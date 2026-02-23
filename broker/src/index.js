@@ -5014,6 +5014,7 @@ async function patchContractWeekScan(env, cwId, r2Key) {
 // A) CONTRACTS (CRUD + lifecycle)
 // ----------------------------------------------------------------------------
 
+
 async function handleContractsCreate(env, req) {
   const user = await requireUser(env, req, ['admin']); // backoffice only
   if (!user) return withCORS(env, req, unauthorized());
@@ -5033,6 +5034,10 @@ async function handleContractsCreate(env, req) {
   const overrideclientsettings = hasOverrideClientSettings
     ? clampBool(body.overrideclientsettings, false)
     : false;
+
+  // ✅ NEW: contract.is_ad_hoc (default false)
+  const hasIsAdHoc = Object.prototype.hasOwnProperty.call(body, 'is_ad_hoc');
+  const is_ad_hoc = hasIsAdHoc ? clampBool(body.is_ad_hoc, false) : false;
 
   // Track whether flags were explicitly supplied so we can decide when to derive from client defaults
   const hasRequireRefToPay      = Object.prototype.hasOwnProperty.call(body, 'require_reference_to_pay');
@@ -5321,6 +5326,9 @@ async function handleContractsCreate(env, req) {
       // ✅ NEW: persist overrideclientsettings
       overrideclientsettings,
 
+      // ✅ NEW: persist is_ad_hoc
+      is_ad_hoc,
+
       // NEW: contract route / calc overrides
       is_nhsp,
       autoprocess_hr,
@@ -5385,11 +5393,80 @@ async function handleContractsCreate(env, req) {
     console.warn('[CONTRACTS][CREATE] generate-weeks failed (non-fatal)', { id: row?.id, error: String(e?.message || e) });
   }
 
-  return withCORS(env, req, ok(row));
+  // ── NEW: schedule clash warnings (never block)
+  let scheduleClashes = null;
+  try {
+    const candidateId = row?.candidate_id || null;
+    if (candidateId && typeof detectScheduleClashesInternal === 'function') {
+      const wew = Number(row.week_ending_weekday_snapshot ?? 0);
+      const startWE = computeWeekEnding(row.start_date, wew);
+      const endWE = computeWeekEnding(row.end_date, wew);
+
+      const proposed_entries = [];
+      const seen = new Set();
+
+      let wkRows = [];
+      try {
+        const { rows: weeks } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=eq.${enc(row.id)}` +
+            `&week_ending_date=gte.${enc(startWE)}` +
+            `&week_ending_date=lte.${enc(endWE)}` +
+            `&select=planned_schedule_json,week_ending_date,additional_seq` +
+            `&order=week_ending_date.asc,additional_seq.asc`
+        );
+        wkRows = weeks || [];
+      } catch {
+        wkRows = [];
+      }
+
+      for (const w of (wkRows || [])) {
+        const raw = w?.planned_schedule_json;
+        const arr = Array.isArray(raw) ? raw : (typeof raw === 'string' ? (JSON.parse(raw) || []) : []);
+        for (const p of (arr || [])) {
+          const ymd = (p && typeof p.date === 'string') ? p.date : null;
+          if (!ymd) continue;
+          if (ymd < row.start_date || ymd > row.end_date) continue;
+
+          const start = (p && typeof p.start === 'string') ? p.start : null;
+          const end   = (p && typeof p.end === 'string') ? p.end : null;
+          if (!start || !end) continue;
+
+          const breakMinutes = (p && (p.break_minutes != null)) ? Number(p.break_minutes) : 0;
+          const breaksArr = Array.isArray(p?.breaks) ? p.breaks : [];
+
+          const key = `${ymd}|${start}|${end}|${Number.isFinite(breakMinutes) ? breakMinutes : 0}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          proposed_entries.push({
+            date: ymd,
+            start,
+            end,
+            breaks: breaksArr,
+            break_minutes: Number.isFinite(breakMinutes) ? breakMinutes : 0,
+            overnight: (p && p.overnight === true) ? true : false
+          });
+        }
+      }
+
+      if (proposed_entries.length) {
+        scheduleClashes = await detectScheduleClashesInternal(env, {
+          candidate_id: candidateId,
+          proposed_entries,
+          ignore_contract_ids: [row.id]
+        });
+      } else {
+        scheduleClashes = { clash_count: 0, clashes: [], note: 'No planned schedule entries available to check.' };
+      }
+    }
+  } catch (e) {
+    scheduleClashes = { clash_count: 0, clashes: [], error: String(e?.message || e) };
+  }
+
+  return withCORS(env, req, ok({ ...row, warnings: { schedule_clashes: scheduleClashes } }));
 }
-
-
-
 
 // ──────────────────────────────────────────────────────────────────────────────
 // BACKEND: handleContractsList (amended) — adds paging + extended filters
@@ -6255,6 +6332,11 @@ async function handleContractsUpdate(env, req, contractId) {
   if ('display_site' in body) patch.display_site = (body.display_site ?? '').toString().trim();
   if ('ward_hint'    in body) patch.ward_hint    = (body.ward_hint ?? '').toString().trim();
 
+  // ✅ NEW: contract.is_ad_hoc (persist)
+  if ('is_ad_hoc' in body) {
+    patch.is_ad_hoc = clampBool(body.is_ad_hoc, !!current.is_ad_hoc);
+  }
+
   // ✅ UPDATED: default_submission_mode is only persisted when overrideclientsettings=true,
   // and MUST NOT be implicitly cleared/changed when hasSubmitted=true.
   if ('default_submission_mode' in body) {
@@ -6271,19 +6353,13 @@ async function handleContractsUpdate(env, req, contractId) {
       : !!current.overrideclientsettings;
 
     if (!effOverride) {
-      // If contract inherits client settings:
-      // - If submitted TS exist: do NOT change stored value (legacy rows may have a value).
-      // - Else (no submitted TS): clear to NULL to align with brief.
       if (!hasSubmitted) {
         patch.default_submission_mode = null;
       }
     } else {
-      // overrideclientsettings=true → store desired (can be null to clear)
       patch.default_submission_mode = desired;
     }
   } else if (hasOverrideClientSettings) {
-    // Only clear contracts.default_submission_mode when overrideclientsettings was toggled OFF
-    // AND there are no submitted timesheets.
     const effOverride = Object.prototype.hasOwnProperty.call(patch, 'overrideclientsettings')
       ? !!patch.overrideclientsettings
       : !!current.overrideclientsettings;
@@ -6393,10 +6469,6 @@ async function handleContractsUpdate(env, req, contractId) {
       if (desired !== cur) changed.push('overrideclientsettings');
     }
 
-    // ✅ Only treat default_submission_mode as a "change" if:
-    // - the client tried to send it AND
-    // - overrideclientsettings=true AND
-    // - it would actually change the stored value.
     if (Object.prototype.hasOwnProperty.call(body, 'default_submission_mode')) {
       const effOverride = Object.prototype.hasOwnProperty.call(patch, 'overrideclientsettings')
         ? !!patch.overrideclientsettings
@@ -6621,12 +6693,82 @@ async function handleContractsUpdate(env, req, contractId) {
     if (normRes.ok) updated = (await normRes.json().catch(()=>[]))[0] || updated;
   }
 
+  // ── NEW: schedule clash warnings (never block)
+  let scheduleClashes = null;
+  try {
+    const candId = updated?.candidate_id || null;
+    if (candId && typeof detectScheduleClashesInternal === 'function') {
+      const wewEff = Number(updated.week_ending_weekday_snapshot ?? current.week_ending_weekday_snapshot ?? 0);
+      const startWE = computeWeekEnding(updated.start_date, wewEff);
+      const endWE = computeWeekEnding(updated.end_date, wewEff);
+
+      const proposed_entries = [];
+      const seen = new Set();
+
+      let wkRows = [];
+      try {
+        const { rows: weeks } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+            `?contract_id=eq.${enc(contractId)}` +
+            `&week_ending_date=gte.${enc(startWE)}` +
+            `&week_ending_date=lte.${enc(endWE)}` +
+            `&select=planned_schedule_json,week_ending_date,additional_seq` +
+            `&order=week_ending_date.asc,additional_seq.asc`
+        );
+        wkRows = weeks || [];
+      } catch {
+        wkRows = [];
+      }
+
+      for (const w of (wkRows || [])) {
+        const raw = w?.planned_schedule_json;
+        const arr = Array.isArray(raw) ? raw : (typeof raw === 'string' ? (JSON.parse(raw) || []) : []);
+        for (const p of (arr || [])) {
+          const ymd = (p && typeof p.date === 'string') ? p.date : null;
+          if (!ymd) continue;
+          if (ymd < updated.start_date || ymd > updated.end_date) continue;
+
+          const start = (p && typeof p.start === 'string') ? p.start : null;
+          const end   = (p && typeof p.end === 'string') ? p.end : null;
+          if (!start || !end) continue;
+
+          const breakMinutes = (p && (p.break_minutes != null)) ? Number(p.break_minutes) : 0;
+          const breaksArr = Array.isArray(p?.breaks) ? p.breaks : [];
+
+          const key = `${ymd}|${start}|${end}|${Number.isFinite(breakMinutes) ? breakMinutes : 0}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          proposed_entries.push({
+            date: ymd,
+            start,
+            end,
+            breaks: breaksArr,
+            break_minutes: Number.isFinite(breakMinutes) ? breakMinutes : 0,
+            overnight: (p && p.overnight === true) ? true : false
+          });
+        }
+      }
+
+      if (proposed_entries.length) {
+        scheduleClashes = await detectScheduleClashesInternal(env, {
+          candidate_id: candId,
+          proposed_entries,
+          ignore_contract_ids: [contractId]
+        });
+      } else {
+        scheduleClashes = { clash_count: 0, clashes: [], note: 'No planned schedule entries available to check.' };
+      }
+    }
+  } catch (e) {
+    scheduleClashes = { clash_count: 0, clashes: [], error: String(e?.message || e) };
+  }
+
   const warnings0 = await computePayMethodWarnings(env, { ...current, ...updated });
   const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
-  return withCORS(env, req, ok({ contract: updated, warnings }));
+  return withCORS(env, req, ok({ contract: updated, warnings, schedule_clashes: scheduleClashes }));
 }
-
-
 // Lightweight checker for FE: returns real-timesheet boundary info for proposed window
  async function handleContractsCheckTimesheetBoundary(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -6915,8 +7057,6 @@ async function handleContractsReplace(env, req, contractId) {
   const extraWarnings = [];
   let wew;
 
-  // ✅ UPDATED: only “freeze” week-ending when submitted TS exist.
-  // If not submitted, allow change (even if weeks exist) and regenerate weeks safely later.
   if (hasSubmitted) {
     wew = Number(current.week_ending_weekday_snapshot ?? 0);
   } else {
@@ -6989,6 +7129,9 @@ async function handleContractsReplace(env, req, contractId) {
     return withCORS(env, req, badRequest(`end_date cannot be before latest submitted week ending (${maxWE})`));
   }
 
+  const hasIsAdHoc = Object.prototype.hasOwnProperty.call(body, 'is_ad_hoc');
+  const isAdHoc = hasIsAdHoc ? clampBool(body.is_ad_hoc, !!current.is_ad_hoc) : !!current.is_ad_hoc;
+
   const patch = {
     candidate_id: ('candidate_id' in body ? body.candidate_id : current.candidate_id),
     client_id:    body.client_id,
@@ -6998,6 +7141,8 @@ async function handleContractsReplace(env, req, contractId) {
     ward_hint:    (body.ward_hint ?? current.ward_hint ?? '').toString().trim(),
     start_date:   newStart,
     end_date:     newEnd,
+
+    is_ad_hoc: isAdHoc,
 
     overrideclientsettings,
 
@@ -7129,14 +7274,11 @@ async function handleContractsReplace(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   let updated = (await res.json().catch(()=>[]))[0];
 
-  // ✅ windowChanged should reflect effective stored window (based on newStart/newEnd vs current)
   const windowChanged = (String(newStart || '') !== String(current.start_date || '')) ||
                         (String(newEnd   || '') !== String(current.end_date   || ''));
 
-  // ✅ weekdayChanged should reflect effective stored week ending (based on computed wew vs current)
   const weekdayChanged = Number(wew) !== Number(current.week_ending_weekday_snapshot ?? 0);
 
-  // Keep existing “delete out of range” logic only for rows with timesheet_id IS NULL
   if (windowChanged) {
     const del = await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null&or=(week_ending_date.lt.${enc(newStart)},week_ending_date.gt.${enc(newEnd)})`,
@@ -7145,15 +7287,9 @@ async function handleContractsReplace(env, req, contractId) {
     try { await del.arrayBuffer(); } catch {}
   }
 
-  // ✅ UPDATED week generation rules:
-  // - If windowChanged and !skip_generate_weeks: ALWAYS generate missing weeks (even if hasSubmitted).
-  // - If weekdayChanged and !skip_generate_weeks:
-  //     - if hasSubmitted: already blocked above; defensively skip here.
-  //     - else: delete all draft weeks (timesheet_id IS NULL) then regenerate under new weekday.
   if (!body.skip_generate_weeks) {
     if (weekdayChanged) {
       if (!hasSubmitted) {
-        // Delete all draft weeks so regeneration doesn't duplicate old weekday structure
         const delAllDraft = await fetch(
           `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null`,
           { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return-minimal' } }
@@ -7167,7 +7303,6 @@ async function handleContractsReplace(env, req, contractId) {
         }
       }
     } else if (windowChanged) {
-      // Always add missing weeks on date-window change (even if submitted TS exist)
       try {
         await handleContractsGenerateWeeks(env, req, contractId);
       } catch (e) {
@@ -7231,9 +7366,72 @@ async function handleContractsReplace(env, req, contractId) {
     if (normRes.ok) updated = (await normRes.json().catch(()=>[]))[0] || updated;
   }
 
+  // ✅ WARN-ONLY: schedule clash warnings via detectScheduleClashesInternal (never block)
+  let scheduleClashes = null;
+  try {
+    const candId = updated?.candidate_id || null;
+
+    if (candId && typeof detectScheduleClashesInternal === 'function') {
+      const proposed_entries = [];
+      const seen = new Set();
+
+      if (patch.is_ad_hoc === true) {
+        scheduleClashes = { clash_count: 0, clashes: [], note: 'Ad-hoc contract: no template-based proposed entries to check.' };
+      } else if (patch.std_schedule_json && typeof patch.std_schedule_json === 'object') {
+        const names = ['sun','mon','tue','wed','thu','fri','sat'];
+
+        const d0 = new Date(String(updated.start_date) + 'T00:00:00Z');
+        const d1 = new Date(String(updated.end_date)   + 'T00:00:00Z');
+
+        if (!Number.isNaN(d0.getTime()) && !Number.isNaN(d1.getTime()) && d0 <= d1) {
+          for (let dt = new Date(d0); dt <= d1; dt.setUTCDate(dt.getUTCDate() + 1)) {
+            const ymd = toYmd(dt);
+            if (!ymd) continue;
+
+            const wkKey = names[dt.getUTCDay()];
+            const tpl = patch.std_schedule_json?.[wkKey];
+            if (!tpl || typeof tpl !== 'object') continue;
+
+            const start = (tpl.start == null ? '' : String(tpl.start)).trim();
+            const end   = (tpl.end   == null ? '' : String(tpl.end)).trim();
+            if (!start || !end) continue;
+
+            const bm = (tpl.break_minutes != null) ? Number(tpl.break_minutes) : 0;
+            const key = `${ymd}|${start}|${end}|${Number.isFinite(bm) ? bm : 0}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            proposed_entries.push({
+              date: ymd,
+              start,
+              end,
+              breaks: Array.isArray(tpl.breaks) ? tpl.breaks : [],
+              break_minutes: Number.isFinite(bm) ? bm : 0,
+              overnight: tpl.overnight === true
+            });
+          }
+        }
+
+        if (proposed_entries.length) {
+          scheduleClashes = await detectScheduleClashesInternal(env, {
+            candidate_id: candId,
+            proposed_entries,
+            ignore_contract_ids: [updated.id]
+          });
+        } else {
+          scheduleClashes = { clash_count: 0, clashes: [], note: 'No timed template entries available to check.' };
+        }
+      } else {
+        scheduleClashes = { clash_count: 0, clashes: [], note: 'No std_schedule_json available to check.' };
+      }
+    }
+  } catch (e) {
+    scheduleClashes = { clash_count: 0, clashes: [], error: String(e?.message || e) };
+  }
+
   const warnings0 = await computePayMethodWarnings(env, { ...current, ...updated });
   const warnings = Array.isArray(warnings0) ? [...warnings0, ...extraWarnings] : [...extraWarnings];
-  return withCORS(env, req, ok({ contract: updated, warnings }));
+  return withCORS(env, req, ok({ contract: updated, warnings, warnings_extra: { schedule_clashes: scheduleClashes } }));
 }
 async function handleContractsDuplicate(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
@@ -7284,6 +7482,9 @@ async function handleContractsDuplicate(env, req, contractId) {
 
       start_date: src.start_date,
       end_date: src.end_date,
+
+      // ✅ NEW: copy contract.is_ad_hoc
+      is_ad_hoc: !!src.is_ad_hoc,
 
       pay_method_snapshot: String(src.pay_method_snapshot || 'PAYE').toUpperCase() === 'PAYE' ? 'PAYE' : 'UMBRELLA',
       rates_json: src.rates_json || {},
@@ -7361,12 +7562,28 @@ async function handleContractsDuplicate(env, req, contractId) {
       });
     }
 
+    // ✅ WARN-ONLY schedule clashes: duplicates are created unassigned (candidate_id null),
+    // so this will typically be null/empty. Kept for parity if future flow assigns candidate at creation.
+    let scheduleClashes = null;
+    try {
+      if (row.candidate_id && typeof detectScheduleClashesInternal === 'function') {
+        scheduleClashes = await detectScheduleClashesInternal(env, {
+          candidate_id: row.candidate_id,
+          proposed_entries: [],
+          ignore_contract_ids: [row.id]
+        });
+      }
+    } catch {
+      scheduleClashes = null;
+    }
+
     duplicates.push({
       id: row.id,
       candidate_id: row.candidate_id,
       client_id: row.client_id,
       start_date: row.start_date,
-      end_date: row.end_date
+      end_date: row.end_date,
+      warnings: { schedule_clashes: scheduleClashes }
     });
   }
 
@@ -7385,7 +7602,350 @@ async function handleContractsDuplicate(env, req, contractId) {
   }));
 }
 
- 
+async function generateContractWeeksInternal(env, contractId, opts = {}) {
+  const enc = encodeURIComponent;
+
+  const c = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=` +
+      [
+        'id',
+        'client_id',
+        'start_date',
+        'end_date',
+        'week_ending_weekday_snapshot',
+        'std_schedule_json',
+        'default_submission_mode',
+        'overrideclientsettings'
+      ].join(',')
+  );
+  if (!c) throw new Error('Contract not found');
+
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
+  };
+
+  const normalizeSubmissionMode = (v) => {
+    const s = String(v || '').trim().toUpperCase();
+    if (s === 'ELECTRONIC' || s === 'MANUAL' || s === 'QR') return s;
+    return null;
+  };
+
+  let clientSettingsRow = null;
+  try {
+    if (c.client_id) {
+      clientSettingsRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/client_settings` +
+          `?client_id=eq.${enc(c.client_id)}` +
+          `&select=default_submission_mode,effective_from,created_at` +
+          `&order=effective_from.desc,created_at.desc` +
+          `&limit=1`
+      );
+    }
+  } catch {
+    clientSettingsRow = null;
+  }
+
+  const clientDefaultMode = normalizeSubmissionMode(clientSettingsRow?.default_submission_mode);
+
+  let submissionModeSnapshot = null;
+  if (asBool(c.overrideclientsettings)) {
+    submissionModeSnapshot = normalizeSubmissionMode(c.default_submission_mode) || clientDefaultMode;
+  } else {
+    submissionModeSnapshot = clientDefaultMode;
+  }
+  if (!submissionModeSnapshot) submissionModeSnapshot = 'ELECTRONIC';
+
+  const wew = Number(c.week_ending_weekday_snapshot || 0);
+  const endWE = computeWeekEndingInclusive(c.end_date, wew);
+  const allWE = enumerateWeekEndings(c.start_date, endWE, wew);
+  const todayYmd = (opts && typeof opts.todayYmd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(opts.todayYmd))
+    ? opts.todayYmd
+    : toYmd(new Date());
+
+  let existing = [];
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?contract_id=eq.${enc(contractId)}` +
+      `&additional_seq=eq.0` +
+      `&select=week_ending_date,additional_seq`
+    );
+    existing = rows || [];
+  } catch (_) {
+    existing = [];
+  }
+  const existingSet = new Set((existing || []).map(r => r.week_ending_date));
+
+  const missingWE = allWE.filter(we => !existingSet.has(we));
+  if (!missingWE.length) {
+    return { generated: 0, inserted: [] };
+  }
+
+  const isEmptyPlanned = (v) => {
+    if (v == null) return true;
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === 'object') return Object.keys(v).length === 0;
+    if (typeof v === 'string') return String(v).trim() === '';
+    return false;
+  };
+
+  const rowsToInsert = missingWE.map(we => {
+    let planned_schedule_json = null;
+    try {
+      const raw = buildPlannedScheduleFromTemplate(c.std_schedule_json || null, we);
+      planned_schedule_json = clampPlannedToWindow(raw, we, wew, c.start_date, endWE, c.end_date);
+      if (isEmptyPlanned(planned_schedule_json)) planned_schedule_json = null;
+    } catch {
+      planned_schedule_json = null;
+    }
+
+    return {
+      contract_id: c.id,
+      week_ending_date: we,
+      additional_seq: 0,
+      status: (we <= todayYmd ? 'OPEN' : 'PLANNED'),
+      submission_mode_snapshot: submissionModeSnapshot,
+      timesheet_id: null,
+      planned_schedule_json,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    };
+  });
+
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
+    body: JSON.stringify(rowsToInsert),
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`Failed to generate contract weeks: ${t || res.status}`);
+  }
+
+  const inserted = await res.json().catch(() => []);
+  return { generated: Array.isArray(inserted) ? inserted.length : 0, inserted: Array.isArray(inserted) ? inserted : [] };
+}
+
+async function detectScheduleClashesInternal(env, params = {}) {
+  const enc = encodeURIComponent;
+
+  const candidateId = params && params.candidate_id ? String(params.candidate_id) : '';
+  if (!candidateId) throw new Error('candidate_id required');
+
+  const ignoreContractIds = Array.isArray(params.ignore_contract_ids)
+    ? params.ignore_contract_ids.map(String).filter(Boolean)
+    : [];
+
+  const isYmd = (s) => (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s));
+
+  const proposedEntries = Array.isArray(params.proposed_entries) ? params.proposed_entries : null;
+
+  let fromYmd = (params && isYmd(params.from_date)) ? params.from_date : null;
+  let toYmd2  = (params && isYmd(params.to_date))   ? params.to_date   : null;
+
+  if (proposedEntries && proposedEntries.length) {
+    let minD = null, maxD = null;
+    for (const e of proposedEntries) {
+      const d = e && typeof e.date === 'string' ? e.date : null;
+      if (!d || !isYmd(d)) continue;
+      if (!minD || d < minD) minD = d;
+      if (!maxD || d > maxD) maxD = d;
+    }
+    if (!minD || !maxD) throw new Error('proposed_entries must include valid date fields (YYYY-MM-DD)');
+    fromYmd = minD;
+    toYmd2 = maxD;
+  } else {
+    if (!fromYmd || !toYmd2) throw new Error('from_date and to_date required when proposed_entries is not provided');
+    if (fromYmd > toYmd2) throw new Error('from_date must be on or before to_date');
+  }
+
+  const scanFrom = addDays(fromYmd, -1);
+  const scanTo   = addDays(toYmd2, 1);
+  const weFrom   = addDays(scanFrom, -6);
+  const weTo     = addDays(scanTo, 6);
+
+  const toAbsMs = (ymd, mins) => {
+    const dt = new Date(ymd + 'T00:00:00Z');
+    return dt.getTime() + (Number(mins || 0) * 60 * 1000);
+  };
+
+  const entryToIntervals = (src) => {
+    const out = [];
+    const date = (src && typeof src.date === 'string') ? src.date : null;
+    const startStr = (src && typeof src.start === 'string') ? src.start : null;
+    const endStr   = (src && typeof src.end === 'string') ? src.end : null;
+    if (!date || !isYmd(date) || !startStr || !endStr) return out;
+
+    const sMin = parseHHMM(startStr);
+    const eMin = parseHHMM(endStr);
+    if (sMin == null || eMin == null) return out;
+
+    const overnight = (src && src.overnight === true) ? true : (eMin <= sMin);
+    const startMs = toAbsMs(date, sMin);
+    const endMs = overnight ? toAbsMs(addDays(date, 1), eMin) : toAbsMs(date, eMin);
+
+    if (!(Number.isFinite(startMs) && Number.isFinite(endMs))) return out;
+    if (endMs <= startMs) return out;
+
+    out.push({
+      date,
+      start: startStr,
+      end: endStr,
+      overnight,
+      start_ms: startMs,
+      end_ms: endMs
+    });
+    return out;
+  };
+
+  const coercePlanArray = (v) => {
+    if (v == null) return [];
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') {
+      try {
+        const j = JSON.parse(v);
+        return Array.isArray(j) ? j : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  let rows = [];
+  try {
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+      `?select=id,contract_id,week_ending_date,additional_seq,planned_schedule_json,contracts!inner(candidate_id,client_id)` +
+      `&contracts.candidate_id=eq.${enc(candidateId)}` +
+      `&week_ending_date=gte.${enc(weFrom)}` +
+      `&week_ending_date=lte.${enc(weTo)}` +
+      `&order=week_ending_date.asc,additional_seq.asc`;
+
+    const { rows: got } = await sbFetch(env, url);
+    rows = got || [];
+  } catch (e) {
+    throw new Error(e?.message || String(e || 'Failed to load schedules'));
+  }
+
+  const existingIntervals = [];
+  for (const r of rows) {
+    const contractId = r && r.contract_id ? String(r.contract_id) : null;
+    if (!contractId) continue;
+    if (ignoreContractIds.includes(contractId)) continue;
+
+    const planArr = coercePlanArray(r.planned_schedule_json);
+    for (const pe of planArr) {
+      const d = pe && typeof pe.date === 'string' ? pe.date : null;
+      if (!d || !isYmd(d)) continue;
+      if (d < scanFrom || d > scanTo) continue;
+
+      for (const iv of entryToIntervals(pe)) {
+        existingIntervals.push({
+          ...iv,
+          source: 'EXISTING',
+          contract_id: contractId,
+          contract_week_id: r.id ? String(r.id) : null,
+          week_ending_date: r.week_ending_date ? String(r.week_ending_date) : null,
+          additional_seq: Number(r.additional_seq || 0)
+        });
+      }
+    }
+  }
+
+  const proposedIntervals = [];
+  if (proposedEntries && proposedEntries.length) {
+    for (const pe of proposedEntries) {
+      const d = pe && typeof pe.date === 'string' ? pe.date : null;
+      if (!d || !isYmd(d)) continue;
+      if (d < scanFrom || d > scanTo) continue;
+
+      for (const iv of entryToIntervals(pe)) {
+        proposedIntervals.push({
+          ...iv,
+          source: 'PROPOSED',
+          contract_id: null,
+          contract_week_id: null,
+          week_ending_date: null,
+          additional_seq: 0
+        });
+      }
+    }
+  }
+
+  const overlaps = [];
+  const aList = (proposedIntervals.length ? proposedIntervals : existingIntervals);
+  const bList = (proposedIntervals.length ? existingIntervals : existingIntervals);
+
+  const pushOverlap = (a, b) => {
+    const overlapStart = Math.max(a.start_ms, b.start_ms);
+    const overlapEnd   = Math.min(a.end_ms,   b.end_ms);
+    if (overlapEnd <= overlapStart) return;
+
+    overlaps.push({
+      overlap_start_utc: new Date(overlapStart).toISOString(),
+      overlap_end_utc: new Date(overlapEnd).toISOString(),
+
+      a_source: a.source,
+      a_date: a.date,
+      a_start: a.start,
+      a_end: a.end,
+      a_overnight: !!a.overnight,
+      a_contract_id: a.contract_id,
+      a_contract_week_id: a.contract_week_id,
+      a_week_ending_date: a.week_ending_date,
+      a_additional_seq: a.additional_seq,
+
+      b_source: b.source,
+      b_date: b.date,
+      b_start: b.start,
+      b_end: b.end,
+      b_overnight: !!b.overnight,
+      b_contract_id: b.contract_id,
+      b_contract_week_id: b.contract_week_id,
+      b_week_ending_date: b.week_ending_date,
+      b_additional_seq: b.additional_seq
+    });
+  };
+
+  if (proposedIntervals.length) {
+    for (const a of aList) {
+      for (const b of bList) {
+        if (!b.contract_id) continue;
+        pushOverlap(a, b);
+      }
+    }
+  } else {
+    for (let i = 0; i < existingIntervals.length; i++) {
+      for (let j = i + 1; j < existingIntervals.length; j++) {
+        const a = existingIntervals[i];
+        const b = existingIntervals[j];
+        if (a.contract_id && b.contract_id && a.contract_id === b.contract_id) continue;
+        pushOverlap(a, b);
+      }
+    }
+  }
+
+  overlaps.sort((x, y) => String(x.overlap_start_utc).localeCompare(String(y.overlap_start_utc)));
+
+  return {
+    candidate_id: candidateId,
+    scan_from: scanFrom,
+    scan_to: scanTo,
+    compared_existing_count: existingIntervals.length,
+    compared_proposed_count: proposedIntervals.length,
+    clash_count: overlaps.length,
+    clashes: overlaps
+  };
+}
+
 
 // Helper: returns ['PAY_METHOD_MISMATCH'] if candidate.pay_method != pay_method_snapshot
 async function computePayMethodWarnings(env, contractRow) {
@@ -7457,6 +8017,7 @@ async function computePayMethodWarnings(env, contractRow) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   return withCORS(env, req, ok({ deleted: true }));
 }
+
 async function handleContractsGenerateWeeks(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -7465,11 +8026,13 @@ async function handleContractsGenerateWeeks(env, req, contractId) {
 
   // ✅ Load only the fields this function actually needs + the fields required
   // to resolve submission_mode_snapshot correctly (overrideclientsettings + client_id)
+  // ✅ NEW: include candidate_id for schedule clash warnings
   const c = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=` +
       [
         'id',
+        'candidate_id',
         'client_id',
         'start_date',
         'end_date',
@@ -7546,7 +8109,7 @@ async function handleContractsGenerateWeeks(env, req, contractId) {
 
   const missingWE = allWE.filter(we => !existingSet.has(we));
   if (!missingWE.length) {
-    return withCORS(env, req, ok({ generated: 0 }));
+    return withCORS(env, req, ok({ generated: 0, warnings: { schedule_clashes: null } }));
   }
 
   const isEmptyPlanned = (v) => {
@@ -7573,8 +8136,6 @@ async function handleContractsGenerateWeeks(env, req, contractId) {
       additional_seq: 0,
       status: (we <= todayYmd ? 'OPEN' : 'PLANNED'),
 
-      // ✅ FIX: do NOT use contracts.default_submission_mode when overrideclientsettings=false.
-      // Always write the resolved snapshot (never null).
       submission_mode_snapshot: submissionModeSnapshot,
 
       timesheet_id: null,
@@ -7592,9 +8153,56 @@ async function handleContractsGenerateWeeks(env, req, contractId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
   const inserted = await res.json().catch(() => []);
 
-  return withCORS(env, req, ok({ generated: inserted.length }));
-}
+  // ✅ WARN-ONLY schedule clashes (never block)
+  let scheduleClashes = null;
+  try {
+    if (c.candidate_id && typeof detectScheduleClashesInternal === 'function') {
+      const proposed_entries = [];
+      const seen = new Set();
 
+      for (const wk of (Array.isArray(inserted) ? inserted : [])) {
+        const raw = wk?.planned_schedule_json;
+        const arr = Array.isArray(raw) ? raw : (typeof raw === 'string' ? (JSON.parse(raw) || []) : []);
+        for (const p of (arr || [])) {
+          const ymd = (p && typeof p.date === 'string') ? p.date : null;
+          if (!ymd) continue;
+
+          const start = (p && typeof p.start === 'string') ? p.start : null;
+          const end   = (p && typeof p.end === 'string') ? p.end : null;
+          if (!start || !end) continue;
+
+          const bm = (p && p.break_minutes != null) ? Number(p.break_minutes) : 0;
+          const key = `${ymd}|${start}|${end}|${Number.isFinite(bm) ? bm : 0}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          proposed_entries.push({
+            date: ymd,
+            start,
+            end,
+            breaks: Array.isArray(p?.breaks) ? p.breaks : [],
+            break_minutes: Number.isFinite(bm) ? bm : 0,
+            overnight: (p && p.overnight === true) ? true : false
+          });
+        }
+      }
+
+      if (proposed_entries.length) {
+        scheduleClashes = await detectScheduleClashesInternal(env, {
+          candidate_id: c.candidate_id,
+          proposed_entries,
+          ignore_contract_ids: [c.id]
+        });
+      } else {
+        scheduleClashes = { clash_count: 0, clashes: [], note: 'No timed entries generated to check.' };
+      }
+    }
+  } catch (e) {
+    scheduleClashes = { clash_count: 0, clashes: [], error: String(e?.message || e) };
+  }
+
+  return withCORS(env, req, ok({ generated: inserted.length, warnings: { schedule_clashes: scheduleClashes } }));
+}
 
 function computeWeekEndingInclusive(ymd, wew) {
   const d = new Date(ymd + 'T00:00:00Z');   // ymd → Date (UTC)
@@ -7655,253 +8263,1177 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   // Unknown shape → nothing to render
   return [];
 }
+
 async function handleContractsCloneAndExtend(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
 
   let body;
   try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  // Load current contract
+  // Load current contract (read-only; used only for defaults and basic validation)
   const cur = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
   );
   if (!cur) return withCORS(env, req, notFound('Contract not found'));
 
-  // Inputs
+  // Inputs (front-end payload + safe defaults)
   const newStart = toYmd(body.new_start_date || cur.end_date);
-  const newEnd   = toYmd(body.new_end_date   || cur.end_date);
-  if (!newStart || !newEnd)  return withCORS(env, req, badRequest('new_start_date and new_end_date required'));
-  if (newStart  >  newEnd)   return withCORS(env, req, badRequest('new_start_date must be on or before new_end_date'));
+  const newEnd   = toYmd((body.new_end_date === undefined ? cur.end_date : body.new_end_date) || cur.end_date);
 
-  // Should we end existing A?
-  const wantEndExisting = (typeof body.end_existing === 'boolean') ? body.end_existing : true;
+  if (!newStart) return withCORS(env, req, badRequest('new_start_date required'));
+  if (!newEnd)   return withCORS(env, req, badRequest('new_end_date required (or contract must have an end_date)'));
+  if (newStart > newEnd) return withCORS(env, req, badRequest('new_start_date must be on or before new_end_date'));
 
-  // Default close date = newStart − 1 day
-  const defaultCloseD = new Date(newStart + 'T00:00:00Z'); defaultCloseD.setUTCDate(defaultCloseD.getUTCDate() - 1);
+  // End-existing is enforced by brief (RPC always closes predecessor)
+  const defaultCloseD = new Date(newStart + 'T00:00:00Z');
+  defaultCloseD.setUTCDate(defaultCloseD.getUTCDate() - 1);
   const defaultCloseIso = toYmd(defaultCloseD);
 
-  // If user supplied end date, use it (validated below); else use default
-  let closeTo = wantEndExisting ? toYmd(body.end_existing_on || defaultCloseIso) : null;
+  const closeTo = toYmd(body.end_existing_on || defaultCloseIso);
+  if (!closeTo) return withCORS(env, req, badRequest('end_existing_on required (YYYY-MM-DD)'));
 
-  if (wantEndExisting) {
-    if (!closeTo) return withCORS(env, req, badRequest('end_existing_on required when end_existing=true'));
-    if (closeTo < cur.start_date) return withCORS(env, req, badRequest('Existing contract cannot end before its original start'));
-    if (closeTo >= newStart)      return withCORS(env, req, badRequest('Existing contract end must be before the new start'));
+  const assignExistingCandidate =
+    (typeof body.assign_existing_candidate === 'boolean') ? body.assign_existing_candidate : true;
+
+  const newCandidateId =
+    (body.new_candidate_id === undefined ? null : (body.new_candidate_id || null));
+
+  const splitWorkerNoteRaw =
+    (body.split_worker_note === undefined ? null : body.split_worker_note);
+
+  const successorOverrides =
+    (body.successor_overrides && typeof body.successor_overrides === 'object' && !Array.isArray(body.successor_overrides))
+      ? body.successor_overrides
+      : null;
+
+  const forceScheduleClashes =
+    (body.force_schedule_clashes === true);
+
+  const forceAlreadySplitWeek =
+    (body.force_already_split_week === true);
+
+  const confirmedSplitWeek =
+    (body.confirmed_split_week === true);
+
+  const actorUserId = (user && user.id) ? user.id : null;
+
+  try {
+    const rpcRes = await sbRpc(env, 'contracts_clone_and_extend_atomic', {
+      p_contract_id: String(contractId),
+      p_new_start_date: newStart,
+      p_new_end_date: newEnd,
+      p_end_existing_on: closeTo,
+
+      p_assign_existing_candidate: !!assignExistingCandidate,
+      p_new_candidate_id: newCandidateId,
+
+      p_split_worker_note: splitWorkerNoteRaw,
+      p_successor_overrides: successorOverrides,
+
+      p_force_schedule_clashes: !!forceScheduleClashes,
+      p_force_already_split_week: !!forceAlreadySplitWeek,
+      p_confirmed_split_week: !!confirmedSplitWeek,
+
+      p_actor_user_id: actorUserId
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'contracts_clone_and_extend_atomic')) {
+        payload = payload.contracts_clone_and_extend_atomic;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    const tryParseJson = (s) => {
+      try { return JSON.parse(s); } catch { return null; }
+    };
+
+    const extractStructured = () => {
+      // Preferred: PostgREST JSON error object -> message contains our JSON payload
+      try {
+        const j = (e && e.json) ? e.json : null;
+        if (j && typeof j === 'object') {
+          // If the RPC already returned a structured object (rare), use it.
+          if (j.error && typeof j.error === 'string') return j;
+
+          const msg = (typeof j.message === 'string') ? j.message.trim() : '';
+          if (msg) {
+            const direct = (msg.startsWith('{') && msg.endsWith('}')) ? tryParseJson(msg) : null;
+            if (direct && typeof direct === 'object') return direct;
+
+            const i = msg.indexOf('{');
+            const k = msg.lastIndexOf('}');
+            if (i >= 0 && k > i) {
+              const sub = msg.slice(i, k + 1);
+              const subJ = tryParseJson(sub);
+              if (subJ && typeof subJ === 'object') return subJ;
+            }
+          }
+
+          // Sometimes PostgREST body itself is our JSON (if raised differently)
+          const asIs = tryParseJson((e && typeof e.body === 'string') ? e.body : '');
+          if (asIs && typeof asIs === 'object') {
+            if (asIs.error && typeof asIs.error === 'string') return asIs;
+            if (asIs.message && typeof asIs.message === 'string') {
+              const inner = tryParseJson(asIs.message);
+              if (inner && typeof inner === 'object') return inner;
+            }
+          }
+        }
+      } catch {}
+
+      // Fallback: attempt to parse the raw body
+      try {
+        const bodyTxt = (e && typeof e.body === 'string') ? e.body.trim() : '';
+        if (bodyTxt) {
+          const asObj = tryParseJson(bodyTxt);
+          if (asObj && typeof asObj === 'object') {
+            if (asObj.error && typeof asObj.error === 'string') return asObj;
+            if (asObj.message && typeof asObj.message === 'string') {
+              const inner = tryParseJson(asObj.message);
+              if (inner && typeof inner === 'object') return inner;
+              const i = asObj.message.indexOf('{');
+              const k = asObj.message.lastIndexOf('}');
+              if (i >= 0 && k > i) {
+                const sub = asObj.message.slice(i, k + 1);
+                const subJ = tryParseJson(sub);
+                if (subJ && typeof subJ === 'object') return subJ;
+              }
+            }
+            return asObj;
+          }
+        }
+      } catch {}
+
+      // Last resort: return a minimal JSON error
+      return {
+        error: 'RPC_ERROR',
+        message: String(e?.message || e || 'RPC_ERROR')
+      };
+    };
+
+    const errPayload = extractStructured();
+    const code = (errPayload && typeof errPayload === 'object' && typeof errPayload.error === 'string')
+      ? errPayload.error
+      : ((errPayload && typeof errPayload === 'object' && typeof errPayload.code === 'string') ? errPayload.code : null);
+
+    const conflictCodes = new Set([
+      'SCHEDULE_CLASH',
+      'ALREADY_SPLIT_WEEK',
+      'SPLIT_WEEK_CONFIRM_REQUIRED',
+
+      'SUBMITTED_BEYOND_CLOSE',
+      'BOUNDARY_WEEK_TIMESHEET_ALREADY_SUBMITTED',
+      'ENDING_WEEK_SUBMITTED_CANNOT_TRUNCATE'
+    ]);
+
+    let status = 400;
+
+    if (code === 'CONTRACT_NOT_FOUND') {
+      status = 404;
+    } else if (code && conflictCodes.has(code)) {
+      status = 409;
+    } else if (e && Number.isFinite(Number(e.status)) && Number(e.status) >= 400 && Number(e.status) < 600) {
+      status = Number(e.status);
+    } else {
+      status = 400;
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+
+    let bodyOut = '';
+    try { bodyOut = JSON.stringify(errPayload && typeof errPayload === 'object' ? errPayload : { error: 'RPC_ERROR' }); }
+    catch { bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize error payload' }); }
+
+    return withCORS(env, req, new Response(bodyOut, { status, headers }));
+  }
+}
+
+async function handleBankingIdPreview(env, req, user) {
+  try {
+    const rpcRes = await sbRpc(env, 'id_consolidation_preview', {});
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'id_consolidation_preview')) {
+        payload = payload.id_consolidation_preview;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+async function handleBankingIdRunsList(env, req, user) {
+  let limit = 50;
+  let offset = 0;
+
+  try {
+    const u = new URL(req.url);
+
+    const limRaw = u.searchParams.get('limit');
+    const offRaw = u.searchParams.get('offset');
+
+    const limNum = Number(limRaw);
+    const offNum = Number(offRaw);
+
+    if (Number.isFinite(limNum)) limit = Math.trunc(limNum);
+    if (Number.isFinite(offNum)) offset = Math.trunc(offNum);
+
+    if (!Number.isFinite(limit)) limit = 50;
+    if (!Number.isFinite(offset)) offset = 0;
+
+    limit = Math.max(1, Math.min(500, limit));
+    offset = Math.max(0, offset);
+  } catch {
+    limit = 50;
+    offset = 0;
   }
 
-  // If we must end A, ensure no submitted TS on/after the cut
-  if (wantEndExisting) {
-    const submittedAfter = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?contract_id=eq.${enc(cur.id)}&timesheet_id=not.is.null&week_ending_date=gte.${enc(newStart)}` +
-      `&select=week_ending_date&limit=1`
-    );
-    if (submittedAfter) {
-      return withCORS(env, req, badRequest('Cannot close: submitted timesheets exist on or after the new start date.'));
+  try {
+    const rpcRes = await sbRpc(env, 'id_consolidation_runs_list', {
+      p_limit: limit,
+      p_offset: offset
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'id_consolidation_runs_list')) {
+        payload = payload.id_consolidation_runs_list;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingIdRunGet(env, req, user, idRef) {
+  const id_ref = String(idRef || '').trim();
+  if (!id_ref) return withCORS(env, req, badRequest('id_ref is required'));
+  if (!/^[0-9]{6}$/.test(id_ref)) return withCORS(env, req, badRequest('id_ref must be 6 digits'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'id_consolidation_run_get', {
+      p_id_ref: id_ref
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'id_consolidation_run_get')) {
+        payload = payload.id_consolidation_run_get;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+async function handleBankingIdBalanceNow(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const bankUploadCode = String(body.bank_upload_code || '').trim();
+  if (!bankUploadCode) return withCORS(env, req, badRequest('bank_upload_code is required'));
+
+  const noteRaw = (body.note === null || body.note === undefined) ? null : String(body.note).trim();
+  const note = noteRaw ? noteRaw : null;
+
+  try {
+    const rpcRes = await sbRpc(env, 'id_consolidation_balance_now', {
+      p_actor_user_id: user.id,
+      p_bank_upload_code: bankUploadCode,
+      p_note: note
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'id_consolidation_balance_now')) {
+        payload = payload.id_consolidation_balance_now;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+
+
+
+async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!payBatchId) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = {};
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const scope = String(body?.scope ?? body?.pay_channel_scope ?? 'ALL').trim().toUpperCase();
+  if (!['ALL', 'PAYE', 'UMBRELLA'].includes(scope)) {
+    return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
+  }
+
+  const bankConfirmRef = String(body?.bank_confirm_ref ?? body?.bank_confirm_code ?? body?.bank_reference ?? '').trim();
+  if (!bankConfirmRef) {
+    return withCORS(env, req, badRequest('bank_confirm_ref is required'));
+  }
+
+  try {
+    const out = await sbRpc(env, 'pay_settle_manual_confirm', {
+      p_pay_batch_id: payBatchId,
+      p_scope: scope,
+      p_bank_confirm_ref: bankConfirmRef,
+      p_actor_user_id: user.id
+    });
+    return withCORS(env, req, ok(out));
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'SETTLE_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (!payBatchId) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = {};
+  try { body = await parseJSONBody(req); } catch { /* allow empty body */ }
+
+  const scope = String(body?.scope ?? body?.pay_channel_scope ?? 'ALL').trim().toUpperCase();
+  if (!['ALL', 'PAYE', 'UMBRELLA'].includes(scope)) {
+    return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
+  }
+
+  const nowIso = new Date().toISOString();
+
+  let build;
+  try {
+    build = await sbRpc(env, 'pay_remittance_build', {
+      p_pay_batch_id: payBatchId,
+      p_scope: scope
+    });
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'REM_BUILD_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+
+  const jobs = Array.isArray(build?.jobs) ? build.jobs : [];
+  const payDate = (build && build.pay_date) ? String(build.pay_date) : null;
+  const bulkRef = (build && build.bulk_reference) ? String(build.bulk_reference) : null;
+
+  const queued = [];
+  const skipped = [];
+
+  for (const job of jobs) {
+    const jobKind = String(job?.job_kind || '').toUpperCase(); // 'UMBRELLA' | 'PAYE'
+    const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
+
+    const toEmailRaw =
+      (jobKind === 'UMBRELLA')
+        ? (recipient?.remittance_email ?? recipient?.email ?? null)
+        : (recipient?.email ?? recipient?.remittance_email ?? null);
+
+    const toEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
+    if (!toEmail) {
+      skipped.push({
+        job_kind: jobKind || null,
+        payee_entity_kind: job?.payee_entity_kind ?? null,
+        payee_entity_id: job?.payee_entity_id ?? null,
+        reason: 'NO_EMAIL'
+      });
+      continue;
+    }
+
+    const payPeriodLabel = (job?.pay_period_label && String(job.pay_period_label).trim())
+      ? String(job.pay_period_label).trim()
+      : (payDate ? payDate : 'Pay run');
+
+    const subject = `Remittance Advice – ${payPeriodLabel}`;
+
+    const payeeName = (job?.payee_name && String(job.payee_name).trim()) ? String(job.payee_name).trim() : '';
+    const tmsRef = (job?.candidate_tms_ref && String(job.candidate_tms_ref).trim()) ? String(job.candidate_tms_ref).trim() : '';
+    const displayName = (job?.candidate_display_name && String(job.candidate_display_name).trim()) ? String(job.candidate_display_name).trim() : '';
+
+    const totals = (job && typeof job.totals === 'object' && job.totals) ? job.totals : null;
+
+    const totalPayEx = (job?.total_pay_ex_vat != null) ? Number(job.total_pay_ex_vat) : null;
+    const totalVat = (job?.total_pay_vat != null) ? Number(job.total_pay_vat) : null;
+    const totalInc = (job?.total_pay_inc_vat != null) ? Number(job.total_pay_inc_vat) : null;
+
+    const lines = [];
+    lines.push('Remittance Advice');
+    if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
+    if (payDate) lines.push(`Pay date: ${payDate}`);
+    lines.push(`Pay batch: ${payBatchId}`);
+    lines.push(`Scope: ${scope}`);
+    lines.push('');
+
+    if (jobKind === 'PAYE') {
+      if (displayName || tmsRef) lines.push(`Candidate: ${[displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ')}`);
+    } else if (jobKind === 'UMBRELLA') {
+      if (payeeName) lines.push(`Umbrella: ${payeeName}`);
+    }
+
+    if (totals) {
+      if (totals.total_pay_ex_vat != null) lines.push(`Total pay ex VAT: ${totals.total_pay_ex_vat}`);
+      if (totals.total_pay_vat != null) lines.push(`Total VAT: ${totals.total_pay_vat}`);
+      if (totals.total_pay_inc_vat != null) lines.push(`Total inc VAT: ${totals.total_pay_inc_vat}`);
+      if (totals.total_pay_net != null) lines.push(`Total net: ${totals.total_pay_net}`);
+    } else {
+      if (totalPayEx != null) lines.push(`Total pay ex VAT: ${totalPayEx.toFixed(2)}`);
+      if (totalVat != null) lines.push(`Total VAT: ${totalVat.toFixed(2)}`);
+      if (totalInc != null) lines.push(`Total inc VAT: ${totalInc.toFixed(2)}`);
+    }
+
+    lines.push('');
+    lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
+
+    const bodyText = lines.join('\n');
+    const bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
+
+    const payeeEntityKind = (job?.payee_entity_kind && String(job.payee_entity_kind).trim())
+      ? String(job.payee_entity_kind).trim()
+      : null;
+
+    const payeeEntityId = (job?.payee_entity_id && String(job.payee_entity_id).trim())
+      ? String(job.payee_entity_id).trim()
+      : null;
+
+    const reference = `remit:pay_batch:${payBatchId}:${jobKind || 'JOB'}:${payeeEntityKind || 'UNKNOWN'}:${payeeEntityId || 'UNKNOWN'}`;
+
+    const outboxRow = {
+      type: 'REMITTANCE',
+      to: toEmail,
+      cc: null,
+      subject,
+      body_text: bodyText,
+      body_html: bodyHtml,
+      attachments: null,
+      status: 'QUEUED',
+      reference,
+      created_by: user?.id || null,
+      created_at_utc: nowIso
+    };
+
+    try {
+      const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify(outboxRow)
+      });
+
+      if (!ins.ok) {
+        const errTxt = await ins.text().catch(() => '');
+        skipped.push({
+          job_kind: jobKind || null,
+          payee_entity_kind: payeeEntityKind,
+          payee_entity_id: payeeEntityId,
+          to: toEmail,
+          reason: 'MAIL_OUTBOX_INSERT_FAILED',
+          error: (errTxt || '').slice(0, 500)
+        });
+        continue;
+      }
+
+      const insJson = await ins.json().catch(() => []);
+      const mail = Array.isArray(insJson) ? insJson[0] : insJson;
+      const mailId = mail?.id ? String(mail.id) : null;
+
+      queued.push({
+        job_kind: jobKind || null,
+        payee_entity_kind: payeeEntityKind,
+        payee_entity_id: payeeEntityId,
+        to: toEmail,
+        subject,
+        reference,
+        mail_outbox_id: mailId
+      });
+    } catch (e) {
+      skipped.push({
+        job_kind: jobKind || null,
+        payee_entity_kind: payeeEntityKind,
+        payee_entity_id: payeeEntityId,
+        to: toEmail,
+        reason: 'MAIL_OUTBOX_EXCEPTION',
+        error: String(e?.message || e || 'MAIL_OUTBOX_EXCEPTION').slice(0, 500)
+      });
+      continue;
     }
   }
 
-  // Successor source: allow overrides from body.successor_overrides
-  const ov = (body.successor_overrides && typeof body.successor_overrides === 'object') ? body.successor_overrides : {};
-
-  // Helper: bool or null (allows explicit null in overrides to clear)
-  const boolOrNull = (v, fallbackBool) => {
-    if (v === null) return null;
-    if (v === undefined) return fallbackBool;
-    return clampBool(v, fallbackBool);
-  };
-
-  // NEW: Copy overrideclientsettings into successor (allow override if present)
-  const successor_overrideclientsettings =
-    ('overrideclientsettings' in ov)
-      ? clampBool(ov.overrideclientsettings, !!cur.overrideclientsettings)
-      : !!cur.overrideclientsettings;
-
-  // Compose successor std_* (prefer explicit override → derived from schedule → inherit)
-  let successor_std_schedule = ('std_schedule_json' in ov) ? (ov.std_schedule_json || null) : (cur.std_schedule_json || null);
-  let successor_std_hours    = null;
-  if (successor_std_schedule) {
-    try { successor_std_hours = deriveStdHoursFromSchedule(successor_std_schedule); }
-    catch (e) { return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json for successor')); }
-  } else {
-    successor_std_hours = ('std_hours_json' in ov) ? (ov.std_hours_json || null) : (cur.std_hours_json || null);
-  }
-
-  // NEW: Copy contract route/calc/group flags into successor (allow override if present)
-  const successor_is_nhsp =
-    ('is_nhsp' in ov) ? boolOrNull(ov.is_nhsp, !!cur.is_nhsp) : (cur.is_nhsp ?? null);
-
-  const successor_autoprocess_hr =
-    ('autoprocess_hr' in ov) ? boolOrNull(ov.autoprocess_hr, !!cur.autoprocess_hr) : (cur.autoprocess_hr ?? null);
-
-  const successor_requires_hr =
-    ('requires_hr' in ov) ? boolOrNull(ov.requires_hr, !!cur.requires_hr) : (cur.requires_hr ?? null);
-
-  const successor_no_timesheet_required =
-    ('no_timesheet_required' in ov) ? boolOrNull(ov.no_timesheet_required, !!cur.no_timesheet_required) : (cur.no_timesheet_required ?? null);
-
-  const successor_daily_calc_of_invoices =
-    ('daily_calc_of_invoices' in ov) ? boolOrNull(ov.daily_calc_of_invoices, !!cur.daily_calc_of_invoices) : (cur.daily_calc_of_invoices ?? null);
-
-  const successor_group_nightsat_sunbh =
-    ('group_nightsat_sunbh' in ov) ? boolOrNull(ov.group_nightsat_sunbh, !!cur.group_nightsat_sunbh) : (cur.group_nightsat_sunbh ?? null);
-
-  // Also copy self_bill (contract-level) for correctness (allow override if present)
-  const successor_self_bill =
-    ('self_bill' in ov) ? boolOrNull(ov.self_bill, !!cur.self_bill) : (cur.self_bill ?? null);
-
-  // NEW: Copy attachment + reference/email routing flags into successor (allow override if present)
-  const successor_hr_attach_to_invoice =
-    ('hr_attach_to_invoice' in ov) ? boolOrNull(ov.hr_attach_to_invoice, !!cur.hr_attach_to_invoice) : (cur.hr_attach_to_invoice ?? null);
-
-  const successor_ts_attach_to_invoice =
-    ('ts_attach_to_invoice' in ov) ? boolOrNull(ov.ts_attach_to_invoice, !!cur.ts_attach_to_invoice) : (cur.ts_attach_to_invoice ?? null);
-
-  const successor_reference_number_required_to_issue_invoice =
-    ('reference_number_required_to_issue_invoice' in ov)
-      ? boolOrNull(ov.reference_number_required_to_issue_invoice, !!cur.reference_number_required_to_issue_invoice)
-      : (cur.reference_number_required_to_issue_invoice ?? null);
-
-  const successor_send_manual_invoices_to_different_email =
-    ('send_manual_invoices_to_different_email' in ov)
-      ? boolOrNull(ov.send_manual_invoices_to_different_email, !!cur.send_manual_invoices_to_different_email)
-      : (cur.send_manual_invoices_to_different_email ?? null);
-
-  const successor_manual_invoices_alt_email_address =
-    ('manual_invoices_alt_email_address' in ov)
-      ? (ov.manual_invoices_alt_email_address == null ? null : String(ov.manual_invoices_alt_email_address))
-      : (cur.manual_invoices_alt_email_address ?? null);
-
-  const successor_weekly_timesheet_source =
-    ('weekly_timesheet_source' in ov) ? (ov.weekly_timesheet_source ?? null) : (cur.weekly_timesheet_source ?? null);
-
-  // Friendly validation mirroring DB constraints (validate resulting successor state)
-  if (successor_is_nhsp === true && successor_autoprocess_hr === true) {
-    return withCORS(env, req, badRequest('Invalid contract route for successor: is_nhsp=true and autoprocess_hr=true cannot both be true.'));
-  }
-  if (successor_no_timesheet_required === true && successor_autoprocess_hr !== true) {
-    return withCORS(env, req, badRequest('Invalid contract route for successor: no_timesheet_required=true requires autoprocess_hr=true.'));
-  }
-
-  // Successor payload: copy from A, apply overrides
-  const successorPayload = [{
-    candidate_id: ('candidate_id' in ov) ? ov.candidate_id : cur.candidate_id,
-    client_id:    ('client_id'    in ov) ? ov.client_id    : cur.client_id,
-    role:         ('role'         in ov) ? ov.role         : cur.role,
-    band:         ('band'         in ov) ? ov.band         : cur.band,
-    display_site: ('display_site' in ov) ? ov.display_site : cur.display_site,
-    ward_hint:    ('ward_hint'    in ov) ? ov.ward_hint    : cur.ward_hint,
-
-    start_date: newStart,
-    end_date:   newEnd,
-
-    overrideclientsettings: successor_overrideclientsettings,
-
-    // NEW: route/calc/group flags copied into successor
-    is_nhsp: successor_is_nhsp,
-    autoprocess_hr: successor_autoprocess_hr,
-    requires_hr: successor_requires_hr,
-    no_timesheet_required: successor_no_timesheet_required,
-    daily_calc_of_invoices: successor_daily_calc_of_invoices,
-    group_nightsat_sunbh: successor_group_nightsat_sunbh,
-    self_bill: successor_self_bill,
-
-    hr_attach_to_invoice: successor_hr_attach_to_invoice,
-    ts_attach_to_invoice: successor_ts_attach_to_invoice,
-
-    reference_number_required_to_issue_invoice: successor_reference_number_required_to_issue_invoice,
-    send_manual_invoices_to_different_email: successor_send_manual_invoices_to_different_email,
-    manual_invoices_alt_email_address: successor_manual_invoices_alt_email_address,
-
-    weekly_timesheet_source: successor_weekly_timesheet_source,
-
-    pay_method_snapshot: ('pay_method_snapshot' in ov) ? ov.pay_method_snapshot : cur.pay_method_snapshot,
-    rates_json:          ('rates_json'          in ov) ? ov.rates_json          : (cur.rates_json || {}),
-
-    default_submission_mode: ('default_submission_mode' in ov) ? ov.default_submission_mode : cur.default_submission_mode,
-    week_ending_weekday_snapshot: (ov.week_ending_weekday_snapshot != null
-                                  ? Number(ov.week_ending_weekday_snapshot)
-                                  : cur.week_ending_weekday_snapshot),
-
-    std_schedule_json: successor_std_schedule,
-    std_hours_json:    successor_std_hours,
-
-    bucket_labels_json: ('bucket_labels_json' in ov) ? ov.bucket_labels_json : (cur.bucket_labels_json || null),
-    additional_rates_json: ('additional_rates_json' in ov) ? ov.additional_rates_json : (cur.additional_rates_json || null),
-
-    // Keep existing contract-level flags as before (no override support unless you add it later)
-    auto_invoice: cur.auto_invoice,
-    require_reference_to_pay: cur.require_reference_to_pay,
-    require_reference_to_invoice: cur.require_reference_to_invoice,
-
-    mileage_pay_rate: cur.mileage_pay_rate,
-    mileage_charge_rate: cur.mileage_charge_rate,
-
-    created_at: nowIso(), updated_at: nowIso()
-  }];
-
-  // Insert successor
-  const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
-    method: 'POST', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' },
-    body: JSON.stringify(successorPayload)
-  });
-  if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
-  const successor = (await ins.json().catch(()=>[]))[0];
-
-  // Generate weeks for successor
+  // Mark sent (audit trail) — DB function is scope + results_json (not per-payee)
   try {
-    await handleContractsGenerateWeeks(env, new Request(''), successor.id);
-  } catch (e) {
-    // non-fatal; leave successor created
-    console.warn('[CLONE-EXTEND] generate-weeks failed for successor', successor.id, e?.message || e);
-  }
-
-  // End existing A (if requested)
-  if (wantEndExisting) {
-    // Per-day prune at/after newStart (skip TS), then patch end_date = closeTo
-    try {
-      const { rows: weeks } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-        `?contract_id=eq.${enc(cur.id)}&week_ending_date=gte.${enc(newStart)}` +
-        `&select=id,week_ending_date,timesheet_id,planned_schedule_json`
-      );
-      for (const w of (weeks || [])) {
-        if (w?.timesheet_id) continue; // keep weeks with TS
-
-        const plan = Array.isArray(w?.planned_schedule_json) ? w.planned_schedule_json : [];
-        if (!plan.length) {
-          await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-            method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' }
-          }).catch(()=>{});
-          continue;
-        }
-        const kept = plan.filter(d => d && typeof d.date === 'string' && d.date < newStart);
-        if (kept.length) {
-          await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-            method:'PATCH', headers:{ ...sbHeaders(env), 'Prefer':'return=minimal' },
-            body: JSON.stringify({ planned_schedule_json: kept, updated_at: nowIso() })
-          });
-        } else {
-          await fetch(`${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`, {
-            method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return=minimal' }
-          }).catch(()=>{});
-        }
-      }
-    } catch (_) {}
-
-    // Patch A.end_date
-    await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`, {
-      method: 'PATCH', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ end_date: closeTo, updated_at: nowIso() })
+    await sbRpc(env, 'pay_remittance_mark_sent', {
+      p_pay_batch_id: payBatchId,
+      p_scope: scope,
+      p_results_json: { queued, skipped, pay_date: payDate, bulk_reference: bulkRef },
+      p_actor_user_id: user.id
     });
+  } catch (e) {
+    // Non-fatal: emails are queued; audit mark can be retried.
+    console.warn('[banking][remittances] pay_remittance_mark_sent failed:', e?.message || e);
   }
 
-  return withCORS(env, req, ok({ successor, closed_at: wantEndExisting ? closeTo : null }));
+  return withCORS(env, req, ok({
+    ok: true,
+    pay_batch_id: payBatchId,
+    scope,
+    pay_date: payDate,
+    bulk_reference: bulkRef,
+    queued_count: queued.length,
+    skipped_count: skipped.length,
+    queued,
+    skipped
+  }));
+}
+
+/**
+ * Minimal HTML escape for safe <pre> usage.
+ * (mail_outbox ultimately renders HTML; keep it safe.)
+ */
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+
+async function handleBankingPayReconcileExternal(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+  const payDate = (body?.pay_date && String(body.pay_date).trim()) ? String(body.pay_date).trim() : null;
+  if (!payDate) return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD)'));
+
+  const paymentReference =
+    (body?.payment_reference && String(body.payment_reference).trim()) ? String(body.payment_reference).trim()
+    : (body?.bank_confirm_ref && String(body.bank_confirm_ref).trim()) ? String(body.bank_confirm_ref).trim()
+    : null;
+
+  if (!paymentReference) return withCORS(env, req, badRequest('payment_reference is required'));
+
+  const note = (body?.note && String(body.note).trim()) ? String(body.note).trim() : null;
+
+  const idsIn = Array.isArray(body?.timesheet_ids) ? body.timesheet_ids : [];
+  const timesheetIds = [...new Set(idsIn.map(x => (x == null ? '' : String(x).trim())).filter(Boolean))];
+  if (!timesheetIds.length) return withCORS(env, req, badRequest('timesheet_ids[] is required'));
+
+  let rec;
+  try {
+    rec = await sbRpc(env, 'pay_reconcile_external_payment', {
+      p_actor_user_id: user.id,
+      p_payload_json: {
+        pay_date: payDate,
+        payment_reference: paymentReference,
+        note,
+        timesheet_ids: timesheetIds
+      }
+    });
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'RECONCILE_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+
+  const batchId = rec?.pay_batch_id ? String(rec.pay_batch_id) : null;
+  if (!batchId) {
+    return withCORS(env, req, serverError('pay_reconcile_external_payment did not return pay_batch_id'));
+  }
+
+  try {
+    const batch = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: batchId });
+    return withCORS(env, req, ok({
+      ok: true,
+      pay_batch_id: batchId,
+      batch
+    }));
+  } catch (e) {
+    // Still return the created batch id even if drilldown fails (non-fatal UX fallback)
+    const msg = (e && e.message) ? String(e.message) : String(e || 'PAY_BATCH_GET_FAILED');
+    return withCORS(env, req, ok({
+      ok: true,
+      pay_batch_id: batchId,
+      warning: 'PAY_BATCH_GET_FAILED',
+      warning_detail: msg
+    }));
+  }
+}
+
+
+async function handleBankingCapabilities(env, req, user) {
+  try {
+    const select = [
+      'rail_provider_default',
+      'rail_env_default',
+      'rail_supports_scheduling',
+      'rail_supports_name_check',
+      'rail_supports_auto_execute',
+      'default_schedule_umbrella_local',
+      'default_schedule_paye_local',
+      'funds_warning_hours_json'
+    ].join(',');
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${select}&limit=1`
+    );
+
+    const sd = (rows && rows[0]) ? rows[0] : null;
+    if (!sd) return withCORS(env, req, notFound('settings_defaults not found'));
+
+    const rail_provider_default = String(sd.rail_provider_default || 'CSV').toUpperCase();
+    const rail_env_default = String(sd.rail_env_default || 'PROD').toUpperCase();
+
+    const rail_supports_scheduling = !!sd.rail_supports_scheduling;
+    const rail_supports_name_check = !!sd.rail_supports_name_check;
+    const rail_supports_auto_execute = !!sd.rail_supports_auto_execute;
+
+    const default_schedule_umbrella_local = String(sd.default_schedule_umbrella_local || 'Thu 02:00');
+    const default_schedule_paye_local = String(sd.default_schedule_paye_local || 'Fri 02:00');
+
+    const funds_warning_hours_json =
+      (sd.funds_warning_hours_json && typeof sd.funds_warning_hours_json === 'object')
+        ? sd.funds_warning_hours_json
+        : [24, 12];
+
+    // Adapter "available" (feature-gate): Revolut requires worker secrets to exist.
+    const revolutAvailable =
+      !!(env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim()) &&
+      !!(env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim()) &&
+      !!(env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim()) &&
+      !!(env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
+
+    const copAvailable = revolutAvailable && rail_supports_name_check;
+
+    const rails = [
+      {
+        rail_provider: 'REVOLUT',
+        rail_kind: 'API',
+        available: revolutAvailable,
+        supports_scheduling: revolutAvailable && rail_supports_scheduling,
+        supports_name_check: copAvailable,
+        supports_auto_execute: revolutAvailable && rail_supports_auto_execute
+      },
+      {
+        rail_provider: 'CSV',
+        rail_kind: 'MANUAL',
+        available: true,
+        supports_scheduling: false,
+        supports_name_check: false,
+        supports_auto_execute: false
+      }
+    ];
+
+    return withCORS(env, req, ok({
+      ok: true,
+
+      rail_provider_default,
+      rail_env_default,
+
+      rail_supports_scheduling,
+      rail_supports_name_check,
+      rail_supports_auto_execute,
+
+      default_schedule_umbrella_local,
+      default_schedule_paye_local,
+
+      funds_warning_hours_json,
+
+      rails,
+
+      // explicit UI-friendly CoP flag (settings + adapter availability)
+      cop_available: copAvailable,
+
+      // informational
+      server_utc: new Date().toISOString()
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayPreview(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const payDate = String(body.pay_date || '').trim();
+  if (!payDate) return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD)'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_preview', {
+      p_pay_date: payDate,
+      p_actor_user_id: user.id
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_preview')) {
+        payload = payload.pay_preview;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayCreateDraft(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const payDate = String(body.pay_date || '').trim();
+  if (!payDate) return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD)'));
+
+  const previewDecisions =
+    (body.preview_decisions_json && typeof body.preview_decisions_json === 'object' && !Array.isArray(body.preview_decisions_json))
+      ? body.preview_decisions_json
+      : {};
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_create_draft_batch', {
+      p_pay_date: payDate,
+      p_actor_user_id: user.id,
+      p_preview_decisions_json: previewDecisions
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_create_draft_batch')) {
+        payload = payload.pay_create_draft_batch;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+async function handleBankingPayBatchGet(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_get')) {
+        payload = payload.pay_batch_get;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const scopeRaw = String(body.pay_channel_scope || body.scope || 'ALL').trim().toUpperCase();
+  const payChannelScope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_execute_bank', {
+      p_pay_batch_id: id,
+      p_pay_channel_scope: payChannelScope,
+      p_actor_user_id: user.id
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_execute_bank')) {
+        payload = payload.pay_execute_bank;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+  body = body || {};
+
+  try {
+    // Read batch (rail provider/env snapshot) via pay_batch_get (single source for drilldown)
+    const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+    let batchPayload = batchRes;
+    try {
+      if (Array.isArray(batchRes) && batchRes.length === 1 && batchRes[0] && typeof batchRes[0] === 'object') batchPayload = batchRes[0];
+      if (batchPayload && typeof batchPayload === 'object' && Object.prototype.hasOwnProperty.call(batchPayload, 'pay_batch_get')) {
+        batchPayload = batchPayload.pay_batch_get;
+      }
+    } catch {}
+
+    const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
+    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+    const envSnap  = String(batchObj?.rail_env_snapshot || 'PROD').toUpperCase();
+
+    const revolutAvailable =
+      !!(env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim()) &&
+      !!(env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim()) &&
+      !!(env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim()) &&
+      !!(env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
+
+    // Apply optional name-check overrides BEFORE prepare
+    const overrides = Array.isArray(body.name_check_overrides) ? body.name_check_overrides : [];
+    for (const o of overrides) {
+      if (!o || typeof o !== 'object' || Array.isArray(o)) {
+        return withCORS(env, req, badRequest('name_check_overrides must contain objects'));
+      }
+
+      const oProvider = String(o.rail_provider || o.provider || provider).trim().toUpperCase();
+      const oEnv      = String(o.rail_env || o.env || envSnap).trim().toUpperCase();
+
+      const entityKind = String(o.entity_kind || o.payee_entity_kind || '').trim().toUpperCase();
+      const entityId   = String(o.entity_id || o.payee_entity_id || '').trim();
+      const reason     = String(o.reason || '').trim();
+
+      if (!entityKind) return withCORS(env, req, badRequest('name_check_overrides[].entity_kind is required'));
+      if (!entityId)   return withCORS(env, req, badRequest('name_check_overrides[].entity_id is required'));
+      if (!reason)     return withCORS(env, req, badRequest('name_check_overrides[].reason is required'));
+
+      await sbRpc(env, 'bank_name_check_set_override', {
+        p_provider: oProvider,
+        p_env: oEnv,
+        p_entity_kind: entityKind,
+        p_entity_id: entityId,
+        p_reason: reason,
+        p_actor_user_id: user.id
+      });
+    }
+
+    // Rail-aware behaviour: adapter.prepareBatch(batchId, actor)
+    // Current adapter availability gates:
+    if (provider === 'REVOLUT' && !revolutAvailable) {
+      return withCORS(env, req, badRequest('REVOLUT_NOT_CONFIGURED'));
+    }
+
+    // ✅ NEW: Perform rail adapter prepare to do name-check + payee-map, so schedule can proceed.
+    try {
+      const adapter = getRailAdapter(provider);
+      if (adapter && typeof adapter.prepareBatch === 'function') {
+        await adapter.prepareBatch(env, id, user.id);
+      }
+    } catch (e) {
+      return withCORS(env, req, serverError(String(e?.message || e)));
+    }
+
+    // DB payee readiness list (authoritative for UI) — re-run AFTER adapter prepare
+    const prepRes = await sbRpc(env, 'pay_batch_prepare', {
+      p_pay_batch_id: id,
+      p_actor_user_id: user.id
+    });
+
+    let payload = prepRes;
+    try {
+      if (Array.isArray(prepRes) && prepRes.length === 1 && prepRes[0] && typeof prepRes[0] === 'object') payload = prepRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_prepare')) {
+        payload = payload.pay_batch_prepare;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const scheduleKindRaw = String(body.schedule_kind || '').trim().toUpperCase();
+  if (!scheduleKindRaw) return withCORS(env, req, badRequest('schedule_kind is required'));
+
+  // ✅ Normalize legacy UI/backend value -> DB canonical enum
+  // DB expects: IMMEDIATE | SCHEDULED
+  // We accept legacy: AT_TIME (treated as SCHEDULED)
+  const scheduleKind =
+    (scheduleKindRaw === 'AT_TIME')
+      ? 'SCHEDULED'
+      : scheduleKindRaw;
+
+  const scheduledAtUtcRaw =
+    (body.scheduled_at_utc === null || body.scheduled_at_utc === undefined)
+      ? null
+      : String(body.scheduled_at_utc).trim();
+  const scheduledAtUtcIn = scheduledAtUtcRaw ? scheduledAtUtcRaw : null;
+
+  if (scheduleKind !== 'IMMEDIATE' && scheduleKind !== 'SCHEDULED') {
+    return withCORS(env, req, badRequest('schedule_kind must be IMMEDIATE or SCHEDULED (legacy AT_TIME is also accepted)'));
+  }
+  if (scheduleKind === 'SCHEDULED' && !scheduledAtUtcIn) {
+    return withCORS(env, req, badRequest('scheduled_at_utc is required when schedule_kind=SCHEDULED (or legacy AT_TIME)'));
+  }
+
+  // ✅ Only pass scheduled_at_utc to the DB when scheduled
+  const scheduledAtUtc = (scheduleKind === 'SCHEDULED') ? scheduledAtUtcIn : null;
+
+  const fundingAccountRef = (body.funding_account_ref === null || body.funding_account_ref === undefined)
+    ? null
+    : String(body.funding_account_ref).trim() || null;
+
+  // ✅ DB expects warning_hours_json to be a JSON array (or null). Reject objects to avoid DB exceptions.
+  let warningHoursJson = null;
+  if (body.warning_hours_json === null || body.warning_hours_json === undefined) {
+    warningHoursJson = null;
+  } else if (Array.isArray(body.warning_hours_json)) {
+    warningHoursJson = body.warning_hours_json;
+  } else {
+    return withCORS(env, req, badRequest('warning_hours_json must be an array (e.g., [24,12])'));
+  }
+
+  try {
+    // Revolut-only scheduling: validate provider snapshot on the batch
+    const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+    let batchPayload = batchRes;
+    try {
+      if (Array.isArray(batchRes) && batchRes.length === 1 && batchRes[0] && typeof batchRes[0] === 'object') batchPayload = batchRes[0];
+      if (batchPayload && typeof batchPayload === 'object' && Object.prototype.hasOwnProperty.call(batchPayload, 'pay_batch_get')) {
+        batchPayload = batchPayload.pay_batch_get;
+      }
+    } catch {}
+
+    const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
+    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+
+    if (provider !== 'REVOLUT') {
+      return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+
+    const revolutAvailable =
+      !!(env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim()) &&
+      !!(env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim()) &&
+      !!(env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim()) &&
+      !!(env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
+
+    if (!revolutAvailable) {
+      return withCORS(env, req, badRequest('REVOLUT_NOT_CONFIGURED'));
+    }
+
+    const rpcRes = await sbRpc(env, 'pay_batch_schedule', {
+      p_pay_batch_id: id,
+      p_schedule_kind: scheduleKind,
+      p_scheduled_at_utc: scheduledAtUtc,
+      p_funding_account_ref: fundingAccountRef,
+      p_warning_hours_json: warningHoursJson,
+      p_actor_user_id: user.id
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_schedule')) {
+        payload = payload.pay_batch_schedule;
+      }
+    } catch {}
+
+    // Option A: return “scheduled” and let cron execute within 1 minute.
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const reason = String(body.reason || '').trim();
+  if (!reason) return withCORS(env, req, badRequest('reason is required'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_batch_cancel', {
+      p_pay_batch_id: id,
+      p_actor_user_id: user.id,
+      p_reason: reason
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_cancel')) {
+        payload = payload.pay_batch_cancel;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const url = new URL(req.url);
+  const scopeRaw = String(url.searchParams.get('scope') || 'ALL').trim().toUpperCase();
+  const scope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
+
+  try {
+    const csvText = await sbRpc(env, 'pay_export_bank_csv', {
+      p_pay_batch_id: id,
+      p_scope: scope
+    });
+
+    const txt = (csvText === null || csvText === undefined) ? '' : String(csvText);
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'text/csv; charset=utf-8');
+    headers.set('Content-Disposition', `attachment; filename="pay_batch_${id}_${scope}.csv"`);
+    // CORS
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Access-Control-Allow-Headers', '*');
+    headers.set('Access-Control-Allow-Methods', '*');
+
+    return new Response(txt, { status: 200, headers });
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+  body = body || {};
+
+  try {
+    // Determine provider from batch snapshot
+    const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+    let batchPayload = batchRes;
+    try {
+      if (Array.isArray(batchRes) && batchRes.length === 1 && batchRes[0] && typeof batchRes[0] === 'object') batchPayload = batchRes[0];
+      if (batchPayload && typeof batchPayload === 'object' && Object.prototype.hasOwnProperty.call(batchPayload, 'pay_batch_get')) {
+        batchPayload = batchPayload.pay_batch_get;
+      }
+    } catch {}
+
+    const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
+    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+
+    // CSV: polling is a no-op (settlement happens via manual-confirm). Return pay_batch_get for UI refresh.
+    if (provider === 'CSV') {
+      return withCORS(env, req, ok(batchPayload && typeof batchPayload === 'object' ? batchPayload : {}));
+    }
+
+    // REVOLUT (and any API rail): poll the rail provider via adapter (authoritative),
+    // which applies rail status updates AND settles via pay_settle_rail safely.
+    if (provider === 'REVOLUT') {
+      const revolutAvailable =
+        !!(env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim()) &&
+        !!(env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim()) &&
+        !!(env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim()) &&
+        !!(env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
+
+      if (!revolutAvailable) {
+        return withCORS(env, req, badRequest('REVOLUT_NOT_CONFIGURED'));
+      }
+    }
+
+    const adapter = getRailAdapter(provider);
+    if (!adapter || typeof adapter.pollBatch !== 'function') {
+      return withCORS(env, req, badRequest('POLL_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+
+    const polled = await adapter.pollBatch(env, id, user.id);
+    return withCORS(env, req, ok(polled && typeof polled === 'object' ? polled : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
 }
 
 
@@ -8548,7 +10080,6 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
 }
 
 
-
 async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8574,6 +10105,13 @@ async function handleContractWeeksList(env, req) {
         'uploaded_pdf_r2_key',
         'planned_schedule_json',
 
+        // ✅ NEW: split-week enforcement + worker note fields (admin visibility)
+        'enforce_day_partition',
+        'allowed_days_mask',
+        'split_boundary_date',
+        'worker_note',
+        'split_group_key',
+
         // ✅ required for planned-week repaint after draft save
         'totals_json',
         'day_entries_json',
@@ -8598,7 +10136,6 @@ async function handleContractWeeksList(env, req) {
   const { rows } = await sbFetch(env, api);
   return withCORS(env, req, ok(rows || []));
 }
-
 
  async function handleContractWeekUpdate(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -12803,6 +14340,8 @@ async function handleTimesheetsPresignWeekly(env, req) {
     }
   }));
 }
+
+
 async function handleTimesheetsEligibilityWeekly(env, req) {
   const enc = encodeURIComponent;
 
@@ -12825,14 +14364,16 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
   const { rows } = await sbFetch(env, url);
   const list = rows || [];
 
-  // Attach bucket labels per contract for the app UI
+  // Attach bucket labels + is_ad_hoc per contract for the app UI
   const DEFAULT_LABELS = { day: 'Day', night: 'Night', sat: 'Sat', sun: 'Sun', bh: 'BH' };
   const contractIds = [...new Set(list.map(r => r.contract_id).filter(Boolean))];
   let mapLabels = {};
+  let mapIsAdHoc = {};
+
   if (contractIds.length) {
     const { rows: cons } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json`
+      `${env.SUPABASE_URL}/rest/v1/contracts?id=in.(${contractIds.map(enc).join(',')})&select=id,bucket_labels_json,is_ad_hoc`
     );
     mapLabels = Object.fromEntries(
       (cons || []).map(c => [
@@ -12841,6 +14382,9 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
           ? c.bucket_labels_json
           : DEFAULT_LABELS
       ])
+    );
+    mapIsAdHoc = Object.fromEntries(
+      (cons || []).map(c => [ c.id, !!c.is_ad_hoc ])
     );
   }
 
@@ -12962,9 +14506,15 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 
     const isResubmission = hasExistingTs && !lockInfo.locked && !isManualOnly;
 
+    const isAdHoc = mapIsAdHoc[r.contract_id] === true;
+
     return {
       ...r,
       bucket_labels: mapLabels[r.contract_id] || DEFAULT_LABELS,
+
+      // ✅ NEW: contract-level ad hoc flag (authoritative from contracts table)
+      contract_is_ad_hoc: isAdHoc,
+      is_ad_hoc: (r && Object.prototype.hasOwnProperty.call(r, 'is_ad_hoc') && r.is_ad_hoc != null) ? r.is_ad_hoc : isAdHoc,
 
       supports_electronic_submission: supportsElectronic,
       has_existing_timesheet: hasExistingTs,
@@ -12981,7 +14531,6 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 
   return withCORS(env, req, ok(withLabels));
 }
-
 
 // GET /api/timesheets/:id/evidence
 // GET /api/timesheets/:id/evidence
@@ -15352,6 +16901,56 @@ async function handleTimesheetsSubmitWeekly(env, req) {
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
+  // ─────────────────────────────────────────────────────────────
+  // ✅ NEW: split-week enforcement backend gate
+  // If enforce_day_partition=true, we require day-level schedule (actual_schedule_json)
+  // and validate that all schedule dates fall within allowed_days_mask.
+  // ─────────────────────────────────────────────────────────────
+  if (cw && cw.enforce_day_partition === true) {
+    const mask = String(cw.allowed_days_mask || '').trim();
+
+    if (!/^[01]{7}$/.test(mask)) {
+      return withCORS(env, req, badRequest('Day partition is enforced for this week but allowed_days_mask is invalid'));
+    }
+
+    if (!(Array.isArray(body?.actual_schedule_json) && body.actual_schedule_json.length)) {
+      return withCORS(env, req, badRequest('This timesheet requires day-level entries. Please submit using actual_schedule_json.'));
+    }
+
+    const weekEnd = String(cw.week_ending_date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekEnd)) {
+      return withCORS(env, req, badRequest('Weekly slot has invalid week_ending_date'));
+    }
+    const weekStart = addDays(weekEnd, -6);
+
+    const idxFromUtcDow = (utcDow) => {
+      // JS: 0=Sun..6=Sat ; mask: Mon..Sun => Mon=0..Sun=6
+      return (utcDow === 0) ? 6 : (utcDow - 1);
+    };
+
+    for (const seg of body.actual_schedule_json) {
+      const d = (seg && typeof seg === 'object' && seg.date != null) ? String(seg.date).trim() : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        return withCORS(env, req, badRequest('Invalid actual_schedule_json: each segment must include date (YYYY-MM-DD)'));
+      }
+
+      if (d < weekStart || d > weekEnd) {
+        return withCORS(env, req, badRequest('This timesheet enforces a split-week day partition and the schedule contains a date outside this contract week'));
+      }
+
+      const dt = new Date(d + 'T00:00:00Z');
+      if (Number.isNaN(dt.getTime())) {
+        return withCORS(env, req, badRequest('Invalid actual_schedule_json date'));
+      }
+      const idx = idxFromUtcDow(dt.getUTCDay());
+      const allowed = mask.charAt(idx) === '1';
+
+      if (!allowed) {
+        return withCORS(env, req, badRequest('This timesheet enforces a split-week day partition. One or more schedule dates belong on the other timesheet for this week.'));
+      }
+    }
+  }
+
   // Client submission-mode capability: client_settings.default_submission_mode
   // - ELECTRONIC => electronic allowed (and QR allowed)
   // - MANUAL     => electronic NOT allowed, QR allowed
@@ -16296,7 +17895,6 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     email_queued: wantsQR ? !!emailQueued : null
   }));
 }
-
 
 // ─────────────────────────────────────────────────────────────
 // NEW HELPER: purge superseded (non-current) timesheet artifacts
@@ -19775,593 +21373,6 @@ async function handleInvoiceEligibleTimesheets(env, req, invoiceId) {
 // ───────────────────────────────────────────────────────────────────────────────
 // PAYMENTS — CSV (authorised gate + 16-char payment reference cap)
 // ───────────────────────────────────────────────────────────────────────────────
-async function handlePaymentsGenerateCsv(env, req) {
-  const enc    = encodeURIComponent;
-  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-  const capRef = (s, max = 16) => (s ? String(s).slice(0, max) : '');
-  const csvEsc = (v) => {
-    const s = String(v ?? '');
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-
-  // Monday of a given date (UTC) as YYYY-MM-DD
-  const computeMondayWeekStartForDate = (d) => {
-    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
-    const base = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-    const day  = base.getUTCDay();           // 0=Sun..6=Sat
-    const offset = (day + 6) % 7;            // days since Monday
-    base.setUTCDate(base.getUTCDate() - offset);
-    const yyyy = base.getUTCFullYear();
-    const mm   = String(base.getUTCMonth() + 1).padStart(2, '0');
-    const dd   = String(base.getUTCDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
-
-  const clientIds    = Array.isArray(body?.client_ids)    ? body.client_ids.filter(Boolean)    : [];
-  const candidateIds = Array.isArray(body?.candidate_ids) ? body.candidate_ids.filter(Boolean) : [];
-  const payMethod    = body?.pay_method ? String(body.pay_method).toUpperCase() : null;
-  const umbrellaIds  = Array.isArray(body?.umbrella_ids)  ? body.umbrella_ids.filter(Boolean)  : [];
-
-  // One pay-run week start for *this* CSV generation.
-  // Used for missing-shift repayments and scheduled advances/repayments.
-  const payWeekStart = computeMondayWeekStartForDate(new Date());
-
-  // ==== Query TSFIN — only current, unpaid, not on hold, AUTHORISED timesheets
-  let url =
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-    `?select=` +
-    [
-      'id',
-      'timesheet_id',
-      'candidate_id',
-      'client_id',
-      'pay_method',
-      'processing_status',
-      'total_pay_ex_vat',
-      'additional_pay_ex_vat',
-      'expenses_pay_ex_vat',
-      'mileage_pay_ex_vat',
-      'pay_wtr_rate_pct_snapshot',
-      'policy_snapshot_json',
-      'pay_vat_rate_pct_snapshot',
-      'pay_vat_amount_snapshot',
-      'pay_total_inc_vat_snapshot',
-      'paid_at_utc',
-      'pay_on_hold',
-      'invoice_breakdown_json',
-      'timesheet:timesheets(week_ending_date,authorised_at_server,contract_id,reference_number)'
-    ].join(',') +
-    `&is_current=eq.true&paid_at_utc=is.null&pay_on_hold=eq.false` +
-    `&timesheet.authorised_at_server=not.is.null`;
-
-  if (clientIds.length)    url += `&client_id=in.(${clientIds.map(enc).join(',')})`;
-  if (candidateIds.length) url += `&candidate_id=in.(${candidateIds.map(enc).join(',')})`;
-  if (payMethod)           url += `&pay_method=eq.${enc(payMethod)}`;
-
-  const { rows: tsRowsRaw } = await sbFetch(env, url, false);
-  const tsRows = Array.isArray(tsRowsRaw) ? tsRowsRaw : [];
-
-  // ==== Load unpaid pay adjustments (only as_advance=false)
-  // NOTE: this allows "adjustments-only" runs even when there are no TSFIN rows.
-  let adjRows = [];
-  try {
-    let adjUrl =
-      `${env.SUPABASE_URL}/rest/v1/ts_pay_adjustments` +
-      `?paid_at_utc=is.null` +
-      `&as_advance=eq.false` +
-      `&select=id,timesheet_id,candidate_id,client_id,week_ending_date,delta_pay_ex_vat,reason,as_advance,advance_reason,meta_json,note`;
-
-    if (clientIds.length)    adjUrl += `&client_id=in.(${clientIds.map(enc).join(',')})`;
-    if (candidateIds.length) adjUrl += `&candidate_id=in.(${candidateIds.map(enc).join(',')})`;
-
-    const { rows } = await sbFetch(env, adjUrl, false);
-    adjRows = rows || [];
-  } catch (e) {
-    console.warn('[PAY_CSV] failed to load ts_pay_adjustments', e?.message || e);
-    adjRows = [];
-  }
-
-  if (!tsRows.length && !adjRows.length) {
-    return withCORS(env, req, notFound('Nothing to pay (no eligible timesheets and no unpaid pay adjustments).'));
-  }
-
-  // ==== Load contracts for reference gate (require_reference_to_pay – CONTRACT-LEVEL)
-  // (only relevant for TSFIN rows)
-  const contractIds = [...new Set(tsRows.map(r => r?.timesheet?.contract_id).filter(Boolean))];
-  let requireRefMap = {};
-  if (contractIds.length) {
-    const { rows: crows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contracts` +
-      `?id=in.(${contractIds.map(enc).join(',')})` +
-      `&select=id,require_reference_to_pay`
-    );
-    requireRefMap = Object.fromEntries((crows || []).map(c => [c.id, !!c.require_reference_to_pay]));
-  }
-
-  // ==== Candidate and Umbrella lookups (must include candidates from TSFIN rows + adjustments)
-  const candIdsAll = [
-    ...new Set([
-      ...tsRows.map(r => r?.candidate_id).filter(Boolean),
-      ...adjRows.map(a => a?.candidate_id).filter(Boolean)
-    ])
-  ];
-
-  const { rows: candRows } = candIdsAll.length
-    ? await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/candidates?` +
-        `select=id,display_name,first_name,last_name,email,account_holder,bank_name,sort_code,account_number,pay_method,umbrella_id` +
-        `&id=in.(${candIdsAll.map(enc).join(',')})`
-      )
-    : { rows: [] };
-
-  const mapCand = Object.fromEntries((candRows || []).map(c => [c.id, c]));
-
-  const umbIdsAll = [...new Set((candRows || []).map(c => c.umbrella_id).filter(Boolean))];
-  const { rows: umbRows } = umbIdsAll.length
-    ? await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/umbrellas` +
-        `?id=in.(${umbIdsAll.map(enc).join(',')})` +
-        `&select=id,name,enabled,vat_chargeable,bank_name,sort_code,account_number`
-      )
-    : { rows: [] };
-
-  const mapUmb = Object.fromEntries((umbRows || []).map(u => [u.id, u]));
-
-  // ==== Optional umbrella filter + safety gates + contract reference gate (TSFIN rows only)
-  const filtered = tsRows.filter(r => {
-    const ps = String(r.processing_status || '').toUpperCase();
-    if (ps === 'UNASSIGNED' || ps === 'CLIENT_UNRESOLVED' || ps === 'RATE_MISSING' || ps === 'PAY_CHANNEL_MISSING') {
-      return false;
-    }
-
-    const cand = mapCand[r.candidate_id];
-    if (!cand) return false;
-
-    const candMethod = String(cand.pay_method || '').toUpperCase();
-    if (!candMethod || (candMethod !== 'PAYE' && candMethod !== 'UMBRELLA')) return false;
-
-    if (payMethod && candMethod !== payMethod) return false;
-
-    if (umbrellaIds.length) {
-      const u = cand.umbrella_id;
-      if (!u || !umbrellaIds.includes(u)) return false;
-    }
-
-    if (candMethod === 'UMBRELLA') {
-      const umb = mapUmb[cand.umbrella_id];
-      if (!umb?.enabled) return false;
-    }
-
-    if (candMethod === 'PAYE') {
-      if (!cand.sort_code || !cand.account_number || !cand.account_holder) return false;
-    }
-
-    if (!r?.timesheet?.authorised_at_server) return false;
-
-    const requireRef = r?.timesheet?.contract_id ? !!requireRefMap[r.timesheet.contract_id] : false;
-    if (requireRef) {
-      const ref = (r?.timesheet?.reference_number || '').trim();
-      if (!ref) return false;
-    }
-
-    return true;
-  });
-
-  // ==== Defaults / client WTR
-  const defaults = await getDefaultSettings(env);
-  const clientIdSet = [...new Set(filtered.map(r => r.client_id).filter(Boolean))];
-  const clientHolidayMap = clientIdSet.length ? await getClientHolidayPctMap(env, clientIdSet) : {};
-
-  // ==== Group by candidate_id (NOT week_ending_date)
-  // Goal: pay run includes all outstanding TSFIN + all outstanding non-advance adjustments for each candidate.
-  const groups = new Map(); // candidate_id -> { candidate_id, rows: [], adjustments: [] }
-
-  for (const r of filtered) {
-    const key = String(r.candidate_id);
-    let g = groups.get(key);
-    if (!g) {
-      g = { candidate_id: r.candidate_id, rows: [], adjustments: [] };
-      groups.set(key, g);
-    }
-    g.rows.push(r);
-  }
-
-  for (const a of adjRows) {
-    const key = String(a.candidate_id);
-    let g = groups.get(key);
-    if (!g) {
-      g = { candidate_id: a.candidate_id, rows: [], adjustments: [] };
-      groups.set(key, g);
-    }
-    g.adjustments.push(a);
-  }
-
-  // ==== CSV compose (Monzo format)
-  const csvHeader = ['Payment reference','Payee name','Sort code','Bank account number','Bank account type','Amount'];
-  const csvRows = [csvHeader.map(csvEsc).join(',')];
-
-  const nowIso = new Date().toISOString();
-  const batchRef = `PAY:${nowIso.slice(0,10)}`;
-  const payRunCorrelationId = `PAYRUN:${nowIso}`; // used to fetch deductions/adjustments later for remittances
-
-  const affectedTsIds = [];
-  const patchQueue = [];       // TSFIN patches
-  const payAdjPatchQueue = []; // pay adjustment patches
-  const skippedCandidates = []; // for diagnostics
-
-  let bankTransferLines = 0;
-  let internalSettledCandidates = 0;
-
-  for (const g of groups.values()) {
-    const cand = mapCand[g.candidate_id];
-    if (!cand) continue;
-
-    const payMethodEff = String(cand.pay_method || '').toUpperCase();
-    if (!payMethodEff || (payMethodEff !== 'PAYE' && payMethodEff !== 'UMBRELLA')) continue;
-
-    if (payMethod && payMethodEff !== payMethod) continue;
-    if (umbrellaIds.length && payMethodEff === 'UMBRELLA') {
-      const u = cand.umbrella_id;
-      if (!u || !umbrellaIds.includes(u)) continue;
-    }
-
-    // Bank/channel eligibility (covers adjustments-only too)
-    if (payMethodEff === 'UMBRELLA') {
-      const umb = mapUmb[cand?.umbrella_id];
-      if (!umb?.enabled) continue;
-      if (!umb.sort_code || !umb.account_number || !umb.name) continue;
-    } else {
-      if (!cand.sort_code || !cand.account_number || !cand.account_holder) continue;
-    }
-
-    // 1) Compute gross from TSFIN rows
-    let sumEx  = 0; // PAYE (ex VAT)
-    let sumInc = 0; // Umbrella (inc VAT)
-
-    for (const r of g.rows) {
-      const payEx = Number(r.total_pay_ex_vat || 0);
-      const expEx = Number(r.expenses_pay_ex_vat || 0);
-      const milEx = Number(r.mileage_pay_ex_vat || 0);
-      const rowEx = round2(payEx + expEx + milEx);
-
-      if (payMethodEff === 'PAYE') {
-        const wtrPct = resolveWtrPctForRow(r, defaults, clientHolidayMap);
-        if (r.pay_wtr_rate_pct_snapshot == null) {
-          patchQueue.push({ id: r.id, body: { pay_wtr_rate_pct_snapshot: wtrPct } });
-        }
-        sumEx += rowEx;
-      } else {
-        const umb = mapUmb[cand?.umbrella_id];
-        const vatChargeable = !!umb?.vat_chargeable;
-
-        let rate   = r.pay_vat_rate_pct_snapshot;
-        let vatAmt = r.pay_vat_amount_snapshot;
-        let incAmt = r.pay_total_inc_vat_snapshot;
-
-        if (vatChargeable) {
-          if (incAmt == null || Number(incAmt) === 0) {
-            rate = (rate == null ? defaults.vat : Number(rate));
-            const derived = deriveUmbrellaVatSnapshots(rowEx, rate, true);
-            rate   = derived.rate;
-            vatAmt = derived.vat;
-            incAmt = derived.inc;
-            patchQueue.push({
-              id: r.id,
-              body: {
-                pay_vat_rate_pct_snapshot: rate,
-                pay_vat_amount_snapshot:   vatAmt,
-                pay_total_inc_vat_snapshot: incAmt
-              }
-            });
-          }
-          sumInc += Number(incAmt || 0);
-        } else {
-          if (
-            (r.pay_vat_amount_snapshot && Number(r.pay_vat_amount_snapshot) !== 0) ||
-            (r.pay_total_inc_vat_snapshot && Number(r.pay_total_inc_vat_snapshot) !== round2(rowEx))
-          ) {
-            patchQueue.push({
-              id: r.id,
-              body: {
-                pay_vat_rate_pct_snapshot: null,
-                pay_vat_amount_snapshot:   0,
-                pay_total_inc_vat_snapshot: rowEx
-              }
-            });
-          }
-          sumInc += rowEx;
-        }
-      }
-    }
-
-    // 1b) Add pay adjustments (non-advance only), regardless of their stored week_ending_date
-    const adjList = (g.adjustments || []).map(a => ({
-      id: a.id,
-      timesheet_id: a.timesheet_id || null,
-      delta_pay_ex_vat: round2(Number(a.delta_pay_ex_vat || 0)),
-      reason: a.reason || null,
-      note: a.note || null,
-      meta_json: a.meta_json || null
-    }));
-    const adjTotal = round2(adjList.reduce((acc, a) => acc + Number(a.delta_pay_ex_vat || 0), 0));
-
-    if (payMethodEff === 'PAYE') sumEx  = round2(sumEx  + adjTotal);
-    else                         sumInc = round2(sumInc + adjTotal);
-
-    const grossBeforeDeductions = payMethodEff === 'PAYE' ? round2(sumEx) : round2(sumInc);
-
-    // If gross is <= 0, we cannot produce a valid pay run for this candidate.
-    // (We also do NOT mark anything paid; this requires manual resolution.)
-    if (!(grossBeforeDeductions > 0)) {
-      skippedCandidates.push({
-        candidate_id: g.candidate_id,
-        reason: 'GROSS_NON_POSITIVE',
-        gross_before_deductions: grossBeforeDeductions
-      });
-      continue;
-    }
-
-    // 2) Apply deductions/repayments with net-pay floor for THIS pay run week start
-    let baseGross = grossBeforeDeductions;
-    let scheduleEntries = [];
-    let advanceUpdates = [];
-
-    if (payWeekStart) {
-      // For each TSFIN row, register missing-shift repayments into THIS pay run week
-      for (const r of g.rows) {
-        if (!r.client_id) continue;
-        await createMissingShiftRepayEntriesForTs(env, g.candidate_id, r.client_id, r, payWeekStart);
-      }
-
-      const loaded = await loadScheduledAdvanceEntries(env, g.candidate_id, payWeekStart);
-      scheduleEntries = loaded?.entries || [];
-
-      if (scheduleEntries.length) {
-        const applied = await applyAdvanceScheduleEntriesForWeek(env, g.candidate_id, payWeekStart, baseGross, scheduleEntries);
-        baseGross = Number(applied?.newGross ?? baseGross);
-        advanceUpdates = Array.isArray(applied?.updates) ? applied.updates : [];
-        await persistAdvanceRepayments(env, advanceUpdates, payWeekStart);
-      }
-    }
-
-    // Net after deductions (guaranteed >= 0 by applyAdvanceScheduleEntriesForWeek; clamp defensively anyway)
-    const netAfterDeductions = round2(Math.max(0, Number(baseGross || 0)));
-
-    // 3) Determine payee + bank details + account type
-    let payeeName, sortCode, accountNumber, accountType;
-    if (payMethodEff === 'UMBRELLA') {
-      const umb = mapUmb[cand?.umbrella_id];
-      if (!umb?.enabled) continue;
-      payeeName     = umb.name || 'Umbrella';
-      sortCode      = umb.sort_code || '';
-      accountNumber = umb.account_number || '';
-      accountType   = 'Business';
-    } else {
-      const first   = (cand?.first_name || '').trim();
-      const last    = (cand?.last_name  || '').trim();
-      const display = [first, last].filter(Boolean).join(' ').trim();
-      payeeName     = display || cand?.account_holder || cand?.display_name || 'Candidate';
-      sortCode      = cand?.sort_code || '';
-      accountNumber = cand?.account_number || '';
-      accountType   = 'Personal';
-    }
-
-    // 4) PAYMENT REFERENCE: Candidate "Surname Firstname"
-    const refLast  = (cand?.last_name  || '').trim();
-    const refFirst = (cand?.first_name || '').trim();
-    const lineRef  = capRef([refLast, refFirst].filter(Boolean).join(' ').trim(), 16);
-
-    // 5) CSV ROW RULES:
-    // - 100% guarantee no negatives: we never emit a negative amount
-    // - no zero lines: if net is 0, we do NOT emit a bank row
-    // BUT we *still* settle the run internally by marking TSFIN + adjustments paid,
-    // because the gross was consumed by deductions/repayments.
-    const bankTransferNeeded = netAfterDeductions > 0;
-    if (bankTransferNeeded) {
-      csvRows.push([
-        csvEsc(lineRef),
-        csvEsc(payeeName),
-        csvEsc(sortCode),
-        csvEsc(accountNumber),
-        csvEsc(accountType),
-        csvEsc(netAfterDeductions.toFixed(2)),
-      ].join(','));
-      bankTransferLines++;
-    }
-
-    // 6) Mark TSFIN rows as paid (even if net transfer is 0, because the pay run is settled via deductions)
-    for (const r of g.rows) {
-      affectedTsIds.push(r.timesheet_id);
-      patchQueue.push({
-        id: r.id,
-        body: {
-          paid_at_utc: nowIso,
-          paid_by_user_id: user.id || null,
-          payment_reference: lineRef
-        }
-      });
-    }
-
-    // 7) Mark pay adjustments as paid (same logic: settled even if net transfer is 0)
-    for (const a of (g.adjustments || [])) {
-      payAdjPatchQueue.push({
-        id: a.id,
-        body: {
-          paid_at_utc: nowIso,
-          paid_by_user_id: user.id || null,
-          payment_reference: lineRef
-        }
-      });
-    }
-
-    // 8) Audit per candidate: allows remittance to show deductions + adjustments itemised.
-    try {
-      const deductionsApplied = (advanceUpdates || [])
-        .filter(u => u && typeof u === 'object')
-        .map(u => ({
-          advance_id: u.advance_id || null,
-          reason: u.reason || null,
-          scheduled_amount: Number(u.amount || 0),   // signed
-          actual: Number(u.actual || 0),            // >= 0 (amount taken or paid)
-          remainder: Number(u.remainder || 0)       // >0 if could not take it all
-        }));
-
-      await writeAudit(
-        env,
-        user,
-        'PAY_RUN_CANDIDATE_SETTLED',
-        {
-          paid_at_utc: nowIso,
-          pay_week_start: payWeekStart,
-          payment_reference: lineRef,
-          pay_method: payMethodEff,
-          gross_before_deductions: grossBeforeDeductions,
-          net_after_deductions: netAfterDeductions,
-          bank_transfer_needed: bankTransferNeeded,
-          bank_transfer_amount: bankTransferNeeded ? netAfterDeductions : 0,
-
-          timesheet_ids: (g.rows || []).map(r => r.timesheet_id).filter(Boolean),
-          tsfin_ids: (g.rows || []).map(r => r.id).filter(Boolean),
-
-          pay_adjustments: adjList,
-          pay_adjustments_total: adjTotal,
-
-          deductions: deductionsApplied
-        },
-        { entity: 'candidate', subject_id: g.candidate_id, reason: 'PAYMENT', correlation_id: payRunCorrelationId, req }
-      );
-    } catch (e) {
-      console.warn('[PAY_CSV] candidate settle audit failed', e?.message || e);
-    }
-
-    internalSettledCandidates++;
-  }
-
-  if (!patchQueue.length && !payAdjPatchQueue.length) {
-    // nothing was settled (e.g. everything skipped for negative/zero gross or bank invalid)
-    return withCORS(env, req, notFound('Nothing to pay.'));
-  }
-
-  // ==== Apply TSFIN patches
-  for (const p of patchQueue) {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(p.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify(p.body)
-      }
-    );
-  }
-
-  // ==== Apply pay-adjustment patches
-  for (const p of payAdjPatchQueue) {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/ts_pay_adjustments?id=eq.${enc(p.id)}`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-        body: JSON.stringify(p.body)
-      }
-    );
-  }
-
-  // ==== Closeout: create £0 ISSUED do_not_send invoices for any zero-charge timesheets that were just paid
-  // IMPORTANT:
-  // - This is best-effort and must not fail the pay run.
-  // - We pass all affected timesheet_ids; SQL will filter to those eligible.
-  const uniqueTsIds = [...new Set(affectedTsIds.filter(Boolean))];
-
-  let closeout = null;
-  if (uniqueTsIds.length) {
-    try {
-      // Chunk to avoid oversized RPC payloads
-      const chunkArr = (arr, n) => {
-        const out = [];
-        for (let i = 0; i < (arr || []).length; i += n) out.push(arr.slice(i, i + n));
-        return out;
-      };
-
-      const invoiceIds = [];
-      let okCount = 0;
-      let totalRows = 0;
-
-      for (const ch of chunkArr(uniqueTsIds, 200)) {
-        const r = await sbRpc(env, 'invoice_closeout_zero_charge_timesheets', {
-          p_timesheet_ids: ch,
-          p_actor_user_id: user.id || null
-        });
-
-        const rows = Array.isArray(r) ? r : (r ? [r] : []);
-        totalRows += rows.length;
-
-        for (const row of rows) {
-          if (row && row.ok === true) okCount++;
-          if (row && row.invoice_id) invoiceIds.push(row.invoice_id);
-        }
-      }
-
-      closeout = {
-        attempted: true,
-        ok_count: okCount,
-        total_rows: totalRows,
-        invoice_ids: invoiceIds
-      };
-    } catch (e) {
-      closeout = {
-        attempted: true,
-        ok: false,
-        error: (e && (e.message || String(e))) || 'CLOSEOUT_FAILED'
-      };
-    }
-  }
-
-  // ==== Audit summary for the run
-  await writeAudit(
-    env,
-    user,
-    'PAY_CSV_GENERATED',
-    {
-      batch_reference: batchRef,
-      pay_week_start: payWeekStart,
-      paid_at_utc: nowIso,
-      timesheets_count: uniqueTsIds.length,
-      bank_transfer_lines: bankTransferLines,
-      internal_settled_candidates: internalSettledCandidates,
-      skipped_candidates: skippedCandidates.slice(0, 50),
-      closeout
-    },
-    { entity: 'timesheet', subject_id: null, reason: 'PAYMENT', correlation_id: payRunCorrelationId, req }
-  );
-
-  // CSV contains header + only positive lines (no zero, no negatives)
-  const csv = csvRows.join('\n');
-
-  return withCORS(env, req, ok({
-    csv,
-    affected_timesheet_ids: uniqueTsIds,
-    batch_reference: batchRef,
-    pay_week_start: payWeekStart,
-    paid_at_utc: nowIso,
-    bank_transfer_lines: bankTransferLines,
-    internal_settled_candidates: internalSettledCandidates,
-    skipped_candidates: skippedCandidates,
-    closeout
-  }));
-}
 
 
 async function handleRemittancesSend(env, req) {
@@ -21193,167 +22204,6 @@ async function handleTimesheetPayHold(env, req, timesheetId) {
     updated: true,
     on_hold: onHold,
     row,
-    // NEW: return resolution metadata so FE can adopt the current id if needed
-    booking_id: guard.resolved.booking_id || null,
-    requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
-    current_timesheet_id: currentTimesheetId,
-    current_version: guard.resolved.current_version ?? null,
-    was_stale: !!guard.resolved.was_stale
-  }));
-}
-
-async function handleTimesheetMarkPaid(env, req, timesheetId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try { body = await parseJSONBody(req); }
-  catch { return withCORS(env, req, badRequest('Invalid JSON')); }
-
-  // NEW: guarded write (optimistic concurrency)
-  const expectedTimesheetId = body?.expected_timesheet_id || null;
-  const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
-  if (!guard.ok) return guard.res;
-
-  const currentTimesheetId = guard.resolved.current_timesheet_id;
-
-  const paid = body?.paid === true;
-  const paymentRef = (body?.payment_reference || '').trim() || `MANUAL:${new Date().toISOString().slice(0,10)}`;
-
-  // Load current TSFIN row FOR CURRENT timesheet id (include charge + lock/segment state for closeout eligibility)
-  const { rows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?is_current=eq.true&timesheet_id=eq.${enc(currentTimesheetId)}` +
-    `&select=id,candidate_id,client_id,pay_method,total_pay_ex_vat,total_charge_ex_vat,locked_by_invoice_id,invoice_breakdown_json,` +
-    `expenses_pay_ex_vat,mileage_pay_ex_vat,policy_snapshot_json,` +
-    `pay_wtr_rate_pct_snapshot,pay_vat_rate_pct_snapshot,pay_vat_amount_snapshot,pay_total_inc_vat_snapshot`
-  );
-  const row = rows?.[0];
-  if (!row) return withCORS(env, req, notFound('Timesheet financial snapshot not found'));
-
-  // Closeout eligibility (zero client charge AND not already invoice-locked, incl. segment locks)
-  const chargeEx = Number(row.total_charge_ex_vat || 0);
-  const isZeroCharge = (round2(chargeEx) === 0);
-
-  const hasSummaryInvoiceLock = !!(row.locked_by_invoice_id);
-
-  const hasAnySegmentInvoiceLock = (() => {
-    const ib = (row?.invoice_breakdown_json && typeof row.invoice_breakdown_json === 'object') ? row.invoice_breakdown_json : null;
-    const mode = String(ib?.mode || '').toUpperCase();
-    if (mode !== 'SEGMENTS') return false;
-    const segs = Array.isArray(ib?.segments) ? ib.segments : [];
-    for (const s of segs) {
-      const v = (s && typeof s === 'object') ? s : null;
-      const invId = (v?.invoice_locked_invoice_id != null) ? String(v.invoice_locked_invoice_id).trim() : '';
-      if (invId) return true;
-    }
-    return false;
-  })();
-
-  const closeoutEligible = (paid && isZeroCharge && !hasSummaryInvoiceLock && !hasAnySegmentInvoiceLock);
-
-  const patch = {};
-  if (paid) {
-    patch.paid_at_utc = new Date().toISOString();
-    patch.paid_by_user_id = user.id || null;
-    patch.payment_reference = paymentRef;
-
-    // Fill snapshots if missing (WTR for PAYE, VAT for Umbrella)
-    const defaults = await getDefaultSettings(env);
-    if (String(row.pay_method || '').toUpperCase() === 'PAYE') {
-      if (row.pay_wtr_rate_pct_snapshot == null) {
-        const clientMap = await getClientHolidayPctMap(env, [row.client_id].filter(Boolean));
-        patch.pay_wtr_rate_pct_snapshot = resolveWtrPctForRow(row, defaults, clientMap);
-      }
-    } else {
-      // Umbrella VAT
-      // Need umbrella VAT-chargeable. Fetch candidate -> umbrella
-      const { rows: cRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(row.candidate_id)}&select=umbrella_id`);
-      const umbId = cRows?.[0]?.umbrella_id || null;
-      let vatChargeable = false;
-      if (umbId) {
-        const { rows: uRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${enc(umbId)}&select=vat_chargeable`);
-        vatChargeable = !!uRows?.[0]?.vat_chargeable;
-      }
-      const payEx = Number(row.total_pay_ex_vat || 0);
-      const expEx = Number(row.expenses_pay_ex_vat || 0);
-      const milEx = Number(row.mileage_pay_ex_vat || 0);
-      const rowEx = round2(payEx + expEx + milEx);
-
-      if (vatChargeable) {
-        const rate = (row.pay_vat_rate_pct_snapshot == null) ? defaults.vat : Number(row.pay_vat_rate_pct_snapshot);
-        const derived = deriveUmbrellaVatSnapshots(rowEx, rate, true);
-        patch.pay_vat_rate_pct_snapshot = derived.rate;
-        patch.pay_vat_amount_snapshot = derived.vat;
-        patch.pay_total_inc_vat_snapshot = derived.inc;
-      } else {
-        patch.pay_vat_rate_pct_snapshot = null;
-        patch.pay_vat_amount_snapshot = 0;
-        patch.pay_total_inc_vat_snapshot = rowEx;
-      }
-    }
-  } else {
-    patch.paid_at_utc = null;
-    patch.paid_by_user_id = null;
-    patch.payment_reference = null;
-  }
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets_financials?id=eq.${enc(row.id)}`,
-    { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
-  );
-  if (!res.ok) {
-    const t = await res.text();
-    return withCORS(env, req, serverError(`Failed to update paid state: ${t}`));
-  }
-  const json = await res.json().catch(() => []);
-  const updated = Array.isArray(json) ? json[0] : json;
-
-  // If paid AND zero-charge, create a terminal £0 closeout invoice (ISSUED + do_not_send) and lock timesheet to it
-  // IMPORTANT: do not fail the paid update if closeout creation fails; return warning for operator visibility.
-  let closeout = null;
-  if (closeoutEligible) {
-    try {
-      const r = await sbRpc(env, 'invoice_closeout_zero_charge_timesheets', {
-        p_timesheet_ids: [currentTimesheetId],
-        p_actor_user_id: user.id || null
-      });
-
-      const rows = Array.isArray(r) ? r : (r ? [r] : []);
-      const first = rows[0] || null;
-
-      closeout = {
-        attempted: true,
-        ok: !!first?.ok,
-        invoice_id: first?.invoice_id || null,
-        warnings: first?.warnings ?? null
-      };
-    } catch (e) {
-      closeout = {
-        attempted: true,
-        ok: false,
-        invoice_id: null,
-        error: (e && (e.message || String(e))) || 'CLOSEOUT_FAILED'
-      };
-    }
-  }
-
-  await writeAudit(env, user, paid ? 'MARK_PAID' : 'MARK_UNPAID', {
-    payment_reference: paymentRef,
-    closeout
-  }, { entity: 'timesheet', subject_id: currentTimesheetId, reason: 'PAYMENT', correlation_id: null, req });
-
-  // Optionally enqueue worker to re-evaluate eligibility on UNPAID
-  if (!paid) {
-    try {
-      // NOTE: SQL signature is enqueue_ts_financials(_timesheet_id uuid, _reason ts_fin_reason_enum)
-      await sbRpc(env, 'enqueue_ts_financials', { _timesheet_id: currentTimesheetId, _reason: 'CONTEXT_CHANGED' });
-    } catch { /* noop */ }
-  }
-
-  return withCORS(env, req, ok({
-    updated,
-    closeout,
     // NEW: return resolution metadata so FE can adopt the current id if needed
     booking_id: guard.resolved.booking_id || null,
     requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
@@ -56998,559 +57848,6 @@ async function handlePatchClientDefault(env, req, rateId) {
 
 
 
-
-
- async function handleContractChangeRatesPreview(env, req, contractId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
-
-  const url = new URL(req.url);
-
-  // Normalise YYYY-MM-DD or ISO into YMD safely
-  const cutoffRaw = url.searchParams.get('cutoff_week_ending_date') || null;
-  let cutoffYmd = null;
-  if (cutoffRaw) {
-    try {
-      cutoffYmd = toYmd(cutoffRaw);
-    } catch {
-      cutoffYmd = null;
-    }
-  }
-
-  // Load the contract shell for context
-  const contract = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contracts` +
-    `?id=eq.${enc(contractId)}&select=id,start_date,end_date,pay_method_snapshot`
-  );
-  if (!contract) {
-    return withCORS(env, req, notFound('Contract not found'));
-  }
-
-  // Use the shared helper to find outstanding weeks for this contract
-  const weeksRaw = await findOutstandingWeeksForContract(env, contractId, cutoffYmd);
-  const weeks = Array.isArray(weeksRaw) ? weeksRaw : [];
-
-  return withCORS(env, req, ok({
-    contract_id: contract.id,
-    start_date: contract.start_date,
-    end_date: contract.end_date,
-    pay_method_snapshot: contract.pay_method_snapshot,
-    cutoff_week_ending_date: cutoffYmd || null,
-    weeks: weeks.map(w => ({
-      week_id: w.id,
-      week_ending_date: w.week_ending_date,
-      status: w.status,
-      timesheet_id: w.timesheet_id,
-      is_invoiced: w.is_invoiced,
-      is_paid: w.is_paid
-    }))
-  }));
-}
-
-async function handleContractChangeRatesOutstanding(env, req, contractId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-  if (!contractId) return withCORS(env, req, badRequest('contract_id required'));
-
-  const method = (req.method || 'GET').toUpperCase();
-  const url = new URL(req.url);
-
-  // Small helper: normalise YYYY-MM-DD or ISO into YMD
-  const toYmdSafe = (val) => {
-    if (!val) return null;
-    try {
-      return toYmd(val); // existing helper already in this file
-    } catch {
-      return null;
-    }
-  };
-
-  // Shared helper: load outstanding weeks for this contract
-  const findOutstandingWeeks = async (cutoffYmd /* may be null */) => {
-    const filters = [
-      `contract_id=eq.${enc(contractId)}`,
-      'additional_seq=eq.0' // only primary weeks; additional handled manually if needed
-    ];
-    if (cutoffYmd) {
-      filters.push(`week_ending_date=gte.${enc(cutoffYmd)}`);
-    }
-
-    const cwUrl =
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?select=id,week_ending_date,additional_seq,status,timesheet_id` +
-      `&${filters.join('&')}` +
-      `&order=week_ending_date.asc,additional_seq.asc`;
-
-    const { rows: weeks } = await sbFetch(env, cwUrl);
-    const list = Array.isArray(weeks) ? weeks : [];
-
-    const tsIds = Array.from(
-      new Set(list.map(w => w.timesheet_id).filter(Boolean).map(String))
-    );
-
-    const finByTsId = new Map();
-
-    if (tsIds.length) {
-      const finUrl =
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?is_current=eq.true` +
-        `&timesheet_id=in.(${tsIds.map(enc).join(',')})` +
-        `&select=timesheet_id,locked_by_invoice_id,paid_at_utc`;
-      const { rows: fins } = await sbFetch(env, finUrl);
-      for (const r of (fins || [])) {
-        if (r && r.timesheet_id) {
-          finByTsId.set(String(r.timesheet_id), r);
-        }
-      }
-    }
-
-    return list.map(w => {
-      const tsId = w.timesheet_id ? String(w.timesheet_id) : null;
-      const fin = tsId ? finByTsId.get(tsId) || null : null;
-      const isInvoiced = !!(fin && fin.locked_by_invoice_id);
-      const isPaid = !!(fin && fin.paid_at_utc);
-      const isOutstanding = !tsId || (!isInvoiced && !isPaid);
-      return {
-        id: w.id,
-        week_ending_date: w.week_ending_date,
-        additional_seq: w.additional_seq,
-        status: w.status,
-        timesheet_id: w.timesheet_id || null,
-        is_invoiced: isInvoiced,
-        is_paid: isPaid,
-        outstanding: isOutstanding
-      };
-    }).filter(w => w.outstanding);
-  };
-
-  if (method === 'GET') {
-    // Preview mode: list all outstanding weeks for this contract (optionally from cutoff)
-    const cutoffRaw = url.searchParams.get('cutoff_week_ending_date') || null;
-    const cutoffYmd = toYmdSafe(cutoffRaw);
-
-    const contract = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contracts` +
-      `?id=eq.${enc(contractId)}&select=id,start_date,end_date,pay_method_snapshot`
-    );
-    if (!contract) {
-      return withCORS(env, req, notFound('Contract not found'));
-    }
-
-    const weeks = await findOutstandingWeeks(cutoffYmd);
-    return withCORS(env, req, ok({
-      contract_id: contract.id,
-      start_date: contract.start_date,
-      end_date: contract.end_date,
-      pay_method_snapshot: contract.pay_method_snapshot,
-      cutoff_week_ending_date: cutoffYmd || null,
-      weeks: weeks.map(w => ({
-        week_id: w.id,
-        week_ending_date: w.week_ending_date,
-        status: w.status,
-        timesheet_id: w.timesheet_id,
-        is_invoiced: w.is_invoiced,
-        is_paid: w.is_paid
-      }))
-    }));
-  }
-
-  if (method !== 'POST') {
-    return withCORS(env, req, badRequest('Only GET and POST are supported'));
-  }
-
-  // Mutation: create successor contract, move outstanding weeks, rebuild TSFIN for weekly
-  let body;
-  try {
-    body = await parseJSONBody(req);
-  } catch {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
-
-  const cutoffYmd = toYmdSafe(body?.cutoff_week_ending_date);
-  if (!cutoffYmd) {
-    return withCORS(env, req, badRequest('cutoff_week_ending_date (YYYY-MM-DD) is required'));
-  }
-
-  const newRates = body?.rates_json && typeof body.rates_json === 'object'
-    ? body.rates_json
-    : null;
-
-  if (!newRates) {
-    return withCORS(env, req, badRequest('rates_json (object) is required'));
-  }
-
-  const newStdSchedule = (body && body.std_schedule_json && typeof body.std_schedule_json === 'object')
-    ? body.std_schedule_json
-    : null;
-
-  // Load original contract (includes additional_rates_json)
-  const contract = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/contracts` +
-    `?id=eq.${enc(contractId)}&select=*`
-  );
-  if (!contract) {
-    return withCORS(env, req, notFound('Contract not found'));
-  }
-
-  // Find all outstanding weeks at/after cutoff
-  const outstandingWeeks = await findOutstandingWeeks(cutoffYmd);
-  if (!outstandingWeeks.length) {
-    return withCORS(env, req, badRequest('No outstanding weeks at or after the cutoff date'));
-  }
-
-  // Earliest week-ending among those outstanding
-  const earliestWe = outstandingWeeks
-    .map(w => w.week_ending_date)
-    .filter(Boolean)
-    .sort()[0];
-
-  const earliestStart = addDays(earliestWe, -6); // start-of-week = week-ending minus 6 days
-
-  // Derive std_hours_json from schedule if provided, else reuse existing
-  let successorStdSchedule = newStdSchedule != null ? newStdSchedule : (contract.std_schedule_json || null);
-  let successorStdHours = null;
-  if (successorStdSchedule) {
-    try {
-      successorStdHours = deriveStdHoursFromSchedule(successorStdSchedule);
-    } catch (e) {
-      return withCORS(env, req, badRequest(e?.message || 'Invalid std_schedule_json'));
-    }
-  } else {
-    successorStdHours = contract.std_hours_json || null;
-  }
-
-  // Create successor contract C2
-  const now = nowIso();
-  const successorPayload = {
-    candidate_id: contract.candidate_id,
-    client_id: contract.client_id,
-    role: contract.role,
-    band: contract.band,
-    display_site: contract.display_site,
-    ward_hint: contract.ward_hint,
-    start_date: earliestStart,
-    end_date: contract.end_date,
-    pay_method_snapshot: contract.pay_method_snapshot,
-    rates_json: newRates,
-    std_schedule_json: successorStdSchedule,
-    std_hours_json: successorStdHours,
-    bucket_labels_json: contract.bucket_labels_json,
-    // carry over any configured additional per-unit buckets
-    additional_rates_json: contract.additional_rates_json || null,
-    default_submission_mode: contract.default_submission_mode,
-    week_ending_weekday_snapshot: contract.week_ending_weekday_snapshot,
-    auto_invoice: contract.auto_invoice,
-    require_reference_to_pay: contract.require_reference_to_pay,
-    require_reference_to_invoice: contract.require_reference_to_invoice,
-    mileage_pay_rate: contract.mileage_pay_rate,
-    mileage_charge_rate: contract.mileage_charge_rate,
-    created_at: now,
-    updated_at: now
-  };
-
-  const ins = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contracts`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(successorPayload)
-    }
-  );
-  if (!ins.ok) {
-    const txt = await ins.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to create successor contract: ${txt || ins.status}`));
-  }
-  const insJson = await ins.json().catch(() => []);
-  const successor = Array.isArray(insJson) ? insJson[0] : insJson;
-  if (!successor || !successor.id) {
-    return withCORS(env, req, serverError('Failed to create successor contract (no row returned)'));
-  }
-
-  // Truncate original contract end_date to the day before the new start
-  let truncatedEnd = addDays(earliestStart, -1);
-  if (truncatedEnd < contract.start_date) truncatedEnd = contract.start_date;
-
-  try {
-    if (truncatedEnd !== contract.end_date) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-          body: JSON.stringify({ end_date: truncatedEnd, updated_at: nowIso() })
-        }
-      );
-    }
-  } catch (e) {
-    // Non-fatal, but log
-    try { console.warn('[CONTRACTS][CHANGE-RATES] truncate original failed', e); } catch {}
-  }
-
-  // Move outstanding weeks + timesheets to successor
-  const weekIds = outstandingWeeks.map(w => w.id).filter(Boolean);
-  const tsIds = Array.from(
-    new Set(outstandingWeeks.map(w => w.timesheet_id).filter(Boolean).map(String))
-  );
-
-  if (weekIds.length) {
-    const cwPatchUrl =
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?id=in.(${weekIds.map(enc).join(',')})`;
-    await fetch(cwPatchUrl, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({ contract_id: successor.id, updated_at: nowIso() })
-    });
-  }
-
-  if (tsIds.length) {
-    const tsPatchUrl =
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=in.(${tsIds.map(enc).join(',')})`;
-    await fetch(tsPatchUrl, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({ contract_id: successor.id, updated_at: nowIso() })
-    });
-  }
-
-  // Clean up any future weeks on the old contract without timesheets (beyond truncated end)
-  try {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?contract_id=eq.${enc(contractId)}` +
-      `&week_ending_date=gt.${enc(truncatedEnd)}` +
-      `&timesheet_id=is.null`,
-      {
-        method: 'DELETE',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
-      }
-    );
-  } catch (e) {
-    try { console.warn('[CONTRACTS][CHANGE-RATES] prune future empty weeks failed', e); } catch {}
-  }
-
-  // Generate full future weeks for successor (non-fatal if this fails)
-  try {
-    if (typeof handleContractsGenerateWeeks === 'function') {
-      await handleContractsGenerateWeeks(env, req, successor.id);
-    }
-  } catch (e) {
-    try { console.warn('[CONTRACTS][CHANGE-RATES] generate-weeks for successor failed', e); } catch {}
-  }
-
-  // ✅ NEW: SQL-first targeted TSFIN recompute (bulk enqueue + deterministic targeted drain)
-  // This avoids per-timesheet REST policy loads and prevents subrequest blowups.
-  try {
-    if (tsIds.length) {
-      await tsfinTargetedDrainNow(env, {
-        timesheetIds: tsIds,
-        reason: 'RATE_CHANGED',
-        chunkSize: 50
-      });
-    }
-  } catch (e) {
-    // Non-fatal: items are at least enqueued; inline drain may not complete.
-    try { console.warn('[CONTRACTS][CHANGE-RATES] tsfinTargetedDrainNow failed', e); } catch {}
-  }
-
-  return withCORS(env, req, ok({
-    old_contract_id: contract.id,
-    new_contract_id: successor.id,
-    cutoff_week_ending_date: cutoffYmd,
-    weeks_migrated: weekIds.length,
-    timesheets_migrated: tsIds.length
-  }));
-}
-
-async function cloneContractForRatesChange(env, contract, overrides = {}) {
-  if (!contract || !contract.id) {
-    throw new Error('cloneContractForRatesChange: source contract missing or invalid');
-  }
-
-  const ov = overrides || {};
-
-  const start_date = ov.start_date || contract.start_date;
-  const end_date   = ov.end_date   || contract.end_date;
-
-  // std_schedule_json / std_hours_json composition:
-  // 1) prefer explicit override std_schedule_json if supplied
-  // 2) else use contract.std_schedule_json
-  // 3) derive std_hours_json from schedule if present
-  // 4) else fall back to override.std_hours_json or contract.std_hours_json
-  let successorStdSchedule =
-    (Object.prototype.hasOwnProperty.call(ov, 'std_schedule_json'))
-      ? (ov.std_schedule_json || null)
-      : (contract.std_schedule_json || null);
-
-  // Handle stringified JSON defensively
-  if (successorStdSchedule && typeof successorStdSchedule === 'string') {
-    try { successorStdSchedule = JSON.parse(successorStdSchedule); } catch { /* leave as-is; deriveStdHoursFromSchedule will throw */ }
-  }
-
-  let successorStdHours = null;
-  if (successorStdSchedule && typeof successorStdSchedule === 'object') {
-    // Derive hours from schedule
-    successorStdHours = deriveStdHoursFromSchedule(successorStdSchedule);
-  } else {
-    successorStdHours =
-      (Object.prototype.hasOwnProperty.call(ov, 'std_hours_json'))
-        ? (ov.std_hours_json || null)
-        : (contract.std_hours_json || null);
-  }
-
-  // Helper: allow explicit null in overrides to clear nullable contract override fields
-  const boolOrNull = (v, fallback) => {
-    if (v === null) return null;
-    if (v === undefined) return fallback;
-    return (v === true || v === 'true' || v === 1 || v === '1' || v === 'on');
-  };
-
-  // NEW: copy contract route/calc/group flags into successor (allow override if present)
-  const successor_is_nhsp =
-    (Object.prototype.hasOwnProperty.call(ov, 'is_nhsp'))
-      ? boolOrNull(ov.is_nhsp, contract.is_nhsp ?? null)
-      : (contract.is_nhsp ?? null);
-
-  const successor_autoprocess_hr =
-    (Object.prototype.hasOwnProperty.call(ov, 'autoprocess_hr'))
-      ? boolOrNull(ov.autoprocess_hr, contract.autoprocess_hr ?? null)
-      : (contract.autoprocess_hr ?? null);
-
-  const successor_requires_hr =
-    (Object.prototype.hasOwnProperty.call(ov, 'requires_hr'))
-      ? boolOrNull(ov.requires_hr, contract.requires_hr ?? null)
-      : (contract.requires_hr ?? null);
-
-  const successor_no_timesheet_required =
-    (Object.prototype.hasOwnProperty.call(ov, 'no_timesheet_required'))
-      ? boolOrNull(ov.no_timesheet_required, contract.no_timesheet_required ?? null)
-      : (contract.no_timesheet_required ?? null);
-
-  const successor_daily_calc_of_invoices =
-    (Object.prototype.hasOwnProperty.call(ov, 'daily_calc_of_invoices'))
-      ? boolOrNull(ov.daily_calc_of_invoices, contract.daily_calc_of_invoices ?? null)
-      : (contract.daily_calc_of_invoices ?? null);
-
-  const successor_group_nightsat_sunbh =
-    (Object.prototype.hasOwnProperty.call(ov, 'group_nightsat_sunbh'))
-      ? boolOrNull(ov.group_nightsat_sunbh, contract.group_nightsat_sunbh ?? null)
-      : (contract.group_nightsat_sunbh ?? null);
-
-  const successor_self_bill =
-    (Object.prototype.hasOwnProperty.call(ov, 'self_bill'))
-      ? boolOrNull(ov.self_bill, contract.self_bill ?? null)
-      : (contract.self_bill ?? null);
-
-  // Friendly validation mirroring DB constraints (validate successor state)
-  if (successor_is_nhsp === true && successor_autoprocess_hr === true) {
-    throw new Error('cloneContractForRatesChange: invalid successor route (is_nhsp=true and autoprocess_hr=true cannot both be true)');
-  }
-  if (successor_no_timesheet_required === true && successor_autoprocess_hr !== true) {
-    throw new Error('cloneContractForRatesChange: invalid successor route (no_timesheet_required=true requires autoprocess_hr=true)');
-  }
-
-  const now = nowIso();
-
-  const payload = [{
-    // Identity / linkage
-    candidate_id: (Object.prototype.hasOwnProperty.call(ov, 'candidate_id') ? ov.candidate_id : contract.candidate_id),
-    client_id:    (Object.prototype.hasOwnProperty.call(ov, 'client_id')    ? ov.client_id    : contract.client_id),
-    role:         (Object.prototype.hasOwnProperty.call(ov, 'role')         ? ov.role         : contract.role),
-    band:         (Object.prototype.hasOwnProperty.call(ov, 'band')         ? ov.band         : contract.band),
-    display_site: (Object.prototype.hasOwnProperty.call(ov, 'display_site') ? ov.display_site : contract.display_site),
-    ward_hint:    (Object.prototype.hasOwnProperty.call(ov, 'ward_hint')    ? ov.ward_hint    : contract.ward_hint),
-
-    // Window
-    start_date,
-    end_date,
-
-    // NEW: route/calc/group overrides copied forward (and overridable)
-    is_nhsp: successor_is_nhsp,
-    autoprocess_hr: successor_autoprocess_hr,
-    requires_hr: successor_requires_hr,
-    no_timesheet_required: successor_no_timesheet_required,
-    daily_calc_of_invoices: successor_daily_calc_of_invoices,
-    group_nightsat_sunbh: successor_group_nightsat_sunbh,
-    self_bill: successor_self_bill,
-
-    // Pay method + rates
-    pay_method_snapshot: (Object.prototype.hasOwnProperty.call(ov, 'pay_method_snapshot')
-      ? ov.pay_method_snapshot
-      : contract.pay_method_snapshot),
-    rates_json: (Object.prototype.hasOwnProperty.call(ov, 'rates_json')
-      ? (ov.rates_json || {})
-      : (contract.rates_json || {})),
-
-    // Submission + week ending policy
-    default_submission_mode: (Object.prototype.hasOwnProperty.call(ov, 'default_submission_mode')
-      ? ov.default_submission_mode
-      : contract.default_submission_mode),
-    week_ending_weekday_snapshot: (ov.week_ending_weekday_snapshot != null
-      ? Number(ov.week_ending_weekday_snapshot)
-      : Number(contract.week_ending_weekday_snapshot ?? 0)),
-
-    // Schedule template
-    std_schedule_json: successorStdSchedule,
-    std_hours_json:    successorStdHours,
-
-    // Labels / flags
-    bucket_labels_json: (Object.prototype.hasOwnProperty.call(ov, 'bucket_labels_json')
-      ? ov.bucket_labels_json
-      : (contract.bucket_labels_json || null)),
-
-      // 🔹 NEW: configurable additional per-unit buckets (EX1–EX5)
-    // ✅ If caller supplies overrides.additional_rates_json, it MUST be normalised
-    //    to the same shape/rules as Contracts Create/Update/Replace.
-    additional_rates_json: (Object.prototype.hasOwnProperty.call(ov, 'additional_rates_json')
-      ? normaliseAdditionalRates(ov.additional_rates_json)
-      : (contract.additional_rates_json || null)),
-
-
-    // Contract-level flags (can be overridden if you pass them in overrides)
-    auto_invoice: (Object.prototype.hasOwnProperty.call(ov, 'auto_invoice') ? boolOrNull(ov.auto_invoice, !!contract.auto_invoice) : contract.auto_invoice),
-    require_reference_to_pay: (Object.prototype.hasOwnProperty.call(ov, 'require_reference_to_pay') ? boolOrNull(ov.require_reference_to_pay, !!contract.require_reference_to_pay) : contract.require_reference_to_pay),
-    require_reference_to_invoice: (Object.prototype.hasOwnProperty.call(ov, 'require_reference_to_invoice') ? boolOrNull(ov.require_reference_to_invoice, !!contract.require_reference_to_invoice) : contract.require_reference_to_invoice),
-
-    // Mileage (if present on contract / overrides)
-    mileage_pay_rate: (Object.prototype.hasOwnProperty.call(ov, 'mileage_pay_rate')
-      ? ov.mileage_pay_rate
-      : contract.mileage_pay_rate),
-    mileage_charge_rate: (Object.prototype.hasOwnProperty.call(ov, 'mileage_charge_rate')
-      ? ov.mileage_charge_rate
-      : contract.mileage_charge_rate),
-
-    created_at: now,
-    updated_at: now
-  }];
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contracts`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(payload)
-    }
-  );
-
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`cloneContractForRatesChange: insert failed (${res.status}): ${txt}`);
-  }
-
-  const json = await res.json().catch(() => []);
-  const row = Array.isArray(json) ? json[0] : json;
-  if (!row || !row.id) {
-    throw new Error('cloneContractForRatesChange: insert returned no row');
-  }
-
-  return row;
-}
-
 const normaliseAdditionalRates = (raw) => {
   if (!raw) return null;
   const arr = Array.isArray(raw) ? raw : [];
@@ -57603,38 +57900,7 @@ const normaliseAdditionalRates = (raw) => {
   return out.length ? out : null;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: findOutstandingWeeksForContract
-// A "week" is outstanding if:
-//   - it has no timesheet, OR
-//   - its current TSFIN is neither invoiced (locked_by_invoice_id) nor paid (paid_at_utc)
-// Optional cutoffWeekEnding (YYYY-MM-DD or ISO) limits to week_ending_date >= cutoff.
-// Returns an array of rows: { id, week_ending_date, additional_seq, status, timesheet_id, is_invoiced, is_paid }
-// ─────────────────────────────────────────────────────────────────────────────
 
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: cloneContractForRatesChange
-// Clone a contract row into a new one, applying overrides:
-//   - overrides.start_date / end_date
-//   - overrides.rates_json
-//   - overrides.std_schedule_json / std_hours_json
-//   - overrides.pay_method_snapshot, bucket_labels_json, mileage_* etc (optional)
-// Returns the newly created contract row (successor).
-// ─────────────────────────────────────────────────────────────────────────────
-
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: migrateOutstandingWeeksToNewContract
-// Move a set of outstanding contract_weeks (and their timesheets) from one
-// contract to another, and enqueue RATE_CHANGED TSFIN recomputes in outbox.
-//   - originalId: source contract_id
-//   - newId:      successor contract_id
-//   - weekRows:   array of { id, timesheet_id, ... } (e.g. from findOutstandingWeeksForContract)
-// Returns { week_ids, timesheet_ids }.
-// ─────────────────────────────────────────────────────────────────────────────
 async function migrateOutstandingWeeksToNewContract(env, originalId, newId, weekRows) {
   const weeks = Array.isArray(weekRows) ? weekRows : [];
   if (!weeks.length) {
@@ -57731,104 +57997,6 @@ async function migrateOutstandingWeeksToNewContract(env, originalId, newId, week
 // }
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function findOutstandingWeeksForContract(env, contractId, cutoffWeekEnding) {
-  if (!contractId) return [];
-
-  let cutoffYmd = null;
-  if (cutoffWeekEnding) {
-    try {
-      cutoffYmd = toYmd(cutoffWeekEnding);
-    } catch {
-      cutoffYmd = null;
-    }
-  }
-
-  const map = await collectOutstandingWeeksByContract(env, [contractId], cutoffYmd);
-  return map.get(String(contractId)) || [];
-}
-
-
-
-async function collectOutstandingWeeklyContractsForCandidate(env, candidateId, newMethod, originalMethod) {
-  if (!candidateId) return [];
-
-  const orig = (originalMethod || '').toUpperCase();
-  const target = (newMethod || '').toUpperCase();
-
-  if (!orig || (orig !== 'PAYE' && orig !== 'UMBRELLA')) return [];
-  if (!target || (target !== 'PAYE' && target !== 'UMBRELLA')) return [];
-
-  // 1) Load contracts for this candidate with pay_method_snapshot = originalMethod
-  const url =
-    `${env.SUPABASE_URL}/rest/v1/contracts` +
-    `?candidate_id=eq.${enc(candidateId)}` +
-    `&pay_method_snapshot=eq.${enc(orig)}` +
-    `&select=id,client_id,role,band,start_date,end_date,pay_method_snapshot`;
-
-  const { rows: conRows } = await sbFetch(env, url);
-  const contracts = Array.isArray(conRows) ? conRows : [];
-  if (!contracts.length) return [];
-
-  const contractIds = contracts.map(c => c && c.id).filter(Boolean).map(String);
-  if (!contractIds.length) return [];
-
-  // 2) Bulk outstanding weeks for these contracts
-  const outstandingByContract = await collectOutstandingWeeksByContract(env, contractIds, null);
-
-  const summaries = [];
-  const clientIds = new Set();
-
-  for (const c of contracts) {
-    if (!c || !c.id) continue;
-    const cid = String(c.id);
-    const weeks = outstandingByContract.get(cid) || [];
-    if (!weeks.length) continue;
-
-    const dates = weeks
-      .map(w => w.week_ending_date)
-      .filter(Boolean)
-      .sort();
-    if (!dates.length) continue;
-
-    clientIds.add(c.client_id);
-
-    summaries.push({
-      contract_id: c.id,
-      client_id: c.client_id || null,
-      client_name: null, // filled in below
-      role: c.role || null,
-      band: c.band ?? null,
-      date_range: { start_date: c.start_date || null, end_date: c.end_date || null },
-      pay_method_snapshot: c.pay_method_snapshot || null,
-      outstanding_weeks: weeks.length,
-      first_outstanding_we: dates[0],
-      last_outstanding_we: dates[dates.length - 1]
-    });
-  }
-
-  if (!summaries.length) return [];
-
-  // 3) Load client names in one go
-  if (clientIds.size) {
-    const idsList = Array.from(clientIds).filter(Boolean).map(String);
-    if (idsList.length) {
-      const clientsUrl =
-        `${env.SUPABASE_URL}/rest/v1/clients` +
-        `?id=in.(${idsList.map(enc).join(',')})` +
-        `&select=id,name`;
-      const { rows: cliRows } = await sbFetch(env, clientsUrl);
-      const byId = new Map((cliRows || []).map(r => [String(r.id), r.name || null]));
-
-      for (const s of summaries) {
-        if (s.client_id) {
-          s.client_name = byId.get(String(s.client_id)) || null;
-        }
-      }
-    }
-  }
-
-  return summaries;
-}
 
 
 
@@ -70381,7 +70549,6 @@ async function handleContractsPlanRanges(env, req, contractId) {
       submissionModeSnapshot = clientDefaultMode;
     }
 
-    // Final fallback to keep DB constraint safe
     if (!submissionModeSnapshot) submissionModeSnapshot = 'ELECTRONIC';
 
     if (extendWindow) {
@@ -70546,11 +70713,7 @@ async function handleContractsPlanRanges(env, req, contractId) {
         week_ending_date: weYmd,
         additional_seq: Number(additionalSeq || 0),
         status: (weYmd <= today ? 'OPEN' : 'PLANNED'),
-
-        // ✅ FIX: do NOT use contracts.default_submission_mode when overrideclientsettings=false
-        // Use resolved submissionModeSnapshot instead.
         submission_mode_snapshot: submissionModeSnapshot,
-
         timesheet_id: null,
         planned_schedule_json: [],
         created_at: nowIso(),
@@ -70578,6 +70741,10 @@ async function handleContractsPlanRanges(env, req, contractId) {
 
     const results = [];
     let contractWindowChanged = false;
+
+    // Collect proposed_entries (only from the days we’re about to write that have times)
+    const proposed_entries = [];
+    const seen = new Set();
 
     for (const r of ranges) {
       const mergeMode = (String(r.merge || 'append').toLowerCase() === 'replace') ? 'replace' : 'append';
@@ -70616,6 +70783,22 @@ async function handleContractsPlanRanges(env, req, contractId) {
           const idx = planArr.findIndex(p => p?.date === ymd);
           const entry = buildPlanEntryForDate(ymd, c, d.explicit);
 
+          if (entry && entry.start && entry.end) {
+            const bm = Number(entry.break_minutes || 0);
+            const key = `${entry.date}|${entry.start}|${entry.end}|${Number.isFinite(bm) ? bm : 0}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              proposed_entries.push({
+                date: entry.date,
+                start: entry.start,
+                end: entry.end,
+                breaks: Array.isArray(entry.breaks) ? entry.breaks : [],
+                break_minutes: Number.isFinite(bm) ? bm : 0,
+                overnight: entry.overnight === true
+              });
+            }
+          }
+
           if (idx >= 0) {
             if (mergeMode === 'replace') { planArr[idx] = entry; changed = true; daysPlanned += 1; }
           } else {
@@ -70636,7 +70819,6 @@ async function handleContractsPlanRanges(env, req, contractId) {
             patch.status = statusIfReviving;
           }
 
-          // ✅ Defensive: if DB row somehow has a null/invalid submission_mode_snapshot, set it on patch too.
           try {
             const sms = String(targetWeek.submission_mode_snapshot || '').toUpperCase();
             if (sms !== 'ELECTRONIC' && sms !== 'MANUAL' && sms !== 'QR') {
@@ -70671,9 +70853,26 @@ async function handleContractsPlanRanges(env, req, contractId) {
       });
     }
 
+    // ✅ NEW: schedule clash warnings (never block)
+    let scheduleClashes = null;
+    try {
+      if (c.candidate_id && proposed_entries.length && typeof detectScheduleClashesInternal === 'function') {
+        scheduleClashes = await detectScheduleClashesInternal(env, {
+          candidate_id: c.candidate_id,
+          proposed_entries,
+          ignore_contract_ids: [c.id]
+        });
+      } else {
+        scheduleClashes = { clash_count: 0, clashes: [], note: 'No candidate or no timed entries to check.' };
+      }
+    } catch (e) {
+      scheduleClashes = { clash_count: 0, clashes: [], error: String(e?.message || e) };
+    }
+
     return withCORS(env, req, ok({
       contract_window_changed: contractWindowChanged,
-      ranges: results
+      ranges: results,
+      warnings: { schedule_clashes: scheduleClashes }
     }));
   } catch (e) {
     try {
@@ -70728,7 +70927,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
       rangesCount: ranges.length,
       tsExistsPolicy,
       emptyWeekAction: emptyWeekActionRaw,
-      emptyWeekAction_effective: 'delete_if_empty',
+      emptyWeekAction_effective: 'respect_empty_week_action_and_never_delete_enforcement_weeks',
       sampleRange: ranges[0] || null
     });
 
@@ -70772,6 +70971,25 @@ async function handleContractsUnplanRanges(env, req, contractId) {
         return [];
       }
       return [];
+    };
+
+    const isNonEmptyText = (v) => {
+      const s = (v == null) ? '' : String(v);
+      return (s.trim() !== '');
+    };
+
+    // ✅ Enforcement-aware deletion guard (never delete weeks that hold enforcement metadata)
+    const hasEnforcementMeta = (w) => {
+      try {
+        const enforce = (w && (w.enforce_day_partition === true || String(w.enforce_day_partition).toLowerCase() === 'true'));
+        const hasMask = isNonEmptyText(w?.allowed_days_mask);
+        const hasNote = isNonEmptyText(w?.worker_note);
+        const hasGrp  = isNonEmptyText(w?.split_group_key);
+        const hasBdy  = (w?.split_boundary_date != null && String(w.split_boundary_date).trim() !== '');
+        return !!(enforce || hasMask || hasNote || hasGrp || hasBdy);
+      } catch {
+        return false;
+      }
     };
 
     async function loadBlockedWeeksSummary(contractId2, weFrom, weTo) {
@@ -70897,7 +71115,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
       const { rows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId2)}&week_ending_date=in.(${weList})` +
-        `&select=id,week_ending_date,additional_seq,timesheet_id,planned_schedule_json,status`
+        `&select=id,week_ending_date,additional_seq,timesheet_id,planned_schedule_json,status,enforce_day_partition,allowed_days_mask,worker_note,split_group_key,split_boundary_date`
       );
       return rows || [];
     }
@@ -70923,47 +71141,134 @@ async function handleContractsUnplanRanges(env, req, contractId) {
         const weTo   = computeWeekEnding(toY,   c.week_ending_weekday_snapshot || 0);
 
         log('FASTPATH_REMOVE_ALL', {
-          weFrom, weTo,
-          note: 'Deleting contract_weeks rows (timesheet_id IS NULL) rather than cancelling.'
+          weFrom,
+          weTo,
+          empty_week_action: emptyWeekActionRaw,
+          note: 'Applying empty_week_action to timesheet-free weeks; never deleting enforcement metadata weeks.'
         });
 
         const blocked = await loadBlockedWeeksSummary(c.id, weFrom, weTo);
         if (blocked.length) blockedWeeksAll.push(...blocked);
 
-        const del = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-          `?contract_id=eq.${enc(c.id)}` +
-          `&timesheet_id=is.null` +
-          `&week_ending_date=gte.${enc(weFrom)}` +
-          `&week_ending_date=lte.${enc(weTo)}`,
-          { method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' } }
-        );
-
-        if (!del.ok) {
-          const txt = await del.text();
-          errl('DELETE weeks failed', { status: del.status, txt });
-          return withCORS(env, req, serverError(txt));
+        // Load timesheet-free contract_weeks in range so we can enforce "never delete enforcement metadata"
+        let wkRows = [];
+        try {
+          const { rows: got } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+              `?contract_id=eq.${enc(c.id)}` +
+              `&timesheet_id=is.null` +
+              `&week_ending_date=gte.${enc(weFrom)}` +
+              `&week_ending_date=lte.${enc(weTo)}` +
+              `&select=id,week_ending_date,additional_seq,status,timesheet_id,planned_schedule_json,enforce_day_partition,allowed_days_mask,worker_note,split_group_key,split_boundary_date`
+          );
+          wkRows = got || [];
+        } catch {
+          wkRows = [];
         }
 
-        const deletedRows = await del.json().catch(() => []);
-        const deletedCount = Array.isArray(deletedRows) ? deletedRows.length : 0;
+        // Compute removed days (best-effort, based on stored plan length)
+        let daysRemovedFast = 0;
+        try {
+          for (const w0 of (wkRows || [])) {
+            const arr0 = safeParseJsonArray(w0?.planned_schedule_json, `contract_weeks.planned_schedule_json (id=${String(w0?.id || '')})`);
+            daysRemovedFast += Array.isArray(arr0) ? arr0.length : 0;
+          }
+        } catch {
+          // non-fatal
+        }
 
-        log('FASTPATH_DELETE_RESULT', { deletedCount, blockedCount: blocked.length });
+        const deleteIds = [];
+        const patchIds  = [];
+        let keptDueEnforcement = 0;
+
+        for (const w0 of (wkRows || [])) {
+          if (!w0 || !w0.id) continue;
+
+          const meta = hasEnforcementMeta(w0);
+
+          if (emptyWeekActionRaw === 'delete' && !meta) {
+            deleteIds.push(String(w0.id));
+          } else {
+            patchIds.push(String(w0.id));
+            if (meta && emptyWeekActionRaw === 'delete') keptDueEnforcement += 1;
+          }
+        }
+
+        let deletedCount = 0;
+        let patchedCount = 0;
+
+        // DELETE (only safe rows when action=delete)
+        if (deleteIds.length) {
+          const inList = deleteIds.map(enc).join(',');
+          const del = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=in.(${inList})`,
+            { method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=representation' } }
+          );
+
+          if (!del.ok) {
+            const txt = await del.text().catch(() => '');
+            errl('FASTPATH_DELETE_FAILED', { status: del.status, txt });
+            return withCORS(env, req, serverError(txt));
+          }
+
+          const deletedRows = await del.json().catch(() => []);
+          deletedCount = Array.isArray(deletedRows) ? deletedRows.length : 0;
+        }
+
+        // PATCH (cancel/keep, plus enforced rows when action=delete but unsafe)
+        if (patchIds.length) {
+          const inList = patchIds.map(enc).join(',');
+          const patchBody = {
+            planned_schedule_json: [],
+            updated_at: nowIso()
+          };
+          if (emptyWeekActionRaw === 'cancel') {
+            patchBody.status = 'CANCELLED';
+          }
+
+          const pr = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=in.(${inList})`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+              body: JSON.stringify(patchBody)
+            }
+          );
+          if (!pr.ok) {
+            const txt = await pr.text().catch(() => '');
+            errl('FASTPATH_PATCH_FAILED', { status: pr.status, txt });
+            return withCORS(env, req, serverError(txt));
+          }
+          try { await pr.arrayBuffer(); } catch {}
+          patchedCount = patchIds.length;
+        }
+
+        const affectedCount = deletedCount + patchedCount;
+
+        log('FASTPATH_RESULT', {
+          affectedCount,
+          deletedCount,
+          patchedCount,
+          keptDueEnforcement,
+          blockedCount: blocked.length
+        });
 
         results.push({
           from: fromY,
           to:   toY,
-          patched_weeks: deletedCount,
-          days_removed: 0,
-          emptied_weeks: deletedCount,
-          emptied_weeks_action: 'delete',
+          patched_weeks: affectedCount,
+          days_removed: daysRemovedFast,
+          emptied_weeks: affectedCount,
+          emptied_weeks_action: emptyWeekActionRaw,
           skipped_due_to_timesheet: 0,
           blocked_weeks: blocked,
           blocked_weeks_count: blocked.length
         });
 
-        totalPatchedWeeks += deletedCount;
-        totalEmptiedWeeks += deletedCount;
+        totalPatchedWeeks += affectedCount;
+        totalDaysRemoved  += daysRemovedFast;
+        totalEmptiedWeeks += affectedCount;
         continue;
       }
 
@@ -71031,16 +71336,51 @@ async function handleContractsUnplanRanges(env, req, contractId) {
           daysRemoved += removedHere;
 
           if (!newPlan.length) {
-            const del = await fetch(
+            const meta = hasEnforcementMeta(w);
+            const canDelete = (emptyWeekActionRaw === 'delete') && !meta;
+
+            if (canDelete) {
+              const del = await fetch(
+                `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`,
+                { method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' } }
+              );
+              try { await del.arrayBuffer(); } catch {}
+
+              emptiedWeeks += 1;
+              patchedWeeks += 1;
+
+              log('DELETE_EMPTY_WEEK', { we, weekId: w.id });
+              continue;
+            }
+
+            // ✅ KEEP ROW: preserve enforcement metadata and/or respect cancel/keep semantics
+            const patchBody = {
+              planned_schedule_json: [],
+              updated_at: nowIso()
+            };
+            if (emptyWeekActionRaw === 'cancel') {
+              patchBody.status = 'CANCELLED';
+            }
+
+            const res = await fetch(
               `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(w.id)}`,
-              { method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' } }
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+                body: JSON.stringify(patchBody)
+              }
             );
-            try { await del.arrayBuffer(); } catch {}
+            try { await res.arrayBuffer(); } catch {}
 
             emptiedWeeks += 1;
             patchedWeeks += 1;
 
-            log('DELETE_EMPTY_WEEK', { we, weekId: w.id });
+            log('PATCH_EMPTY_WEEK_KEEP', {
+              we,
+              weekId: w.id,
+              empty_week_action: emptyWeekActionRaw,
+              kept_due_to_enforcement: (meta && emptyWeekActionRaw === 'delete')
+            });
             continue;
           }
 
@@ -71094,7 +71434,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
         patched_weeks: patchedWeeks,
         days_removed: daysRemoved,
         emptied_weeks: emptiedWeeks,
-        emptied_weeks_action: 'delete_if_empty',
+        emptied_weeks_action: emptyWeekActionRaw,
         skipped_due_to_timesheet: skippedDueTS,
         blocked_weeks: blockedEnriched,
         blocked_weeks_count: blockedEnriched.length
@@ -71138,6 +71478,7 @@ async function handleContractsUnplanRanges(env, req, contractId) {
     }
 
     let minPlanned = null, maxPlanned = null;
+    let minWEAll = null, maxWEAll = null;
     try {
       const { rows: allWeeks } = await sbFetch(
         env,
@@ -71145,6 +71486,12 @@ async function handleContractsUnplanRanges(env, req, contractId) {
         `?contract_id=eq.${enc(c.id)}&select=planned_schedule_json,week_ending_date,timesheet_id,id`
       );
       for (const w of (allWeeks || [])) {
+        const we0 = (w && w.week_ending_date) ? String(w.week_ending_date) : null;
+        if (we0 && /^\d{4}-\d{2}-\d{2}$/.test(we0)) {
+          if (!minWEAll || we0 < minWEAll) minWEAll = we0;
+          if (!maxWEAll || we0 > maxWEAll) maxWEAll = we0;
+        }
+
         const arr = safeParseJsonArray(w?.planned_schedule_json, `contract_weeks.planned_schedule_json (id=${String(w?.id || '')})`);
         for (const p of arr) {
           const y = toYmd(p?.date);
@@ -71164,7 +71511,11 @@ async function handleContractsUnplanRanges(env, req, contractId) {
       newStart = minPlanned;
       newEnd   = maxPlanned;
     } else {
-      if (minWE || maxWE) {
+      // ✅ If no planned dates remain, keep contract window covering any remaining contract_weeks rows
+      if (minWEAll || maxWEAll) {
+        newStart = minWEAll ? addDays(minWEAll, -6) : c.start_date;
+        newEnd   = maxWEAll ? maxWEAll : c.end_date;
+      } else if (minWE || maxWE) {
         newStart = minWE ? addDays(minWE, -6) : c.start_date;
         newEnd   = maxWE ? maxWE : c.end_date;
       } else {
@@ -71173,14 +71524,24 @@ async function handleContractsUnplanRanges(env, req, contractId) {
       }
     }
 
-    const beforeClamp = { newStart, newEnd, minWE, maxWE };
+    const beforeClamp = { newStart, newEnd, minWE, maxWE, minWEAll, maxWEAll };
 
+    // Clamp to timesheet envelope (existing behaviour)
     if (minWE) {
       const minWeekStart = addDays(minWE, -6);
       if (newStart > minWeekStart) newStart = minWeekStart;
     }
     if (maxWE) {
       if (newEnd < maxWE) newEnd = maxWE;
+    }
+
+    // ✅ Clamp to remaining contract_weeks envelope too (prevents pruning kept enforcement weeks)
+    if (minWEAll) {
+      const minWeekStartAll = addDays(minWEAll, -6);
+      if (newStart > minWeekStartAll) newStart = minWeekStartAll;
+    }
+    if (maxWEAll) {
+      if (newEnd < maxWEAll) newEnd = maxWEAll;
     }
 
     log('NORMALIZE_WINDOW', {
@@ -71213,10 +71574,17 @@ async function handleContractsUnplanRanges(env, req, contractId) {
 
       try {
         log('PRUNE_OUTSIDE_WEEKS', { keepFrom: c.start_date, keepTo: c.end_date });
+
+        // ✅ Never delete outside weeks that carry enforcement metadata
         const delRes = await fetch(
           `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
           `?contract_id=eq.${enc(c.id)}` +
           `&timesheet_id=is.null` +
+          `&enforce_day_partition=eq.false` +
+          `&worker_note=is.null` +
+          `&split_group_key=is.null` +
+          `&allowed_days_mask=is.null` +
+          `&split_boundary_date=is.null` +
           `&or=(week_ending_date.lt.${enc(c.start_date)},week_ending_date.gt.${enc(c.end_date)})`,
           { method: 'DELETE', headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' } }
         );
@@ -71265,7 +71633,6 @@ async function handleContractsUnplanRanges(env, req, contractId) {
     return withCORS(env, req, serverError(e?.message || String(e || 'Failed to unplan ranges')));
   }
 }
-
 async function handleContractWeekGeneratePrintable(env, req, weekId) {
   const enc = encodeURIComponent;
   const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
@@ -72531,6 +72898,1321 @@ async function handleClientDeleteApply(env, req, clientId) {
     return withCORS(env, req, serverError(`Failed client delete: ${msg}`));
   }
 }
+function getRailAdapter(provider) {
+  const p0 = String(provider || '').trim().toUpperCase();
+
+  // Normalise common aliases (defensive)
+  const p = (p0 === 'REV' ? 'REVOLUT' : p0);
+
+  if (p === 'REVOLUT') {
+    return {
+      railProvider: 'REVOLUT',
+
+      async capabilities(env) {
+        const hasClientId = !!(env && env.REVOLUT_CLIENT_ID && String(env.REVOLUT_CLIENT_ID).trim());
+        const hasRefresh  = !!(env && env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim());
+        const hasKey      = !!(env && env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
+        const hasBase     = !!(env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim());
+
+        let available = false;
+        let reason = null;
+
+        if (!hasClientId || !hasRefresh || !hasKey) {
+          available = false;
+          reason = 'MISSING_REVOLUT_SECRETS';
+        } else {
+          // Try minting an access token as the definitive availability check (cached).
+          try {
+            await revolutAuth_getAccessToken(env);
+            available = true;
+          } catch (e) {
+            available = false;
+            reason = (e && e.message) ? String(e.message) : 'REVOLUT_TOKEN_FAILED';
+          }
+        }
+
+        return {
+          provider: 'REVOLUT',
+          available,
+          reason,
+          supports_scheduling: true,
+          supports_name_check: true,
+          supports_auto_execute: true,
+          api_base: hasBase ? String(env.REVOLUT_API_BASE) : null
+        };
+      },
+
+      async prepareBatch(env, batchId, actorUserId) {
+        if (!batchId) throw new Error('prepareBatch: batchId required');
+        if (!actorUserId) throw new Error('prepareBatch: actorUserId required');
+
+        // 1) Ask DB what payees/transfers exist + whether name-check/payee-map are required.
+        const prep0 = await sbRpc(env, 'pay_batch_prepare', {
+          p_pay_batch_id: String(batchId),
+          p_actor_user_id: String(actorUserId)
+        });
+
+        if (!prep0 || prep0.ok !== true) {
+          // sbRpc already throws on non-2xx, but keep defensive
+          throw new Error('prepareBatch: pay_batch_prepare failed');
+        }
+
+        const rail = (prep0.rail && typeof prep0.rail === 'object') ? prep0.rail : {};
+        const needNameCheck = !!rail.need_name_check;
+        const requiresPayeeMap = !!rail.requires_payee_map;
+
+        // ✅ Determine rail env snapshot (must not be hard-coded to PROD)
+        let railEnv = 'PROD';
+        try {
+          const a = (rail && (rail.env_snapshot || rail.rail_env_snapshot || rail.env)) ? String(rail.env_snapshot || rail.rail_env_snapshot || rail.env).trim() : '';
+          railEnv = a ? a.toUpperCase() : railEnv;
+        } catch {}
+        if (!railEnv || railEnv === 'UNDEFINED' || railEnv === 'NULL') railEnv = 'PROD';
+        if (railEnv === 'SANDBOX' || railEnv === 'PROD') {
+          // ok
+        } else {
+          // If DB returns something else, keep as-is but normalized.
+          railEnv = String(railEnv).toUpperCase();
+        }
+
+        // If rail env snapshot was not present in pay_batch_prepare, fetch from pay_batch_get as fallback.
+        if (!railEnv || railEnv === 'PROD' && !(rail && (rail.env_snapshot || rail.rail_env_snapshot || rail.env))) {
+          try {
+            const bg0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(batchId) });
+            const bgBatch = (bg0 && typeof bg0 === 'object') ? (bg0.batch || null) : null;
+            const bEnv = bgBatch && bgBatch.rail_env_snapshot ? String(bgBatch.rail_env_snapshot).trim() : '';
+            if (bEnv) railEnv = bEnv.toUpperCase();
+          } catch {
+            // keep default PROD
+          }
+        }
+
+        const payees = Array.isArray(prep0.payees) ? prep0.payees : [];
+        if (!payees.length) return { ok: true, did_work: false, payees_processed: 0 };
+
+        let didWork = false;
+        let processed = 0;
+
+        // 2) For each payee, perform missing/required operations (name-check + payee-map).
+        for (const pe of payees) {
+          const kind = String(pe?.payee_entity_kind || '').trim().toUpperCase();
+          const idText = String(pe?.payee_entity_id || '').trim();
+          const bankHash = String(pe?.bank_details_hash || '').trim();
+
+          if (!kind || !idText) continue;
+
+          // Skip if DB already declares missing bank details blocker.
+          const blockers = Array.isArray(pe?.blockers) ? pe.blockers.map(x => String(x || '').toUpperCase()) : [];
+          if (blockers.includes('BLOCKED_BANK_DETAILS')) continue;
+
+          const transfers = Array.isArray(pe?.transfers) ? pe.transfers : [];
+          const t0 = transfers.length ? transfers[0] : null;
+
+          // We rely on execute-bank snapshot fields (already normalised in DB).
+          const payeeName = String(t0?.payee_name || '').trim();
+          const sortCode = String(t0?.sort_code || '').trim();
+          const accountNo = String(t0?.account_number || '').trim();
+          const accountType = String(t0?.account_type || '').trim() || (kind === 'UMBRELLA' ? 'Business' : 'Personal');
+
+          // Name-check (CoP): only if required, and not overridden, and not already PASS.
+          if (needNameCheck) {
+            const nc = (pe?.name_check && typeof pe.name_check === 'object') ? pe.name_check : {};
+            const status = String(nc.status || 'UNVERIFIED').toUpperCase();
+            const hasOverride = (nc.has_override === true);
+
+            if (!hasOverride && status !== 'PASS') {
+              try {
+                const token = await revolutAuth_getAccessToken(env);
+                const ncRes = await revolutNameCheck_perform(env, token, {
+                  payee_name: payeeName,
+                  sort_code: sortCode,
+                  account_number: accountNo,
+                  account_type: accountType
+                });
+
+                // Persist result into DB (rail-generic name-check record)
+                await sbRpc(env, 'bank_name_check_record_result', {
+                  p_provider: 'REVOLUT',
+                  p_env: railEnv,
+                  p_entity_kind: kind,
+                  p_entity_id: idText,
+                  p_bank_details_hash: bankHash,
+                  p_status: ncRes.status,
+                  p_result_json: ncRes.result_json,
+                  p_checked_at_utc: ncRes.checked_at_utc,
+                  p_actor_user_id: String(actorUserId)
+                });
+
+                didWork = true;
+              } catch (e) {
+                // If CoP is not enabled, record UNAVAILABLE (policy gate happens in UI/backend).
+                const msg = (e && e.message) ? String(e.message) : '';
+                const is404 = msg.includes('REVOLUT_COP_UNAVAILABLE_404');
+                if (is404) {
+                  await sbRpc(env, 'bank_name_check_record_result', {
+                    p_provider: 'REVOLUT',
+                    p_env: railEnv,
+                    p_entity_kind: kind,
+                    p_entity_id: idText,
+                    p_bank_details_hash: bankHash,
+                    p_status: 'UNAVAILABLE',
+                    p_result_json: { error: 'COP_NOT_ENABLED', detail: msg || null },
+                    p_checked_at_utc: new Date().toISOString(),
+                    p_actor_user_id: String(actorUserId)
+                  });
+                  didWork = true;
+                } else {
+                  throw e;
+                }
+              }
+            }
+          }
+
+          // Payee map (counterparty): only if required and not present.
+          if (requiresPayeeMap) {
+            const pm = (pe?.payee_map && typeof pe.payee_map === 'object') ? pe.payee_map : {};
+            const present = (pm.present === true);
+
+            if (!present) {
+              const token = await revolutAuth_getAccessToken(env);
+              await revolutCounterparty_ensureMapped(env, token, {
+                rail_env: railEnv,
+                actor_user_id: String(actorUserId),
+                entity_kind: kind,
+                entity_id: idText,
+                bank_details_hash: bankHash,
+                bank_fields: {
+                  payee_name: payeeName,
+                  sort_code: sortCode,
+                  account_number: accountNo,
+                  account_type: accountType
+                }
+              });
+              didWork = true;
+            }
+          }
+
+          processed += 1;
+        }
+
+        return { ok: true, did_work: didWork, payees_processed: processed };
+      },
+
+      async scheduleBatch(env, batchId, payload, actorUserId) {
+        // Scheduling is DB-driven (pay_batch_schedule). The adapter wrapper is kept for symmetry.
+        if (!batchId) throw new Error('scheduleBatch: batchId required');
+        if (!actorUserId) throw new Error('scheduleBatch: actorUserId required');
+        if (!payload || typeof payload !== 'object') throw new Error('scheduleBatch: payload required');
+
+        const scheduleKindRaw = String(payload.schedule_kind || '').trim().toUpperCase();
+        const scheduleKind =
+          (scheduleKindRaw === 'AT_TIME')
+            ? 'SCHEDULED'
+            : scheduleKindRaw;
+
+        const scheduledAtUtcIn = payload.scheduled_at_utc ? String(payload.scheduled_at_utc).trim() : null;
+        if (scheduleKind !== 'IMMEDIATE' && scheduleKind !== 'SCHEDULED') {
+          throw new Error('scheduleBatch: schedule_kind must be IMMEDIATE or SCHEDULED (legacy AT_TIME accepted)');
+        }
+        if (scheduleKind === 'SCHEDULED' && !scheduledAtUtcIn) {
+          throw new Error('scheduleBatch: scheduled_at_utc is required when schedule_kind=SCHEDULED (or legacy AT_TIME)');
+        }
+
+        const scheduledAtUtc = (scheduleKind === 'SCHEDULED') ? scheduledAtUtcIn : null;
+
+        const fundingAccountRef = payload.funding_account_ref ? String(payload.funding_account_ref).trim() : null;
+
+        // DB expects a JSON array (or null to use defaults). If not an array, pass null.
+        const warningHoursJson = Array.isArray(payload.warning_hours_json) ? payload.warning_hours_json : null;
+
+        return sbRpc(env, 'pay_batch_schedule', {
+          p_pay_batch_id: String(batchId),
+          p_schedule_kind: scheduleKind,
+          p_scheduled_at_utc: scheduledAtUtc,
+          p_funding_account_ref: fundingAccountRef,
+          p_warning_hours_json: warningHoursJson,
+          p_actor_user_id: String(actorUserId)
+        });
+      },
+
+      async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit } = {}) {
+        const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
+
+        const lim = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Math.trunc(Number(limit)))) : 25;
+
+        const perBatchLim = (() => {
+          const n = Number(perBatchSubmitLimit);
+          if (!Number.isFinite(n)) return 500;
+          return Math.max(1, Math.min(2000, Math.trunc(n)));
+        })();
+
+        const actor = (() => {
+          const a = (actorUserId && String(actorUserId).trim()) ? String(actorUserId).trim() : '';
+          if (a) return a;
+
+          const aa = (env && env.PAY_ACTOR_USER_ID && String(env.PAY_ACTOR_USER_ID).trim()) ? String(env.PAY_ACTOR_USER_ID).trim() : '';
+          const bb = (env && env.INVOICE_ACTOR_USER_ID && String(env.INVOICE_ACTOR_USER_ID).trim()) ? String(env.INVOICE_ACTOR_USER_ID).trim() : '';
+          const cc = (env && env.TSFIN_ACTOR_USER_ID && String(env.TSFIN_ACTOR_USER_ID).trim()) ? String(env.TSFIN_ACTOR_USER_ID).trim() : '';
+          const chosen = aa || bb || cc;
+          if (!chosen) throw new Error('BANKING_CRON_ACTOR_USER_ID_MISSING');
+          return chosen;
+        })();
+
+        const out = {
+          ok: true,
+          claimed: 0,
+          batches: [],
+          blocked_funds: [],
+          submitted: [],
+          warnings: [],
+          errors: []
+        };
+
+        let rows = [];
+        if (Array.isArray(claimedRows) && claimedRows.length) {
+          rows = claimedRows;
+        } else {
+          const claimRes = await sbRpc(env, 'pay_batches_claim_due_scheduled', {
+            p_limit: lim,
+            p_now_utc: nowIso
+          });
+
+          let claimPayload = claimRes;
+          try {
+            if (Array.isArray(claimRes) && claimRes.length === 1 && claimRes[0] && typeof claimRes[0] === 'object') claimPayload = claimRes[0];
+            if (claimPayload && typeof claimPayload === 'object' && Object.prototype.hasOwnProperty.call(claimPayload, 'pay_batches_claim_due_scheduled')) {
+              claimPayload = claimPayload.pay_batches_claim_due_scheduled;
+            }
+          } catch {}
+
+          rows =
+            (claimPayload && Array.isArray(claimPayload.claimed))
+              ? claimPayload.claimed
+              : (Array.isArray(claimPayload) ? claimPayload : []);
+        }
+
+        out.claimed = rows.length;
+        out.batches = rows;
+
+        if (!rows.length) return out;
+
+        const token = await revolutAuth_getAccessToken(env);
+
+        const _asNum = (v) => {
+          if (v === null || v === undefined) return null;
+          if (typeof v === 'number' && Number.isFinite(v)) return v;
+          if (typeof v === 'string') {
+            const n = Number(v);
+            if (Number.isFinite(n)) return n;
+          }
+          if (typeof v === 'object') {
+            if (v.amount !== undefined) return _asNum(v.amount);
+          }
+          return null;
+        };
+
+        const _parseAvailable = (acct) => {
+          if (!acct) return null;
+          const a = _asNum(acct.available_balance);
+          if (a !== null) return a;
+          const b = _asNum(acct.balance);
+          if (b !== null) return b;
+          return null;
+        };
+
+        const _sumRequired = (trs) => {
+          let total = 0;
+          for (const t of trs || []) {
+            const n = Number(t && t.amount);
+            if (Number.isFinite(n)) total += n;
+          }
+          return Math.round(total * 100) / 100;
+        };
+
+        const _patchBatchFundsCheck = async (payBatchId, fundsCheckJson) => {
+          try {
+            const q = new URLSearchParams();
+            q.set('select', 'id');
+            q.set('id', `eq.${String(payBatchId)}`);
+            const url = `${env.SUPABASE_URL}/rest/v1/pay_batches?${q.toString()}`;
+            await sbFetch(env, url, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+              body: JSON.stringify({
+                last_funds_check_at_utc: nowIso,
+                last_funds_check_json: fundsCheckJson
+              })
+            });
+          } catch {
+            // ignore best-effort patch failures
+          }
+        };
+
+        // Execute transfers for each claimed batch (idempotent by request_id).
+        for (const b of rows) {
+          const batchId = String(b?.pay_batch_id || b?.id || '').trim();
+          if (!batchId) continue;
+
+          // Fetch transfers via DB for authoritative snapshot fields
+          const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: batchId });
+          const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
+          const bgBatch = (bg && typeof bg === 'object') ? (bg.batch || null) : null;
+
+          const railEnv = String(b?.rail_env_snapshot || b?.rail_env || bgBatch?.rail_env_snapshot || 'PROD').trim().toUpperCase() || 'PROD';
+          const fundingRef = String(b?.funding_account_ref || bgBatch?.funding_account_ref || '').trim();
+
+          if (!fundingRef) {
+            out.errors.push({ code: 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF', pay_batch_id: batchId });
+            continue;
+          }
+
+          const toSubmit = (transfers || []).filter(t => {
+            const status = String(t?.status || '').toUpperCase();
+            if (status !== 'PENDING') return false;
+
+            const railTxId = t?.rail_tx_id ? String(t.rail_tx_id).trim() : '';
+            if (railTxId) return false;
+
+            const amt = Number(t?.amount || 0);
+            const ccy = String(t?.currency || 'GBP').toUpperCase();
+            return Number.isFinite(amt) && amt > 0 && ccy === 'GBP';
+          }).slice(0, perBatchLim);
+
+          // Funds check for NEW submissions only
+          const required = _sumRequired(toSubmit);
+
+          let available = null;
+          try {
+            const accs = await revolutAccounts_list(env, token);
+            const match = (accs || []).find(a => a && String(a.id || '').trim() === fundingRef);
+            available = _parseAvailable(match);
+
+            if (available === null) {
+              throw new Error('REVOLUT_FUNDING_ACCOUNT_BALANCE_UNAVAILABLE');
+            }
+          } catch (e) {
+            out.errors.push({
+              code: 'FUNDS_CHECK_FAILED',
+              pay_batch_id: batchId,
+              error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+            });
+            continue;
+          }
+
+          const sufficient = (available + 1e-9) >= required;
+
+          const fundsCheckJson = {
+            checked_at_utc: nowIso,
+            rail_provider: 'REVOLUT',
+            rail_env: railEnv,
+            funding_account_ref: fundingRef,
+            required_gbp: required,
+            available_gbp: available,
+            sufficient: sufficient
+          };
+
+          await _patchBatchFundsCheck(batchId, fundsCheckJson);
+
+          if (!sufficient) {
+            try {
+              await sbRpc(env, 'pay_batch_mark_blocked_funds', {
+                p_pay_batch_id: batchId,
+                p_actor_user_id: actor,
+                p_funds_check_json: fundsCheckJson
+              });
+              out.blocked_funds.push({ pay_batch_id: batchId, required_gbp: required, available_gbp: available });
+            } catch (e) {
+              out.errors.push({
+                code: 'MARK_BLOCKED_FUNDS_FAILED',
+                pay_batch_id: batchId,
+                error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+              });
+            }
+            continue;
+          }
+
+          if (!toSubmit.length) {
+            out.submitted.push({ pay_batch_id: batchId, submitted_count: 0, updates_applied: 0 });
+            continue;
+          }
+
+          const updates = [];
+
+          for (const t of toSubmit) {
+            const transferId = String(t?.id || '').trim();
+            if (!transferId) continue;
+
+            const requestId = String(t?.request_id || '').trim() || transferId;
+
+            try {
+              const entityKind = String(t?.payee_entity_kind || '').trim().toUpperCase();
+              const entityId = t?.payee_entity_id ? String(t.payee_entity_id).trim() : '';
+              const bankHash = t?.bank_details_hash_snapshot ? String(t.bank_details_hash_snapshot).trim() : '';
+
+              const map = await revolutCounterparty_ensureMapped(env, token, {
+                rail_env: railEnv,
+                actor_user_id: actor,
+                entity_kind: entityKind,
+                entity_id: entityId,
+                bank_details_hash: bankHash,
+                bank_fields: {
+                  payee_name: String(t?.payee_name || '').trim(),
+                  sort_code: String(t?.sort_code || '').trim(),
+                  account_number: String(t?.account_number || '').trim(),
+                  account_type: String(t?.account_type || '').trim()
+                }
+              });
+
+              const payRes = await revolutPayment_create(env, token, {
+                request_id: requestId,
+                source_account_id: fundingRef,
+                counterparty_id: map.payee_id,
+                counterparty_account_id: map.payee_account_id || null,
+                amount: Number(t?.amount || 0),
+                currency: String(t?.currency || 'GBP').toUpperCase(),
+                reference: String(t?.payment_reference || '').trim()
+              });
+
+              updates.push({
+                transfer_id: transferId,
+                status: 'PENDING',
+                rail_tx_id: payRes.rail_tx_id,
+                rail_state: payRes.rail_state,
+                rail_meta_json: payRes.rail_meta_json,
+                failed_reason: null,
+                completed_at_utc: null
+              });
+            } catch (e) {
+              const msg = (e && e.message) ? String(e.message) : String(e || 'unknown');
+              updates.push({
+                transfer_id: transferId,
+                status: 'PENDING',
+                rail_state: `CREATE_ERROR:${msg}`.slice(0, 500),
+                rail_meta_json: { kind: 'REVOLUT_CREATE_ERROR', at_utc: nowIso, error: msg },
+                failed_reason: null,
+                completed_at_utc: null
+              });
+            }
+          }
+
+          if (updates.length) {
+            try {
+              await sbRpc(env, 'pay_bank_transfers_apply_rail_updates', {
+                p_pay_batch_id: batchId,
+                p_updates: updates
+              });
+              out.submitted.push({
+                pay_batch_id: batchId,
+                submitted_count: toSubmit.length,
+                updates_applied: updates.length
+              });
+            } catch (e) {
+              out.errors.push({
+                code: 'APPLY_UPDATES_FAILED',
+                pay_batch_id: batchId,
+                error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+              });
+            }
+          } else {
+            out.submitted.push({ pay_batch_id: batchId, submitted_count: 0, updates_applied: 0 });
+          }
+        }
+
+        return out;
+      },
+
+      async pollBatch(env, batchId, actorUserId) {
+        if (!batchId) throw new Error('pollBatch: batchId required');
+        if (!actorUserId) throw new Error('pollBatch: actorUserId required');
+
+        const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(batchId) });
+        const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
+        if (!transfers.length) return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
+
+        const token = await revolutAuth_getAccessToken(env);
+
+        const updates = [];
+        for (const t of transfers) {
+          const st = String(t?.status || '').toUpperCase();
+          if (st !== 'PENDING') continue;
+
+          const reqId = String(t?.request_id || '').trim();
+          if (!reqId) continue;
+
+          const polled = await revolutPayment_poll(env, token, { request_id: reqId });
+
+          updates.push({
+            transfer_id: String(t?.id || '').trim(),
+            status: polled.status,
+            rail_tx_id: polled.rail_tx_id || null,
+            rail_state: polled.rail_state || null,
+            rail_meta_json: polled.rail_meta_json || null
+          });
+        }
+
+        if (!updates.length) {
+          return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
+        }
+
+        // Use DB rail-generic settle to update transfers AND settle snapshots safely.
+        const settled = await sbRpc(env, 'pay_settle_rail', {
+          p_pay_batch_id: String(batchId),
+          p_settlement_json: updates,
+          p_actor_user_id: String(actorUserId)
+        });
+
+        return { ok: true, pay_batch_id: String(batchId), polled: updates.length, settled };
+      },
+
+      async confirmManual() {
+        throw new Error('REVOLUT_ADAPTER: confirmManual is CSV-only');
+      }
+    };
+  }
+
+  // Default rail: CSV (manual)
+  return {
+    railProvider: 'CSV',
+
+    async capabilities(env) {
+      return {
+        provider: 'CSV',
+        available: true,
+        reason: null,
+        supports_scheduling: false,
+        supports_name_check: false,
+        supports_auto_execute: false,
+        api_base: null
+      };
+    },
+
+    async prepareBatch() {
+      // CSV has no external prepare step
+      return { ok: true, did_work: false, payees_processed: 0 };
+    },
+
+    async scheduleBatch() {
+      throw new Error('CSV_ADAPTER: scheduleBatch not supported');
+    },
+
+    async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit } = {}) {
+      const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
+      const lim = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Math.trunc(Number(limit)))) : 25;
+
+      const rows = (Array.isArray(claimedRows) && claimedRows.length) ? claimedRows : [];
+
+      return {
+        ok: true,
+        now_utc: nowIso,
+        claimed: rows.length ? rows.length : Math.min(0, lim),
+        batches: rows,
+        blocked_funds: [],
+        submitted: [],
+        warnings: [],
+        errors: []
+      };
+    },
+
+    async pollBatch(env, batchId, actorUserId) {
+      // CSV polling is effectively a no-op (settlement is manual-confirm)
+      if (!batchId) throw new Error('pollBatch: batchId required');
+      if (!actorUserId) throw new Error('pollBatch: actorUserId required');
+      return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
+    },
+
+    async confirmManual(env, batchId, payload, actorUserId) {
+      if (!batchId) throw new Error('confirmManual: batchId required');
+      if (!actorUserId) throw new Error('confirmManual: actorUserId required');
+      if (!payload || typeof payload !== 'object') throw new Error('confirmManual: payload required');
+
+      const scope = String(payload.scope || 'ALL').trim();
+      const bankConfirmRef = String(payload.bank_confirm_ref || '').trim();
+      if (!bankConfirmRef) throw new Error('confirmManual: bank_confirm_ref required');
+
+      return sbRpc(env, 'pay_settle_manual_confirm', {
+        p_pay_batch_id: String(batchId),
+        p_scope: scope,
+        p_bank_confirm_ref: bankConfirmRef,
+        p_actor_user_id: String(actorUserId)
+      });
+    }
+  };
+}
+
+
+async function revolutAuth_getAccessToken(env) {
+  const cacheKey = '__REVOLUT_TOKEN_CACHE__';
+  const nowMs = Date.now();
+
+  const clientId = env && env.REVOLUT_CLIENT_ID ? String(env.REVOLUT_CLIENT_ID).trim() : '';
+  const refreshToken = env && env.REVOLUT_REFRESH_TOKEN ? String(env.REVOLUT_REFRESH_TOKEN).trim() : '';
+  const pkcs8B64 = env && env.REVOLUT_PRIVATE_KEY_PKCS8_B64 ? String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim() : '';
+  const redirectUri = env && env.REVOLUT_REDIRECT_URI ? String(env.REVOLUT_REDIRECT_URI).trim() : '';
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  if (!clientId || !refreshToken || !pkcs8B64) {
+    throw new Error('REVOLUT_AUTH_MISSING_CONFIG');
+  }
+
+  // Cache (global for Worker isolate)
+  const g = globalThis;
+  const cache = (g[cacheKey] && typeof g[cacheKey] === 'object') ? g[cacheKey] : { accessToken: null, expMs: 0 };
+  if (cache.accessToken && Number(cache.expMs || 0) > (nowMs + 60_000)) {
+    return cache.accessToken;
+  }
+
+  const b64ToBytes = (b64) => {
+    const clean = String(b64 || '').replace(/[\r\n\s]/g, '');
+    const bin = atob(clean);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  };
+
+  const bytesToB64Url = (bytes) => {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin);
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  };
+
+  const strToB64Url = (s) => {
+    const enc = new TextEncoder();
+    return bytesToB64Url(enc.encode(String(s)));
+  };
+
+  const signRs256 = async (pkcs8DerBytes, inputStr) => {
+    const key = await crypto.subtle.importKey(
+      'pkcs8',
+      pkcs8DerBytes.buffer,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const enc = new TextEncoder();
+    const sig = await crypto.subtle.sign(
+      { name: 'RSASSA-PKCS1-v1_5' },
+      key,
+      enc.encode(inputStr)
+    );
+    return new Uint8Array(sig);
+  };
+
+  // Revolut expects iss = domain from redirect URI (without https://), sub = client_id, aud = https://revolut.com. :contentReference[oaicite:0]{index=0}
+  let iss = '';
+  try {
+    if (redirectUri) iss = new URL(redirectUri).host;
+  } catch {
+    iss = '';
+  }
+  if (!iss) throw new Error('REVOLUT_AUTH_ISS_MISSING_REDIRECT_URI_DOMAIN');
+
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const expSec = Math.floor((nowMs + (90 * 24 * 60 * 60 * 1000)) / 1000); // 90 days
+  const payload = { iss, sub: clientId, aud: 'https://revolut.com', exp: expSec };
+
+  const jwtUnsigned = `${strToB64Url(JSON.stringify(header))}.${strToB64Url(JSON.stringify(payload))}`;
+  const sigBytes = await signRs256(b64ToBytes(pkcs8B64), jwtUnsigned);
+  const jwt = `${jwtUnsigned}.${bytesToB64Url(sigBytes)}`;
+
+  const tokenUrl = `${apiBase}/auth/token`; // :contentReference[oaicite:1]{index=1}
+
+  const body = new URLSearchParams();
+  body.set('grant_type', 'refresh_token');
+  body.set('refresh_token', refreshToken);
+  body.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
+  body.set('client_assertion', jwt);
+
+  const res = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  });
+
+  const text = await res.text();
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+
+  if (!res.ok) {
+    throw new Error(`REVOLUT_AUTH_TOKEN_FAILED_${res.status}: ${text}`);
+  }
+
+  const accessToken = json && json.access_token ? String(json.access_token) : '';
+  const expiresIn = json && Number.isFinite(Number(json.expires_in)) ? Number(json.expires_in) : 300;
+
+  if (!accessToken) throw new Error('REVOLUT_AUTH_NO_ACCESS_TOKEN');
+
+  const expMs = nowMs + Math.max(30, expiresIn) * 1000;
+
+  g[cacheKey] = { accessToken, expMs };
+  return accessToken;
+}
+
+
+async function revolutAccounts_list(env, token) {
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  const t = token ? String(token).trim() : '';
+  if (!t) throw new Error('REVOLUT_ACCOUNTS_NO_TOKEN');
+
+  const url = `${apiBase}/accounts`; // :contentReference[oaicite:2]{index=2}
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${t}`,
+      Accept: 'application/json'
+    }
+  });
+
+  const text = await res.text();
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+
+  if (!res.ok) {
+    throw new Error(`REVOLUT_ACCOUNTS_FAILED_${res.status}: ${text}`);
+  }
+
+  return Array.isArray(json) ? json : [];
+}
+
+async function revolutCounterparty_ensureMapped(env, token, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, bank_fields }) {
+  const kind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const bankHash = String(bank_details_hash || '').trim();
+
+  const railEnvRaw = (rail_env !== undefined && rail_env !== null) ? String(rail_env).trim() : '';
+  const railEnv = (railEnvRaw ? railEnvRaw : 'PROD').toUpperCase();
+
+  const actorRaw = (actor_user_id !== undefined && actor_user_id !== null) ? String(actor_user_id).trim() : '';
+  const actorUserId = actorRaw ? actorRaw : null;
+
+  if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') throw new Error('REVOLUT_PAYEE_KIND_INVALID');
+  if (!entityId) throw new Error('REVOLUT_PAYEE_ID_REQUIRED');
+  if (!bankHash) throw new Error('REVOLUT_BANK_HASH_REQUIRED');
+
+  const t = token ? String(token).trim() : '';
+  if (!t) throw new Error('REVOLUT_COUNTERPARTY_NO_TOKEN');
+
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  const payeeName = String(bank_fields?.payee_name || '').trim();
+  const sortCodeRaw = String(bank_fields?.sort_code || '').trim();
+  const acctRaw = String(bank_fields?.account_number || '').trim();
+  const acctType = String(bank_fields?.account_type || '').trim().toLowerCase();
+
+  const sortDigits = sortCodeRaw.replace(/[^0-9]/g, '');
+  const acctDigits = acctRaw.replace(/[^0-9]/g, '');
+
+  if (!payeeName || sortDigits.length !== 6 || !acctDigits) {
+    throw new Error('REVOLUT_COUNTERPARTY_MISSING_BANK_FIELDS');
+  }
+
+  // 1) Check existing mapping in DB (rail_provider/env + entity_kind/id + bank_hash)
+  const q = new URLSearchParams();
+  q.set('select', 'payee_id,payee_account_id,meta_json');
+  q.set('rail_provider', 'eq.REVOLUT');
+  q.set('rail_env', `eq.${railEnv}`);
+  q.set('entity_kind', `eq.${kind}`);
+  q.set('entity_id', `eq.${entityId}`);
+  q.set('bank_details_hash', `eq.${bankHash}`);
+  q.set('limit', '1');
+
+  const mapUrl = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${q.toString()}`;
+  const mapRes = await sbFetch(env, mapUrl);
+  const row = (mapRes && Array.isArray(mapRes.rows) && mapRes.rows.length) ? mapRes.rows[0] : null;
+
+  const existingPayeeId = row && row.payee_id ? String(row.payee_id).trim() : '';
+  const existingPayeeAcctId = row && row.payee_account_id ? String(row.payee_account_id).trim() : '';
+
+  if (existingPayeeId) {
+    return {
+      payee_id: existingPayeeId,
+      payee_account_id: existingPayeeAcctId || null,
+      reused: true
+    };
+  }
+
+  // 2) Create Revolut counterparty (external GBP)
+  const body = {
+    bank_country: 'GB',
+    currency: 'GBP',
+    account_no: acctDigits,
+    sort_code: sortDigits
+  };
+
+  if (acctType === 'personal' || kind === 'CANDIDATE') {
+    const parts = payeeName.split(/\s+/).filter(Boolean);
+    const first = parts.length ? parts[0] : payeeName;
+    const last = parts.length > 1 ? parts.slice(1).join(' ') : 'Unknown';
+    body.individual_name = { first_name: first, last_name: last };
+  } else {
+    body.company_name = payeeName;
+  }
+
+  const createUrl = `${apiBase}/counterparty`;
+  const res = await fetch(createUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${t}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  const text = await res.text();
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+
+  if (!res.ok) {
+    throw new Error(`REVOLUT_COUNTERPARTY_CREATE_FAILED_${res.status}: ${text}`);
+  }
+
+  const payeeId = json && json.id ? String(json.id).trim() : '';
+  if (!payeeId) throw new Error('REVOLUT_COUNTERPARTY_CREATE_NO_ID');
+
+  const acctId = (json && Array.isArray(json.accounts) && json.accounts.length && json.accounts[0] && json.accounts[0].id)
+    ? String(json.accounts[0].id).trim()
+    : null;
+
+  // 3) Persist mapping in DB via RPC (authoritative, audited, idempotent).
+  await sbRpc(env, 'bank_payee_map_upsert', {
+    p_provider: 'REVOLUT',
+    p_env: railEnv,
+    p_entity_kind: kind,
+    p_entity_id: entityId,
+    p_bank_details_hash: bankHash,
+    p_payee_id: payeeId,
+    p_payee_account_id: acctId,
+    p_meta_json: {
+      created_by: 'REVOLUT_ADAPTER',
+      created_at_utc: new Date().toISOString(),
+      request: {
+        bank_country: 'GB',
+        currency: 'GBP'
+      }
+    },
+    p_actor_user_id: actorUserId
+  });
+
+  return {
+    payee_id: payeeId,
+    payee_account_id: acctId,
+    reused: false
+  };
+}
+
+async function revolutNameCheck_perform(env, token, { payee_name, sort_code, account_number, account_type }) {
+  const t = token ? String(token).trim() : '';
+  if (!t) throw new Error('REVOLUT_COP_NO_TOKEN');
+
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  const name = String(payee_name || '').trim();
+  const scDigits = String(sort_code || '').replace(/[^0-9]/g, '');
+  const acctDigits = String(account_number || '').replace(/[^0-9]/g, '');
+  const acctTypeNorm = String(account_type || '').trim().toLowerCase();
+
+  if (!name || scDigits.length !== 6 || !acctDigits) {
+    throw new Error('REVOLUT_COP_MISSING_FIELDS');
+  }
+
+  const body = {
+    account_no: acctDigits,
+    sort_code: scDigits
+  };
+
+  if (acctTypeNorm === 'business') {
+    body.company_name = name;
+  } else {
+    const parts = name.split(/\s+/).filter(Boolean);
+    const first = parts.length ? parts[0] : name;
+    const last = parts.length > 1 ? parts.slice(1).join(' ') : 'Unknown';
+    body.individual_name = { first_name: first, last_name: last };
+  }
+
+  const url = `${apiBase}/account-name-validation`; // :contentReference[oaicite:6]{index=6}
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${t}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  const text = await res.text();
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+
+  if (res.status === 404) {
+    // CoP not enabled for this business/env. :contentReference[oaicite:7]{index=7}
+    const err = new Error('REVOLUT_COP_UNAVAILABLE_404');
+    err.detail = text;
+    throw err;
+  }
+
+  if (!res.ok) {
+    throw new Error(`REVOLUT_COP_FAILED_${res.status}: ${text}`);
+  }
+
+  const rc = json && json.result_code ? String(json.result_code).trim().toLowerCase() : '';
+  let status = 'UNAVAILABLE';
+
+  if (rc === 'matched') status = 'PASS';
+  else if (rc === 'close_match') status = 'NEAR_MATCH';
+  else if (rc === 'not_matched') status = 'FAIL';
+  else if (rc === 'cannot_be_checked' || rc === 'temporarily_unavailable') status = 'UNAVAILABLE';
+
+  return {
+    status,
+    checked_at_utc: new Date().toISOString(),
+    result_json: json
+  };
+}
+
+async function revolutPayment_create(env, token, { request_id, source_account_id, counterparty_id, counterparty_account_id, amount, currency, reference }) {
+  const t = token ? String(token).trim() : '';
+  if (!t) throw new Error('REVOLUT_PAY_NO_TOKEN');
+
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  const reqId = String(request_id || '').trim();
+  const src = String(source_account_id || '').trim();
+  const cp = String(counterparty_id || '').trim();
+  const cpa = counterparty_account_id ? String(counterparty_account_id).trim() : '';
+  const ccy = String(currency || 'GBP').trim().toUpperCase();
+  const ref = String(reference || '').trim();
+
+  const amtNum = Number(amount);
+  if (!reqId) throw new Error('REVOLUT_PAY_REQUEST_ID_REQUIRED');
+  if (!src) throw new Error('REVOLUT_PAY_SOURCE_ACCOUNT_REQUIRED');
+  if (!cp) throw new Error('REVOLUT_PAY_COUNTERPARTY_REQUIRED');
+  if (!Number.isFinite(amtNum) || amtNum <= 0) throw new Error('REVOLUT_PAY_AMOUNT_INVALID');
+
+  // POST /pay — schema per docs. :contentReference[oaicite:8]{index=8}
+  const body = {
+    request_id: reqId,
+    account_id: src,
+    receiver: {
+      counterparty_id: cp
+    },
+    amount: amtNum,
+    currency: ccy
+  };
+
+  if (cpa) body.receiver.account_id = cpa;
+  if (ref) body.reference = ref;
+
+  const url = `${apiBase}/pay`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${t}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  const text = await res.text();
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+
+  if (!res.ok) {
+    throw new Error(`REVOLUT_PAY_CREATE_FAILED_${res.status}: ${text}`);
+  }
+
+  const txId = json && json.id ? String(json.id).trim() : '';
+  const state = json && json.state ? String(json.state).trim() : '';
+
+  return {
+    rail_tx_id: txId || null,
+    rail_state: state || null,
+    rail_meta_json: json || null
+  };
+}
+
+async function revolutPayment_poll(env, token, { request_id }) {
+  const t = token ? String(token).trim() : '';
+  if (!t) throw new Error('REVOLUT_POLL_NO_TOKEN');
+
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  const reqId = String(request_id || '').trim();
+  if (!reqId) throw new Error('REVOLUT_POLL_REQUEST_ID_REQUIRED');
+
+  // GET /transaction/{transaction_id}?id_type=request_id — per docs. :contentReference[oaicite:9]{index=9}
+  const url = `${apiBase}/transaction/${encodeURIComponent(reqId)}?id_type=request_id`;
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${t}`,
+      Accept: 'application/json'
+    }
+  });
+
+  const text = await res.text();
+  let json;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+
+  if (!res.ok) {
+    throw new Error(`REVOLUT_POLL_FAILED_${res.status}: ${text}`);
+  }
+
+  const txId = json && json.id ? String(json.id).trim() : null;
+  const state = json && json.state ? String(json.state).trim().toLowerCase() : '';
+
+  let status = 'PENDING';
+  if (state === 'completed') status = 'COMPLETED';
+  else if (state === 'declined' || state === 'failed' || state === 'reverted') status = 'FAILED';
+  else status = 'PENDING';
+
+  return {
+    status,
+    rail_tx_id: txId,
+    rail_state: (json && json.state) ? String(json.state) : null,
+    rail_meta_json: json
+  };
+}
+
+async function csvAdapter_export(env, batchId, scope, actorUserId) {
+  if (!batchId) throw new Error('csvAdapter_export: batchId required');
+  // actorUserId not required by DB export RPC, but keep signature consistent for adapters
+  const sc = String(scope || 'ALL').trim();
+  const csvText = await sbRpc(env, 'pay_export_bank_csv', {
+    p_pay_batch_id: String(batchId),
+    p_scope: sc
+  });
+  return csvText;
+}
+
+async function csvAdapter_confirmManual(env, batchId, bankConfirmRef, actorUserId, scope = 'ALL') {
+  if (!batchId) throw new Error('csvAdapter_confirmManual: batchId required');
+  if (!actorUserId) throw new Error('csvAdapter_confirmManual: actorUserId required');
+  const ref = String(bankConfirmRef || '').trim();
+  if (!ref) throw new Error('csvAdapter_confirmManual: bankConfirmRef required');
+
+  const sc = String(scope || 'ALL').trim();
+
+  return sbRpc(env, 'pay_settle_manual_confirm', {
+    p_pay_batch_id: String(batchId),
+    p_scope: sc,
+    p_bank_confirm_ref: ref,
+    p_actor_user_id: String(actorUserId)
+  });
+}
+
+async function bankingCronTick(env, opts = {}) {
+  const nowUtc = (() => {
+    const v = opts && opts.nowUtc ? new Date(opts.nowUtc) : new Date();
+    return (v && !isNaN(v.getTime())) ? v : new Date();
+  })();
+  const nowIso = nowUtc.toISOString();
+
+  const claimLimit = (() => {
+    const n = Number(opts && opts.claimLimit);
+    if (!Number.isFinite(n)) return 10;
+    return Math.max(1, Math.min(100, Math.trunc(n)));
+  })();
+
+  const pollLimit = (() => {
+    const n = Number(opts && opts.pollLimit);
+    if (!Number.isFinite(n)) return 25;
+    return Math.max(1, Math.min(200, Math.trunc(n)));
+  })();
+
+  const perBatchSubmitLimit = (() => {
+    const n = Number(opts && opts.perBatchSubmitLimit);
+    if (!Number.isFinite(n)) return 500;
+    return Math.max(1, Math.min(2000, Math.trunc(n)));
+  })();
+
+  const actorUserId = (() => {
+    const a = (env && env.PAY_ACTOR_USER_ID && String(env.PAY_ACTOR_USER_ID).trim()) ? String(env.PAY_ACTOR_USER_ID).trim() : '';
+    const b = (env && env.INVOICE_ACTOR_USER_ID && String(env.INVOICE_ACTOR_USER_ID).trim()) ? String(env.INVOICE_ACTOR_USER_ID).trim() : '';
+    const c = (env && env.TSFIN_ACTOR_USER_ID && String(env.TSFIN_ACTOR_USER_ID).trim()) ? String(env.TSFIN_ACTOR_USER_ID).trim() : '';
+    const chosen = a || b || c;
+    if (!chosen) throw new Error('BANKING_CRON_ACTOR_USER_ID_MISSING');
+    return chosen;
+  })();
+
+  const summary = {
+    ok: true,
+    now_utc: nowIso,
+    claimed: [],
+    blocked_funds: [],
+    submitted: [],
+    polled_batches: [],
+    settled_batches: [],
+    warnings: [],
+    errors: []
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 1) Claim due scheduled batches (DB) and delegate execution to adapters by provider
+  // ─────────────────────────────────────────────────────────────────────────────
+  let claimRes;
+  try {
+    claimRes = await sbRpc(env, 'pay_batches_claim_due_scheduled', {
+      p_limit: claimLimit,
+      p_now_utc: nowIso
+    });
+  } catch (e) {
+    summary.ok = false;
+    summary.errors.push({
+      code: 'CLAIM_DUE_SCHEDULED_FAILED',
+      error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+    });
+    return summary;
+  }
+
+  // Unwrap common RPC wrappers/return shapes (primary: { claimed: [...] })
+  let claimPayload = claimRes;
+  try {
+    if (Array.isArray(claimRes) && claimRes.length === 1 && claimRes[0] && typeof claimRes[0] === 'object') claimPayload = claimRes[0];
+    if (claimPayload && typeof claimPayload === 'object' && Object.prototype.hasOwnProperty.call(claimPayload, 'pay_batches_claim_due_scheduled')) {
+      claimPayload = claimPayload.pay_batches_claim_due_scheduled;
+    }
+  } catch {}
+
+  const claimedRows =
+    (claimPayload && Array.isArray(claimPayload.claimed))
+      ? claimPayload.claimed
+      : (Array.isArray(claimPayload) ? claimPayload : []);
+
+  summary.claimed = claimedRows;
+
+  // Group claimed rows by provider snapshot
+  const byProvider = new Map();
+  for (const r of claimedRows) {
+    const prov = String(r?.rail_provider_snapshot || r?.rail_provider || 'CSV').trim().toUpperCase() || 'CSV';
+    if (!byProvider.has(prov)) byProvider.set(prov, []);
+    byProvider.get(prov).push(r);
+  }
+
+  for (const [prov, rows] of byProvider.entries()) {
+    try {
+      const adapter = getRailAdapter(prov);
+      if (!adapter || typeof adapter.executeDueBatches !== 'function') {
+        summary.warnings.push({ code: 'ADAPTER_EXECUTE_MISSING', provider: prov, claimed: rows.length });
+        continue;
+      }
+
+      const res = await adapter.executeDueBatches(env, {
+        nowUtc: nowIso,
+        limit: rows.length,
+        claimedRows: rows,
+        actorUserId,
+        perBatchSubmitLimit
+      });
+
+      if (res && typeof res === 'object') {
+        const bf = Array.isArray(res.blocked_funds) ? res.blocked_funds : [];
+        const sub = Array.isArray(res.submitted) ? res.submitted : [];
+        const warns = Array.isArray(res.warnings) ? res.warnings : [];
+        const errs = Array.isArray(res.errors) ? res.errors : [];
+
+        summary.blocked_funds.push(...bf);
+        summary.submitted.push(...sub);
+        summary.warnings.push(...warns.map(w => ({ ...w, provider: prov })));
+        summary.errors.push(...errs.map(er => ({ ...er, provider: prov })));
+      }
+    } catch (e) {
+      summary.errors.push({
+        code: 'ADAPTER_EXECUTE_FAILED',
+        provider: prov,
+        error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 2) Poll in-flight batches (DB list) and delegate polling/settlement to adapters
+  // ─────────────────────────────────────────────────────────────────────────────
+  try {
+    const q = new URLSearchParams();
+    q.set('select', 'id,rail_provider_snapshot,rail_env_snapshot,status');
+    q.set('status', 'in.(EXECUTING,PARTIAL)');
+    q.set('order', 'executing_started_at_utc.asc,id.asc');
+    q.set('limit', String(pollLimit));
+
+    const url = `${env.SUPABASE_URL}/rest/v1/pay_batches?${q.toString()}`;
+    const res = await sbFetch(env, url);
+    const inflight = (res && Array.isArray(res.rows)) ? res.rows : [];
+
+    for (const b of inflight) {
+      const batchId = b && b.id ? String(b.id).trim() : '';
+      if (!batchId) continue;
+
+      const prov = String(b?.rail_provider_snapshot || 'CSV').trim().toUpperCase() || 'CSV';
+      const adapter = getRailAdapter(prov);
+
+      if (!adapter || typeof adapter.pollBatch !== 'function') {
+        summary.warnings.push({ code: 'ADAPTER_POLL_MISSING', provider: prov, pay_batch_id: batchId });
+        continue;
+      }
+
+      try {
+        const polled = await adapter.pollBatch(env, batchId, actorUserId);
+        summary.polled_batches.push({
+          pay_batch_id: batchId,
+          provider: prov,
+          result: (polled && typeof polled === 'object') ? polled : null
+        });
+
+        if (polled && typeof polled === 'object' && polled.settled !== undefined && polled.settled !== null) {
+          summary.settled_batches.push({
+            pay_batch_id: batchId,
+            provider: prov,
+            settled: polled.settled
+          });
+        }
+      } catch (e) {
+        summary.warnings.push({
+          code: 'ADAPTER_POLL_FAILED_ONE',
+          provider: prov,
+          pay_batch_id: batchId,
+          error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+        });
+      }
+    }
+  } catch (e) {
+    summary.errors.push({
+      code: 'INFIGHT_LIST_OR_POLL_FAILED',
+      error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+    });
+  }
+
+  return summary;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -73677,7 +75359,7 @@ async function handleContractWeekPlanPatch(env, req, weekId) {
 
   const c = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(w.contract_id)}&select=id,start_date,end_date,std_schedule_json,week_ending_weekday_snapshot`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(w.contract_id)}&select=id,candidate_id,start_date,end_date,std_schedule_json,week_ending_weekday_snapshot`
   );
   if (!c) return withCORS(env, req, badRequest('Contract not found'));
 
@@ -73746,7 +75428,7 @@ async function handleContractWeekPlanPatch(env, req, weekId) {
   }
 
   if (!changed) {
-    return withCORS(env, req, ok({ updated:false, week_id: w.id, empty_week_action: emptyActionRaw }));
+    return withCORS(env, req, ok({ updated:false, week_id: w.id, empty_week_action: emptyActionRaw, warnings: { schedule_clashes: null } }));
   }
 
   // NEW BEHAVIOUR: if emptied, DELETE the contract_weeks row (since there is no TS)
@@ -73762,7 +75444,8 @@ async function handleContractWeekPlanPatch(env, req, weekId) {
       week_deleted: true,
       week_id: w.id,
       empty_week_action: emptyActionRaw,
-      empty_week_action_effective: 'delete'
+      empty_week_action_effective: 'delete',
+      warnings: { schedule_clashes: null }
     }));
   }
 
@@ -73790,14 +75473,59 @@ async function handleContractWeekPlanPatch(env, req, weekId) {
   if (!res.ok) return withCORS(env, req, serverError(await res.text()));
 
   const row = (await res.json().catch(()=>[]))[0] || null;
+
+  // ✅ WARN-ONLY schedule clash detection (never block)
+  let scheduleClashes = null;
+  try {
+    if (c.candidate_id && typeof detectScheduleClashesInternal === 'function') {
+      const proposed_entries = [];
+      const seen = new Set();
+
+      for (const p of plan) {
+        const ymd = (p && typeof p.date === 'string') ? p.date : null;
+        if (!ymd) continue;
+
+        const start = (p && typeof p.start === 'string') ? p.start : null;
+        const end   = (p && typeof p.end === 'string') ? p.end : null;
+        if (!start || !end) continue;
+
+        const bm = (p && p.break_minutes != null) ? Number(p.break_minutes) : 0;
+        const key = `${ymd}|${start}|${end}|${Number.isFinite(bm) ? bm : 0}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        proposed_entries.push({
+          date: ymd,
+          start,
+          end,
+          breaks: Array.isArray(p?.breaks) ? p.breaks : [],
+          break_minutes: Number.isFinite(bm) ? bm : 0,
+          overnight: (p && p.overnight === true) ? true : false
+        });
+      }
+
+      if (proposed_entries.length) {
+        scheduleClashes = await detectScheduleClashesInternal(env, {
+          candidate_id: c.candidate_id,
+          proposed_entries,
+          ignore_contract_ids: [c.id]
+        });
+      } else {
+        scheduleClashes = { clash_count: 0, clashes: [], note: 'No timed entries in week plan to check.' };
+      }
+    }
+  } catch (e) {
+    scheduleClashes = { clash_count: 0, clashes: [], error: String(e?.message || e) };
+  }
+
   return withCORS(env, req, ok({
     updated: true,
     week: row,
     empty_week_action: emptyActionRaw,
-    empty_week_action_effective: 'delete_if_empty'
+    empty_week_action_effective: 'delete_if_empty',
+    warnings: { schedule_clashes: scheduleClashes }
   }));
 }
-
 
 
 async function setWeeksInvoicedForTimesheets(env, timesheetIds) {
@@ -75791,6 +77519,114 @@ export default {
       }
 
 
+      // ====================== BANKING (rail-generic) ======================
+if (p.startsWith('/api/banking/')) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  if (req.method === 'GET' && p === '/api/banking/capabilities') {
+    return handleBankingCapabilities(env, req, user);
+  }
+
+  if (req.method === 'POST' && p === '/api/banking/pay/preview') {
+    return handleBankingPayPreview(env, req, user);
+  }
+
+  // ====================== BANKING (Invoice Discounting) ======================
+
+// GET /api/banking/id/preview
+if (req.method === 'GET' && p === '/api/banking/id/preview') {
+  return handleBankingIdPreview(env, req, user);
+}
+
+// GET /api/banking/id/runs?limit=&offset=
+if (req.method === 'GET' && p === '/api/banking/id/runs') {
+  return handleBankingIdRunsList(env, req, user);
+}
+
+// GET /api/banking/id/runs/:id_ref
+{
+  const m = matchPath(p, '/api/banking/id/runs/:id_ref');
+  if (m && req.method === 'GET') {
+    return handleBankingIdRunGet(env, req, user, m.id_ref);
+  }
+}
+
+// POST /api/banking/id/balance-now
+if (req.method === 'POST' && p === '/api/banking/id/balance-now') {
+  return handleBankingIdBalanceNow(env, req, user);
+}
+  if (req.method === 'POST' && p === '/api/banking/pay/batch/create-draft') {
+    return handleBankingPayCreateDraft(env, req, user);
+  }
+ {
+    const m = matchPath(p, '/api/banking/pay/batch/:id/prepare');
+    if (m && req.method === 'POST') {
+      return handleBankingPayBatchPrepare(env, req, user, m.id);
+    }
+  }
+
+// ====================== BANKING (CSV settle, remittances, external reconcile) ======================
+
+// POST /api/banking/pay/batch/:id/settle/manual-confirm
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/settle/manual-confirm');
+  if (m && req.method === 'POST') return handleBankingPayBatchManualConfirm(env, req, m.id);
+}
+
+// POST /api/banking/pay/batch/:id/remittances/send
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/remittances/send');
+  if (m && req.method === 'POST') return handleBankingPayBatchRemittancesSend(env, req, m.id);
+}
+
+// POST /api/banking/pay/reconcile-external
+if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
+  return handleBankingPayReconcileExternal(env, req);
+}
+
+  {
+    const m = matchPath(p, '/api/banking/pay/batch/:id/schedule');
+    if (m && req.method === 'POST') {
+      return handleBankingPayBatchSchedule(env, req, user, m.id);
+    }
+  }
+
+  {
+    const m = matchPath(p, '/api/banking/pay/batch/:id/cancel');
+    if (m && req.method === 'POST') {
+      return handleBankingPayBatchCancel(env, req, user, m.id);
+    }
+  }
+
+  {
+    const m = matchPath(p, '/api/banking/pay/batch/:id/export-csv');
+    if (m && req.method === 'GET') {
+      return handleBankingPayBatchExportCsv(env, req, user, m.id);
+    }
+  }
+
+  {
+    const m = matchPath(p, '/api/banking/pay/batch/:id/poll');
+    if (m && req.method === 'POST') {
+      return handleBankingPayBatchPoll(env, req, user, m.id);
+    }
+  }
+  {
+    const m = matchPath(p, '/api/banking/pay/batch/:id');
+    if (m && req.method === 'GET') {
+      return handleBankingPayBatchGet(env, req, user, m.id);
+    }
+  }
+
+  {
+    const m = matchPath(p, '/api/banking/pay/batch/:id/execute');
+    if (m && req.method === 'POST') {
+      return handleBankingPayBatchExecute(env, req, user, m.id);
+    }
+  }
+}
+
       // ====================== PUBLIC (mobile) WRITE FLOW ======================
       if (req.method === "POST" && p === "/timesheets/presign")            return handlePresign(env, req);
       if (req.method === "PUT"  && p === "/upload")                         return handleUpload(env, req, url);
@@ -76191,8 +78027,7 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
         const payHold = matchPath(p, '/api/timesheets/:id/pay-hold');
         if (payHold && req.method === 'PATCH')                               return handleTimesheetPayHold(env, req, payHold.id);
 
-        const markPaid = matchPath(p, '/api/timesheets/:id/mark-paid');
-        if (markPaid && req.method === 'PATCH')                              return handleTimesheetMarkPaid(env, req, markPaid.id);
+      
       }
 {
   const m = matchPath(p, '/api/timesheets/:id/adjustments');
@@ -76381,8 +78216,7 @@ if (req.method === 'POST' && p === '/api/tspdf/queue/drain') {
       if (req.method === 'GET'  && p === '/api/reports/umbrellas')           return handleReportUmbrellas(env, req);
 
       // ====================== PAYMENTS (Bank CSV) ======================
-      if (req.method === 'POST' && p === '/api/payments/generate-csv')       return handlePaymentsGenerateCsv(env, req);
-
+     
       // =============================================================================
       // NEW ROUTES — Rates Presets
       // =============================================================================
@@ -76486,11 +78320,7 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
       }
 
       // NEW: change contract rates (preview + apply)
-      {
-        const m = matchPath(p, '/api/contracts/:id/change-rates-outstanding');
-        if (m && req.method === 'GET')  return handleContractChangeRatesPreview(env, req, m.id);
-        if (m && req.method === 'POST') return handleContractChangeRatesOutstanding(env, req, m.id);
-      }
+ 
 
       {
         const m = matchPath(p, '/api/contracts/:id/calendar');
@@ -76897,6 +78727,7 @@ if (req.method === 'POST' && p === '/api/users') {
   },
   /// Cron handler for TSFIN queue processing + Auto-invoice + Email outbox drain
 // Cron handler for TSFIN queue processing + Auto-invoice + TS PDF + INVOICE PDF + Email outbox drain
+
 async scheduled(event, env, ctx) {
   const maxBatches      = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
   const batchSize       = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
@@ -77053,6 +78884,13 @@ async scheduled(event, env, ctx) {
   };
 
   ctx.waitUntil((async () => {
+    // ✅ NEW: Banking cron tick runs every minute (and also on the 5-minute cron)
+    try {
+      await bankingCronTick(env);
+    } catch (e) {
+      console.warn('[scheduled] Banking cron tick failed:', e?.message || e);
+    }
+
     // Minute cron: invpdf drain only (keeps BR capacity stable on free plan)
     if (isInvpdfMinuteCron) {
       try {
@@ -77211,7 +79049,5 @@ async scheduled(event, env, ctx) {
     }
   })());
 }
-
-
 
 };
