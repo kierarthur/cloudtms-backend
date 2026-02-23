@@ -286,7 +286,8 @@ BEGIN
     IF array_length(v_moved_timesheet_ids, 1) IS NOT NULL THEN
       INSERT INTO public.ts_financials_outbox (timesheet_id, reason, attempt_count, created_at)
       SELECT tid, 'RATE_CHANGED'::public.ts_fin_reason_enum, 0, now()
-      FROM unnest(v_moved_timesheet_ids) AS tid;
+      FROM unnest(v_moved_timesheet_ids) AS tid
+      ON CONFLICT ON CONSTRAINT uq_tsfin_outbox DO NOTHING;
     END IF;
 
     -- Adjust old contract end_date:
@@ -396,8 +397,6 @@ BEGIN
   RETURN v_result;
 END;
 $function$;
-
-
 
 -- =========================================================
 -- 3) NEW RPCs: Candidate delete eligibility + apply (tombstones + audit + change bump)
