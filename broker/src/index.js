@@ -549,13 +549,7 @@ function pick(obj, keyOrKeys, defaults = undefined) {
   return out;
 }
 
-const escapeHtml = (s = "") =>
-  String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+
 
 const escapeUrl = (s = "") =>
   String(s).replace(/['")\\]/g, (m) => ({ "'": "%27", '"': "%22", ")": "%29", "\\": "%5C" }[m]));
@@ -39410,9 +39404,7 @@ async function handleHrAutoprocessApply(env, req, importId) {
     return out;
   };
 
-  const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
+
 
   const safeYmd = (v) => {
     const s = String(v || '').trim();
