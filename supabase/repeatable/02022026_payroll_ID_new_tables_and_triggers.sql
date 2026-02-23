@@ -829,9 +829,6 @@ end;
 $$;
 
 
-
-
-
 create or replace function public.id_consolidation_run_get(p_id_ref text)
 returns jsonb
 language plpgsql
@@ -857,7 +854,10 @@ begin
     r.created_by_user_id,
     r.total_delta_ex_vat,
     r.total_delta_vat,
-    r.total_delta_inc_vat
+    r.total_delta_inc_vat,
+    r.bank_upload_code,
+    r.bank_uploaded_at_utc,
+    r.note
   into v_run
   from public.id_consolidation_runs r
   where r.id_ref = p_id_ref
@@ -899,6 +899,9 @@ begin
       'id_ref', v_run.id_ref,
       'created_at_utc', v_run.created_at_utc,
       'created_by_user_id', case when v_run.created_by_user_id is null then null else v_run.created_by_user_id::text end,
+      'bank_upload_code', v_run.bank_upload_code,
+      'bank_uploaded_at_utc', v_run.bank_uploaded_at_utc,
+      'note', v_run.note,
       'total_delta_ex_vat', v_run.total_delta_ex_vat,
       'total_delta_vat', v_run.total_delta_vat,
       'total_delta_inc_vat', v_run.total_delta_inc_vat
@@ -908,7 +911,6 @@ begin
   );
 end;
 $$;
-
 
 -- Optional PostgREST schema reload (safe wrapper)
 do $$
