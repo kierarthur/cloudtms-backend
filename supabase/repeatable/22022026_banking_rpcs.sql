@@ -16,6 +16,9 @@ declare
 
   -- ✅ C: include default funding account in capabilities output
   v_rail_default_funding_account_ref text;
+
+  -- ✅ NEW: payroll testing flag (simulate payments; no real bank payments)
+  v_payroll_testing boolean;
 begin
   -- settings_defaults is expected to have a single row; do not assume an id column.
   select
@@ -24,14 +27,16 @@ begin
     sd.rail_supports_scheduling,
     sd.rail_supports_name_check,
     sd.rail_supports_auto_execute,
-    sd.rail_default_funding_account_ref
+    sd.rail_default_funding_account_ref,
+    sd.payroll_testing
   into
     v_provider,
     v_env,
     v_supports_scheduling,
     v_supports_name_check,
     v_supports_auto_execute,
-    v_rail_default_funding_account_ref
+    v_rail_default_funding_account_ref,
+    v_payroll_testing
   from public.settings_defaults sd
   limit 1;
 
@@ -41,6 +46,8 @@ begin
   v_supports_scheduling := coalesce(v_supports_scheduling, false);
   v_supports_name_check := coalesce(v_supports_name_check, false);
   v_supports_auto_execute := coalesce(v_supports_auto_execute, false);
+
+  v_payroll_testing := coalesce(v_payroll_testing, false);
 
   -- CSV rail implies manual bank confirmation (upload + confirm).
   v_supports_csv_confirm := (v_provider = 'CSV');
@@ -54,12 +61,14 @@ begin
     'supports_csv_confirm', v_supports_csv_confirm,
     'requires_manual_bank_confirm', v_supports_csv_confirm,
 
+    -- ✅ NEW: surface test-mode switch for UI/backend consistency
+    'payroll_testing', v_payroll_testing,
+
     -- ✅ C: surface saved default so UI can preselect consistently
     'rail_default_funding_account_ref', v_rail_default_funding_account_ref
   );
 end;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
   p_provider text,
