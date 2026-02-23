@@ -106,28 +106,146 @@ declare
 
   -- sink for CTE
   v_dummy int;
+
+  -- =====================================================
+  -- DEBUGGING (gated by settings_defaults.invoice_debug)
+  -- =====================================================
+  v_invoice_debug boolean := false;
+  v_dbg_started_at timestamptz := clock_timestamp();
+  v_dbg_steps jsonb := '[]'::jsonb;
+  v_dbg_sqlstate text := null;
+  v_dbg_error text := null;
+  v_dbg_detail text := null;
+  v_dbg_hint text := null;
+  v_dbg_context text := null;
+  v_dbg_stats jsonb := '{}'::jsonb;
+
+  v_rc int := 0;
+
 begin
+  -- ─────────────────────────────────────────────────────────────
+  -- Load invoice_debug flag (safe if column/table not present)
+  -- ─────────────────────────────────────────────────────────────
+  begin
+    select coalesce(sd.invoice_debug, false)
+      into v_invoice_debug
+      from public.settings_defaults sd
+     where sd.id = 1
+     limit 1;
+  exception
+    when undefined_column then
+      v_invoice_debug := false;
+    when undefined_table then
+      v_invoice_debug := false;
+    when others then
+      -- never allow debug flag read to break functional flow
+      v_invoice_debug := false;
+  end;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','start',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'inputs', jsonb_build_object(
+          'p_contract_id', coalesce(p_contract_id::text,''),
+          'p_new_start_date', coalesce(p_new_start_date::text,''),
+          'p_new_end_date', coalesce(p_new_end_date::text,''),
+          'p_end_existing_on', coalesce(p_end_existing_on::text,''),
+          'p_assign_existing_candidate', coalesce(p_assign_existing_candidate, true),
+          'p_new_candidate_id', coalesce(p_new_candidate_id::text,''),
+          'p_split_worker_note', coalesce(p_split_worker_note,''),
+          'p_successor_overrides_type', case when p_successor_overrides is null then 'null' else jsonb_typeof(p_successor_overrides) end,
+          'p_force_schedule_clashes', coalesce(p_force_schedule_clashes,false),
+          'p_force_already_split_week', coalesce(p_force_already_split_week,false),
+          'p_confirmed_split_week', coalesce(p_confirmed_split_week,false),
+          'p_actor_user_id', coalesce(p_actor_user_id::text,'')
+        )
+      )
+    );
+  end if;
+
   -- ─────────────────────────────────────────────────────────────
   -- Basic input validation
   -- ─────────────────────────────────────────────────────────────
   if p_contract_id is null then
     v_err := jsonb_build_object('error','INVALID_INPUT','message','p_contract_id is required');
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_validation',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'reason','p_contract_id is null',
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
   end if;
 
   if v_new_start is null or v_new_end is null then
     v_err := jsonb_build_object('error','INVALID_INPUT','message','p_new_start_date and p_new_end_date are required');
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_validation',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'reason','new_start or new_end is null',
+          'error', v_err,
+          'computed', jsonb_build_object('v_new_start', coalesce(v_new_start::text,''), 'v_new_end', coalesce(v_new_end::text,''))
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
   end if;
 
   if v_new_start > v_new_end then
     v_err := jsonb_build_object('error','INVALID_INPUT','message','p_new_start_date must be <= p_new_end_date');
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_validation',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'reason','v_new_start > v_new_end',
+          'computed', jsonb_build_object('v_new_start', v_new_start, 'v_new_end', v_new_end),
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
   end if;
 
   if v_close_to is null then
     v_err := jsonb_build_object('error','INVALID_INPUT','message','p_end_existing_on is required');
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_validation',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'reason','v_close_to is null',
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
+  end if;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','validation_ok',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'computed', jsonb_build_object('v_new_start', v_new_start, 'v_new_end', v_new_end, 'v_close_to', v_close_to)
+      )
+    );
   end if;
 
   -- ─────────────────────────────────────────────────────────────
@@ -141,7 +259,35 @@ begin
 
   if not found then
     v_err := jsonb_build_object('error','CONTRACT_NOT_FOUND','contract_id',p_contract_id);
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','contract_not_found',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
+  end if;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','locked_predecessor',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'predecessor', jsonb_build_object(
+          'id', v_cur.id,
+          'candidate_id', coalesce(v_cur.candidate_id::text,''),
+          'client_id', coalesce(v_cur.client_id::text,''),
+          'start_date', v_cur.start_date,
+          'end_date', v_cur.end_date,
+          'week_ending_weekday_snapshot', v_cur.week_ending_weekday_snapshot
+        )
+      )
+    );
   end if;
 
   -- Close window rules (end-existing enforced)
@@ -152,6 +298,18 @@ begin
       'predecessor_start_date', v_cur.start_date,
       'end_existing_on', v_close_to
     );
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_close_window_rule',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'reason','close_to < predecessor.start_date',
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
   end if;
 
@@ -162,7 +320,35 @@ begin
       'end_existing_on', v_close_to,
       'new_start_date', v_new_start
     );
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_close_window_rule',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'reason','close_to > new_start - 1',
+          'error', v_err,
+          'computed', jsonb_build_object('new_start_minus_1', (v_new_start - 1))
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
+  end if;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','close_window_rules_ok',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'computed', jsonb_build_object(
+          'predecessor_start_date', v_cur.start_date,
+          'close_to', v_close_to,
+          'new_start', v_new_start,
+          'close_to_max', (v_new_start - 1)
+        )
+      )
+    );
   end if;
 
   -- ─────────────────────────────────────────────────────────────
@@ -170,13 +356,61 @@ begin
   -- ─────────────────────────────────────────────────────────────
   if coalesce(p_assign_existing_candidate, true) then
     v_succ_candidate_id := v_cur.candidate_id;
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','succ_candidate_assignment',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'path','assign_existing_candidate',
+          'successor_candidate_id', coalesce(v_succ_candidate_id::text,'')
+        )
+      );
+    end if;
+
   else
     if p_new_candidate_id is not null then
       v_succ_candidate_id := p_new_candidate_id;
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','succ_candidate_assignment',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'path','explicit_param_new_candidate_id',
+            'successor_candidate_id', coalesce(v_succ_candidate_id::text,'')
+          )
+        );
+      end if;
+
     elsif (v_ov ? 'candidate_id') and nullif(btrim(v_ov->>'candidate_id'), '') is not null then
       v_succ_candidate_id := (v_ov->>'candidate_id')::uuid;
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','succ_candidate_assignment',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'path','override_candidate_id',
+            'successor_candidate_id', coalesce(v_succ_candidate_id::text,'')
+          )
+        );
+      end if;
+
     else
       v_succ_candidate_id := null;
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','succ_candidate_assignment',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'path','no_candidate_assigned',
+            'successor_candidate_id',''
+          )
+        );
+      end if;
+
     end if;
   end if;
 
@@ -184,12 +418,34 @@ begin
   -- Predecessor week-ending snapshot validation + derived dates
   -- ─────────────────────────────────────────────────────────────
   v_wew_pred := coalesce(v_cur.week_ending_weekday_snapshot, 0);
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','predecessor_wew_loaded',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'week_ending_weekday_snapshot', v_wew_pred
+      )
+    );
+  end if;
+
   if v_wew_pred < 0 or v_wew_pred > 6 then
     v_err := jsonb_build_object(
       'error','INVALID_CONTRACT_STATE',
       'message','predecessor.week_ending_weekday_snapshot must be 0..6',
       'week_ending_weekday_snapshot', v_cur.week_ending_weekday_snapshot
     );
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_predecessor_wew_validation',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
   end if;
 
@@ -201,6 +457,24 @@ begin
   v_boundary_week_end :=
     (v_new_start + (((v_wew_pred - extract(dow from v_new_start)::int + 7) % 7)) * interval '1 day')::date;
   v_boundary_week_start := (v_boundary_week_end - interval '6 days')::date;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','derived_dates',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'computed', jsonb_build_object(
+          'v_wew_pred', v_wew_pred,
+          'v_end_we_old', v_end_we_old,
+          'v_boundary_week_start', v_boundary_week_start,
+          'v_boundary_week_end', v_boundary_week_end,
+          'v_new_start', v_new_start,
+          'v_new_end', v_new_end,
+          'v_close_to', v_close_to
+        )
+      )
+    );
+  end if;
 
   -- ─────────────────────────────────────────────────────────────
   -- Hard block: submitted beyond close window
@@ -217,7 +491,29 @@ begin
       'contract_id', v_cur.id,
       'end_week_ending_date', v_end_we_old
     );
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_submitted_beyond_close',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
+  end if;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','submitted_beyond_close_check_ok',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'contract_id', v_cur.id::text,
+        'end_we_old', v_end_we_old
+      )
+    );
   end if;
 
   -- NEW HARD RULE: ending week submitted + midweek truncation
@@ -235,8 +531,31 @@ begin
         'close_to', v_close_to,
         'week_ending_date', v_end_we_old
       );
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','fail_ending_week_submitted_midweek_truncation',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'error', v_err
+          )
+        );
+      end if;
+
       raise exception using message = v_err::text;
     end if;
+  end if;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','ending_week_truncation_rule_ok',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'close_to', v_close_to,
+        'end_we_old', v_end_we_old,
+        'is_midweek_truncation', (v_close_to < v_end_we_old)
+      )
+    );
   end if;
 
   -- ─────────────────────────────────────────────────────────────
@@ -249,6 +568,23 @@ begin
     and v_new_start <> v_boundary_week_start
     and v_end_we_old = v_boundary_week_end
   );
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','split_week_eligibility',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'components', jsonb_build_object(
+          'pred_candidate_not_null', (v_cur.candidate_id is not null),
+          'succ_candidate_not_null', (v_succ_candidate_id is not null),
+          'same_candidate', (v_cur.candidate_id is not null and v_succ_candidate_id is not null and v_cur.candidate_id = v_succ_candidate_id),
+          'new_start_is_midweek', (v_new_start <> v_boundary_week_start),
+          'pred_end_week_equals_boundary_week', (v_end_we_old = v_boundary_week_end)
+        ),
+        'result', v_split_week
+      )
+    );
+  end if;
 
   if v_split_week then
     -- Hard block: boundary week already submitted (contract-based definition)
@@ -276,7 +612,30 @@ begin
         'contract_id', v_bad_contract_id,
         'timesheet_id', v_bad_timesheet_id
       );
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','fail_boundary_week_already_submitted',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'found_contract_id', coalesce(v_bad_contract_id::text,''),
+            'found_timesheet_id', coalesce(v_bad_timesheet_id::text,''),
+            'error', v_err
+          )
+        );
+      end if;
+
       raise exception using message = v_err::text;
+    end if;
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','boundary_week_submitted_check_ok',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'boundary_week_end', v_boundary_week_end
+        )
+      );
     end if;
 
     -- Already split detection (another overlapping contract for same candidate+client in boundary week)
@@ -289,6 +648,17 @@ begin
          and c2.start_date <= v_boundary_week_end
          and c2.end_date >= v_boundary_week_start
     ) into v_already_split;
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','already_split_detection',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'already_split', v_already_split,
+          'p_force_already_split_week', coalesce(p_force_already_split_week,false)
+        )
+      );
+    end if;
 
     if v_already_split and not coalesce(p_force_already_split_week, false) then
       v_err := jsonb_build_object(
@@ -307,6 +677,17 @@ begin
              and c2.end_date >= v_boundary_week_start
         )
       );
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','fail_already_split_week_not_forced',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'error', v_err
+          )
+        );
+      end if;
+
       raise exception using message = v_err::text;
     end if;
 
@@ -314,6 +695,20 @@ begin
     -- Old half: max(predecessor.start_date, week_start) .. closeTo
     if greatest(v_cur.start_date, v_boundary_week_start) > v_close_to then
       v_old_mask := '0000000';
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','old_mask_computed',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'path','empty_range',
+            'old_allowed_from', greatest(v_cur.start_date, v_boundary_week_start),
+            'old_allowed_to', v_close_to,
+            'old_mask', v_old_mask
+          )
+        );
+      end if;
+
     else
       select string_agg(case when d.pos is not null then '1' else '0' end, '' order by p.pos)
         into v_old_mask
@@ -327,11 +722,39 @@ begin
                  ) as dt
         ) as d
           on d.pos = p.pos;
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','old_mask_computed',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'path','generate_series',
+            'old_allowed_from', greatest(v_cur.start_date, v_boundary_week_start),
+            'old_allowed_to', v_close_to,
+            'old_mask', v_old_mask
+          )
+        );
+      end if;
+
     end if;
 
     -- New half: newStart .. min(newEnd, week_end)
     if v_new_start > least(v_new_end, v_boundary_week_end) then
       v_new_mask := '0000000';
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','new_mask_computed',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'path','empty_range',
+            'new_allowed_from', v_new_start,
+            'new_allowed_to', least(v_new_end, v_boundary_week_end),
+            'new_mask', v_new_mask
+          )
+        );
+      end if;
+
     else
       select string_agg(case when d.pos is not null then '1' else '0' end, '' order by p.pos)
         into v_new_mask
@@ -345,10 +768,39 @@ begin
                  ) as dt
         ) as d
           on d.pos = p.pos;
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','new_mask_computed',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'path','generate_series',
+            'new_allowed_from', v_new_start,
+            'new_allowed_to', least(v_new_end, v_boundary_week_end),
+            'new_mask', v_new_mask
+          )
+        );
+      end if;
+
     end if;
 
     -- Confirm gating (note required)
     v_split_note := btrim(coalesce(p_split_worker_note, ''));
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','split_week_confirm_gating',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'p_confirmed_split_week', coalesce(p_confirmed_split_week,false),
+          'split_note_empty', (v_split_note = ''),
+          'split_note_len', length(v_split_note),
+          'old_mask', v_old_mask,
+          'new_mask', v_new_mask
+        )
+      );
+    end if;
+
     if (not coalesce(p_confirmed_split_week, false)) or v_split_note = '' then
       v_err := jsonb_build_object(
         'error','SPLIT_WEEK_CONFIRM_REQUIRED',
@@ -370,10 +822,33 @@ begin
            to_char(v_new_start,'YYYY-MM-DD') || ' to ' ||
            to_char(least(v_new_end, v_boundary_week_end),'YYYY-MM-DD') || '.')
       );
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','fail_split_week_confirm_required',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'error', v_err
+          )
+        );
+      end if;
+
       raise exception using message = v_err::text;
     end if;
 
     v_split_group_key := gen_random_uuid()::text;
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','split_week_confirmed',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'split_group_key', v_split_group_key,
+          'worker_note', v_split_note
+        )
+      );
+    end if;
+
   end if;
 
   -- ─────────────────────────────────────────────────────────────
@@ -635,12 +1110,61 @@ begin
     v_wew_succ := coalesce(v_cur.week_ending_weekday_snapshot, 0);
   end if;
 
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','successor_fields_merged',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'merged', jsonb_build_object(
+          'succ_candidate_id', coalesce(v_succ_candidate_id::text,''),
+          'succ_client_id', coalesce(v_succ_client_id::text,''),
+          'succ_role', coalesce(v_succ_role,''),
+          'succ_band', coalesce(v_succ_band,''),
+          'succ_display_site', coalesce(v_succ_display_site,''),
+          'succ_ward_hint', coalesce(v_succ_ward_hint,''),
+          'succ_pay_method_snapshot', coalesce(v_succ_pay_method_snapshot,''),
+          'succ_week_ending_weekday_snapshot', v_wew_succ,
+          'succ_overrideclientsettings', coalesce(v_succ_overrideclientsettings,false),
+          'succ_weekly_timesheet_source', coalesce(v_succ_weekly_timesheet_source::text,''),
+          'succ_no_timesheet_required', case when v_succ_no_timesheet_required is null then null else v_succ_no_timesheet_required end,
+          'succ_daily_calc_of_invoices', case when v_succ_daily_calc_of_invoices is null then null else v_succ_daily_calc_of_invoices end,
+          'succ_group_nightsat_sunbh', case when v_succ_group_nightsat_sunbh is null then null else v_succ_group_nightsat_sunbh end,
+          'succ_is_nhsp', case when v_succ_is_nhsp is null then null else v_succ_is_nhsp end,
+          'succ_autoprocess_hr', case when v_succ_autoprocess_hr is null then null else v_succ_autoprocess_hr end,
+          'succ_requires_hr', case when v_succ_requires_hr is null then null else v_succ_requires_hr end,
+          'succ_hr_attach_to_invoice', case when v_succ_hr_attach_to_invoice is null then null else v_succ_hr_attach_to_invoice end,
+          'succ_ts_attach_to_invoice', case when v_succ_ts_attach_to_invoice is null then null else v_succ_ts_attach_to_invoice end,
+          'succ_reference_number_required_to_issue_invoice', case when v_succ_reference_number_required_to_issue_invoice is null then null else v_succ_reference_number_required_to_issue_invoice end,
+          'succ_send_manual_invoices_to_different_email', case when v_succ_send_manual_invoices_to_different_email is null then null else v_succ_send_manual_invoices_to_different_email end,
+          'succ_manual_invoices_alt_email_address', coalesce(v_succ_manual_invoices_alt_email_address,''),
+          'succ_is_ad_hoc', coalesce(v_succ_is_ad_hoc,false),
+          'succ_default_submission_mode', coalesce(v_succ_default_submission_mode::text,'')
+        ),
+        'overrides_keys', (
+          select coalesce(jsonb_agg(k), '[]'::jsonb)
+          from jsonb_object_keys(v_ov) as k
+        )
+      )
+    );
+  end if;
+
   if v_wew_succ < 0 or v_wew_succ > 6 then
     v_err := jsonb_build_object(
       'error','INVALID_INPUT',
       'message','successor.week_ending_weekday_snapshot must be 0..6',
       'week_ending_weekday_snapshot', v_wew_succ
     );
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_successor_wew_validation',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
   end if;
 
@@ -650,6 +1174,18 @@ begin
       'error','INVALID_INPUT',
       'message','is_nhsp and autoprocess_hr cannot both be true for successor'
     );
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_route_flag_validation',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'which','is_nhsp && autoprocess_hr',
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
   end if;
 
@@ -658,7 +1194,28 @@ begin
       'error','INVALID_INPUT',
       'message','no_timesheet_required=true requires autoprocess_hr=true for successor'
     );
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','fail_route_flag_validation',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'which','no_timesheet_required && autoprocess_hr != true',
+          'error', v_err
+        )
+      );
+    end if;
+
     raise exception using message = v_err::text;
+  end if;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','route_flags_ok',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+      )
+    );
   end if;
 
   -- Snapshot predecessor state for audit before mutations
@@ -672,6 +1229,16 @@ begin
     'new_end_date', v_new_end,
     'end_existing_on', v_close_to
   );
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','before_state_snapshot',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'before_state', v_before_state
+      )
+    );
+  end if;
 
   -- ─────────────────────────────────────────────────────────────
   -- Insert successor contract
@@ -757,6 +1324,23 @@ begin
   )
   returning c.* into v_succ;
 
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','inserted_successor_contract',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'successor', jsonb_build_object(
+          'id', v_succ.id,
+          'candidate_id', coalesce(v_succ.candidate_id::text,''),
+          'client_id', coalesce(v_succ.client_id::text,''),
+          'start_date', v_succ.start_date,
+          'end_date', v_succ.end_date,
+          'week_ending_weekday_snapshot', v_succ.week_ending_weekday_snapshot
+        )
+      )
+    );
+  end if;
+
   -- ─────────────────────────────────────────────────────────────
   -- Update predecessor end_date (end-existing enforced)
   -- ─────────────────────────────────────────────────────────────
@@ -765,7 +1349,21 @@ begin
          updated_at = v_now
    where c.id = v_cur.id;
 
+  get diagnostics v_rc = row_count;
+
   v_cur.end_date := v_close_to;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','updated_predecessor_end_date',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'row_count', v_rc,
+        'predecessor_id', v_cur.id::text,
+        'new_end_date', v_close_to
+      )
+    );
+  end if;
 
   -- ─────────────────────────────────────────────────────────────
   -- Generate/ensure base contract_weeks rows for predecessor + successor in their final windows
@@ -977,6 +1575,19 @@ begin
   )
   select 1 into v_dummy from ins limit 1;
 
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','ensure_contract_weeks_done',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'note','weeks ensure CTE executed (v_dummy indicates at least one insert when non-null)',
+        'v_dummy', v_dummy,
+        'predecessor_id', v_cur.id::text,
+        'successor_id', v_succ.id::text
+      )
+    );
+  end if;
+
   -- ─────────────────────────────────────────────────────────────
   -- Delete predecessor draft weeks beyond truncated window (never touches submitted weeks)
   -- ─────────────────────────────────────────────────────────────
@@ -984,6 +1595,20 @@ begin
    where cw.contract_id = v_cur.id
      and cw.timesheet_id is null
      and cw.week_ending_date > v_end_we_old;
+
+  get diagnostics v_rc = row_count;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','deleted_predecessor_draft_weeks_beyond_trunc',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'row_count', v_rc,
+        'contract_id', v_cur.id::text,
+        'v_end_we_old', v_end_we_old
+      )
+    );
+  end if;
 
   -- ─────────────────────────────────────────────────────────────
   -- Clamp predecessor ending week planned schedule (draft rows only; never delete the week row)
@@ -1013,6 +1638,21 @@ begin
     from tgt
    where cw.id = tgt.contract_week_id;
 
+  get diagnostics v_rc = row_count;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','clamped_predecessor_ending_week_plan',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'row_count', v_rc,
+        'contract_id', v_cur.id::text,
+        'week_ending_date', v_end_we_old,
+        'clamp_to_date', v_close_to
+      )
+    );
+  end if;
+
   -- ─────────────────────────────────────────────────────────────
   -- Split-week enforcement patch (draft rows only; includes additional_seq variants)
   -- ─────────────────────────────────────────────────────────────
@@ -1028,6 +1668,23 @@ begin
        and cw.week_ending_date = v_boundary_week_end
        and cw.timesheet_id is null;
 
+    get diagnostics v_rc = row_count;
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','split_week_patch_predecessor_weeks',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'row_count', v_rc,
+          'contract_id', v_cur.id::text,
+          'week_end', v_boundary_week_end,
+          'allowed_days_mask', v_old_mask,
+          'split_boundary_date', v_new_start,
+          'split_group_key', v_split_group_key
+        )
+      );
+    end if;
+
     update public.contract_weeks as cw
        set enforce_day_partition = true,
            allowed_days_mask = v_new_mask,
@@ -1038,6 +1695,24 @@ begin
      where cw.contract_id = v_succ.id
        and cw.week_ending_date = v_boundary_week_end
        and cw.timesheet_id is null;
+
+    get diagnostics v_rc = row_count;
+
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','split_week_patch_successor_weeks',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'row_count', v_rc,
+          'contract_id', v_succ.id::text,
+          'week_end', v_boundary_week_end,
+          'allowed_days_mask', v_new_mask,
+          'split_boundary_date', v_new_start,
+          'split_group_key', v_split_group_key
+        )
+      );
+    end if;
+
   end if;
 
   -- ─────────────────────────────────────────────────────────────
@@ -1045,6 +1720,19 @@ begin
   -- NOTE: avoid using CTE name "overlaps" (keyword/operator in SQL); use ovl_rows instead.
   -- ─────────────────────────────────────────────────────────────
   if v_succ_candidate_id is not null then
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','schedule_clash_scan_start',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'candidate_id', v_succ_candidate_id::text,
+          'new_start', v_new_start,
+          'new_end', v_new_end,
+          'p_force_schedule_clashes', coalesce(p_force_schedule_clashes,false)
+        )
+      );
+    end if;
+
     with params as (
       select
         (v_new_start - 1) as scan_from,
@@ -1235,8 +1923,30 @@ begin
       'clashes', coalesce(v_schedule_clashes, '[]'::jsonb)
     );
 
+    if v_invoice_debug then
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','schedule_clash_scan_done',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'clash_count', coalesce(v_clash_count,0),
+          'forced', coalesce(p_force_schedule_clashes,false)
+        )
+      );
+    end if;
+
     if coalesce(v_clash_count, 0) > 0 and not coalesce(p_force_schedule_clashes, false) then
       v_err := v_schedule_clashes || jsonb_build_object('error','SCHEDULE_CLASH');
+
+      if v_invoice_debug then
+        v_dbg_steps := v_dbg_steps || jsonb_build_array(
+          jsonb_build_object(
+            'step','fail_schedule_clash_not_forced',
+            'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'error', v_err
+          )
+        );
+      end if;
+
       raise exception using message = v_err::text;
     end if;
   end if;
@@ -1269,6 +1979,16 @@ begin
       order by c2.start_date
       limit 50
     ) as c2;
+  end if;
+
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','overlap_warnings_computed',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'overlap_warning_count', case when v_overlap_warnings is null or jsonb_typeof(v_overlap_warnings) <> 'array' then null else jsonb_array_length(v_overlap_warnings) end
+      )
+    );
   end if;
 
   -- ─────────────────────────────────────────────────────────────
@@ -1307,6 +2027,67 @@ begin
     p_actor_user_id
   );
 
+  if v_invoice_debug then
+    v_dbg_steps := v_dbg_steps || jsonb_build_array(
+      jsonb_build_object(
+        'step','canonical_audit_written',
+        'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        'event','CLONE_EXTEND',
+        'actor_user_id', coalesce(p_actor_user_id::text,'')
+      )
+    );
+  end if;
+
+  -- ─────────────────────────────────────────────────────────────
+  -- DEBUG AUDIT (single row per call; best-effort, never breaks flow)
+  -- ─────────────────────────────────────────────────────────────
+  if v_invoice_debug then
+    begin
+      v_dbg_stats := jsonb_build_object(
+        'predecessor_id', v_cur.id,
+        'successor_id', v_succ.id,
+        'split_week', v_split_week,
+        'already_split', v_already_split,
+        'boundary_week_start', v_boundary_week_start,
+        'boundary_week_end', v_boundary_week_end,
+        'end_we_old', v_end_we_old,
+        'clash_count', coalesce(v_clash_count,0),
+        'forced_schedule_clashes', coalesce(p_force_schedule_clashes,false),
+        'forced_already_split_week', coalesce(p_force_already_split_week,false)
+      );
+
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','finish',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'stats', v_dbg_stats
+        )
+      );
+
+      perform public._inv_write_audit(
+        null,
+        'CONTRACTS_CLONE_EXTEND_DEBUG',
+        jsonb_build_object(
+          'predecessor_id', v_cur.id::text,
+          'successor_id', v_succ.id::text,
+          'stats', v_dbg_stats,
+          'steps', v_dbg_steps,
+          'warnings', jsonb_build_object(
+            'schedule_clashes', v_schedule_clashes,
+            'overlap_warnings', v_overlap_warnings
+          )
+        ),
+        'contracts',
+        ('contract:' || v_cur.id::text),
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
   -- ─────────────────────────────────────────────────────────────
   -- Return payload
   -- ─────────────────────────────────────────────────────────────
@@ -1343,5 +2124,73 @@ begin
       'overlap_warnings', v_overlap_warnings
     )
   );
+
+exception when others then
+  v_dbg_sqlstate := SQLSTATE;
+  v_dbg_error := SQLERRM;
+
+  begin
+    get stacked diagnostics
+      v_dbg_detail = PG_EXCEPTION_DETAIL,
+      v_dbg_hint = PG_EXCEPTION_HINT,
+      v_dbg_context = PG_EXCEPTION_CONTEXT;
+  exception when others then
+    v_dbg_detail := null;
+    v_dbg_hint := null;
+    v_dbg_context := null;
+  end;
+
+  if v_invoice_debug then
+    begin
+      v_dbg_steps := v_dbg_steps || jsonb_build_array(
+        jsonb_build_object(
+          'step','exception',
+          'at_utc', to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+          'sqlstate', v_dbg_sqlstate,
+          'error', v_dbg_error,
+          'detail', v_dbg_detail,
+          'hint', v_dbg_hint
+        )
+      );
+
+      v_dbg_stats := jsonb_build_object(
+        'predecessor_id', coalesce(v_cur.id::text,''),
+        'successor_id', coalesce(v_succ.id::text,''),
+        'split_week', v_split_week,
+        'already_split', v_already_split,
+        'boundary_week_start', coalesce(v_boundary_week_start::text,''),
+        'boundary_week_end', coalesce(v_boundary_week_end::text,''),
+        'end_we_old', coalesce(v_end_we_old::text,''),
+        'clash_count', coalesce(v_clash_count,0),
+        'forced_schedule_clashes', coalesce(p_force_schedule_clashes,false),
+        'forced_already_split_week', coalesce(p_force_already_split_week,false)
+      );
+
+      perform public._inv_write_audit(
+        null,
+        'CONTRACTS_CLONE_EXTEND_ERROR',
+        jsonb_build_object(
+          'predecessor_id', coalesce(v_cur.id::text,''),
+          'successor_id', coalesce(v_succ.id::text,''),
+          'sqlstate', v_dbg_sqlstate,
+          'error', v_dbg_error,
+          'detail', v_dbg_detail,
+          'hint', v_dbg_hint,
+          'context', v_dbg_context,
+          'stats', v_dbg_stats,
+          'steps', v_dbg_steps
+        ),
+        'contracts',
+        ('contract:' || coalesce(p_contract_id::text,'')),
+        null,
+        'INVOICE_DEBUG',
+        null, null, null
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  raise;
 end;
 $$;
