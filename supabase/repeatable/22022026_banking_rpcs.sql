@@ -578,6 +578,302 @@ begin
 end;
 $function$;
 
+
+create or replace function public.pay_batch_schedule(
+  p_pay_batch_id uuid,
+  p_schedule_kind text,
+  p_scheduled_at_utc timestamptz,
+  p_funding_account_ref text,
+  p_warning_hours_json jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_kind text := upper(btrim(coalesce(p_schedule_kind,'')));
+  v_batch record;
+  v_cfg record;
+
+  v_provider text := upper(btrim(coalesce(nullif(btrim(coalesce(p_schedule_kind,'')),''),'')));
+
+  v_sched_at timestamptz;
+  v_warn jsonb;
+
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+  v_funding text := nullif(btrim(coalesce(p_funding_account_ref,'')), '');
+
+  v_missing_bank int := 0;
+  v_blocked_name int := 0;
+  v_missing_map int := 0;
+  v_pending_transfers int := 0;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_schedule: pay_batch_id is required';
+  end if;
+  if p_actor_user_id is null then
+    raise exception 'pay_batch_schedule: actor_user_id is required';
+  end if;
+  if v_kind not in ('IMMEDIATE','SCHEDULED') then
+    raise exception 'pay_batch_schedule: invalid schedule_kind (IMMEDIATE|SCHEDULED)';
+  end if;
+
+  select
+    pb.id,
+    pb.status,
+    pb.pay_date,
+    pb.rail_provider_snapshot,
+    pb.rail_env_snapshot
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  for update;
+
+  if v_batch.id is null then
+    raise exception 'pay_batch_schedule: pay_batch not found';
+  end if;
+
+  v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot,'')));
+  if v_provider = '' then
+    raise exception 'pay_batch_schedule: rail_provider_snapshot missing on batch';
+  end if;
+
+  select
+    sd.funds_warning_hours_json,
+    sd.rail_supports_name_check,
+    sd.rail_supports_scheduling,
+    sd.rail_default_funding_account_ref
+  into v_cfg
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_cfg.rail_supports_scheduling is null then
+    raise exception 'pay_batch_schedule: settings_defaults missing (id=1)';
+  end if;
+
+  -- Manual rails (e.g. CSV) must not use scheduling
+  if v_provider = 'CSV' then
+    raise exception 'pay_batch_schedule: scheduling is not supported for manual rail_provider_snapshot=%', v_batch.rail_provider_snapshot;
+  end if;
+
+  -- Global capability gate (current defaults)
+  if coalesce(v_cfg.rail_supports_scheduling,false) = false then
+    raise exception 'pay_batch_schedule: scheduling is not enabled in settings_defaults (rail_supports_scheduling=false)';
+  end if;
+
+  v_need_name_check := (coalesce(v_cfg.rail_supports_name_check,false) = true);
+  v_requires_payee_map := true; -- scheduling rails are API rails and require payee mapping
+
+  v_warn := coalesce(p_warning_hours_json, v_cfg.funds_warning_hours_json);
+  if v_warn is not null and jsonb_typeof(v_warn) <> 'array' then
+    raise exception 'pay_batch_schedule: warning_hours_json must be a JSON array';
+  end if;
+
+  if v_kind = 'IMMEDIATE' then
+    v_sched_at := now();
+  else
+    if p_scheduled_at_utc is null then
+      raise exception 'pay_batch_schedule: scheduled_at_utc is required when schedule_kind=SCHEDULED';
+    end if;
+    v_sched_at := p_scheduled_at_utc;
+  end if;
+
+  -- Funding account must be present for scheduling rails; allow fallback to settings default
+  if v_funding is null then
+    v_funding := nullif(btrim(coalesce(v_cfg.rail_default_funding_account_ref,'')), '');
+  end if;
+  if v_funding is null then
+    raise exception 'pay_batch_schedule: funding_account_ref is required for this rail (provider=%)', v_batch.rail_provider_snapshot;
+  end if;
+
+  select count(*)::int
+  into v_pending_transfers
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id
+    and upper(coalesce(pbt.status,'')) = 'PENDING';
+
+  if v_pending_transfers = 0 then
+    raise exception 'pay_batch_schedule: no PENDING transfers exist for this batch (execute-bank required first)';
+  end if;
+
+  with t as (
+    select
+      upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) as payee_kind,
+      coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
+      ) as payee_id,
+      coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
+    from public.pay_bank_transfers pbt
+    left join public.candidates c
+      on c.id = coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then null else pbt.candidate_id end
+      )
+     and upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) = 'CANDIDATE'
+    left join public.umbrellas u
+      on u.id = coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else null end
+      )
+     and upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) = 'UMBRELLA'
+    where pbt.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(pbt.status,'')) = 'PENDING'
+    group by 1,2,3
+  )
+  select
+    sum(case when t.bank_hash is null or btrim(t.bank_hash) = '' then 1 else 0 end)::int
+  into v_missing_bank
+  from t;
+
+  if v_missing_bank > 0 then
+    raise exception 'pay_batch_schedule: BLOCKED_BANK_DETAILS for % payee(s)', v_missing_bank;
+  end if;
+
+  with t as (
+    select
+      upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) as payee_kind,
+      coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
+      ) as payee_id,
+      coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
+    from public.pay_bank_transfers pbt
+    left join public.candidates c
+      on c.id = coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then null else pbt.candidate_id end
+      )
+     and upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) = 'CANDIDATE'
+    left join public.umbrellas u
+      on u.id = coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else null end
+      )
+     and upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) = 'UMBRELLA'
+    where pbt.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(pbt.status,'')) = 'PENDING'
+    group by 1,2,3
+  )
+  select
+    sum(
+      case
+        when v_need_name_check = true then
+          case
+            when coalesce(bnc.status,'UNVERIFIED') = 'PASS' then 0
+            when (bnc.override_reason is not null and bnc.override_hash = t.bank_hash) then 0
+            else 1
+          end
+        else 0
+      end
+    )::int
+  into v_blocked_name
+  from t
+  left join public.bank_name_checks bnc
+    on bnc.rail_provider = v_batch.rail_provider_snapshot
+   and bnc.rail_env = v_batch.rail_env_snapshot
+   and bnc.entity_kind = t.payee_kind
+   and bnc.entity_id = t.payee_id
+   and bnc.bank_details_hash = t.bank_hash;
+
+  if v_blocked_name > 0 then
+    raise exception 'pay_batch_schedule: BLOCKED_NAME_CHECK for % payee(s)', v_blocked_name;
+  end if;
+
+  with t as (
+    select
+      upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) as payee_kind,
+      coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
+      ) as payee_id,
+      coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
+    from public.pay_bank_transfers pbt
+    left join public.candidates c
+      on c.id = coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then null else pbt.candidate_id end
+      )
+     and upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) = 'CANDIDATE'
+    left join public.umbrellas u
+      on u.id = coalesce(
+        pbt.payee_entity_id,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else null end
+      )
+     and upper(coalesce(pbt.payee_entity_kind,
+        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
+      )) = 'UMBRELLA'
+    where pbt.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(pbt.status,'')) = 'PENDING'
+    group by 1,2,3
+  )
+  select
+    sum(
+      case
+        when v_requires_payee_map = true then
+          case when bpm.payee_id is null then 1 else 0 end
+        else 0
+      end
+    )::int
+  into v_missing_map
+  from t
+  left join public.bank_payee_map bpm
+    on bpm.rail_provider = v_batch.rail_provider_snapshot
+   and bpm.rail_env = v_batch.rail_env_snapshot
+   and bpm.entity_kind = t.payee_kind
+   and bpm.entity_id = t.payee_id
+   and bpm.bank_details_hash = t.bank_hash;
+
+  if v_missing_map > 0 then
+    raise exception 'pay_batch_schedule: BLOCKED_NO_PAYEE_MAP for % payee(s)', v_missing_map;
+  end if;
+
+  update public.pay_batches pb
+  set
+    schedule_kind = v_kind,
+    scheduled_at_utc = v_sched_at,
+    scheduled_by_user_id = p_actor_user_id,
+    funding_account_ref = v_funding,
+    funds_warning_hours_json = v_warn,
+    status = 'SCHEDULED'
+  where pb.id = p_pay_batch_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'status', (select pb2.status from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'schedule_kind', v_kind,
+    'scheduled_at_utc', v_sched_at::text,
+    'funding_account_ref', v_funding,
+    'funds_warning_hours_json', v_warn,
+    'rail_provider_snapshot', v_batch.rail_provider_snapshot,
+    'rail_env_snapshot', v_batch.rail_env_snapshot
+  );
+end;
+$$;
+
+
+
 create or replace function public.pay_batch_prepare(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -590,6 +886,8 @@ as $$
 declare
   v_batch record;
   v_cfg record;
+
+  v_provider text := null;
 
   v_need_name_check boolean := false;
   v_requires_payee_map boolean := false;
@@ -623,6 +921,8 @@ begin
     raise exception 'pay_batch_prepare: pay_batch not found';
   end if;
 
+  v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot,'')));
+
   select
     sd.rail_provider_default,
     sd.rail_env_default,
@@ -631,7 +931,8 @@ begin
     sd.rail_supports_auto_execute,
     sd.default_schedule_umbrella_local,
     sd.default_schedule_paye_local,
-    sd.funds_warning_hours_json
+    sd.funds_warning_hours_json,
+    sd.rail_default_funding_account_ref
   into v_cfg
   from public.settings_defaults sd
   where sd.id = 1
@@ -641,8 +942,13 @@ begin
     raise exception 'pay_batch_prepare: settings_defaults missing (id=1)';
   end if;
 
-  v_need_name_check := (upper(coalesce(v_batch.rail_provider_snapshot,'')) = 'REVOLUT') and coalesce(v_cfg.rail_supports_name_check,false) = true;
-  v_requires_payee_map := (upper(coalesce(v_batch.rail_provider_snapshot,'')) = 'REVOLUT');
+  -- Generic readiness semantics:
+  -- - name-check only when the rail supports it (and never for manual CSV)
+  -- - payee-map required for API rails (false for manual CSV)
+  v_need_name_check := (coalesce(v_cfg.rail_supports_name_check,false) = true)
+                       and (v_provider <> 'CSV');
+
+  v_requires_payee_map := (v_provider <> 'CSV');
 
   with t as (
     select
@@ -850,7 +1156,8 @@ begin
     'schedule_recommendations', jsonb_build_object(
       'default_schedule_umbrella_local', v_cfg.default_schedule_umbrella_local,
       'default_schedule_paye_local', v_cfg.default_schedule_paye_local,
-      'funds_warning_hours_json', v_cfg.funds_warning_hours_json
+      'funds_warning_hours_json', v_cfg.funds_warning_hours_json,
+      'rail_default_funding_account_ref', v_cfg.rail_default_funding_account_ref
     ),
     'batch_schedule', jsonb_build_object(
       'schedule_kind', v_batch.schedule_kind,
@@ -865,258 +1172,9 @@ begin
 end;
 $$;
 
-create or replace function public.pay_batch_schedule(
-  p_pay_batch_id uuid,
-  p_schedule_kind text,
-  p_scheduled_at_utc timestamptz,
-  p_funding_account_ref text,
-  p_warning_hours_json jsonb,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_kind text := upper(btrim(coalesce(p_schedule_kind,'')));
-  v_batch record;
-  v_cfg record;
 
-  v_sched_at timestamptz;
-  v_warn jsonb;
 
-  v_missing_bank int := 0;
-  v_blocked_name int := 0;
-  v_missing_map int := 0;
-  v_pending_transfers int := 0;
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_batch_schedule: pay_batch_id is required';
-  end if;
-  if p_actor_user_id is null then
-    raise exception 'pay_batch_schedule: actor_user_id is required';
-  end if;
-  if v_kind not in ('IMMEDIATE','SCHEDULED') then
-    raise exception 'pay_batch_schedule: invalid schedule_kind (IMMEDIATE|SCHEDULED)';
-  end if;
 
-  select
-    pb.id,
-    pb.status,
-    pb.pay_date,
-    pb.rail_provider_snapshot,
-    pb.rail_env_snapshot
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id
-  for update;
-
-  if v_batch.id is null then
-    raise exception 'pay_batch_schedule: pay_batch not found';
-  end if;
-
-  if upper(coalesce(v_batch.rail_provider_snapshot,'')) <> 'REVOLUT' then
-    raise exception 'pay_batch_schedule: scheduling is only supported for rail_provider_snapshot=REVOLUT (current=%)', v_batch.rail_provider_snapshot;
-  end if;
-
-  select
-    sd.funds_warning_hours_json,
-    sd.rail_supports_name_check
-  into v_cfg
-  from public.settings_defaults sd
-  where sd.id = 1
-  limit 1;
-
-  v_warn := coalesce(p_warning_hours_json, v_cfg.funds_warning_hours_json);
-  if v_warn is not null and jsonb_typeof(v_warn) <> 'array' then
-    raise exception 'pay_batch_schedule: warning_hours_json must be a JSON array';
-  end if;
-
-  if v_kind = 'IMMEDIATE' then
-    v_sched_at := now();
-  else
-    if p_scheduled_at_utc is null then
-      raise exception 'pay_batch_schedule: scheduled_at_utc is required when schedule_kind=SCHEDULED';
-    end if;
-    v_sched_at := p_scheduled_at_utc;
-  end if;
-
-  select count(*)::int
-  into v_pending_transfers
-  from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id
-    and upper(coalesce(pbt.status,'')) = 'PENDING';
-
-  if v_pending_transfers = 0 then
-    raise exception 'pay_batch_schedule: no PENDING transfers exist for this batch (execute-bank required first)';
-  end if;
-
-  with t as (
-    select
-      upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) as payee_kind,
-      coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
-      ) as payee_id,
-      coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
-    from public.pay_bank_transfers pbt
-    left join public.candidates c
-      on c.id = coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then null else pbt.candidate_id end
-      )
-     and upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) = 'CANDIDATE'
-    left join public.umbrellas u
-      on u.id = coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else null end
-      )
-     and upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) = 'UMBRELLA'
-    where pbt.pay_batch_id = p_pay_batch_id
-      and upper(coalesce(pbt.status,'')) = 'PENDING'
-    group by 1,2,3
-  )
-  select
-    sum(case when t.bank_hash is null or btrim(t.bank_hash) = '' then 1 else 0 end)::int
-  into v_missing_bank
-  from t;
-
-  if v_missing_bank > 0 then
-    raise exception 'pay_batch_schedule: BLOCKED_BANK_DETAILS for % payee(s)', v_missing_bank;
-  end if;
-
-  with t as (
-    select
-      upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) as payee_kind,
-      coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
-      ) as payee_id,
-      coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
-    from public.pay_bank_transfers pbt
-    left join public.candidates c
-      on c.id = coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then null else pbt.candidate_id end
-      )
-     and upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) = 'CANDIDATE'
-    left join public.umbrellas u
-      on u.id = coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else null end
-      )
-     and upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) = 'UMBRELLA'
-    where pbt.pay_batch_id = p_pay_batch_id
-      and upper(coalesce(pbt.status,'')) = 'PENDING'
-    group by 1,2,3
-  )
-  select
-    sum(
-      case
-        when coalesce(v_cfg.rail_supports_name_check,false) = true then
-          case
-            when coalesce(bnc.status,'UNVERIFIED') = 'PASS' then 0
-            when (bnc.override_reason is not null and bnc.override_hash = t.bank_hash) then 0
-            else 1
-          end
-        else 0
-      end
-    )::int
-  into v_blocked_name
-  from t
-  left join public.bank_name_checks bnc
-    on bnc.rail_provider = v_batch.rail_provider_snapshot
-   and bnc.rail_env = v_batch.rail_env_snapshot
-   and bnc.entity_kind = t.payee_kind
-   and bnc.entity_id = t.payee_id
-   and bnc.bank_details_hash = t.bank_hash;
-
-  if v_blocked_name > 0 then
-    raise exception 'pay_batch_schedule: BLOCKED_NAME_CHECK for % payee(s)', v_blocked_name;
-  end if;
-
-  with t as (
-    select
-      upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) as payee_kind,
-      coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
-      ) as payee_id,
-      coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
-    from public.pay_bank_transfers pbt
-    left join public.candidates c
-      on c.id = coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then null else pbt.candidate_id end
-      )
-     and upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) = 'CANDIDATE'
-    left join public.umbrellas u
-      on u.id = coalesce(
-        pbt.payee_entity_id,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else null end
-      )
-     and upper(coalesce(pbt.payee_entity_kind,
-        case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end
-      )) = 'UMBRELLA'
-    where pbt.pay_batch_id = p_pay_batch_id
-      and upper(coalesce(pbt.status,'')) = 'PENDING'
-    group by 1,2,3
-  )
-  select
-    sum(case when bpm.payee_id is null then 1 else 0 end)::int
-  into v_missing_map
-  from t
-  left join public.bank_payee_map bpm
-    on bpm.rail_provider = v_batch.rail_provider_snapshot
-   and bpm.rail_env = v_batch.rail_env_snapshot
-   and bpm.entity_kind = t.payee_kind
-   and bpm.entity_id = t.payee_id
-   and bpm.bank_details_hash = t.bank_hash;
-
-  if v_missing_map > 0 then
-    raise exception 'pay_batch_schedule: BLOCKED_NO_PAYEE_MAP for % payee(s)', v_missing_map;
-  end if;
-
-  update public.pay_batches pb
-  set
-    schedule_kind = v_kind,
-    scheduled_at_utc = v_sched_at,
-    scheduled_by_user_id = p_actor_user_id,
-    funding_account_ref = p_funding_account_ref,
-    funds_warning_hours_json = v_warn,
-    status = 'SCHEDULED'
-  where pb.id = p_pay_batch_id;
-
-  return jsonb_build_object(
-    'ok', true,
-    'pay_batch_id', p_pay_batch_id::text,
-    'status', (select pb2.status from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
-    'schedule_kind', v_kind,
-    'scheduled_at_utc', v_sched_at::text,
-    'funding_account_ref', p_funding_account_ref,
-    'funds_warning_hours_json', v_warn,
-    'rail_provider_snapshot', v_batch.rail_provider_snapshot,
-    'rail_env_snapshot', v_batch.rail_env_snapshot
-  );
-end;
-$$;
 
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
