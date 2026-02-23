@@ -9035,11 +9035,18 @@ async function handleBankingCapabilities(env, req, user) {
         ? null
         : (String(sd.rail_default_funding_account_ref).trim() || null);
 
+    const deriveWorkerEnvFromApiBase = (apiBase) => {
+      const b = (apiBase === undefined || apiBase === null) ? '' : String(apiBase);
+      return (b.toLowerCase().includes('sandbox')) ? 'SANDBOX' : 'PROD';
+    };
+
     // Build rails list by iterating the adapter registry (single source of truth).
     const providers = getRailAdapter('__LIST__');
     const rails = [];
 
     let revolutCaps = null;
+    let revolutWorkerEnv = null;
+    let revolutApiBase = null;
 
     for (const prov of (Array.isArray(providers) ? providers : [])) {
       const adapter = getRailAdapter(prov);
@@ -9056,7 +9063,8 @@ async function handleBankingCapabilities(env, req, user) {
           supports_scheduling: false,
           supports_name_check: false,
           supports_auto_execute: false,
-          api_base: null
+          api_base: null,
+          worker_env: null
         };
       }
 
@@ -9069,7 +9077,21 @@ async function handleBankingCapabilities(env, req, user) {
       const supports_name_check = available && !!caps.supports_name_check && rail_supports_name_check;
       const supports_auto_execute = available && !!caps.supports_auto_execute && rail_supports_auto_execute;
 
-      if (providerName === 'REVOLUT') revolutCaps = { available, supports_name_check };
+      const apiBase = (caps && caps.api_base) ? String(caps.api_base) : null;
+      const workerEnv =
+        (caps && caps.worker_env) ? String(caps.worker_env).trim().toUpperCase()
+        : (apiBase ? deriveWorkerEnvFromApiBase(apiBase) : null);
+
+      const envMismatch =
+        (workerEnv && rail_env_default)
+          ? (String(workerEnv).toUpperCase() !== String(rail_env_default).toUpperCase())
+          : null;
+
+      if (providerName === 'REVOLUT') {
+        revolutCaps = { available, supports_name_check };
+        revolutWorkerEnv = workerEnv;
+        revolutApiBase = apiBase;
+      }
 
       rails.push({
         rail_provider: providerName,
@@ -9079,17 +9101,31 @@ async function handleBankingCapabilities(env, req, user) {
         supports_scheduling,
         supports_name_check,
         supports_auto_execute,
-        api_base: (caps && caps.api_base) ? caps.api_base : null
+        api_base: apiBase,
+        worker_env: workerEnv,
+        env_mismatch: envMismatch
       });
     }
 
     const copAvailable = !!(revolutCaps && revolutCaps.available && revolutCaps.supports_name_check);
+
+    const dbRailEnvDefault = String(rail_env_default || 'PROD').toUpperCase();
+    const topWorkerEnv = revolutWorkerEnv ? String(revolutWorkerEnv).toUpperCase() : null;
+    const topEnvMismatch =
+      (topWorkerEnv && dbRailEnvDefault)
+        ? (topWorkerEnv !== dbRailEnvDefault)
+        : null;
 
     return withCORS(env, req, ok({
       ok: true,
 
       rail_provider_default,
       rail_env_default,
+
+      // ✅ Explicit UI fields for mismatch blocking
+      db_rail_env_default: dbRailEnvDefault,
+      worker_env: topWorkerEnv,
+      env_mismatch: topEnvMismatch,
 
       rail_supports_scheduling,
       rail_supports_name_check,
@@ -9109,13 +9145,13 @@ async function handleBankingCapabilities(env, req, user) {
       cop_available: copAvailable,
 
       // informational
+      revolut_api_base: revolutApiBase || null,
       server_utc: new Date().toISOString()
     }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleBankingPayPreview(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -59402,7 +59438,6 @@ async function handleUpdateClientDefault(env, req, id) {
   }
 }
 
-
 function canonicalizeClientSettingsServer(beforeCs, csInput) {
   const before = (beforeCs && typeof beforeCs === 'object') ? beforeCs : {};
   const in0    = (csInput && typeof csInput === 'object') ? csInput : {};
@@ -59548,9 +59583,6 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
     }
   }
 
-  // policy: self-bill => auto-invoice forced false
-  if (out.self_bill_no_invoices_sent) out.auto_invoice_default = false;
-
   // defaults for attach flags if still missing
   if (!Object.prototype.hasOwnProperty.call(out, 'hr_attach_to_invoice')) out.hr_attach_to_invoice = true;
   if (!Object.prototype.hasOwnProperty.call(out, 'ts_attach_to_invoice')) out.ts_attach_to_invoice = true;
@@ -59560,7 +59592,6 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
 
   return out;
 }
-
 
 // ============================================================
 // UPDATED: handleUpdateClient
@@ -73214,12 +73245,28 @@ async function handleClientDeleteApply(env, req, clientId) {
   }
 }
 
-
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
   // -----------------------------
   if (!getRailAdapter.__RAIL_REGISTRY || typeof getRailAdapter.__RAIL_REGISTRY !== 'object') {
+    const deriveWorkerEnvFromApiBase = (apiBase) => {
+      const b = (apiBase === undefined || apiBase === null) ? '' : String(apiBase);
+      return (b.toLowerCase().includes('sandbox')) ? 'SANDBOX' : 'PROD';
+    };
+
+    const getRevolutWorkerEnv = (env) => {
+      const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+      return deriveWorkerEnvFromApiBase(apiBase);
+    };
+
+    const normalizeEnv = (v, fallback) => {
+      const f = (fallback === undefined || fallback === null) ? 'PROD' : String(fallback).trim().toUpperCase();
+      const s = (v === undefined || v === null) ? '' : String(v).trim();
+      const u = s ? s.toUpperCase() : '';
+      return u || f || 'PROD';
+    };
+
     getRailAdapter.__RAIL_REGISTRY = {
       REVOLUT: () => ({
         railProvider: 'REVOLUT',
@@ -73230,6 +73277,9 @@ function getRailAdapter(provider) {
           const hasRefresh  = !!(env && env.REVOLUT_REFRESH_TOKEN && String(env.REVOLUT_REFRESH_TOKEN).trim());
           const hasKey      = !!(env && env.REVOLUT_PRIVATE_KEY_PKCS8_B64 && String(env.REVOLUT_PRIVATE_KEY_PKCS8_B64).trim());
           const hasBase     = !!(env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim());
+
+          const apiBase = hasBase ? String(env.REVOLUT_API_BASE) : null;
+          const workerEnv = deriveWorkerEnvFromApiBase(apiBase || '');
 
           let available = false;
           let reason = null;
@@ -73255,13 +73305,21 @@ function getRailAdapter(provider) {
             supports_scheduling: true,
             supports_name_check: true,
             supports_auto_execute: true,
-            api_base: hasBase ? String(env.REVOLUT_API_BASE) : null
+            api_base: apiBase,
+            worker_env: workerEnv
           };
         },
 
         async listFundingAccounts(env, { rail_env } = {}) {
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
+          const expectedEnv = normalizeEnv(rail_env, workerEnv);
+
+          if (expectedEnv !== workerEnv) {
+            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+          }
+
           // Returns normalized list of funding accounts for the current Worker env.
-          // rail_env is accepted for signature symmetry, but API environment is driven by Worker credentials/base URL.
           const token = await revolutAuth_getAccessToken(env);
           const accs = await revolutAccounts_list(env, token);
 
@@ -73309,31 +73367,54 @@ function getRailAdapter(provider) {
           return {
             ok: true,
             provider: 'REVOLUT',
-            rail_env: (rail_env === undefined || rail_env === null) ? null : String(rail_env).trim().toUpperCase(),
+            rail_env: expectedEnv,
+            worker_env: workerEnv,
+            api_base: apiBase || null,
             accounts
           };
         },
 
         async validateFundingAccountRef(env, { rail_env, funding_account_ref } = {}) {
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
+          const expectedEnv = normalizeEnv(rail_env, workerEnv);
+
           const ref = (funding_account_ref === undefined || funding_account_ref === null) ? '' : String(funding_account_ref).trim();
           if (!ref) {
-            return { ok: true, valid: false, reason: 'FUNDING_ACCOUNT_REF_REQUIRED', account: null };
+            return { ok: true, valid: false, reason: 'FUNDING_ACCOUNT_REF_REQUIRED', account: null, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
           }
 
-          const listed = await this.listFundingAccounts(env, { rail_env });
+          if (expectedEnv !== workerEnv) {
+            return { ok: true, valid: false, reason: 'REVOLUT_ENV_MISMATCH', account: null, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
+          }
+
+          let listed = null;
+          try {
+            listed = await this.listFundingAccounts(env, { rail_env: expectedEnv });
+          } catch (e) {
+            const msg = (e && e.message) ? String(e.message) : '';
+            if (msg.includes('REVOLUT_ENV_MISMATCH')) {
+              return { ok: true, valid: false, reason: 'REVOLUT_ENV_MISMATCH', account: null, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
+            }
+            throw e;
+          }
+
           const accounts = (listed && Array.isArray(listed.accounts)) ? listed.accounts : [];
           const match = accounts.find(a => a && String(a.account_id || '').trim() === ref) || null;
 
           if (!match) {
-            return { ok: true, valid: false, reason: 'FUNDING_ACCOUNT_REF_NOT_FOUND', account: null };
+            return { ok: true, valid: false, reason: 'FUNDING_ACCOUNT_REF_NOT_FOUND', account: null, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
           }
 
-          return { ok: true, valid: true, reason: null, account: match };
+          return { ok: true, valid: true, reason: null, account: match, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
         },
 
         async prepareBatch(env, batchId, actorUserId) {
           if (!batchId) throw new Error('prepareBatch: batchId required');
           if (!actorUserId) throw new Error('prepareBatch: actorUserId required');
+
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
 
           // 1) Ask DB what payees/transfers exist + whether name-check/payee-map are required.
           const prep0 = await sbRpc(env, 'pay_batch_prepare', {
@@ -73374,6 +73455,10 @@ function getRailAdapter(provider) {
             } catch {
               // keep default PROD
             }
+          }
+
+          if (railEnv !== workerEnv) {
+            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${railEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
           }
 
           const payees = Array.isArray(prep0.payees) ? prep0.payees : [];
@@ -73493,6 +73578,18 @@ function getRailAdapter(provider) {
           if (!actorUserId) throw new Error('scheduleBatch: actorUserId required');
           if (!payload || typeof payload !== 'object') throw new Error('scheduleBatch: payload required');
 
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
+
+          const bg0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(batchId) });
+          const bgBatch0 = (bg0 && typeof bg0 === 'object') ? (bg0.batch || null) : null;
+          const batchEnv = bgBatch0 && bgBatch0.rail_env_snapshot ? String(bgBatch0.rail_env_snapshot).trim().toUpperCase() : 'PROD';
+          const expectedEnv = normalizeEnv(batchEnv, 'PROD');
+
+          if (expectedEnv !== workerEnv) {
+            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+          }
+
           const scheduleKindRaw = String(payload.schedule_kind || '').trim().toUpperCase();
           const scheduleKind =
             (scheduleKindRaw === 'AT_TIME')
@@ -73526,6 +73623,9 @@ function getRailAdapter(provider) {
 
         async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit } = {}) {
           const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
+
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
 
           const lim = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Math.trunc(Number(limit)))) : 25;
 
@@ -73584,6 +73684,24 @@ function getRailAdapter(provider) {
           out.batches = rows;
 
           if (!rows.length) return out;
+
+          const distinctEnvs = new Set();
+          const mismatchBatches = [];
+
+          for (const b of rows) {
+            const batchId = String(b?.pay_batch_id || b?.id || '').trim();
+            const rowEnvRaw = String(b?.rail_env_snapshot || b?.rail_env || '').trim();
+            const rowEnv = normalizeEnv(rowEnvRaw, 'PROD');
+            distinctEnvs.add(rowEnv);
+
+            if (rowEnv !== workerEnv) {
+              mismatchBatches.push({ pay_batch_id: batchId || null, rail_env_snapshot: rowEnv });
+            }
+          }
+
+          if (mismatchBatches.length) {
+            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${workerEnv} worker_env=${workerEnv} api_base=${apiBase || ''} mismatched_batches=${JSON.stringify(mismatchBatches)}`);
+          }
 
           const token = await revolutAuth_getAccessToken(env);
 
@@ -73649,6 +73767,10 @@ function getRailAdapter(provider) {
 
             const railEnv = String(b?.rail_env_snapshot || b?.rail_env || bgBatch?.rail_env_snapshot || 'PROD').trim().toUpperCase() || 'PROD';
             const fundingRef = String(b?.funding_account_ref || bgBatch?.funding_account_ref || '').trim();
+
+            if (normalizeEnv(railEnv, 'PROD') !== workerEnv) {
+              throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${normalizeEnv(railEnv, 'PROD')} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+            }
 
             if (!fundingRef) {
               out.errors.push({ code: 'SCHEDULED_BATCH_MISSING_FUNDING_ACCOUNT_REF', pay_batch_id: batchId });
@@ -73814,7 +73936,18 @@ function getRailAdapter(provider) {
           if (!batchId) throw new Error('pollBatch: batchId required');
           if (!actorUserId) throw new Error('pollBatch: actorUserId required');
 
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
+
           const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(batchId) });
+          const bgBatch = (bg && typeof bg === 'object') ? (bg.batch || null) : null;
+          const batchEnvRaw = bgBatch && bgBatch.rail_env_snapshot ? String(bgBatch.rail_env_snapshot).trim() : 'PROD';
+          const expectedEnv = normalizeEnv(batchEnvRaw, 'PROD');
+
+          if (expectedEnv !== workerEnv) {
+            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+          }
+
           const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
           if (!transfers.length) return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
 
@@ -73870,7 +74003,8 @@ function getRailAdapter(provider) {
             supports_scheduling: false,
             supports_name_check: false,
             supports_auto_execute: false,
-            api_base: null
+            api_base: null,
+            worker_env: null
           };
         },
 
@@ -73955,7 +74089,6 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p] || getRailAdapter.__RAIL_REGISTRY.CSV;
   return mk();
 }
-
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
   const nowMs = Date.now();
@@ -74480,6 +74613,81 @@ async function bankingCronTick(env, opts = {}) {
     errors: []
   };
 
+  const _errMsg = (e) => (e && e.message) ? String(e.message) : String(e || 'unknown');
+
+  const _isEnvMismatchError = (msg) => {
+    const m = String(msg || '');
+    return (
+      m.includes('REVOLUT_ENV_MISMATCH') ||
+      m.includes('RAIL_ENV_MISMATCH') ||
+      m.includes('ENV_MISMATCH')
+    );
+  };
+
+  const _extractBatchIds = (rows) => {
+    const ids = [];
+    for (const r of (rows || [])) {
+      const id = String(r?.pay_batch_id || r?.id || '').trim();
+      if (id) ids.push(id);
+    }
+    return ids;
+  };
+
+  const _chunk = (arr, size) => {
+    const out = [];
+    const s = Math.max(1, Number(size) || 50);
+    for (let i = 0; i < (arr || []).length; i += s) out.push(arr.slice(i, i + s));
+    return out;
+  };
+
+  const _revertBatchesToScheduled = async (payBatchIds, provider, errorMsg, phase) => {
+    const ids = (payBatchIds || []).map(x => String(x || '').trim()).filter(Boolean);
+    if (!ids.length) return { ok: true, reverted: 0 };
+
+    const diag = {
+      code: 'RAIL_ENV_MISMATCH',
+      provider: String(provider || '').trim().toUpperCase() || null,
+      phase: String(phase || '').trim() || null,
+      at_utc: nowIso,
+      error: String(errorMsg || '').slice(0, 2000)
+    };
+
+    let reverted = 0;
+    const chunks = _chunk(ids, 50);
+
+    for (const part of chunks) {
+      try {
+        const q = new URLSearchParams();
+        q.set('id', `in.(${part.join(',')})`);
+        q.set('select', 'id');
+
+        const url = `${env.SUPABASE_URL}/rest/v1/pay_batches?${q.toString()}`;
+        await sbFetch(env, url, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            status: 'SCHEDULED',
+            executing_started_at_utc: null,
+            last_funds_check_at_utc: nowIso,
+            last_funds_check_json: diag
+          })
+        });
+
+        reverted += part.length;
+      } catch (e) {
+        summary.errors.push({
+          code: 'ENV_MISMATCH_REVERT_FAILED',
+          provider: String(provider || '').trim().toUpperCase() || 'UNKNOWN',
+          phase: String(phase || '').trim() || null,
+          pay_batch_ids: part,
+          error: _errMsg(e)
+        });
+      }
+    }
+
+    return { ok: true, reverted };
+  };
+
   // ─────────────────────────────────────────────────────────────────────────────
   // 1) Claim due scheduled batches (DB) and delegate execution to adapters by provider
   // ─────────────────────────────────────────────────────────────────────────────
@@ -74493,7 +74701,7 @@ async function bankingCronTick(env, opts = {}) {
     summary.ok = false;
     summary.errors.push({
       code: 'CLAIM_DUE_SCHEDULED_FAILED',
-      error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+      error: _errMsg(e)
     });
     return summary;
   }
@@ -74550,10 +74758,27 @@ async function bankingCronTick(env, opts = {}) {
         summary.errors.push(...errs.map(er => ({ ...er, provider: prov })));
       }
     } catch (e) {
+      const msg = _errMsg(e);
+
+      // ✅ Critical wedge fix: if we claimed -> EXECUTING, but adapter refuses due to ENV mismatch,
+      // revert those batches back to SCHEDULED immediately so they cannot wedge in EXECUTING.
+      if (_isEnvMismatchError(msg)) {
+        const ids = _extractBatchIds(rows);
+        const revertRes = await _revertBatchesToScheduled(ids, prov, msg, 'EXECUTE');
+        summary.warnings.push({
+          code: 'ADAPTER_EXECUTE_ENV_MISMATCH_REVERTED',
+          provider: prov,
+          reverted_count: revertRes && Number.isFinite(Number(revertRes.reverted)) ? revertRes.reverted : 0,
+          pay_batch_ids: ids,
+          error: msg
+        });
+        continue;
+      }
+
       summary.errors.push({
         code: 'ADAPTER_EXECUTE_FAILED',
         provider: prov,
-        error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+        error: msg
       });
     }
   }
@@ -74600,25 +74825,38 @@ async function bankingCronTick(env, opts = {}) {
           });
         }
       } catch (e) {
+        const msg = _errMsg(e);
+
+        // ✅ Same wedge fix for poll path: an env mismatch must not leave a batch stuck EXECUTING/PARTIAL.
+        if (_isEnvMismatchError(msg)) {
+          const revertRes = await _revertBatchesToScheduled([batchId], prov, msg, 'POLL');
+          summary.warnings.push({
+            code: 'ADAPTER_POLL_ENV_MISMATCH_REVERTED',
+            provider: prov,
+            pay_batch_id: batchId,
+            reverted_count: revertRes && Number.isFinite(Number(revertRes.reverted)) ? revertRes.reverted : 0,
+            error: msg
+          });
+          continue;
+        }
+
         summary.warnings.push({
           code: 'ADAPTER_POLL_FAILED_ONE',
           provider: prov,
           pay_batch_id: batchId,
-          error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+          error: msg
         });
       }
     }
   } catch (e) {
     summary.errors.push({
       code: 'INFIGHT_LIST_OR_POLL_FAILED',
-      error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+      error: _errMsg(e)
     });
   }
 
   return summary;
 }
-
-
 
 
 
