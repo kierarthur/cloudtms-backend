@@ -4881,7 +4881,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.pay_batches_list(
   p_limit int default 50,
   p_offset int default 0,
@@ -4923,7 +4922,7 @@ begin
         'executing_started_at_utc', pb.executing_started_at_utc,
         'last_status_checked_at_utc', pb.last_status_checked_at_utc,
 
-        -- ✅ NEW: funding account used/selected for this batch (for UI audit/history)
+        -- ✅ NEW: funding account reference used for this batch (UI audit/history)
         'funding_account_ref', pb.funding_account_ref,
 
         -- Neutral (rail-generic) manual confirm aliases (keep legacy keys too)
