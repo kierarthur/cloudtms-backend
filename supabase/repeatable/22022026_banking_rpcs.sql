@@ -19,6 +19,9 @@ declare
 
   -- ✅ NEW: payroll testing flag (simulate payments; no real bank payments)
   v_payroll_testing boolean;
+
+  -- ✅ NEW: PAYE remittances gate
+  v_paye_remittances_enabled boolean;
 begin
   -- settings_defaults is expected to have a single row; do not assume an id column.
   select
@@ -28,7 +31,8 @@ begin
     sd.rail_supports_name_check,
     sd.rail_supports_auto_execute,
     sd.rail_default_funding_account_ref,
-    sd.payroll_testing
+    sd.payroll_testing,
+    sd.paye_remittances_enabled
   into
     v_provider,
     v_env,
@@ -36,7 +40,8 @@ begin
     v_supports_name_check,
     v_supports_auto_execute,
     v_rail_default_funding_account_ref,
-    v_payroll_testing
+    v_payroll_testing,
+    v_paye_remittances_enabled
   from public.settings_defaults sd
   limit 1;
 
@@ -48,6 +53,7 @@ begin
   v_supports_auto_execute := coalesce(v_supports_auto_execute, false);
 
   v_payroll_testing := coalesce(v_payroll_testing, false);
+  v_paye_remittances_enabled := coalesce(v_paye_remittances_enabled, false);
 
   -- CSV rail implies manual bank confirmation (upload + confirm).
   v_supports_csv_confirm := (v_provider = 'CSV');
@@ -63,6 +69,9 @@ begin
 
     -- ✅ NEW: surface test-mode switch for UI/backend consistency
     'payroll_testing', v_payroll_testing,
+
+    -- ✅ NEW: PAYE remittance gate (UI can block PAYE remittance send)
+    'paye_remittances_enabled', v_paye_remittances_enabled,
 
     -- ✅ C: surface saved default so UI can preselect consistently
     'rail_default_funding_account_ref', v_rail_default_funding_account_ref
