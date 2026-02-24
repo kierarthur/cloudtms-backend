@@ -2011,6 +2011,9 @@ begin
 end;
 $$;
 
+
+
+
 create or replace function public.pay_remittance_build(
   p_pay_batch_id uuid,
   p_scope text default 'ALL'
@@ -2026,6 +2029,17 @@ declare
 
   v_jobs_umb jsonb := '[]'::jsonb;
   v_jobs_paye jsonb := '[]'::jsonb;
+
+  -- ✅ NEW: remittance settings (single-row settings_defaults)
+  v_remittance_includes_json jsonb := null;
+  v_remittance_header_message text := null;
+  v_remittance_footer_message text := null;
+
+  -- ✅ NEW: derived defaults for config evaluation
+  v_missing_scope text := 'WEEKLY';
+  v_unknown_item_type_default boolean := true;
+
+  v_unknown_item_type_default_text text := 'true';
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_remittance_build: pay_batch_id is required';
@@ -2033,6 +2047,35 @@ begin
 
   if v_scope not in ('ALL','PAYE','UMBRELLA') then
     raise exception 'pay_remittance_build: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
+  end if;
+
+  -- ✅ NEW: load remittance settings (single row)
+  select
+    sd.remittance_includes_json,
+    sd.remittance_header_message,
+    sd.remittance_footer_message
+  into
+    v_remittance_includes_json,
+    v_remittance_header_message,
+    v_remittance_footer_message
+  from public.settings_defaults sd
+  limit 1;
+
+  -- ✅ NEW: normalize config defaults (safe when config is NULL or not an object)
+  if v_remittance_includes_json is not null and jsonb_typeof(v_remittance_includes_json) = 'object' then
+    v_missing_scope := upper(btrim(coalesce(v_remittance_includes_json->'defaults'->>'missing_scope', 'WEEKLY')));
+
+    v_unknown_item_type_default_text := lower(btrim(coalesce(v_remittance_includes_json->'defaults'->>'unknown_item_type', 'true')));
+    v_unknown_item_type_default := (v_unknown_item_type_default_text in ('true','1','yes','y','on'));
+  else
+    v_missing_scope := 'WEEKLY';
+    v_unknown_item_type_default := true;
+  end if;
+
+  if v_unknown_item_type_default then
+    v_unknown_item_type_default_text := 'true';
+  else
+    v_unknown_item_type_default_text := 'false';
   end if;
 
   select
@@ -2057,7 +2100,7 @@ begin
   --  - pay_batch_items (in-scope)
   --  - pay_batch_candidates (display metadata)
   -- Plus read-only enrichment from:
-  --  - candidates, umbrellas, timesheets
+  --  - candidates, umbrellas, timesheets, contracts, v_timesheets_summary (client + scope)
   -- ============================================================
   if v_scope in ('ALL','UMBRELLA') then
     with umb_transfers as (
@@ -2114,15 +2157,137 @@ begin
                   'amount_vat', pbi.amount_vat,
                   'amount_inc_vat', pbi.amount_inc_vat,
                   'pay_channel', pbi.pay_channel,
+
+                  -- ✅ NEW: sheet scope (DAILY/WEEKLY) for the item, from v_timesheets_summary when present
+                  'sheet_scope', upper(coalesce(vs.sheet_scope::text, v_missing_scope)),
+
+                  -- ✅ NEW: client identity for grouping (week ending → client), from v_timesheets_summary
+                  'client_id', case
+                    when (
+                      case
+                        when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                          (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
+                        else
+                          (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
+                      end
+                    )
+                    then case when vs.client_id is null then null else vs.client_id::text end
+                    else null
+                  end,
+                  'client_name', case
+                    when (
+                      case
+                        when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                          (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
+                        else
+                          (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
+                      end
+                    )
+                    then vs.client_name
+                    else null
+                  end,
+
+                  -- ✅ NEW: job title + band (if enabled by config; best available source = contract fallback)
+                  'job_title', case
+                    when (
+                      case
+                        when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                          (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'job_title','true'))) in ('true','1','yes','y','on'))
+                        else
+                          (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'job_title','true'))) in ('true','1','yes','y','on'))
+                      end
+                    )
+                    then nullif(btrim(coalesce(ct.role, ts.job_title_norm)), '')
+                    else null
+                  end,
+                  'band', case
+                    when (
+                      case
+                        when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                          (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'band','true'))) in ('true','1','yes','y','on'))
+                        else
+                          (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'band','true'))) in ('true','1','yes','y','on'))
+                      end
+                    )
+                    then nullif(btrim(coalesce(ct.band, ts.band)), '')
+                    else null
+                  end,
+
                   'timesheet', case
                     when pbi.timesheet_id is null then null
                     else jsonb_build_object(
-                      'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
-                      'reference_number', ts.reference_number,
-                      'worked_start_iso', ts.worked_start_iso,
-                      'worked_end_iso', ts.worked_end_iso,
-                      'break_minutes', ts.break_minutes,
-                      'worked_minutes', ts.worked_minutes
+                      'week_ending_date', case
+                        when (
+                          case
+                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'week_ending_date','true'))) in ('true','1','yes','y','on'))
+                            else
+                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'week_ending_date','true'))) in ('true','1','yes','y','on'))
+                          end
+                        )
+                        then case when ts.week_ending_date is null then null else ts.week_ending_date::text end
+                        else null
+                      end,
+                      'reference_number', case
+                        when (
+                          case
+                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'reference_number','true'))) in ('true','1','yes','y','on'))
+                            else
+                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'reference_number','true'))) in ('true','1','yes','y','on'))
+                          end
+                        )
+                        then ts.reference_number
+                        else null
+                      end,
+                      'worked_start_iso', case
+                        when (
+                          case
+                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                            else
+                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                          end
+                        )
+                        then ts.worked_start_iso
+                        else null
+                      end,
+                      'worked_end_iso', case
+                        when (
+                          case
+                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                            else
+                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                          end
+                        )
+                        then ts.worked_end_iso
+                        else null
+                      end,
+                      'break_minutes', case
+                        when (
+                          case
+                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                            else
+                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                          end
+                        )
+                        then ts.break_minutes
+                        else null
+                      end,
+                      'worked_minutes', case
+                        when (
+                          case
+                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                            else
+                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                          end
+                        )
+                        then ts.worked_minutes
+                        else null
+                      end
                     )
                   end
                 )
@@ -2134,9 +2299,29 @@ begin
               left join public.timesheets ts
                 on ts.timesheet_id = pbi.timesheet_id
                and ts.is_current = true
+              left join public.contracts ct
+                on ct.id = ts.contract_id
+              left join public.v_timesheets_summary vs
+                on vs.timesheet_id = pbi.timesheet_id
               where pbc.pay_batch_id = p_pay_batch_id
                 and pbc.candidate_id = c.id
                 and pbi.pay_channel = 'UMBRELLA'
+                and (
+                  case
+                    when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                      (
+                        case
+                          when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                          then true else false end
+                      )
+                    else
+                      (
+                        case
+                          when lower(coalesce(v_remittance_includes_json->'weekly'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                          then true else false end
+                      )
+                  end
+                )
             ), '[]'::jsonb),
             'totals', jsonb_build_object(
               'items_total_inc_vat', coalesce((
@@ -2295,39 +2480,181 @@ begin
           'items', coalesce((
             select jsonb_agg(
               jsonb_build_object(
-                'item_id', pbi.id::text,
-                'item_type', pbi.item_type,
-                'description', pbi.description,
-                'timesheet_id', case when pbi.timesheet_id is null then null else pbi.timesheet_id::text end,
-                'segment_key', pbi.segment_key,
-                'source_ref', pbi.source_ref,
-                'amount_ex_vat', pbi.amount_ex_vat,
-                'amount_vat', pbi.amount_vat,
-                'amount_inc_vat', pbi.amount_inc_vat,
-                'pay_channel', pbi.pay_channel,
+                'item_id', pbix.id::text,
+                'item_type', pbix.item_type,
+                'description', pbix.description,
+                'timesheet_id', case when pbix.timesheet_id is null then null else pbix.timesheet_id::text end,
+                'segment_key', pbix.segment_key,
+                'source_ref', pbix.source_ref,
+                'amount_ex_vat', pbix.amount_ex_vat,
+                'amount_vat', pbix.amount_vat,
+                'amount_inc_vat', pbix.amount_inc_vat,
+                'pay_channel', pbix.pay_channel,
+
+                -- ✅ NEW: sheet scope (DAILY/WEEKLY) for the item, from v_timesheets_summary when present
+                'sheet_scope', upper(coalesce(vs2.sheet_scope::text, v_missing_scope)),
+
+                -- ✅ NEW: client identity for grouping (week ending → client), from v_timesheets_summary
+                'client_id', case
+                  when (
+                    case
+                      when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                        (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
+                      else
+                        (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
+                    end
+                  )
+                  then case when vs2.client_id is null then null else vs2.client_id::text end
+                  else null
+                end,
+                'client_name', case
+                  when (
+                    case
+                      when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                        (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
+                      else
+                        (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
+                    end
+                  )
+                  then vs2.client_name
+                  else null
+                end,
+
+                -- ✅ NEW: job title + band (if enabled by config; best available source = contract fallback)
+                'job_title', case
+                  when (
+                    case
+                      when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                        (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'job_title','true'))) in ('true','1','yes','y','on'))
+                      else
+                        (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'job_title','true'))) in ('true','1','yes','y','on'))
+                    end
+                  )
+                  then nullif(btrim(coalesce(ct2.role, ts2.job_title_norm)), '')
+                  else null
+                end,
+                'band', case
+                  when (
+                    case
+                      when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                        (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'band','true'))) in ('true','1','yes','y','on'))
+                      else
+                        (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'band','true'))) in ('true','1','yes','y','on'))
+                    end
+                  )
+                  then nullif(btrim(coalesce(ct2.band, ts2.band)), '')
+                  else null
+                end,
+
                 'timesheet', case
-                  when pbi.timesheet_id is null then null
+                  when pbix.timesheet_id is null then null
                   else jsonb_build_object(
-                    'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
-                    'reference_number', ts.reference_number,
-                    'worked_start_iso', ts.worked_start_iso,
-                    'worked_end_iso', ts.worked_end_iso,
-                    'break_minutes', ts.break_minutes,
-                    'worked_minutes', ts.worked_minutes
+                    'week_ending_date', case
+                      when (
+                        case
+                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'week_ending_date','true'))) in ('true','1','yes','y','on'))
+                          else
+                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'week_ending_date','true'))) in ('true','1','yes','y','on'))
+                        end
+                      )
+                      then case when ts2.week_ending_date is null then null else ts2.week_ending_date::text end
+                      else null
+                    end,
+                    'reference_number', case
+                      when (
+                        case
+                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'reference_number','true'))) in ('true','1','yes','y','on'))
+                          else
+                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'reference_number','true'))) in ('true','1','yes','y','on'))
+                        end
+                      )
+                      then ts2.reference_number
+                      else null
+                    end,
+                    'worked_start_iso', case
+                      when (
+                        case
+                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                          else
+                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                        end
+                      )
+                      then ts2.worked_start_iso
+                      else null
+                    end,
+                    'worked_end_iso', case
+                      when (
+                        case
+                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                          else
+                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                        end
+                      )
+                      then ts2.worked_end_iso
+                      else null
+                    end,
+                    'break_minutes', case
+                      when (
+                        case
+                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                          else
+                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                        end
+                      )
+                      then ts2.break_minutes
+                      else null
+                    end,
+                    'worked_minutes', case
+                      when (
+                        case
+                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                          else
+                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
+                        end
+                      )
+                      then ts2.worked_minutes
+                      else null
+                    end
                   )
                 end
               )
-              order by pbi.timesheet_id nulls last, pbi.id
+              order by pbix.timesheet_id nulls last, pbix.id
             )
             from public.pay_batch_candidates pbcx
             join public.pay_batch_items pbix
               on pbix.pay_batch_candidate_id = pbcx.id
-            left join public.timesheets ts
-              on ts.timesheet_id = pbix.timesheet_id
-             and ts.is_current = true
+            left join public.timesheets ts2
+              on ts2.timesheet_id = pbix.timesheet_id
+             and ts2.is_current = true
+            left join public.contracts ct2
+              on ct2.id = ts2.contract_id
+            left join public.v_timesheets_summary vs2
+              on vs2.timesheet_id = pbix.timesheet_id
             where pbcx.pay_batch_id = p_pay_batch_id
               and pbcx.candidate_id = pg.candidate_id
               and pbix.pay_channel = 'PAYE'
+              and (
+                case
+                  when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+                    (
+                      case
+                        when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbix.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                        then true else false end
+                    )
+                  else
+                    (
+                      case
+                        when lower(coalesce(v_remittance_includes_json->'weekly'->'include_item_types'->>pbix.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                        then true else false end
+                    )
+                end
+              )
           ), '[]'::jsonb),
           'transfers', coalesce(pg.transfers_json,'[]'::jsonb)
         )
@@ -2345,11 +2672,15 @@ begin
     'scope', v_scope,
     'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
     'bulk_reference', v_batch.bulk_reference,
+
+    -- ✅ NEW: surface header/footer for email rendering (no extra settings fetch required)
+    'remittance_header_message', v_remittance_header_message,
+    'remittance_footer_message', v_remittance_footer_message,
+
     'jobs', (coalesce(v_jobs_umb,'[]'::jsonb) || coalesce(v_jobs_paye,'[]'::jsonb))
   );
 end;
 $$;
-
 
 create or replace function public.pay_remittance_mark_sent(
   p_pay_batch_id uuid,
