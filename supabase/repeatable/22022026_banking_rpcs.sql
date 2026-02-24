@@ -2013,7 +2013,6 @@ $$;
 
 
 
-
 create or replace function public.pay_remittance_build(
   p_pay_batch_id uuid,
   p_scope text default 'ALL'
@@ -2114,7 +2113,19 @@ begin
         pbt.currency,
         pbt.status,
         pbt.payment_reference,
-        pbt.completed_at_utc
+        pbt.completed_at_utc,
+        pbt.rail_tx_id,
+        pbt.rail_state,
+        pbt.rail_meta_json,
+        pbt.failed_reason,
+        (
+          upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
+          or (
+            pbt.rail_meta_json is not null
+            and (pbt.rail_meta_json ? 'simulated')
+            and lower(btrim(coalesce(pbt.rail_meta_json->>'simulated',''))) in ('true','1','yes','y','on')
+          )
+        ) as is_simulated
       from public.pay_bank_transfers pbt
       where pbt.pay_batch_id = p_pay_batch_id
         and pbt.pay_channel = 'UMBRELLA'
@@ -2127,6 +2138,7 @@ begin
         ut.umbrella_id,
         max(u.name) as umbrella_name,
         max(u.remittance_email) as remittance_email,
+        bool_or(coalesce(ut.is_simulated,false)) as test_mode,
         jsonb_agg(
           jsonb_build_object(
             'transfer_id', ut.transfer_id::text,
@@ -2142,7 +2154,12 @@ begin
               'amount', ut.amount,
               'currency', ut.currency,
               'status', ut.status,
-              'payment_reference', ut.payment_reference
+              'payment_reference', ut.payment_reference,
+              'rail_tx_id', ut.rail_tx_id,
+              'rail_state', ut.rail_state,
+              'rail_meta_json', ut.rail_meta_json,
+              'failed_reason', ut.failed_reason,
+              'is_simulated', coalesce(ut.is_simulated,false)
             ),
             'items', coalesce((
               select jsonb_agg(
@@ -2374,6 +2391,7 @@ begin
           'scope', 'UMBRELLA',
           'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
           'bulk_reference', v_batch.bulk_reference,
+          'test_mode', coalesce(ug.test_mode,false),
           'recipient', jsonb_build_object(
             'entity_kind', 'UMBRELLA',
             'umbrella_id', ug.umbrella_id::text,
@@ -2410,7 +2428,19 @@ begin
         pbt.currency,
         pbt.status,
         pbt.payment_reference,
-        pbt.completed_at_utc
+        pbt.completed_at_utc,
+        pbt.rail_tx_id,
+        pbt.rail_state,
+        pbt.rail_meta_json,
+        pbt.failed_reason,
+        (
+          upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
+          or (
+            pbt.rail_meta_json is not null
+            and (pbt.rail_meta_json ? 'simulated')
+            and lower(btrim(coalesce(pbt.rail_meta_json->>'simulated',''))) in ('true','1','yes','y','on')
+          )
+        ) as is_simulated
       from public.pay_bank_transfers pbt
       where pbt.pay_batch_id = p_pay_batch_id
         and pbt.pay_channel = 'PAYE'
@@ -2424,6 +2454,7 @@ begin
         max(c.display_name) as display_name,
         max(c.email) as email,
         round(coalesce(sum(pt.amount),0),2) as total_amount,
+        bool_or(coalesce(pt.is_simulated,false)) as test_mode,
         jsonb_agg(
           jsonb_build_object(
             'transfer_id', pt.transfer_id::text,
@@ -2433,7 +2464,12 @@ begin
               'amount', pt.amount,
               'currency', pt.currency,
               'status', pt.status,
-              'payment_reference', pt.payment_reference
+              'payment_reference', pt.payment_reference,
+              'rail_tx_id', pt.rail_tx_id,
+              'rail_state', pt.rail_state,
+              'rail_meta_json', pt.rail_meta_json,
+              'failed_reason', pt.failed_reason,
+              'is_simulated', coalesce(pt.is_simulated,false)
             )
           )
           order by pt.transfer_id
@@ -2451,6 +2487,7 @@ begin
           'scope', 'PAYE',
           'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
           'bulk_reference', v_batch.bulk_reference,
+          'test_mode', coalesce(pg.test_mode,false),
           'recipient', jsonb_build_object(
             'entity_kind', 'CANDIDATE',
             'candidate_id', pg.candidate_id::text,
