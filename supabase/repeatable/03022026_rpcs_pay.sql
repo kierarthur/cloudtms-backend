@@ -312,7 +312,6 @@ end;
 $$;
 
 
-
 create or replace function public.weekly_import_apply_cancellations(
   p_import_id uuid,
   p_actions jsonb,
