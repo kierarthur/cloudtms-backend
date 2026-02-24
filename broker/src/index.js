@@ -9200,6 +9200,7 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
+
 async function handleBankingCapabilities(env, req, user) {
   try {
     const select = [
@@ -9212,7 +9213,8 @@ async function handleBankingCapabilities(env, req, user) {
       'default_schedule_paye_local',
       'funds_warning_hours_json',
       'rail_default_funding_account_ref',
-      'payroll_testing'
+      'payroll_testing',
+      'paye_remittances_enabled'
     ].join(',');
 
     const { rows } = await sbFetch(
@@ -9244,6 +9246,7 @@ async function handleBankingCapabilities(env, req, user) {
         : (String(sd.rail_default_funding_account_ref).trim() || null);
 
     const payroll_testing = !!sd.payroll_testing;
+    const paye_remittances_enabled = !!sd.paye_remittances_enabled;
 
     const deriveWorkerEnvFromApiBase = (apiBase) => {
       const b = (apiBase === undefined || apiBase === null) ? '' : String(apiBase);
@@ -9350,6 +9353,9 @@ async function handleBankingCapabilities(env, req, user) {
 
       // ✅ payroll testing mode (UI banner + execution simulation)
       payroll_testing,
+
+      // ✅ PAYE remittances gate (UI can block PAYE remittance send)
+      paye_remittances_enabled,
 
       rail_supports_scheduling,
       rail_supports_name_check,
@@ -9891,7 +9897,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const scope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
 
   try {
-    // Resolve provider from batch snapshot; CSV export is only valid for manual rails.
+    // Resolve provider from batch snapshot; delegate export to adapter if supported.
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
 
     let batchPayload = batchRes;
@@ -9905,11 +9911,35 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
     const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
 
-    if (provider !== 'CSV') {
+    const adapter = getRailAdapter(provider);
+    if (!adapter || typeof adapter.exportCsv !== 'function') {
       return withCORS(env, req, badRequest('EXPORT_NOT_SUPPORTED_FOR_THIS_RAIL'));
     }
 
-    const csvText = await csvAdapter_export(env, id, scope, user && user.id ? user.id : null);
+    // ✅ Generic availability gate via adapter.capabilities() (no provider-specific checks here)
+    try {
+      if (adapter && typeof adapter.capabilities === 'function') {
+        const caps = await adapter.capabilities(env);
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
+          return withCORS(env, req, badRequest(reason));
+        }
+      }
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
+      return withCORS(env, req, badRequest(msg));
+    }
+
+    let csvText = null;
+    try {
+      csvText = await adapter.exportCsv(env, id, { scope }, user && user.id ? user.id : null);
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'EXPORT_FAILED');
+      if (msg.includes('RAIL_ENV_MISMATCH')) {
+        return withCORS(env, req, badRequest(msg));
+      }
+      throw e;
+    }
 
     const txt = (csvText === null || csvText === undefined) ? '' : String(csvText);
 
@@ -9926,6 +9956,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -9953,12 +9984,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
     const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
 
-    // CSV: polling is a no-op (settlement happens via manual-confirm). Return pay_batch_get for UI refresh.
-    if (provider === 'CSV') {
-      return withCORS(env, req, ok(batchPayload && typeof batchPayload === 'object' ? batchPayload : {}));
-    }
-
-    // Any non-manual rail: delegate polling/settlement to adapter.
+    // Always delegate polling/settlement to adapter (CSV adapter returns a no-op poll result).
     const adapter = getRailAdapter(provider);
     if (!adapter || typeof adapter.pollBatch !== 'function') {
       return withCORS(env, req, badRequest('POLL_NOT_SUPPORTED_FOR_THIS_RAIL'));
@@ -9978,8 +10004,36 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(msg));
     }
 
-    const polled = await adapter.pollBatch(env, id, user.id);
-    return withCORS(env, req, ok(polled && typeof polled === 'object' ? polled : {}));
+    let polled = null;
+    try {
+      polled = await adapter.pollBatch(env, id, user.id);
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'POLL_FAILED');
+      if (msg.includes('RAIL_ENV_MISMATCH')) {
+        return withCORS(env, req, badRequest(msg));
+      }
+      throw e;
+    }
+
+    // ✅ Always return refreshed pay_batch_get for UI
+    const batchRes2 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+    let freshPayload = batchRes2;
+    try {
+      if (Array.isArray(batchRes2) && batchRes2.length === 1 && batchRes2[0] && typeof batchRes2[0] === 'object') freshPayload = batchRes2[0];
+      if (freshPayload && typeof freshPayload === 'object' && Object.prototype.hasOwnProperty.call(freshPayload, 'pay_batch_get')) {
+        freshPayload = freshPayload.pay_batch_get;
+      }
+    } catch {}
+
+    const freshObj = (freshPayload && typeof freshPayload === 'object') ? freshPayload : {};
+
+    return withCORS(env, req, ok({
+      ...freshObj,
+      poll_result: (polled && typeof polled === 'object') ? polled : {},
+      poll_provider: provider,
+      poll_server_utc: new Date().toISOString()
+    }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
@@ -43918,6 +43972,9 @@ async function handleGetSettings(env, req) {
         'remittance_header_message',
         'remittance_footer_message',
 
+        // ✅ PAYE remittances gate
+        'paye_remittances_enabled',
+
         // Global shift patterns + timezone
         'timezone_id',
         'day_start','day_end',
@@ -43997,6 +44054,7 @@ async function handleGetSettings(env, req) {
     return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
   }
 }
+
 async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -44022,6 +44080,9 @@ async function handleUpdateSettings(env, req) {
 
     // ✅ NEW: payroll testing mode flag (simulate payments; no real bank payments)
     'payroll_testing',
+
+    // ✅ PAYE remittances gate
+    'paye_remittances_enabled',
 
     // ✅ Remittances (new settings tab)
     'remittance_includes_json',
@@ -44308,6 +44369,26 @@ async function handleUpdateSettings(env, req) {
       continue;
     }
 
+    if (k === 'paye_remittances_enabled') {
+      const raw = data.paye_remittances_enabled;
+
+      let v = null;
+      if (typeof raw === 'boolean') {
+        v = raw;
+      } else if (typeof raw === 'string') {
+        const t = raw.trim().toLowerCase();
+        if (t === 'true') v = true;
+        else if (t === 'false') v = false;
+      }
+
+      if (v === null) {
+        return withCORS(env, req, badRequest('paye_remittances_enabled must be boolean'));
+      }
+
+      payload.paye_remittances_enabled = v;
+      continue;
+    }
+
     if (k === 'rail_default_funding_account_ref') {
       const v0 = (data.rail_default_funding_account_ref === null || data.rail_default_funding_account_ref === undefined)
         ? null
@@ -44393,7 +44474,6 @@ async function handleUpdateSettings(env, req) {
     return withCORS(env, req, serverError("Failed to update settings_defaults"));
   }
 }
-
 
 function getClientIp(req) {
   const h = req && req.headers;
@@ -73787,7 +73867,6 @@ async function handleClientDeleteApply(env, req, clientId) {
   }
 }
 
-
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -73872,7 +73951,7 @@ function getRailAdapter(provider) {
           const expectedEnv = normalizeEnv(rail_env, workerEnv);
 
           if (expectedEnv !== workerEnv) {
-            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+            throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
           }
 
           // Returns normalized list of funding accounts for the current Worker env.
@@ -73941,7 +74020,7 @@ function getRailAdapter(provider) {
           }
 
           if (expectedEnv !== workerEnv) {
-            return { ok: true, valid: false, reason: 'REVOLUT_ENV_MISMATCH', account: null, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
+            return { ok: true, valid: false, reason: 'RAIL_ENV_MISMATCH', account: null, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
           }
 
           let listed = null;
@@ -73949,8 +74028,8 @@ function getRailAdapter(provider) {
             listed = await this.listFundingAccounts(env, { rail_env: expectedEnv });
           } catch (e) {
             const msg = (e && e.message) ? String(e.message) : '';
-            if (msg.includes('REVOLUT_ENV_MISMATCH')) {
-              return { ok: true, valid: false, reason: 'REVOLUT_ENV_MISMATCH', account: null, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
+            if (msg.includes('RAIL_ENV_MISMATCH')) {
+              return { ok: true, valid: false, reason: 'RAIL_ENV_MISMATCH', account: null, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
             }
             throw e;
           }
@@ -74014,7 +74093,7 @@ function getRailAdapter(provider) {
           }
 
           if (railEnv !== workerEnv) {
-            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${railEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+            throw new Error(`RAIL_ENV_MISMATCH expected_env=${railEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
           }
 
           const payees = Array.isArray(prep0.payees) ? prep0.payees : [];
@@ -74143,7 +74222,7 @@ function getRailAdapter(provider) {
           const expectedEnv = normalizeEnv(batchEnv, 'PROD');
 
           if (expectedEnv !== workerEnv) {
-            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+            throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
           }
 
           const scheduleKindRaw = String(payload.schedule_kind || '').trim().toUpperCase();
@@ -74256,7 +74335,13 @@ function getRailAdapter(provider) {
           }
 
           if (mismatchBatches.length) {
-            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${workerEnv} worker_env=${workerEnv} api_base=${apiBase || ''} mismatched_batches=${JSON.stringify(mismatchBatches)}`);
+            const expectedEnv0 = (() => {
+              const xs = Array.from(distinctEnvs);
+              if (xs.length === 1) return xs[0];
+              if (xs.length > 1) return 'MIXED';
+              return workerEnv;
+            })();
+            throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv0} worker_env=${workerEnv} api_base=${apiBase || ''} mismatched_batches=${JSON.stringify(mismatchBatches)}`);
           }
 
           const payrollTesting = await _fetchPayrollTestingFlag(env);
@@ -74303,7 +74388,7 @@ function getRailAdapter(provider) {
               const fundingRef = String(b?.funding_account_ref || bgBatch?.funding_account_ref || '').trim();
 
               if (normalizeEnv(railEnv, 'PROD') !== workerEnv) {
-                throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${normalizeEnv(railEnv, 'PROD')} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+                throw new Error(`RAIL_ENV_MISMATCH expected_env=${normalizeEnv(railEnv, 'PROD')} worker_env=${workerEnv} api_base=${apiBase || ''}`);
               }
 
               if (!fundingRef) {
@@ -74445,7 +74530,7 @@ function getRailAdapter(provider) {
             const fundingRef = String(b?.funding_account_ref || bgBatch?.funding_account_ref || '').trim();
 
             if (normalizeEnv(railEnv, 'PROD') !== workerEnv) {
-              throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${normalizeEnv(railEnv, 'PROD')} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+              throw new Error(`RAIL_ENV_MISMATCH expected_env=${normalizeEnv(railEnv, 'PROD')} worker_env=${workerEnv} api_base=${apiBase || ''}`);
             }
 
             if (!fundingRef) {
@@ -74621,7 +74706,7 @@ function getRailAdapter(provider) {
           const expectedEnv = normalizeEnv(batchEnvRaw, 'PROD');
 
           if (expectedEnv !== workerEnv) {
-            throw new Error(`REVOLUT_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+            throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
           }
 
           const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
@@ -74718,6 +74803,11 @@ function getRailAdapter(provider) {
           throw new Error('CSV_ADAPTER: scheduleBatch not supported');
         },
 
+        async exportCsv(env, batchId, opts = {}, actorUserId = null) {
+          const sc = String(opts && opts.scope ? opts.scope : 'ALL').trim().toUpperCase();
+          return csvAdapter_export(env, batchId, sc, actorUserId);
+        },
+
         async executeDueBatches(env, { nowUtc, limit, claimedRows, actorUserId, perBatchSubmitLimit } = {}) {
           const nowIso = nowUtc ? String(nowUtc) : new Date().toISOString();
           const lim = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Math.trunc(Number(limit)))) : 25;
@@ -74773,6 +74863,8 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p] || getRailAdapter.__RAIL_REGISTRY.CSV;
   return mk();
 }
+
+
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
   const nowMs = Date.now();
@@ -75302,7 +75394,6 @@ async function bankingCronTick(env, opts = {}) {
   const _isEnvMismatchError = (msg) => {
     const m = String(msg || '');
     return (
-      m.includes('REVOLUT_ENV_MISMATCH') ||
       m.includes('RAIL_ENV_MISMATCH') ||
       m.includes('ENV_MISMATCH')
     );
