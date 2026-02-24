@@ -2012,7 +2012,6 @@ end;
 $$;
 
 
-
 create or replace function public.pay_remittance_build(
   p_pay_batch_id uuid,
   p_scope text default 'ALL'
@@ -2114,10 +2113,14 @@ begin
         pbt.status,
         pbt.payment_reference,
         pbt.completed_at_utc,
+
+        -- ✅ NEW: rail settlement metadata for audit/labelling
         pbt.rail_tx_id,
         pbt.rail_state,
         pbt.rail_meta_json,
         pbt.failed_reason,
+
+        -- ✅ NEW: computed simulated flag from artifacts only
         (
           upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
           or (
@@ -2155,6 +2158,8 @@ begin
               'currency', ut.currency,
               'status', ut.status,
               'payment_reference', ut.payment_reference,
+
+              -- ✅ NEW fields
               'rail_tx_id', ut.rail_tx_id,
               'rail_state', ut.rail_state,
               'rail_meta_json', ut.rail_meta_json,
@@ -2175,10 +2180,10 @@ begin
                   'amount_inc_vat', pbi.amount_inc_vat,
                   'pay_channel', pbi.pay_channel,
 
-                  -- ✅ NEW: sheet scope (DAILY/WEEKLY) for the item, from v_timesheets_summary when present
+                  -- ✅ sheet scope (DAILY/WEEKLY) for the item, from v_timesheets_summary when present
                   'sheet_scope', upper(coalesce(vs.sheet_scope::text, v_missing_scope)),
 
-                  -- ✅ NEW: client identity for grouping (week ending → client), from v_timesheets_summary
+                  -- ✅ client identity for grouping (week ending → client), from v_timesheets_summary
                   'client_id', case
                     when (
                       case
@@ -2204,7 +2209,7 @@ begin
                     else null
                   end,
 
-                  -- ✅ NEW: job title + band (if enabled by config; best available source = contract fallback)
+                  -- ✅ job title + band (if enabled by config; best available source = contract fallback)
                   'job_title', case
                     when (
                       case
@@ -2391,7 +2396,10 @@ begin
           'scope', 'UMBRELLA',
           'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
           'bulk_reference', v_batch.bulk_reference,
+
+          -- ✅ NEW: job-level marker derived only from transfer artifacts
           'test_mode', coalesce(ug.test_mode,false),
+
           'recipient', jsonb_build_object(
             'entity_kind', 'UMBRELLA',
             'umbrella_id', ug.umbrella_id::text,
@@ -2429,10 +2437,14 @@ begin
         pbt.status,
         pbt.payment_reference,
         pbt.completed_at_utc,
+
+        -- ✅ NEW: rail settlement metadata for audit/labelling
         pbt.rail_tx_id,
         pbt.rail_state,
         pbt.rail_meta_json,
         pbt.failed_reason,
+
+        -- ✅ NEW: computed simulated flag from artifacts only
         (
           upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
           or (
@@ -2465,6 +2477,8 @@ begin
               'currency', pt.currency,
               'status', pt.status,
               'payment_reference', pt.payment_reference,
+
+              -- ✅ NEW fields
               'rail_tx_id', pt.rail_tx_id,
               'rail_state', pt.rail_state,
               'rail_meta_json', pt.rail_meta_json,
@@ -2487,7 +2501,10 @@ begin
           'scope', 'PAYE',
           'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
           'bulk_reference', v_batch.bulk_reference,
+
+          -- ✅ NEW: job-level marker derived only from transfer artifacts
           'test_mode', coalesce(pg.test_mode,false),
+
           'recipient', jsonb_build_object(
             'entity_kind', 'CANDIDATE',
             'candidate_id', pg.candidate_id::text,
@@ -2528,10 +2545,10 @@ begin
                 'amount_inc_vat', pbix.amount_inc_vat,
                 'pay_channel', pbix.pay_channel,
 
-                -- ✅ NEW: sheet scope (DAILY/WEEKLY) for the item, from v_timesheets_summary when present
+                -- ✅ sheet scope (DAILY/WEEKLY) for the item, from v_timesheets_summary when present
                 'sheet_scope', upper(coalesce(vs2.sheet_scope::text, v_missing_scope)),
 
-                -- ✅ NEW: client identity for grouping (week ending → client), from v_timesheets_summary
+                -- ✅ client identity for grouping (week ending → client), from v_timesheets_summary
                 'client_id', case
                   when (
                     case
@@ -2557,7 +2574,7 @@ begin
                   else null
                 end,
 
-                -- ✅ NEW: job title + band (if enabled by config; best available source = contract fallback)
+                -- ✅ job title + band (if enabled by config; best available source = contract fallback)
                 'job_title', case
                   when (
                     case
@@ -2710,7 +2727,7 @@ begin
     'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
     'bulk_reference', v_batch.bulk_reference,
 
-    -- ✅ NEW: surface header/footer for email rendering (no extra settings fetch required)
+    -- ✅ surface header/footer for email rendering (no extra settings fetch required)
     'remittance_header_message', v_remittance_header_message,
     'remittance_footer_message', v_remittance_footer_message,
 
