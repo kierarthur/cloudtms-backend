@@ -8664,7 +8664,6 @@ async function handleBankingIdBalanceNow(env, req, user) {
 }
 
 
-
 async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8680,12 +8679,9 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   }
 
   const bankConfirmRef = String(body?.bank_confirm_ref ?? body?.bank_confirm_code ?? body?.bank_reference ?? '').trim();
-  if (!bankConfirmRef) {
-    return withCORS(env, req, badRequest('bank_confirm_ref is required'));
-  }
 
   try {
-    // Resolve provider from batch snapshot and delegate to adapter.confirmManual(...)
+    // Resolve provider + transfers snapshot via pay_batch_get
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
 
     let batchPayload = batchRes;
@@ -8697,6 +8693,32 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
     } catch {}
 
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
+    const transfers = (batchPayload && typeof batchPayload === 'object' && Array.isArray(batchPayload.transfers)) ? batchPayload.transfers : [];
+
+    // Determine if there are any PENDING transfers in the chosen scope
+    const pendingInScope = (transfers || []).filter(t => {
+      const st = String(t?.status || '').trim().toUpperCase();
+      if (st !== 'PENDING') return false;
+      const ch = String(t?.pay_channel || '').trim().toUpperCase();
+      if (!ch) return false;
+      return (scope === 'ALL') ? true : (ch === scope);
+    });
+
+    // ✅ If there are no transfers / no pending transfers in scope, do settle-only via pay_settle_rail([])
+    if (!pendingInScope.length) {
+      const out0 = await sbRpc(env, 'pay_settle_rail', {
+        p_pay_batch_id: String(payBatchId),
+        p_settlement_json: [],
+        p_actor_user_id: user.id
+      });
+      return withCORS(env, req, ok(out0));
+    }
+
+    // ✅ If there are pending transfers in scope, require bank_confirm_ref and delegate to adapter.confirmManual(...)
+    if (!bankConfirmRef) {
+      return withCORS(env, req, badRequest('bank_confirm_ref is required'));
+    }
+
     const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
 
     const adapter = getRailAdapter(provider);
@@ -8735,6 +8757,29 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
 
   const nowIso = new Date().toISOString();
 
+  // ✅ Load remittance policy + messages (single-row settings_defaults)
+  let payrollTesting = false;
+  let payeRemittancesEnabled = false;
+  let settingsHeaderMsg = null;
+  let settingsFooterMsg = null;
+
+  try {
+    const sel = ['payroll_testing', 'paye_remittances_enabled', 'remittance_header_message', 'remittance_footer_message'].join(',');
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}`);
+    const r0 = (rows && rows[0]) ? rows[0] : null;
+    payrollTesting = !!(r0 && r0.payroll_testing === true);
+    payeRemittancesEnabled = !!(r0 && r0.paye_remittances_enabled === true);
+    settingsHeaderMsg = (r0 && typeof r0.remittance_header_message === 'string') ? r0.remittance_header_message : null;
+    settingsFooterMsg = (r0 && typeof r0.remittance_footer_message === 'string') ? r0.remittance_footer_message : null;
+  } catch (e) {
+    return withCORS(env, req, serverError('Failed to load remittance settings'));
+  }
+
+  // ✅ Simplified test-mode policy: block sending remittances when payroll_testing is enabled
+  if (payrollTesting) {
+    return withCORS(env, req, badRequest('REMITTANCES_DISABLED_IN_PAYROLL_TESTING'));
+  }
+
   let build;
   try {
     build = await sbRpc(env, 'pay_remittance_build', {
@@ -8750,46 +8795,155 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
   const payDate = (build && build.pay_date) ? String(build.pay_date) : null;
   const bulkRef = (build && build.bulk_reference) ? String(build.bulk_reference) : null;
 
+  const headerMsgFromBuild = (build && typeof build.remittance_header_message === 'string') ? build.remittance_header_message : null;
+  const footerMsgFromBuild = (build && typeof build.remittance_footer_message === 'string') ? build.remittance_footer_message : null;
+
+  const headerMsg = (headerMsgFromBuild && headerMsgFromBuild.trim().length) ? headerMsgFromBuild : (settingsHeaderMsg && settingsHeaderMsg.trim().length ? settingsHeaderMsg : null);
+  const footerMsg = (footerMsgFromBuild && footerMsgFromBuild.trim().length) ? footerMsgFromBuild : (settingsFooterMsg && settingsFooterMsg.trim().length ? settingsFooterMsg : null);
+
   const queued = [];
   const skipped = [];
 
+  const asMoney = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return n.toFixed(2);
+  };
+
+  const safeLabelForItem = (item) => {
+    const itemType = (item && item.item_type != null) ? String(item.item_type).toUpperCase() : '';
+    const descRaw = (item && item.description != null) ? String(item.description) : '';
+    if (itemType === 'DEBT_CREATED') return 'Overpayment correction';
+    if (/debt/i.test(descRaw)) return 'Overpayment correction';
+    const d = descRaw.trim();
+    if (d.length) return d;
+    return itemType || 'Item';
+  };
+
+  const groupItemsWeekClient = (items) => {
+    const map = new Map();
+    for (const it of (Array.isArray(items) ? items : [])) {
+      const ts = (it && typeof it.timesheet === 'object' && it.timesheet) ? it.timesheet : null;
+      const week = (ts && ts.week_ending_date) ? String(ts.week_ending_date) : '';
+      const client = (it && it.client_name) ? String(it.client_name) : '';
+      const weekKey = week || 'NO_WEEK';
+      const clientKey = client || 'NO_CLIENT';
+      if (!map.has(weekKey)) map.set(weekKey, new Map());
+      const cm = map.get(weekKey);
+      if (!cm.has(clientKey)) cm.set(clientKey, []);
+      cm.get(clientKey).push(it);
+    }
+    return map;
+  };
+
+  const renderGroupedItems = (lines, items) => {
+    const grouped = groupItemsWeekClient(items);
+    const weekKeys = Array.from(grouped.keys()).sort();
+
+    for (const wk of weekKeys) {
+      const wkLabel = (wk === 'NO_WEEK') ? 'Other items (not linked to a timesheet)' : `Week ending: ${wk}`;
+      lines.push(wkLabel);
+
+      const clientMap = grouped.get(wk);
+      const clientKeys = Array.from(clientMap.keys()).sort((a, b) => a.localeCompare(b));
+
+      for (const ck of clientKeys) {
+        const clientLabel = (ck === 'NO_CLIENT') ? 'Client: (unknown)' : `Client: ${ck}`;
+
+        const its = clientMap.get(ck) || [];
+        let role = null;
+        let band = null;
+        for (const it of its) {
+          if (!role && it && it.job_title != null && String(it.job_title).trim().length) role = String(it.job_title).trim();
+          if (!band && it && it.band != null && String(it.band).trim().length) band = String(it.band).trim();
+          if (role && band) break;
+        }
+
+        const roleBandBits = [];
+        if (role) roleBandBits.push(`Role: ${role}`);
+        if (band) roleBandBits.push(`Band: ${band}`);
+        const rb = roleBandBits.length ? ` (${roleBandBits.join(' · ')})` : '';
+
+        lines.push(`  ${clientLabel}${rb}`);
+
+        for (const it of its) {
+          const label = safeLabelForItem(it);
+          const amt = (it && it.amount_inc_vat != null) ? asMoney(it.amount_inc_vat) :
+                      (it && it.amount_ex_vat != null) ? asMoney(it.amount_ex_vat) : null;
+
+          const ts = (it && typeof it.timesheet === 'object' && it.timesheet) ? it.timesheet : null;
+          const refNum = (ts && ts.reference_number != null && String(ts.reference_number).trim().length) ? String(ts.reference_number).trim() : null;
+
+          const bits = [];
+          if (refNum) bits.push(`Ref: ${refNum}`);
+          if (amt != null) bits.push(`£${amt}`);
+
+          lines.push(`    - ${label}${bits.length ? ` — ${bits.join(' | ')}` : ''}`);
+        }
+      }
+
+      lines.push('');
+    }
+  };
+
   for (const job of jobs) {
-    const jobKind = String(job?.job_kind || '').toUpperCase(); // 'UMBRELLA' | 'PAYE'
+    const jobKindRaw = String(job?.job_kind || '').trim().toUpperCase();
+    const isUmbrella = jobKindRaw.includes('UMBRELLA');
+    const isPaye = jobKindRaw.includes('PAYE');
+
+    // Skip unknown job kinds rather than accidentally sending
+    if (!isUmbrella && !isPaye) {
+      skipped.push({
+        job_kind: jobKindRaw || null,
+        reason: 'UNKNOWN_JOB_KIND'
+      });
+      continue;
+    }
+
+    // ✅ PAYE remittance gate
+    if (isPaye && !payeRemittancesEnabled) {
+      const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
+      skipped.push({
+        job_kind: jobKindRaw || null,
+        payee_entity_kind: recipient?.entity_kind ?? null,
+        payee_entity_id: recipient?.candidate_id ?? null,
+        reason: 'PAYE_REMITTANCES_DISABLED'
+      });
+      continue;
+    }
+
     const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
 
-    const toEmailRaw =
-      (jobKind === 'UMBRELLA')
-        ? (recipient?.remittance_email ?? recipient?.email ?? null)
-        : (recipient?.email ?? recipient?.remittance_email ?? null);
+    const toEmailRaw = isUmbrella
+      ? (recipient?.remittance_email ?? recipient?.email ?? null)
+      : (recipient?.email ?? recipient?.remittance_email ?? null);
 
     const toEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
     if (!toEmail) {
       skipped.push({
-        job_kind: jobKind || null,
-        payee_entity_kind: job?.payee_entity_kind ?? null,
-        payee_entity_id: job?.payee_entity_id ?? null,
+        job_kind: jobKindRaw || null,
+        payee_entity_kind: recipient?.entity_kind ?? null,
+        payee_entity_id: (recipient?.candidate_id ?? recipient?.umbrella_id ?? null),
         reason: 'NO_EMAIL'
       });
       continue;
     }
 
-    const payPeriodLabel = (job?.pay_period_label && String(job.pay_period_label).trim())
-      ? String(job.pay_period_label).trim()
-      : (payDate ? payDate : 'Pay run');
-
-    const subject = `Remittance Advice – ${payPeriodLabel}`;
-
-    const payeeName = (job?.payee_name && String(job.payee_name).trim()) ? String(job.payee_name).trim() : '';
-    const tmsRef = (job?.candidate_tms_ref && String(job.candidate_tms_ref).trim()) ? String(job.candidate_tms_ref).trim() : '';
-    const displayName = (job?.candidate_display_name && String(job.candidate_display_name).trim()) ? String(job.candidate_display_name).trim() : '';
-
-    const totals = (job && typeof job.totals === 'object' && job.totals) ? job.totals : null;
-
-    const totalPayEx = (job?.total_pay_ex_vat != null) ? Number(job.total_pay_ex_vat) : null;
-    const totalVat = (job?.total_pay_vat != null) ? Number(job.total_pay_vat) : null;
-    const totalInc = (job?.total_pay_inc_vat != null) ? Number(job.total_pay_inc_vat) : null;
+    const jobTestMode = !!(job && job.test_mode === true);
+    const payPeriodLabel = payDate ? payDate : 'Pay run';
+    const subject = jobTestMode ? `[TEST MODE] Remittance Advice – ${payPeriodLabel}` : `Remittance Advice – ${payPeriodLabel}`;
 
     const lines = [];
+    if (headerMsg) {
+      lines.push(headerMsg);
+      lines.push('');
+    }
+
+    if (jobTestMode) {
+      lines.push('SIMULATED / TEST MODE — no bank payment was submitted');
+      lines.push('');
+    }
+
     lines.push('Remittance Advice');
     if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
     if (payDate) lines.push(`Pay date: ${payDate}`);
@@ -8797,38 +8951,92 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     lines.push(`Scope: ${scope}`);
     lines.push('');
 
-    if (jobKind === 'PAYE') {
-      if (displayName || tmsRef) lines.push(`Candidate: ${[displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ')}`);
-    } else if (jobKind === 'UMBRELLA') {
-      if (payeeName) lines.push(`Umbrella: ${payeeName}`);
+    if (isPaye) {
+      const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
+      const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
+      if (displayName || tmsRef) {
+        lines.push(`Candidate: ${[displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ')}`);
+        lines.push('');
+      }
+
+      const summary = (job && typeof job.summary === 'object' && job.summary) ? job.summary : {};
+      const totalAmount = (summary.total_amount != null) ? asMoney(summary.total_amount) : null;
+      if (totalAmount != null) lines.push(`Total: £${totalAmount}`);
+      lines.push('');
+
+      const items = Array.isArray(job?.items) ? job.items : [];
+      renderGroupedItems(lines, items);
+
+      const netInput = (job && typeof job.net_input === 'object' && job.net_input) ? job.net_input : null;
+      if (netInput) {
+        const src = (netInput.source != null) ? String(netInput.source) : null;
+        const amt = (netInput.net_amount != null) ? asMoney(netInput.net_amount) : null;
+        if (src || amt) {
+          lines.push('PAYE net input (latest):');
+          if (src) lines.push(`  Source: ${src}`);
+          if (amt != null) lines.push(`  Net amount: £${amt}`);
+          lines.push('');
+        }
+      }
+    } else if (isUmbrella) {
+      const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
+      if (umbName) {
+        lines.push(`Umbrella: ${umbName}`);
+        lines.push('');
+      }
+
+      const summary = (job && typeof job.summary === 'object' && job.summary) ? job.summary : {};
+      const totalAmount = (summary.total_amount != null) ? asMoney(summary.total_amount) : null;
+      if (totalAmount != null) lines.push(`Total: £${totalAmount}`);
+      lines.push('');
+
+      const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
+      for (const c of candidates) {
+        const cand = (c && typeof c.candidate === 'object' && c.candidate) ? c.candidate : {};
+        const dn = (cand.display_name && String(cand.display_name).trim()) ? String(cand.display_name).trim() : '';
+        const tr = (cand.tms_ref && String(cand.tms_ref).trim()) ? String(cand.tms_ref).trim() : '';
+        const header = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ');
+        if (header) {
+          lines.push(`Candidate: ${header}`);
+        } else {
+          lines.push('Candidate: (unknown)');
+        }
+
+        const totals = (c && typeof c.totals === 'object' && c.totals) ? c.totals : null;
+        if (totals) {
+          const inc = (totals.items_total_inc_vat != null) ? asMoney(totals.items_total_inc_vat) : null;
+          if (inc != null) lines.push(`  Items total: £${inc}`);
+          const debtCreated = (totals.debt_created_total != null) ? asMoney(totals.debt_created_total) : null;
+          if (debtCreated != null && debtCreated !== '0.00') lines.push(`  Overpayment correction: £${debtCreated}`);
+        }
+        lines.push('');
+
+        const items = Array.isArray(c?.items) ? c.items : [];
+        renderGroupedItems(lines, items);
+      }
     }
 
-    if (totals) {
-      if (totals.total_pay_ex_vat != null) lines.push(`Total pay ex VAT: ${totals.total_pay_ex_vat}`);
-      if (totals.total_pay_vat != null) lines.push(`Total VAT: ${totals.total_pay_vat}`);
-      if (totals.total_pay_inc_vat != null) lines.push(`Total inc VAT: ${totals.total_pay_inc_vat}`);
-      if (totals.total_pay_net != null) lines.push(`Total net: ${totals.total_pay_net}`);
-    } else {
-      if (totalPayEx != null) lines.push(`Total pay ex VAT: ${totalPayEx.toFixed(2)}`);
-      if (totalVat != null) lines.push(`Total VAT: ${totalVat.toFixed(2)}`);
-      if (totalInc != null) lines.push(`Total inc VAT: ${totalInc.toFixed(2)}`);
-    }
-
-    lines.push('');
     lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
+
+    if (footerMsg) {
+      lines.push('');
+      lines.push(footerMsg);
+    }
 
     const bodyText = lines.join('\n');
     const bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
 
-    const payeeEntityKind = (job?.payee_entity_kind && String(job.payee_entity_kind).trim())
-      ? String(job.payee_entity_kind).trim()
-      : null;
+    const payeeEntityKind = (recipient?.entity_kind && String(recipient.entity_kind).trim())
+      ? String(recipient.entity_kind).trim()
+      : (isUmbrella ? 'UMBRELLA' : 'CANDIDATE');
 
-    const payeeEntityId = (job?.payee_entity_id && String(job.payee_entity_id).trim())
-      ? String(job.payee_entity_id).trim()
-      : null;
+    const payeeEntityId = (isUmbrella
+      ? (recipient?.umbrella_id ?? null)
+      : (recipient?.candidate_id ?? null));
 
-    const reference = `remit:pay_batch:${payBatchId}:${jobKind || 'JOB'}:${payeeEntityKind || 'UNKNOWN'}:${payeeEntityId || 'UNKNOWN'}`;
+    const payeeEntityIdText = (payeeEntityId != null) ? String(payeeEntityId).trim() : 'UNKNOWN';
+
+    const reference = `remit:pay_batch:${payBatchId}:${jobKindRaw || 'JOB'}:${payeeEntityKind}:${payeeEntityIdText}`;
 
     const outboxRow = {
       type: 'REMITTANCE',
@@ -8854,9 +9062,9 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
       if (!ins.ok) {
         const errTxt = await ins.text().catch(() => '');
         skipped.push({
-          job_kind: jobKind || null,
+          job_kind: jobKindRaw || null,
           payee_entity_kind: payeeEntityKind,
-          payee_entity_id: payeeEntityId,
+          payee_entity_id: payeeEntityIdText,
           to: toEmail,
           reason: 'MAIL_OUTBOX_INSERT_FAILED',
           error: (errTxt || '').slice(0, 500)
@@ -8869,9 +9077,9 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
       const mailId = mail?.id ? String(mail.id) : null;
 
       queued.push({
-        job_kind: jobKind || null,
+        job_kind: jobKindRaw || null,
         payee_entity_kind: payeeEntityKind,
-        payee_entity_id: payeeEntityId,
+        payee_entity_id: payeeEntityIdText,
         to: toEmail,
         subject,
         reference,
@@ -8879,9 +9087,9 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
       });
     } catch (e) {
       skipped.push({
-        job_kind: jobKind || null,
+        job_kind: jobKindRaw || null,
         payee_entity_kind: payeeEntityKind,
-        payee_entity_id: payeeEntityId,
+        payee_entity_id: payeeEntityIdText,
         to: toEmail,
         reason: 'MAIL_OUTBOX_EXCEPTION',
         error: String(e?.message || e || 'MAIL_OUTBOX_EXCEPTION').slice(0, 500)
@@ -8915,7 +9123,6 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     skipped
   }));
 }
-
 /**
  * Minimal HTML escape for safe <pre> usage.
  * (mail_outbox ultimately renders HTML; keep it safe.)
@@ -8993,7 +9200,6 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
-
 async function handleBankingCapabilities(env, req, user) {
   try {
     const select = [
@@ -9048,9 +9254,14 @@ async function handleBankingCapabilities(env, req, user) {
     const providers = getRailAdapter('__LIST__');
     const rails = [];
 
-    let revolutCaps = null;
-    let revolutWorkerEnv = null;
+    // Back-compat informational fields only (not used for top-level derivation)
     let revolutApiBase = null;
+
+    // ✅ NEW: compute top-level env/mismatch and cop_available from DEFAULT rail, not hard-coded REVOLUT
+    let defaultApiBase = null;
+    let defaultWorkerEnv = null;
+    let defaultRailSupportsNameCheck = false;
+    let defaultRailAvailable = false;
 
     for (const prov of (Array.isArray(providers) ? providers : [])) {
       const adapter = getRailAdapter(prov);
@@ -9092,9 +9303,15 @@ async function handleBankingCapabilities(env, req, user) {
           : null;
 
       if (providerName === 'REVOLUT') {
-        revolutCaps = { available, supports_name_check };
-        revolutWorkerEnv = workerEnv;
         revolutApiBase = apiBase;
+      }
+
+      // Capture default rail top-level sources
+      if (providerName === String(rail_provider_default || 'CSV').toUpperCase()) {
+        defaultApiBase = apiBase;
+        defaultWorkerEnv = workerEnv;
+        defaultRailSupportsNameCheck = !!supports_name_check;
+        defaultRailAvailable = !!available;
       }
 
       rails.push({
@@ -9111,14 +9328,14 @@ async function handleBankingCapabilities(env, req, user) {
       });
     }
 
-    const copAvailable = !!(revolutCaps && revolutCaps.available && revolutCaps.supports_name_check);
-
     const dbRailEnvDefault = String(rail_env_default || 'PROD').toUpperCase();
-    const topWorkerEnv = revolutWorkerEnv ? String(revolutWorkerEnv).toUpperCase() : null;
+    const topWorkerEnv = defaultWorkerEnv ? String(defaultWorkerEnv).toUpperCase() : null;
     const topEnvMismatch =
       (topWorkerEnv && dbRailEnvDefault)
         ? (topWorkerEnv !== dbRailEnvDefault)
         : null;
+
+    const copAvailable = !!(defaultRailAvailable && defaultRailSupportsNameCheck);
 
     return withCORS(env, req, ok({
       ok: true,
@@ -9126,12 +9343,12 @@ async function handleBankingCapabilities(env, req, user) {
       rail_provider_default,
       rail_env_default,
 
-      // ✅ Explicit UI fields for mismatch blocking
+      // ✅ Explicit UI fields for mismatch blocking (derived from DEFAULT rail)
       db_rail_env_default: dbRailEnvDefault,
       worker_env: topWorkerEnv,
       env_mismatch: topEnvMismatch,
 
-      // ✅ NEW: payroll testing mode (UI banner + execution simulation)
+      // ✅ payroll testing mode (UI banner + execution simulation)
       payroll_testing,
 
       rail_supports_scheduling,
@@ -9143,16 +9360,20 @@ async function handleBankingCapabilities(env, req, user) {
 
       funds_warning_hours_json,
 
-      // ✅ C: default funding account UI preselect
+      // ✅ default funding account UI preselect
       rail_default_funding_account_ref,
 
       rails,
 
-      // explicit UI-friendly CoP flag (settings + adapter availability)
+      // explicit UI-friendly CoP flag (settings + DEFAULT rail availability)
       cop_available: copAvailable,
 
-      // informational
+      // informational / backward compatibility
       revolut_api_base: revolutApiBase || null,
+      default_api_base: defaultApiBase || null,
+      default_worker_env: topWorkerEnv,
+      default_env_mismatch: topEnvMismatch,
+
       server_utc: new Date().toISOString()
     }));
   } catch (e) {
@@ -9249,6 +9470,129 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+async function handleBankingPayBatchesList(env, req, user) {
+  try {
+    const u = new URL(req.url);
+
+    const clampInt = (raw, dflt, lo, hi) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return dflt;
+      const v = Math.trunc(n);
+      if (v < lo) return lo;
+      if (v > hi) return hi;
+      return v;
+    };
+
+    const limit = clampInt(u.searchParams.get('limit'), 50, 1, 500);
+    const offset = clampInt(u.searchParams.get('offset'), 0, 0, 1_000_000);
+
+    const statusRaw = (u.searchParams.get('status') || '').trim();
+    const status = statusRaw ? statusRaw.toUpperCase() : null;
+
+    const rpcRes = await sbRpc(env, 'pay_batches_list', {
+      p_limit: limit,
+      p_offset: offset,
+      p_status: status
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batches_list')) {
+        payload = payload.pay_batches_list;
+      }
+    } catch {}
+
+    const obj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const items = Array.isArray(obj.rows) ? obj.rows : [];
+    const count = Number.isFinite(Number(obj.total_count)) ? Math.trunc(Number(obj.total_count)) : items.length;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      items,
+      count,
+      limit: Number.isFinite(Number(obj.limit)) ? Math.trunc(Number(obj.limit)) : limit,
+      offset: Number.isFinite(Number(obj.offset)) ? Math.trunc(Number(obj.offset)) : offset
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingIdLedgerList(env, req, user) {
+  try {
+    const u = new URL(req.url);
+
+    const clampInt = (raw, dflt, lo, hi) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return dflt;
+      const v = Math.trunc(n);
+      if (v < lo) return lo;
+      if (v > hi) return hi;
+      return v;
+    };
+
+    const limit = clampInt(u.searchParams.get('limit'), 50, 1, 500);
+    const offset = clampInt(u.searchParams.get('offset'), 0, 0, 1_000_000);
+
+    // status can be repeated (?status=ISSUED&status=ON_HOLD) or comma-separated (?status=ISSUED,ON_HOLD)
+    const statusAll = u.searchParams.getAll('status').flatMap(v => String(v || '').split(','));
+    const statuses = statusAll.map(s => String(s || '').trim()).filter(Boolean);
+    const p_status = statuses.length ? statuses : null;
+
+    const clientIdRaw = (u.searchParams.get('client_id') || '').trim();
+    const uuidRe = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    const p_client_id = clientIdRaw ? (uuidRe.test(clientIdRaw) ? clientIdRaw : null) : null;
+    if (clientIdRaw && !p_client_id) {
+      return withCORS(env, req, badRequest('client_id must be a UUID'));
+    }
+
+    const p_search = (() => {
+      const s = (u.searchParams.get('search') || '').trim();
+      return s ? s : null;
+    })();
+
+    const onlyReportableRaw = (u.searchParams.get('only_reportable') || '').trim().toLowerCase();
+    const p_only_reportable = (onlyReportableRaw === 'true' || onlyReportableRaw === '1' || onlyReportableRaw === 'yes' || onlyReportableRaw === 'y' || onlyReportableRaw === 'on');
+
+    const rpcRes = await sbRpc(env, 'id_ledger_list', {
+      p_limit: limit,
+      p_offset: offset,
+      p_status,
+      p_client_id,
+      p_search,
+      p_only_reportable
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'id_ledger_list')) {
+        payload = payload.id_ledger_list;
+      }
+    } catch {}
+
+    const obj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const items = Array.isArray(obj.rows) ? obj.rows : [];
+    const count = Number.isFinite(Number(obj.total_count)) ? Math.trunc(Number(obj.total_count)) : items.length;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      items,
+      count,
+      limit: Number.isFinite(Number(obj.limit)) ? Math.trunc(Number(obj.limit)) : limit,
+      offset: Number.isFinite(Number(obj.offset)) ? Math.trunc(Number(obj.offset)) : offset
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
 
 
 async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
@@ -42140,7 +42484,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   }
 }
 
- async function handleListOutbox(env, req) {
+async function handleListOutbox(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -42149,15 +42493,28 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
   const type = url.searchParams.get('type');
 
+  // ✅ NEW: reference filtering for banking remittance status queries
+  const referencePrefix = (url.searchParams.get('reference_prefix') || '').trim();
+  const referenceContains = (url.searchParams.get('reference_contains') || '').trim();
+
   let q = `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=*`;
   if (status) q += `&status=eq.${enc(status)}`;
   if (type) q += `&type=eq.${enc(type)}`;
+
+  if (referencePrefix) {
+    // PostgREST like uses * wildcard
+    q += `&reference=like.${enc(referencePrefix)}*`;
+  }
+  if (referenceContains) {
+    // ilike contains with * wildcard
+    q += `&reference=ilike.*${enc(referenceContains)}*`;
+  }
+
   q += `&order=created_at_utc.desc&limit=${limit}`;
 
   const { rows } = await sbFetch(env, q, false);
   return withCORS(env, req, ok({ items: rows }));
 }
-
  async function handleGetOutboxItem(env, req, outboxId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -42333,7 +42690,7 @@ async function recordEmailAudit(env, userOrNull, action, meta) {
 // ------------------------------
 // REVISED: Remittance & Invoice email queueing
 // ------------------------------
- async function handleRemittanceEmailForCandidate(env, req) {
+async function handleRemittanceEmailForCandidate(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -42427,6 +42784,59 @@ async function recordEmailAudit(env, userOrNull, action, meta) {
     // Determine if selection is PAYE and/or UMBRELLA (in theory a candidate is one channel, but be robust)
     const hasPAYE = finRows.some((r) => String(r.pay_method || '').toUpperCase() === 'PAYE');
     const hasUmbrella = finRows.some((r) => String(r.pay_method || '').toUpperCase() === 'UMBRELLA');
+
+    // ✅ NEW: remittance policy + header/footer messages from settings_defaults
+    let payrollTesting = false;
+    let payeRemittancesEnabled = false;
+    let headerMsgRaw = null;
+    let footerMsgRaw = null;
+
+    try {
+      const sel = [
+        'payroll_testing',
+        'paye_remittances_enabled',
+        'remittance_header_message',
+        'remittance_footer_message'
+      ].join(',');
+
+      const { rows: sRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}`,
+        false
+      );
+
+      const s0 = (sRows && sRows[0]) ? sRows[0] : null;
+      payrollTesting = !!(s0 && s0.payroll_testing === true);
+      payeRemittancesEnabled = !!(s0 && s0.paye_remittances_enabled === true);
+      headerMsgRaw = (s0 && typeof s0.remittance_header_message === 'string') ? s0.remittance_header_message : null;
+      footerMsgRaw = (s0 && typeof s0.remittance_footer_message === 'string') ? s0.remittance_footer_message : null;
+    } catch {
+      return withCORS(env, req, serverError('Failed to load settings_defaults for remittances'));
+    }
+
+    // ✅ Simplified policy: block all remittances when payroll_testing is enabled
+    if (payrollTesting) {
+      return withCORS(env, req, badRequest('REMITTANCES_DISABLED_IN_PAYROLL_TESTING'));
+    }
+
+    // ✅ PAYE gate: only allow PAYE remittances when explicitly enabled
+    if (hasPAYE && !payeRemittancesEnabled) {
+      return withCORS(env, req, badRequest('PAYE_REMITTANCES_DISABLED'));
+    }
+
+    // ✅ Wording rule: never output “debt” (sanitize header/footer so they cannot introduce it)
+    const sanitizeNoDebt = (s) => {
+      if (s == null) return null;
+      const raw = String(s);
+      const trimmed = raw.trim();
+      if (!trimmed.length) return null;
+      return trimmed.replace(/debt/ig, 'Overpayment correction');
+    };
+
+    const headerMsg = sanitizeNoDebt(headerMsgRaw);
+    const footerMsg = sanitizeNoDebt(footerMsgRaw);
+
+    const msgToHtml = (s) => esc(String(s)).replace(/\r\n|\r|\n/g, '<br>');
 
        // Finance fallback for WTR (Holiday pay %) must be anchored to PAY DATE:
     // - If row.paid_at_utc exists => use that (Europe/London date)
@@ -42674,6 +43084,7 @@ async function recordEmailAudit(env, userOrNull, action, meta) {
 
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;line-height:1.4">
+        ${headerMsg ? `<p style="margin:0 0 12px">${msgToHtml(headerMsg)}</p>` : ''}
         <h2 style="margin:0 0 8px">Remittance Advice${periodTitleSuffix}</h2>
         <p style="margin:0 0 12px"><strong>${esc(candName)}</strong></p>
         <p style="margin:0 0 12px">Period: ${esc(periodLabel)}</p>
@@ -42727,10 +43138,15 @@ async function recordEmailAudit(env, userOrNull, action, meta) {
 
         ${hasPAYE ? `<p style="margin-top:12px;color:#666">Note: For PAYE, the pay rate is WTR-inclusive. The “Basic + WTR” split is informational only and is included in your payment.</p>` : ''}
         ${hasUmbrella ? `<p style="margin-top:8px;color:#666">Note: For Umbrella assignments where VAT applies, totals show ex VAT and inc VAT amounts using the VAT rate captured at the time of payment/lock.</p>` : ''}
+        ${footerMsg ? `<p style="margin-top:16px">${msgToHtml(footerMsg)}</p>` : ''}
       </div>`;
 
     // 4) Plain-text version (short, but with the new info)
     const textLines = [];
+    if (headerMsg) {
+      textLines.push(headerMsg);
+      textLines.push('');
+    }
     textLines.push(`Remittance Advice${periodTitleSuffix}`);
     textLines.push(`${candName}`);
     textLines.push(`Period: ${periodLabel}`);
@@ -42768,6 +43184,10 @@ async function recordEmailAudit(env, userOrNull, action, meta) {
     textLines.push(`Totals — Pay ex VAT: ${fmt(totalPayEx)}, Expenses: ${fmt(totalExpEx)}, Mileage: ${fmt(totalMilEx)}, Total ex VAT: ${fmt(totalEx)}`);
     if (hasPAYE) textLines.push(`PAYE Basic + WTR (info totals): ${fmt(totalWtrBasic)} basic + ${fmt(totalWtrElem)} WTR`);
     if (hasUmbrella) textLines.push(`Umbrella VAT Total: ${fmt(totalVat)}  |  Total inc VAT: ${fmt(totalInc)}`);
+    if (footerMsg) {
+      textLines.push('');
+      textLines.push(footerMsg);
+    }
 
     const text = textLines.join('\n');
 
@@ -42836,7 +43256,6 @@ async function recordEmailAudit(env, userOrNull, action, meta) {
     return withCORS(env, req, serverError('Failed to build/queue remittance email'));
   }
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CANDIDATES: snapshot / delta / id-list
@@ -43494,6 +43913,11 @@ async function handleGetSettings(env, req) {
         'timesheet_header_json',
         'timesheet_footer_json',
 
+        // ✅ Remittances (new settings tab)
+        'remittance_includes_json',
+        'remittance_header_message',
+        'remittance_footer_message',
+
         // Global shift patterns + timezone
         'timezone_id',
         'day_start','day_end',
@@ -43599,6 +44023,11 @@ async function handleUpdateSettings(env, req) {
     // ✅ NEW: payroll testing mode flag (simulate payments; no real bank payments)
     'payroll_testing',
 
+    // ✅ Remittances (new settings tab)
+    'remittance_includes_json',
+    'remittance_header_message',
+    'remittance_footer_message',
+
     // Email settings
     'finance_email',
     'finance_email_settings',
@@ -43686,6 +44115,37 @@ async function handleUpdateSettings(env, req) {
     return out;
   };
 
+  const isPlainObj = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
+
+  const normalizeTextOrNull = (raw) => {
+    if (raw === null || raw === undefined) return null;
+    const s = String(raw);
+    const t = s.trim();
+    return t.length ? s : null;
+  };
+
+  const validateRemittanceIncludesJson = (obj) => {
+    if (obj == null) return null;
+    if (!isPlainObj(obj)) throw new Error('remittance_includes_json_not_object');
+
+    const weekly = obj.weekly;
+    const daily = obj.daily;
+
+    if (!isPlainObj(weekly) || !isPlainObj(daily)) throw new Error('remittance_includes_json_missing_scopes');
+
+    if ('include_item_types' in weekly && !isPlainObj(weekly.include_item_types)) throw new Error('remittance_includes_json_weekly_item_types');
+    if ('include_fields' in weekly && !isPlainObj(weekly.include_fields)) throw new Error('remittance_includes_json_weekly_fields');
+
+    if ('include_item_types' in daily && !isPlainObj(daily.include_item_types)) throw new Error('remittance_includes_json_daily_item_types');
+    if ('include_fields' in daily && !isPlainObj(daily.include_fields)) throw new Error('remittance_includes_json_daily_fields');
+
+    if ('defaults' in obj && obj.defaults != null && !isPlainObj(obj.defaults)) throw new Error('remittance_includes_json_defaults');
+
+    return obj;
+  };
+
+  const MAX_REM_MSG_LEN = 2000;
+
   for (const k of allowed) {
     if (!(k in data)) continue;
 
@@ -43706,6 +44166,54 @@ async function handleUpdateSettings(env, req) {
       }
 
       payload.import_config_json = parsed;
+      continue;
+    }
+
+    if (k === 'remittance_includes_json') {
+      const raw = data.remittance_includes_json;
+      let parsed = null;
+
+      if (raw == null) {
+        parsed = null;
+      } else if (isPlainObj(raw)) {
+        parsed = raw;
+      } else if (typeof raw === 'string') {
+        parsed = _safeJsonParseMaybe(raw, null);
+      }
+
+      try {
+        payload.remittance_includes_json = validateRemittanceIncludesJson(parsed);
+      } catch (e) {
+        const msg = String(e?.message || e || '');
+        const err =
+          (msg === 'remittance_includes_json_not_object') ? 'remittance_includes_json must be a JSON object (or null)' :
+          (msg === 'remittance_includes_json_missing_scopes') ? 'remittance_includes_json must include weekly and daily objects' :
+          (msg === 'remittance_includes_json_weekly_item_types') ? 'remittance_includes_json.weekly.include_item_types must be an object' :
+          (msg === 'remittance_includes_json_weekly_fields') ? 'remittance_includes_json.weekly.include_fields must be an object' :
+          (msg === 'remittance_includes_json_daily_item_types') ? 'remittance_includes_json.daily.include_item_types must be an object' :
+          (msg === 'remittance_includes_json_daily_fields') ? 'remittance_includes_json.daily.include_fields must be an object' :
+          (msg === 'remittance_includes_json_defaults') ? 'remittance_includes_json.defaults must be an object' :
+          'remittance_includes_json invalid';
+        return withCORS(env, req, badRequest(err));
+      }
+      continue;
+    }
+
+    if (k === 'remittance_header_message') {
+      const v = normalizeTextOrNull(data.remittance_header_message);
+      if (v != null && v.length > MAX_REM_MSG_LEN) {
+        return withCORS(env, req, badRequest(`remittance_header_message too long (max ${MAX_REM_MSG_LEN})`));
+      }
+      payload.remittance_header_message = v;
+      continue;
+    }
+
+    if (k === 'remittance_footer_message') {
+      const v = normalizeTextOrNull(data.remittance_footer_message);
+      if (v != null && v.length > MAX_REM_MSG_LEN) {
+        return withCORS(env, req, badRequest(`remittance_footer_message too long (max ${MAX_REM_MSG_LEN})`));
+      }
+      payload.remittance_footer_message = v;
       continue;
     }
 
@@ -43885,6 +44393,7 @@ async function handleUpdateSettings(env, req) {
     return withCORS(env, req, serverError("Failed to update settings_defaults"));
   }
 }
+
 
 function getClientIp(req) {
   const h = req && req.headers;
@@ -73815,6 +74324,22 @@ function getRailAdapter(provider) {
               }).slice(0, perBatchLim);
 
               if (!toSimulate.length) {
+                // ✅ REQUIRED: still settle zero-transfer / correction-only batches so deltas don't repeat forever
+                try {
+                  await sbRpc(env, 'pay_settle_rail', {
+                    p_pay_batch_id: batchId,
+                    p_settlement_json: [],
+                    p_actor_user_id: actor
+                  });
+                } catch (e) {
+                  out.errors.push({
+                    code: 'PAYROLL_TESTING_SETTLE_FAILED',
+                    pay_batch_id: batchId,
+                    error: (e && e.message) ? String(e.message) : String(e || 'unknown')
+                  });
+                  continue;
+                }
+
                 out.submitted.push({ pay_batch_id: batchId, submitted_count: 0, updates_applied: 0, simulated: true });
                 continue;
               }
@@ -74100,7 +74625,15 @@ function getRailAdapter(provider) {
           }
 
           const transfers = Array.isArray(bg?.transfers) ? bg.transfers : [];
-          if (!transfers.length) return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
+          if (!transfers.length) {
+            // ✅ REQUIRED: still settle zero-transfer / correction-only batches so deltas don't repeat forever
+            const settled0 = await sbRpc(env, 'pay_settle_rail', {
+              p_pay_batch_id: String(batchId),
+              p_settlement_json: [],
+              p_actor_user_id: String(actorUserId)
+            });
+            return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: settled0 };
+          }
 
           const token = await revolutAuth_getAccessToken(env);
 
@@ -78333,6 +78866,17 @@ if (p.startsWith('/api/banking/')) {
     return handleBankingCapabilities(env, req, user);
   }
 
+  // ====================== BANKING (rail-generic) ======================
+// Add these routes inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
+// after `user` has been resolved.
+
+if (req.method === 'GET' && p === '/api/banking/pay/batches') {
+  return handleBankingPayBatchesList(env, req, user);
+}
+
+if (req.method === 'GET' && p === '/api/banking/id/ledger') {
+  return handleBankingIdLedgerList(env, req, user);
+}
   if (req.method === 'POST' && p === '/api/banking/pay/preview') {
     return handleBankingPayPreview(env, req, user);
   }
