@@ -118,7 +118,7 @@ begin
       )
       and (
         coalesce(p_only_reportable, false) = false
-        or upper(coalesce(c.effective_invoice_status, '')) = 'ISSUED'
+        or upper(coalesce(c.effective_invoice_status, '')) <> 'ON_HOLD'
       )
   ),
   total as (
@@ -194,9 +194,6 @@ begin
   );
 end;
 $function$;
-
-
-
 
 
 
