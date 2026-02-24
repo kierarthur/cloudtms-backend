@@ -8459,7 +8459,6 @@ async function handleBankingRailAccountsList(env, req, user) {
     // Resolve provider/env from settings_defaults (default), but allow ?provider= override
     const url = new URL(req.url);
     const providerOverrideRaw = String(url.searchParams.get('provider') || '').trim().toUpperCase();
-    const providerOverride = (providerOverrideRaw === 'REV') ? 'REVOLUT' : providerOverrideRaw;
 
     const select = ['rail_provider_default', 'rail_env_default'].join(',');
     const { rows } = await sbFetch(
@@ -8473,15 +8472,9 @@ async function handleBankingRailAccountsList(env, req, user) {
     const providerDefault = String(sd.rail_provider_default || 'CSV').trim().toUpperCase();
     const railEnvDefault = String(sd.rail_env_default || 'PROD').trim().toUpperCase();
 
-    const provider = providerOverride ? providerOverride : providerDefault;
+    const provider = providerOverrideRaw ? providerOverrideRaw : providerDefault;
 
-    // Validate provider override is actually supported by the adapter registry
-    const provList = getRailAdapter('__LIST__');
-    const supported = Array.isArray(provList) ? provList.map(x => String(x || '').trim().toUpperCase()) : [];
-    if (providerOverride && !supported.includes(providerOverride)) {
-      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
-    }
-
+    // Resolve via adapter registry (including any alias/normalisation that the registry supports)
     const adapter = getRailAdapter(provider);
     if (!adapter) return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
 
@@ -8490,8 +8483,8 @@ async function handleBankingRailAccountsList(env, req, user) {
     }
 
     // Generic availability gate via adapter.capabilities()
+    let caps = null;
     if (typeof adapter.capabilities === 'function') {
-      let caps = null;
       try {
         caps = await adapter.capabilities(env);
       } catch (e) {
@@ -8504,6 +8497,11 @@ async function handleBankingRailAccountsList(env, req, user) {
         return withCORS(env, req, badRequest(reason));
       }
     }
+
+    const providerResolved =
+      String(caps?.provider || adapter.railProvider || provider || '')
+        .trim()
+        .toUpperCase() || String(provider || '').trim().toUpperCase();
 
     // NOTE: rail_env_default is the DB env snapshot / partition key.
     // The actual Revolut environment is determined by the Worker credentials/base URL.
@@ -8521,7 +8519,7 @@ async function handleBankingRailAccountsList(env, req, user) {
 
     return withCORS(env, req, ok({
       ok: true,
-      provider,
+      provider: providerResolved,
       rail_env_default: railEnvDefault,
       note: 'rail_env_default is the DB env snapshot/partition key; actual API environment depends on Worker credentials/base URL.',
       accounts,
@@ -8531,7 +8529,6 @@ async function handleBankingRailAccountsList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 
 async function handleBankingIdPreview(env, req, user) {
   try {
@@ -9200,7 +9197,6 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
-
 async function handleBankingCapabilities(env, req, user) {
   try {
     const select = [
@@ -9257,9 +9253,6 @@ async function handleBankingCapabilities(env, req, user) {
     const providers = getRailAdapter('__LIST__');
     const rails = [];
 
-    // Back-compat informational fields only (not used for top-level derivation)
-    let revolutApiBase = null;
-
     // ✅ NEW: compute top-level env/mismatch and cop_available from DEFAULT rail, not hard-coded REVOLUT
     let defaultApiBase = null;
     let defaultWorkerEnv = null;
@@ -9304,10 +9297,6 @@ async function handleBankingCapabilities(env, req, user) {
         (workerEnv && rail_env_default)
           ? (String(workerEnv).toUpperCase() !== String(rail_env_default).toUpperCase())
           : null;
-
-      if (providerName === 'REVOLUT') {
-        revolutApiBase = apiBase;
-      }
 
       // Capture default rail top-level sources
       if (providerName === String(rail_provider_default || 'CSV').toUpperCase()) {
@@ -9374,8 +9363,7 @@ async function handleBankingCapabilities(env, req, user) {
       // explicit UI-friendly CoP flag (settings + DEFAULT rail availability)
       cop_available: copAvailable,
 
-      // informational / backward compatibility
-      revolut_api_base: revolutApiBase || null,
+      // informational / backward compatibility (generic)
       default_api_base: defaultApiBase || null,
       default_worker_env: topWorkerEnv,
       default_env_mismatch: topEnvMismatch,
@@ -9386,7 +9374,6 @@ async function handleBankingCapabilities(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleBankingPayPreview(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
