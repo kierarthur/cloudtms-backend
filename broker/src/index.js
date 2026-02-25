@@ -9420,8 +9420,13 @@ async function handleBankingPayPreview(env, req, user) {
   const payDate = String(body.pay_date || '').trim();
   if (!payDate) return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD)'));
 
-  const candRaw = String(body.candidate_id || body.candidateId || '').trim();
-  const clientRaw = String(body.client_id || body.clientId || '').trim();
+  // ✅ Accept both legacy + new filter keys (frontend may send either)
+  const candRaw = String(
+    body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || ''
+  ).trim();
+  const clientRaw = String(
+    body.client_id || body.clientId || body.client_filter_id || body.clientFilterId || body.client_filter || ''
+  ).trim();
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -9487,13 +9492,18 @@ async function handleBankingPayCreateDraft(env, req, user) {
   const payDate = String(body.pay_date || '').trim();
   if (!payDate) return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD)'));
 
-  const previewDecisions =
+  const previewDecisionsIn =
     (body.preview_decisions_json && typeof body.preview_decisions_json === 'object' && !Array.isArray(body.preview_decisions_json))
       ? body.preview_decisions_json
       : {};
 
-  const candRaw = String(body.candidate_id || body.candidateId || '').trim();
-  const clientRaw = String(body.client_id || body.clientId || '').trim();
+  // ✅ Accept both legacy + new filter keys (frontend may send either)
+  const candRaw = String(
+    body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || ''
+  ).trim();
+  const clientRaw = String(
+    body.client_id || body.clientId || body.client_filter_id || body.clientFilterId || body.client_filter || ''
+  ).trim();
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -9506,6 +9516,16 @@ async function handleBankingPayCreateDraft(env, req, user) {
   if (clientId && !uuidRe.test(clientId)) {
     return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
   }
+
+  // ✅ IMPORTANT: also embed filters into preview_decisions_json for “schema cache / fallback” safety.
+  // Your DB pay_create_draft_batch reads candidate_filter_id/client_filter_id from decisions JSON if params aren't passed.
+  const previewDecisions =
+    (previewDecisionsIn && typeof previewDecisionsIn === 'object' && !Array.isArray(previewDecisionsIn))
+      ? { ...previewDecisionsIn }
+      : {};
+
+  if (candidateId && !previewDecisions.candidate_filter_id) previewDecisions.candidate_filter_id = candidateId;
+  if (clientId && !previewDecisions.client_filter_id) previewDecisions.client_filter_id = clientId;
 
   const argsWithFilters = {
     p_pay_date: payDate,
@@ -9552,7 +9572,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
