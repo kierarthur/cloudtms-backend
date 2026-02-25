@@ -4014,7 +4014,32 @@ begin
 end;
 $$;
 
+create or replace function public._bank_hash(
+  p_sort_code text,
+  p_account_number text,
+  p_account_holder text
+) returns text
+language plpgsql
+as $$
+declare
+  v_sort text;
+  v_acct text;
+  v_name text;
+  v_raw  text;
+begin
+  v_sort := regexp_replace(coalesce(p_sort_code,''), '[^0-9]+', '', 'g');
+  v_acct := regexp_replace(coalesce(p_account_number,''), '[^0-9]+', '', 'g');
+  v_name := upper(regexp_replace(btrim(coalesce(p_account_holder,'')), '\s+', ' ', 'g'));
 
+  if v_sort = '' or v_acct = '' then
+    return null;
+  end if;
+
+  v_raw := v_sort || '|' || v_acct || '|' || v_name;
+
+  -- md5() is built-in (no pgcrypto dependency) and returns a stable hex string.
+  return md5(v_raw);
+end $$;
 
 
 
