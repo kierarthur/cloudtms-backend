@@ -2271,6 +2271,8 @@ $$;
 -- =========================================================
 
 begin;
+
+
 create or replace function public.pay_create_draft_batch(
   p_pay_date date,
   p_actor_user_id uuid,
@@ -3538,7 +3540,7 @@ begin
     tc.pay_channel_used,
     s.base_snapshot_json,
     s.target_snapshot_json,
-    encode(digest(convert_to(s.target_snapshot_json::text,'utf8'), 'sha256'), 'hex'),
+    md5(s.target_snapshot_json::text),
     now()
   from snap s
   join ts_channel tc
