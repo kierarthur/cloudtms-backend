@@ -169,6 +169,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -186,6 +187,13 @@ declare
   v_default_schedule_paye_local text := null;
   v_funds_warning_hours_json jsonb := null;
   v_rail_default_funding_account_ref text := null;
+
+  -- ✅ D: authorisation summary (lightweight, for Banking UI)
+  v_ar record;
+  v_auth_approved_count int := 0;
+  v_auth_approved_by jsonb := '[]'::jsonb;
+  v_auth_invited_to jsonb := '[]'::jsonb;
+  v_auth jsonb := null;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -216,6 +224,88 @@ begin
   from public.settings_defaults sd
   where sd.id = 1
   limit 1;
+
+  -- ✅ D: authorisation summary (latest active request if present)
+  v_auth := jsonb_build_object(
+    'auth_request_id', null,
+    'auth_state', null,
+    'required_quantity', null,
+    'approved_count', 0,
+    'approved_by', '[]'::jsonb,
+    'invited_to', '[]'::jsonb,
+    'golden_key_used', false,
+    'golden_key_user_id', null
+  );
+
+  select
+    pbar0.id as auth_request_id,
+    pbar0.state as auth_state,
+    pbar0.required_quantity as required_quantity,
+    pbar0.golden_key_used as golden_key_used,
+    pbar0.golden_key_user_id as golden_key_user_id
+  into v_ar
+  from public.pay_batch_auth_requests pbar0
+  where pbar0.pay_batch_id = p_pay_batch_id
+    and pbar0.state in ('AWAITING','AUTHORISED')
+  order by pbar0.created_at_utc desc, pbar0.id desc
+  limit 1;
+
+  if v_ar.auth_request_id is not null then
+    select count(*)::int
+    into v_auth_approved_count
+    from public.pay_batch_auth_actions pbaa0
+    where pbaa0.auth_request_id = v_ar.auth_request_id
+      and pbaa0.action in ('AUTHORISE','USE_GOLDEN_KEY');
+
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'actor_user_id', pbaa1.actor_user_id::text,
+          'actor_display_name', tu1.display_name,
+          'action', pbaa1.action,
+          'action_at_utc', pbaa1.action_at_utc,
+          'note', pbaa1.note
+        )
+        order by pbaa1.action_at_utc asc nulls last, pbaa1.id asc
+      ),
+      '[]'::jsonb
+    )
+    into v_auth_approved_by
+    from public.pay_batch_auth_actions pbaa1
+    left join public.tms_users tu1
+      on tu1.id = pbaa1.actor_user_id
+    where pbaa1.auth_request_id = v_ar.auth_request_id;
+
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'target_user_id', pbat0.target_user_id::text,
+          'target_display_name', tu2.display_name,
+          'invited_at_utc', pbat0.created_at_utc,
+          'expires_at_utc', pbat0.expires_at_utc,
+          'used_at_utc', pbat0.used_at_utc
+        )
+        order by pbat0.created_at_utc asc nulls last, pbat0.token asc
+      ),
+      '[]'::jsonb
+    )
+    into v_auth_invited_to
+    from public.pay_batch_auth_tokens pbat0
+    left join public.tms_users tu2
+      on tu2.id = pbat0.target_user_id
+    where pbat0.auth_request_id = v_ar.auth_request_id;
+
+    v_auth := jsonb_build_object(
+      'auth_request_id', v_ar.auth_request_id::text,
+      'auth_state', v_ar.auth_state,
+      'required_quantity', v_ar.required_quantity,
+      'approved_count', v_auth_approved_count,
+      'approved_by', v_auth_approved_by,
+      'invited_to', v_auth_invited_to,
+      'golden_key_used', coalesce(v_ar.golden_key_used,false),
+      'golden_key_user_id', case when v_ar.golden_key_user_id is null then null else v_ar.golden_key_user_id::text end
+    );
+  end if;
 
   -- Candidates + PAYE net input summary (latest per candidate)
   select coalesce(
@@ -344,6 +434,9 @@ begin
       'rail_default_funding_account_ref', v_rail_default_funding_account_ref
     ),
 
+    -- ✅ D: authorisation summary for Banking UI
+    'auth', v_auth,
+
     'batch', jsonb_build_object(
       'id', v_batch.id::text,
       'pay_date', v_batch.pay_date::text,
@@ -380,6 +473,7 @@ begin
   );
 end;
 $$;
+
 
 -- =========================================================
 -- A4.3 pay_set_paye_net_from_sage(p_pay_batch_id, p_csv_raw, p_actor_user_id, p_source_filename)
@@ -4881,6 +4975,8 @@ begin
   );
 end;
 $$;
+
+
 create or replace function public.pay_batches_list(
   p_limit int default 50,
   p_offset int default 0,
@@ -4938,7 +5034,13 @@ begin
         -- Bulk payment reference fields
         'bulk_ref_num', pb.bulk_ref_num,
         'bulk_ref_date', case when pb.bulk_ref_date is null then null else pb.bulk_ref_date::text end,
-        'bulk_reference', pb.bulk_reference
+        'bulk_reference', pb.bulk_reference,
+
+        -- ✅ NEW: lightweight authorisation summary for list visibility
+        'auth_required_quantity', pb.auth_required_quantity,
+        'auth_approved_count', pb.auth_approved_count,
+        'auth_label', pb.auth_label,
+        'auth_state', pb.auth_state
       )
       order by pb.created_at_utc desc, pb.id desc
     ),
@@ -4946,8 +5048,38 @@ begin
   )
   into v_rows
   from (
-    select pb0.*
+    select
+      pb0.*,
+      pbar.required_quantity as auth_required_quantity,
+      pbar.state as auth_state,
+      case
+        when pbar.id is null then null
+        else pbaa.approved_count
+      end as auth_approved_count,
+      case
+        when pbar.id is null then null
+        else (coalesce(pbaa.approved_count, 0)::text || '/' || pbar.required_quantity::text)
+      end as auth_label
     from public.pay_batches pb0
+    left join lateral (
+      select
+        pbar0.id,
+        pbar0.state,
+        pbar0.required_quantity
+      from public.pay_batch_auth_requests pbar0
+      where pbar0.pay_batch_id = pb0.id
+        and pbar0.state in ('AWAITING','AUTHORISED')
+      order by pbar0.created_at_utc desc, pbar0.id desc
+      limit 1
+    ) pbar on true
+    left join lateral (
+      select
+        count(*)::int as approved_count
+      from public.pay_batch_auth_actions pbaa0
+      where pbar.id is not null
+        and pbaa0.auth_request_id = pbar.id
+        and pbaa0.action in ('AUTHORISE','USE_GOLDEN_KEY')
+    ) pbaa on true
     where v_status is null or upper(coalesce(pb0.status,'')) = v_status
     order by pb0.created_at_utc desc, pb0.id desc
     limit v_limit offset v_offset
@@ -4962,5 +5094,3 @@ begin
   );
 end;
 $$;
-
-
