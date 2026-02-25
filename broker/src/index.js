@@ -45734,7 +45734,8 @@ async function handleUpdateSettings(env, req) {
         payload.remittance_test_recipient_email = null;
         continue;
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v0)) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+\.[^\s@]+$/.test(v0)) {
+        // keep existing error code format as-is
         return withCORS(env, req, badRequest('invalid_remittance_test_recipient_email'));
       }
       payload.remittance_test_recipient_email = v0;
@@ -45792,6 +45793,22 @@ async function handleUpdateSettings(env, req) {
       const adapter = getRailAdapter(provider);
       if (!adapter || typeof adapter.validateFundingAccountRef !== 'function') {
         return withCORS(env, req, badRequest('FUNDING_ACCOUNT_REF_NOT_SUPPORTED_FOR_THIS_RAIL'));
+      }
+
+      // ✅ OPTION (1): Only validate if the rail is configured/available. If not available, allow saving without validation
+      // to avoid wedging Global Settings when Revolut OAuth/redirect config is incomplete.
+      if (typeof adapter.capabilities === 'function') {
+        let caps = null;
+        try {
+          caps = await adapter.capabilities(env);
+        } catch (e) {
+          caps = { available: false, reason: (e && e.message) ? String(e.message) : 'CAPABILITIES_FAILED' };
+        }
+
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          payload.rail_default_funding_account_ref = v0;
+          continue;
+        }
       }
 
       let vres = null;
@@ -45859,7 +45876,6 @@ async function handleUpdateSettings(env, req) {
     return withCORS(env, req, serverError("Failed to update settings_defaults"));
   }
 }
-
 async function handleAuthReauthVerify(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
 
