@@ -3460,6 +3460,558 @@ begin
 end;
 $$;
 
+create or replace function public.pay_batch_auth_start(
+  p_pay_batch_id uuid,
+  p_schedule_kind text,
+  p_scheduled_at_utc timestamptz,
+  p_funding_account_ref text,
+  p_warning_hours_json jsonb,
+  p_actor_user_id uuid,
+  p_actor_intent text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_kind text := upper(btrim(coalesce(p_schedule_kind,'')));
+  v_intent text := upper(btrim(coalesce(p_actor_intent,'')));
+  v_now timestamptz := now();
+
+  v_user record;
+  v_cfg record;
+
+  v_req_qty int := 1;
+  v_use_golden boolean := false;
+
+  v_existing_id uuid := null;
+  v_req_id uuid := null;
+
+  v_batch record;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_auth_start: pay_batch_id is required';
+  end if;
+  if p_actor_user_id is null then
+    raise exception 'pay_batch_auth_start: actor_user_id is required';
+  end if;
+
+  if v_kind not in ('IMMEDIATE','SCHEDULED') then
+    raise exception 'pay_batch_auth_start: invalid schedule_kind (IMMEDIATE|SCHEDULED)';
+  end if;
+
+  v_use_golden := (v_intent = 'USE_GOLDEN_KEY');
+
+  select
+    tu.id,
+    tu.is_active,
+    tu.payment_authoriser,
+    tu.payment_golden_key
+  into v_user
+  from public.tms_users tu
+  where tu.id = p_actor_user_id
+  limit 1;
+
+  if v_user.id is null then
+    raise exception 'pay_batch_auth_start: actor_user not found';
+  end if;
+
+  if coalesce(v_user.is_active,false) = false then
+    raise exception 'pay_batch_auth_start: actor_user is not active';
+  end if;
+
+  if coalesce(v_user.payment_authoriser,false) = false then
+    raise exception 'pay_batch_auth_start: actor_user must be a payment authoriser';
+  end if;
+
+  if v_use_golden = true and coalesce(v_user.payment_golden_key,false) = false then
+    raise exception 'pay_batch_auth_start: actor_user does not have payment golden key';
+  end if;
+
+  select
+    sd.payment_authoriser_quantity
+  into v_cfg
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  v_req_qty := greatest(1, coalesce(v_cfg.payment_authoriser_quantity, 1));
+
+  select
+    pb.id,
+    pb.status
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  for update;
+
+  if v_batch.id is null then
+    raise exception 'pay_batch_auth_start: pay_batch not found';
+  end if;
+
+  select
+    pbar.id
+  into v_existing_id
+  from public.pay_batch_auth_requests pbar
+  where pbar.pay_batch_id = p_pay_batch_id
+    and pbar.state = 'AWAITING'
+  limit 1;
+
+  if v_existing_id is not null then
+    raise exception 'pay_batch_auth_start: an active authorisation request already exists for this batch';
+  end if;
+
+  -- Validate schedule prerequisites and write schedule fields to pay_batches.
+  -- We will override the batch status afterwards.
+  perform public.pay_batch_schedule(
+    p_pay_batch_id,
+    v_kind,
+    p_scheduled_at_utc,
+    p_funding_account_ref,
+    p_warning_hours_json,
+    p_actor_user_id
+  );
+
+  select
+    pb2.id,
+    pb2.schedule_kind,
+    pb2.scheduled_at_utc,
+    pb2.funding_account_ref,
+    pb2.funds_warning_hours_json
+  into v_batch
+  from public.pay_batches pb2
+  where pb2.id = p_pay_batch_id
+  for update;
+
+  if v_batch.id is null then
+    raise exception 'pay_batch_auth_start: pay_batch not found after scheduling';
+  end if;
+
+  insert into public.pay_batch_auth_requests(
+    pay_batch_id,
+    requested_by_user_id,
+    required_quantity,
+    schedule_kind,
+    scheduled_at_utc,
+    funding_account_ref,
+    funds_warning_hours_json,
+    state,
+    golden_key_used,
+    golden_key_user_id,
+    created_at_utc
+  )
+  values (
+    p_pay_batch_id,
+    p_actor_user_id,
+    v_req_qty,
+    v_batch.schedule_kind,
+    v_batch.scheduled_at_utc,
+    v_batch.funding_account_ref,
+    v_batch.funds_warning_hours_json,
+    'AWAITING',
+    false,
+    null,
+    v_now
+  )
+  returning id into v_req_id;
+
+  insert into public.pay_batch_auth_actions(
+    auth_request_id,
+    pay_batch_id,
+    actor_user_id,
+    action,
+    action_at_utc,
+    note
+  )
+  values (
+    v_req_id,
+    p_pay_batch_id,
+    p_actor_user_id,
+    case when v_use_golden then 'USE_GOLDEN_KEY' else 'AUTHORISE' end,
+    v_now,
+    null
+  );
+
+  if v_use_golden = true or v_req_qty <= 1 then
+    update public.pay_batch_auth_requests pbar2
+    set
+      state = 'AUTHORISED',
+      golden_key_used = v_use_golden,
+      golden_key_user_id = case when v_use_golden then p_actor_user_id else null end,
+      finalised_at_utc = v_now,
+      finalised_by_user_id = p_actor_user_id
+    where pbar2.id = v_req_id;
+
+    update public.pay_batches pb3
+    set status = 'AUTHORISED_FOR_PAYMENT'
+    where pb3.id = p_pay_batch_id;
+
+    return jsonb_build_object(
+      'ok', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', (select pb4.status from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
+      'auth_request_id', v_req_id::text,
+      'auth_state', 'AUTHORISED',
+      'required_quantity', v_req_qty,
+      'approved_count', 1,
+      'became_authorised', true
+    );
+  else
+    update public.pay_batches pb5
+    set status = 'AWAITING_AUTHORISATION'
+    where pb5.id = p_pay_batch_id;
+
+    return jsonb_build_object(
+      'ok', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', (select pb6.status from public.pay_batches pb6 where pb6.id = p_pay_batch_id),
+      'auth_request_id', v_req_id::text,
+      'auth_state', 'AWAITING',
+      'required_quantity', v_req_qty,
+      'approved_count', 1,
+      'became_authorised', false
+    );
+  end if;
+end;
+$$;
+
+create or replace function public.pay_batch_auth_apply_action(
+  p_auth_request_id uuid,
+  p_actor_user_id uuid,
+  p_action text,
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
+  v_action text := upper(btrim(coalesce(p_action,'')));
+
+  v_req record;
+  v_user record;
+
+  v_inserted_id uuid := null;
+  v_approved_count int := 0;
+
+  v_became_authorised boolean := false;
+  v_new_auth_state text := null;
+  v_new_batch_status text := null;
+begin
+  if p_auth_request_id is null then
+    raise exception 'pay_batch_auth_apply_action: auth_request_id is required';
+  end if;
+  if p_actor_user_id is null then
+    raise exception 'pay_batch_auth_apply_action: actor_user_id is required';
+  end if;
+
+  if v_action not in ('AUTHORISE','USE_GOLDEN_KEY','REJECT') then
+    raise exception 'pay_batch_auth_apply_action: invalid action (AUTHORISE|USE_GOLDEN_KEY|REJECT)';
+  end if;
+
+  select
+    pbar.id,
+    pbar.pay_batch_id,
+    pbar.state,
+    pbar.required_quantity
+  into v_req
+  from public.pay_batch_auth_requests pbar
+  where pbar.id = p_auth_request_id
+  for update;
+
+  if v_req.id is null then
+    raise exception 'pay_batch_auth_apply_action: auth_request not found';
+  end if;
+
+  if v_req.state <> 'AWAITING' then
+    raise exception 'pay_batch_auth_apply_action: auth_request must be AWAITING (current=%)', v_req.state;
+  end if;
+
+  select
+    tu.id,
+    tu.is_active,
+    tu.payment_authoriser,
+    tu.payment_golden_key
+  into v_user
+  from public.tms_users tu
+  where tu.id = p_actor_user_id
+  limit 1;
+
+  if v_user.id is null then
+    raise exception 'pay_batch_auth_apply_action: actor_user not found';
+  end if;
+
+  if coalesce(v_user.is_active,false) = false then
+    raise exception 'pay_batch_auth_apply_action: actor_user is not active';
+  end if;
+
+  if coalesce(v_user.payment_authoriser,false) = false and coalesce(v_user.payment_golden_key,false) = false then
+    raise exception 'pay_batch_auth_apply_action: actor_user is not an authoriser';
+  end if;
+
+  if v_action = 'USE_GOLDEN_KEY' and coalesce(v_user.payment_golden_key,false) = false then
+    raise exception 'pay_batch_auth_apply_action: actor_user does not have payment golden key';
+  end if;
+
+  insert into public.pay_batch_auth_actions(
+    auth_request_id,
+    pay_batch_id,
+    actor_user_id,
+    action,
+    action_at_utc,
+    note
+  )
+  values (
+    p_auth_request_id,
+    v_req.pay_batch_id,
+    p_actor_user_id,
+    v_action,
+    v_now,
+    p_note
+  )
+  on conflict on constraint ux_pay_batch_auth_actions_one_per_user
+  do nothing
+  returning id into v_inserted_id;
+
+  if v_inserted_id is null then
+    raise exception 'pay_batch_auth_apply_action: actor_user has already acted on this request';
+  end if;
+
+  if v_action = 'REJECT' then
+    update public.pay_batch_auth_requests pbar2
+    set
+      state = 'REJECTED',
+      finalised_at_utc = v_now,
+      finalised_by_user_id = p_actor_user_id,
+      golden_key_used = false,
+      golden_key_user_id = null
+    where pbar2.id = p_auth_request_id;
+
+    update public.pay_batch_auth_tokens pbat2
+    set used_at_utc = v_now
+    where pbat2.auth_request_id = p_auth_request_id
+      and pbat2.used_at_utc is null;
+
+    update public.pay_batches pb2
+    set
+      status = 'READY',
+      schedule_kind = null,
+      scheduled_at_utc = null,
+      scheduled_by_user_id = null,
+      funding_account_ref = null,
+      funds_warning_hours_json = null
+    where pb2.id = v_req.pay_batch_id;
+
+    return jsonb_build_object(
+      'ok', true,
+      'pay_batch_id', v_req.pay_batch_id::text,
+      'status', (select pb3.status from public.pay_batches pb3 where pb3.id = v_req.pay_batch_id),
+      'auth_request_id', p_auth_request_id::text,
+      'auth_state', 'REJECTED',
+      'required_quantity', v_req.required_quantity,
+      'approved_count', 0,
+      'became_authorised', false
+    );
+  end if;
+
+  select count(*)::int
+  into v_approved_count
+  from public.pay_batch_auth_actions pbaa0
+  where pbaa0.auth_request_id = p_auth_request_id
+    and pbaa0.action in ('AUTHORISE','USE_GOLDEN_KEY');
+
+  if v_action = 'USE_GOLDEN_KEY' or v_approved_count >= greatest(1, coalesce(v_req.required_quantity,1)) then
+    v_became_authorised := true;
+
+    update public.pay_batch_auth_requests pbar3
+    set
+      state = 'AUTHORISED',
+      finalised_at_utc = v_now,
+      finalised_by_user_id = p_actor_user_id,
+      golden_key_used = case when v_action = 'USE_GOLDEN_KEY' then true else coalesce(pbar3.golden_key_used,false) end,
+      golden_key_user_id = case when v_action = 'USE_GOLDEN_KEY' then p_actor_user_id else pbar3.golden_key_user_id end
+    where pbar3.id = p_auth_request_id;
+
+    update public.pay_batches pb4
+    set status = 'AUTHORISED_FOR_PAYMENT'
+    where pb4.id = v_req.pay_batch_id;
+
+    update public.pay_batch_auth_tokens pbat3
+    set used_at_utc = v_now
+    where pbat3.auth_request_id = p_auth_request_id
+      and pbat3.used_at_utc is null;
+
+    v_new_auth_state := 'AUTHORISED';
+    v_new_batch_status := 'AUTHORISED_FOR_PAYMENT';
+  else
+    v_became_authorised := false;
+    v_new_auth_state := 'AWAITING';
+
+    update public.pay_batches pb5
+    set status = 'AWAITING_AUTHORISATION'
+    where pb5.id = v_req.pay_batch_id;
+
+    v_new_batch_status := 'AWAITING_AUTHORISATION';
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', v_req.pay_batch_id::text,
+    'status', (select pb6.status from public.pay_batches pb6 where pb6.id = v_req.pay_batch_id),
+    'auth_request_id', p_auth_request_id::text,
+    'auth_state', v_new_auth_state,
+    'required_quantity', v_req.required_quantity,
+    'approved_count', v_approved_count,
+    'became_authorised', v_became_authorised
+  );
+end;
+$$;
+
+
+create or replace function public.pay_batch_auth_invites_upsert(
+  p_auth_request_id uuid,
+  p_actor_user_id uuid,
+  p_target_user_ids uuid[] default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_req record;
+  v_now timestamptz := now();
+  v_expires timestamptz := (now() + interval '7 days');
+
+  v_target_count int := 0;
+  v_inserted_count int := 0;
+  v_tokens jsonb := '[]'::jsonb;
+begin
+  if p_auth_request_id is null then
+    raise exception 'pay_batch_auth_invites_upsert: auth_request_id is required';
+  end if;
+  if p_actor_user_id is null then
+    raise exception 'pay_batch_auth_invites_upsert: actor_user_id is required';
+  end if;
+
+  select
+    pbar.id,
+    pbar.pay_batch_id,
+    pbar.state
+  into v_req
+  from public.pay_batch_auth_requests pbar
+  where pbar.id = p_auth_request_id
+  for update;
+
+  if v_req.id is null then
+    raise exception 'pay_batch_auth_invites_upsert: auth_request not found';
+  end if;
+
+  if v_req.state <> 'AWAITING' then
+    raise exception 'pay_batch_auth_invites_upsert: auth_request must be AWAITING (current=%)', v_req.state;
+  end if;
+
+  with targets as (
+    select
+      tu.id as user_id
+    from public.tms_users tu
+    where tu.is_active = true
+      and (coalesce(tu.payment_authoriser,false) = true or coalesce(tu.payment_golden_key,false) = true)
+      and (
+        p_target_user_ids is null
+        or coalesce(array_length(p_target_user_ids,1),0) = 0
+        or tu.id = any(p_target_user_ids)
+      )
+  )
+  select count(*)::int
+  into v_target_count
+  from targets;
+
+  if v_target_count = 0 then
+    raise exception 'pay_batch_auth_invites_upsert: no eligible target users resolved';
+  end if;
+
+  with targets as (
+    select
+      tu.id as user_id
+    from public.tms_users tu
+    where tu.is_active = true
+      and (coalesce(tu.payment_authoriser,false) = true or coalesce(tu.payment_golden_key,false) = true)
+      and (
+        p_target_user_ids is null
+        or coalesce(array_length(p_target_user_ids,1),0) = 0
+        or tu.id = any(p_target_user_ids)
+      )
+  )
+  insert into public.pay_batch_auth_tokens(
+    token,
+    auth_request_id,
+    target_user_id,
+    expires_at_utc,
+    used_at_utc,
+    created_at_utc
+  )
+  select
+    encode(gen_random_bytes(24), 'hex'),
+    p_auth_request_id,
+    t.user_id,
+    v_expires,
+    null,
+    v_now
+  from targets t
+  on conflict on constraint ux_pay_batch_auth_tokens_one_per_target
+  do nothing;
+
+  get diagnostics v_inserted_count = row_count;
+
+  with targets as (
+    select
+      tu.id as user_id
+    from public.tms_users tu
+    where tu.is_active = true
+      and (coalesce(tu.payment_authoriser,false) = true or coalesce(tu.payment_golden_key,false) = true)
+      and (
+        p_target_user_ids is null
+        or coalesce(array_length(p_target_user_ids,1),0) = 0
+        or tu.id = any(p_target_user_ids)
+      )
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'target_user_id', pbat.target_user_id::text,
+        'token', pbat.token,
+        'expires_at_utc', pbat.expires_at_utc,
+        'used_at_utc', pbat.used_at_utc,
+        'created_at_utc', pbat.created_at_utc
+      )
+      order by pbat.created_at_utc asc nulls last, pbat.token asc
+    ),
+    '[]'::jsonb
+  )
+  into v_tokens
+  from public.pay_batch_auth_tokens pbat
+  join targets t
+    on t.user_id = pbat.target_user_id
+  where pbat.auth_request_id = p_auth_request_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'auth_request_id', p_auth_request_id::text,
+    'pay_batch_id', v_req.pay_batch_id::text,
+    'resolved_target_count', v_target_count,
+    'inserted_count', v_inserted_count,
+    'expires_at_utc', v_expires,
+    'tokens', v_tokens
+  );
+end;
+$$;
+
+
+
 
 
 
