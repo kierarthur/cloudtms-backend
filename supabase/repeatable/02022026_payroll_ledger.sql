@@ -1249,7 +1249,6 @@ begin;
 --  - Payable deltas exclude blocked-positive segments (delta forced to 0) but still show them in blocked_items list
 -- =========================================================
 
-
 create or replace function public.pay_preview(p_pay_date date, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -1434,7 +1433,7 @@ begin
       and ts.authorised_at_server is not null
       and coalesce(tf.has_rate_issue,false) = false
       and coalesce(tf.has_pay_channel_issue,false) = false
-      and upper(coalesce(tf.processing_status,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
+      and upper(coalesce(tf.processing_status::text,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
       and upper(coalesce(c.pay_method,'')) in ('PAYE','UMBRELLA')
 
       -- ✅ Option A: eligibility window is controlled by Settings (relative to UK “today”),
@@ -2242,8 +2241,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 -- =========================================================
