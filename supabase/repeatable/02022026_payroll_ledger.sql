@@ -1249,7 +1249,14 @@ begin;
 --  - Payable deltas exclude blocked-positive segments (delta forced to 0) but still show them in blocked_items list
 -- =========================================================
 
-create or replace function public.pay_preview(p_pay_date date, p_actor_user_id uuid)
+
+
+create or replace function public.pay_preview(
+  p_pay_date date,
+  p_actor_user_id uuid,
+  p_candidate_id uuid default null,
+  p_client_id uuid default null
+)
 returns jsonb
 language plpgsql
 security definer
@@ -1440,6 +1447,10 @@ begin
       -- NOT scoped by pay_date week.
       and ts.week_ending_date::date >= v_eligibility_from_date
       and ts.week_ending_date::date <= v_eligibility_to_date
+
+      -- ✅ Optional filters (default ALL/ALL when NULL)
+      and (p_candidate_id is null or tf.candidate_id = p_candidate_id)
+      and (p_client_id is null or tf.client_id = p_client_id)
   ),
   umb_map as (
     select
@@ -1844,7 +1855,7 @@ begin
       max(d.cand_tms_ref) as cand_tms_ref,
       max(d.cand_display_name) as cand_display_name,
       max(d.cand_pay_method) as cand_pay_method,
-      max(d.cand_umbrella_id) as cand_umbrella_id,
+      max(d.cand_umbrella_id::text)::uuid as cand_umbrella_id,
       bool_or(d.umb_enabled) as umb_enabled,
       bool_or(d.umb_vat_chargeable) as umb_vat_chargeable,
 
@@ -2215,6 +2226,12 @@ begin
       'weeks_ahead', v_pay_eligibility_weeks_ahead
     ),
 
+    -- ✅ Echo applied filters for UI/debug (NULL = ALL)
+    'filters', jsonb_build_object(
+      'candidate_id', case when p_candidate_id is null then null else p_candidate_id::text end,
+      'client_id', case when p_client_id is null then null else p_client_id::text end
+    ),
+
     'finance', jsonb_build_object(
       'vat_rate_pct', v_vat_rate_pct,
       'erni_pct', v_erni_pct
@@ -2254,11 +2271,12 @@ $$;
 -- =========================================================
 
 begin;
-
 create or replace function public.pay_create_draft_batch(
   p_pay_date date,
   p_actor_user_id uuid,
-  p_preview_decisions_json jsonb
+  p_preview_decisions_json jsonb,
+  p_candidate_id uuid default null,
+  p_client_id uuid default null
 )
 returns jsonb
 language plpgsql
@@ -2278,6 +2296,11 @@ declare
   -- ✅ Computed eligibility window
   v_eligibility_from_date date;
   v_eligibility_to_date date;
+
+  -- ✅ Optional filters (single candidate/client)
+  v_candidate_filter_single uuid := p_candidate_id;
+  v_client_filter_single uuid := p_client_id;
+  v_filter_text text;
 
   v_vat_rate_pct numeric;
   v_erni_pct numeric;
@@ -2323,6 +2346,25 @@ begin
   if to_regclass('public.settings_finance_windows') is null then
     raise exception 'settings_finance_windows missing';
   end if;
+
+  -- Optional filters can be supplied via preview_decisions_json for backward-compatible callers
+  begin
+    if v_candidate_filter_single is null then
+      v_filter_text := nullif(btrim(coalesce(p_preview_decisions_json->>'candidate_filter_id','')), '');
+      if v_filter_text is not null then
+        v_candidate_filter_single := v_filter_text::uuid;
+      end if;
+    end if;
+
+    if v_client_filter_single is null then
+      v_filter_text := nullif(btrim(coalesce(p_preview_decisions_json->>'client_filter_id','')), '');
+      if v_filter_text is not null then
+        v_client_filter_single := v_filter_text::uuid;
+      end if;
+    end if;
+  exception when invalid_text_representation then
+    raise exception 'Invalid candidate_filter_id/client_filter_id (must be UUID)';
+  end;
 
   select
     sfw.vat_rate_pct,
@@ -2387,6 +2429,11 @@ begin
     from jsonb_array_elements_text(p_preview_decisions_json->'candidate_ids') x;
   end if;
 
+  -- Treat empty array as "ALL" (null filter)
+  if v_candidate_filter is not null and array_length(v_candidate_filter, 1) is null then
+    v_candidate_filter := null;
+  end if;
+
   -- Candidate set from pay_preview.
   -- Compatible with both preview shapes:
   --  - if pay_preview returns has_any_delta => use it
@@ -2416,10 +2463,44 @@ begin
       end
     )
     and (v_candidate_filter is null or (cand->>'candidate_id')::uuid = any(v_candidate_filter))
+    and (v_candidate_filter_single is null or (cand->>'candidate_id')::uuid = v_candidate_filter_single)
   )
   select coalesce(array_agg(s.candidate_id), array[]::uuid[])
   into v_candidate_ids
   from selected s;
+
+  -- Apply client filter (single) as an additional narrowing step (must not create candidates outside the requested client)
+  if v_client_filter_single is not null then
+    with cand_ids as (
+      select unnest(v_candidate_ids) as candidate_id
+    ),
+    cand_ok as (
+      select distinct tf.candidate_id
+      from public.timesheets_financials tf
+      join public.timesheets ts
+        on ts.timesheet_id = tf.timesheet_id
+       and ts.is_current = true
+      join cand_ids ci
+        on ci.candidate_id = tf.candidate_id
+      join public.candidates c
+        on c.id = tf.candidate_id
+      where tf.is_current = true
+        and coalesce(tf.pay_on_hold,false) = false
+        and ts.authorised_at_server is not null
+        and coalesce(tf.has_rate_issue,false) = false
+        and coalesce(tf.has_pay_channel_issue,false) = false
+        and upper(coalesce(tf.processing_status::text,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
+        and upper(coalesce(c.pay_method,'')) in ('PAYE','UMBRELLA')
+        and tf.client_id = v_client_filter_single
+        and ts.week_ending_date::date >= v_eligibility_from_date
+        and ts.week_ending_date::date <= v_eligibility_to_date
+    )
+    select coalesce(array_agg(ci.candidate_id), array[]::uuid[])
+    into v_candidate_ids
+    from cand_ids ci
+    join cand_ok ok
+      on ok.candidate_id = ci.candidate_id;
+  end if;
 
   if array_length(v_candidate_ids,1) is null or array_length(v_candidate_ids,1) = 0 then
     raise exception 'Nothing to pay (no payable deltas after blockers)';
@@ -2551,9 +2632,10 @@ begin
       and ts.authorised_at_server is not null
       and coalesce(tf.has_rate_issue,false) = false
       and coalesce(tf.has_pay_channel_issue,false) = false
-      and upper(coalesce(tf.processing_status,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
+      and upper(coalesce(tf.processing_status::text,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
       and upper(coalesce(c.pay_method,'')) in ('PAYE','UMBRELLA')
       and tf.candidate_id = any(v_candidate_ids)
+      and (v_client_filter_single is null or tf.client_id = v_client_filter_single)
 
       -- ✅ Option A: match pay_preview eligibility window (relative to UK “today”).
       and ts.week_ending_date::date >= v_eligibility_from_date
@@ -3474,7 +3556,6 @@ begin
   );
 end;
 $$;
-
 
 
 commit;
