@@ -478,7 +478,6 @@ $$;
 -- =========================================================
 -- A4.3 pay_set_paye_net_from_sage(p_pay_batch_id, p_csv_raw, p_actor_user_id, p_source_filename)
 -- =========================================================
-
 create or replace function public.pay_set_paye_net_from_sage(
   p_pay_batch_id uuid,
   p_csv_raw text,
@@ -558,7 +557,7 @@ begin
     net_amount numeric
   ) on commit drop;
 
-  delete from _tmp_sage_net;
+  truncate table _tmp_sage_net;
 
   for i in (header_idx+1)..coalesce(array_length(v_lines,1),0) loop
     v_line := coalesce(v_lines[i],'');
@@ -626,7 +625,7 @@ begin
     ni_norm text
   ) on commit drop;
 
-  delete from _tmp_batch_paye;
+  truncate table _tmp_batch_paye;
 
   insert into _tmp_batch_paye(candidate_id, pay_batch_candidate_id, tms_ref_norm, ni_norm)
   select
@@ -724,10 +723,6 @@ begin
 end;
 $$;
 
--- =========================================================
--- A4.4 pay_set_paye_net_manual(p_pay_batch_id, p_entries_json, p_actor_user_id)
--- =========================================================
-
 create or replace function public.pay_set_paye_net_manual(
   p_pay_batch_id uuid,
   p_entries_json jsonb,
@@ -762,7 +757,7 @@ begin
     net_amount numeric
   ) on commit drop;
 
-  delete from _tmp_manual_net;
+  truncate table _tmp_manual_net;
 
   insert into _tmp_manual_net(candidate_id, works_raw, works_norm, net_amount)
   select
@@ -803,7 +798,7 @@ begin
     ni_norm text
   ) on commit drop;
 
-  delete from _tmp_batch_paye2;
+  truncate table _tmp_batch_paye2;
 
   insert into _tmp_batch_paye2(pay_batch_candidate_id, candidate_id, tms_ref_norm, ni_norm)
   select
@@ -886,7 +881,7 @@ begin
     net_amount numeric
   ) on commit drop;
 
-  delete from _tmp_manual_match;
+  truncate table _tmp_manual_match;
 
   -- candidate_id path
   insert into _tmp_manual_match(pay_batch_candidate_id, net_amount)
@@ -946,7 +941,6 @@ begin
   return jsonb_build_object('ok', true, 'pay_batch_id', p_pay_batch_id::text, 'source', 'MANUAL_ENTRY');
 end;
 $$;
-
 commit;
 
 
@@ -1248,7 +1242,6 @@ begin;
 --      * DO_NOT_PAY: suppressed if snoozed AND raw_delta = 0 (informational-only)
 --  - Payable deltas exclude blocked-positive segments (delta forced to 0) but still show them in blocked_items list
 -- =========================================================
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview(p_pay_date date, p_actor_user_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid)
@@ -2299,8 +2292,7 @@ begin
     'snoozed_items', v_snoozed
   );
 end;
-$function$
-
+$function$;
 
 
 
