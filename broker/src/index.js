@@ -8759,22 +8759,41 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
   let payeRemittancesEnabled = false;
   let settingsHeaderMsg = null;
   let settingsFooterMsg = null;
+  let remittanceTestRecipientEmail = null;
 
   try {
-    const sel = ['payroll_testing', 'paye_remittances_enabled', 'remittance_header_message', 'remittance_footer_message'].join(',');
+    const sel = [
+      'payroll_testing',
+      'paye_remittances_enabled',
+      'remittance_header_message',
+      'remittance_footer_message',
+      'remittance_test_recipient_email'
+    ].join(',');
+
     const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}`);
     const r0 = (rows && rows[0]) ? rows[0] : null;
+
     payrollTesting = !!(r0 && r0.payroll_testing === true);
     payeRemittancesEnabled = !!(r0 && r0.paye_remittances_enabled === true);
     settingsHeaderMsg = (r0 && typeof r0.remittance_header_message === 'string') ? r0.remittance_header_message : null;
     settingsFooterMsg = (r0 && typeof r0.remittance_footer_message === 'string') ? r0.remittance_footer_message : null;
+
+    const te = (r0 && typeof r0.remittance_test_recipient_email === 'string') ? r0.remittance_test_recipient_email.trim() : '';
+    remittanceTestRecipientEmail = te && te.length ? te : null;
   } catch (e) {
     return withCORS(env, req, serverError('Failed to load remittance settings'));
   }
 
-  // ✅ Simplified test-mode policy: block sending remittances when payroll_testing is enabled
+  // ✅ Test-mode policy: allow sending ONLY if a test recipient email is configured.
+  // When enabled, ALL remittances are routed to this email and intended recipient emails are ignored.
+  const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
+  let testTo = null;
+
   if (payrollTesting) {
-    return withCORS(env, req, badRequest('REMITTANCES_DISABLED_IN_PAYROLL_TESTING'));
+    if (!remittanceTestRecipientEmail || !isEmail(remittanceTestRecipientEmail)) {
+      return withCORS(env, req, badRequest('REMITTANCE_TEST_RECIPIENT_EMAIL_REQUIRED_IN_PAYROLL_TESTING'));
+    }
+    testTo = remittanceTestRecipientEmail.trim();
   }
 
   let build;
@@ -8915,7 +8934,11 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
       ? (recipient?.remittance_email ?? recipient?.email ?? null)
       : (recipient?.email ?? recipient?.remittance_email ?? null);
 
-    const toEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
+    const intendedToEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
+
+    // ✅ In payroll_testing, route to test recipient (ignore intended recipient email entirely)
+    const toEmail = testTo ? testTo : intendedToEmail;
+
     if (!toEmail) {
       skipped.push({
         job_kind: jobKindRaw || null,
@@ -8927,8 +8950,10 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     }
 
     const jobTestMode = !!(job && job.test_mode === true);
+    const effectiveTestMode = !!(jobTestMode || payrollTesting);
+
     const payPeriodLabel = payDate ? payDate : 'Pay run';
-    const subject = jobTestMode ? `[TEST MODE] Remittance Advice – ${payPeriodLabel}` : `Remittance Advice – ${payPeriodLabel}`;
+    const subject = effectiveTestMode ? `[TEST MODE] Remittance Advice – ${payPeriodLabel}` : `Remittance Advice – ${payPeriodLabel}`;
 
     const lines = [];
     if (headerMsg) {
@@ -8936,9 +8961,16 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
       lines.push('');
     }
 
-    if (jobTestMode) {
-      lines.push('SIMULATED / TEST MODE — no bank payment was submitted');
-      lines.push('');
+    if (effectiveTestMode) {
+      if (payrollTesting) {
+        lines.push('PAYROLL TEST MODE — remittances routed to test recipient');
+        lines.push(`Test recipient: ${testTo}`);
+        if (intendedToEmail) lines.push(`Intended recipient: ${intendedToEmail}`);
+        lines.push('');
+      } else {
+        lines.push('SIMULATED / TEST MODE — no bank payment was submitted');
+        lines.push('');
+      }
     }
 
     lines.push('Remittance Advice');
@@ -9063,6 +9095,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
           payee_entity_kind: payeeEntityKind,
           payee_entity_id: payeeEntityIdText,
           to: toEmail,
+          intended_to: intendedToEmail,
           reason: 'MAIL_OUTBOX_INSERT_FAILED',
           error: (errTxt || '').slice(0, 500)
         });
@@ -9078,6 +9111,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
         payee_entity_kind: payeeEntityKind,
         payee_entity_id: payeeEntityIdText,
         to: toEmail,
+        intended_to: intendedToEmail,
         subject,
         reference,
         mail_outbox_id: mailId
@@ -9088,6 +9122,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
         payee_entity_kind: payeeEntityKind,
         payee_entity_id: payeeEntityIdText,
         to: toEmail,
+        intended_to: intendedToEmail,
         reason: 'MAIL_OUTBOX_EXCEPTION',
         error: String(e?.message || e || 'MAIL_OUTBOX_EXCEPTION').slice(0, 500)
       });
@@ -9100,7 +9135,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     await sbRpc(env, 'pay_remittance_mark_sent', {
       p_pay_batch_id: payBatchId,
       p_scope: scope,
-      p_results_json: { queued, skipped, pay_date: payDate, bulk_reference: bulkRef },
+      p_results_json: { queued, skipped, pay_date: payDate, bulk_reference: bulkRef, payroll_testing: payrollTesting, test_recipient: testTo },
       p_actor_user_id: user.id
     });
   } catch (e) {
@@ -9114,6 +9149,8 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     scope,
     pay_date: payDate,
     bulk_reference: bulkRef,
+    payroll_testing: payrollTesting,
+    test_recipient: testTo,
     queued_count: queued.length,
     skipped_count: skipped.length,
     queued,
@@ -9727,8 +9764,6 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
 }
 
 
-
-
 async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -9775,8 +9810,41 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   } else if (Array.isArray(body.warning_hours_json)) {
     warningHoursJson = body.warning_hours_json;
   } else {
-    return withCORS(env, req, badRequest('warning_hours_json must be an array (e.g., [24,12])'));
+    return withCORS(env, req, badRequest('warning_hours_json must be an array (e.g. [24,12])'));
   }
+
+  // ✅ Re-auth required (password + 2FA already done client-side; server requires reauth_token)
+  const reauthToken = String(body.reauth_token || '').trim();
+  if (!reauthToken) return withCORS(env, req, badRequest('reauth_token is required'));
+
+  const rt = await verifyToken(sessionSecret(env), reauthToken);
+  if (!rt || rt.ok !== true) return withCORS(env, req, unauthorized('Invalid reauth_token'));
+
+  const rtp = (rt && rt.payload && typeof rt.payload === 'object') ? rt.payload : {};
+  if (String(rtp.typ || '').trim() !== 'reauth') return withCORS(env, req, unauthorized('Invalid reauth_token'));
+  if (String(rtp.purpose || '').trim() !== 'PAYMENT_SCHEDULE') return withCORS(env, req, unauthorized('Invalid reauth_token'));
+  if (String(rtp.sub || '').trim() !== String(user.id || '').trim()) return withCORS(env, req, unauthorized('Invalid reauth_token'));
+
+  // ✅ Initiator must be a payment authoriser
+  try {
+    const enc = encodeURIComponent;
+    const { rows: urows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/tms_users` +
+      `?id=eq.${enc(user.id)}` +
+      `&select=id,is_active,email,display_name,payment_authoriser,payment_golden_key` +
+      `&limit=1`
+    );
+    const u0 = (urows && urows[0]) ? urows[0] : null;
+    if (!u0 || u0.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
+    if (u0.payment_authoriser !== true) return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to validate payment authoriser')));
+  }
+
+  // Optional: initiator can choose to use golden key (still optional; DB enforces eligibility)
+  const actorIntentRaw = String(body.actor_intent || '').trim().toUpperCase();
+  const actorIntent = (actorIntentRaw === 'USE_GOLDEN_KEY') ? 'USE_GOLDEN_KEY' : null;
 
   try {
     // Determine provider from batch snapshot
@@ -9791,7 +9859,8 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     } catch {}
 
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
-    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+    const providerRaw = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+    const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
 
     const adapter = getRailAdapter(provider);
     if (!adapter) {
@@ -9812,27 +9881,176 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(msg));
     }
 
+    // ✅ Scheduling must be supported for this rail
     if (!adapter || typeof adapter.scheduleBatch !== 'function') {
       return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
     }
 
-    const rpcRes = await adapter.scheduleBatch(env, id, {
-      schedule_kind: scheduleKind,
-      scheduled_at_utc: scheduledAtUtc,
-      funding_account_ref: fundingAccountRef,
-      warning_hours_json: warningHoursJson
-    }, user.id);
+    // ✅ Preserve Revolut env mismatch guard (do not rely on DB for this)
+    if (provider === 'REVOLUT') {
+      const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+      const workerEnv = getRevolutWorkerEnv(env);
+      const batchEnvRaw = batchObj && batchObj.rail_env_snapshot ? String(batchObj.rail_env_snapshot).trim().toUpperCase() : 'PROD';
+      const expectedEnv = normalizeEnv(batchEnvRaw, 'PROD');
+      if (expectedEnv !== workerEnv) {
+        return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
+      }
+    }
+
+    // ✅ NEW: Authorisation-start (transactional) — do NOT call pay_batch_schedule directly
+    const rpcRes = await sbRpc(env, 'pay_batch_auth_start', {
+      p_pay_batch_id: id,
+      p_schedule_kind: scheduleKind,
+      p_scheduled_at_utc: scheduledAtUtc,
+      p_funding_account_ref: fundingAccountRef,
+      p_warning_hours_json: warningHoursJson,
+      p_actor_user_id: user.id,
+      p_actor_intent: actorIntent
+    });
 
     let payload = rpcRes;
     try {
       if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_schedule')) {
-        payload = payload.pay_batch_schedule;
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_auth_start')) {
+        payload = payload.pay_batch_auth_start;
       }
     } catch {}
 
-    // Option A: return “scheduled” and let cron execute within 1 minute.
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    // ✅ If fully authorised, queue “payment scheduled” notifications to ALL authorisers (best-effort; never blocks scheduling)
+    try {
+      const becameAuthorised = (out.became_authorised === true) || (String(out.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
+      const authRequestId = (out.auth_request_id != null && String(out.auth_request_id).trim()) ? String(out.auth_request_id).trim() : null;
+
+      if (becameAuthorised) {
+        const enc = encodeURIComponent;
+
+        // Fetch updated batch/auth summary for email content
+        const b2 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+        let bp2 = b2;
+        try {
+          if (Array.isArray(b2) && b2.length === 1 && b2[0] && typeof b2[0] === 'object') bp2 = b2[0];
+          if (bp2 && typeof bp2 === 'object' && Object.prototype.hasOwnProperty.call(bp2, 'pay_batch_get')) bp2 = bp2.pay_batch_get;
+        } catch {}
+
+        const bObj = (bp2 && typeof bp2 === 'object') ? (bp2.batch || null) : null;
+        const authObj = (bp2 && typeof bp2 === 'object') ? (bp2.auth || null) : null;
+        const transfers = (bp2 && typeof bp2 === 'object' && Array.isArray(bp2.transfers)) ? bp2.transfers : [];
+
+        const payDate = (bObj && bObj.pay_date) ? String(bObj.pay_date) : '';
+        const scheduledAt = (bObj && bObj.scheduled_at_utc) ? String(bObj.scheduled_at_utc) : '';
+        const scheduleKindOut = (bObj && bObj.schedule_kind) ? String(bObj.schedule_kind) : '';
+
+        let totalAmount = 0;
+        for (const t of transfers) {
+          const n = Number(t && t.amount);
+          if (Number.isFinite(n)) totalAmount += n;
+        }
+        totalAmount = Math.round(totalAmount * 100) / 100;
+
+        // Initiator display/email
+        let initiatorName = user.id;
+        let initiatorEmail = null;
+        try {
+          const { rows: urows2 } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${enc(user.id)}` +
+            `&select=id,email,display_name&limit=1`
+          );
+          const u2 = (urows2 && urows2[0]) ? urows2[0] : null;
+          if (u2 && u2.display_name) initiatorName = String(u2.display_name);
+          if (u2 && u2.email) initiatorEmail = String(u2.email);
+        } catch {}
+
+        // Approved-by summary (already enriched in pay_batch_get)
+        const approvedBy = (authObj && Array.isArray(authObj.approved_by)) ? authObj.approved_by : [];
+        const fmtUk = (iso) => {
+          try {
+            const d = new Date(String(iso || '').trim());
+            if (isNaN(d.getTime())) return '';
+            const parts = new Intl.DateTimeFormat('en-GB', {
+              timeZone: 'Europe/London',
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit',
+              hour12: false
+            }).formatToParts(d).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
+            return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}hrs`;
+          } catch { return ''; }
+        };
+
+        const scheduledAtUk = scheduledAt ? fmtUk(scheduledAt) : '';
+        const linesAuth = approvedBy.map(a => {
+          const who = (a && a.actor_display_name) ? String(a.actor_display_name) : (a && a.actor_user_id ? String(a.actor_user_id) : 'Unknown');
+          const act = (a && a.action) ? String(a.action) : '';
+          const at  = (a && a.action_at_utc) ? fmtUk(a.action_at_utc) : '';
+          return `- ${who} (${act}) at ${at}`;
+        });
+
+        const subject = `Payment scheduled – Pay batch ${String(id).slice(0, 8)} – ${payDate || 'no pay date'}`;
+
+        const textLines = [
+          `A payment has been scheduled in CloudTMS.`,
+          ``,
+          `Pay batch: ${id}`,
+          ...(payDate ? [`Pay date: ${payDate}`] : []),
+          `Schedule: ${scheduleKindOut || ''}${scheduledAtUk ? ` (release: ${scheduledAtUk})` : ''}`,
+          ``,
+          `Total amount: £${totalAmount.toFixed(2)}`,
+          ``,
+          `Processed by: ${initiatorName}${initiatorEmail ? ` <${initiatorEmail}>` : ''}`,
+          ``,
+          `Authorised by:`,
+          ...(linesAuth.length ? linesAuth : ['- (none recorded)']),
+          ``,
+          `This email is for audit visibility for all payment authorisers.`
+        ];
+
+        const body_text = textLines.join('\n');
+        const body_html = `<pre>${textLines.map(l => String(l)).join('\n')}</pre>`;
+
+        // Recipient list: all active authorisers OR golden key users
+        const { rows: authUsers } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/tms_users` +
+          `?select=id,email,display_name,is_active,payment_authoriser,payment_golden_key` +
+          `&is_active=eq.true` +
+          `&or=(payment_authoriser.eq.true,payment_golden_key.eq.true)`
+        );
+
+        const toEmails = (authUsers || [])
+          .map(r => (r && r.email) ? String(r.email).trim() : '')
+          .filter(Boolean);
+
+        // Queue one BROADCAST outbox row per recipient (mail_outbox_type_check allows BROADCAST in this codebase)
+        for (const toEmail of toEmails) {
+          try {
+            const reference = `pay_batch_scheduled:${id}:${authRequestId || ''}`;
+            await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+              method: 'POST',
+              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+              body: JSON.stringify({
+                type: 'BROADCAST',
+                to: toEmail,
+                cc: null,
+                subject,
+                body_html,
+                body_text,
+                attachments: null,
+                status: 'QUEUED',
+                reference,
+                created_by: user?.id || null
+              })
+            }).catch(() => {});
+          } catch {}
+        }
+      }
+    } catch {
+      // best-effort only
+    }
+
+    return withCORS(env, req, ok(out));
   } catch (e) {
     const msg = (e && e.message) ? String(e.message) : String(e || 'SCHEDULE_FAILED');
     if (msg.includes('not supported') || msg.includes('NOT_SUPPORTED') || msg.includes('scheduleBatch not supported')) {
@@ -9843,6 +10061,734 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
 }
 
 
+async function handlePaymentAuthorisersList(env, req, user) {
+  const enc = encodeURIComponent;
+
+  try {
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/tms_users` +
+      `?select=id,email,display_name,is_active,payment_authoriser,payment_golden_key` +
+      `&is_active=eq.true` +
+      `&or=(payment_authoriser.eq.true,payment_golden_key.eq.true)` +
+      `&order=display_name.asc`;
+
+    const { rows } = await sbFetch(env, url, false);
+    const users = Array.isArray(rows) ? rows : [];
+
+    return withCORS(env, req, ok({
+      ok: true,
+      users: users.map((r) => ({
+        id: r?.id ? String(r.id) : null,
+        email: r?.email ? String(r.email) : null,
+        display_name: r?.display_name ? String(r.display_name) : null,
+        is_active: r?.is_active === true,
+        payment_authoriser: r?.payment_authoriser === true,
+        payment_golden_key: r?.payment_golden_key === true
+      }))
+    }));
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'Failed to list payment authorisers');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handlePayBatchAuthInvitesSend(env, req, user, authRequestId) {
+  const enc = encodeURIComponent;
+
+  const authId = String(authRequestId || '').trim();
+  if (!authId) return withCORS(env, req, badRequest('auth_request_id is required'));
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(authId)) {
+    return withCORS(env, req, badRequest('invalid_auth_request_id'));
+  }
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const isAll =
+    body.all === true ||
+    String(body.target || body.targets || '').trim().toUpperCase() === 'ALL';
+
+  let targetIds = null;
+
+  if (!isAll) {
+    const raw = Array.isArray(body.target_user_ids) ? body.target_user_ids : null;
+    if (!raw || !raw.length) {
+      return withCORS(env, req, badRequest('target_user_ids is required (or set all=true)'));
+    }
+
+    const cleaned = raw
+      .map((x) => (x == null ? '' : String(x).trim()))
+      .filter(Boolean);
+
+    const uuids = [];
+    for (const s of cleaned) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)) {
+        return withCORS(env, req, badRequest('invalid_target_user_id'));
+      }
+      uuids.push(s);
+    }
+
+    // Deduplicate
+    targetIds = Array.from(new Set(uuids));
+    if (!targetIds.length) {
+      return withCORS(env, req, badRequest('target_user_ids is required (or set all=true)'));
+    }
+  }
+
+  // Validate actor is eligible to send invites (authoriser or golden key)
+  try {
+    const { rows: urows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/tms_users` +
+      `?id=eq.${enc(user.id)}` +
+      `&select=id,is_active,payment_authoriser,payment_golden_key` +
+      `&limit=1`,
+      false
+    );
+    const u0 = (urows && urows[0]) ? urows[0] : null;
+    if (!u0 || u0.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
+    if (u0.payment_authoriser !== true && u0.payment_golden_key !== true) {
+      return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
+    }
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to validate actor')));
+  }
+
+  let rpcRes;
+  try {
+    rpcRes = await sbRpc(env, 'pay_batch_auth_invites_upsert', {
+      p_auth_request_id: authId,
+      p_actor_user_id: user.id,
+      p_target_user_ids: targetIds
+    });
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'INVITES_UPSERT_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+
+  let payload = rpcRes;
+  try {
+    if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+    if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_auth_invites_upsert')) {
+      payload = payload.pay_batch_auth_invites_upsert;
+    }
+  } catch {}
+
+  const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  const payBatchId = (out.pay_batch_id != null) ? String(out.pay_batch_id) : null;
+
+  if (!payBatchId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payBatchId)) {
+    return withCORS(env, req, serverError('INVITES_UPSERT_RETURNED_INVALID_PAY_BATCH_ID'));
+  }
+
+  // Load batch summary for email context (pay date, schedule, totals)
+  let payBatchGet = null;
+  try {
+    const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId });
+
+    let bp = bg;
+    try {
+      if (Array.isArray(bg) && bg.length === 1 && bg[0] && typeof bg[0] === 'object') bp = bg[0];
+      if (bp && typeof bp === 'object' && Object.prototype.hasOwnProperty.call(bp, 'pay_batch_get')) bp = bp.pay_batch_get;
+    } catch {}
+
+    payBatchGet = (bp && typeof bp === 'object') ? bp : null;
+  } catch {
+    payBatchGet = null;
+  }
+
+  const batchObj = payBatchGet && typeof payBatchGet === 'object' ? (payBatchGet.batch || null) : null;
+  const transfers = payBatchGet && typeof payBatchGet === 'object' && Array.isArray(payBatchGet.transfers) ? payBatchGet.transfers : [];
+  const authObj = payBatchGet && typeof payBatchGet === 'object' ? (payBatchGet.auth || null) : null;
+
+  const payDate = batchObj && batchObj.pay_date ? String(batchObj.pay_date) : '';
+  const scheduleKind = batchObj && batchObj.schedule_kind ? String(batchObj.schedule_kind) : '';
+  const scheduledAtUtc = batchObj && batchObj.scheduled_at_utc ? String(batchObj.scheduled_at_utc) : '';
+
+  let totalAmount = 0;
+  for (const t of transfers) {
+    const n = Number(t && t.amount);
+    if (Number.isFinite(n)) totalAmount += n;
+  }
+  totalAmount = Math.round(totalAmount * 100) / 100;
+
+  const fmtUk = (iso) => {
+    try {
+      const d = new Date(String(iso || '').trim());
+      if (isNaN(d.getTime())) return '';
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      }).formatToParts(d).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
+      return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}hrs`;
+    } catch { return ''; }
+  };
+
+  const scheduledAtUk = scheduledAtUtc ? fmtUk(scheduledAtUtc) : '';
+
+  // Resolve base URL for approval links (same pattern as password reset: origin/referer first, then env fallbacks)
+  let base = null;
+  try {
+    const origin = req.headers.get('origin');
+    if (origin && String(origin).trim()) base = String(origin).trim();
+  } catch {}
+
+  if (!base) {
+    try {
+      const ref = req.headers.get('referer');
+      if (ref && String(ref).trim()) base = new URL(String(ref).trim()).origin;
+    } catch {}
+  }
+
+  if (!base) {
+    const cand = [env.PUBLIC_APP_BASE_URL, env.PUBLIC_FRONTEND_BASE_URL, env.PUBLIC_SITE_URL].filter((x) => isNonEmptyString(x));
+    if (cand.length) base = String(cand[0]).trim();
+  }
+
+  // Build email subject/body
+  const subject = `CloudTMS payment authorisation request – ${String(payBatchId).slice(0, 8)}${payDate ? ` (${payDate})` : ''}`;
+  const headerLines = [
+    `A payment requires authorisation in CloudTMS.`,
+    ``,
+    `Pay batch: ${payBatchId}`,
+    ...(payDate ? [`Pay date: ${payDate}`] : []),
+    `Total amount: £${totalAmount.toFixed(2)}`,
+    ...(scheduleKind ? [`Schedule: ${scheduleKind}${scheduledAtUk ? ` (release: ${scheduledAtUk})` : ''}`] : []),
+    ``,
+    `Click the link below to open CloudTMS and approve or reject this payment request:`,
+    ``
+  ];
+
+  // Determine which tokens we will email (avoid re-sending already used tokens)
+  const tokensArr = Array.isArray(out.tokens) ? out.tokens : [];
+  const usableTokens = tokensArr.filter((t) => t && t.token && !t.used_at_utc);
+
+  // Fetch target user emails for usable tokens
+  const targetUserIds = Array.from(new Set(
+    usableTokens
+      .map((t) => (t && t.target_user_id) ? String(t.target_user_id).trim() : '')
+      .filter(Boolean)
+  ));
+
+  let targetUsers = [];
+  if (targetUserIds.length) {
+    const inList = targetUserIds.map((x) => `"${String(x).replace(/"/g, '')}"`).join(',');
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/tms_users` +
+      `?select=id,email,display_name,is_active,payment_authoriser,payment_golden_key` +
+      `&id=in.(${enc(inList)})` +
+      `&limit=${Math.min(1000, targetUserIds.length)}`;
+
+    try {
+      const { rows } = await sbFetch(env, url, false);
+      targetUsers = Array.isArray(rows) ? rows : [];
+    } catch {
+      targetUsers = [];
+    }
+  }
+
+  const byId = new Map();
+  for (const r of targetUsers) {
+    if (r && r.id) byId.set(String(r.id), r);
+  }
+
+  let queued = 0;
+  let queueErrors = 0;
+
+  if (base) {
+    for (const t of usableTokens) {
+      const tuid = String(t.target_user_id || '').trim();
+      const tok = String(t.token || '').trim();
+      if (!tuid || !tok) continue;
+
+      const tr = byId.get(tuid);
+      const toEmail = tr && tr.email ? String(tr.email).trim() : '';
+      if (!toEmail) continue;
+
+      let link = null;
+      try {
+        const u = new URL(String(base).trim());
+        u.pathname = '/';
+        u.searchParams.set('pay_auth_token', tok);
+        link = u.toString();
+      } catch {
+        link = null;
+      }
+      if (!link) continue;
+
+      const textLines = headerLines.concat([link, ``, `If you were not expecting this request, you can ignore this email.`]);
+      const body_text = textLines.join('\n');
+      const body_html = `<pre>${textLines.map((l) => String(l)).join('\n')}</pre>`;
+
+      const reference = `pay_auth_invite:${payBatchId}:${authId}:${tuid}`;
+
+      try {
+        const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+          method: 'POST',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            type: 'BROADCAST',
+            to: toEmail,
+            cc: null,
+            subject,
+            body_html,
+            body_text,
+            attachments: null,
+            status: 'QUEUED',
+            reference,
+            created_by: user?.id || null
+          })
+        });
+        if (ins.ok) queued += 1;
+        else queueErrors += 1;
+      } catch {
+        queueErrors += 1;
+      }
+    }
+  } else {
+    // No base URL resolved: still return tokens, but do not attempt to queue emails
+    queueErrors = usableTokens.length;
+  }
+
+  return withCORS(env, req, ok({
+    ok: true,
+    auth_request_id: authId,
+    pay_batch_id: payBatchId,
+    resolved_target_count: out.resolved_target_count || 0,
+    inserted_count: out.inserted_count || 0,
+    expires_at_utc: out.expires_at_utc || null,
+    queued_emails: queued,
+    queue_errors: queueErrors,
+    tokens: out.tokens || []
+  }));
+}
+
+async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
+  const enc = encodeURIComponent;
+
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const actionKind = String(body.action_kind || '').trim().toUpperCase();
+  if (!actionKind) return withCORS(env, req, badRequest('action_kind is required'));
+  if (!(actionKind === 'AUTHORISE' || actionKind === 'USE_GOLDEN_KEY' || actionKind === 'REJECT')) {
+    return withCORS(env, req, badRequest('action_kind must be AUTHORISE, USE_GOLDEN_KEY or REJECT'));
+  }
+
+  const note = (body.note === null || body.note === undefined) ? null : String(body.note).trim();
+
+  // Validate actor eligibility (authoriser or golden key)
+  try {
+    const { rows: urows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/tms_users` +
+      `?id=eq.${enc(user.id)}` +
+      `&select=id,is_active,payment_authoriser,payment_golden_key,email,display_name` +
+      `&limit=1`,
+      false
+    );
+    const u0 = (urows && urows[0]) ? urows[0] : null;
+    if (!u0 || u0.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
+    if (u0.payment_authoriser !== true && u0.payment_golden_key !== true) {
+      return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
+    }
+    if (actionKind === 'USE_GOLDEN_KEY' && u0.payment_golden_key !== true) {
+      return withCORS(env, req, badRequest('PAYMENT_GOLDEN_KEY_REQUIRED'));
+    }
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to validate actor')));
+  }
+
+  // Resolve auth_request_id: explicit in body OR current from pay_batch_get
+  let authRequestId = (body.auth_request_id == null) ? null : String(body.auth_request_id).trim();
+  if (authRequestId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(authRequestId)) {
+      return withCORS(env, req, badRequest('invalid_auth_request_id'));
+    }
+  }
+
+  let beforeGet = null;
+  try {
+    const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+    let bp = bg;
+    try {
+      if (Array.isArray(bg) && bg.length === 1 && bg[0] && typeof bg[0] === 'object') bp = bg[0];
+      if (bp && typeof bp === 'object' && Object.prototype.hasOwnProperty.call(bp, 'pay_batch_get')) bp = bp.pay_batch_get;
+    } catch {}
+
+    beforeGet = (bp && typeof bp === 'object') ? bp : null;
+  } catch {
+    beforeGet = null;
+  }
+
+  if (!authRequestId) {
+    const a = (beforeGet && typeof beforeGet === 'object') ? (beforeGet.auth || null) : null;
+    const ar = a && a.auth_request_id ? String(a.auth_request_id).trim() : '';
+    if (ar) authRequestId = ar;
+  }
+
+  if (!authRequestId) return withCORS(env, req, badRequest('No active authorisation request for this batch'));
+
+  // Apply action
+  let rpcRes;
+  try {
+    rpcRes = await sbRpc(env, 'pay_batch_auth_apply_action', {
+      p_auth_request_id: authRequestId,
+      p_actor_user_id: user.id,
+      p_action: actionKind,
+      p_note: note
+    });
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'AUTH_ACTION_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+
+  let payload = rpcRes;
+  try {
+    if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+    if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_auth_apply_action')) {
+      payload = payload.pay_batch_auth_apply_action;
+    }
+  } catch {}
+
+  const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  const becameAuthorised = (out.became_authorised === true) || (String(out.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
+
+  // Load updated batch/auth for response + email content
+  let afterGet = null;
+  try {
+    const bg2 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+    let bp2 = bg2;
+    try {
+      if (Array.isArray(bg2) && bg2.length === 1 && bg2[0] && typeof bg2[0] === 'object') bp2 = bg2[0];
+      if (bp2 && typeof bp2 === 'object' && Object.prototype.hasOwnProperty.call(bp2, 'pay_batch_get')) bp2 = bp2.pay_batch_get;
+    } catch {}
+
+    afterGet = (bp2 && typeof bp2 === 'object') ? bp2 : null;
+  } catch {
+    afterGet = null;
+  }
+
+  // If finalised, queue notification email to ALL authorisers (best-effort; never blocks)
+  if (becameAuthorised && afterGet && typeof afterGet === 'object') {
+    try {
+      const batchObj = afterGet.batch || null;
+      const authObj = afterGet.auth || null;
+      const transfers = Array.isArray(afterGet.transfers) ? afterGet.transfers : [];
+
+      const payDate = batchObj && batchObj.pay_date ? String(batchObj.pay_date) : '';
+      const scheduledAt = batchObj && batchObj.scheduled_at_utc ? String(batchObj.scheduled_at_utc) : '';
+      const scheduleKind = batchObj && batchObj.schedule_kind ? String(batchObj.schedule_kind) : '';
+
+      let totalAmount = 0;
+      for (const t of transfers) {
+        const n = Number(t && t.amount);
+        if (Number.isFinite(n)) totalAmount += n;
+      }
+      totalAmount = Math.round(totalAmount * 100) / 100;
+
+      // Initiator display/email (user may not have display_name in token)
+      let initiatorName = user.id;
+      let initiatorEmail = user.email || null;
+      try {
+        const { rows: urows2 } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${enc(user.id)}` +
+          `&select=id,email,display_name&limit=1`,
+          false
+        );
+        const u2 = (urows2 && urows2[0]) ? urows2[0] : null;
+        if (u2 && u2.display_name) initiatorName = String(u2.display_name);
+        if (u2 && u2.email) initiatorEmail = String(u2.email);
+      } catch {}
+
+      const fmtUk = (iso) => {
+        try {
+          const d = new Date(String(iso || '').trim());
+          if (isNaN(d.getTime())) return '';
+          const parts = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Europe/London',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false
+          }).formatToParts(d).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
+          return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}hrs`;
+        } catch { return ''; }
+      };
+
+      const scheduledAtUk = scheduledAt ? fmtUk(scheduledAt) : '';
+
+      const approvedBy = (authObj && Array.isArray(authObj.approved_by)) ? authObj.approved_by : [];
+      const linesAuth = approvedBy.map(a => {
+        const who = (a && a.actor_display_name) ? String(a.actor_display_name) : (a && a.actor_user_id ? String(a.actor_user_id) : 'Unknown');
+        const act = (a && a.action) ? String(a.action) : '';
+        const at  = (a && a.action_at_utc) ? fmtUk(a.action_at_utc) : '';
+        return `- ${who} (${act}) at ${at}`;
+      });
+
+      const subject = `Payment scheduled – Pay batch ${String(id).slice(0, 8)}${payDate ? ` – ${payDate}` : ''}`;
+
+      const textLines = [
+        `A payment has been scheduled in CloudTMS.`,
+        ``,
+        `Pay batch: ${id}`,
+        ...(payDate ? [`Pay date: ${payDate}`] : []),
+        `Schedule: ${scheduleKind || ''}${scheduledAtUk ? ` (release: ${scheduledAtUk})` : ''}`,
+        ``,
+        `Total amount: £${totalAmount.toFixed(2)}`,
+        ``,
+        `Processed by: ${initiatorName}${initiatorEmail ? ` <${initiatorEmail}>` : ''}`,
+        ``,
+        `Authorised by:`,
+        ...(linesAuth.length ? linesAuth : ['- (none recorded)']),
+        ``,
+        `This email is for audit visibility for all payment authorisers.`
+      ];
+
+      const body_text = textLines.join('\n');
+      const body_html = `<pre>${textLines.map(l => String(l)).join('\n')}</pre>`;
+
+      // Recipients: all active authorisers or golden key users
+      const { rows: authUsers } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/tms_users` +
+        `?select=id,email,is_active,payment_authoriser,payment_golden_key` +
+        `&is_active=eq.true` +
+        `&or=(payment_authoriser.eq.true,payment_golden_key.eq.true)`,
+        false
+      );
+
+      const toEmails = (authUsers || [])
+        .map(r => (r && r.email) ? String(r.email).trim() : '')
+        .filter(Boolean);
+
+      const reference = `pay_batch_scheduled:${id}:${authRequestId}`;
+
+      for (const toEmail of toEmails) {
+        try {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+            method: 'POST',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              type: 'BROADCAST',
+              to: toEmail,
+              cc: null,
+              subject,
+              body_html,
+              body_text,
+              attachments: null,
+              status: 'QUEUED',
+              reference,
+              created_by: user?.id || null
+            })
+          }).catch(() => {});
+        } catch {}
+      }
+    } catch {
+      // best-effort only
+    }
+  }
+
+  const respAuth = afterGet && typeof afterGet === 'object' ? (afterGet.auth || null) : null;
+  const respBatch = afterGet && typeof afterGet === 'object' ? (afterGet.batch || null) : null;
+
+  return withCORS(env, req, ok({
+    ok: true,
+    result: out,
+    batch: respBatch,
+    auth: respAuth
+  }));
+}
+
+
+
+async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, actorUserId) {
+  const enc = encodeURIComponent;
+
+  const id = String(payBatchId || '').trim();
+  if (!id) throw new Error('payBatchId required');
+
+  const authId = (authRequestId == null) ? null : String(authRequestId).trim() || null;
+
+  // 1) Load batch + auth summary
+  const bg = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+  let payload = bg;
+  try {
+    if (Array.isArray(bg) && bg.length === 1 && bg[0] && typeof bg[0] === 'object') payload = bg[0];
+    if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_get')) payload = payload.pay_batch_get;
+  } catch {}
+
+  const batchObj = (payload && typeof payload === 'object') ? (payload.batch || null) : null;
+  const authObj  = (payload && typeof payload === 'object') ? (payload.auth || null) : null;
+  const transfers = (payload && typeof payload === 'object' && Array.isArray(payload.transfers)) ? payload.transfers : [];
+
+  const payDate = (batchObj && batchObj.pay_date) ? String(batchObj.pay_date) : '';
+  const scheduleKind = (batchObj && batchObj.schedule_kind) ? String(batchObj.schedule_kind) : '';
+  const scheduledAtUtc = (batchObj && batchObj.scheduled_at_utc) ? String(batchObj.scheduled_at_utc) : '';
+
+  let totalAmount = 0;
+  for (const t of transfers) {
+    const n = Number(t && t.amount);
+    if (Number.isFinite(n)) totalAmount += n;
+  }
+  totalAmount = Math.round(totalAmount * 100) / 100;
+
+  const fmtUk = (iso) => {
+    try {
+      const d = new Date(String(iso || '').trim());
+      if (isNaN(d.getTime())) return '';
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      }).formatToParts(d).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
+      return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}hrs`;
+    } catch { return ''; }
+  };
+
+  const scheduledAtUk = scheduledAtUtc ? fmtUk(scheduledAtUtc) : '';
+
+  const approvedBy = (authObj && Array.isArray(authObj.approved_by)) ? authObj.approved_by : [];
+  const linesAuth = approvedBy.map(a => {
+    const who = (a && a.actor_display_name) ? String(a.actor_display_name) : (a && a.actor_user_id ? String(a.actor_user_id) : 'Unknown');
+    const act = (a && a.action) ? String(a.action) : '';
+    const at  = (a && a.action_at_utc) ? fmtUk(a.action_at_utc) : '';
+    return `- ${who} (${act}) at ${at}`;
+  });
+
+  // 2) Recipients: all active authorisers OR golden-key users
+  const { rows: authUsers } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/tms_users` +
+    `?select=id,email,is_active,payment_authoriser,payment_golden_key` +
+    `&is_active=eq.true` +
+    `&or=(payment_authoriser.eq.true,payment_golden_key.eq.true)`,
+    false
+  );
+
+  const toEmails = (authUsers || [])
+    .map(r => (r && r.email) ? String(r.email).trim() : '')
+    .filter(Boolean);
+
+  // 3) Dedup guard: don’t queue the same notice twice per recipient for this reference
+  const reference = `pay_batch_scheduled:${id}:${authId || ''}`;
+
+  const { rows: existingRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/mail_outbox` +
+    `?select=to` +
+    `&type=eq.BROADCAST` +
+    `&reference=eq.${enc(reference)}` +
+    `&limit=1000`,
+    false
+  );
+
+  const existingTo = new Set((existingRows || [])
+    .map(r => (r && r.to) ? String(r.to).trim() : '')
+    .filter(Boolean)
+  );
+
+  // 4) Compose message
+  const subject = `Payment scheduled – Pay batch ${String(id).slice(0, 8)}${payDate ? ` – ${payDate}` : ''}`;
+
+  const textLines = [
+    `A payment has been scheduled in CloudTMS.`,
+    ``,
+    `Pay batch: ${id}`,
+    ...(payDate ? [`Pay date: ${payDate}`] : []),
+    `Schedule: ${scheduleKind || ''}${scheduledAtUk ? ` (release: ${scheduledAtUk})` : ''}`,
+    ``,
+    `Total amount: £${totalAmount.toFixed(2)}`,
+    ``,
+    `Authorised by:`,
+    ...(linesAuth.length ? linesAuth : ['- (none recorded)']),
+    ``,
+    `This email is for audit visibility for all payment authorisers.`
+  ];
+
+  const body_text = textLines.join('\n');
+  const body_html = `<pre>${textLines.map(l => String(l)).join('\n')}</pre>`;
+
+  // 5) Queue mail_outbox rows (QUEUED)
+  let queued = 0;
+  let skipped_exists = 0;
+  let errors = 0;
+
+  for (const toEmail of toEmails) {
+    if (existingTo.has(toEmail)) {
+      skipped_exists += 1;
+      continue;
+    }
+
+    try {
+      const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          type: 'BROADCAST',
+          to: toEmail,
+          cc: null,
+          subject,
+          body_html,
+          body_text,
+          attachments: null,
+          status: 'QUEUED',
+          reference,
+          created_by: actorUserId || null
+        })
+      });
+
+      if (ins.ok) queued += 1;
+      else errors += 1;
+    } catch {
+      errors += 1;
+    }
+  }
+
+  return {
+    ok: true,
+    pay_batch_id: id,
+    auth_request_id: authId,
+    reference,
+    recipients_total: toEmails.length,
+    queued,
+    skipped_exists,
+    errors
+  };
+}
+
+async function handleBankingPayBatchNotifyScheduled(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (body && (typeof body !== 'object' || Array.isArray(body))) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const authRequestId = (body && body.auth_request_id != null) ? String(body.auth_request_id).trim() : null;
+
+  try {
+    const rep = await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user?.id || null);
+    return withCORS(env, req, ok(rep));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'NOTIFY_FAILED')));
+  }
+}
+
+
+
 async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -9851,8 +10797,22 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
 
+  const password = String(body.password || '');
+  if (!password) return withCORS(env, req, badRequest('password is required'));
+
   const reason = String(body.reason || '').trim();
   if (!reason) return withCORS(env, req, badRequest('reason is required'));
+
+  // ✅ Password-only confirmation (no 2FA)
+  try {
+    const userRow = await sbGetUserById(env, user.id); // includes password_hash per existing helper
+    if (!userRow || userRow.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
+
+    const okPw = await pbkdf2Verify(password, userRow.password_hash || '');
+    if (!okPw) return withCORS(env, req, unauthorized('Invalid credentials'));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
 
   try {
     const rpcRes = await sbRpc(env, 'pay_batch_cancel', {
@@ -9874,6 +10834,10 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
+
+
 
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -18976,7 +19940,9 @@ async function handleUsersList(env, req) {
     'created_at',
     'updated_at',
     'last_login_at_utc',
-    'email_settings'
+    'email_settings',
+    'payment_authoriser',
+    'payment_golden_key'
   ].join(','));
 
   params.set('order', 'created_at.desc');
@@ -19008,7 +19974,6 @@ async function handleUsersList(env, req) {
   return ok({ ok: true, users: Array.isArray(rows) ? rows : [] });
 }
 
-
 async function handleUsersCreate(env, req) {
   const actor = await requireUser(env, req, ['admin']);
   if (!actor) return unauthorized('Unauthorized');
@@ -19039,6 +20004,30 @@ async function handleUsersCreate(env, req) {
   if (emailSettings == null) emailSettings = {};
   if (typeof emailSettings !== 'object' || Array.isArray(emailSettings)) return badRequest('invalid_email_settings');
 
+  const asBoolStrict = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    return null;
+  };
+
+  let paymentAuthoriser = false;
+  let paymentGoldenKey = false;
+
+  if ('payment_authoriser' in body) {
+    const b = asBoolStrict(body.payment_authoriser);
+    if (b === null) return badRequest('invalid_payment_authoriser');
+    paymentAuthoriser = b;
+  }
+
+  if ('payment_golden_key' in body) {
+    const b = asBoolStrict(body.payment_golden_key);
+    if (b === null) return badRequest('invalid_payment_golden_key');
+    paymentGoldenKey = b;
+  }
+
+  // Golden Key implies Authoriser (match DB CHECK + UX rule)
+  if (paymentGoldenKey) paymentAuthoriser = true;
+
   const hash = await pbkdf2Hash(pw);
 
   const row = {
@@ -19048,7 +20037,9 @@ async function handleUsersCreate(env, req) {
     is_active: true,
     password_hash: hash,
     session_version: 1,
-    email_settings: emailSettings
+    email_settings: emailSettings,
+    payment_authoriser: paymentAuthoriser,
+    payment_golden_key: paymentGoldenKey
   };
 
   const apiUrl = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}`;
@@ -19113,6 +20104,25 @@ async function handleUsersPatch(env, req, userId) {
     patch.email_settings = s;
   }
 
+  if ('payment_authoriser' in body) {
+    if (typeof body.payment_authoriser !== 'boolean') return badRequest('invalid_payment_authoriser');
+    patch.payment_authoriser = body.payment_authoriser;
+  }
+
+  if ('payment_golden_key' in body) {
+    if (typeof body.payment_golden_key !== 'boolean') return badRequest('invalid_payment_golden_key');
+    patch.payment_golden_key = body.payment_golden_key;
+    if (body.payment_golden_key === true) {
+      // Golden Key implies Authoriser (match DB CHECK + UX rule)
+      if ('payment_authoriser' in body && body.payment_authoriser === false) {
+        return badRequest('golden_requires_authoriser');
+      }
+      if (!('payment_authoriser' in body)) {
+        patch.payment_authoriser = true;
+      }
+    }
+  }
+
   if (!Object.keys(patch).length) return badRequest('empty_patch');
 
   const apiUrl = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(userId)}`;
@@ -19133,6 +20143,8 @@ async function handleUsersPatch(env, req, userId) {
 
   return ok({ ok: true, user: u });
 }
+
+
 
 async function handleUsersResetPassword(env, req, userId) {
   const actor = await requireUser(env, req, ['admin']);
@@ -43962,6 +44974,12 @@ async function handleGetSettings(env, req) {
         // ✅ PAYE remittances gate
         'paye_remittances_enabled',
 
+        // ✅ NEW: remittance test routing (send all remittances to this email when payroll_testing=true)
+        'remittance_test_recipient_email',
+
+        // ✅ NEW: payment authoriser quantity
+        'payment_authoriser_quantity',
+
         // Global shift patterns + timezone
         'timezone_id',
         'day_start','day_end',
@@ -44041,7 +45059,6 @@ async function handleGetSettings(env, req) {
     return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
   }
 }
-
 async function handleUpdateSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -44070,6 +45087,12 @@ async function handleUpdateSettings(env, req) {
 
     // ✅ PAYE remittances gate
     'paye_remittances_enabled',
+
+    // ✅ NEW: remittance test routing (send all remittances to this email when payroll_testing=true)
+    'remittance_test_recipient_email',
+
+    // ✅ NEW: payment authoriser quantity
+    'payment_authoriser_quantity',
 
     // ✅ Remittances (new settings tab)
     'remittance_includes_json',
@@ -44376,6 +45399,30 @@ async function handleUpdateSettings(env, req) {
       continue;
     }
 
+    if (k === 'remittance_test_recipient_email') {
+      const v0 = (data.remittance_test_recipient_email == null) ? null : String(data.remittance_test_recipient_email).trim();
+      if (!v0) {
+        payload.remittance_test_recipient_email = null;
+        continue;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v0)) {
+        return withCORS(env, req, badRequest('invalid_remittance_test_recipient_email'));
+      }
+      payload.remittance_test_recipient_email = v0;
+      continue;
+    }
+
+    if (k === 'payment_authoriser_quantity') {
+      const raw = data.payment_authoriser_quantity;
+      const n = Number(raw);
+      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
+      if (!(v >= 1 && v <= 10)) {
+        return withCORS(env, req, badRequest('payment_authoriser_quantity must be an integer between 1 and 10'));
+      }
+      payload.payment_authoriser_quantity = v;
+      continue;
+    }
+
     if (k === 'rail_default_funding_account_ref') {
       const v0 = (data.rail_default_funding_account_ref === null || data.rail_default_funding_account_ref === undefined)
         ? null
@@ -44460,6 +45507,123 @@ async function handleUpdateSettings(env, req) {
   } catch {
     return withCORS(env, req, serverError("Failed to update settings_defaults"));
   }
+}
+
+async function handleAuthReauthStart(env, req) {
+  const pre = preflightIfNeeded(env, req); if (pre) return pre;
+
+  const u = await requireUser(env, req); // any logged-in user
+  if (!u) return unauthorized('Unauthorized');
+
+  const body = await parseJSONBody(req);
+  if (!body) return badRequest('invalid_json');
+
+  const password = String(body.password || '').trim();
+  if (!password) return badRequest('password_required');
+
+  // Verify current password against stored hash
+  const userRow = await sbGetUserById(env, u.id); // includes password_hash
+  if (!userRow || userRow.is_active !== true) return unauthorized('Unauthorized');
+
+  const okPw = await pbkdf2Verify(password, userRow.password_hash || '');
+  if (!okPw) return unauthorized('Invalid credentials');
+
+  // Load auth policy (reuse same policy source as login 2FA)
+  let authEffective = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    authEffective = (s && s.importConfig && s.importConfig.auth_effective && typeof s.importConfig.auth_effective === 'object')
+      ? s.importConfig.auth_effective
+      : null;
+  } catch { authEffective = null; }
+
+  const tfaCodeTtlSec = (authEffective && Number.isFinite(Number(authEffective.tfa_code_ttl_seconds)))
+    ? Math.max(30, Math.trunc(Number(authEffective.tfa_code_ttl_seconds)))
+    : 300;
+
+  const ip = getClientIp(req);
+  const ipKey = (ip && String(ip).trim()) ? String(ip).trim() : 'UNKNOWN';
+
+  const nowIso = new Date().toISOString();
+  const expiresAtIso = new Date(Date.now() + (tfaCodeTtlSec * 1000)).toISOString();
+
+  const code = genSixDigitCode();
+  const salt = bufToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+  const codeHash = await hash2faCode(salt, code);
+
+  // Insert challenge row (same table as login 2FA)
+  let challengeId = null;
+  try {
+    challengeId = await sbInsert2faChallenge(env, {
+      user_id: userRow.id,
+      ip_address: ipKey,
+      code_salt: salt,
+      code_hash: codeHash,
+      expires_at_utc: expiresAtIso
+    });
+  } catch (e) {
+    return serverError(e?.message || String(e));
+  }
+
+  if (!challengeId) return serverError('2FA challenge id missing after insert');
+
+  // Resolve system replyTo email (optional)
+  let replyTo = null;
+  try {
+    const s = await loadSettingsDefaults(env);
+    if (s && s.system_email && String(s.system_email).trim()) replyTo = String(s.system_email).trim();
+  } catch {}
+
+  // Send code email via SYSTEM channel
+  const mins = Math.max(1, Math.round(tfaCodeTtlSec / 60));
+  const subject = 'CloudTMS payment verification code';
+  const bodyText =
+    `Your CloudTMS payment verification code is: ${code}\n\n` +
+    `It expires in ${mins} minute${mins === 1 ? '' : 's'}.\n\n` +
+    `If you did not request this code, you can ignore this email.`;
+
+  const htmlBody =
+    `<p>Your CloudTMS payment verification code is:</p>` +
+    `<p style="font-size:22px;font-weight:700;letter-spacing:2px;">${code}</p>` +
+    `<p>This code expires in ${mins} minute${mins === 1 ? '' : 's'}.</p>` +
+    `<p>If you did not request this code, you can ignore this email.</p>`;
+
+  const emailPayload = {
+    to: String(userRow.email || '').trim(),
+    subject,
+    htmlBody,
+    body: bodyText,
+    attachmentsV2: [],
+    metadata: { kind: 'PAYMENT_REAUTH_2FA', user_id: String(userRow.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
+  };
+  if (replyTo) emailPayload.replyTo = replyTo;
+
+  let pa;
+  try {
+    pa = await postToPowerAutomate(env, emailPayload, 'system');
+  } catch (e) {
+    pa = { ok: false, status: 0, body: e?.message || String(e) };
+  }
+
+  if (!pa || pa.ok !== true) {
+    // Best-effort: delete the challenge so we don't accumulate unusable rows
+    try {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges?id=eq.${encodeURIComponent(challengeId)}`,
+        { method: 'DELETE', headers: sbAuthHeaders(env) }
+      ).catch(() => {});
+    } catch {}
+
+    return serverError(`2FA email send failed (${pa?.status || 0}) ${pa?.body || ''}`.trim());
+  }
+
+  return new Response(JSON.stringify({
+    ok: true,
+    tfa_required: true,
+    purpose: 'PAYMENT_SCHEDULE',
+    challenge_id: challengeId,
+    expires_in: tfaCodeTtlSec
+  }), { status: 200, headers: JSON_HEADERS });
 }
 
 function getClientIp(req) {
@@ -78916,6 +80080,14 @@ export default {
       if (req.method === 'POST' && p === '/auth/forgot')  return withCORS(env, req, await handleAuthForgot(env, req));
       if (req.method === 'POST' && p === '/auth/reset')   return withCORS(env, req, await handleAuthReset(env, req));
 
+      // ====================== AUTH (add inside fetch router) ======================
+// Re-auth for payment scheduling (password + 2FA; not login)
+if (req.method === 'POST' && p === '/auth/reauth/start') {
+  return withCORS(env, req, await handleAuthReauthStart(env, req));
+}
+if (req.method === 'POST' && p === '/auth/reauth/verify') {
+  return withCORS(env, req, await handleAuthReauthVerify(env, req));
+}
       // ====================== HEALTH ======================
       if (req.method === "GET" && p === "/healthz") return handleHealth(env);
       if (req.method === "GET" && p === "/readyz")  return handleReady(env);
@@ -78947,6 +80119,40 @@ if (p.startsWith('/api/banking/')) {
   // ====================== BANKING (rail-generic) ======================
 // Add these routes inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
 // after `user` has been resolved.
+// ====================== BANKING (add inside /api/banking/ router block) ======================
+
+// List eligible payment authorisers (🔓 Authoriser or 🔑 Golden Key)
+if (req.method === 'GET' && p === '/api/banking/pay/authorisers') {
+  return withCORS(env, req, await handlePaymentAuthorisersList(env, req, user));
+}
+
+// ====================== BANKING (add inside /api/banking/ router block) ======================
+// Manual/admin resend of "payment scheduled" notification to all authorisers
+{
+  const m = p.match(/^\/api\/banking\/pay\/batch\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/notify-scheduled$/i);
+  if (m && req.method === 'POST') {
+    return withCORS(env, req, await handleBankingPayBatchNotifyScheduled(env, req, user, m[1]));
+  }
+}
+
+
+
+// Send (or resend) invite links for a given auth request
+{
+  const m = p.match(/^\/api\/banking\/pay\/auth-requests\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/invites$/i);
+  if (m && req.method === 'POST') {
+    return withCORS(env, req, await handlePayBatchAuthInvitesSend(env, req, user, m[1]));
+  }
+}
+
+// In-app authorise / use golden key / reject (works even if user wasn't emailed)
+{
+  const m = p.match(/^\/api\/banking\/pay\/batch\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/auth-action$/i);
+  if (m && req.method === 'POST') {
+    return withCORS(env, req, await handleBankingPayBatchAuthAction(env, req, user, m[1]));
+  }
+}
+
 
 if (req.method === 'GET' && p === '/api/banking/pay/batches') {
   return handleBankingPayBatchesList(env, req, user);
