@@ -4547,6 +4547,9 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
+
+
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -5193,6 +5196,7 @@ begin
   );
 end;
 $$;
+
 
 
 create or replace function public.pay_batches_list(
