@@ -1199,8 +1199,6 @@ $$;
 
 
 
-
-
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -1233,8 +1231,8 @@ begin
     raise exception 'pay_batch_cancel: pay_batch not found';
   end if;
 
-  if v_batch.status not in ('READY','SCHEDULED') then
-    raise exception 'pay_batch_cancel: batch status must be READY or SCHEDULED (current=%)', v_batch.status;
+  if v_batch.status not in ('READY','SCHEDULED','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT') then
+    raise exception 'pay_batch_cancel: batch status must be READY, SCHEDULED, AWAITING_AUTHORISATION or AUTHORISED_FOR_PAYMENT (current=%)', v_batch.status;
   end if;
 
   update public.pay_batch_items pbi
@@ -1247,6 +1245,30 @@ begin
   delete from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id;
 
+  -- If auth tables exist, cancel any active auth request and invalidate tokens.
+  if to_regclass('public.pay_batch_auth_requests') is not null then
+    execute
+      'update public.pay_batch_auth_requests pbar
+       set state = ''CANCELLED''
+       where pbar.pay_batch_id = $1
+         and pbar.state = ''AWAITING'''
+      using p_pay_batch_id;
+
+    if to_regclass('public.pay_batch_auth_tokens') is not null then
+      execute
+        'update public.pay_batch_auth_tokens pbat
+         set used_at_utc = now()
+         where pbat.used_at_utc is null
+           and pbat.auth_request_id in (
+             select pbar2.id
+             from public.pay_batch_auth_requests pbar2
+             where pbar2.pay_batch_id = $1
+               and pbar2.state in (''AWAITING'',''CANCELLED'')
+           )'
+        using p_pay_batch_id;
+    end if;
+  end if;
+
   update public.pay_batches pb
   set
     status = 'CANCELLED',
@@ -1256,7 +1278,8 @@ begin
     schedule_kind = null,
     scheduled_at_utc = null,
     scheduled_by_user_id = null,
-    funding_account_ref = null
+    funding_account_ref = null,
+    funds_warning_hours_json = null
   where pb.id = p_pay_batch_id;
 
   return jsonb_build_object(
@@ -1269,6 +1292,11 @@ begin
   );
 end;
 $$;
+
+
+
+
+
 
 create or replace function public.pay_batch_mark_blocked_funds(
   p_pay_batch_id uuid,
@@ -3197,7 +3225,6 @@ end;
 $$;
 
 
-
 create or replace function public.pay_batches_claim_due_scheduled(
   p_limit int,
   p_now_utc timestamptz
@@ -3224,7 +3251,7 @@ begin
       pb.scheduled_at_utc,
       pb.funding_account_ref
     from public.pay_batches pb
-    where upper(coalesce(pb.status,'')) = 'SCHEDULED'
+    where upper(coalesce(pb.status,'')) in ('SCHEDULED','AUTHORISED_FOR_PAYMENT')
       and pb.scheduled_at_utc is not null
       and pb.scheduled_at_utc <= v_cutoff
       and nullif(btrim(coalesce(pb.funding_account_ref,'')), '') is not null
