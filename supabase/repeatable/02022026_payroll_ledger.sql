@@ -1250,18 +1250,12 @@ begin;
 -- =========================================================
 
 
-
-create or replace function public.pay_preview(
-  p_pay_date date,
-  p_actor_user_id uuid,
-  p_candidate_id uuid default null,
-  p_client_id uuid default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.pay_preview(p_pay_date date, p_actor_user_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_week_start date := public._pay_week_start_monday(p_pay_date);
 
@@ -1393,6 +1387,8 @@ begin
       tf.id as tsfin_id,
       tf.candidate_id,
       tf.client_id,
+      ts.week_ending_date as ts_week_ending_date,
+      cl.name as ts_client_name,
       upper(coalesce(tf.pay_method,'')) as ts_pay_method,
       upper(coalesce(c.pay_method,''))  as cand_pay_method,
       c.tms_ref as cand_tms_ref,
@@ -1429,6 +1425,8 @@ begin
      and ts.is_current = true
     join public.candidates c
       on c.id = tf.candidate_id
+    join public.clients cl
+      on cl.id = tf.client_id
     left join public.contracts ct
       on ct.id = ts.contract_id
     left join public.client_settings cs
@@ -1477,6 +1475,8 @@ begin
       e.timesheet_id,
       e.tsfin_id,
       e.client_id,
+      e.ts_week_ending_date,
+      e.ts_client_name,
       e.ts_pay_method,
       e.cand_pay_method,
       e.cand_tms_ref,
@@ -1555,6 +1555,9 @@ begin
     select
       t.candidate_id,
       t.timesheet_id,
+      t.client_id,
+      t.ts_week_ending_date,
+      t.ts_client_name,
       t.ts_pay_method,
       t.cand_pay_method,
       t.cand_tms_ref,
@@ -1770,6 +1773,9 @@ begin
     select
       b.candidate_id,
       b.timesheet_id,
+      b.client_id,
+      b.ts_week_ending_date,
+      b.ts_client_name,
       b.ts_pay_method,
       b.cand_pay_method,
       b.cand_tms_ref,
@@ -1848,6 +1854,35 @@ begin
         where coalesce(nullif(q.d->>'delta_pay_ex_vat','')::numeric,0) <> 0
       ) as adjustment_deltas_json
     from ts_baseline b
+  ),
+  ts_itemised as (
+    select
+      d2.*,
+      d2.total_ex as payment_amount_ex_vat,
+      case
+        when d2.ts_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(d2.total_ex, v_vat_rate_pct, d2.umb_vat_chargeable)->>'inc')::numeric
+        else d2.total_ex
+      end as payment_amount_inc_vat,
+      case
+        when d2.ts_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(d2.total_ex, v_vat_rate_pct, d2.umb_vat_chargeable)->>'inc')::numeric
+        else d2.total_ex
+      end as payment_amount
+    from (
+      select
+        d1.*,
+        round(
+          coalesce((select sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)) from jsonb_array_elements(d1.segment_deltas_json) x),0)
+          + coalesce(d1.delta_additional_pay_ex_vat,0)
+          + coalesce(d1.delta_expenses_pay_ex_vat,0)
+          + coalesce(d1.delta_travel_pay_ex_vat,0)
+          + coalesce(d1.delta_accommodation_pay_ex_vat,0)
+          + coalesce(d1.delta_other_pay_ex_vat,0)
+          + coalesce(d1.delta_mileage_pay_ex_vat,0)
+          + coalesce((select sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)) from jsonb_array_elements(d1.adjustment_deltas_json) x),0),
+          2
+        ) as total_ex
+      from ts_deltas d1
+    ) d2
   ),
   candidate_rollup as (
     select
@@ -1931,6 +1966,12 @@ begin
         jsonb_agg(
           jsonb_build_object(
             'timesheet_id', d.timesheet_id::text,
+            'week_ending_date', case when d.ts_week_ending_date is null then null else d.ts_week_ending_date::text end,
+            'client_id', case when d.client_id is null then null else d.client_id::text end,
+            'client_name', d.ts_client_name,
+            'payment_amount_ex_vat', d.payment_amount_ex_vat,
+            'payment_amount_inc_vat', d.payment_amount_inc_vat,
+            'payment_amount', d.payment_amount,
             'source_pay_method', d.ts_pay_method,
             'segment_deltas', d.segment_deltas_json,
             'adjustment_deltas', d.adjustment_deltas_json,
@@ -1953,7 +1994,7 @@ begin
         ),
         '[]'::jsonb
       ) as timesheets_itemisation
-    from ts_deltas d
+    from ts_itemised d
     group by d.candidate_id
   ),
   blocked_counts as (
@@ -2257,7 +2298,8 @@ begin
     'snoozed_items', v_snoozed
   );
 end;
-$$;
+$function$
+
 
 
 -- =========================================================
