@@ -9754,6 +9754,106 @@ async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
   }
 }
 
+async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const csvRaw =
+    (body.csv_raw != null) ? String(body.csv_raw)
+    : (body.csv != null) ? String(body.csv)
+    : (body.csv_text != null) ? String(body.csv_text)
+    : (body.csvText != null) ? String(body.csvText)
+    : '';
+
+  if (!csvRaw.trim()) {
+    return withCORS(env, req, badRequest('csv_raw is required'));
+  }
+
+  const sourceFilenameRaw =
+    (body.source_filename != null) ? String(body.source_filename).trim()
+    : (body.file_name != null) ? String(body.file_name).trim()
+    : (body.filename != null) ? String(body.filename).trim()
+    : (body.sourceFilename != null) ? String(body.sourceFilename).trim()
+    : '';
+
+  const sourceFilename = sourceFilenameRaw ? sourceFilenameRaw : 'sage_export.csv';
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_set_paye_net_from_sage', {
+      p_pay_batch_id: id,
+      p_csv_raw: csvRaw,
+      p_actor_user_id: user.id,
+      p_source_filename: sourceFilename
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_set_paye_net_from_sage')) {
+        payload = payload.pay_set_paye_net_from_sage;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const entries =
+    Array.isArray(body.entries) ? body.entries
+    : Array.isArray(body.entries_json) ? body.entries_json
+    : Array.isArray(body.p_entries_json) ? body.p_entries_json
+    : Array.isArray(body.manual_entries) ? body.manual_entries
+    : [];
+
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return withCORS(env, req, badRequest('entries[] is required'));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_set_paye_net_manual', {
+      p_pay_batch_id: id,
+      p_entries_json: entries,
+      p_actor_user_id: user.id
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_set_paye_net_manual')) {
+        payload = payload.pay_set_paye_net_manual;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
 async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -80635,6 +80735,22 @@ if (req.method === 'GET' && p === '/api/banking/pay/authorisers') {
   return withCORS(env, req, await handlePaymentAuthorisersList(env, req, user));
 }
 
+// ROUTERS (insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
+// alongside the other /api/banking/pay/batch/:id/* routes, after `user` has been resolved.)
+
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/paye-net/sage');
+  if (m && req.method === 'POST') {
+    return handleBankingPayBatchPayeNetImportSage(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/paye-net/manual');
+  if (m && req.method === 'POST') {
+    return handleBankingPayBatchPayeNetSetManual(env, req, user, m.id);
+  }
+}
 
 // NEW ROUTERS (insert alongside the other /api/banking/pay/* routes)
 
