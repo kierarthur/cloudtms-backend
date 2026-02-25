@@ -4543,7 +4543,6 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
-
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -4714,7 +4713,7 @@ begin
     grouping_mode_used text null
   ) on commit drop;
 
-  delete from _tmp_pay_transfer_groups;
+  truncate table _tmp_pay_transfer_groups;
 
   -- =========================================================
   -- PAYE groups: candidate_id only (one transfer per candidate)
