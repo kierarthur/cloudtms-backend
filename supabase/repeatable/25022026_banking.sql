@@ -1364,6 +1364,8 @@ begin
 end;
 $$;
 
+
+
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -1436,7 +1438,7 @@ begin
     rail_meta_json jsonb null
   ) on commit drop;
 
-  delete from _tmp_settle_in;
+  truncate table _tmp_settle_in;
 
   insert into _tmp_settle_in(transfer_id, status, rail_tx_id, rail_state, rail_meta_json)
   select
@@ -1530,7 +1532,7 @@ begin
     candidate_id uuid primary key
   ) on commit drop;
 
-  delete from _tmp_newly_settled_candidates;
+  truncate table _tmp_newly_settled_candidates;
 
   with cand_transfers as (
     select
@@ -1702,7 +1704,7 @@ begin
     primary key (advance_id, week_start)
   ) on commit drop;
 
-  delete from _tmp_loan_taken;
+  truncate table _tmp_loan_taken;
 
   insert into _tmp_loan_taken(advance_id, week_start, taken_amount)
   select
@@ -1942,6 +1944,7 @@ begin
   );
 end;
 $$;
+
 create or replace function public.pay_settle_manual_confirm(
   p_pay_batch_id uuid,
   p_scope text,
@@ -3342,7 +3345,7 @@ begin
     completed_at_utc timestamptz null
   ) on commit drop;
 
-  delete from _tmp_pbt_updates;
+  truncate table _tmp_pbt_updates;
 
   insert into _tmp_pbt_updates(
     transfer_id,
@@ -3459,6 +3462,7 @@ begin
   );
 end;
 $$;
+
 
 create or replace function public.pay_batch_auth_start(
   p_pay_batch_id uuid,
