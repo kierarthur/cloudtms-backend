@@ -1259,6 +1259,17 @@ as $$
 declare
   v_week_start date := public._pay_week_start_monday(p_pay_date);
 
+  -- ✅ UK “today” anchor for eligibility window (Option A)
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
+
+  -- ✅ Eligibility window knobs (from settings_defaults; fallback to defaults if column absent)
+  v_pay_eligibility_months_back int := 6;
+  v_pay_eligibility_weeks_ahead int := 2;
+
+  -- ✅ Computed eligibility window
+  v_eligibility_from_date date;
+  v_eligibility_to_date date;
+
   v_vat_rate_pct numeric;
   v_erni_pct numeric;
 
@@ -1329,6 +1340,29 @@ begin
   if v_rail_provider_default is null or v_rail_env_default is null then
     raise exception 'settings_defaults missing or not populated';
   end if;
+
+  -- ✅ Load eligibility window knobs from settings_defaults (Option A)
+  -- NOTE: use exception guard so the function is robust even if the column is absent at runtime.
+  begin
+    select
+      sd.pay_eligibility_months_back,
+      sd.pay_eligibility_weeks_ahead
+    into
+      v_pay_eligibility_months_back,
+      v_pay_eligibility_weeks_ahead
+    from public.settings_defaults sd
+    order by sd.id asc
+    limit 1;
+  exception when undefined_column then
+    v_pay_eligibility_months_back := 6;
+    v_pay_eligibility_weeks_ahead := 2;
+  end;
+
+  v_pay_eligibility_months_back := greatest(0, least(120, coalesce(v_pay_eligibility_months_back, 6)));
+  v_pay_eligibility_weeks_ahead := greatest(0, least(52, coalesce(v_pay_eligibility_weeks_ahead, 2)));
+
+  v_eligibility_from_date := (v_today_uk - (v_pay_eligibility_months_back::text || ' months')::interval)::date;
+  v_eligibility_to_date   := (v_today_uk + (v_pay_eligibility_weeks_ahead::text || ' weeks')::interval)::date;
 
   with active_snoozes as (
     select
@@ -1402,6 +1436,11 @@ begin
       and coalesce(tf.has_pay_channel_issue,false) = false
       and upper(coalesce(tf.processing_status,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
       and upper(coalesce(c.pay_method,'')) in ('PAYE','UMBRELLA')
+
+      -- ✅ Option A: eligibility window is controlled by Settings (relative to UK “today”),
+      -- NOT scoped by pay_date week.
+      and ts.week_ending_date::date >= v_eligibility_from_date
+      and ts.week_ending_date::date <= v_eligibility_to_date
   ),
   umb_map as (
     select
@@ -2167,6 +2206,16 @@ begin
   return jsonb_build_object(
     'pay_date', p_pay_date::text,
     'pay_week_start', v_week_start::text,
+
+    -- ✅ Option A: expose eligibility period for UI (“Eligible Timesheet period …”)
+    'eligibility', jsonb_build_object(
+      'today_uk', v_today_uk::text,
+      'from_date', v_eligibility_from_date::text,
+      'to_date', v_eligibility_to_date::text,
+      'months_back', v_pay_eligibility_months_back,
+      'weeks_ahead', v_pay_eligibility_weeks_ahead
+    ),
+
     'finance', jsonb_build_object(
       'vat_rate_pct', v_vat_rate_pct,
       'erni_pct', v_erni_pct
@@ -2195,6 +2244,8 @@ end;
 $$;
 
 
+
+
 -- =========================================================
 -- A4.2 pay_create_draft_batch(p_pay_date, p_actor_user_id, p_preview_decisions_json)
 -- UPDATED LOGIC FULLY APPLIED:
@@ -2206,6 +2257,7 @@ $$;
 -- =========================================================
 
 begin;
+
 create or replace function public.pay_create_draft_batch(
   p_pay_date date,
   p_actor_user_id uuid,
@@ -2218,6 +2270,17 @@ set search_path = public
 as $$
 declare
   v_week_start date := public._pay_week_start_monday(p_pay_date);
+
+  -- ✅ UK “today” anchor for eligibility window (Option A)
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
+
+  -- ✅ Eligibility window knobs (from settings_defaults; fallback to defaults if column absent)
+  v_pay_eligibility_months_back int := 6;
+  v_pay_eligibility_weeks_ahead int := 2;
+
+  -- ✅ Computed eligibility window
+  v_eligibility_from_date date;
+  v_eligibility_to_date date;
 
   v_vat_rate_pct numeric;
   v_erni_pct numeric;
@@ -2297,6 +2360,29 @@ begin
   if v_settings.rail_provider_default is null or v_settings.rail_env_default is null then
     raise exception 'settings_defaults missing rail_provider_default/rail_env_default';
   end if;
+
+  -- ✅ Load eligibility window knobs from settings_defaults (Option A)
+  -- NOTE: use exception guard so function is robust even if column is absent at runtime.
+  begin
+    select
+      sd.pay_eligibility_months_back,
+      sd.pay_eligibility_weeks_ahead
+    into
+      v_pay_eligibility_months_back,
+      v_pay_eligibility_weeks_ahead
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_pay_eligibility_months_back := 6;
+    v_pay_eligibility_weeks_ahead := 2;
+  end;
+
+  v_pay_eligibility_months_back := greatest(0, least(120, coalesce(v_pay_eligibility_months_back, 6)));
+  v_pay_eligibility_weeks_ahead := greatest(0, least(52,  coalesce(v_pay_eligibility_weeks_ahead, 2)));
+
+  v_eligibility_from_date := (v_today_uk - (v_pay_eligibility_months_back::text || ' months')::interval)::date;
+  v_eligibility_to_date   := (v_today_uk + (v_pay_eligibility_weeks_ahead::text || ' weeks')::interval)::date;
 
   if jsonb_typeof(p_preview_decisions_json->'candidate_ids') = 'array' then
     select coalesce(array_agg((x::text)::uuid), array[]::uuid[])
@@ -2471,6 +2557,10 @@ begin
       and upper(coalesce(tf.processing_status,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
       and upper(coalesce(c.pay_method,'')) in ('PAYE','UMBRELLA')
       and tf.candidate_id = any(v_candidate_ids)
+
+      -- ✅ Option A: match pay_preview eligibility window (relative to UK “today”).
+      and ts.week_ending_date::date >= v_eligibility_from_date
+      and ts.week_ending_date::date <= v_eligibility_to_date
   ),
   umb as (
     select
@@ -3387,6 +3477,9 @@ begin
   );
 end;
 $$;
+
+
+
 commit;
 
 begin;
