@@ -417,6 +417,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -872,7 +873,6 @@ begin
       vts.week_ending_date,
       vts.client_id,
       vts.client_name,
-      nullif(btrim(coalesce(vts.ward_norm,'')), '') as ward_norm,
       nullif(btrim(coalesce(vts.hospital_norm,'')), '') as hospital_norm,
       round(coalesce(vts.total_hours,0),2) as units,
       round(coalesce(g.subtotal_paye_ex_vat,0),2) as subtotal_ex_vat,
@@ -896,7 +896,7 @@ begin
           )
         else null
       end as rate,
-      coalesce(nullif(btrim(coalesce(vts.ward_norm,'')), ''), nullif(btrim(coalesce(vts.hospital_norm,'')), '')) as unit_name
+      nullif(btrim(coalesce(vts.hospital_norm,'')), '') as unit_name
     from ts_group g
     left join public.v_timesheets_summary_base vts
       on vts.timesheet_id = g.timesheet_id
@@ -931,7 +931,6 @@ begin
       end as week_ending_date,
       null::uuid as client_id,
       null::text as client_name,
-      null::text as ward_norm,
       null::text as hospital_norm,
       null::numeric as units,
       round(coalesce(g.subtotal_paye_ex_vat,0),2) as subtotal_ex_vat,
@@ -1034,8 +1033,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 
@@ -2617,8 +2614,7 @@ begin
       case
         when d2.ts_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(d2.total_ex, v_vat_rate_pct, d2.umb_vat_chargeable)->>'inc')::numeric
         else d2.total_ex
-      end as payment_amount,
-      d2.total_ex as payment_amount
+      end as payment_amount
     from (
       select
         d1.*,
@@ -3230,6 +3226,7 @@ begin
   );
 end;
 $function$;
+
 
 create or replace function public.pay_create_draft_batch(
   p_pay_date date,
