@@ -1822,6 +1822,7 @@ begin;
 
 begin;
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1861,12 +1862,19 @@ declare
   v_default_schedule_paye_local text;
   v_funds_warning_hours_json jsonb;
 
+  -- ✅ Derived readiness semantics (match pay_batch_prepare)
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+
   v_paye jsonb := '[]'::jsonb;
   v_nonpaye jsonb := '[]'::jsonb;
 
   v_blocked jsonb := '[]'::jsonb;
   v_do_not_pay jsonb := '[]'::jsonb;
   v_snoozed jsonb := '[]'::jsonb;
+
+  -- ✅ NEW: payees section (ready/blocked status per payee)
+  v_payees jsonb := '[]'::jsonb;
 begin
   if p_pay_date is null then
     raise exception 'pay_date is required';
@@ -1922,6 +1930,14 @@ begin
   if v_rail_provider_default is null or v_rail_env_default is null then
     raise exception 'settings_defaults missing or not populated';
   end if;
+
+  -- ✅ Derived semantics (match pay_batch_prepare):
+  -- - name-check only when the rail supports it (and never for manual CSV)
+  -- - payee-map required for API rails (false for manual CSV)
+  v_need_name_check := (coalesce(v_rail_supports_name_check,false) = true)
+                       and (upper(btrim(coalesce(v_rail_provider_default,''))) <> 'CSV');
+
+  v_requires_payee_map := (upper(btrim(coalesce(v_rail_provider_default,''))) <> 'CSV');
 
   -- ✅ Load eligibility window knobs from settings_defaults (Option A)
   -- NOTE: use exception guard so the function is robust even if the column is absent at runtime.
@@ -2601,7 +2617,8 @@ begin
       case
         when d2.ts_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(d2.total_ex, v_vat_rate_pct, d2.umb_vat_chargeable)->>'inc')::numeric
         else d2.total_ex
-      end as payment_amount
+      end as payment_amount,
+      d2.total_ex as payment_amount
     from (
       select
         d1.*,
@@ -2800,6 +2817,155 @@ begin
     left join blocked_counts bc on bc.candidate_id = cr.candidate_id
     left join do_not_pay_counts dpc on dpc.candidate_id = cr.candidate_id
     left join loan_due ld on ld.candidate_id = cr.candidate_id
+  ),
+
+  -- ✅ NEW: Payees section (candidate + umbrella) + readiness derived from bank_name_checks + bank_payee_map
+  payees_src as (
+    select
+      'CANDIDATE'::text as payee_entity_kind,
+      ce.candidate_id as payee_entity_id,
+      nullif(btrim(coalesce(ce.candidate_bank_hash,'')), '') as bank_details_hash
+    from cand_enriched ce
+    union all
+    select
+      'UMBRELLA'::text as payee_entity_kind,
+      ce.cand_umbrella_id as payee_entity_id,
+      nullif(btrim(coalesce(ce.umbrella_bank_hash,'')), '') as bank_details_hash
+    from cand_enriched ce
+    where ce.cand_umbrella_id is not null
+  ),
+  payees as (
+    select
+      upper(btrim(coalesce(ps.payee_entity_kind,''))) as payee_entity_kind,
+      ps.payee_entity_id as payee_entity_id,
+      ps.bank_details_hash as bank_details_hash
+    from payees_src ps
+    where ps.payee_entity_id is not null
+    group by 1,2,3
+  ),
+  payees_enriched as (
+    select
+      p.payee_entity_kind,
+      p.payee_entity_id,
+      p.bank_details_hash,
+
+      coalesce(bnc.status, 'UNVERIFIED') as name_check_status,
+      (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash) as name_check_has_override,
+
+      (bpm.payee_id is not null) as payee_map_present,
+
+      (p.bank_details_hash is null or btrim(p.bank_details_hash) = '') as is_missing_bank_details,
+
+      (
+        v_need_name_check = true
+        and coalesce(bnc.status, 'UNVERIFIED') <> 'PASS'
+        and not (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash)
+      ) as is_name_check_blocked,
+
+      (
+        v_requires_payee_map = true
+        and (bpm.payee_id is null)
+      ) as is_payee_map_blocked
+    from payees p
+    left join public.bank_name_checks bnc
+      on bnc.rail_provider = v_rail_provider_default
+     and bnc.rail_env = v_rail_env_default
+     and bnc.entity_kind = p.payee_entity_kind
+     and bnc.entity_id = p.payee_entity_id
+     and bnc.bank_details_hash is not distinct from p.bank_details_hash
+    left join public.bank_payee_map bpm
+      on bpm.rail_provider = v_rail_provider_default
+     and bpm.rail_env = v_rail_env_default
+     and bpm.entity_kind = p.payee_entity_kind
+     and bpm.entity_id = p.payee_entity_id
+     and bpm.bank_details_hash is not distinct from p.bank_details_hash
+  ),
+  payees_json as (
+    select
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'payee_entity_kind', pe.payee_entity_kind,
+            'payee_entity_id', pe.payee_entity_id::text,
+            'bank_details_hash', pe.bank_details_hash,
+            'name_check', jsonb_build_object(
+              'status', pe.name_check_status,
+              'has_override', (pe.name_check_has_override = true)
+            ),
+            'payee_map', jsonb_build_object(
+              'present', (pe.payee_map_present = true)
+            ),
+            'blockers',
+              (
+                (case when pe.is_missing_bank_details then jsonb_build_array('BLOCKED_BANK_DETAILS') else '[]'::jsonb end)
+                ||
+                (case when pe.is_name_check_blocked then jsonb_build_array('BLOCKED_NAME_CHECK') else '[]'::jsonb end)
+                ||
+                (case when pe.is_payee_map_blocked then jsonb_build_array('BLOCKED_NO_PAYEE_MAP') else '[]'::jsonb end)
+              )
+          )
+          order by pe.payee_entity_kind, pe.payee_entity_id::text
+        ),
+        '[]'::jsonb
+      ) as payees
+    from payees_enriched pe
+  ),
+  cand_payee0 as (
+    select
+      ce.*,
+      case when ce.cand_pay_method = 'PAYE' then 'CANDIDATE' else 'UMBRELLA' end as payee_entity_kind,
+      case when ce.cand_pay_method = 'PAYE' then ce.candidate_id else ce.cand_umbrella_id end as payee_entity_id,
+      case when ce.cand_pay_method = 'PAYE' then nullif(btrim(coalesce(ce.candidate_bank_hash,'')), '') else nullif(btrim(coalesce(ce.umbrella_bank_hash,'')), '') end as payee_bank_hash
+    from cand_enriched ce
+  ),
+  cand_payee as (
+    select
+      cp.*,
+
+      coalesce(pe.name_check_status, 'UNVERIFIED') as payee_name_check_status,
+      coalesce(pe.name_check_has_override, false) as payee_name_check_has_override,
+      coalesce(pe.payee_map_present, false) as payee_map_present,
+
+      (
+        (case when (cp.payee_entity_id is null or cp.payee_bank_hash is null or btrim(cp.payee_bank_hash) = '') then jsonb_build_array('BLOCKED_BANK_DETAILS') else '[]'::jsonb end)
+        ||
+        (case
+           when (cp.payee_entity_id is not null and cp.payee_bank_hash is not null and v_need_name_check = true and coalesce(pe.name_check_status,'UNVERIFIED') <> 'PASS' and not coalesce(pe.name_check_has_override,false))
+           then jsonb_build_array('BLOCKED_NAME_CHECK')
+           else '[]'::jsonb
+         end)
+        ||
+        (case
+           when (cp.payee_entity_id is not null and cp.payee_bank_hash is not null and v_requires_payee_map = true and not coalesce(pe.payee_map_present,false))
+           then jsonb_build_array('BLOCKED_NO_PAYEE_MAP')
+           else '[]'::jsonb
+         end)
+      ) as blockers,
+
+      (
+        jsonb_array_length(
+          (
+            (case when (cp.payee_entity_id is null or cp.payee_bank_hash is null or btrim(cp.payee_bank_hash) = '') then jsonb_build_array('BLOCKED_BANK_DETAILS') else '[]'::jsonb end)
+            ||
+            (case
+               when (cp.payee_entity_id is not null and cp.payee_bank_hash is not null and v_need_name_check = true and coalesce(pe.name_check_status,'UNVERIFIED') <> 'PASS' and not coalesce(pe.name_check_has_override,false))
+               then jsonb_build_array('BLOCKED_NAME_CHECK')
+               else '[]'::jsonb
+             end)
+            ||
+            (case
+               when (cp.payee_entity_id is not null and cp.payee_bank_hash is not null and v_requires_payee_map = true and not coalesce(pe.payee_map_present,false))
+               then jsonb_build_array('BLOCKED_NO_PAYEE_MAP')
+               else '[]'::jsonb
+             end)
+          )
+        ) = 0
+      ) as is_ready_for_draft
+    from cand_payee0 cp
+    left join payees_enriched pe
+      on pe.payee_entity_kind = cp.payee_entity_kind
+     and pe.payee_entity_id = cp.payee_entity_id
+     and pe.bank_details_hash is not distinct from cp.payee_bank_hash
   )
   select
     -- paye_candidates
@@ -2815,11 +2981,21 @@ begin
             'umbrella_enabled', ce.umb_enabled,
             'umbrella_vat_chargeable', ce.umb_vat_chargeable,
 
-            -- ✅ bank readiness summary
+            -- ✅ bank readiness summary (legacy)
             'candidate_has_bank_details', ce.candidate_has_bank_details,
             'candidate_bank_hash', ce.candidate_bank_hash,
             'umbrella_has_bank_details', null,
             'umbrella_bank_hash', null,
+
+            -- ✅ NEW: derived payee readiness (for drafting / accept/decline UX)
+            'payee_entity_kind', ce.payee_entity_kind,
+            'payee_entity_id', case when ce.payee_entity_id is null then null else ce.payee_entity_id::text end,
+            'payee_bank_hash', ce.payee_bank_hash,
+            'payee_map_present', ce.payee_map_present,
+            'name_check_status', ce.payee_name_check_status,
+            'name_check_has_override', ce.payee_name_check_has_override,
+            'blockers', ce.blockers,
+            'is_ready_for_draft', ce.is_ready_for_draft,
 
             'blocked_count', ce.blocked_count,
             'do_not_pay_count', ce.do_not_pay_count,
@@ -2854,7 +3030,7 @@ begin
           )
           order by ce.cand_display_name nulls last, ce.cand_tms_ref nulls last, ce.candidate_id
         )
-        from cand_enriched ce
+        from cand_payee ce
         where ce.cand_pay_method = 'PAYE'
       ),
       '[]'::jsonb
@@ -2872,11 +3048,21 @@ begin
             'umbrella_enabled', ce.umb_enabled,
             'umbrella_vat_chargeable', ce.umb_vat_chargeable,
 
-            -- ✅ bank readiness summary
+            -- ✅ bank readiness summary (legacy)
             'candidate_has_bank_details', ce.candidate_has_bank_details,
             'candidate_bank_hash', ce.candidate_bank_hash,
             'umbrella_has_bank_details', case when ce.cand_pay_method <> 'PAYE' then ce.umbrella_has_bank_details else null end,
             'umbrella_bank_hash', case when ce.cand_pay_method <> 'PAYE' then ce.umbrella_bank_hash else null end,
+
+            -- ✅ NEW: derived payee readiness (for drafting / accept/decline UX)
+            'payee_entity_kind', ce.payee_entity_kind,
+            'payee_entity_id', case when ce.payee_entity_id is null then null else ce.payee_entity_id::text end,
+            'payee_bank_hash', ce.payee_bank_hash,
+            'payee_map_present', ce.payee_map_present,
+            'name_check_status', ce.payee_name_check_status,
+            'name_check_has_override', ce.payee_name_check_has_override,
+            'blockers', ce.blockers,
+            'is_ready_for_draft', ce.is_ready_for_draft,
 
             'blocked_count', ce.blocked_count,
             'do_not_pay_count', ce.do_not_pay_count,
@@ -2912,7 +3098,7 @@ begin
           )
           order by ce.cand_display_name nulls last, ce.cand_tms_ref nulls last, ce.candidate_id
         )
-        from cand_enriched ce
+        from cand_payee ce
         where ce.cand_pay_method <> 'PAYE'
       ),
       '[]'::jsonb
@@ -2985,8 +3171,10 @@ begin
         ) u
       ),
       '[]'::jsonb
-    )
-  into v_paye, v_nonpaye, v_blocked, v_do_not_pay, v_snoozed;
+    ),
+    -- ✅ NEW: payees section
+    coalesce((select pj.payees from payees_json pj), '[]'::jsonb)
+  into v_paye, v_nonpaye, v_blocked, v_do_not_pay, v_snoozed, v_payees;
 
   return jsonb_build_object(
     'pay_date', p_pay_date::text,
@@ -3020,7 +3208,9 @@ begin
         'env_default', v_rail_env_default,
         'supports_scheduling', v_rail_supports_scheduling,
         'supports_name_check', v_rail_supports_name_check,
-        'supports_auto_execute', v_rail_supports_auto_execute
+        'supports_auto_execute', v_rail_supports_auto_execute,
+        'need_name_check', v_need_name_check,
+        'requires_payee_map', v_requires_payee_map
       ),
       'schedule_defaults', jsonb_build_object(
         'umbrella_local', v_default_schedule_umbrella_local,
@@ -3028,6 +3218,10 @@ begin
       ),
       'funds_warning_hours_json', v_funds_warning_hours_json
     ),
+
+    -- ✅ NEW: payees section for accept/decline + readiness UI
+    'payees', v_payees,
+
     'paye_candidates', v_paye,
     'non_paye_payees', v_nonpaye,
     'blocked_items', v_blocked,
