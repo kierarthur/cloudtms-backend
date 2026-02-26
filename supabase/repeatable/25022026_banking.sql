@@ -79,6 +79,100 @@ begin
 end;
 $function$;
 
+create or replace function public.pay_create_draft_batches_split(
+  p_pay_date date,
+  p_week_ending_cutoff date,
+  p_actor_user_id uuid,
+  p_preview_decisions_json jsonb,
+  p_candidate_id uuid default null,
+  p_client_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_umbrella_res jsonb;
+  v_paye_res jsonb;
+
+  v_umbrella_pay_batch_id uuid;
+  v_paye_pay_batch_id uuid;
+
+  v_err text;
+begin
+  if p_pay_date is null then
+    raise exception 'pay_date is required';
+  end if;
+
+  if p_week_ending_cutoff is null then
+    raise exception 'week_ending_cutoff is required';
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id is required';
+  end if;
+
+  -- Create UMBRELLA draft (READY umbrella items only; enforced by pay_create_draft_batch scope logic)
+  begin
+    v_umbrella_res := public.pay_create_draft_batch(
+      p_pay_date,
+      p_week_ending_cutoff,
+      'UMBRELLA',
+      p_actor_user_id,
+      p_preview_decisions_json,
+      p_candidate_id,
+      p_client_id
+    );
+
+    v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
+  exception
+    when others then
+      v_err := coalesce(SQLERRM, '');
+      -- Treat "Nothing to pay ..." as non-fatal: allow PAYE draft to still be created.
+      if position('Nothing to pay' in v_err) = 1 then
+        v_umbrella_pay_batch_id := null;
+      else
+        raise;
+      end if;
+  end;
+
+  -- Create PAYE draft (worksheet batch; net can be set later; pay_create_draft_batch does not require net)
+  begin
+    v_paye_res := public.pay_create_draft_batch(
+      p_pay_date,
+      p_week_ending_cutoff,
+      'PAYE',
+      p_actor_user_id,
+      p_preview_decisions_json,
+      p_candidate_id,
+      p_client_id
+    );
+
+    v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
+  exception
+    when others then
+      v_err := coalesce(SQLERRM, '');
+      -- Treat "Nothing to pay ..." as non-fatal: allow UMBRELLA draft to still be created.
+      if position('Nothing to pay' in v_err) = 1 then
+        v_paye_pay_batch_id := null;
+      else
+        raise;
+      end if;
+  end;
+
+  if v_umbrella_pay_batch_id is null and v_paye_pay_batch_id is null then
+    raise exception 'Nothing to pay (no payable items for UMBRELLA or PAYE after blockers)';
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'umbrella_pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
+    'paye_pay_batch_id', case when v_paye_pay_batch_id is null then null else v_paye_pay_batch_id::text end
+  );
+end;
+$$;
+
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
   p_provider text,
   p_env text,
@@ -1196,105 +1290,6 @@ begin
   );
 end;
 $$;
-
-
-
-create or replace function public.pay_batch_cancel(
-  p_pay_batch_id uuid,
-  p_actor_user_id uuid,
-  p_reason text
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_batch record;
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_batch_cancel: pay_batch_id is required';
-  end if;
-  if p_actor_user_id is null then
-    raise exception 'pay_batch_cancel: actor_user_id is required';
-  end if;
-
-  select
-    pb.id,
-    pb.status
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id
-  for update;
-
-  if v_batch.id is null then
-    raise exception 'pay_batch_cancel: pay_batch not found';
-  end if;
-
-  if v_batch.status not in ('READY','SCHEDULED','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT') then
-    raise exception 'pay_batch_cancel: batch status must be READY, SCHEDULED, AWAITING_AUTHORISATION or AUTHORISED_FOR_PAYMENT (current=%)', v_batch.status;
-  end if;
-
-  update public.pay_batch_items pbi
-  set pay_bank_transfer_id = null
-  from public.pay_batch_candidates pbc
-  where pbc.id = pbi.pay_batch_candidate_id
-    and pbc.pay_batch_id = p_pay_batch_id
-    and pbi.pay_bank_transfer_id is not null;
-
-  delete from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id;
-
-  -- If auth tables exist, cancel any active auth request and invalidate tokens.
-  if to_regclass('public.pay_batch_auth_requests') is not null then
-    execute
-      'update public.pay_batch_auth_requests pbar
-       set state = ''CANCELLED''
-       where pbar.pay_batch_id = $1
-         and pbar.state = ''AWAITING'''
-      using p_pay_batch_id;
-
-    if to_regclass('public.pay_batch_auth_tokens') is not null then
-      execute
-        'update public.pay_batch_auth_tokens pbat
-         set used_at_utc = now()
-         where pbat.used_at_utc is null
-           and pbat.auth_request_id in (
-             select pbar2.id
-             from public.pay_batch_auth_requests pbar2
-             where pbar2.pay_batch_id = $1
-               and pbar2.state in (''AWAITING'',''CANCELLED'')
-           )'
-        using p_pay_batch_id;
-    end if;
-  end if;
-
-  update public.pay_batches pb
-  set
-    status = 'CANCELLED',
-    cancelled_at_utc = now(),
-    cancelled_by_user_id = p_actor_user_id,
-    cancel_reason = p_reason,
-    schedule_kind = null,
-    scheduled_at_utc = null,
-    scheduled_by_user_id = null,
-    funding_account_ref = null,
-    funds_warning_hours_json = null
-  where pb.id = p_pay_batch_id;
-
-  return jsonb_build_object(
-    'ok', true,
-    'pay_batch_id', p_pay_batch_id::text,
-    'status', (select pb2.status from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
-    'cancelled_at_utc', (select pb3.cancelled_at_utc::text from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
-    'cancelled_by_user_id', p_actor_user_id::text,
-    'cancel_reason', p_reason
-  );
-end;
-$$;
-
-
-
 
 
 
