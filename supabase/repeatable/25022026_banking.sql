@@ -1359,6 +1359,402 @@ begin
 end;
 $$;
 
+create or replace function public.pay_export_bank_csv(
+  p_pay_batch_id uuid,
+  p_scope text default 'ALL'
+)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
+
+  v_default_cols jsonb := '["payment_reference","payee_name","sort_code","account_number","account_type","amount"]'::jsonb;
+  v_cols_json jsonb;
+  v_cols text[];
+  v_col text;
+
+  v_allowed_cols text[] := array[
+    'transfer_id',
+    'payment_reference',
+    'payee_name',
+    'sort_code',
+    'account_number',
+    'account_type',
+    'amount',
+    'currency',
+    'pay_channel',
+    'rail_provider',
+    'rail_env',
+    'request_id',
+    'transfer_group_key',
+    'grouping_mode_used',
+    'week_ending_bucket',
+    'candidate_id',
+    'umbrella_id',
+    'payee_entity_kind',
+    'payee_entity_id',
+    'bank_details_hash_snapshot'
+  ];
+
+  v_header text := '';
+  v_body text := '';
+  v_csv text := '';
+
+  v_missing_count int := 0;
+  v_row_count int := 0;
+
+  v_hdr_part text;
+  v_val text;
+  v_line text;
+
+  r record;
+begin
+  if v_scope not in ('ALL','PAYE','UMBRELLA') then
+    raise exception 'pay_export_bank_csv: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
+  end if;
+
+  if not exists (select 1 from public.pay_batches pb where pb.id = p_pay_batch_id) then
+    raise exception 'pay_export_bank_csv: pay batch % not found.', p_pay_batch_id;
+  end if;
+
+  -- Load configured CSV column order (fallback to default if NULL/invalid/empty)
+  select sd.pay_export_csv_columns_json
+  into v_cols_json
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_cols_json is null or jsonb_typeof(v_cols_json) <> 'array' or jsonb_array_length(v_cols_json) = 0 then
+    v_cols_json := v_default_cols;
+  end if;
+
+  select coalesce(array_agg(t.col order by t.ord), array[]::text[])
+  into v_cols
+  from jsonb_array_elements_text(v_cols_json) with ordinality as t(col, ord);
+
+  if array_length(v_cols, 1) is null or array_length(v_cols, 1) = 0 then
+    v_cols := array['payment_reference','payee_name','sort_code','account_number','account_type','amount']::text[];
+  end if;
+
+  -- Validate column keys: must be from allowed set
+  foreach v_col in array v_cols loop
+    if v_col is null or btrim(v_col) = '' then
+      raise exception 'pay_export_bank_csv: export columns contain an empty key';
+    end if;
+
+    if not (v_col = any(v_allowed_cols)) then
+      raise exception 'pay_export_bank_csv: invalid export column "%". Allowed=%', v_col, array_to_string(v_allowed_cols, ',');
+    end if;
+  end loop;
+
+  -- Reject duplicates (deterministic export)
+  if (
+    select count(*)::int
+    from unnest(v_cols) x
+  ) <> (
+    select count(distinct x)::int
+    from unnest(v_cols) x
+  ) then
+    raise exception 'pay_export_bank_csv: duplicate column keys in pay_export_csv_columns_json';
+  end if;
+
+  -- Ensure required snapshot fields exist for all *pending* transfers in scope, but only for fields actually exported.
+  select count(*)::int
+  into v_missing_count
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or pbt.pay_channel = v_scope)
+    and upper(coalesce(pbt.status,'')) = 'PENDING'
+    and (
+      (array_position(v_cols,'payment_reference') is not null and pbt.payment_reference is null)
+      or (array_position(v_cols,'payee_name') is not null and pbt.payee_name is null)
+      or (array_position(v_cols,'sort_code') is not null and pbt.sort_code is null)
+      or (array_position(v_cols,'account_number') is not null and pbt.account_number is null)
+      or (array_position(v_cols,'account_type') is not null and pbt.account_type is null)
+      or (array_position(v_cols,'amount') is not null and pbt.amount is null)
+      or (array_position(v_cols,'currency') is not null and pbt.currency is null)
+      or (array_position(v_cols,'pay_channel') is not null and pbt.pay_channel is null)
+      or (array_position(v_cols,'rail_provider') is not null and pbt.rail_provider is null)
+      or (array_position(v_cols,'rail_env') is not null and pbt.rail_env is null)
+      or (array_position(v_cols,'request_id') is not null and pbt.request_id is null)
+      or (array_position(v_cols,'transfer_group_key') is not null and pbt.transfer_group_key is null)
+      or (array_position(v_cols,'grouping_mode_used') is not null and pbt.grouping_mode_used is null)
+      or (array_position(v_cols,'week_ending_bucket') is not null and pbt.week_ending_bucket is null)
+      or (array_position(v_cols,'candidate_id') is not null and pbt.candidate_id is null)
+      or (array_position(v_cols,'umbrella_id') is not null and pbt.umbrella_id is null)
+      or (array_position(v_cols,'payee_entity_kind') is not null and pbt.payee_entity_kind is null)
+      or (array_position(v_cols,'payee_entity_id') is not null and pbt.payee_entity_id is null)
+      or (array_position(v_cols,'bank_details_hash_snapshot') is not null and pbt.bank_details_hash_snapshot is null)
+    );
+
+  if v_missing_count > 0 then
+    raise exception 'pay_export_bank_csv: % pending transfer(s) missing one or more required fields for the configured export. Execute-bank must populate these first.', v_missing_count;
+  end if;
+
+  -- If no rows, raise to avoid silent "empty file".
+  select count(*)::int
+  into v_row_count
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or pbt.pay_channel = v_scope)
+    and upper(coalesce(pbt.status,'')) = 'PENDING';
+
+  if v_row_count = 0 then
+    raise exception 'pay_export_bank_csv: no pending transfers found for batch % (scope=%).', p_pay_batch_id, v_scope;
+  end if;
+
+  -- Build header from configured columns
+  v_header := '';
+  foreach v_col in array v_cols loop
+    v_hdr_part := case v_col
+      when 'transfer_id' then 'Transfer id'
+      when 'payment_reference' then 'Payment reference'
+      when 'payee_name' then 'Payee name'
+      when 'sort_code' then 'Sort code'
+      when 'account_number' then 'Bank account number'
+      when 'account_type' then 'Bank account type'
+      when 'amount' then 'Amount'
+      when 'currency' then 'Currency'
+      when 'pay_channel' then 'Channel'
+      when 'rail_provider' then 'Rail provider'
+      when 'rail_env' then 'Rail env'
+      when 'request_id' then 'Request id'
+      when 'transfer_group_key' then 'Transfer group key'
+      when 'grouping_mode_used' then 'Grouping mode'
+      when 'week_ending_bucket' then 'Week ending'
+      when 'candidate_id' then 'Candidate id'
+      when 'umbrella_id' then 'Umbrella id'
+      when 'payee_entity_kind' then 'Payee entity kind'
+      when 'payee_entity_id' then 'Payee entity id'
+      when 'bank_details_hash_snapshot' then 'Bank details hash'
+      else v_col
+    end;
+
+    if v_header = '' then
+      v_header := v_hdr_part;
+    else
+      v_header := v_header || ',' || v_hdr_part;
+    end if;
+  end loop;
+
+  -- Build rows
+  v_body := '';
+  for r in
+    select
+      pbt.id as transfer_id,
+      pbt.payment_reference,
+      pbt.payee_name,
+      pbt.sort_code,
+      pbt.account_number,
+      pbt.account_type,
+      pbt.amount,
+      pbt.currency,
+      pbt.pay_channel,
+      pbt.rail_provider,
+      pbt.rail_env,
+      pbt.request_id,
+      pbt.transfer_group_key,
+      pbt.grouping_mode_used,
+      pbt.week_ending_bucket,
+      pbt.candidate_id,
+      pbt.umbrella_id,
+      pbt.payee_entity_kind,
+      pbt.payee_entity_id,
+      pbt.bank_details_hash_snapshot
+    from public.pay_bank_transfers pbt
+    where pbt.pay_batch_id = p_pay_batch_id
+      and (v_scope = 'ALL' or pbt.pay_channel = v_scope)
+      and upper(coalesce(pbt.status,'')) = 'PENDING'
+    order by pbt.id
+  loop
+    v_line := '';
+
+    foreach v_col in array v_cols loop
+      v_val := null;
+
+      if v_col = 'transfer_id' then
+        v_val := r.transfer_id::text;
+      elsif v_col = 'payment_reference' then
+        v_val := r.payment_reference;
+      elsif v_col = 'payee_name' then
+        v_val := r.payee_name;
+      elsif v_col = 'sort_code' then
+        v_val := r.sort_code;
+      elsif v_col = 'account_number' then
+        v_val := r.account_number;
+      elsif v_col = 'account_type' then
+        v_val := r.account_type;
+      elsif v_col = 'amount' then
+        v_val := to_char(r.amount, 'FM9999999990.00');
+      elsif v_col = 'currency' then
+        v_val := r.currency;
+      elsif v_col = 'pay_channel' then
+        v_val := r.pay_channel;
+      elsif v_col = 'rail_provider' then
+        v_val := r.rail_provider;
+      elsif v_col = 'rail_env' then
+        v_val := r.rail_env;
+      elsif v_col = 'request_id' then
+        v_val := r.request_id;
+      elsif v_col = 'transfer_group_key' then
+        v_val := r.transfer_group_key;
+      elsif v_col = 'grouping_mode_used' then
+        v_val := r.grouping_mode_used;
+      elsif v_col = 'week_ending_bucket' then
+        v_val := case when r.week_ending_bucket is null then null else r.week_ending_bucket::text end;
+      elsif v_col = 'candidate_id' then
+        v_val := case when r.candidate_id is null then null else r.candidate_id::text end;
+      elsif v_col = 'umbrella_id' then
+        v_val := case when r.umbrella_id is null then null else r.umbrella_id::text end;
+      elsif v_col = 'payee_entity_kind' then
+        v_val := r.payee_entity_kind;
+      elsif v_col = 'payee_entity_id' then
+        v_val := case when r.payee_entity_id is null then null else r.payee_entity_id::text end;
+      elsif v_col = 'bank_details_hash_snapshot' then
+        v_val := r.bank_details_hash_snapshot;
+      else
+        v_val := null;
+      end if;
+
+      v_val := coalesce(v_val, '');
+
+      -- CSV escaping: quote when contains comma/quote/newline, double quotes inside.
+      if v_val ~ '[,"\r\n]' then
+        v_val := '"' || replace(v_val, '"', '""') || '"';
+      end if;
+
+      if v_line = '' then
+        v_line := v_val;
+      else
+        v_line := v_line || ',' || v_val;
+      end if;
+    end loop;
+
+    if v_body = '' then
+      v_body := v_line;
+    else
+      v_body := v_body || E'\n' || v_line;
+    end if;
+  end loop;
+
+  v_csv := v_header || E'\n' || coalesce(v_body, '');
+  return v_csv;
+end;
+$$;
+
+create or replace function public.pay_settle_manual_confirm(
+  p_pay_batch_id uuid,
+  p_scope text,
+  p_bank_confirm_ref text,
+  p_payment_date date,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_scope text := upper(btrim(coalesce(p_scope,'ALL')));
+  v_batch record;
+
+  v_settlement_json jsonb := '[]'::jsonb;
+  v_now timestamptz := now();
+
+  v_pending_count int := 0;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_settle_manual_confirm: pay_batch_id is required';
+  end if;
+  if p_actor_user_id is null then
+    raise exception 'pay_settle_manual_confirm: actor_user_id is required';
+  end if;
+  if v_scope not in ('ALL','PAYE','UMBRELLA') then
+    raise exception 'pay_settle_manual_confirm: invalid scope (ALL|PAYE|UMBRELLA)';
+  end if;
+  if nullif(btrim(coalesce(p_bank_confirm_ref,'')),'') is null then
+    raise exception 'pay_settle_manual_confirm: bank_confirm_ref is required';
+  end if;
+  if p_payment_date is null then
+    raise exception 'pay_settle_manual_confirm: payment_date is required';
+  end if;
+
+  select
+    pb.id,
+    pb.status,
+    pb.rail_provider_snapshot,
+    pb.rail_env_snapshot
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  for update;
+
+  if v_batch.id is null then
+    raise exception 'pay_settle_manual_confirm: pay_batch not found';
+  end if;
+
+  if upper(coalesce(v_batch.rail_provider_snapshot,'')) <> 'CSV' then
+    raise exception 'pay_settle_manual_confirm: CSV-only (rail_provider_snapshot must be CSV; current=%)', v_batch.rail_provider_snapshot;
+  end if;
+
+  select count(*)::int
+  into v_pending_count
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
+    and upper(coalesce(pbt.status,'')) = 'PENDING';
+
+  if v_pending_count = 0 then
+    raise exception 'pay_settle_manual_confirm: no PENDING transfers found for batch % (scope=%)', p_pay_batch_id, v_scope;
+  end if;
+
+  update public.pay_batches pb2
+  set
+    monzo_confirmed_at_utc = v_now,
+    monzo_confirmed_by_user_id = p_actor_user_id
+  where pb2.id = p_pay_batch_id;
+
+  update public.pay_batch_items pbi
+  set bank_reference = p_bank_confirm_ref
+  from public.pay_bank_transfers pbt
+  join public.pay_batch_candidates pbc
+    on pbc.id = pbi.pay_batch_candidate_id
+   and pbc.pay_batch_id = p_pay_batch_id
+  where pbt.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
+    and upper(coalesce(pbt.status,'')) = 'PENDING'
+    and pbi.pay_bank_transfer_id = pbt.id;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'transfer_id', pbt.id::text,
+        'status', 'COMPLETED',
+        'rail_tx_id', null,
+        'rail_state', 'MANUAL_CONFIRM',
+        'rail_meta_json', jsonb_build_object(
+          'bank_confirm_ref', p_bank_confirm_ref,
+          'payment_date', p_payment_date::text,
+          'confirmed_at_utc', v_now::text,
+          'confirmed_by_user_id', p_actor_user_id::text
+        )
+      )
+      order by pbt.pay_channel, pbt.amount desc, pbt.id
+    ),
+    '[]'::jsonb
+  )
+  into v_settlement_json
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
+    and upper(coalesce(pbt.status,'')) = 'PENDING';
+
+  return public.pay_settle_rail(p_pay_batch_id, v_settlement_json, p_actor_user_id);
+end;
+$$;
 
 
 create or replace function public.pay_settle_rail(
@@ -1862,10 +2258,12 @@ begin
   into v_batch_status
   from stats s;
 
+  -- ✅ Updated: always bump last_status_checked_at_utc for poll throttling (even if settlement_json was empty/no-op)
   update public.pay_batches pb2
   set
     status = v_batch_status,
-    completed_at_utc = case when v_batch_status = 'SETTLED' then coalesce(pb2.completed_at_utc, v_now) else pb2.completed_at_utc end
+    completed_at_utc = case when v_batch_status = 'SETTLED' then coalesce(pb2.completed_at_utc, v_now) else pb2.completed_at_utc end,
+    last_status_checked_at_utc = v_now
   where pb2.id = p_pay_batch_id;
 
   select coalesce(
@@ -1940,111 +2338,9 @@ begin
 end;
 $$;
 
-create or replace function public.pay_settle_manual_confirm(
-  p_pay_batch_id uuid,
-  p_scope text,
-  p_bank_confirm_ref text,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_scope text := upper(btrim(coalesce(p_scope,'ALL')));
-  v_batch record;
 
-  v_settlement_json jsonb := '[]'::jsonb;
-  v_now timestamptz := now();
 
-  v_pending_count int := 0;
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_settle_manual_confirm: pay_batch_id is required';
-  end if;
-  if p_actor_user_id is null then
-    raise exception 'pay_settle_manual_confirm: actor_user_id is required';
-  end if;
-  if v_scope not in ('ALL','PAYE','UMBRELLA') then
-    raise exception 'pay_settle_manual_confirm: invalid scope (ALL|PAYE|UMBRELLA)';
-  end if;
-  if nullif(btrim(coalesce(p_bank_confirm_ref,'')),'') is null then
-    raise exception 'pay_settle_manual_confirm: bank_confirm_ref is required';
-  end if;
 
-  select
-    pb.id,
-    pb.status,
-    pb.rail_provider_snapshot,
-    pb.rail_env_snapshot
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id
-  for update;
-
-  if v_batch.id is null then
-    raise exception 'pay_settle_manual_confirm: pay_batch not found';
-  end if;
-
-  if upper(coalesce(v_batch.rail_provider_snapshot,'')) <> 'CSV' then
-    raise exception 'pay_settle_manual_confirm: CSV-only (rail_provider_snapshot must be CSV; current=%)', v_batch.rail_provider_snapshot;
-  end if;
-
-  select count(*)::int
-  into v_pending_count
-  from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
-    and upper(coalesce(pbt.status,'')) = 'PENDING';
-
-  if v_pending_count = 0 then
-    raise exception 'pay_settle_manual_confirm: no PENDING transfers found for batch % (scope=%)', p_pay_batch_id, v_scope;
-  end if;
-
-  update public.pay_batches pb2
-  set
-    monzo_confirmed_at_utc = v_now,
-    monzo_confirmed_by_user_id = p_actor_user_id
-  where pb2.id = p_pay_batch_id;
-
-  update public.pay_batch_items pbi
-  set bank_reference = p_bank_confirm_ref
-  from public.pay_bank_transfers pbt
-  join public.pay_batch_candidates pbc
-    on pbc.id = pbi.pay_batch_candidate_id
-   and pbc.pay_batch_id = p_pay_batch_id
-  where pbt.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
-    and upper(coalesce(pbt.status,'')) = 'PENDING'
-    and pbi.pay_bank_transfer_id = pbt.id;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'transfer_id', pbt.id::text,
-        'status', 'COMPLETED',
-        'rail_tx_id', null,
-        'rail_state', 'MANUAL_CONFIRM',
-        'rail_meta_json', jsonb_build_object(
-          'bank_confirm_ref', p_bank_confirm_ref,
-          'confirmed_at_utc', v_now::text,
-          'confirmed_by_user_id', p_actor_user_id::text
-        )
-      )
-      order by pbt.pay_channel, pbt.amount desc, pbt.id
-    ),
-    '[]'::jsonb
-  )
-  into v_settlement_json
-  from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
-    and upper(coalesce(pbt.status,'')) = 'PENDING';
-
-  return public.pay_settle_rail(p_pay_batch_id, v_settlement_json, p_actor_user_id);
-end;
-$$;
 
 
 create or replace function public.pay_remittance_build(
