@@ -10040,6 +10040,26 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
   try {
     // ─────────────────────────────────────────────────────────────
+    // 0) Server-side single-shot gate: do not allow execute twice.
+    // ─────────────────────────────────────────────────────────────
+    let gateGet0;
+    try {
+      gateGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
+    const gateGet = unwrapRpc(gateGet0, 'pay_batch_get');
+    const gateBatch = (gateGet && typeof gateGet === 'object') ? (gateGet.batch || null) : null;
+    const gateStatus = String(gateBatch?.status || '').trim().toUpperCase();
+
+    const gateAllowed = (gateStatus === 'DRAFT' || gateStatus === 'DRAFT_CREATED' || gateStatus === 'READY');
+    if (!gateAllowed) {
+      const msg = `EXECUTE_NOT_ALLOWED status=${gateStatus || '—'}`;
+      return withCORS(env, req, jsonResponse(400, { error: msg, message: msg, error_code: 'EXECUTE_NOT_ALLOWED' }));
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 1) Execute-bank: build transfers + link items
     // ─────────────────────────────────────────────────────────────
     let execRes0;
@@ -12143,6 +12163,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -12171,6 +12192,11 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     const transfers = (batchPayload && typeof batchPayload === 'object' && Array.isArray(batchPayload.transfers)) ? batchPayload.transfers : [];
 
     const hasPending = (transfers || []).some(t => String(t?.status || '').trim().toUpperCase() === 'PENDING');
+    const hasPollable = (transfers || []).some(t => {
+      if (String(t?.status || '').trim().toUpperCase() !== 'PENDING') return false;
+      const railTx = String(t?.rail_tx_id || '').trim();
+      return !!railTx;
+    });
 
     const lastCheckedIso = batchObj?.last_status_checked_at_utc ? String(batchObj.last_status_checked_at_utc).trim() : '';
     const lastCheckedMs = (() => {
@@ -12189,6 +12215,46 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       return withCORS(env, req, ok({
         ...freshObj,
         poll_result: { ok: true, skipped: true, reason: 'THROTTLED', throttle_ms: THROTTLE_MS, last_status_checked_at_utc: lastCheckedIso },
+        poll_provider: provider,
+        poll_server_utc: new Date().toISOString()
+      }));
+    }
+
+    // If nothing is pending, skip poll (but still return fresh batch state)
+    if (!hasPending) {
+      const freshObj = (batchPayload && typeof batchPayload === 'object') ? batchPayload : {};
+      return withCORS(env, req, ok({
+        ...freshObj,
+        poll_result: { ok: true, skipped: true, reason: 'NO_PENDING' },
+        poll_provider: provider,
+        poll_server_utc: new Date().toISOString()
+      }));
+    }
+
+    // ✅ If pending exists but nothing is pollable, do NOT call rail; return safe skipped result.
+    if (!hasPollable) {
+      try {
+        await sbRpc(env, 'pay_settle_rail', {
+          p_pay_batch_id: String(id),
+          p_settlement_json: [],
+          p_actor_user_id: String(user.id)
+        });
+      } catch {}
+
+      const batchRes2 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+      let freshPayload2 = batchRes2;
+      try {
+        if (Array.isArray(batchRes2) && batchRes2.length === 1 && batchRes2[0] && typeof batchRes2[0] === 'object') freshPayload2 = batchRes2[0];
+        if (freshPayload2 && typeof freshPayload2 === 'object' && Object.prototype.hasOwnProperty.call(freshPayload2, 'pay_batch_get')) {
+          freshPayload2 = freshPayload2.pay_batch_get;
+        }
+      } catch {}
+
+      const freshObj2 = (freshPayload2 && typeof freshPayload2 === 'object') ? freshPayload2 : {};
+      return withCORS(env, req, ok({
+        ...freshObj2,
+        poll_result: { ok: true, skipped: true, reason: 'NO_POLLABLE_RAIL_TX_ID' },
         poll_provider: provider,
         poll_server_utc: new Date().toISOString()
       }));
@@ -12224,17 +12290,6 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(msg));
     }
 
-    // If nothing is pending, skip poll (but still return fresh batch state)
-    if (!hasPending) {
-      const freshObj = (batchPayload && typeof batchPayload === 'object') ? batchPayload : {};
-      return withCORS(env, req, ok({
-        ...freshObj,
-        poll_result: { ok: true, skipped: true, reason: 'NO_PENDING' },
-        poll_provider: provider,
-        poll_server_utc: new Date().toISOString()
-      }));
-    }
-
     let polled = null;
     try {
       polled = await adapter.pollBatch(env, id, user.id);
@@ -12243,6 +12298,43 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       if (msg.includes('RAIL_ENV_MISMATCH')) {
         return withCORS(env, req, badRequest(msg));
       }
+
+      const msgU = msg.toUpperCase();
+      const isRevolutNotFound =
+        msgU.includes('REVOLUT_POLL_FAILED_404')
+        || msgU.includes('RESOURCE NOT FOUND')
+        || msgU.includes('"CODE":3006')
+        || msgU.includes('CODE\":3006');
+
+      // ✅ Soft-fail: do NOT 500-loop on rail "not found" during pending states; return safe skipped.
+      if (isRevolutNotFound) {
+        try {
+          await sbRpc(env, 'pay_settle_rail', {
+            p_pay_batch_id: String(id),
+            p_settlement_json: [],
+            p_actor_user_id: String(user.id)
+          });
+        } catch {}
+
+        const batchRes3 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+
+        let freshPayload3 = batchRes3;
+        try {
+          if (Array.isArray(batchRes3) && batchRes3.length === 1 && batchRes3[0] && typeof batchRes3[0] === 'object') freshPayload3 = batchRes3[0];
+          if (freshPayload3 && typeof freshPayload3 === 'object' && Object.prototype.hasOwnProperty.call(freshPayload3, 'pay_batch_get')) {
+            freshPayload3 = freshPayload3.pay_batch_get;
+          }
+        } catch {}
+
+        const freshObj3 = (freshPayload3 && typeof freshPayload3 === 'object') ? freshPayload3 : {};
+        return withCORS(env, req, ok({
+          ...freshObj3,
+          poll_result: { ok: true, skipped: true, reason: 'RAIL_RESOURCE_NOT_FOUND', detail: msg },
+          poll_provider: provider,
+          poll_server_utc: new Date().toISOString()
+        }));
+      }
+
       throw e;
     }
 
@@ -12281,6 +12373,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 
