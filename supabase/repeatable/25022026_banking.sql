@@ -251,6 +251,7 @@ begin
   end if;
 
   -- Upsert the check row. If status becomes PASS, clear override fields.
+  -- IMPORTANT: explicitly type NULLs to avoid any implicit text typing issues for uuid columns.
   insert into public.bank_name_checks (
     rail_provider,
     rail_env,
@@ -278,10 +279,10 @@ begin
     p_result_json,
     v_now,
     v_now,
-    case when v_status = 'PASS' then null else null end,
-    case when v_status = 'PASS' then null else null end,
-    case when v_status = 'PASS' then null else null end,
-    case when v_status = 'PASS' then null else null end
+    null::text,
+    null::uuid,
+    null::timestamptz,
+    null::text
   )
   on conflict (rail_provider, rail_env, entity_kind, entity_id, bank_details_hash)
   do update set
@@ -291,19 +292,19 @@ begin
     updated_at_utc = v_now,
 
     override_reason = case
-      when excluded.status = 'PASS' then null
+      when excluded.status = 'PASS' then null::text
       else public.bank_name_checks.override_reason
     end,
     override_by_user_id = case
-      when excluded.status = 'PASS' then null
+      when excluded.status = 'PASS' then null::uuid
       else public.bank_name_checks.override_by_user_id
     end,
     override_at_utc = case
-      when excluded.status = 'PASS' then null
+      when excluded.status = 'PASS' then null::timestamptz
       else public.bank_name_checks.override_at_utc
     end,
     override_hash = case
-      when excluded.status = 'PASS' then null
+      when excluded.status = 'PASS' then null::text
       else public.bank_name_checks.override_hash
     end;
 
@@ -338,6 +339,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_set_override(
