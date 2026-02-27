@@ -417,7 +417,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -1033,7 +1032,6 @@ begin
   );
 end;
 $$;
-
 
 
 -- =========================================================
