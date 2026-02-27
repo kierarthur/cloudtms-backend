@@ -9599,11 +9599,31 @@ async function handleBankingPayPreview(env, req, user) {
       const msg = String(e?.message || e || '');
       const looksLikeUnexpectedParam =
         /unexpected/i.test(msg) || /unknown/i.test(msg) || /parameter/i.test(msg) || /PGRST/i.test(msg);
+
+      // ✅ IMPORTANT: Do NOT silently drop filters. If the RPC rejects filter params, surface it loudly.
       if (looksLikeUnexpectedParam && (candidateId || clientId)) {
-        rpcRes = await sbRpc(env, 'pay_preview', argsWithoutFilters);
-      } else {
+        try {
+          const keys = Object.keys(argsWithFilters || {}).sort();
+          console.error('[BANKING][API] pay_preview rejected filter params; refusing fallback', {
+            pay_date: payDate,
+            week_ending_cutoff: cutoffIso,
+            has_candidate_id: !!candidateId,
+            has_client_id: !!clientId,
+            arg_keys: keys,
+            err: msg
+          });
+        } catch {}
+
+        throw new Error(`pay_preview rejected filter parameters (candidate_id/client_id). This indicates an RPC signature mismatch between environments or wrong param names. Original error: ${msg}`);
+      }
+
+      // If no filters were supplied, or it doesn't look like a param/signature issue, keep existing error behaviour.
+      if (!looksLikeUnexpectedParam || !(candidateId || clientId)) {
         throw e;
       }
+
+      // Defensive: if we ever reach here, do NOT fallback silently; fallback is allowed only when no filters exist (which is handled above).
+      rpcRes = await sbRpc(env, 'pay_preview', argsWithoutFilters);
     }
 
     let payload = rpcRes;
@@ -9621,8 +9641,6 @@ async function handleBankingPayPreview(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
