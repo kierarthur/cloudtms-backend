@@ -8698,6 +8698,67 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
 
   const paymentDateIso = paymentDateRaw ? parseIsoOrUkDateToIso(paymentDateRaw) : null;
 
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    let bodyOut = '';
+    try { bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }); }
+    catch { bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize error payload' }); }
+    return new Response(bodyOut, { status, headers });
+  };
+
+  const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR', fallbackUserMessage = 'Request failed. Please try again.') => {
+    const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
+    const status = (statusRaw && statusRaw >= 400 && statusRaw < 600) ? statusRaw : null;
+
+    let msg = '';
+    let msgFromJson = '';
+    try {
+      const jm = (e && e.json && typeof e.json === 'object' && typeof e.json.message === 'string') ? e.json.message : '';
+      msgFromJson = jm ? String(jm) : '';
+    } catch {}
+
+    msg = msgFromJson || String(e?.message || e || '');
+
+    if (!msgFromJson) {
+      try {
+        const i = msg.indexOf('{');
+        const j = msg.lastIndexOf('}');
+        if (i >= 0 && j > i) {
+          const maybe = msg.slice(i, j + 1);
+          const parsed = JSON.parse(maybe);
+          if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
+            msg = String(parsed.message);
+          }
+        }
+      } catch {}
+    }
+
+    const raw = String(msg || '').trim();
+    const rawU = raw.toUpperCase();
+
+    let error_code = fallbackCode;
+    let user_message = fallbackUserMessage;
+
+    if (rawU.includes('CSV-ONLY') || rawU.includes('CSV_ONLY') || rawU.includes('NOT SUPPORTED') || rawU.includes('NOT_SUPPORTED')) {
+      error_code = 'MANUAL_CONFIRM_NOT_SUPPORTED_FOR_THIS_RAIL';
+      user_message = 'Manual confirm is not supported for this banking rail.';
+    } else if (raw) {
+      user_message = raw;
+    }
+
+    const httpStatus = (status && status >= 400 && status < 500) ? status : null;
+
+    return {
+      status: httpStatus || 400,
+      body: {
+        error: user_message,
+        message: user_message,
+        error_code
+      }
+    };
+  };
+
   try {
     // Resolve provider + transfers snapshot via pay_batch_get
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
@@ -8778,11 +8839,13 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
 
     return withCORS(env, req, ok(out));
   } catch (e) {
-    const msg = (e && e.message) ? String(e.message) : String(e || 'SETTLE_FAILED');
-    if (msg.includes('CSV-only') || msg.includes('CSV_ONLY') || msg.includes('not supported') || msg.includes('NOT_SUPPORTED')) {
-      return withCORS(env, req, badRequest('MANUAL_CONFIRM_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    const norm = normalizeRpcError(e, 'SETTLE_FAILED', 'Manual confirm failed.');
+    // Return 400 for user-correctable; otherwise 500 with safe message.
+    const status = (e && Number.isFinite(Number(e.status)) && Number(e.status) >= 400 && Number(e.status) < 500) ? Number(e.status) : null;
+    if (status && status < 500) {
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
     }
-    return withCORS(env, req, serverError(msg));
+    return withCORS(env, req, jsonResponse(500, { error: 'Manual confirm failed.', message: 'Manual confirm failed.', error_code: 'SETTLE_FAILED' }));
   }
 }
 
@@ -9876,21 +9939,114 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
   };
 
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    let bodyOut = '';
+    try { bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }); }
+    catch { bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize error payload' }); }
+    return new Response(bodyOut, { status, headers });
+  };
+
+  const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR') => {
+    const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
+    const status = (statusRaw && statusRaw >= 400 && statusRaw < 600) ? statusRaw : null;
+
+    let msg = '';
+    let msgFromJson = '';
+    try {
+      const jm = (e && e.json && typeof e.json === 'object' && typeof e.json.message === 'string') ? e.json.message : '';
+      msgFromJson = jm ? String(jm) : '';
+    } catch {}
+
+    msg = msgFromJson || String(e?.message || e || '');
+
+    // If message looks like: "RPC <fn> failed 400: {json...}", try to extract json.message
+    if (!msgFromJson) {
+      try {
+        const i = msg.indexOf('{');
+        const j = msg.lastIndexOf('}');
+        if (i >= 0 && j > i) {
+          const maybe = msg.slice(i, j + 1);
+          const parsed = JSON.parse(maybe);
+          if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
+            msg = String(parsed.message);
+          }
+        }
+      } catch {}
+    }
+
+    const raw = String(msg || '').trim();
+    const rawU = raw.toUpperCase();
+
+    let error_code = fallbackCode;
+    let user_message = 'Request failed. Please try again.';
+
+    const prefix = raw.split(':')[0] ? raw.split(':')[0].trim() : '';
+    const prefixU = prefix.toUpperCase();
+
+    if (prefixU === 'PAYE_NOT_READY' || rawU.startsWith('PAYE_NOT_READY')) {
+      error_code = 'PAYE_NOT_READY';
+      user_message = 'Some PAYE candidates are not ready. Open the PAYE worksheet, enter any missing net amounts, click Save, then try again.';
+    } else if (prefixU === 'PAYE_NET_MISSING' || rawU.startsWith('PAYE_NET_MISSING')) {
+      error_code = 'PAYE_NET_MISSING';
+      user_message = 'Missing PAYE net amounts. Open the PAYE worksheet, enter net amounts, click Save, then try again.';
+    } else if (rawU.includes('RAIL_ENV_MISMATCH')) {
+      error_code = 'RAIL_ENV_MISMATCH';
+      user_message = 'The banking rail environment does not match this batch. Please switch to the correct environment and try again.';
+    } else if (rawU === 'UNKNOWN_RAIL_PROVIDER') {
+      error_code = 'UNKNOWN_RAIL_PROVIDER';
+      user_message = 'Unknown banking rail provider for this batch.';
+    } else if (rawU === 'RAIL_NOT_CONFIGURED') {
+      error_code = 'RAIL_NOT_CONFIGURED';
+      user_message = 'Banking rail is not configured for this environment.';
+    } else if (rawU === 'HAS_HARD_BLOCKERS') {
+      error_code = 'HAS_HARD_BLOCKERS';
+      user_message = 'This batch has hard blockers and cannot proceed until they are resolved.';
+    } else if (raw) {
+      // For other user-correctable 4xx errors, use a cleaned message (no RPC wrapper)
+      user_message = raw;
+    }
+
+    const httpStatus = (status && status >= 400 && status < 500) ? status : null;
+
+    return {
+      status: httpStatus || 400,
+      body: {
+        error: user_message,
+        message: user_message,
+        error_code
+      }
+    };
+  };
+
   try {
     // ─────────────────────────────────────────────────────────────
     // 1) Execute-bank: build transfers + link items
     // ─────────────────────────────────────────────────────────────
-    const execRes0 = await sbRpc(env, 'pay_execute_bank', {
-      p_pay_batch_id: id,
-      p_pay_channel_scope: payChannelScope,
-      p_actor_user_id: user.id
-    });
+    let execRes0;
+    try {
+      execRes0 = await sbRpc(env, 'pay_execute_bank', {
+        p_pay_batch_id: id,
+        p_pay_channel_scope: payChannelScope,
+        p_actor_user_id: user.id
+      });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
     const execRes = unwrapRpc(execRes0, 'pay_execute_bank');
 
     // ─────────────────────────────────────────────────────────────
     // 2) Prepare: adapter.prepareBatch (name-check + payee map) + DB pay_batch_prepare
     // ─────────────────────────────────────────────────────────────
-    const batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    let batchGet0;
+    try {
+      batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
     const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
 
     const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
@@ -9941,20 +10097,35 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         await adapter.prepareBatch(env, id, user.id);
       }
     } catch (e) {
-      return withCORS(env, req, serverError(String(e?.message || e)));
+      // Adapter errors are treated as user-visible but non-RPC; return a clean 400 unless clearly server-side
+      const msg = String(e?.message || e || '').trim() || 'BATCH_PREPARE_FAILED';
+      const code = 'BATCH_PREPARE_FAILED';
+      return withCORS(env, req, jsonResponse(400, { error: msg, message: msg, error_code: code }));
     }
 
-    const prepRes0 = await sbRpc(env, 'pay_batch_prepare', {
-      p_pay_batch_id: id,
-      p_actor_user_id: user.id
-    });
+    let prepRes0;
+    try {
+      prepRes0 = await sbRpc(env, 'pay_batch_prepare', {
+        p_pay_batch_id: id,
+        p_actor_user_id: user.id
+      });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_BATCH_PREPARE_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
     const prepRes = unwrapRpc(prepRes0, 'pay_batch_prepare');
 
     const hasHardBlockers = !!(prepRes && typeof prepRes === 'object' && prepRes.has_hard_blockers === true);
 
     // If blocked at prepare stage, do not proceed to scheduling (return full diagnostics to the UI)
     if (hasHardBlockers) {
-      const afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+      let afterGet0;
+      try {
+        afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+      } catch (e) {
+        const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
+        return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      }
       const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
 
       return withCORS(env, req, ok({
@@ -9981,15 +10152,21 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     if (supportsScheduling) {
       scheduleAttempted = true;
 
-      const schedRes0 = await sbRpc(env, 'pay_batch_auth_start', {
-        p_pay_batch_id: id,
-        p_schedule_kind: scheduleKind,
-        p_scheduled_at_utc: (scheduleKind === 'SCHEDULED') ? scheduledAtUtc : null,
-        p_funding_account_ref: fundingAccountRef,
-        p_warning_hours_json: warningHoursJson,
-        p_actor_user_id: user.id,
-        p_actor_intent: actorIntent
-      });
+      let schedRes0;
+      try {
+        schedRes0 = await sbRpc(env, 'pay_batch_auth_start', {
+          p_pay_batch_id: id,
+          p_schedule_kind: scheduleKind,
+          p_scheduled_at_utc: (scheduleKind === 'SCHEDULED') ? scheduledAtUtc : null,
+          p_funding_account_ref: fundingAccountRef,
+          p_warning_hours_json: warningHoursJson,
+          p_actor_user_id: user.id,
+          p_actor_intent: actorIntent
+        });
+      } catch (e) {
+        const norm = normalizeRpcError(e, 'PAY_BATCH_AUTH_START_FAILED');
+        return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      }
 
       scheduledOut = unwrapRpc(schedRes0, 'pay_batch_auth_start');
 
@@ -10045,7 +10222,13 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
 
     // Always return fresh batch snapshot
-    const afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    let afterGet0;
+    try {
+      afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
     const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
 
     return withCORS(env, req, ok({
@@ -10063,10 +10246,15 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       batch_get: afterGet
     }));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const norm = normalizeRpcError(e, 'BANKING_EXECUTE_PAYMENT_FAILED');
+    // If it looks like a 4xx (user-correctable), return 400; otherwise 500 with safe message.
+    const status = (e && Number.isFinite(Number(e.status)) && Number(e.status) >= 400 && Number(e.status) < 500) ? Number(e.status) : 500;
+    if (status >= 400 && status < 500) {
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
+    return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
-
 
 async function handleBankingPaySnoozeUpsert(env, req, user) {
   let body = null;
@@ -10296,9 +10484,6 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
 }
 
 
-
-
-
 async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -10309,6 +10494,73 @@ async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
 
   const scopeRaw = String(body.pay_channel_scope || body.scope || 'ALL').trim().toUpperCase();
   const payChannelScope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    let bodyOut = '';
+    try { bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }); }
+    catch { bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize error payload' }); }
+    return new Response(bodyOut, { status, headers });
+  };
+
+  const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR') => {
+    const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
+    const status = (statusRaw && statusRaw >= 400 && statusRaw < 600) ? statusRaw : null;
+
+    let msg = '';
+    let msgFromJson = '';
+    try {
+      const jm = (e && e.json && typeof e.json === 'object' && typeof e.json.message === 'string') ? e.json.message : '';
+      msgFromJson = jm ? String(jm) : '';
+    } catch {}
+
+    msg = msgFromJson || String(e?.message || e || '');
+
+    if (!msgFromJson) {
+      try {
+        const i = msg.indexOf('{');
+        const j = msg.lastIndexOf('}');
+        if (i >= 0 && j > i) {
+          const maybe = msg.slice(i, j + 1);
+          const parsed = JSON.parse(maybe);
+          if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
+            msg = String(parsed.message);
+          }
+        }
+      } catch {}
+    }
+
+    const raw = String(msg || '').trim();
+    const rawU = raw.toUpperCase();
+
+    let error_code = fallbackCode;
+    let user_message = 'Request failed. Please try again.';
+
+    const prefix = raw.split(':')[0] ? raw.split(':')[0].trim() : '';
+    const prefixU = prefix.toUpperCase();
+
+    if (prefixU === 'PAYE_NOT_READY' || rawU.startsWith('PAYE_NOT_READY')) {
+      error_code = 'PAYE_NOT_READY';
+      user_message = 'Some PAYE candidates are not ready. Open the PAYE worksheet, enter any missing net amounts, click Save, then try again.';
+    } else if (prefixU === 'PAYE_NET_MISSING' || rawU.startsWith('PAYE_NET_MISSING')) {
+      error_code = 'PAYE_NET_MISSING';
+      user_message = 'Missing PAYE net amounts. Open the PAYE worksheet, enter net amounts, click Save, then try again.';
+    } else if (raw) {
+      user_message = raw;
+    }
+
+    const httpStatus = (status && status >= 400 && status < 500) ? status : null;
+
+    return {
+      status: httpStatus || 400,
+      body: {
+        error: user_message,
+        message: user_message,
+        error_code
+      }
+    };
+  };
 
   try {
     const rpcRes = await sbRpc(env, 'pay_execute_bank', {
@@ -10329,9 +10581,12 @@ async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
 
     return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
+    return withCORS(env, req, jsonResponse(norm.status, norm.body));
   }
 }
+
+
 
 async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -13589,7 +13844,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   additional_pay_ex_vat = +Number(additional_pay_ex_vat).toFixed(2);
   additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
   const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
-
   // Load current timesheet row (if exists)
   let ts = currentTimesheetIdForWeek
     ? await sbGetOne(
@@ -13600,6 +13854,21 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
           `&select=*`
       )
     : null;
+
+  // ✅ Hard rule: reject any attempt to alter schedule/hours while authorised
+  if (ts && ts.authorised_at_server) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before changing hours.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
 
 
@@ -15928,7 +16197,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return created || { ...currentTs, version: newVersion, is_current: true };
   };
 
-  // 3) Load DAILY timesheet (current version) — use currentTimesheetId
+    // 3) Load DAILY timesheet (current version) — use currentTimesheetId
   let ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -15937,6 +16206,21 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       `&select=*`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  // ✅ Hard rule: reject any attempt to alter hours/schedule while authorised
+  if (ts.authorised_at_server) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before changing hours.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
   const sheetScope = String(ts.sheet_scope || '').toUpperCase();
   if (sheetScope !== 'DAILY') {
@@ -46058,7 +46342,7 @@ async function handleGetSettings(env, req) {
 
         // ✅ NEW: pay eligibility window (Option A)
         'pay_eligibility_months_back',
-        'pay_eligibility_weeks_ahead',
+        // NOTE: pay_eligibility_weeks_ahead is deprecated (cutoff date controls upper bound); do not expose.
 
         // ✅ NEW: configurable export CSV columns/order
         'pay_export_csv_columns_json',
@@ -46183,7 +46467,7 @@ async function handleUpdateSettings(env, req) {
 
     // ✅ NEW: pay eligibility window (Option A)
     'pay_eligibility_months_back',
-    'pay_eligibility_weeks_ahead',
+    // NOTE: pay_eligibility_weeks_ahead is deprecated (cutoff date controls upper bound); ignore updates.
 
     // ✅ Remittances (new settings tab)
     'remittance_includes_json',
@@ -46555,17 +46839,6 @@ async function handleUpdateSettings(env, req) {
       continue;
     }
 
-    if (k === 'pay_eligibility_weeks_ahead') {
-      const raw = data.pay_eligibility_weeks_ahead;
-      const n = Number(raw);
-      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
-      if (!(v >= 0 && v <= 52)) {
-        return withCORS(env, req, badRequest('pay_eligibility_weeks_ahead must be an integer between 0 and 52'));
-      }
-      payload.pay_eligibility_weeks_ahead = v;
-      continue;
-    }
-
     if (k === 'rail_default_funding_account_ref') {
       const v0 = (data.rail_default_funding_account_ref === null || data.rail_default_funding_account_ref === undefined)
         ? null
@@ -46667,6 +46940,7 @@ async function handleUpdateSettings(env, req) {
     return withCORS(env, req, serverError("Failed to update settings_defaults"));
   }
 }
+
 
 
 
