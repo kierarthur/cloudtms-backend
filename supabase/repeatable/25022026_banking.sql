@@ -829,13 +829,28 @@ declare
   v_pending_transfers int := 0;
 begin
   if p_pay_batch_id is null then
-    raise exception 'pay_batch_schedule: pay_batch_id is required';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'PAY_BATCH_ID_REQUIRED',
+      'message', 'pay_batch_schedule: pay_batch_id is required'
+    )::text;
   end if;
   if p_actor_user_id is null then
-    raise exception 'pay_batch_schedule: actor_user_id is required';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_batch_schedule: actor_user_id is required',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
   if v_kind not in ('IMMEDIATE','SCHEDULED') then
-    raise exception 'pay_batch_schedule: invalid schedule_kind (IMMEDIATE|SCHEDULED)';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'INVALID_SCHEDULE_KIND',
+      'message', 'pay_batch_schedule: invalid schedule_kind (IMMEDIATE|SCHEDULED)',
+      'schedule_kind', v_kind,
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   select
@@ -850,12 +865,22 @@ begin
   for update;
 
   if v_batch.id is null then
-    raise exception 'pay_batch_schedule: pay_batch not found';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'PAY_BATCH_NOT_FOUND',
+      'message', 'pay_batch_schedule: pay_batch not found',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot,'')));
   if v_provider = '' then
-    raise exception 'pay_batch_schedule: rail_provider_snapshot missing on batch';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'RAIL_PROVIDER_MISSING_ON_BATCH',
+      'message', 'pay_batch_schedule: rail_provider_snapshot missing on batch',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   select
@@ -869,17 +894,33 @@ begin
   limit 1;
 
   if v_cfg.rail_supports_scheduling is null then
-    raise exception 'pay_batch_schedule: settings_defaults missing (id=1)';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'SETTINGS_DEFAULTS_MISSING',
+      'message', 'pay_batch_schedule: settings_defaults missing (id=1)',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   -- Manual rails (e.g. CSV) must not use scheduling
   if v_provider = 'CSV' then
-    raise exception 'pay_batch_schedule: scheduling is not supported for manual rail_provider_snapshot=%', v_batch.rail_provider_snapshot;
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'SCHEDULING_NOT_SUPPORTED_FOR_MANUAL_RAIL',
+      'message', format('pay_batch_schedule: scheduling is not supported for manual rail_provider_snapshot=%s', v_batch.rail_provider_snapshot),
+      'pay_batch_id', p_pay_batch_id::text,
+      'rail_provider_snapshot', v_batch.rail_provider_snapshot
+    )::text;
   end if;
 
   -- Global capability gate (current defaults)
   if coalesce(v_cfg.rail_supports_scheduling,false) = false then
-    raise exception 'pay_batch_schedule: scheduling is not enabled in settings_defaults (rail_supports_scheduling=false)';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'SCHEDULING_DISABLED_IN_SETTINGS',
+      'message', 'pay_batch_schedule: scheduling is not enabled in settings_defaults (rail_supports_scheduling=false)',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   v_need_name_check := (coalesce(v_cfg.rail_supports_name_check,false) = true);
@@ -887,14 +928,25 @@ begin
 
   v_warn := coalesce(p_warning_hours_json, v_cfg.funds_warning_hours_json);
   if v_warn is not null and jsonb_typeof(v_warn) <> 'array' then
-    raise exception 'pay_batch_schedule: warning_hours_json must be a JSON array';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'WARNING_HOURS_JSON_INVALID',
+      'message', 'pay_batch_schedule: warning_hours_json must be a JSON array',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   if v_kind = 'IMMEDIATE' then
     v_sched_at := now();
   else
     if p_scheduled_at_utc is null then
-      raise exception 'pay_batch_schedule: scheduled_at_utc is required when schedule_kind=SCHEDULED';
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE',
+        'code', 'SCHEDULED_AT_REQUIRED',
+        'message', 'pay_batch_schedule: scheduled_at_utc is required when schedule_kind=SCHEDULED',
+        'pay_batch_id', p_pay_batch_id::text,
+        'schedule_kind', v_kind
+      )::text;
     end if;
     v_sched_at := p_scheduled_at_utc;
   end if;
@@ -904,7 +956,13 @@ begin
     v_funding := nullif(btrim(coalesce(v_cfg.rail_default_funding_account_ref,'')), '');
   end if;
   if v_funding is null then
-    raise exception 'pay_batch_schedule: funding_account_ref is required for this rail (provider=%)', v_batch.rail_provider_snapshot;
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'FUNDING_ACCOUNT_REQUIRED',
+      'message', format('pay_batch_schedule: funding_account_ref is required for this rail (provider=%s)', v_batch.rail_provider_snapshot),
+      'pay_batch_id', p_pay_batch_id::text,
+      'rail_provider_snapshot', v_batch.rail_provider_snapshot
+    )::text;
   end if;
 
   select count(*)::int
@@ -914,7 +972,13 @@ begin
     and upper(coalesce(pbt.status,'')) = 'PENDING';
 
   if v_pending_transfers = 0 then
-    raise exception 'pay_batch_schedule: no PENDING transfers exist for this batch (execute-bank required first)';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'NO_PENDING_TRANSFERS',
+      'message', 'pay_batch_schedule: no PENDING transfers exist for this batch (execute-bank required first)',
+      'pay_batch_id', p_pay_batch_id::text,
+      'ui_hint', 'RERUN_PREVIEW_OR_EXECUTE_BANK'
+    )::text;
   end if;
 
   with t as (
@@ -954,7 +1018,14 @@ begin
   from t;
 
   if v_missing_bank > 0 then
-    raise exception 'pay_batch_schedule: BLOCKED_BANK_DETAILS for % payee(s)', v_missing_bank;
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE_BLOCKED',
+      'code', 'BLOCKED_BANK_DETAILS',
+      'message', format('pay_batch_schedule: BLOCKED_BANK_DETAILS for %s payee(s)', v_missing_bank::text),
+      'pay_batch_id', p_pay_batch_id::text,
+      'count', v_missing_bank,
+      'ui_hint', 'RERUN_PREVIEW'
+    )::text;
   end if;
 
   with t as (
@@ -1010,7 +1081,14 @@ begin
    and bnc.bank_details_hash = t.bank_hash;
 
   if v_blocked_name > 0 then
-    raise exception 'pay_batch_schedule: BLOCKED_NAME_CHECK for % payee(s)', v_blocked_name;
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE_BLOCKED',
+      'code', 'BLOCKED_NAME_CHECK',
+      'message', format('pay_batch_schedule: BLOCKED_NAME_CHECK for %s payee(s)', v_blocked_name::text),
+      'pay_batch_id', p_pay_batch_id::text,
+      'count', v_blocked_name,
+      'ui_hint', 'RERUN_PREVIEW'
+    )::text;
   end if;
 
   with t as (
@@ -1062,7 +1140,14 @@ begin
    and bpm.bank_details_hash = t.bank_hash;
 
   if v_missing_map > 0 then
-    raise exception 'pay_batch_schedule: BLOCKED_NO_PAYEE_MAP for % payee(s)', v_missing_map;
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE_BLOCKED',
+      'code', 'BLOCKED_NO_PAYEE_MAP',
+      'message', format('pay_batch_schedule: BLOCKED_NO_PAYEE_MAP for %s payee(s)', v_missing_map::text),
+      'pay_batch_id', p_pay_batch_id::text,
+      'count', v_missing_map,
+      'ui_hint', 'RERUN_PREVIEW'
+    )::text;
   end if;
 
   update public.pay_batches pb
@@ -1090,7 +1175,6 @@ end;
 $$;
 
 
-
 create or replace function public.pay_batch_prepare(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -1114,10 +1198,19 @@ declare
   v_has_hard_blockers boolean := false;
 begin
   if p_pay_batch_id is null then
-    raise exception 'pay_batch_prepare: pay_batch_id is required';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_PREPARE',
+      'code', 'PAY_BATCH_ID_REQUIRED',
+      'message', 'pay_batch_prepare: pay_batch_id is required'
+    )::text;
   end if;
   if p_actor_user_id is null then
-    raise exception 'pay_batch_prepare: actor_user_id is required';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_PREPARE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_batch_prepare: actor_user_id is required',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   select
@@ -1135,7 +1228,12 @@ begin
   where pb.id = p_pay_batch_id;
 
   if v_batch.id is null then
-    raise exception 'pay_batch_prepare: pay_batch not found';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_PREPARE',
+      'code', 'PAY_BATCH_NOT_FOUND',
+      'message', 'pay_batch_prepare: pay_batch not found',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot,'')));
@@ -1156,7 +1254,12 @@ begin
   limit 1;
 
   if v_cfg.rail_provider_default is null then
-    raise exception 'pay_batch_prepare: settings_defaults missing (id=1)';
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_PREPARE',
+      'code', 'SETTINGS_DEFAULTS_MISSING',
+      'message', 'pay_batch_prepare: settings_defaults missing (id=1)',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
   end if;
 
   -- Generic readiness semantics:
