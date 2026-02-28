@@ -173,6 +173,8 @@ begin
 end;
 $$;
 
+
+
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
   p_provider text,
   p_env text,
@@ -199,6 +201,11 @@ declare
   v_now timestamptz := now();
 
   v_row public.bank_name_checks%rowtype;
+  v_inserted boolean := false;
+
+  v_action text := null;
+
+  v_row_json jsonb;
 begin
   if v_provider = '' then
     raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
@@ -241,6 +248,8 @@ begin
   -- Stale-result guard (bank details changed while check in-flight)
   if v_current_hash is distinct from btrim(p_bank_details_hash) then
     return jsonb_build_object(
+      'ok', true,
+      'action', 'ignored_stale_hash',
       'ignored', true,
       'reason', 'STALE_HASH',
       'entity_kind', v_kind,
@@ -252,96 +261,106 @@ begin
 
   -- Upsert the check row. If status becomes PASS, clear override fields.
   -- IMPORTANT: explicitly type NULLs to avoid any implicit text typing issues for uuid columns.
-  insert into public.bank_name_checks (
-    rail_provider,
-    rail_env,
-    entity_kind,
-    entity_id,
-    bank_details_hash,
-    status,
-    checked_at_utc,
-    result_json,
-    created_at_utc,
-    updated_at_utc,
-    override_reason,
-    override_by_user_id,
-    override_at_utc,
-    override_hash
-  )
-  values (
-    v_provider,
-    v_env,
-    v_kind,
-    p_entity_id,
-    v_current_hash,
-    v_status,
-    coalesce(p_checked_at_utc, v_now),
-    p_result_json,
-    v_now,
-    v_now,
-    null::text,
-    null::uuid,
-    null::timestamptz,
-    null::text
-  )
-  on conflict (rail_provider, rail_env, entity_kind, entity_id, bank_details_hash)
-  do update set
-    status = excluded.status,
-    checked_at_utc = excluded.checked_at_utc,
-    result_json = excluded.result_json,
-    updated_at_utc = v_now,
+  with upserted as (
+    insert into public.bank_name_checks (
+      rail_provider,
+      rail_env,
+      entity_kind,
+      entity_id,
+      bank_details_hash,
+      status,
+      checked_at_utc,
+      result_json,
+      created_at_utc,
+      updated_at_utc,
+      override_reason,
+      override_by_user_id,
+      override_at_utc,
+      override_hash
+    )
+    values (
+      v_provider,
+      v_env,
+      v_kind,
+      p_entity_id,
+      v_current_hash,
+      v_status,
+      coalesce(p_checked_at_utc, v_now),
+      p_result_json,
+      v_now,
+      v_now,
+      null::text,
+      null::uuid,
+      null::timestamptz,
+      null::text
+    )
+    on conflict (rail_provider, rail_env, entity_kind, entity_id, bank_details_hash)
+    do update set
+      status = excluded.status,
+      checked_at_utc = excluded.checked_at_utc,
+      result_json = excluded.result_json,
+      updated_at_utc = v_now,
 
-    override_reason = case
-      when excluded.status = 'PASS' then null::text
-      else public.bank_name_checks.override_reason
-    end,
-    override_by_user_id = case
-      when excluded.status = 'PASS' then null::uuid
-      else public.bank_name_checks.override_by_user_id
-    end,
-    override_at_utc = case
-      when excluded.status = 'PASS' then null::timestamptz
-      else public.bank_name_checks.override_at_utc
-    end,
-    override_hash = case
-      when excluded.status = 'PASS' then null::text
-      else public.bank_name_checks.override_hash
-    end;
-
-  select bnc.*
+      override_reason = case
+        when excluded.status = 'PASS' then null::text
+        else public.bank_name_checks.override_reason
+      end,
+      override_by_user_id = case
+        when excluded.status = 'PASS' then null::uuid
+        else public.bank_name_checks.override_by_user_id
+      end,
+      override_at_utc = case
+        when excluded.status = 'PASS' then null::timestamptz
+        else public.bank_name_checks.override_at_utc
+      end,
+      override_hash = case
+        when excluded.status = 'PASS' then null::text
+        else public.bank_name_checks.override_hash
+      end
+    returning
+      public.bank_name_checks.*,
+      (xmax = 0) as inserted_flag
+  )
+  select
+    u.*
   into v_row
-  from public.bank_name_checks bnc
-  where bnc.rail_provider = v_provider
-    and bnc.rail_env = v_env
-    and bnc.entity_kind = v_kind
-    and bnc.entity_id = p_entity_id
-    and bnc.bank_details_hash = v_current_hash
+  from upserted u
   limit 1;
 
+  select
+    u.inserted_flag
+  into v_inserted
+  from upserted u
+  limit 1;
+
+  v_action := case when v_inserted then 'inserted' else 'updated' end;
+
+  v_row_json := jsonb_build_object(
+    'id', v_row.id::text,
+    'rail_provider', v_row.rail_provider,
+    'rail_env', v_row.rail_env,
+    'entity_kind', v_row.entity_kind,
+    'entity_id', v_row.entity_id::text,
+    'bank_details_hash', v_row.bank_details_hash,
+    'status', v_row.status,
+    'checked_at_utc', v_row.checked_at_utc,
+    'result_json', v_row.result_json,
+    'override_reason', v_row.override_reason,
+    'override_by_user_id', case when v_row.override_by_user_id is null then null else v_row.override_by_user_id::text end,
+    'override_at_utc', v_row.override_at_utc,
+    'override_hash', v_row.override_hash,
+    'created_at_utc', v_row.created_at_utc,
+    'updated_at_utc', v_row.updated_at_utc
+  );
+
   return jsonb_build_object(
+    'ok', true,
+    'action', v_action,
     'ignored', false,
-    'row', jsonb_build_object(
-      'rail_provider', v_row.rail_provider,
-      'rail_env', v_row.rail_env,
-      'entity_kind', v_row.entity_kind,
-      'entity_id', v_row.entity_id::text,
-      'bank_details_hash', v_row.bank_details_hash,
-      'status', v_row.status,
-      'checked_at_utc', v_row.checked_at_utc,
-      'result_json', v_row.result_json,
-      'override_reason', v_row.override_reason,
-      'override_by_user_id', case when v_row.override_by_user_id is null then null else v_row.override_by_user_id::text end,
-      'override_at_utc', v_row.override_at_utc,
-      'override_hash', v_row.override_hash,
-      'created_at_utc', v_row.created_at_utc,
-      'updated_at_utc', v_row.updated_at_utc
-    )
+    'row', v_row_json
   );
 end;
 $function$;
-
-
-
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_set_override(
   p_provider text,
@@ -365,7 +384,15 @@ declare
   v_now timestamptz := now();
 
   v_current_hash text;
+
+  v_before public.bank_name_checks%rowtype;
   v_row public.bank_name_checks%rowtype;
+
+  v_before_json jsonb := null;
+  v_after_json jsonb := null;
+
+  v_inserted boolean := false;
+  v_action text := null;
 begin
   if v_provider = '' then
     raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
@@ -402,49 +429,9 @@ begin
     raise exception '%', jsonb_build_object('error','ENTITY_NOT_FOUND_OR_NO_HASH','entity_kind',v_kind)::text;
   end if;
 
-  -- Ensure row exists (insert UNVERIFIED if not), then set override fields.
-  insert into public.bank_name_checks (
-    rail_provider,
-    rail_env,
-    entity_kind,
-    entity_id,
-    bank_details_hash,
-    status,
-    checked_at_utc,
-    result_json,
-    override_reason,
-    override_by_user_id,
-    override_at_utc,
-    override_hash,
-    created_at_utc,
-    updated_at_utc
-  )
-  values (
-    v_provider,
-    v_env,
-    v_kind,
-    p_entity_id,
-    v_current_hash,
-    'UNVERIFIED',
-    null,
-    null,
-    v_reason,
-    p_actor_user_id,
-    v_now,
-    v_current_hash,
-    v_now,
-    v_now
-  )
-  on conflict (rail_provider, rail_env, entity_kind, entity_id, bank_details_hash)
-  do update set
-    override_reason = excluded.override_reason,
-    override_by_user_id = excluded.override_by_user_id,
-    override_at_utc = excluded.override_at_utc,
-    override_hash = excluded.override_hash,
-    updated_at_utc = v_now;
-
+  -- Capture before row (if any)
   select bnc.*
-  into v_row
+  into v_before
   from public.bank_name_checks bnc
   where bnc.rail_provider = v_provider
     and bnc.rail_env = v_env
@@ -453,28 +440,121 @@ begin
     and bnc.bank_details_hash = v_current_hash
   limit 1;
 
+  if v_before.id is not null then
+    v_before_json := jsonb_build_object(
+      'id', v_before.id::text,
+      'rail_provider', v_before.rail_provider,
+      'rail_env', v_before.rail_env,
+      'entity_kind', v_before.entity_kind,
+      'entity_id', v_before.entity_id::text,
+      'bank_details_hash', v_before.bank_details_hash,
+      'status', v_before.status,
+      'checked_at_utc', v_before.checked_at_utc,
+      'result_json', v_before.result_json,
+      'override_reason', v_before.override_reason,
+      'override_by_user_id', case when v_before.override_by_user_id is null then null else v_before.override_by_user_id::text end,
+      'override_at_utc', v_before.override_at_utc,
+      'override_hash', v_before.override_hash,
+      'created_at_utc', v_before.created_at_utc,
+      'updated_at_utc', v_before.updated_at_utc
+    );
+  end if;
+
+  -- Ensure row exists (insert UNVERIFIED if not), then set override fields.
+  with upserted as (
+    insert into public.bank_name_checks (
+      rail_provider,
+      rail_env,
+      entity_kind,
+      entity_id,
+      bank_details_hash,
+      status,
+      checked_at_utc,
+      result_json,
+      override_reason,
+      override_by_user_id,
+      override_at_utc,
+      override_hash,
+      created_at_utc,
+      updated_at_utc
+    )
+    values (
+      v_provider,
+      v_env,
+      v_kind,
+      p_entity_id,
+      v_current_hash,
+      'UNVERIFIED',
+      null,
+      null,
+      v_reason,
+      p_actor_user_id,
+      v_now,
+      v_current_hash,
+      v_now,
+      v_now
+    )
+    on conflict (rail_provider, rail_env, entity_kind, entity_id, bank_details_hash)
+    do update set
+      override_reason = excluded.override_reason,
+      override_by_user_id = excluded.override_by_user_id,
+      override_at_utc = excluded.override_at_utc,
+      override_hash = excluded.override_hash,
+      updated_at_utc = v_now
+    returning
+      public.bank_name_checks.*,
+      (xmax = 0) as inserted_flag
+  )
+  select
+    u.*
+  into v_row
+  from upserted u
+  limit 1;
+
+  select
+    u.inserted_flag
+  into v_inserted
+  from upserted u
+  limit 1;
+
+  v_action := case when v_inserted then 'inserted' else 'updated' end;
+
+  v_after_json := jsonb_build_object(
+    'id', v_row.id::text,
+    'rail_provider', v_row.rail_provider,
+    'rail_env', v_row.rail_env,
+    'entity_kind', v_row.entity_kind,
+    'entity_id', v_row.entity_id::text,
+    'bank_details_hash', v_row.bank_details_hash,
+    'status', v_row.status,
+    'checked_at_utc', v_row.checked_at_utc,
+    'result_json', v_row.result_json,
+    'override_reason', v_row.override_reason,
+    'override_by_user_id', case when v_row.override_by_user_id is null then null else v_row.override_by_user_id::text end,
+    'override_at_utc', v_row.override_at_utc,
+    'override_hash', v_row.override_hash,
+    'created_at_utc', v_row.created_at_utc,
+    'updated_at_utc', v_row.updated_at_utc
+  );
+
+  -- ✅ User-facing audit (UNGATED): bank name-check override set
+  perform public._audit_insert(
+    'bank_name_checks',
+    v_row.id::text,
+    'BANK_NAME_CHECK_OVERRIDE_SET',
+    v_before_json,
+    v_after_json,
+    v_reason,
+    p_actor_user_id
+  );
+
   return jsonb_build_object(
     'ok', true,
-    'row', jsonb_build_object(
-      'rail_provider', v_row.rail_provider,
-      'rail_env', v_row.rail_env,
-      'entity_kind', v_row.entity_kind,
-      'entity_id', v_row.entity_id::text,
-      'bank_details_hash', v_row.bank_details_hash,
-      'status', v_row.status,
-      'checked_at_utc', v_row.checked_at_utc,
-      'result_json', v_row.result_json,
-      'override_reason', v_row.override_reason,
-      'override_by_user_id', case when v_row.override_by_user_id is null then null else v_row.override_by_user_id::text end,
-      'override_at_utc', v_row.override_at_utc,
-      'override_hash', v_row.override_hash,
-      'created_at_utc', v_row.created_at_utc,
-      'updated_at_utc', v_row.updated_at_utc
-    )
+    'action', v_action,
+    'row', v_after_json
   );
 end;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_clear_override(
   p_provider text,
@@ -587,7 +667,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.bank_payee_map_upsert(
   p_provider text,
   p_env text,
@@ -616,6 +695,10 @@ declare
   v_now timestamptz := now();
 
   v_row public.bank_payee_map%rowtype;
+  v_inserted boolean := false;
+  v_action text := null;
+
+  v_row_json jsonb;
 begin
   if v_provider = '' then
     raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
@@ -641,61 +724,74 @@ begin
     raise exception '%', jsonb_build_object('error','PAYEE_ID_REQUIRED')::text;
   end if;
 
-  insert into public.bank_payee_map (
-    rail_provider,
-    rail_env,
-    entity_kind,
-    entity_id,
-    bank_details_hash,
-    payee_id,
-    payee_account_id,
-    meta_json,
-    created_at_utc,
-    updated_at_utc
+  with upserted as (
+    insert into public.bank_payee_map (
+      rail_provider,
+      rail_env,
+      entity_kind,
+      entity_id,
+      bank_details_hash,
+      payee_id,
+      payee_account_id,
+      meta_json,
+      created_at_utc,
+      updated_at_utc
+    )
+    values (
+      v_provider,
+      v_env,
+      v_kind,
+      p_entity_id,
+      v_hash,
+      v_payee_id,
+      v_payee_account_id,
+      p_meta_json,
+      v_now,
+      v_now
+    )
+    on conflict (rail_provider, rail_env, entity_kind, entity_id, bank_details_hash)
+    do update set
+      payee_id = excluded.payee_id,
+      payee_account_id = excluded.payee_account_id,
+      meta_json = excluded.meta_json,
+      updated_at_utc = v_now
+    returning
+      public.bank_payee_map.*,
+      (xmax = 0) as inserted_flag
   )
-  values (
-    v_provider,
-    v_env,
-    v_kind,
-    p_entity_id,
-    v_hash,
-    v_payee_id,
-    v_payee_account_id,
-    p_meta_json,
-    v_now,
-    v_now
-  )
-  on conflict (rail_provider, rail_env, entity_kind, entity_id, bank_details_hash)
-  do update set
-    payee_id = excluded.payee_id,
-    payee_account_id = excluded.payee_account_id,
-    meta_json = excluded.meta_json,
-    updated_at_utc = v_now;
-
-  select bpm.*
+  select
+    u.*
   into v_row
-  from public.bank_payee_map bpm
-  where bpm.rail_provider = v_provider
-    and bpm.rail_env = v_env
-    and bpm.entity_kind = v_kind
-    and bpm.entity_id = p_entity_id
-    and bpm.bank_details_hash = v_hash
+  from upserted u
   limit 1;
+
+  select
+    u.inserted_flag
+  into v_inserted
+  from upserted u
+  limit 1;
+
+  v_action := case when v_inserted then 'inserted' else 'updated' end;
+
+  v_row_json := jsonb_build_object(
+    'rail_provider', v_row.rail_provider,
+    'rail_env', v_row.rail_env,
+    'entity_kind', v_row.entity_kind,
+    'entity_id', v_row.entity_id::text,
+    'bank_details_hash', v_row.bank_details_hash,
+    'payee_id', v_row.payee_id,
+    'payee_account_id', v_row.payee_account_id,
+    'meta_json', v_row.meta_json,
+    'created_at_utc', v_row.created_at_utc,
+    'updated_at_utc', v_row.updated_at_utc
+  );
 
   return jsonb_build_object(
     'ok', true,
-    'row', jsonb_build_object(
-      'rail_provider', v_row.rail_provider,
-      'rail_env', v_row.rail_env,
-      'entity_kind', v_row.entity_kind,
-      'entity_id', v_row.entity_id::text,
-      'bank_details_hash', v_row.bank_details_hash,
-      'payee_id', v_row.payee_id,
-      'payee_account_id', v_row.payee_account_id,
-      'meta_json', v_row.meta_json,
-      'created_at_utc', v_row.created_at_utc,
-      'updated_at_utc', v_row.updated_at_utc
-    )
+    'action', v_action,
+    'payee_id', v_row.payee_id,
+    'payee_account_id', v_row.payee_account_id,
+    'row', v_row_json
   );
 end;
 $function$;
