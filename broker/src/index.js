@@ -9445,12 +9445,19 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
 
     const pm = (pe?.payee_map && typeof pe.payee_map === 'object') ? pe.payee_map : {};
     const mapPresent = (pm.present === true);
-
     const transfers = Array.isArray(pe?.transfers) ? pe.transfers : [];
     const t0 = transfers.length ? transfers[0] : null;
 
     const payeeName =
       String(pe?.payee_name || pe?.payeeName || t0?.payee_name || '').trim();
+
+    // ✅ IMPORTANT: CoP should validate the beneficiary/account-holder name, not the candidate display name.
+    // Prefer account_holder when present; fall back to payee_name for legacy payloads.
+    const accountHolder =
+      String(pe?.account_holder || pe?.accountHolder || t0?.account_holder || '').trim();
+
+    const nameForRail = accountHolder || payeeName;
+
     const sortCode =
       String(pe?.sort_code || pe?.sortCode || t0?.sort_code || '').trim();
     const accountNo =
@@ -9492,17 +9499,17 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
 
     // NAME CHECK: only attempt when DB says BLOCKED_NAME_CHECK AND status is UNVERIFIED AND no override.
     // If status is FAIL/NEAR_MATCH/UNAVAILABLE, we do NOT re-run; it remains a review-required item.
-    if (needsNameCheck) {
+     if (needsNameCheck) {
       if (ncHasOverride) {
         row.name_check = { attempted: false, reason: 'HAS_OVERRIDE', status: ncStatus };
       } else if (ncStatus !== 'UNVERIFIED') {
         row.name_check = { attempted: false, reason: 'ALREADY_CHECKED', status: ncStatus };
-      } else if (!payeeName || scDigits.length !== 6 || !acctDigits) {
+      } else if (!nameForRail || scDigits.length !== 6 || !acctDigits) {
         row.name_check = {
           attempted: false,
           reason: 'MISSING_BANK_FIELDS',
           missing: {
-            payee_name: !payeeName,
+            payee_name: !nameForRail,
             sort_code: (scDigits.length !== 6),
             account_number: !acctDigits
           }
@@ -9510,7 +9517,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
       } else {
         try {
           const ncRes = await revolutNameCheck_perform(env, token, {
-            payee_name: payeeName,
+            payee_name: nameForRail,
             sort_code: sortCode,
             account_number: accountNo,
             account_type: accountType
@@ -9565,12 +9572,12 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
     if (needsPayeeMap) {
       if (mapPresent) {
         row.payee_map = { attempted: false, reason: 'ALREADY_PRESENT' };
-      } else if (!payeeName || scDigits.length !== 6 || !acctDigits) {
+      } else if (!nameForRail || scDigits.length !== 6 || !acctDigits) {
         row.payee_map = {
           attempted: false,
           reason: 'MISSING_BANK_FIELDS',
           missing: {
-            payee_name: !payeeName,
+            payee_name: !nameForRail,
             sort_code: (scDigits.length !== 6),
             account_number: !acctDigits
           }
@@ -9584,7 +9591,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
             entity_id: idText,
             bank_details_hash: bankHash,
             bank_fields: {
-              payee_name: payeeName,
+              payee_name: nameForRail,
               sort_code: sortCode,
               account_number: accountNo,
               account_type: accountType
@@ -10372,7 +10379,6 @@ async function handleBankingPayBatchesList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleBankingIdLedgerList(env, req, user) {
   try {
     const u = new URL(req.url);
@@ -10409,13 +10415,24 @@ async function handleBankingIdLedgerList(env, req, user) {
     const onlyReportableRaw = (u.searchParams.get('only_reportable') || '').trim().toLowerCase();
     const p_only_reportable = (onlyReportableRaw === 'true' || onlyReportableRaw === '1' || onlyReportableRaw === 'yes' || onlyReportableRaw === 'y' || onlyReportableRaw === 'on');
 
+    // ✅ NEW: server-side filter for "Only changed (delta ≠ 0)" (matches new RPC param p_only_changed)
+    const onlyChangedRaw = String(
+      u.searchParams.get('only_changed')
+      || u.searchParams.get('onlyChanged')
+      || u.searchParams.get('only_delta')
+      || u.searchParams.get('onlyDelta')
+      || ''
+    ).trim().toLowerCase();
+    const p_only_changed = (onlyChangedRaw === 'true' || onlyChangedRaw === '1' || onlyChangedRaw === 'yes' || onlyChangedRaw === 'y' || onlyChangedRaw === 'on');
+
     const rpcRes = await sbRpc(env, 'id_ledger_list', {
       p_limit: limit,
       p_offset: offset,
       p_status,
       p_client_id,
       p_search,
-      p_only_reportable
+      p_only_reportable,
+      p_only_changed
     });
 
     let payload = rpcRes;
@@ -10443,8 +10460,6 @@ async function handleBankingIdLedgerList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 
 
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
