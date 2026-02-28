@@ -1140,3 +1140,519 @@ exception when others then
 end$$;
 
 commit;
+
+CREATE OR REPLACE FUNCTION public.id_consolidation_run_draft_start(
+  p_actor_user_id uuid,
+  p_note text DEFAULT NULL::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_ref_num bigint;
+  v_id_ref text;
+  v_created_at timestamptz := now();
+
+  v_total_ex numeric(12,2) := 0;
+  v_total_vat numeric(12,2) := 0;
+  v_total_inc numeric(12,2) := 0;
+  v_line_count int := 0;
+
+  v_note text;
+begin
+  v_note := nullif(btrim(coalesce(p_note,'')), '');
+
+  if to_regclass('public.id_ref_seq') is null then
+    raise exception 'ID_REF_SEQ_MISSING';
+  end if;
+  if to_regclass('public.id_invoice_ledger') is null then
+    raise exception 'ID_LEDGER_MISSING';
+  end if;
+  if to_regclass('public.id_consolidation_runs') is null
+     or to_regclass('public.id_consolidation_run_lines') is null then
+    raise exception 'ID_RUN_TABLES_MISSING';
+  end if;
+
+  -- Allocate new sequential ref and format as 6 digits
+  select nextval('public.id_ref_seq') into v_ref_num;
+  v_id_ref := lpad(v_ref_num::text, 6, '0');
+
+  -- Build snapshot of changed rows (same delta logic as id_consolidation_balance_now),
+  -- and INSERT run header + run lines WITHOUT updating id_invoice_ledger baselines.
+  with changed as (
+    select
+      l.invoice_id,
+      l.invoice_number,
+      l.invoice_status,
+      l.invoice_type,
+
+      (upper(coalesce(l.invoice_status,'')) = 'ON_HOLD') as is_on_hold,
+
+      coalesce(l.current_ex_vat,0)::numeric(12,2) as current_ex_vat,
+      coalesce(l.current_vat,0)::numeric(12,2) as current_vat,
+      coalesce(l.current_inc_vat,0)::numeric(12,2) as current_inc_vat,
+
+      coalesce(l.last_reported_ex_vat,0)::numeric(12,2) as last_reported_ex_vat,
+      coalesce(l.last_reported_vat,0)::numeric(12,2) as last_reported_vat,
+      coalesce(l.last_reported_inc_vat,0)::numeric(12,2) as last_reported_inc_vat,
+
+      (case
+        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(l.current_ex_vat,0)::numeric(12,2)
+      end) as reportable_current_ex_vat,
+
+      (case
+        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(l.current_vat,0)::numeric(12,2)
+      end) as reportable_current_vat,
+
+      (case
+        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(l.current_inc_vat,0)::numeric(12,2)
+      end) as reportable_current_inc_vat,
+
+      (
+        (case
+          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+          else coalesce(l.current_ex_vat,0)::numeric(12,2)
+        end)
+        - coalesce(l.last_reported_ex_vat,0)::numeric(12,2)
+      )::numeric(12,2) as delta_ex_vat,
+
+      (
+        (case
+          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+          else coalesce(l.current_vat,0)::numeric(12,2)
+        end)
+        - coalesce(l.last_reported_vat,0)::numeric(12,2)
+      )::numeric(12,2) as delta_vat,
+
+      (
+        (case
+          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+          else coalesce(l.current_inc_vat,0)::numeric(12,2)
+        end)
+        - coalesce(l.last_reported_inc_vat,0)::numeric(12,2)
+      )::numeric(12,2) as delta_inc_vat
+    from public.id_invoice_ledger l
+    where
+      (case
+        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(l.current_ex_vat,0)::numeric(12,2)
+      end) <> coalesce(l.last_reported_ex_vat,0)::numeric(12,2)
+      or
+      (case
+        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(l.current_vat,0)::numeric(12,2)
+      end) <> coalesce(l.last_reported_vat,0)::numeric(12,2)
+      or
+      (case
+        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(l.current_inc_vat,0)::numeric(12,2)
+      end) <> coalesce(l.last_reported_inc_vat,0)::numeric(12,2)
+    for update
+  ),
+  agg as (
+    select
+      coalesce(sum(c.delta_ex_vat),0)::numeric(12,2) as total_ex,
+      coalesce(sum(c.delta_vat),0)::numeric(12,2) as total_vat,
+      coalesce(sum(c.delta_inc_vat),0)::numeric(12,2) as total_inc,
+      count(*)::int as line_count
+    from changed c
+  ),
+  ins_run as (
+    insert into public.id_consolidation_runs (
+      id_ref,
+      created_at_utc,
+      created_by_user_id,
+      total_delta_ex_vat,
+      total_delta_vat,
+      total_delta_inc_vat,
+      bank_upload_code,
+      bank_uploaded_at_utc,
+      note
+    )
+    select
+      v_id_ref,
+      v_created_at,
+      p_actor_user_id,
+      a.total_ex,
+      a.total_vat,
+      a.total_inc,
+      null::text,
+      null::timestamptz,
+      v_note
+    from agg a
+    returning 1
+  ),
+  ins_lines as (
+    insert into public.id_consolidation_run_lines (
+      id_ref,
+      invoice_id,
+      invoice_number,
+      invoice_status,
+      invoice_type,
+      delta_ex_vat,
+      delta_vat,
+      delta_inc_vat,
+      current_ex_vat,
+      current_vat,
+      current_inc_vat
+    )
+    select
+      v_id_ref,
+      c.invoice_id,
+      c.invoice_number,
+      c.invoice_status,
+      c.invoice_type,
+      c.delta_ex_vat,
+      c.delta_vat,
+      c.delta_inc_vat,
+      c.current_ex_vat,
+      c.current_vat,
+      c.current_inc_vat
+    from changed c
+    returning 1
+  )
+  select
+    a.total_ex,
+    a.total_vat,
+    a.total_inc,
+    a.line_count
+  into
+    v_total_ex,
+    v_total_vat,
+    v_total_inc,
+    v_line_count
+  from agg a;
+
+  return jsonb_build_object(
+    'id_ref', v_id_ref,
+    'created_at_utc', v_created_at,
+    'line_count', coalesce(v_line_count, 0),
+    'totals', jsonb_build_object(
+      'delta_ex_vat', coalesce(v_total_ex, 0)::numeric(12,2),
+      'delta_vat', coalesce(v_total_vat, 0)::numeric(12,2),
+      'delta_inc_vat', coalesce(v_total_inc, 0)::numeric(12,2)
+    )
+  );
+end;
+$function$;
+CREATE OR REPLACE FUNCTION public.id_consolidation_run_draft_commit(
+  p_id_ref text,
+  p_bank_upload_code text,
+  p_actor_user_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_id_ref text := nullif(btrim(coalesce(p_id_ref,'')), '');
+  v_bank_upload_code text := nullif(btrim(coalesce(p_bank_upload_code,'')), '');
+  v_now timestamptz := now();
+
+  v_run record;
+
+  v_total_ex numeric(12,2) := 0;
+  v_total_vat numeric(12,2) := 0;
+  v_total_inc numeric(12,2) := 0;
+
+  v_line_count int := 0;
+  v_ledger_rows_updated int := 0;
+  v_header_updated int := 0;
+
+  v_has_committed_by_col boolean := false;
+  v_existing_code text;
+begin
+  if p_actor_user_id is null then
+    raise exception 'ACTOR_USER_ID_REQUIRED';
+  end if;
+
+  if to_regclass('public.id_consolidation_runs') is null
+     or to_regclass('public.id_consolidation_run_lines') is null then
+    raise exception 'ID_RUN_TABLES_MISSING';
+  end if;
+
+  if to_regclass('public.id_invoice_ledger') is null then
+    raise exception 'ID_LEDGER_MISSING';
+  end if;
+
+  if v_id_ref is null or v_id_ref !~ '^[0-9]{6}$' then
+    raise exception 'INVALID_ID_REF';
+  end if;
+
+  if v_bank_upload_code is null then
+    raise exception 'BANK_UPLOAD_CODE_REQUIRED';
+  end if;
+
+  -- Lock run row for idempotency + concurrency safety
+  select
+    r.id_ref,
+    r.created_at_utc,
+    r.created_by_user_id,
+    r.total_delta_ex_vat,
+    r.total_delta_vat,
+    r.total_delta_inc_vat,
+    r.bank_upload_code,
+    r.bank_uploaded_at_utc,
+    r.note
+  into v_run
+  from public.id_consolidation_runs r
+  where r.id_ref = v_id_ref
+  limit 1
+  for update;
+
+  if not found then
+    raise exception 'ID_RUN_NOT_FOUND';
+  end if;
+
+  v_total_ex := coalesce(v_run.total_delta_ex_vat, 0)::numeric(12,2);
+  v_total_vat := coalesce(v_run.total_delta_vat, 0)::numeric(12,2);
+  v_total_inc := coalesce(v_run.total_delta_inc_vat, 0)::numeric(12,2);
+
+  v_existing_code := nullif(btrim(coalesce(v_run.bank_upload_code,'')), '');
+
+  -- Already committed (idempotent path)
+  if v_run.bank_uploaded_at_utc is not null or v_existing_code is not null then
+    if v_existing_code is not distinct from v_bank_upload_code then
+      select count(*)::int
+      into v_line_count
+      from public.id_consolidation_run_lines rl
+      where rl.id_ref = v_id_ref;
+
+      return jsonb_build_object(
+        'id_ref', v_id_ref,
+        'state', 'COMMITTED',
+        'bank_upload_code', v_existing_code,
+        'bank_uploaded_at_utc', v_run.bank_uploaded_at_utc,
+        'committed_by_user_id', p_actor_user_id::text,
+        'line_count', coalesce(v_line_count, 0),
+        'totals', jsonb_build_object(
+          'delta_ex_vat', v_total_ex,
+          'delta_vat', v_total_vat,
+          'delta_inc_vat', v_total_inc
+        ),
+        'ledger_rows_updated', 0,
+        'did_commit', false
+      );
+    else
+      raise exception 'ID_RUN_ALREADY_COMMITTED_DIFFERENT_CODE';
+    end if;
+  end if;
+
+  -- Detect optional column committed_by_user_id (NOT present in current schema dump)
+  select exists (
+    select 1
+    from information_schema.columns c
+    where c.table_schema = 'public'
+      and c.table_name = 'id_consolidation_runs'
+      and c.column_name = 'committed_by_user_id'
+  )
+  into v_has_committed_by_col;
+
+  if v_has_committed_by_col then
+    execute
+      'update public.id_consolidation_runs
+          set bank_upload_code = $1,
+              bank_uploaded_at_utc = $2,
+              committed_by_user_id = $3
+        where id_ref = $4
+          and bank_uploaded_at_utc is null'
+    using v_bank_upload_code, v_now, p_actor_user_id, v_id_ref;
+
+    get diagnostics v_header_updated = row_count;
+  else
+    update public.id_consolidation_runs r2
+    set
+      bank_upload_code = v_bank_upload_code,
+      bank_uploaded_at_utc = v_now
+    where r2.id_ref = v_id_ref
+      and r2.bank_uploaded_at_utc is null;
+
+    get diagnostics v_header_updated = row_count;
+  end if;
+
+  if v_header_updated = 0 then
+    -- Another session committed concurrently; re-check for idempotency
+    select
+      r3.bank_upload_code,
+      r3.bank_uploaded_at_utc
+    into
+      v_existing_code,
+      v_now
+    from public.id_consolidation_runs r3
+    where r3.id_ref = v_id_ref
+    limit 1;
+
+    v_existing_code := nullif(btrim(coalesce(v_existing_code,'')), '');
+
+    if v_now is not null and v_existing_code is not distinct from v_bank_upload_code then
+      select count(*)::int
+      into v_line_count
+      from public.id_consolidation_run_lines rl
+      where rl.id_ref = v_id_ref;
+
+      return jsonb_build_object(
+        'id_ref', v_id_ref,
+        'state', 'COMMITTED',
+        'bank_upload_code', v_existing_code,
+        'bank_uploaded_at_utc', v_now,
+        'committed_by_user_id', p_actor_user_id::text,
+        'line_count', coalesce(v_line_count, 0),
+        'totals', jsonb_build_object(
+          'delta_ex_vat', v_total_ex,
+          'delta_vat', v_total_vat,
+          'delta_inc_vat', v_total_inc
+        ),
+        'ledger_rows_updated', 0,
+        'did_commit', false
+      );
+    end if;
+
+    raise exception 'ID_RUN_COMMIT_RACE';
+  end if;
+
+  -- Update ledger baselines from SNAPSHOT lines (not from current ledger state)
+  update public.id_invoice_ledger l
+  set
+    last_reported_ex_vat = (
+      case
+        when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(rl.current_ex_vat,0)::numeric(12,2)
+      end
+    ),
+    last_reported_vat = (
+      case
+        when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(rl.current_vat,0)::numeric(12,2)
+      end
+    ),
+    last_reported_inc_vat = (
+      case
+        when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(rl.current_inc_vat,0)::numeric(12,2)
+      end
+    ),
+    updated_at_utc = v_now
+  from public.id_consolidation_run_lines rl
+  where rl.id_ref = v_id_ref
+    and l.invoice_id = rl.invoice_id;
+
+  get diagnostics v_ledger_rows_updated = row_count;
+
+  select count(*)::int
+  into v_line_count
+  from public.id_consolidation_run_lines rl2
+  where rl2.id_ref = v_id_ref;
+
+  return jsonb_build_object(
+    'id_ref', v_id_ref,
+    'state', 'COMMITTED',
+    'bank_upload_code', v_bank_upload_code,
+    'bank_uploaded_at_utc', v_now,
+    'committed_by_user_id', p_actor_user_id::text,
+    'line_count', coalesce(v_line_count, 0),
+    'totals', jsonb_build_object(
+      'delta_ex_vat', v_total_ex,
+      'delta_vat', v_total_vat,
+      'delta_inc_vat', v_total_inc
+    ),
+    'ledger_rows_updated', coalesce(v_ledger_rows_updated, 0),
+    'did_commit', true
+  );
+end;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.id_consolidation_run_draft_cancel(
+  p_id_ref text,
+  p_actor_user_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_id_ref text := nullif(btrim(coalesce(p_id_ref,'')), '');
+
+  v_run record;
+
+  v_deleted_lines int := 0;
+  v_deleted_run int := 0;
+
+  v_has_commit_marker boolean := false;
+begin
+  if p_actor_user_id is null then
+    raise exception 'ACTOR_USER_ID_REQUIRED';
+  end if;
+
+  if to_regclass('public.id_consolidation_runs') is null
+     or to_regclass('public.id_consolidation_run_lines') is null then
+    raise exception 'ID_RUN_TABLES_MISSING';
+  end if;
+
+  if v_id_ref is null or v_id_ref !~ '^[0-9]{6}$' then
+    raise exception 'INVALID_ID_REF';
+  end if;
+
+  -- Lock run row (if present)
+  select
+    r.id_ref,
+    r.bank_upload_code,
+    r.bank_uploaded_at_utc
+  into v_run
+  from public.id_consolidation_runs r
+  where r.id_ref = v_id_ref
+  limit 1
+  for update;
+
+  if not found then
+    return jsonb_build_object(
+      'ok', true,
+      'id_ref', v_id_ref,
+      'cancelled', false,
+      'already_missing', true
+    );
+  end if;
+
+  v_has_commit_marker :=
+    (v_run.bank_uploaded_at_utc is not null)
+    or (nullif(btrim(coalesce(v_run.bank_upload_code,'')), '') is not null);
+
+  if v_has_commit_marker then
+    raise exception 'CANNOT_CANCEL_COMMITTED_RUN';
+  end if;
+
+  delete from public.id_consolidation_run_lines rl
+  where rl.id_ref = v_id_ref;
+
+  get diagnostics v_deleted_lines = row_count;
+
+  delete from public.id_consolidation_runs r2
+  where r2.id_ref = v_id_ref
+    and r2.bank_uploaded_at_utc is null;
+
+  get diagnostics v_deleted_run = row_count;
+
+  if v_deleted_run = 0 then
+    raise exception 'CANCEL_FAILED';
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'id_ref', v_id_ref,
+    'cancelled', true,
+    'already_missing', false,
+    'deleted_lines', coalesce(v_deleted_lines, 0)
+  );
+end;
+$function$;
+
+
+
+
