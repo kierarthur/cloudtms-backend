@@ -1999,6 +1999,7 @@ begin;
 
 begin;
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3074,9 +3075,12 @@ begin
       select
         case
           when p.payee_entity_kind = 'CANDIDATE' then c_pay.display_name
-          else u_pay.umbrella_name
+          else u_pay.name
         end as payee_name,
-        coalesce(c_pay.account_holder, u_pay.account_holder) as account_holder,
+        case
+          when p.payee_entity_kind = 'CANDIDATE' then c_pay.account_holder
+          else u_pay.name
+        end as account_holder,
         coalesce(c_pay.bank_name, u_pay.bank_name) as bank_name,
         coalesce(c_pay.sort_code, u_pay.sort_code) as sort_code,
         coalesce(c_pay.account_number, u_pay.account_number) as account_number,
@@ -3084,7 +3088,13 @@ begin
         (
           p.bank_details_hash is null
           or btrim(p.bank_details_hash) = ''
-          or nullif(btrim(coalesce(coalesce(c_pay.account_holder, u_pay.account_holder), '')), '') is null
+          or nullif(btrim(coalesce(
+                case
+                  when p.payee_entity_kind = 'CANDIDATE' then c_pay.account_holder
+                  else u_pay.name
+                end,
+                ''
+              )), '') is null
           or nullif(btrim(coalesce(coalesce(c_pay.sort_code, u_pay.sort_code), '')), '') is null
           or nullif(btrim(coalesce(coalesce(c_pay.account_number, u_pay.account_number), '')), '') is null
         ) as is_missing_bank_details
@@ -3512,6 +3522,14 @@ begin
   );
 end;
 $function$;
+
+
+
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
