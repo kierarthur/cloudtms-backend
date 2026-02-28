@@ -6174,7 +6174,6 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
-
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -6562,7 +6561,7 @@ begin
         pbc0.id as pay_batch_candidate_id,
         pbc0.candidate_id,
         coalesce(vts.week_ending_date, v_pay_week_end) as wk_end,
-        max(pbi0.umbrella_id) as umb_id,
+        nullif(min(pbi0.umbrella_id::text), '')::uuid as umb_id,
         sum(coalesce(pbi0.amount_inc_vat,0)) as sum_amt
       from public.pay_batch_candidates pbc0
       join public.pay_batch_items pbi0
