@@ -79,7 +79,7 @@ begin
 end;
 $function$;
 
-create or replace function public.pay_create_draft_batches_split(
+CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
   p_actor_user_id uuid,
@@ -162,7 +162,7 @@ begin
   end;
 
   if v_umbrella_pay_batch_id is null and v_paye_pay_batch_id is null then
-    raise exception 'Nothing to pay (no payable items for UMBRELLA or PAYE after blockers)';
+    raise exception 'Nothing to pay (no payable items for UMBRELLA or PAYE after readiness blockers)';
   end if;
 
   return jsonb_build_object(
@@ -172,7 +172,6 @@ begin
   );
 end;
 $$;
-
 
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
