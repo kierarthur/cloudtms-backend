@@ -3331,7 +3331,8 @@ begin
 end;
 $function$;
 
-create or replace function public.pay_create_draft_batch(
+
+CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
   p_pay_channel_scope text,
@@ -3372,6 +3373,10 @@ declare
   v_settings record;
 
   v_need_name_check boolean := false;
+
+  v_requires_payee_map boolean := false;
+
+  v_blocked_candidates jsonb := '[]'::jsonb;
 
   v_batch_id uuid;
 
@@ -3475,6 +3480,8 @@ begin
 
   v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true)
                        and (upper(btrim(coalesce(v_settings.rail_provider_default,''))) <> 'CSV');
+
+  v_requires_payee_map := (upper(btrim(coalesce(v_settings.rail_provider_default,''))) <> 'CSV');
 
   -- ✅ Load eligibility window knobs from settings_defaults (Option A)
   -- NOTE: use exception guard so function is robust even if column is absent at runtime.
@@ -3663,7 +3670,8 @@ begin
   -- Also:
   --  - exclude items already reserved in other active batches (aligns with preview)
   --  - exclude items snoozed (any kind) (aligns with preview UX)
-  --  - for UMBRELLA draft, include only "ready" umbrella items (bank details + name-check accept/override if required)
+  --  - for UMBRELLA draft, include only "ready" umbrella items (bank details + name-check accept/override + payee-map if required)
+  --  - for PAYE draft, include only "ready" candidate items (bank details + name-check accept/override + payee-map if required)
   with finance as (
     select v_vat_rate_pct as vat_rate_pct, v_erni_pct as erni_pct
   ),
@@ -3717,6 +3725,7 @@ begin
       upper(coalesce(tf.pay_method,'')) as ts_pay_method,
       upper(coalesce(c.pay_method,'')) as cand_pay_method,
       c.umbrella_id as umbrella_id,
+      c.bank_details_hash as cand_bank_hash,
 
       ts.contract_id,
       ts.reference_number,
@@ -3848,6 +3857,7 @@ begin
       c.umbrella_id,
       c.umb_vat_chargeable,
       c.umb_enabled,
+      c.cand_bank_hash,
       c.umb_bank_hash,
       c.require_reference_to_pay,
 
@@ -3873,6 +3883,7 @@ begin
       d.umbrella_id,
       d.umb_vat_chargeable,
       d.umb_enabled,
+      d.cand_bank_hash,
       d.umb_bank_hash,
       ids.segment_id as segment_key,
 
@@ -3967,6 +3978,7 @@ begin
       d.umbrella_id,
       d.umb_vat_chargeable,
       d.umb_enabled,
+      d.cand_bank_hash,
       d.umb_bank_hash,
       ('adj:' || ids.adj_id) as source_ref,
       round(
@@ -4020,6 +4032,7 @@ begin
       d.umbrella_id,
       d.umb_vat_chargeable,
       d.umb_enabled,
+      d.cand_bank_hash,
       d.umb_bank_hash,
       'ADDITIONAL'::text as kind,
       null::text as segment_key,
@@ -4027,23 +4040,23 @@ begin
       round(d.cur_additional - coalesce(nullif(d.base_json->>'additional_pay_ex_vat','')::numeric,0), 2) as delta_ex
     from deltas d
     union all
-    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.umb_bank_hash,
+    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.cand_bank_hash, d.umb_bank_hash,
       'EXPENSES', null, 'expenses', round(d.expenses_pay_ex_vat - coalesce(nullif(d.base_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0),2)
     from deltas d
     union all
-    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.umb_bank_hash,
+    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.cand_bank_hash, d.umb_bank_hash,
       'TRAVEL', null, 'travel', round(d.travel_pay_ex_vat - coalesce(nullif(d.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0),2)
     from deltas d
     union all
-    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.umb_bank_hash,
+    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.cand_bank_hash, d.umb_bank_hash,
       'ACCOMMODATION', null, 'accommodation', round(d.accommodation_pay_ex_vat - coalesce(nullif(d.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0),2)
     from deltas d
     union all
-    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.umb_bank_hash,
+    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.cand_bank_hash, d.umb_bank_hash,
       'OTHER', null, 'other', round(d.other_pay_ex_vat - coalesce(nullif(d.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0),2)
     from deltas d
     union all
-    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.umb_bank_hash,
+    select d.candidate_id, d.timesheet_id, d.ts_pay_method, d.cand_pay_method, d.umbrella_id, d.umb_vat_chargeable, d.umb_enabled, d.cand_bank_hash, d.umb_bank_hash,
       'MILEAGE', null, 'mileage', round(d.mileage_pay_ex_vat - coalesce(nullif(d.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0),2)
     from deltas d
   ),
@@ -4056,6 +4069,7 @@ begin
       s.umbrella_id,
       s.umb_vat_chargeable,
       s.umb_enabled,
+      s.cand_bank_hash,
       s.umb_bank_hash,
       'SEGMENT'::text as kind,
       s.segment_key,
@@ -4064,12 +4078,12 @@ begin
     from segment_delta_rows s
     union all
     select
-      a.candidate_id, a.timesheet_id, a.ts_pay_method, a.cand_pay_method, a.umbrella_id, a.umb_vat_chargeable, a.umb_enabled, a.umb_bank_hash,
+      a.candidate_id, a.timesheet_id, a.ts_pay_method, a.cand_pay_method, a.umbrella_id, a.umb_vat_chargeable, a.umb_enabled, a.cand_bank_hash, a.umb_bank_hash,
       'ADJUSTMENT'::text, null::text, a.source_ref, a.delta_ex
     from adj_delta_rows a
     union all
     select
-      o.candidate_id, o.timesheet_id, o.ts_pay_method, o.cand_pay_method, o.umbrella_id, o.umb_vat_chargeable, o.umb_enabled, o.umb_bank_hash,
+      o.candidate_id, o.timesheet_id, o.ts_pay_method, o.cand_pay_method, o.umbrella_id, o.umb_vat_chargeable, o.umb_enabled, o.cand_bank_hash, o.umb_bank_hash,
       o.kind, o.segment_key, o.source_ref, o.delta_ex
     from other_delta_rows o
     where round(coalesce(o.delta_ex,0),2) <> 0
@@ -4116,6 +4130,47 @@ begin
         limit 1
       )
       and (
+        v_scope <> 'PAYE'
+        or (
+          r.cand_bank_hash is not null
+          and btrim(r.cand_bank_hash) <> ''
+          and (
+            v_need_name_check = false
+            or exists (
+              select 1
+              from public.bank_name_checks bnc
+              where bnc.rail_provider = upper(btrim(coalesce(v_settings.rail_provider_default,'')))
+                and bnc.rail_env = upper(btrim(coalesce(v_settings.rail_env_default,'')))
+                and bnc.entity_kind = 'CANDIDATE'
+                and bnc.entity_id = r.candidate_id
+                and bnc.bank_details_hash = r.cand_bank_hash
+                and (
+                  upper(coalesce(bnc.status,'')) = 'PASS'
+                  or (
+                    bnc.override_reason is not null
+                    and bnc.override_hash is not null
+                    and bnc.override_hash = r.cand_bank_hash
+                  )
+                )
+              limit 1
+            )
+          )
+          and (
+            v_requires_payee_map = false
+            or exists (
+              select 1
+              from public.bank_payee_map bpm
+              where bpm.rail_provider = upper(btrim(coalesce(v_settings.rail_provider_default,'')))
+                and bpm.rail_env = upper(btrim(coalesce(v_settings.rail_env_default,'')))
+                and bpm.entity_kind = 'CANDIDATE'
+                and bpm.entity_id = r.candidate_id
+                and bpm.bank_details_hash = r.cand_bank_hash
+              limit 1
+            )
+          )
+        )
+      )
+      and (
         v_scope <> 'UMBRELLA'
         or (
           r.umbrella_id is not null
@@ -4140,6 +4195,19 @@ begin
                     and bnc.override_hash = r.umb_bank_hash
                   )
                 )
+              limit 1
+            )
+          )
+          and (
+            v_requires_payee_map = false
+            or exists (
+              select 1
+              from public.bank_payee_map bpm
+              where bpm.rail_provider = upper(btrim(coalesce(v_settings.rail_provider_default,'')))
+                and bpm.rail_env = upper(btrim(coalesce(v_settings.rail_env_default,'')))
+                and bpm.entity_kind = 'UMBRELLA'
+                and bpm.entity_id = r.umbrella_id
+                and bpm.bank_details_hash = r.umb_bank_hash
               limit 1
             )
           )
@@ -4783,6 +4851,167 @@ begin
   join ts_channel tc
     on tc.timesheet_id = s.timesheet_id;
 
+  -- Final safety assertion: draft must not contain candidates blocked by bank readiness (for this scope).
+  with cands as (
+    select
+      pbc.candidate_id,
+      c.umbrella_id as umbrella_id,
+      c.bank_details_hash as cand_bank_hash
+    from public.pay_batch_candidates pbc
+    join public.candidates c
+      on c.id = pbc.candidate_id
+    where pbc.pay_batch_id = v_batch_id
+  ),
+  umb as (
+    select
+      u.id as umbrella_id,
+      coalesce(u.enabled,false) as umb_enabled,
+      u.bank_details_hash as umb_bank_hash
+    from public.umbrellas u
+  ),
+  checks as (
+    select
+      ca.candidate_id,
+      (
+        -- PAYE readiness blockers (payee is candidate)
+        (case
+           when v_scope = 'PAYE' and (ca.cand_bank_hash is null or btrim(ca.cand_bank_hash) = '') then jsonb_build_array('BLOCKED_BANK_DETAILS')
+           else '[]'::jsonb
+         end)
+        ||
+        (case
+           when v_scope = 'PAYE'
+            and v_need_name_check = true
+            and ca.cand_bank_hash is not null and btrim(ca.cand_bank_hash) <> ''
+            and not exists (
+              select 1
+              from public.bank_name_checks bnc
+              where bnc.rail_provider = upper(btrim(coalesce(v_settings.rail_provider_default,'')))
+                and bnc.rail_env = upper(btrim(coalesce(v_settings.rail_env_default,'')))
+                and bnc.entity_kind = 'CANDIDATE'
+                and bnc.entity_id = ca.candidate_id
+                and bnc.bank_details_hash = ca.cand_bank_hash
+                and (
+                  upper(coalesce(bnc.status,'')) = 'PASS'
+                  or (
+                    bnc.override_reason is not null
+                    and bnc.override_hash is not null
+                    and bnc.override_hash = ca.cand_bank_hash
+                  )
+                )
+              limit 1
+            )
+           then jsonb_build_array('BLOCKED_NAME_CHECK')
+           else '[]'::jsonb
+         end)
+        ||
+        (case
+           when v_scope = 'PAYE'
+            and v_requires_payee_map = true
+            and ca.cand_bank_hash is not null and btrim(ca.cand_bank_hash) <> ''
+            and not exists (
+              select 1
+              from public.bank_payee_map bpm
+              where bpm.rail_provider = upper(btrim(coalesce(v_settings.rail_provider_default,'')))
+                and bpm.rail_env = upper(btrim(coalesce(v_settings.rail_env_default,'')))
+                and bpm.entity_kind = 'CANDIDATE'
+                and bpm.entity_id = ca.candidate_id
+                and bpm.bank_details_hash = ca.cand_bank_hash
+              limit 1
+            )
+           then jsonb_build_array('BLOCKED_NO_PAYEE_MAP')
+           else '[]'::jsonb
+         end)
+        ||
+        -- UMBRELLA readiness blockers (payee is umbrella)
+        (case
+           when v_scope = 'UMBRELLA'
+            and (
+              ca.umbrella_id is null
+              or coalesce(u.umb_enabled,false) = false
+              or u.umb_bank_hash is null
+              or btrim(u.umb_bank_hash) = ''
+            )
+           then jsonb_build_array('BLOCKED_BANK_DETAILS')
+           else '[]'::jsonb
+         end)
+        ||
+        (case
+           when v_scope = 'UMBRELLA'
+            and v_need_name_check = true
+            and ca.umbrella_id is not null
+            and coalesce(u.umb_enabled,false) = true
+            and u.umb_bank_hash is not null and btrim(u.umb_bank_hash) <> ''
+            and not exists (
+              select 1
+              from public.bank_name_checks bnc
+              where bnc.rail_provider = upper(btrim(coalesce(v_settings.rail_provider_default,'')))
+                and bnc.rail_env = upper(btrim(coalesce(v_settings.rail_env_default,'')))
+                and bnc.entity_kind = 'UMBRELLA'
+                and bnc.entity_id = ca.umbrella_id
+                and bnc.bank_details_hash = u.umb_bank_hash
+                and (
+                  upper(coalesce(bnc.status,'')) = 'PASS'
+                  or (
+                    bnc.override_reason is not null
+                    and bnc.override_hash is not null
+                    and bnc.override_hash = u.umb_bank_hash
+                  )
+                )
+              limit 1
+            )
+           then jsonb_build_array('BLOCKED_NAME_CHECK')
+           else '[]'::jsonb
+         end)
+        ||
+        (case
+           when v_scope = 'UMBRELLA'
+            and v_requires_payee_map = true
+            and ca.umbrella_id is not null
+            and coalesce(u.umb_enabled,false) = true
+            and u.umb_bank_hash is not null and btrim(u.umb_bank_hash) <> ''
+            and not exists (
+              select 1
+              from public.bank_payee_map bpm
+              where bpm.rail_provider = upper(btrim(coalesce(v_settings.rail_provider_default,'')))
+                and bpm.rail_env = upper(btrim(coalesce(v_settings.rail_env_default,'')))
+                and bpm.entity_kind = 'UMBRELLA'
+                and bpm.entity_id = ca.umbrella_id
+                and bpm.bank_details_hash = u.umb_bank_hash
+              limit 1
+            )
+           then jsonb_build_array('BLOCKED_NO_PAYEE_MAP')
+           else '[]'::jsonb
+         end)
+      ) as blockers
+    from cands ca
+    left join umb u
+      on u.umbrella_id = ca.umbrella_id
+  ),
+  bad as (
+    select
+      x.candidate_id,
+      x.blockers
+    from checks x
+    where jsonb_array_length(x.blockers) > 0
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'candidate_id', b.candidate_id::text,
+        'blockers', b.blockers
+      )
+      order by b.candidate_id::text
+    ),
+    '[]'::jsonb
+  )
+  into v_blocked_candidates
+  from bad b;
+
+  if jsonb_array_length(v_blocked_candidates) > 0 then
+    raise exception 'DRAFT_CONTAINS_BLOCKED_ITEMS %', v_blocked_candidates::text;
+  end if;
+
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
@@ -4797,9 +5026,6 @@ begin
   );
 end;
 $$;
-
-
-
 
 
 
