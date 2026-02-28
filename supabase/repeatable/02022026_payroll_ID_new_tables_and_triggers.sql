@@ -585,14 +585,12 @@ begin
     raise exception 'ID_LEDGER_MISSING';
   end if;
 
-  with changed as (
+  with base as (
     select
       l.invoice_id,
       l.invoice_number,
       l.invoice_status,
       l.invoice_type,
-
-      (upper(coalesce(l.invoice_status,'')) = 'ON_HOLD') as is_on_hold,
 
       coalesce(l.current_ex_vat,0)::numeric(12,2) as current_ex_vat,
       coalesce(l.current_vat,0)::numeric(12,2) as current_vat,
@@ -602,102 +600,126 @@ begin
       coalesce(l.last_reported_vat,0)::numeric(12,2) as last_reported_vat,
       coalesce(l.last_reported_inc_vat,0)::numeric(12,2) as last_reported_inc_vat,
 
+      l.updated_at_utc,
+
+      i.client_id as client_id,
+      c.name as client_name,
+
+      i.invoice_no as inv_invoice_no,
+      i.status::text as inv_status_text,
+      i.type::text as inv_type_text,
+
+      i.issued_at_utc,
+      i.due_at_utc,
+      i.paid_at_utc,
+      i.status_date_utc,
+      i.credit_note_created_at_utc,
+
+      coalesce(nullif(btrim(coalesce(l.invoice_number, '')), ''), i.invoice_no) as effective_invoice_number,
+      coalesce(nullif(btrim(coalesce(l.invoice_status, '')), ''), i.status::text) as effective_invoice_status,
+      coalesce(nullif(btrim(coalesce(l.invoice_type, '')), ''), i.type::text) as effective_invoice_type,
+
+      coalesce(i.issued_at_utc, i.status_date_utc, l.updated_at_utc) as sort_ts
+    from public.id_invoice_ledger l
+    left join public.invoices i
+      on i.id = l.invoice_id
+    left join public.clients c
+      on c.id = i.client_id
+  ),
+  calc as (
+    select
+      b.*,
+
+      (upper(coalesce(b.effective_invoice_status,'')) = 'ON_HOLD') as is_on_hold,
+
       (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_ex_vat,0)::numeric(12,2)
+        when upper(coalesce(b.effective_invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(b.current_ex_vat,0)::numeric(12,2)
       end) as reportable_current_ex_vat,
 
       (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_vat,0)::numeric(12,2)
+        when upper(coalesce(b.effective_invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(b.current_vat,0)::numeric(12,2)
       end) as reportable_current_vat,
 
       (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_inc_vat,0)::numeric(12,2)
-      end) as reportable_current_inc_vat,
+        when upper(coalesce(b.effective_invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+        else coalesce(b.current_inc_vat,0)::numeric(12,2)
+      end) as reportable_current_inc_vat
+    from base b
+  ),
+  changed as (
+    select
+      c.*,
 
-      (
-        (case
-          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-          else coalesce(l.current_ex_vat,0)::numeric(12,2)
-        end)
-        - coalesce(l.last_reported_ex_vat,0)::numeric(12,2)
-      )::numeric(12,2) as delta_ex_vat,
+      (c.reportable_current_ex_vat - coalesce(c.last_reported_ex_vat,0)::numeric(12,2))::numeric(12,2) as delta_ex_vat,
+      (c.reportable_current_vat - coalesce(c.last_reported_vat,0)::numeric(12,2))::numeric(12,2) as delta_vat,
+      (c.reportable_current_inc_vat - coalesce(c.last_reported_inc_vat,0)::numeric(12,2))::numeric(12,2) as delta_inc_vat,
 
-      (
-        (case
-          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-          else coalesce(l.current_vat,0)::numeric(12,2)
-        end)
-        - coalesce(l.last_reported_vat,0)::numeric(12,2)
-      )::numeric(12,2) as delta_vat,
-
-      (
-        (case
-          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-          else coalesce(l.current_inc_vat,0)::numeric(12,2)
-        end)
-        - coalesce(l.last_reported_inc_vat,0)::numeric(12,2)
-      )::numeric(12,2) as delta_inc_vat
-    from public.id_invoice_ledger l
+      (case when c.is_on_hold then 'NON_REPORTABLE' else 'REPORTABLE' end) as line_kind,
+      (case when c.is_on_hold then 'ON_HOLD' else null end) as non_reportable_reason
+    from calc c
     where
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_ex_vat,0)::numeric(12,2)
-      end) <> coalesce(l.last_reported_ex_vat,0)::numeric(12,2)
-      or
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_vat,0)::numeric(12,2)
-      end) <> coalesce(l.last_reported_vat,0)::numeric(12,2)
-      or
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_inc_vat,0)::numeric(12,2)
-      end) <> coalesce(l.last_reported_inc_vat,0)::numeric(12,2)
+      c.reportable_current_ex_vat <> coalesce(c.last_reported_ex_vat,0)::numeric(12,2)
+      or c.reportable_current_vat <> coalesce(c.last_reported_vat,0)::numeric(12,2)
+      or c.reportable_current_inc_vat <> coalesce(c.last_reported_inc_vat,0)::numeric(12,2)
   )
   select
-    coalesce(sum(c.delta_ex_vat),0)::numeric(12,2),
-    coalesce(sum(c.delta_vat),0)::numeric(12,2),
-    coalesce(sum(c.delta_inc_vat),0)::numeric(12,2),
+    coalesce(sum(ch.delta_ex_vat),0)::numeric(12,2),
+    coalesce(sum(ch.delta_vat),0)::numeric(12,2),
+    coalesce(sum(ch.delta_inc_vat),0)::numeric(12,2),
 
-    coalesce(sum(c.current_ex_vat),0)::numeric(12,2),
-    coalesce(sum(c.current_vat),0)::numeric(12,2),
-    coalesce(sum(c.current_inc_vat),0)::numeric(12,2),
+    coalesce(sum(ch.current_ex_vat),0)::numeric(12,2),
+    coalesce(sum(ch.current_vat),0)::numeric(12,2),
+    coalesce(sum(ch.current_inc_vat),0)::numeric(12,2),
 
-    coalesce(sum(c.reportable_current_ex_vat),0)::numeric(12,2),
-    coalesce(sum(c.reportable_current_vat),0)::numeric(12,2),
-    coalesce(sum(c.reportable_current_inc_vat),0)::numeric(12,2),
+    coalesce(sum(ch.reportable_current_ex_vat),0)::numeric(12,2),
+    coalesce(sum(ch.reportable_current_vat),0)::numeric(12,2),
+    coalesce(sum(ch.reportable_current_inc_vat),0)::numeric(12,2),
 
     coalesce(
       jsonb_agg(
         jsonb_build_object(
-          'invoice_id', c.invoice_id::text,
-          'invoice_number', c.invoice_number,
-          'invoice_status', c.invoice_status,
-          'invoice_type', c.invoice_type,
-          'is_on_hold', c.is_on_hold,
+          'invoice_id', ch.invoice_id::text,
+          'invoice_number', ch.effective_invoice_number,
+          'invoice_status', ch.effective_invoice_status,
+          'invoice_type', ch.effective_invoice_type,
 
-          'current_ex_vat', c.current_ex_vat,
-          'current_vat', c.current_vat,
-          'current_inc_vat', c.current_inc_vat,
+          'client_id', case when ch.client_id is null then null else ch.client_id::text end,
+          'client_name', ch.client_name,
 
-          'reportable_current_ex_vat', c.reportable_current_ex_vat,
-          'reportable_current_vat', c.reportable_current_vat,
-          'reportable_current_inc_vat', c.reportable_current_inc_vat,
+          'issued_at_utc', ch.issued_at_utc,
+          'due_at_utc', ch.due_at_utc,
+          'paid_at_utc', ch.paid_at_utc,
+          'status_date_utc', ch.status_date_utc,
+          'credit_note_created_at_utc', ch.credit_note_created_at_utc,
 
-          'last_reported_ex_vat', c.last_reported_ex_vat,
-          'last_reported_vat', c.last_reported_vat,
-          'last_reported_inc_vat', c.last_reported_inc_vat,
+          'updated_at_utc', ch.updated_at_utc,
 
-          'delta_ex_vat', c.delta_ex_vat,
-          'delta_vat', c.delta_vat,
-          'delta_inc_vat', c.delta_inc_vat
+          'is_on_hold', ch.is_on_hold,
+          'line_kind', ch.line_kind,
+          'non_reportable_reason', ch.non_reportable_reason,
+
+          'current_ex_vat', ch.current_ex_vat,
+          'current_vat', ch.current_vat,
+          'current_inc_vat', ch.current_inc_vat,
+
+          'reportable_current_ex_vat', ch.reportable_current_ex_vat,
+          'reportable_current_vat', ch.reportable_current_vat,
+          'reportable_current_inc_vat', ch.reportable_current_inc_vat,
+
+          'last_reported_ex_vat', ch.last_reported_ex_vat,
+          'last_reported_vat', ch.last_reported_vat,
+          'last_reported_inc_vat', ch.last_reported_inc_vat,
+
+          'delta_ex_vat', ch.delta_ex_vat,
+          'delta_vat', ch.delta_vat,
+          'delta_inc_vat', ch.delta_inc_vat
         )
         order by
-          nullif(btrim(coalesce(c.invoice_number,'')),'') nulls last,
-          c.invoice_id
+          ch.sort_ts desc nulls last,
+          nullif(btrim(coalesce(ch.effective_invoice_number,'')),'') nulls last,
+          ch.invoice_id
       ),
       '[]'::jsonb
     )
@@ -706,7 +728,7 @@ begin
     v_total_current_ex, v_total_current_vat, v_total_current_inc,
     v_total_reportable_ex, v_total_reportable_vat, v_total_reportable_inc,
     v_lines
-  from changed c;
+  from changed ch;
 
   return jsonb_build_object(
     'total_delta_ex_vat', v_total_ex,
@@ -726,7 +748,6 @@ begin
   );
 end;
 $$;
-
 
 create or replace function public.id_consolidation_balance_now(
   p_actor_user_id uuid,
