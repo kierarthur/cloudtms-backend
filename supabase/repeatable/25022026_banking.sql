@@ -173,7 +173,6 @@ begin
 end;
 $$;
 
-
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
   p_provider text,
   p_env text,
@@ -199,7 +198,6 @@ declare
   v_current_hash text;
   v_now timestamptz := now();
 
-  v_row public.bank_name_checks%rowtype;
   v_inserted boolean := false;
 
   v_action text := null;
@@ -258,7 +256,7 @@ begin
     );
   end if;
 
-  -- Upsert the check row. If status becomes PASS, clear override fields.
+  -- ✅ Approach A: single statement consumes the CTE and captures both inserted_flag + row JSON.
   -- IMPORTANT: explicitly type NULLs to avoid any implicit text typing issues for uuid columns.
   with upserted as (
     insert into public.bank_name_checks (
@@ -321,36 +319,31 @@ begin
       (xmax = 0) as inserted_flag
   )
   select
-    u.*
-  into v_row
-  from upserted u
-  limit 1;
-
-  select
-    u.inserted_flag
-  into v_inserted
+    u.inserted_flag,
+    jsonb_build_object(
+      'id', u.id::text,
+      'rail_provider', u.rail_provider,
+      'rail_env', u.rail_env,
+      'entity_kind', u.entity_kind,
+      'entity_id', u.entity_id::text,
+      'bank_details_hash', u.bank_details_hash,
+      'status', u.status,
+      'checked_at_utc', u.checked_at_utc,
+      'result_json', u.result_json,
+      'override_reason', u.override_reason,
+      'override_by_user_id', case when u.override_by_user_id is null then null else u.override_by_user_id::text end,
+      'override_at_utc', u.override_at_utc,
+      'override_hash', u.override_hash,
+      'created_at_utc', u.created_at_utc,
+      'updated_at_utc', u.updated_at_utc
+    )
+  into
+    v_inserted,
+    v_row_json
   from upserted u
   limit 1;
 
   v_action := case when v_inserted then 'inserted' else 'updated' end;
-
-  v_row_json := jsonb_build_object(
-    'id', v_row.id::text,
-    'rail_provider', v_row.rail_provider,
-    'rail_env', v_row.rail_env,
-    'entity_kind', v_row.entity_kind,
-    'entity_id', v_row.entity_id::text,
-    'bank_details_hash', v_row.bank_details_hash,
-    'status', v_row.status,
-    'checked_at_utc', v_row.checked_at_utc,
-    'result_json', v_row.result_json,
-    'override_reason', v_row.override_reason,
-    'override_by_user_id', case when v_row.override_by_user_id is null then null else v_row.override_by_user_id::text end,
-    'override_at_utc', v_row.override_at_utc,
-    'override_hash', v_row.override_hash,
-    'created_at_utc', v_row.created_at_utc,
-    'updated_at_utc', v_row.updated_at_utc
-  );
 
   return jsonb_build_object(
     'ok', true,
@@ -693,11 +686,12 @@ declare
 
   v_now timestamptz := now();
 
-  v_row public.bank_payee_map%rowtype;
   v_inserted boolean := false;
   v_action text := null;
 
   v_row_json jsonb;
+  v_out_payee_id text;
+  v_out_payee_account_id text;
 begin
   if v_provider = '' then
     raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
@@ -723,6 +717,7 @@ begin
     raise exception '%', jsonb_build_object('error','PAYEE_ID_REQUIRED')::text;
   end if;
 
+  -- ✅ Approach A: single statement consumes the CTE and captures inserted_flag + output fields.
   with upserted as (
     insert into public.bank_payee_map (
       rail_provider,
@@ -759,37 +754,36 @@ begin
       (xmax = 0) as inserted_flag
   )
   select
-    u.*
-  into v_row
-  from upserted u
-  limit 1;
-
-  select
-    u.inserted_flag
-  into v_inserted
+    u.inserted_flag,
+    u.payee_id,
+    u.payee_account_id,
+    jsonb_build_object(
+      'rail_provider', u.rail_provider,
+      'rail_env', u.rail_env,
+      'entity_kind', u.entity_kind,
+      'entity_id', u.entity_id::text,
+      'bank_details_hash', u.bank_details_hash,
+      'payee_id', u.payee_id,
+      'payee_account_id', u.payee_account_id,
+      'meta_json', u.meta_json,
+      'created_at_utc', u.created_at_utc,
+      'updated_at_utc', u.updated_at_utc
+    )
+  into
+    v_inserted,
+    v_out_payee_id,
+    v_out_payee_account_id,
+    v_row_json
   from upserted u
   limit 1;
 
   v_action := case when v_inserted then 'inserted' else 'updated' end;
 
-  v_row_json := jsonb_build_object(
-    'rail_provider', v_row.rail_provider,
-    'rail_env', v_row.rail_env,
-    'entity_kind', v_row.entity_kind,
-    'entity_id', v_row.entity_id::text,
-    'bank_details_hash', v_row.bank_details_hash,
-    'payee_id', v_row.payee_id,
-    'payee_account_id', v_row.payee_account_id,
-    'meta_json', v_row.meta_json,
-    'created_at_utc', v_row.created_at_utc,
-    'updated_at_utc', v_row.updated_at_utc
-  );
-
   return jsonb_build_object(
     'ok', true,
     'action', v_action,
-    'payee_id', v_row.payee_id,
-    'payee_account_id', v_row.payee_account_id,
+    'payee_id', v_out_payee_id,
+    'payee_account_id', v_out_payee_account_id,
     'row', v_row_json
   );
 end;
