@@ -4336,7 +4336,83 @@ begin
 end $$;
 
 
+CREATE OR REPLACE FUNCTION public.bank_readiness_lock(
+  p_provider text,
+  p_env text,
+  p_entity_kind text,
+  p_entity_id uuid,
+  p_bank_details_hash text,
+  p_lock_kind text DEFAULT 'READINESS'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_provider text;
+  v_env text;
+  v_entity_kind text;
+  v_bank_hash text;
+  v_lock_kind text;
+  v_key text;
 
+  v_h1 int;
+  v_h2 int;
+  v_lock_key bigint;
+begin
+  v_provider := upper(btrim(coalesce(p_provider,'')));
+  v_env := upper(btrim(coalesce(p_env,'')));
+  v_entity_kind := upper(btrim(coalesce(p_entity_kind,'')));
+  v_bank_hash := btrim(coalesce(p_bank_details_hash,''));
+  v_lock_kind := upper(btrim(coalesce(p_lock_kind,'READINESS')));
+
+  if v_provider = '' then
+    raise exception 'provider is required';
+  end if;
+
+  if v_env = '' then
+    raise exception 'env is required';
+  end if;
+
+  if v_entity_kind = '' then
+    raise exception 'entity_kind is required';
+  end if;
+
+  if p_entity_id is null then
+    raise exception 'entity_id is required';
+  end if;
+
+  if v_bank_hash = '' then
+    raise exception 'bank_details_hash is required';
+  end if;
+
+  if v_lock_kind = '' then
+    raise exception 'lock_kind is required';
+  end if;
+
+  v_key := v_lock_kind
+           || '|' || v_provider
+           || '|' || v_env
+           || '|' || v_entity_kind
+           || '|' || p_entity_id::text
+           || '|' || v_bank_hash;
+
+  -- Build a stable 64-bit advisory lock key from two 32-bit hashes.
+  v_h1 := hashtext(v_key);
+  v_h2 := hashtext(v_key || '|2');
+
+  v_lock_key :=
+    (( (v_h1::bigint & 4294967295) << 32 )
+      | (v_h2::bigint & 4294967295));
+
+  perform pg_advisory_xact_lock(v_lock_key);
+
+  return jsonb_build_object(
+    'ok', true
+  );
+end;
+$function$;
 
 
 
