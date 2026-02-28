@@ -1037,6 +1037,7 @@ $$;
 -- =========================================================
 -- A4.3 pay_set_paye_net_from_sage(p_pay_batch_id, p_csv_raw, p_actor_user_id, p_source_filename)
 -- =========================================================
+
 create or replace function public.pay_set_paye_net_from_sage(
   p_pay_batch_id uuid,
   p_csv_raw text,
@@ -1065,9 +1066,13 @@ declare
   net_amt numeric;
 
   dup_check jsonb := '[]'::jsonb;
-  unknown_check jsonb := '[]'::jsonb;
-  ambig_check jsonb := '[]'::jsonb;
 
+  v_matched jsonb := '[]'::jsonb;
+  v_unknown jsonb := '[]'::jsonb;
+  v_ambig jsonb := '[]'::jsonb;
+  v_missing_net jsonb := '[]'::jsonb;
+
+  v_applied_count int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -1139,13 +1144,22 @@ begin
     end if;
 
     net_raw := public._pay_csv_trim_field(case when net_col <= array_length(v_fields,1) then v_fields[net_col] else null end);
-    if net_raw is null then
-      raise exception 'SAGE_IMPORT_INVALID: Net Pay missing for Works Number %', works;
+
+    if net_raw is null or btrim(net_raw) = '' then
+      insert into _tmp_sage_net(works_number, works_norm, net_amount)
+      values (works, works_norm, null);
+      continue;
     end if;
 
     -- Normalize numeric: remove commas and currency symbols
     net_raw := replace(net_raw, ',', '');
     net_raw := regexp_replace(net_raw, '[^0-9\\.-]', '', 'g');
+
+    if net_raw is null or btrim(net_raw) = '' then
+      insert into _tmp_sage_net(works_number, works_norm, net_amount)
+      values (works, works_norm, null);
+      continue;
+    end if;
 
     begin
       net_amt := net_raw::numeric;
@@ -1165,9 +1179,9 @@ begin
   select coalesce(jsonb_agg(t.works_norm), '[]'::jsonb)
   into dup_check
   from (
-    select works_norm
-    from _tmp_sage_net
-    group by works_norm
+    select sn.works_norm
+    from _tmp_sage_net sn
+    group by sn.works_norm
     having count(*) > 1
   ) t;
 
@@ -1197,19 +1211,6 @@ begin
   where pbc.pay_batch_id = p_pay_batch_id
     and pbc.paye_state is not null;
 
-  -- Unknown works numbers (no match by TMS ref or NI)
-  select coalesce(jsonb_agg(s.works_number), '[]'::jsonb)
-  into unknown_check
-  from _tmp_sage_net s
-  left join _tmp_batch_paye bp
-    on (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = s.works_norm)
-    or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = s.works_norm)
-  where bp.candidate_id is null;
-
-  if jsonb_array_length(unknown_check) > 0 then
-    raise exception 'SAGE_IMPORT_INVALID: Works Number(s) not found in batch candidates %', unknown_check::text;
-  end if;
-
   -- Ambiguous works numbers (one works_norm matches multiple batch candidates)
   select coalesce(
     jsonb_agg(
@@ -1220,67 +1221,161 @@ begin
     ),
     '[]'::jsonb
   )
-  into ambig_check
+  into v_ambig
   from (
     select
-      s.works_norm,
-      jsonb_agg(distinct bp.candidate_id::text order by bp.candidate_id::text) as candidate_ids,
-      count(distinct bp.candidate_id) as cnt
-    from _tmp_sage_net s
+      sn.works_norm,
+      jsonb_agg(distinct bp.candidate_id::text order by bp.candidate_id::text) as candidate_ids
+    from _tmp_sage_net sn
     join _tmp_batch_paye bp
-      on (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = s.works_norm)
-      or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = s.works_norm)
-    group by s.works_norm
+      on (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = sn.works_norm)
+      or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = sn.works_norm)
+    group by sn.works_norm
     having count(distinct bp.candidate_id) > 1
   ) a;
 
-  if jsonb_array_length(ambig_check) > 0 then
-    raise exception 'SAGE_IMPORT_INVALID: ambiguous Works Number(s) %', ambig_check::text;
-  end if;
+  -- Unknown works numbers (no match by TMS ref or NI)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'works_number', sn.works_number,
+        'works_norm', sn.works_norm
+      )
+    ),
+    '[]'::jsonb
+  )
+  into v_unknown
+  from _tmp_sage_net sn
+  left join _tmp_batch_paye bp
+    on (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = sn.works_norm)
+    or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = sn.works_norm)
+  where bp.candidate_id is null;
 
-  -- Apply (no partial deletes outside this batch): replace prior SAGE_IMPORT rows for this batch’s PAYE candidates
+  -- Missing net rows (blank net in CSV) for matched-unambiguous works numbers
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'works_number', sn.works_number,
+        'works_norm', sn.works_norm,
+        'candidate_id', bp.candidate_id::text,
+        'pay_batch_candidate_id', bp.pay_batch_candidate_id::text
+      )
+    ),
+    '[]'::jsonb
+  )
+  into v_missing_net
+  from _tmp_sage_net sn
+  join _tmp_batch_paye bp
+    on (
+      (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = sn.works_norm)
+      or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = sn.works_norm)
+    )
+  where sn.net_amount is null
+    and not exists (
+      select 1
+      from jsonb_array_elements(coalesce(v_ambig,'[]'::jsonb)) a
+      where (a->>'works_number') = sn.works_norm
+      limit 1
+    );
+
+  -- Matched rows (unambiguous, known, net_amount present)
+  create temp table if not exists _tmp_sage_match (
+    pay_batch_candidate_id uuid,
+    net_amount numeric
+  ) on commit drop;
+
+  truncate table _tmp_sage_match;
+
+  insert into _tmp_sage_match(pay_batch_candidate_id, net_amount)
+  select
+    bp.pay_batch_candidate_id,
+    sn.net_amount
+  from _tmp_sage_net sn
+  join _tmp_batch_paye bp
+    on (
+      (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = sn.works_norm)
+      or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = sn.works_norm)
+    )
+  where sn.net_amount is not null
+    and not exists (
+      select 1
+      from jsonb_array_elements(coalesce(v_ambig,'[]'::jsonb)) a
+      where (a->>'works_number') = sn.works_norm
+      limit 1
+    )
+    and not exists (
+      select 1
+      from jsonb_array_elements(coalesce(v_unknown,'[]'::jsonb)) u
+      where (u->>'works_norm') = sn.works_norm
+      limit 1
+    );
+
+  select count(*)::int
+  into v_applied_count
+  from _tmp_sage_match sm;
+
+  -- PATCH semantics for SAGE_IMPORT: replace prior SAGE_IMPORT rows only for matched candidates
   delete from public.pay_batch_paye_net_inputs pni
-  using public.pay_batch_candidates pbc
-  where pni.pay_batch_candidate_id = pbc.id
-    and pbc.pay_batch_id = p_pay_batch_id
+  using _tmp_sage_match sm
+  where pni.pay_batch_candidate_id = sm.pay_batch_candidate_id
     and pni.source = 'SAGE_IMPORT';
 
-  with matched as (
-    select
-      bp.pay_batch_candidate_id,
-      s.net_amount
-    from _tmp_sage_net s
-    join _tmp_batch_paye bp
-      on (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = s.works_norm)
-      or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = s.works_norm)
-  )
   insert into public.pay_batch_paye_net_inputs(
     pay_batch_candidate_id, source, net_amount, imported_at_utc, file_name, file_hash
   )
-  select distinct
-    m.pay_batch_candidate_id,
+  select
+    sm.pay_batch_candidate_id,
     'SAGE_IMPORT',
-    m.net_amount,
+    sm.net_amount,
     now(),
     p_source_filename,
     null
-  from matched m;
+  from _tmp_sage_match sm;
 
-  -- Set PAYE state READY only for PAYE candidates that now have at least one net input row
+  -- Recompute PAYE state: READY iff any net input exists (SAGE_IMPORT or MANUAL_ENTRY), else PENDING_NET
   update public.pay_batch_candidates pbc
-  set paye_state = 'READY'
-  where pbc.pay_batch_id = p_pay_batch_id
-    and pbc.paye_state is not null
-    and exists (
+  set paye_state = case
+    when exists (
       select 1
       from public.pay_batch_paye_net_inputs pni
       where pni.pay_batch_candidate_id = pbc.id
       limit 1
-    );
+    ) then 'READY'
+    else 'PENDING_NET'
+  end
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.paye_state is not null;
 
-  return jsonb_build_object('ok', true, 'pay_batch_id', p_pay_batch_id::text, 'source', 'SAGE_IMPORT');
+  -- Build matched list for response (per-candidate)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'pay_batch_candidate_id', bp.pay_batch_candidate_id::text,
+        'candidate_id', bp.candidate_id::text,
+        'net_amount', sm.net_amount
+      )
+      order by bp.candidate_id::text
+    ),
+    '[]'::jsonb
+  )
+  into v_matched
+  from _tmp_sage_match sm
+  join _tmp_batch_paye bp
+    on bp.pay_batch_candidate_id = sm.pay_batch_candidate_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'source', 'SAGE_IMPORT',
+    'applied_count', v_applied_count,
+    'matched', v_matched,
+    'missing_net', v_missing_net,
+    'unknown', v_unknown,
+    'ambiguous', v_ambig
+  );
 end;
 $$;
+
 
 create or replace function public.pay_set_paye_net_manual(
   p_pay_batch_id uuid,
@@ -1294,8 +1389,13 @@ set search_path = public
 as $$
 declare
   v_entries jsonb := coalesce(p_entries_json, '[]'::jsonb);
-  v_dup jsonb;
-  v_ambig jsonb;
+
+  v_dup jsonb := '[]'::jsonb;
+  v_ambig jsonb := '[]'::jsonb;
+  v_unmatched jsonb := '[]'::jsonb;
+
+  v_updated_count int := 0;
+  v_cleared_count int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -1310,6 +1410,7 @@ begin
   end if;
 
   create temp table if not exists _tmp_manual_net (
+    pay_batch_candidate_id uuid,
     candidate_id uuid,
     works_raw text,
     works_norm text,
@@ -1318,30 +1419,63 @@ begin
 
   truncate table _tmp_manual_net;
 
-  insert into _tmp_manual_net(candidate_id, works_raw, works_norm, net_amount)
+  insert into _tmp_manual_net(pay_batch_candidate_id, candidate_id, works_raw, works_norm, net_amount)
   select
+    nullif(e->>'pay_batch_candidate_id','')::uuid as pay_batch_candidate_id,
     nullif(e->>'candidate_id','')::uuid as candidate_id,
     nullif(btrim(e->>'tms_ref'), '') as works_raw,
     case
       when nullif(btrim(e->>'tms_ref'), '') is null then null
       else upper(regexp_replace(btrim(e->>'tms_ref'), '\s+', '', 'g'))
     end as works_norm,
-    round(coalesce(nullif(e->>'net_amount','')::numeric, 0),2) as net_amount
+    case
+      when nullif(btrim(coalesce(e->>'net_amount','')), '') is null then null
+      else round((nullif(btrim(coalesce(e->>'net_amount','')), '')::numeric), 2)
+    end as net_amount
   from jsonb_array_elements(v_entries) e
   where e is not null and jsonb_typeof(e)='object';
 
-  -- Validate non-negative
-  if exists (select 1 from _tmp_manual_net t where t.net_amount < 0 limit 1) then
+  -- Hard validation: each entry must include pay_batch_candidate_id OR candidate_id OR works_norm
+  if exists (
+    select 1
+    from _tmp_manual_net mn
+    where mn.pay_batch_candidate_id is null
+      and mn.candidate_id is null
+      and (mn.works_norm is null or mn.works_norm = '')
+    limit 1
+  ) then
+    raise exception 'MANUAL_NET_INVALID: each entry must include pay_batch_candidate_id, candidate_id or tms_ref/NI (Works Number)';
+  end if;
+
+  -- Validate numeric + non-negative (NULL is allowed = clear)
+  if exists (
+    select 1
+    from _tmp_manual_net t
+    where t.net_amount is not null
+      and t.net_amount < 0
+    limit 1
+  ) then
     raise exception 'MANUAL_NET_INVALID: net_amount must be non-negative';
   end if;
 
-  -- Validate duplicates (by candidate_id or normalized works key)
+  -- Validate duplicates (by explicit key if present; else candidate_id; else works_norm)
   select coalesce(jsonb_agg(x), '[]'::jsonb)
   into v_dup
   from (
-    select to_jsonb(coalesce(candidate_id::text, works_norm)) as x
-    from _tmp_manual_net
-    group by coalesce(candidate_id::text, works_norm)
+    select to_jsonb(
+      case
+        when mn.pay_batch_candidate_id is not null then ('PBC:' || mn.pay_batch_candidate_id::text)
+        when mn.candidate_id is not null then ('CAND:' || mn.candidate_id::text)
+        else ('WORKS:' || mn.works_norm)
+      end
+    ) as x
+    from _tmp_manual_net mn
+    group by
+      case
+        when mn.pay_batch_candidate_id is not null then ('PBC:' || mn.pay_batch_candidate_id::text)
+        when mn.candidate_id is not null then ('CAND:' || mn.candidate_id::text)
+        else ('WORKS:' || mn.works_norm)
+      end
     having count(*) > 1
   ) d;
 
@@ -1366,20 +1500,10 @@ begin
     upper(regexp_replace(btrim(coalesce(pbc.candidate_tms_ref, c.tms_ref, '')), '\s+', '', 'g')) as tms_ref_norm,
     upper(regexp_replace(btrim(coalesce(c.ni_number, '')), '\s+', '', 'g')) as ni_norm
   from public.pay_batch_candidates pbc
-  join public.candidates c on c.id = pbc.candidate_id
+  join public.candidates c
+    on c.id = pbc.candidate_id
   where pbc.pay_batch_id = p_pay_batch_id
     and pbc.paye_state is not null;
-
-  -- Hard validation: every entry must identify a candidate either by candidate_id OR works_norm
-  if exists (
-    select 1
-    from _tmp_manual_net mn
-    where mn.candidate_id is null
-      and (mn.works_norm is null or mn.works_norm = '')
-    limit 1
-  ) then
-    raise exception 'MANUAL_NET_INVALID: each entry must include candidate_id or tms_ref/NI (Works Number)';
-  end if;
 
   -- Ambiguity: works_norm matches multiple candidates in the batch
   select coalesce(
@@ -1395,11 +1519,11 @@ begin
   from (
     select
       mn.works_norm,
-      jsonb_agg(distinct bp.candidate_id::text order by bp.candidate_id::text) as candidate_ids,
-      count(distinct bp.candidate_id) as cnt
+      jsonb_agg(distinct bp.candidate_id::text order by bp.candidate_id::text) as candidate_ids
     from _tmp_manual_net mn
     join _tmp_batch_paye2 bp
-      on mn.candidate_id is null
+      on mn.pay_batch_candidate_id is null
+     and mn.candidate_id is null
      and mn.works_norm is not null
      and mn.works_norm <> ''
      and (
@@ -1414,25 +1538,36 @@ begin
     raise exception 'MANUAL_NET_INVALID: ambiguous Works Number(s) %', v_ambig::text;
   end if;
 
-  -- Validate that each entry matches a batch PAYE candidate
-  if exists (
-    select 1
-    from _tmp_manual_net mn
-    left join _tmp_batch_paye2 bp
-      on (mn.candidate_id is not null and bp.candidate_id = mn.candidate_id)
-      or (
-        mn.candidate_id is null
-        and mn.works_norm is not null
-        and mn.works_norm <> ''
-        and (
-          (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = mn.works_norm)
-          or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = mn.works_norm)
-        )
+  -- Validate that each entry matches a batch PAYE candidate (unmatched => error)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'pay_batch_candidate_id', case when mn.pay_batch_candidate_id is null then null else mn.pay_batch_candidate_id::text end,
+        'candidate_id', case when mn.candidate_id is null then null else mn.candidate_id::text end,
+        'works_norm', mn.works_norm
       )
-    where bp.pay_batch_candidate_id is null
-    limit 1
-  ) then
-    raise exception 'MANUAL_NET_INVALID: entry candidate not found in pay batch PAYE candidates';
+    ),
+    '[]'::jsonb
+  )
+  into v_unmatched
+  from _tmp_manual_net mn
+  left join _tmp_batch_paye2 bp
+    on (mn.pay_batch_candidate_id is not null and bp.pay_batch_candidate_id = mn.pay_batch_candidate_id)
+    or (mn.pay_batch_candidate_id is null and mn.candidate_id is not null and bp.candidate_id = mn.candidate_id)
+    or (
+      mn.pay_batch_candidate_id is null
+      and mn.candidate_id is null
+      and mn.works_norm is not null
+      and mn.works_norm <> ''
+      and (
+        (bp.tms_ref_norm is not null and bp.tms_ref_norm <> '' and bp.tms_ref_norm = mn.works_norm)
+        or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = mn.works_norm)
+      )
+    )
+  where bp.pay_batch_candidate_id is null;
+
+  if jsonb_array_length(v_unmatched) > 0 then
+    raise exception 'MANUAL_NET_INVALID: entry candidate not found in pay batch PAYE candidates %', v_unmatched::text;
   end if;
 
   create temp table if not exists _tmp_manual_match (
@@ -1442,6 +1577,16 @@ begin
 
   truncate table _tmp_manual_match;
 
+  -- pay_batch_candidate_id path (preferred)
+  insert into _tmp_manual_match(pay_batch_candidate_id, net_amount)
+  select
+    bp.pay_batch_candidate_id,
+    mn.net_amount
+  from _tmp_manual_net mn
+  join _tmp_batch_paye2 bp
+    on mn.pay_batch_candidate_id is not null
+   and bp.pay_batch_candidate_id = mn.pay_batch_candidate_id;
+
   -- candidate_id path
   insert into _tmp_manual_match(pay_batch_candidate_id, net_amount)
   select
@@ -1449,7 +1594,8 @@ begin
     mn.net_amount
   from _tmp_manual_net mn
   join _tmp_batch_paye2 bp
-    on mn.candidate_id is not null
+    on mn.pay_batch_candidate_id is null
+   and mn.candidate_id is not null
    and bp.candidate_id = mn.candidate_id;
 
   -- works_norm path (tms_ref OR NI)
@@ -1459,7 +1605,8 @@ begin
     mn.net_amount
   from _tmp_manual_net mn
   join _tmp_batch_paye2 bp
-    on mn.candidate_id is null
+    on mn.pay_batch_candidate_id is null
+   and mn.candidate_id is null
    and mn.works_norm is not null
    and mn.works_norm <> ''
    and (
@@ -1467,10 +1614,34 @@ begin
      or (bp.ni_norm is not null and bp.ni_norm <> '' and bp.ni_norm = mn.works_norm)
    );
 
-  -- Apply: replace prior MANUAL_ENTRY rows for those candidates
+  -- Deduplicate any accidental multiple matches (defensive; should not occur due to earlier checks)
+  if exists (
+    select 1
+    from _tmp_manual_match mm
+    group by mm.pay_batch_candidate_id
+    having count(*) > 1
+    limit 1
+  ) then
+    raise exception 'MANUAL_NET_INVALID: duplicate resolved candidates in request (internal match collision)';
+  end if;
+
+  select count(*)::int
+  into v_updated_count
+  from _tmp_manual_match mm
+  where mm.net_amount is not null;
+
+  select count(*)::int
+  into v_cleared_count
+  from _tmp_manual_match mm
+  where mm.net_amount is null;
+
+  -- PATCH semantics:
+  -- For referenced candidates only:
+  --  - clear prior MANUAL_ENTRY rows
+  --  - insert MANUAL_ENTRY row only when net_amount is non-null
   delete from public.pay_batch_paye_net_inputs pni
-  using _tmp_batch_paye2 bp
-  where pni.pay_batch_candidate_id = bp.pay_batch_candidate_id
+  using _tmp_manual_match mm
+  where pni.pay_batch_candidate_id = mm.pay_batch_candidate_id
     and pni.source = 'MANUAL_ENTRY';
 
   insert into public.pay_batch_paye_net_inputs(
@@ -1483,23 +1654,34 @@ begin
     now(),
     null,
     null
-  from _tmp_manual_match mm;
+  from _tmp_manual_match mm
+  where mm.net_amount is not null;
 
-  -- Set PAYE state READY only for PAYE candidates that now have at least one net input row
+  -- Recompute PAYE state: READY iff any net input exists (SAGE_IMPORT or MANUAL_ENTRY), else PENDING_NET
   update public.pay_batch_candidates pbc
-  set paye_state = 'READY'
-  where pbc.pay_batch_id = p_pay_batch_id
-    and pbc.paye_state is not null
-    and exists (
+  set paye_state = case
+    when exists (
       select 1
       from public.pay_batch_paye_net_inputs pni
       where pni.pay_batch_candidate_id = pbc.id
       limit 1
-    );
+    ) then 'READY'
+    else 'PENDING_NET'
+  end
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.paye_state is not null;
 
-  return jsonb_build_object('ok', true, 'pay_batch_id', p_pay_batch_id::text, 'source', 'MANUAL_ENTRY');
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', p_pay_batch_id::text,
+    'source', 'MANUAL_ENTRY',
+    'updated_count', v_updated_count,
+    'cleared_count', v_cleared_count,
+    'unmatched', '[]'::jsonb
+  );
 end;
 $$;
+
 commit;
 
 
@@ -6119,6 +6301,29 @@ begin
       limit 1
     ) then
       raise exception 'PAYE_NET_MISSING: missing net pay for one or more PAYE candidates';
+    end if;
+
+    -- ✅ Defensive validation: latest net amount must be >= 0 and exactly 2dp
+    if exists (
+      select 1
+      from public.pay_batch_candidates pbc_chk3
+      left join lateral (
+        select pni_chk3.net_amount
+        from public.pay_batch_paye_net_inputs pni_chk3
+        where pni_chk3.pay_batch_candidate_id = pbc_chk3.id
+        order by pni_chk3.imported_at_utc desc
+        limit 1
+      ) ni_chk3 on true
+      where pbc_chk3.pay_batch_id = p_pay_batch_id
+        and pbc_chk3.paye_state is not null
+        and ni_chk3.net_amount is not null
+        and (
+          ni_chk3.net_amount < 0
+          or ni_chk3.net_amount <> round(ni_chk3.net_amount, 2)
+        )
+      limit 1
+    ) then
+      raise exception 'PAYE_NET_INVALID: net pay must be >= 0 and 2dp';
     end if;
   end if;
 
