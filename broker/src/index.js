@@ -8544,7 +8544,31 @@ async function handleBankingIdPreview(env, req, user) {
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const totals = {
+      delta_ex_vat: (p.total_delta_ex_vat !== undefined) ? p.total_delta_ex_vat : 0,
+      delta_vat: (p.total_delta_vat !== undefined) ? p.total_delta_vat : 0,
+      delta_inc_vat: (p.total_delta_inc_vat !== undefined) ? p.total_delta_inc_vat : 0,
+
+      current_ex_vat: (p.total_current_ex_vat !== undefined) ? p.total_current_ex_vat : 0,
+      current_vat: (p.total_current_vat !== undefined) ? p.total_current_vat : 0,
+      current_inc_vat: (p.total_current_inc_vat !== undefined) ? p.total_current_inc_vat : 0,
+
+      reportable_current_ex_vat: (p.total_reportable_current_ex_vat !== undefined) ? p.total_reportable_current_ex_vat : 0,
+      reportable_current_vat: (p.total_reportable_current_vat !== undefined) ? p.total_reportable_current_vat : 0,
+      reportable_current_inc_vat: (p.total_reportable_current_inc_vat !== undefined) ? p.total_reportable_current_inc_vat : 0
+    };
+
+    const lines = Array.isArray(p.lines) ? p.lines : [];
+    const line_count = Number.isFinite(Number(p.line_count)) ? Math.trunc(Number(p.line_count)) : lines.length;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      totals,
+      line_count,
+      lines
+    }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
@@ -9346,6 +9370,253 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
+
+async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUserId) {
+  const envRaw = (railEnv !== undefined && railEnv !== null) ? String(railEnv).trim() : '';
+  const railEnvNorm = (envRaw ? envRaw : 'PROD').toUpperCase();
+
+  const actorRaw = (actorUserId !== undefined && actorUserId !== null) ? String(actorUserId).trim() : '';
+  const actor = actorRaw ? actorRaw : null;
+
+  const list = Array.isArray(payees) ? payees : [];
+  const diagnostics = [];
+
+  let attempted = 0;
+  let success = 0;
+  let failed = 0;
+  let didWork = false;
+
+  if (!list.length) {
+    return {
+      ok: true,
+      did_work: false,
+      payees_processed: 0,
+      attempted_count: 0,
+      success_count: 0,
+      failed_count: 0,
+      diagnostics: []
+    };
+  }
+
+  const token = await revolutAuth_getAccessToken(env);
+
+  for (const pe of list) {
+    const kind =
+      String(pe?.payee_entity_kind || pe?.entity_kind || pe?.payee_kind || '').trim().toUpperCase();
+    const idText =
+      String(pe?.payee_entity_id || pe?.entity_id || pe?.payee_id || '').trim();
+    const bankHash =
+      String(pe?.bank_details_hash || '').trim();
+
+    const row = {
+      payee_entity_kind: kind || null,
+      payee_entity_id: idText || null,
+      bank_details_hash: bankHash || null,
+      skipped: false,
+      skip_reason: null,
+      attempted: false,
+      name_check: null,
+      payee_map: null,
+      lock: null,
+      errors: []
+    };
+
+    if (!kind || !idText || !bankHash) {
+      row.skipped = true;
+      row.skip_reason = 'MISSING_PAYEE_IDENTITY';
+      diagnostics.push(row);
+      continue;
+    }
+
+    const blockers = Array.isArray(pe?.blockers)
+      ? pe.blockers.map(x => String(x || '').trim().toUpperCase()).filter(Boolean)
+      : [];
+
+    if (blockers.includes('BLOCKED_BANK_DETAILS')) {
+      row.skipped = true;
+      row.skip_reason = 'BLOCKED_BANK_DETAILS';
+      diagnostics.push(row);
+      continue;
+    }
+
+    const nc = (pe?.name_check && typeof pe.name_check === 'object') ? pe.name_check : {};
+    const ncStatus = String(nc.status || 'UNVERIFIED').trim().toUpperCase() || 'UNVERIFIED';
+    const ncHasOverride = (nc.has_override === true);
+
+    const pm = (pe?.payee_map && typeof pe.payee_map === 'object') ? pe.payee_map : {};
+    const mapPresent = (pm.present === true);
+
+    const transfers = Array.isArray(pe?.transfers) ? pe.transfers : [];
+    const t0 = transfers.length ? transfers[0] : null;
+
+    const payeeName =
+      String(pe?.payee_name || pe?.payeeName || t0?.payee_name || '').trim();
+    const sortCode =
+      String(pe?.sort_code || pe?.sortCode || t0?.sort_code || '').trim();
+    const accountNo =
+      String(pe?.account_number || pe?.accountNumber || t0?.account_number || '').trim();
+    const accountType =
+      String(pe?.account_type || pe?.accountType || t0?.account_type || '').trim()
+      || (kind === 'UMBRELLA' ? 'Business' : 'Personal');
+
+    const scDigits = sortCode.replace(/[^0-9]/g, '');
+    const acctDigits = accountNo.replace(/[^0-9]/g, '');
+
+    const needsNameCheck = blockers.includes('BLOCKED_NAME_CHECK');
+    const needsPayeeMap = blockers.includes('BLOCKED_NO_PAYEE_MAP');
+
+    if (!needsNameCheck && !needsPayeeMap) {
+      row.skipped = true;
+      row.skip_reason = 'NO_READINESS_WORK_NEEDED';
+      diagnostics.push(row);
+      continue;
+    }
+
+    row.attempted = true;
+    attempted += 1;
+
+    // Advisory lock to prevent duplicate external calls for the same payee+hash
+    try {
+      await sbRpc(env, 'bank_readiness_lock', {
+        p_provider: 'REVOLUT',
+        p_env: railEnvNorm,
+        p_entity_kind: kind,
+        p_entity_id: idText,
+        p_bank_details_hash: bankHash,
+        p_lock_kind: 'READINESS'
+      });
+      row.lock = { ok: true };
+    } catch (e) {
+      row.lock = { ok: false, error: String(e?.message || e || 'LOCK_FAILED') };
+    }
+
+    // NAME CHECK: only attempt when DB says BLOCKED_NAME_CHECK AND status is UNVERIFIED AND no override.
+    // If status is FAIL/NEAR_MATCH/UNAVAILABLE, we do NOT re-run; it remains a review-required item.
+    if (needsNameCheck) {
+      if (ncHasOverride) {
+        row.name_check = { attempted: false, reason: 'HAS_OVERRIDE', status: ncStatus };
+      } else if (ncStatus !== 'UNVERIFIED') {
+        row.name_check = { attempted: false, reason: 'ALREADY_CHECKED', status: ncStatus };
+      } else if (!payeeName || scDigits.length !== 6 || !acctDigits) {
+        row.name_check = {
+          attempted: false,
+          reason: 'MISSING_BANK_FIELDS',
+          missing: {
+            payee_name: !payeeName,
+            sort_code: (scDigits.length !== 6),
+            account_number: !acctDigits
+          }
+        };
+      } else {
+        try {
+          const ncRes = await revolutNameCheck_perform(env, token, {
+            payee_name: payeeName,
+            sort_code: sortCode,
+            account_number: accountNo,
+            account_type: accountType
+          });
+
+          await sbRpc(env, 'bank_name_check_record_result', {
+            p_provider: 'REVOLUT',
+            p_env: railEnvNorm,
+            p_entity_kind: kind,
+            p_entity_id: idText,
+            p_bank_details_hash: bankHash,
+            p_status: ncRes.status,
+            p_result_json: ncRes.result_json,
+            p_checked_at_utc: ncRes.checked_at_utc,
+            p_actor_user_id: actor
+          });
+
+          row.name_check = { attempted: true, ok: true, status: ncRes.status };
+          didWork = true;
+        } catch (e) {
+          const msg = (e && e.message) ? String(e.message) : String(e || '');
+          const is404 = msg.includes('REVOLUT_COP_UNAVAILABLE_404');
+
+          if (is404) {
+            try {
+              await sbRpc(env, 'bank_name_check_record_result', {
+                p_provider: 'REVOLUT',
+                p_env: railEnvNorm,
+                p_entity_kind: kind,
+                p_entity_id: idText,
+                p_bank_details_hash: bankHash,
+                p_status: 'UNAVAILABLE',
+                p_result_json: { error: 'COP_NOT_ENABLED', detail: msg || null },
+                p_checked_at_utc: new Date().toISOString(),
+                p_actor_user_id: actor
+              });
+              row.name_check = { attempted: true, ok: true, status: 'UNAVAILABLE' };
+              didWork = true;
+            } catch (e2) {
+              row.name_check = { attempted: true, ok: false, error: String(e2?.message || e2 || 'NAME_CHECK_RECORD_FAILED') };
+              row.errors.push(String(e2?.message || e2 || 'NAME_CHECK_RECORD_FAILED'));
+            }
+          } else {
+            row.name_check = { attempted: true, ok: false, error: msg || 'NAME_CHECK_FAILED' };
+            row.errors.push(msg || 'NAME_CHECK_FAILED');
+          }
+        }
+      }
+    }
+
+    // PAYEE MAP: attempt when DB says BLOCKED_NO_PAYEE_MAP AND mapping is not present.
+    if (needsPayeeMap) {
+      if (mapPresent) {
+        row.payee_map = { attempted: false, reason: 'ALREADY_PRESENT' };
+      } else if (!payeeName || scDigits.length !== 6 || !acctDigits) {
+        row.payee_map = {
+          attempted: false,
+          reason: 'MISSING_BANK_FIELDS',
+          missing: {
+            payee_name: !payeeName,
+            sort_code: (scDigits.length !== 6),
+            account_number: !acctDigits
+          }
+        };
+      } else {
+        try {
+          await revolutCounterparty_ensureMapped(env, token, {
+            rail_env: railEnvNorm,
+            actor_user_id: actor,
+            entity_kind: kind,
+            entity_id: idText,
+            bank_details_hash: bankHash,
+            bank_fields: {
+              payee_name: payeeName,
+              sort_code: sortCode,
+              account_number: accountNo,
+              account_type: accountType
+            }
+          });
+          row.payee_map = { attempted: true, ok: true };
+          didWork = true;
+        } catch (e) {
+          const msg = (e && e.message) ? String(e.message) : String(e || '');
+          row.payee_map = { attempted: true, ok: false, error: msg || 'PAYEE_MAP_FAILED' };
+          row.errors.push(msg || 'PAYEE_MAP_FAILED');
+        }
+      }
+    }
+
+    if (row.errors.length) failed += 1;
+    else success += 1;
+
+    diagnostics.push(row);
+  }
+
+  return {
+    ok: true,
+    did_work: didWork,
+    payees_processed: list.length,
+    attempted_count: attempted,
+    success_count: success,
+    failed_count: failed,
+    diagnostics
+  };
+}
+
 async function handleBankingCapabilities(env, req, user) {
   try {
     const select = [
@@ -9556,6 +9827,25 @@ async function handleBankingPayPreview(env, req, user) {
   const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
   if (!cutoffIso) return withCORS(env, req, badRequest('week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY'));
 
+  // ✅ Perform readiness checks by default (Requirement C).
+  // Accept legacy/new keys; default true unless explicitly false.
+  const prcIn =
+    (body.perform_readiness_checks !== undefined) ? body.perform_readiness_checks
+    : (body.performReadinessChecks !== undefined) ? body.performReadinessChecks
+    : (body.perform_readiness !== undefined) ? body.perform_readiness
+    : (body.performReadiness !== undefined) ? body.performReadiness
+    : undefined;
+
+  const performReadinessChecks = (() => {
+    if (prcIn === undefined || prcIn === null) return true;
+    if (typeof prcIn === 'boolean') return prcIn;
+    const s = String(prcIn).trim().toLowerCase();
+    if (!s) return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+    return true;
+  })();
+
   // ✅ Accept both legacy + new filter keys (frontend may send either)
   const candRaw = String(
     body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || ''
@@ -9590,9 +9880,21 @@ async function handleBankingPayPreview(env, req, user) {
     p_actor_user_id: user.id
   };
 
-  try {
-    let rpcRes = null;
+  const unwrapPayPreviewRpc = (rpcRes) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_preview')) {
+        payload = payload.pay_preview;
+      }
+    } catch {}
+    return (payload && typeof payload === 'object') ? payload : {};
+  };
 
+  const callPayPreview = async () => {
+    let rpcRes = null;
     try {
       rpcRes = await sbRpc(env, 'pay_preview', argsWithFilters);
     } catch (e) {
@@ -9617,30 +9919,143 @@ async function handleBankingPayPreview(env, req, user) {
         throw new Error(`pay_preview rejected filter parameters (candidate_id/client_id). This indicates an RPC signature mismatch between environments or wrong param names. Original error: ${msg}`);
       }
 
-      // If no filters were supplied, or it doesn't look like a param/signature issue, keep existing error behaviour.
+      // If no filters were supplied, keep existing error behaviour.
       if (!looksLikeUnexpectedParam || !(candidateId || clientId)) {
         throw e;
       }
 
-      // Defensive: if we ever reach here, do NOT fallback silently; fallback is allowed only when no filters exist (which is handled above).
+      // Defensive: do NOT fallback silently when filters are present (this path should not be reachable).
       rpcRes = await sbRpc(env, 'pay_preview', argsWithoutFilters);
     }
+    return unwrapPayPreviewRpc(rpcRes);
+  };
 
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_preview')) {
-        payload = payload.pay_preview;
-      }
-    } catch {}
+  const deriveWorkerEnvFromApiBase = (apiBase) => {
+    const b = (apiBase === undefined || apiBase === null) ? '' : String(apiBase);
+    return (b.toLowerCase().includes('sandbox')) ? 'SANDBOX' : 'PROD';
+  };
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  const normalizeEnv = (v, fallback) => {
+    const f = (fallback === undefined || fallback === null) ? 'PROD' : String(fallback).trim().toUpperCase();
+    const s = (v === undefined || v === null) ? '' : String(v).trim();
+    const u = s ? s.toUpperCase() : '';
+    return u || f || 'PROD';
+  };
+
+  try {
+    // 1) First pass preview (always)
+    const preview0 = await callPayPreview();
+
+    // If readiness checks are disabled, return preview only (but still include readiness wrapper for consistent API).
+    if (!performReadinessChecks) {
+      return withCORS(env, req, ok({
+        ok: true,
+        preview: preview0,
+        readiness: {
+          performed: false,
+          attempted_count: 0,
+          success_count: 0,
+          failed_count: 0,
+          payees_processed: 0,
+          did_work: false,
+          diagnostics: []
+        }
+      }));
+    }
+
+    // 2) Determine rail semantics from preview
+    const settings = (preview0 && typeof preview0 === 'object' && preview0.settings && typeof preview0.settings === 'object')
+      ? preview0.settings
+      : {};
+
+    const rail = (settings.rail && typeof settings.rail === 'object') ? settings.rail : {};
+
+    const providerDefault = String(
+      rail.provider_default || rail.providerDefault || rail.rail_provider_default || rail.provider || 'CSV'
+    ).trim().toUpperCase() || 'CSV';
+
+    const envDefaultRaw = String(
+      rail.env_default || rail.envDefault || rail.rail_env_default || rail.env || 'PROD'
+    ).trim();
+
+    const railEnv = normalizeEnv(envDefaultRaw, 'PROD');
+
+    const needNameCheck = (rail.need_name_check === true);
+    const requiresPayeeMap = (rail.requires_payee_map === true);
+
+    const payees0 = Array.isArray(preview0.payees) ? preview0.payees : [];
+
+    // If manual rail (CSV) or no payees, no readiness work to do.
+    if (!payees0.length || providerDefault === 'CSV' || (!needNameCheck && !requiresPayeeMap)) {
+      return withCORS(env, req, ok({
+        ok: true,
+        preview: preview0,
+        readiness: {
+          performed: false,
+          attempted_count: 0,
+          success_count: 0,
+          failed_count: 0,
+          payees_processed: payees0.length || 0,
+          did_work: false,
+          diagnostics: []
+        }
+      }));
+    }
+
+    // For now, readiness actions are implemented for REVOLUT only (API rail).
+    if (providerDefault !== 'REVOLUT') {
+      return withCORS(env, req, ok({
+        ok: true,
+        preview: preview0,
+        readiness: {
+          performed: false,
+          attempted_count: 0,
+          success_count: 0,
+          failed_count: 0,
+          payees_processed: payees0.length || 0,
+          did_work: false,
+          diagnostics: [{
+            code: 'READINESS_PROVIDER_NOT_IMPLEMENTED',
+            provider: providerDefault
+          }]
+        }
+      }));
+    }
+
+    // 3) Worker env vs rail env validation (match existing pattern used elsewhere)
+    const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+    const workerEnv = deriveWorkerEnvFromApiBase(apiBase || '');
+    const expectedEnv = normalizeEnv(railEnv, workerEnv);
+
+    if (expectedEnv !== workerEnv) {
+      throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
+    }
+
+    // 4) Execute readiness via shared helper (preview-driven)
+    const diag = await revolutEnsurePayeesReadyFromPreview(env, railEnv, payees0, user.id);
+
+    // 5) Second pass preview (source of truth for UI) if any work was done
+    const preview1 = (diag && diag.did_work === true) ? await callPayPreview() : preview0;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      preview: preview1,
+      readiness: {
+        performed: true,
+        attempted_count: Number.isFinite(Number(diag?.attempted_count)) ? Number(diag.attempted_count) : 0,
+        success_count: Number.isFinite(Number(diag?.success_count)) ? Number(diag.success_count) : 0,
+        failed_count: Number.isFinite(Number(diag?.failed_count)) ? Number(diag.failed_count) : 0,
+        payees_processed: Number.isFinite(Number(diag?.payees_processed)) ? Number(diag.payees_processed) : (payees0.length || 0),
+        did_work: !!(diag && diag.did_work === true),
+        diagnostics: Array.isArray(diag?.diagnostics) ? diag.diagnostics : []
+      }
+    }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -9698,6 +10113,30 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
   }
 
+  // ✅ include_set / candidate_ids support (drives preview_decisions_json.candidate_ids)
+  const includeSetIn =
+    Array.isArray(body.include_set) ? body.include_set
+    : Array.isArray(body.includeSet) ? body.includeSet
+    : Array.isArray(body.candidate_ids) ? body.candidate_ids
+    : Array.isArray(body.candidateIds) ? body.candidateIds
+    : null;
+
+  const includeSet = (() => {
+    if (!Array.isArray(includeSetIn)) return null;
+    const out = [];
+    for (const x of includeSetIn) {
+      const s = String(x || '').trim();
+      if (!s) continue;
+      if (!uuidRe.test(s)) return { error: `include_set/candidate_ids must contain UUIDs (bad value: ${s})` };
+      out.push(s);
+    }
+    return out;
+  })();
+
+  if (includeSet && includeSet.error) {
+    return withCORS(env, req, badRequest(includeSet.error));
+  }
+
   // ✅ IMPORTANT: also embed filters into preview_decisions_json for backward-compatible callers and auditability.
   const previewDecisions =
     (previewDecisionsIn && typeof previewDecisionsIn === 'object' && !Array.isArray(previewDecisionsIn))
@@ -9706,6 +10145,12 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
   if (candidateId && !previewDecisions.candidate_filter_id) previewDecisions.candidate_filter_id = candidateId;
   if (clientId && !previewDecisions.client_filter_id) previewDecisions.client_filter_id = clientId;
+
+  if (Array.isArray(includeSet) && includeSet.length) {
+    if (!Array.isArray(previewDecisions.candidate_ids) || previewDecisions.candidate_ids.length === 0) {
+      previewDecisions.candidate_ids = [...includeSet];
+    }
+  }
 
   const argsWithFilters = {
     p_pay_date: payDate,
@@ -9723,7 +10168,100 @@ async function handleBankingPayCreateDraft(env, req, user) {
     p_preview_decisions_json: previewDecisions
   };
 
+  const unwrapPayPreviewRpc = (rpcRes) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_preview')) {
+        payload = payload.pay_preview;
+      }
+    } catch {}
+    return (payload && typeof payload === 'object') ? payload : {};
+  };
+
+  const callPayPreview = async () => {
+    let rpcRes = null;
+    try {
+      rpcRes = await sbRpc(env, 'pay_preview', {
+        p_pay_date: payDate,
+        p_week_ending_cutoff: cutoffIso,
+        p_actor_user_id: user.id,
+        ...(candidateId ? { p_candidate_id: candidateId } : {}),
+        ...(clientId ? { p_client_id: clientId } : {})
+      });
+    } catch (e) {
+      const msg = String(e?.message || e || '');
+      const looksLikeUnexpectedParam =
+        /unexpected/i.test(msg) || /unknown/i.test(msg) || /parameter/i.test(msg) || /PGRST/i.test(msg);
+
+      // Do NOT silently drop filters in preview. If preview rejects filters, surface it.
+      if (looksLikeUnexpectedParam && (candidateId || clientId)) {
+        throw new Error(`pay_preview rejected filter parameters (candidate_id/client_id). Original error: ${msg}`);
+      }
+      throw e;
+    }
+    return unwrapPayPreviewRpc(rpcRes);
+  };
+
+  const countEligibleCandidates = (preview, decisions, includeCandidateIds) => {
+    const dec = (decisions && typeof decisions === 'object') ? decisions : {};
+    const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object') ? dec.mismatch_choices : {};
+
+    const includeSetNorm = (() => {
+      if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
+      const s = new Set();
+      for (const x of includeCandidateIds) s.add(String(x));
+      return s;
+    })();
+
+    const candidates = [];
+    try {
+      const paye = Array.isArray(preview?.paye_candidates) ? preview.paye_candidates : [];
+      const non = Array.isArray(preview?.non_paye_payees) ? preview.non_paye_payees : [];
+      for (const c of paye) candidates.push(c);
+      for (const c of non) candidates.push(c);
+    } catch {}
+
+    let eligible = 0;
+
+    for (const c of candidates) {
+      if (!c || typeof c !== 'object') continue;
+
+      const candId = String(c.candidate_id || '').trim();
+      if (!candId) continue;
+
+      if (includeSetNorm && !includeSetNorm.has(candId)) continue;
+
+      const hasAnyDelta = (c.has_any_delta === true);
+      if (!hasAnyDelta) continue;
+
+      const isReadyForDraft = (c.is_ready_for_draft === true);
+      if (!isReadyForDraft) continue;
+
+      const hasMismatch = !!(c.mismatch && typeof c.mismatch === 'object' && c.mismatch.has_mismatch === true);
+      if (hasMismatch) {
+        const choiceRaw = mismatchChoices[candId];
+        const choice = String(choiceRaw || '').trim().toUpperCase();
+        if (choice !== 'PAYE' && choice !== 'UMBRELLA') continue;
+      }
+
+      eligible += 1;
+    }
+
+    return eligible;
+  };
+
   try {
+    // Friendly early validation: if nothing is eligible, return a clear 400 before attempting draft creation.
+    const preview0 = await callPayPreview();
+    const eligibleCount = countEligibleCandidates(preview0, previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+
+    if (eligibleCount <= 0) {
+      return withCORS(env, req, badRequest('Nothing eligible to draft; resolve Review required items and refresh preview.'));
+    }
+
     let rpcRes = null;
 
     try {
@@ -9732,7 +10270,13 @@ async function handleBankingPayCreateDraft(env, req, user) {
       const msg = String(e?.message || e || '');
       const looksLikeUnexpectedParam =
         /unexpected/i.test(msg) || /unknown/i.test(msg) || /parameter/i.test(msg) || /PGRST/i.test(msg);
+
+      // ✅ IMPORTANT: Do NOT silently drop filters. If the RPC rejects filter params, surface it loudly.
       if (looksLikeUnexpectedParam && (candidateId || clientId)) {
+        throw new Error(`pay_create_draft_batches_split rejected filter parameters (candidate_id/client_id). This indicates an RPC signature mismatch between environments or wrong param names. Original error: ${msg}`);
+      }
+
+      if (looksLikeUnexpectedParam && !(candidateId || clientId)) {
         rpcRes = await sbRpc(env, 'pay_create_draft_batches_split', argsWithoutFilters);
       } else {
         throw e;
@@ -9754,6 +10298,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -9885,12 +10430,12 @@ async function handleBankingIdLedgerList(env, req, user) {
 
     const obj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
     const items = Array.isArray(obj.rows) ? obj.rows : [];
-    const count = Number.isFinite(Number(obj.total_count)) ? Math.trunc(Number(obj.total_count)) : items.length;
+    const total_count = Number.isFinite(Number(obj.total_count)) ? Math.trunc(Number(obj.total_count)) : items.length;
 
     return withCORS(env, req, ok({
       ok: true,
       items,
-      count,
+      total_count,
       limit: Number.isFinite(Number(obj.limit)) ? Math.trunc(Number(obj.limit)) : limit,
       offset: Number.isFinite(Number(obj.offset)) ? Math.trunc(Number(obj.offset)) : offset
     }));
@@ -9898,6 +10443,9 @@ async function handleBankingIdLedgerList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
+
 
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -10005,10 +10553,13 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
     if (prefixU === 'PAYE_NOT_READY' || rawU.startsWith('PAYE_NOT_READY')) {
       error_code = 'PAYE_NOT_READY';
-      user_message = 'Some PAYE candidates are not ready. Open the PAYE worksheet, enter any missing net amounts, click Save, then try again.';
+      user_message = 'Some PAYE candidates are not ready. Enter any missing net amounts, click Save, then try again.';
     } else if (prefixU === 'PAYE_NET_MISSING' || rawU.startsWith('PAYE_NET_MISSING')) {
       error_code = 'PAYE_NET_MISSING';
-      user_message = 'Missing PAYE net amounts. Open the PAYE worksheet, enter net amounts, click Save, then try again.';
+      user_message = 'Missing PAYE net amounts. Enter net amounts, click Save, then try again.';
+    } else if (prefixU === 'PAYE_NET_INVALID' || rawU.startsWith('PAYE_NET_INVALID')) {
+      error_code = 'PAYE_NET_INVALID';
+      user_message = 'PAYE net amounts are invalid. Net must be 0 or greater and have 2 decimal places.';
     } else if (rawU.includes('RAIL_ENV_MISMATCH')) {
       error_code = 'RAIL_ENV_MISMATCH';
       user_message = 'The banking rail environment does not match this batch. Please switch to the correct environment and try again.';
@@ -10076,7 +10627,46 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     const execRes = unwrapRpc(execRes0, 'pay_execute_bank');
 
     // ─────────────────────────────────────────────────────────────
-    // 2) Prepare: adapter.prepareBatch (name-check + payee map) + DB pay_batch_prepare
+    // 2) Verify-only readiness gate via DB pay_batch_prepare (no fixing here).
+    //    If blockers exist, return PREVIEW_GATE_NOT_SATISFIED.
+    // ─────────────────────────────────────────────────────────────
+    let prepRes0;
+    try {
+      prepRes0 = await sbRpc(env, 'pay_batch_prepare', {
+        p_pay_batch_id: id,
+        p_actor_user_id: user.id
+      });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_BATCH_PREPARE_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
+    const prepRes = unwrapRpc(prepRes0, 'pay_batch_prepare');
+    const hasHardBlockers = !!(prepRes && typeof prepRes === 'object' && prepRes.has_hard_blockers === true);
+
+    if (hasHardBlockers) {
+      let afterGet0;
+      try {
+        afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+      } catch (e) {
+        const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
+        return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      }
+      const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
+
+      const msg = 'PREVIEW_GATE_NOT_SATISFIED: batch has hard blockers; rerun preview and resolve Review required items.';
+      return withCORS(env, req, jsonResponse(400, {
+        error: msg,
+        message: msg,
+        error_code: 'PREVIEW_GATE_NOT_SATISFIED',
+        pay_batch_id: id,
+        executed: execRes,
+        prepared: prepRes,
+        batch_get: afterGet
+      }));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3) Schedule (if rail supports scheduling)
     // ─────────────────────────────────────────────────────────────
     let batchGet0;
     try {
@@ -10129,57 +10719,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
     }
 
-    // Adapter prepare step (no-op for CSV)
-    try {
-      if (adapter && typeof adapter.prepareBatch === 'function') {
-        await adapter.prepareBatch(env, id, user.id);
-      }
-    } catch (e) {
-      // Adapter errors are treated as user-visible but non-RPC; return a clean 400 unless clearly server-side
-      const msg = String(e?.message || e || '').trim() || 'BATCH_PREPARE_FAILED';
-      const code = 'BATCH_PREPARE_FAILED';
-      return withCORS(env, req, jsonResponse(400, { error: msg, message: msg, error_code: code }));
-    }
-
-    let prepRes0;
-    try {
-      prepRes0 = await sbRpc(env, 'pay_batch_prepare', {
-        p_pay_batch_id: id,
-        p_actor_user_id: user.id
-      });
-    } catch (e) {
-      const norm = normalizeRpcError(e, 'PAY_BATCH_PREPARE_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
-    }
-    const prepRes = unwrapRpc(prepRes0, 'pay_batch_prepare');
-
-    const hasHardBlockers = !!(prepRes && typeof prepRes === 'object' && prepRes.has_hard_blockers === true);
-
-    // If blocked at prepare stage, do not proceed to scheduling (return full diagnostics to the UI)
-    if (hasHardBlockers) {
-      let afterGet0;
-      try {
-        afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
-      } catch (e) {
-        const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
-        return withCORS(env, req, jsonResponse(norm.status, norm.body));
-      }
-      const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
-
-      return withCORS(env, req, ok({
-        ok: true,
-        pay_batch_id: id,
-        executed: execRes,
-        prepared: prepRes,
-        scheduled: null,
-        remittances: { attempted: false, sent: false, reason: 'HAS_HARD_BLOCKERS' },
-        batch_get: afterGet
-      }));
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 3) Schedule (if rail supports scheduling)
-    // ─────────────────────────────────────────────────────────────
     let scheduledOut = null;
     let scheduleAttempted = false;
 
@@ -10293,6 +10832,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
+
+
+
 
 async function handleBankingPaySnoozeUpsert(env, req, user) {
   let body = null;
@@ -10625,7 +11167,6 @@ async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
 }
 
 
-
 async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -10656,30 +11197,52 @@ async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId
 
   const sourceFilename = sourceFilenameRaw ? sourceFilenameRaw : 'sage_export.csv';
 
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
   try {
-    const rpcRes = await sbRpc(env, 'pay_set_paye_net_from_sage', {
+    const rpcRes0 = await sbRpc(env, 'pay_set_paye_net_from_sage', {
       p_pay_batch_id: id,
       p_csv_raw: csvRaw,
       p_actor_user_id: user.id,
       p_source_filename: sourceFilename
     });
 
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_set_paye_net_from_sage')) {
-        payload = payload.pay_set_paye_net_from_sage;
-      }
-    } catch {}
+    const payload = unwrapRpc(rpcRes0, 'pay_set_paye_net_from_sage');
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    let batchGet0;
+    try {
+      batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    } catch (e) {
+      return withCORS(env, req, serverError(String(e?.message || e)));
+    }
+    const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
+
+    const matchedCount = Array.isArray(payload?.matched) ? payload.matched.length : (Number.isFinite(Number(payload?.applied_count)) ? Number(payload.applied_count) : 0);
+    const unknownCount = Array.isArray(payload?.unknown) ? payload.unknown.length : 0;
+    const ambiguousCount = Array.isArray(payload?.ambiguous) ? payload.ambiguous.length : 0;
+    const missingNetCount = Array.isArray(payload?.missing_net) ? payload.missing_net.length : 0;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      pay_batch_id: id,
+      matched_count: matchedCount,
+      unknown_count: unknownCount,
+      ambiguous_count: ambiguousCount,
+      missing_net_count: missingNetCount,
+      import: (payload && typeof payload === 'object') ? payload : {},
+      batch_get: (batchGet && typeof batchGet === 'object') ? batchGet : {}
+    }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 
 async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -10698,32 +11261,54 @@ async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId)
     : Array.isArray(body.manual_entries) ? body.manual_entries
     : [];
 
-  if (!Array.isArray(entries) || entries.length === 0) {
-    return withCORS(env, req, badRequest('entries[] is required'));
+  if (!Array.isArray(entries)) {
+    return withCORS(env, req, badRequest('entries[] must be an array (can be empty)'));
   }
 
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
   try {
-    const rpcRes = await sbRpc(env, 'pay_set_paye_net_manual', {
+    const rpcRes0 = await sbRpc(env, 'pay_set_paye_net_manual', {
       p_pay_batch_id: id,
       p_entries_json: entries,
       p_actor_user_id: user.id
     });
 
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_set_paye_net_manual')) {
-        payload = payload.pay_set_paye_net_manual;
-      }
-    } catch {}
+    const payload = unwrapRpc(rpcRes0, 'pay_set_paye_net_manual');
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    let batchGet0;
+    try {
+      batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    } catch (e) {
+      return withCORS(env, req, serverError(String(e?.message || e)));
+    }
+    const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
+
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return withCORS(env, req, ok({
+        ...payload,
+        batch_get: (batchGet && typeof batchGet === 'object') ? batchGet : {}
+      }));
+    }
+
+    return withCORS(env, req, ok({
+      ok: true,
+      pay_batch_id: id,
+      result: payload,
+      batch_get: (batchGet && typeof batchGet === 'object') ? batchGet : {}
+    }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
@@ -12373,6 +12958,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 
@@ -76919,113 +77505,17 @@ function getRailAdapter(provider) {
 
           const payees = Array.isArray(prep0.payees) ? prep0.payees : [];
           if (!payees.length) return { ok: true, did_work: false, payees_processed: 0 };
+          const diag = await revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUserId);
 
-          let didWork = false;
-          let processed = 0;
-
-          // 2) For each payee, perform missing/required operations (name-check + payee-map).
-          for (const pe of payees) {
-            const kind = String(pe?.payee_entity_kind || '').trim().toUpperCase();
-            const idText = String(pe?.payee_entity_id || '').trim();
-            const bankHash = String(pe?.bank_details_hash || '').trim();
-
-            if (!kind || !idText) continue;
-
-            // Skip if DB already declares missing bank details blocker.
-            const blockers = Array.isArray(pe?.blockers) ? pe.blockers.map(x => String(x || '').toUpperCase()) : [];
-            if (blockers.includes('BLOCKED_BANK_DETAILS')) continue;
-
-            const transfers = Array.isArray(pe?.transfers) ? pe.transfers : [];
-            const t0 = transfers.length ? transfers[0] : null;
-
-            // We rely on execute-bank snapshot fields (already normalised in DB).
-            const payeeName = String(t0?.payee_name || '').trim();
-            const sortCode = String(t0?.sort_code || '').trim();
-            const accountNo = String(t0?.account_number || '').trim();
-            const accountType = String(t0?.account_type || '').trim() || (kind === 'UMBRELLA' ? 'Business' : 'Personal');
-
-            // Name-check (CoP): only if required, and not overridden, and not already PASS.
-            if (needNameCheck) {
-              const nc = (pe?.name_check && typeof pe.name_check === 'object') ? pe.name_check : {};
-              const status = String(nc.status || 'UNVERIFIED').toUpperCase();
-              const hasOverride = (nc.has_override === true);
-
-              if (!hasOverride && status !== 'PASS') {
-                try {
-                  const token = await revolutAuth_getAccessToken(env);
-                  const ncRes = await revolutNameCheck_perform(env, token, {
-                    payee_name: payeeName,
-                    sort_code: sortCode,
-                    account_number: accountNo,
-                    account_type: accountType
-                  });
-
-                  // Persist result into DB (rail-generic name-check record)
-                  await sbRpc(env, 'bank_name_check_record_result', {
-                    p_provider: 'REVOLUT',
-                    p_env: railEnv,
-                    p_entity_kind: kind,
-                    p_entity_id: idText,
-                    p_bank_details_hash: bankHash,
-                    p_status: ncRes.status,
-                    p_result_json: ncRes.result_json,
-                    p_checked_at_utc: ncRes.checked_at_utc,
-                    p_actor_user_id: String(actorUserId)
-                  });
-
-                  didWork = true;
-                } catch (e) {
-                  // If CoP is not enabled, record UNAVAILABLE (policy gate happens in UI/backend).
-                  const msg = (e && e.message) ? String(e.message) : '';
-                  const is404 = msg.includes('REVOLUT_COP_UNAVAILABLE_404');
-                  if (is404) {
-                    await sbRpc(env, 'bank_name_check_record_result', {
-                      p_provider: 'REVOLUT',
-                      p_env: railEnv,
-                      p_entity_kind: kind,
-                      p_entity_id: idText,
-                      p_bank_details_hash: bankHash,
-                      p_status: 'UNAVAILABLE',
-                      p_result_json: { error: 'COP_NOT_ENABLED', detail: msg || null },
-                      p_checked_at_utc: new Date().toISOString(),
-                      p_actor_user_id: String(actorUserId)
-                    });
-                    didWork = true;
-                  } else {
-                    throw e;
-                  }
-                }
-              }
-            }
-
-            // Payee map (counterparty): only if required and not present.
-            if (requiresPayeeMap) {
-              const pm = (pe?.payee_map && typeof pe.payee_map === 'object') ? pe.payee_map : {};
-              const present = (pm.present === true);
-
-              if (!present) {
-                const token = await revolutAuth_getAccessToken(env);
-                await revolutCounterparty_ensureMapped(env, token, {
-                  rail_env: railEnv,
-                  actor_user_id: String(actorUserId),
-                  entity_kind: kind,
-                  entity_id: idText,
-                  bank_details_hash: bankHash,
-                  bank_fields: {
-                    payee_name: payeeName,
-                    sort_code: sortCode,
-                    account_number: accountNo,
-                    account_type: accountType
-                  }
-                });
-                didWork = true;
-              }
-            }
-
-            processed += 1;
-          }
-
-          return { ok: true, did_work: didWork, payees_processed: processed };
+          return {
+            ok: true,
+            did_work: !!diag.did_work,
+            payees_processed: Number.isFinite(Number(diag.payees_processed)) ? Number(diag.payees_processed) : 0,
+            attempted_count: Number.isFinite(Number(diag.attempted_count)) ? Number(diag.attempted_count) : 0,
+            success_count: Number.isFinite(Number(diag.success_count)) ? Number(diag.success_count) : 0,
+            failed_count: Number.isFinite(Number(diag.failed_count)) ? Number(diag.failed_count) : 0,
+            diagnostics: Array.isArray(diag.diagnostics) ? diag.diagnostics : []
+          };
         },
 
         async scheduleBatch(env, batchId, payload, actorUserId) {
