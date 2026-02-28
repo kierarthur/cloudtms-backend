@@ -4,7 +4,8 @@ CREATE OR REPLACE FUNCTION public.id_ledger_list(
   p_status text[] DEFAULT NULL,
   p_client_id uuid DEFAULT NULL,
   p_search text DEFAULT NULL,
-  p_only_reportable boolean DEFAULT false
+  p_only_reportable boolean DEFAULT false,
+  p_only_changed boolean DEFAULT false
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -97,7 +98,7 @@ begin
       end) as reportable_current_inc_vat
     from base b
   ),
-  filtered as (
+  filtered0 as (
     select
       c.*,
 
@@ -119,6 +120,18 @@ begin
       and (
         coalesce(p_only_reportable, false) = false
         or upper(coalesce(c.effective_invoice_status, '')) <> 'ON_HOLD'
+      )
+  ),
+  filtered as (
+    select
+      f0.*
+    from filtered0 f0
+    where
+      coalesce(p_only_changed, false) = false
+      or (
+        f0.delta_ex_vat <> 0::numeric(12,2)
+        or f0.delta_vat <> 0::numeric(12,2)
+        or f0.delta_inc_vat <> 0::numeric(12,2)
       )
   ),
   total as (
@@ -194,6 +207,7 @@ begin
   );
 end;
 $function$;
+
 
 
 
@@ -558,6 +572,68 @@ begin;
 --  - Balance-now locks the changed ledger rows FOR UPDATE to keep read/update consistent.
 --  - Returns are JSONB so you get {total, lines[]} in a single RPC response.
 -- =========================================================
+CREATE OR REPLACE FUNCTION public.id_consolidation_runs_list(
+  p_limit int DEFAULT 50,
+  p_offset int DEFAULT 0
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+declare
+  v_limit int := greatest(1, least(coalesce(p_limit,50), 500));
+  v_offset int := greatest(coalesce(p_offset,0), 0);
+  v_total_count int;
+  v_runs jsonb := '[]'::jsonb;
+begin
+  if to_regclass('public.id_consolidation_runs') is null then
+    raise exception 'ID_RUNS_TABLE_MISSING';
+  end if;
+
+  -- ✅ Only COMMITTED runs (exclude drafts)
+  select count(*)::int into v_total_count
+  from public.id_consolidation_runs r
+  where r.bank_uploaded_at_utc is not null;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id_ref', r.id_ref,
+          'state', case when r.bank_uploaded_at_utc is null then 'DRAFT' else 'COMMITTED' end,
+          'created_at_utc', r.created_at_utc,
+          'created_by_user_id', case when r.created_by_user_id is null then null else r.created_by_user_id::text end,
+          'committed_by_user_id', case when r.committed_by_user_id is null then null else r.committed_by_user_id::text end,
+          'total_delta_ex_vat', r.total_delta_ex_vat,
+          'total_delta_vat', r.total_delta_vat,
+          'total_delta_inc_vat', r.total_delta_inc_vat,
+          'bank_upload_code', r.bank_upload_code,
+          'bank_uploaded_at_utc', r.bank_uploaded_at_utc,
+          'note', r.note
+        )
+        order by r.created_at_utc desc, r.id_ref desc
+      ),
+      '[]'::jsonb
+    )
+  into v_runs
+  from (
+    select r0.*
+    from public.id_consolidation_runs r0
+    where r0.bank_uploaded_at_utc is not null
+    order by r0.created_at_utc desc, r0.id_ref desc
+    limit v_limit offset v_offset
+  ) r;
+
+  return jsonb_build_object(
+    'total_count', coalesce(v_total_count,0),
+    'limit', v_limit,
+    'offset', v_offset,
+    'runs', v_runs
+  );
+end;
+$$;
+
 
 create or replace function public.id_consolidation_preview()
 returns jsonb
@@ -749,20 +825,20 @@ begin
 end;
 $$;
 
-create or replace function public.id_consolidation_balance_now(
+CREATE OR REPLACE FUNCTION public.id_consolidation_balance_now(
   p_actor_user_id uuid,
   p_bank_upload_code text,
-  p_note text default null
+  p_note text DEFAULT NULL
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 declare
-  v_ref_num bigint;
   v_id_ref text;
-  v_created_at timestamptz := now();
+  v_created_at timestamptz;
+  v_bank_uploaded_at timestamptz;
 
   v_total_ex numeric(12,2) := 0;
   v_total_vat numeric(12,2) := 0;
@@ -772,6 +848,11 @@ declare
 
   v_bank_upload_code text;
   v_note text;
+
+  v_draft jsonb;
+  v_commit jsonb;
+
+  v_is_on_hold boolean;
 begin
   v_bank_upload_code := nullif(btrim(coalesce(p_bank_upload_code,'')), '');
   v_note := nullif(btrim(coalesce(p_note,'')), '');
@@ -791,194 +872,106 @@ begin
     raise exception 'ID_RUN_TABLES_MISSING';
   end if;
 
-  -- Allocate new sequential ref and format as 6 digits
-  select nextval('public.id_ref_seq') into v_ref_num;
-  v_id_ref := lpad(v_ref_num::text, 6, '0');
+  -- ✅ Two-phase wrapper:
+  -- 1) Draft start (creates run header + snapshot lines, NO ledger updates)
+  v_draft := public.id_consolidation_run_draft_start(p_actor_user_id, v_note);
 
-  -- Lock the changed ledger rows so the read + update are consistent.
-  with changed as (
-    select
-      l.invoice_id,
-      l.invoice_number,
-      l.invoice_status,
-      l.invoice_type,
+  v_id_ref := nullif(btrim(coalesce(v_draft->>'id_ref','')), '');
+  if v_id_ref is null or v_id_ref !~ '^[0-9]{6}$' then
+    raise exception 'DRAFT_START_FAILED';
+  end if;
 
-      (upper(coalesce(l.invoice_status,'')) = 'ON_HOLD') as is_on_hold,
+  v_created_at := (v_draft->>'created_at_utc')::timestamptz;
 
-      coalesce(l.current_ex_vat,0)::numeric(12,2) as current_ex_vat,
-      coalesce(l.current_vat,0)::numeric(12,2) as current_vat,
-      coalesce(l.current_inc_vat,0)::numeric(12,2) as current_inc_vat,
+  v_total_ex := coalesce((v_draft #>> '{totals,delta_ex_vat}')::numeric, 0)::numeric(12,2);
+  v_total_vat := coalesce((v_draft #>> '{totals,delta_vat}')::numeric, 0)::numeric(12,2);
+  v_total_inc := coalesce((v_draft #>> '{totals,delta_inc_vat}')::numeric, 0)::numeric(12,2);
 
-      coalesce(l.last_reported_ex_vat,0)::numeric(12,2) as last_reported_ex_vat,
-      coalesce(l.last_reported_vat,0)::numeric(12,2) as last_reported_vat,
-      coalesce(l.last_reported_inc_vat,0)::numeric(12,2) as last_reported_inc_vat,
-
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_ex_vat,0)::numeric(12,2)
-      end) as reportable_current_ex_vat,
-
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_vat,0)::numeric(12,2)
-      end) as reportable_current_vat,
-
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_inc_vat,0)::numeric(12,2)
-      end) as reportable_current_inc_vat,
-
-      (
-        (case
-          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-          else coalesce(l.current_ex_vat,0)::numeric(12,2)
-        end)
-        - coalesce(l.last_reported_ex_vat,0)::numeric(12,2)
-      )::numeric(12,2) as delta_ex_vat,
-
-      (
-        (case
-          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-          else coalesce(l.current_vat,0)::numeric(12,2)
-        end)
-        - coalesce(l.last_reported_vat,0)::numeric(12,2)
-      )::numeric(12,2) as delta_vat,
-
-      (
-        (case
-          when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-          else coalesce(l.current_inc_vat,0)::numeric(12,2)
-        end)
-        - coalesce(l.last_reported_inc_vat,0)::numeric(12,2)
-      )::numeric(12,2) as delta_inc_vat
-    from public.id_invoice_ledger l
-    where
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_ex_vat,0)::numeric(12,2)
-      end) <> coalesce(l.last_reported_ex_vat,0)::numeric(12,2)
-      or
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_vat,0)::numeric(12,2)
-      end) <> coalesce(l.last_reported_vat,0)::numeric(12,2)
-      or
-      (case
-        when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
-        else coalesce(l.current_inc_vat,0)::numeric(12,2)
-      end) <> coalesce(l.last_reported_inc_vat,0)::numeric(12,2)
-    for update
-  )
+  -- Rebuild legacy "lines" payload shape from snapshot run lines
   select
-    coalesce(sum(c.delta_ex_vat),0)::numeric(12,2),
-    coalesce(sum(c.delta_vat),0)::numeric(12,2),
-    coalesce(sum(c.delta_inc_vat),0)::numeric(12,2),
     coalesce(
       jsonb_agg(
         jsonb_build_object(
-          'invoice_id', c.invoice_id::text,
-          'invoice_number', c.invoice_number,
-          'invoice_status', c.invoice_status,
-          'invoice_type', c.invoice_type,
-          'is_on_hold', c.is_on_hold,
+          'invoice_id', rl.invoice_id::text,
+          'invoice_number', rl.invoice_number,
+          'invoice_status', rl.invoice_status,
+          'invoice_type', rl.invoice_type,
 
-          'delta_ex_vat', c.delta_ex_vat,
-          'delta_vat', c.delta_vat,
-          'delta_inc_vat', c.delta_inc_vat,
+          'is_on_hold', (upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD'),
 
-          'current_ex_vat', c.current_ex_vat,
-          'current_vat', c.current_vat,
-          'current_inc_vat', c.current_inc_vat,
+          'delta_ex_vat', coalesce(rl.delta_ex_vat, 0)::numeric(12,2),
+          'delta_vat', coalesce(rl.delta_vat, 0)::numeric(12,2),
+          'delta_inc_vat', coalesce(rl.delta_inc_vat, 0)::numeric(12,2),
 
-          'reportable_current_ex_vat', c.reportable_current_ex_vat,
-          'reportable_current_vat', c.reportable_current_vat,
-          'reportable_current_inc_vat', c.reportable_current_inc_vat,
+          'current_ex_vat', coalesce(rl.current_ex_vat, 0)::numeric(12,2),
+          'current_vat', coalesce(rl.current_vat, 0)::numeric(12,2),
+          'current_inc_vat', coalesce(rl.current_inc_vat, 0)::numeric(12,2),
 
-          'last_reported_ex_vat', c.last_reported_ex_vat,
-          'last_reported_vat', c.last_reported_vat,
-          'last_reported_inc_vat', c.last_reported_inc_vat
+          'reportable_current_ex_vat',
+            (case
+              when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+              else coalesce(rl.current_ex_vat, 0)::numeric(12,2)
+            end),
+
+          'reportable_current_vat',
+            (case
+              when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+              else coalesce(rl.current_vat, 0)::numeric(12,2)
+            end),
+
+          'reportable_current_inc_vat',
+            (case
+              when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+              else coalesce(rl.current_inc_vat, 0)::numeric(12,2)
+            end),
+
+          'last_reported_ex_vat',
+            (
+              (case
+                when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+                else coalesce(rl.current_ex_vat, 0)::numeric(12,2)
+              end)
+              - coalesce(rl.delta_ex_vat, 0)::numeric(12,2)
+            )::numeric(12,2),
+
+          'last_reported_vat',
+            (
+              (case
+                when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+                else coalesce(rl.current_vat, 0)::numeric(12,2)
+              end)
+              - coalesce(rl.delta_vat, 0)::numeric(12,2)
+            )::numeric(12,2),
+
+          'last_reported_inc_vat',
+            (
+              (case
+                when upper(coalesce(rl.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
+                else coalesce(rl.current_inc_vat, 0)::numeric(12,2)
+              end)
+              - coalesce(rl.delta_inc_vat, 0)::numeric(12,2)
+            )::numeric(12,2)
         )
         order by
-          nullif(btrim(coalesce(c.invoice_number,'')),'') nulls last,
-          c.invoice_id
+          nullif(btrim(coalesce(rl.invoice_number,'')),'') nulls last,
+          rl.invoice_id
       ),
       '[]'::jsonb
     )
-  into v_total_ex, v_total_vat, v_total_inc, v_lines
-  from changed c;
+  into v_lines
+  from public.id_consolidation_run_lines rl
+  where rl.id_ref = v_id_ref;
 
-  -- Insert run header (always, even if total=0 and lines empty)
-  insert into public.id_consolidation_runs (
-    id_ref,
-    created_at_utc,
-    created_by_user_id,
-    total_delta_ex_vat,
-    total_delta_vat,
-    total_delta_inc_vat,
-    bank_upload_code,
-    bank_uploaded_at_utc,
-    note
-  )
-  values (
-    v_id_ref,
-    v_created_at,
-    p_actor_user_id,
-    v_total_ex,
-    v_total_vat,
-    v_total_inc,
-    v_bank_upload_code,
-    v_created_at,
-    v_note
-  );
+  -- 2) Commit (stores bank upload code + updates ledger baselines from snapshot)
+  v_commit := public.id_consolidation_run_draft_commit(v_id_ref, v_bank_upload_code, p_actor_user_id);
 
-  -- Insert run lines (only if there are any)
-  if jsonb_array_length(v_lines) > 0 then
-    insert into public.id_consolidation_run_lines (
-      id_ref,
-      invoice_id,
-      invoice_number,
-      invoice_status,
-      invoice_type,
-      delta_ex_vat,
-      delta_vat,
-      delta_inc_vat,
-      current_ex_vat,
-      current_vat,
-      current_inc_vat
-    )
-    select
-      v_id_ref,
-      (x->>'invoice_id')::uuid,
-      x->>'invoice_number',
-      x->>'invoice_status',
-      x->>'invoice_type',
-      coalesce(nullif(x->>'delta_ex_vat','')::numeric, 0)::numeric(12,2),
-      coalesce(nullif(x->>'delta_vat','')::numeric, 0)::numeric(12,2),
-      coalesce(nullif(x->>'delta_inc_vat','')::numeric, 0)::numeric(12,2),
-      coalesce(nullif(x->>'current_ex_vat','')::numeric, 0)::numeric(12,2),
-      coalesce(nullif(x->>'current_vat','')::numeric, 0)::numeric(12,2),
-      coalesce(nullif(x->>'current_inc_vat','')::numeric, 0)::numeric(12,2)
-    from jsonb_array_elements(v_lines) x;
-  end if;
-
-  -- Update ledger baselines so the next run only includes new deltas
-  -- IMPORTANT: last_reported_* becomes reportable_current_* (0 if ON_HOLD, else current_*)
-  update public.id_invoice_ledger l2
-  set
-    last_reported_ex_vat = (case when upper(coalesce(l2.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2) else coalesce(l2.current_ex_vat,0)::numeric(12,2) end),
-    last_reported_vat = (case when upper(coalesce(l2.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2) else coalesce(l2.current_vat,0)::numeric(12,2) end),
-    last_reported_inc_vat = (case when upper(coalesce(l2.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2) else coalesce(l2.current_inc_vat,0)::numeric(12,2) end),
-    updated_at_utc = now()
-  where l2.invoice_id in (
-    select (x->>'invoice_id')::uuid
-    from jsonb_array_elements(v_lines) x
-  );
+  v_bank_uploaded_at := (v_commit->>'bank_uploaded_at_utc')::timestamptz;
 
   return jsonb_build_object(
     'id_ref', v_id_ref,
     'created_at_utc', v_created_at,
     'bank_upload_code', v_bank_upload_code,
-    'bank_uploaded_at_utc', v_created_at,
+    'bank_uploaded_at_utc', v_bank_uploaded_at,
     'note', v_note,
     'total_delta_ex_vat', v_total_ex,
     'total_delta_vat', v_total_vat,
@@ -990,70 +983,12 @@ end;
 $$;
 
 
-create or replace function public.id_consolidation_runs_list(
-  p_limit int default 50,
-  p_offset int default 0
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_limit int := greatest(1, least(coalesce(p_limit,50), 500));
-  v_offset int := greatest(coalesce(p_offset,0), 0);
-  v_total_count int;
-  v_runs jsonb := '[]'::jsonb;
-begin
-  if to_regclass('public.id_consolidation_runs') is null then
-    raise exception 'ID_RUNS_TABLE_MISSING';
-  end if;
-
-  select count(*)::int into v_total_count
-  from public.id_consolidation_runs r;
-
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'id_ref', r.id_ref,
-          'created_at_utc', r.created_at_utc,
-          'created_by_user_id', case when r.created_by_user_id is null then null else r.created_by_user_id::text end,
-          'total_delta_ex_vat', r.total_delta_ex_vat,
-          'total_delta_vat', r.total_delta_vat,
-          'total_delta_inc_vat', r.total_delta_inc_vat,
-          'bank_upload_code', r.bank_upload_code,
-          'bank_uploaded_at_utc', r.bank_uploaded_at_utc,
-          'note', r.note
-        )
-        order by r.created_at_utc desc, r.id_ref desc
-      ),
-      '[]'::jsonb
-    )
-  into v_runs
-  from (
-    select r0.*
-    from public.id_consolidation_runs r0
-    order by r0.created_at_utc desc, r0.id_ref desc
-    limit v_limit offset v_offset
-  ) r;
-
-  return jsonb_build_object(
-    'total_count', coalesce(v_total_count,0),
-    'limit', v_limit,
-    'offset', v_offset,
-    'runs', v_runs
-  );
-end;
-$$;
-
-
-create or replace function public.id_consolidation_run_get(p_id_ref text)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.id_consolidation_run_get(p_id_ref text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 declare
   v_run record;
   v_lines jsonb := '[]'::jsonb;
@@ -1071,6 +1006,7 @@ begin
     r.id_ref,
     r.created_at_utc,
     r.created_by_user_id,
+    r.committed_by_user_id,
     r.total_delta_ex_vat,
     r.total_delta_vat,
     r.total_delta_inc_vat,
@@ -1091,9 +1027,27 @@ begin
       jsonb_agg(
         jsonb_build_object(
           'invoice_id', rl.invoice_id::text,
-          'invoice_number', rl.invoice_number,
-          'invoice_status', rl.invoice_status,
-          'invoice_type', rl.invoice_type,
+
+          'invoice_number',
+            coalesce(
+              nullif(btrim(coalesce(rl.invoice_number,'')),''),
+              i.invoice_no
+            ),
+
+          'client_id', case when i.client_id is null then null else i.client_id::text end,
+          'client_name', c.name,
+
+          'invoice_status',
+            coalesce(
+              nullif(btrim(coalesce(rl.invoice_status,'')),''),
+              i.status::text
+            ),
+
+          'invoice_type',
+            coalesce(
+              nullif(btrim(coalesce(rl.invoice_type,'')),''),
+              i.type::text
+            ),
 
           'delta_ex_vat', rl.delta_ex_vat,
           'delta_vat', rl.delta_vat,
@@ -1111,13 +1065,19 @@ begin
     )
   into v_lines
   from public.id_consolidation_run_lines rl
+  left join public.invoices i
+    on i.id = rl.invoice_id
+  left join public.clients c
+    on c.id = i.client_id
   where rl.id_ref = p_id_ref;
 
   return jsonb_build_object(
     'run', jsonb_build_object(
       'id_ref', v_run.id_ref,
+      'state', case when v_run.bank_uploaded_at_utc is null then 'DRAFT' else 'COMMITTED' end,
       'created_at_utc', v_run.created_at_utc,
       'created_by_user_id', case when v_run.created_by_user_id is null then null else v_run.created_by_user_id::text end,
+      'committed_by_user_id', case when v_run.committed_by_user_id is null then null else v_run.committed_by_user_id::text end,
       'bank_upload_code', v_run.bank_upload_code,
       'bank_uploaded_at_utc', v_run.bank_uploaded_at_utc,
       'note', v_run.note,
