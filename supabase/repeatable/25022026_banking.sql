@@ -354,6 +354,7 @@ begin
 end;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.bank_name_check_set_override(
   p_provider text,
   p_env text,
@@ -494,8 +495,7 @@ begin
       override_hash = excluded.override_hash,
       updated_at_utc = v_now
     returning
-      public.bank_name_checks.*,
-      (xmax = 0) as inserted_flag
+      public.bank_name_checks.*
   )
   select
     u.*
@@ -503,12 +503,8 @@ begin
   from upserted u
   limit 1;
 
-  select
-    u.inserted_flag
-  into v_inserted
-  from upserted u
-  limit 1;
-
+  -- Derive inserted vs updated deterministically from timestamps set by this function.
+  v_inserted := (v_row.created_at_utc is not null and v_row.updated_at_utc is not null and v_row.created_at_utc = v_row.updated_at_utc);
   v_action := case when v_inserted then 'inserted' else 'updated' end;
 
   v_after_json := jsonb_build_object(
@@ -547,6 +543,7 @@ begin
   );
 end;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_clear_override(
   p_provider text,
