@@ -9370,7 +9370,6 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
-
 async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUserId) {
   const envRaw = (railEnv !== undefined && railEnv !== null) ? String(railEnv).trim() : '';
   const railEnvNorm = (envRaw ? envRaw : 'PROD').toUpperCase();
@@ -9443,6 +9442,10 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
     const ncStatus = String(nc.status || 'UNVERIFIED').trim().toUpperCase() || 'UNVERIFIED';
     const ncHasOverride = (nc.has_override === true);
 
+    // Track “post-attempt” name-check facts so payee-map creation can be gated correctly.
+    let ncStatusNow = ncStatus;
+    let ncHasOverrideNow = ncHasOverride;
+
     const pm = (pe?.payee_map && typeof pe.payee_map === 'object') ? pe.payee_map : {};
     const mapPresent = (pm.present === true);
     const transfers = Array.isArray(pe?.transfers) ? pe.transfers : [];
@@ -9499,11 +9502,11 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
 
     // NAME CHECK: only attempt when DB says BLOCKED_NAME_CHECK AND status is UNVERIFIED AND no override.
     // If status is FAIL/NEAR_MATCH/UNAVAILABLE, we do NOT re-run; it remains a review-required item.
-     if (needsNameCheck) {
-      if (ncHasOverride) {
-        row.name_check = { attempted: false, reason: 'HAS_OVERRIDE', status: ncStatus };
-      } else if (ncStatus !== 'UNVERIFIED') {
-        row.name_check = { attempted: false, reason: 'ALREADY_CHECKED', status: ncStatus };
+    if (needsNameCheck) {
+      if (ncHasOverrideNow) {
+        row.name_check = { attempted: false, reason: 'HAS_OVERRIDE', status: ncStatusNow };
+      } else if (ncStatusNow !== 'UNVERIFIED') {
+        row.name_check = { attempted: false, reason: 'ALREADY_CHECKED', status: ncStatusNow };
       } else if (!nameForRail || scDigits.length !== 6 || !acctDigits) {
         row.name_check = {
           attempted: false,
@@ -9535,6 +9538,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
             p_actor_user_id: actor
           });
 
+          ncStatusNow = String(ncRes.status || '').trim().toUpperCase() || ncStatusNow;
           row.name_check = { attempted: true, ok: true, status: ncRes.status };
           didWork = true;
         } catch (e) {
@@ -9554,6 +9558,7 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
                 p_checked_at_utc: new Date().toISOString(),
                 p_actor_user_id: actor
               });
+              ncStatusNow = 'UNAVAILABLE';
               row.name_check = { attempted: true, ok: true, status: 'UNAVAILABLE' };
               didWork = true;
             } catch (e2) {
@@ -9568,10 +9573,30 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
       }
     }
 
+    // ✅ CRITICAL FIX:
+    // Never create / upsert a Revolut beneficiary (payee-map) unless:
+    // - name-check is NOT required (no BLOCKED_NAME_CHECK), OR
+    // - name-check is PASS, OR
+    // - user override exists for this hash.
+    //
+    // This prevents “adding beneficiaries even when CoP FAIL/NEAR_MATCH”.
+    const nameGateRequiredForMap = blockers.includes('BLOCKED_NAME_CHECK');
+    const nameApprovedForMap =
+      (!nameGateRequiredForMap) ||
+      (ncHasOverrideNow === true) ||
+      (String(ncStatusNow || '').trim().toUpperCase() === 'PASS');
+
     // PAYEE MAP: attempt when DB says BLOCKED_NO_PAYEE_MAP AND mapping is not present.
     if (needsPayeeMap) {
       if (mapPresent) {
         row.payee_map = { attempted: false, reason: 'ALREADY_PRESENT' };
+      } else if (!nameApprovedForMap) {
+        row.payee_map = {
+          attempted: false,
+          reason: 'NAME_CHECK_NOT_APPROVED',
+          name_check_status: ncStatusNow,
+          name_check_has_override: (ncHasOverrideNow === true)
+        };
       } else if (!nameForRail || scDigits.length !== 6 || !acctDigits) {
         row.payee_map = {
           attempted: false,
@@ -9623,7 +9648,6 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
     diagnostics
   };
 }
-
 async function handleBankingCapabilities(env, req, user) {
   try {
     const select = [
