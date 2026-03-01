@@ -2607,6 +2607,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.pay_remittance_build(
   p_pay_batch_id uuid,
   p_scope text default 'ALL'
@@ -4478,6 +4479,434 @@ begin
     'remittance_header_message', v_remittance_header_message,
     'remittance_footer_message', v_remittance_footer_message,
     'jobs', (coalesce(v_jobs_umb,'[]'::jsonb) || coalesce(v_jobs_paye,'[]'::jsonb) || coalesce(v_jobs_cand_umb_copy,'[]'::jsonb))
+  );
+end;
+$$;
+
+
+create or replace function public.pay_reconcile_external_payment(
+  p_actor_user_id uuid,
+  p_payload_json jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_pay_date date;
+  v_note text;
+  v_payment_reference text;
+
+  v_settings record;
+  v_batch_id uuid;
+
+  v_timesheet_ids uuid[] := array[]::uuid[];
+  v_dup jsonb := '[]'::jsonb;
+  v_missing jsonb := '[]'::jsonb;
+
+  v_now timestamptz := now();
+
+  v_ts record;
+  v_snapshot jsonb;
+  v_signature text;
+
+  v_timesheet_count int := 0;
+  v_candidate_count int := 0;
+begin
+  if p_payload_json is null or jsonb_typeof(p_payload_json) <> 'object' then
+    raise exception 'pay_reconcile_external_payment: payload_json must be an object';
+  end if;
+
+  if nullif(btrim(coalesce(p_payload_json->>'pay_date','')), '') is null then
+    raise exception 'pay_reconcile_external_payment: payload.pay_date is required (YYYY-MM-DD)';
+  end if;
+
+  begin
+    v_pay_date := (p_payload_json->>'pay_date')::date;
+  exception when others then
+    raise exception 'pay_reconcile_external_payment: payload.pay_date is not a valid date (YYYY-MM-DD)';
+  end;
+
+  v_note := nullif(btrim(coalesce(p_payload_json->>'note','')), '');
+
+  v_payment_reference := nullif(
+    btrim(
+      coalesce(
+        p_payload_json->>'payment_reference',
+        p_payload_json->>'bulk_reference',
+        p_payload_json->>'bank_reference',
+        ''
+      )
+    ),
+    ''
+  );
+
+  if v_payment_reference is null then
+    raise exception 'pay_reconcile_external_payment: payload.payment_reference is required';
+  end if;
+
+  if jsonb_typeof(p_payload_json->'timesheet_ids') <> 'array' then
+    raise exception 'pay_reconcile_external_payment: payload.timesheet_ids must be an array of UUID strings';
+  end if;
+
+  select coalesce(array_agg((x::text)::uuid), array[]::uuid[])
+  into v_timesheet_ids
+  from jsonb_array_elements_text(p_payload_json->'timesheet_ids') x;
+
+  if array_length(v_timesheet_ids, 1) is null or array_length(v_timesheet_ids, 1) = 0 then
+    raise exception 'pay_reconcile_external_payment: payload.timesheet_ids must not be empty';
+  end if;
+
+  -- Duplicates guard
+  select coalesce(jsonb_agg(d.ts_id::text), '[]'::jsonb)
+  into v_dup
+  from (
+    select t.ts_id
+    from (
+      select unnest(v_timesheet_ids) as ts_id
+    ) t
+    group by t.ts_id
+    having count(*) > 1
+  ) d;
+
+  if jsonb_array_length(v_dup) > 0 then
+    raise exception 'pay_reconcile_external_payment: duplicate timesheet_ids %', v_dup::text;
+  end if;
+
+  -- Validate settings exist (for snapshot fields required by pay_batches checks)
+  select
+    sd.banking_system,
+    sd.external_paye_system
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    raise exception 'pay_reconcile_external_payment: settings_defaults missing banking_system/external_paye_system';
+  end if;
+
+  -- Validate timesheets exist and are current
+  select coalesce(jsonb_agg(m.ts_id::text), '[]'::jsonb)
+  into v_missing
+  from (
+    select u.ts_id
+    from (select unnest(v_timesheet_ids) as ts_id) u
+    left join public.timesheets ts
+      on ts.timesheet_id = u.ts_id
+     and ts.is_current = true
+    where ts.timesheet_id is null
+  ) m;
+
+  if jsonb_array_length(v_missing) > 0 then
+    raise exception 'pay_reconcile_external_payment: timesheet(s) not found or not current %', v_missing::text;
+  end if;
+
+  -- Create a settled batch for audit/history linkage
+  insert into public.pay_batches(
+    pay_date,
+    created_at_utc,
+    created_by_user_id,
+    status,
+    banking_system_snapshot,
+    external_paye_system_snapshot,
+    rail_provider_snapshot,
+    rail_env_snapshot,
+    bulk_reference
+  )
+  values (
+    v_pay_date,
+    v_now,
+    p_actor_user_id,
+    'SETTLED',
+    v_settings.banking_system,
+    v_settings.external_paye_system,
+    'EXTERNAL',
+    'EXTERNAL',
+    v_payment_reference
+  )
+  returning id into v_batch_id;
+
+  -- Create pay_batch_candidates (for history drill-down)
+  insert into public.pay_batch_candidates(
+    pay_batch_id,
+    candidate_id,
+    candidate_tms_ref,
+    candidate_display_name,
+    settlement_status,
+    settled_at_utc,
+    settled_via,
+    settled_note
+  )
+  select
+    v_batch_id,
+    c.id,
+    c.tms_ref,
+    c.display_name,
+    'SETTLED',
+    v_now,
+    'EXTERNAL_RECONCILE',
+    v_note
+  from public.timesheets_financials tf
+  join public.timesheets ts
+    on ts.timesheet_id = tf.timesheet_id
+   and ts.is_current = true
+  join public.candidates c
+    on c.id = tf.candidate_id
+  where tf.is_current = true
+    and tf.timesheet_id = any(v_timesheet_ids)
+  group by c.id, c.tms_ref, c.display_name;
+
+  get diagnostics v_candidate_count = row_count;
+
+  -- For each timesheet: build CURRENT snapshot and write to pay_state + history (+ pay_batch_timesheet_snapshots)
+  for v_ts in
+    select
+      tf.timesheet_id,
+      tf.candidate_id,
+      upper(coalesce(tf.pay_method,'')) as pay_method,
+      tf.total_pay_ex_vat,
+      tf.expenses_pay_ex_vat,
+      tf.travel_pay_ex_vat,
+      tf.accommodation_pay_ex_vat,
+      tf.other_pay_ex_vat,
+      tf.mileage_pay_ex_vat,
+      tf.invoice_breakdown_json,
+      tf.additional_units_json,
+      tf.hours_day,
+      tf.hours_night,
+      tf.hours_sat,
+      tf.hours_sun,
+      tf.hours_bh,
+      tf.pay_day,
+      tf.pay_night,
+      tf.pay_sat,
+      tf.pay_sun,
+      tf.pay_bh,
+      tf.mileage_units,
+      tf.mileage_pay_rate,
+      ts.reference_number
+    from public.timesheets_financials tf
+    join public.timesheets ts
+      on ts.timesheet_id = tf.timesheet_id
+     and ts.is_current = true
+    where tf.is_current = true
+      and tf.timesheet_id = any(v_timesheet_ids)
+  loop
+    -- Build snapshot matching the NEW schema used by pay_create_draft_batch:
+    -- - segments include schedule + hours_* when SEGMENTS mode
+    -- - top-level hours_* and pay_* always included
+    -- - additional_units_json included
+    -- - mileage_units and mileage_pay_rate included
+    v_snapshot := jsonb_build_object(
+      'segments',
+        case
+          when v_ts.invoice_breakdown_json is not null
+           and jsonb_typeof(v_ts.invoice_breakdown_json) = 'object'
+           and upper(coalesce(v_ts.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+           and jsonb_typeof(v_ts.invoice_breakdown_json->'segments') = 'array'
+          then (
+            select coalesce(
+              jsonb_agg(
+                jsonb_build_object(
+                  'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')), ''),
+                  'date', nullif(btrim(coalesce(seg->>'date','')), ''),
+                  'start_utc', nullif(btrim(coalesce(seg->>'start_utc','')), ''),
+                  'end_utc', nullif(btrim(coalesce(seg->>'end_utc','')), ''),
+                  'break_mins', coalesce(nullif(seg->>'break_mins','')::numeric,0),
+                  'breaks', coalesce(seg->'breaks','[]'::jsonb),
+                  'hours_day', coalesce(nullif(seg->>'hours_day','')::numeric,0),
+                  'hours_night', coalesce(nullif(seg->>'hours_night','')::numeric,0),
+                  'hours_sat', coalesce(nullif(seg->>'hours_sat','')::numeric,0),
+                  'hours_sun', coalesce(nullif(seg->>'hours_sun','')::numeric,0),
+                  'hours_bh', coalesce(nullif(seg->>'hours_bh','')::numeric,0),
+                  'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
+                  'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
+                  'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), '')
+                )
+                order by nullif(btrim(coalesce(seg->>'segment_id','')), '')
+              ),
+              '[]'::jsonb
+            )
+            from jsonb_array_elements(v_ts.invoice_breakdown_json->'segments') seg
+            where seg is not null and jsonb_typeof(seg)='object'
+          )
+          else jsonb_build_array(
+            jsonb_build_object(
+              'segment_id', ('ts:' || v_ts.timesheet_id::text),
+              'pay_amount', round(coalesce(v_ts.total_pay_ex_vat,0),2),
+              'exclude_from_pay', false,
+              'ref_num', nullif(btrim(coalesce(v_ts.reference_number,'')), '')
+            )
+          )
+        end,
+      'adjustments', coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', a.id::text,
+            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
+          )
+          order by a.created_at nulls last, a.id
+        )
+        from public.ts_pay_adjustments a
+        where a.as_advance = false
+          and a.timesheet_id = v_ts.timesheet_id
+      ), '[]'::jsonb),
+      'additional_pay_ex_vat',
+        case
+          when v_ts.invoice_breakdown_json is not null
+           and jsonb_typeof(v_ts.invoice_breakdown_json)='object'
+           and upper(coalesce(v_ts.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+          then round(coalesce(nullif(v_ts.invoice_breakdown_json #>> '{additional,pay_ex_vat}','')::numeric,0),2)
+          else 0::numeric
+        end,
+      'additional_units_json', coalesce(v_ts.additional_units_json, '{}'::jsonb),
+      'hours_day', round(coalesce(nullif(v_ts.hours_day::text,'')::numeric,0),2),
+      'hours_night', round(coalesce(nullif(v_ts.hours_night::text,'')::numeric,0),2),
+      'hours_sat', round(coalesce(nullif(v_ts.hours_sat::text,'')::numeric,0),2),
+      'hours_sun', round(coalesce(nullif(v_ts.hours_sun::text,'')::numeric,0),2),
+      'hours_bh', round(coalesce(nullif(v_ts.hours_bh::text,'')::numeric,0),2),
+      'pay_day', round(coalesce(nullif(v_ts.pay_day::text,'')::numeric,0),2),
+      'pay_night', round(coalesce(nullif(v_ts.pay_night::text,'')::numeric,0),2),
+      'pay_sat', round(coalesce(nullif(v_ts.pay_sat::text,'')::numeric,0),2),
+      'pay_sun', round(coalesce(nullif(v_ts.pay_sun::text,'')::numeric,0),2),
+      'pay_bh', round(coalesce(nullif(v_ts.pay_bh::text,'')::numeric,0),2),
+      'mileage_units', round(coalesce(nullif(v_ts.mileage_units::text,'')::numeric,0),2),
+      'mileage_pay_rate', case when v_ts.mileage_pay_rate is null then null else round(coalesce(nullif(v_ts.mileage_pay_rate::text,'')::numeric,0),2) end,
+      'expenses', jsonb_build_object(
+        'expenses_pay_ex_vat', round(coalesce(v_ts.expenses_pay_ex_vat,0),2),
+        'travel_pay_ex_vat', round(coalesce(v_ts.travel_pay_ex_vat,0),2),
+        'accommodation_pay_ex_vat', round(coalesce(v_ts.accommodation_pay_ex_vat,0),2),
+        'other_pay_ex_vat', round(coalesce(v_ts.other_pay_ex_vat,0),2),
+        'mileage_pay_ex_vat', round(coalesce(v_ts.mileage_pay_ex_vat,0),2)
+      ),
+      'reconciled_external', true,
+      'reconciled_pay_batch_id', v_batch_id::text,
+      'reconciled_at_utc', v_now::text,
+      'external_payment_reference', v_payment_reference
+    );
+
+    v_signature := md5(v_snapshot::text);
+
+    -- Optional but strong: write pay_batch_timesheet_snapshots for full batch artefact auditability
+    insert into public.pay_batch_timesheet_snapshots(
+      pay_batch_id,
+      timesheet_id,
+      candidate_id,
+      pay_channel,
+      base_snapshot_json,
+      target_snapshot_json,
+      signature
+    )
+    values (
+      v_batch_id,
+      v_ts.timesheet_id,
+      v_ts.candidate_id,
+      case when v_ts.pay_method = 'PAYE' then 'PAYE' else 'UMBRELLA' end,
+      v_snapshot,
+      v_snapshot,
+      v_signature
+    );
+
+    insert into public.timesheet_pay_state(
+      timesheet_id,
+      last_settled_snapshot_json,
+      last_settled_signature,
+      last_settled_pay_batch_id,
+      last_settled_at_utc
+    )
+    values (
+      v_ts.timesheet_id,
+      v_snapshot,
+      v_signature,
+      v_batch_id,
+      v_now
+    )
+    on conflict (timesheet_id)
+    do update set
+      last_settled_snapshot_json = excluded.last_settled_snapshot_json,
+      last_settled_signature = excluded.last_settled_signature,
+      last_settled_pay_batch_id = excluded.last_settled_pay_batch_id,
+      last_settled_at_utc = excluded.last_settled_at_utc;
+
+    insert into public.timesheet_pay_state_history(
+      timesheet_id,
+      pay_batch_id,
+      settled_at_utc,
+      snapshot_json,
+      signature
+    )
+    values (
+      v_ts.timesheet_id,
+      v_batch_id,
+      v_now,
+      v_snapshot,
+      v_signature
+    );
+
+    insert into public.audit_events(
+      actor_user_id,
+      object_type,
+      object_id_text,
+      action,
+      before_json,
+      after_json,
+      reason
+    )
+    values (
+      p_actor_user_id,
+      'timesheet',
+      v_ts.timesheet_id::text,
+      'PAY_EXTERNAL_RECONCILE',
+      null,
+      jsonb_build_object(
+        'pay_batch_id', v_batch_id::text,
+        'pay_date', v_pay_date::text,
+        'timesheet_id', v_ts.timesheet_id::text,
+        'candidate_id', v_ts.candidate_id::text,
+        'pay_method', v_ts.pay_method,
+        'payment_reference', v_payment_reference
+      ),
+      v_note
+    );
+
+    v_timesheet_count := v_timesheet_count + 1;
+  end loop;
+
+  -- Batch-level audit
+  insert into public.audit_events(
+    actor_user_id,
+    object_type,
+    object_id_text,
+    action,
+    before_json,
+    after_json,
+    reason
+  )
+  values (
+    p_actor_user_id,
+    'pay_batch',
+    v_batch_id::text,
+    'PAY_EXTERNAL_RECONCILE_BATCH',
+    null,
+    jsonb_build_object(
+      'pay_batch_id', v_batch_id::text,
+      'pay_date', v_pay_date::text,
+      'payment_reference', v_payment_reference,
+      'timesheet_ids', (select jsonb_agg(t::text) from unnest(v_timesheet_ids) t),
+      'note', v_note
+    ),
+    v_note
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', v_batch_id::text,
+    'pay_date', v_pay_date::text,
+    'payment_reference', v_payment_reference,
+    'settled_timesheet_count', v_timesheet_count,
+    'candidate_count', v_candidate_count
   );
 end;
 $$;
