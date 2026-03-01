@@ -7570,6 +7570,122 @@ begin
 end;
 $$;
 
+CREATE OR REPLACE FUNCTION public._imp_debug_audit(
+  p_actor_user_id uuid,
+  p_action text,
+  p_after_json jsonb,
+  p_entity text,
+  p_subject_id text,
+  p_before_json jsonb DEFAULT NULL::jsonb,
+  p_ip text DEFAULT NULL::text,
+  p_user_agent text DEFAULT NULL::text,
+  p_correlation_id text DEFAULT NULL::text,
+  p_unused_1 text DEFAULT NULL::text,
+  p_unused_2 text DEFAULT NULL::text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_invoice_debug boolean := false;
+begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+      into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  when others then
+    v_invoice_debug := false;
+  end;
+
+  if not v_invoice_debug then
+    return;
+  end if;
+
+  -- Never allow audit failures to break the caller
+  begin
+    perform public._inv_write_audit(
+      p_actor_user_id,
+      p_action,
+      p_after_json,
+      p_entity,
+      p_subject_id,
+      p_before_json,
+      'INVOICE_DEBUG',
+      p_ip,
+      p_user_agent,
+      p_correlation_id
+    );
+  exception when others then
+    null;
+  end;
+end;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public._imp_debug_audit(
+  p_actor_user_id uuid,
+  p_action text,
+  p_after_json jsonb,
+  p_entity text,
+  p_subject_id text,
+  p_before_json jsonb DEFAULT NULL::jsonb,
+  p_ip text DEFAULT NULL::text,
+  p_user_agent text DEFAULT NULL::text,
+  p_correlation_id text DEFAULT NULL::text,
+  p_unused_1 text DEFAULT NULL::text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_invoice_debug boolean := false;
+begin
+  -- Load invoice_debug flag (safe even if column not yet present)
+  begin
+    select coalesce(sd.invoice_debug, false)
+      into v_invoice_debug
+    from public.settings_defaults sd
+    where sd.id = 1
+    limit 1;
+  exception when undefined_column then
+    v_invoice_debug := false;
+  when others then
+    v_invoice_debug := false;
+  end;
+
+  if not v_invoice_debug then
+    return;
+  end if;
+
+  -- Never allow audit failures to break the caller
+  begin
+    perform public._inv_write_audit(
+      p_actor_user_id,
+      p_action,
+      p_after_json,
+      p_entity,
+      p_subject_id,
+      p_before_json,
+      'INVOICE_DEBUG',
+      p_ip,
+      p_user_agent,
+      p_correlation_id
+    );
+  exception when others then
+    null;
+  end;
+end;
+$function$;
+
 
 
 create or replace function public.weekly_import_create_cancellation_corrections(
