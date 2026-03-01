@@ -417,621 +417,10 @@ begin
 end;
 $$;
 
-create or replace function public.pay_batch_get(p_pay_batch_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_batch record;
-  v_candidates jsonb := '[]'::jsonb;
-  v_transfers jsonb := '[]'::jsonb;
-  v_items jsonb := '[]'::jsonb;
 
-  -- ✅ NEW: derived batch kind + channels
-  v_batch_kind text := null;
-  v_pay_channels_present jsonb := '[]'::jsonb;
 
-  -- ✅ NEW: child modal support payloads
-  v_candidate_breakdown jsonb := '[]'::jsonb;
-  v_candidate_lines jsonb := '[]'::jsonb;
 
-  -- ✅ C: schedule recommendations / UI defaults
-  v_default_schedule_umbrella_local text := null;
-  v_default_schedule_paye_local text := null;
-  v_funds_warning_hours_json jsonb := null;
-  v_rail_default_funding_account_ref text := null;
 
-  -- ✅ D: authorisation summary (lightweight, for Banking UI)
-  v_ar record;
-  v_auth_approved_count int := 0;
-  v_auth_approved_by jsonb := '[]'::jsonb;
-  v_auth_invited_to jsonb := '[]'::jsonb;
-  v_auth jsonb := null;
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_batch_id is required';
-  end if;
-
-  select
-    pb.*
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id
-  limit 1;
-
-  if not found then
-    raise exception 'pay_batch not found';
-  end if;
-
-  -- ✅ NEW: derive batch kind + channels from items (excludes DEBT_CREATED)
-  select
-    case
-      when ch.channels is null then null
-      when array_position(ch.channels,'PAYE') is not null and array_position(ch.channels,'UMBRELLA') is not null then 'MIXED'
-      when array_position(ch.channels,'PAYE') is not null then 'PAYE'
-      when array_position(ch.channels,'UMBRELLA') is not null then 'UMBRELLA'
-      else null
-    end as batch_kind,
-    coalesce(to_jsonb(ch.channels), '[]'::jsonb) as channels_json
-  into
-    v_batch_kind,
-    v_pay_channels_present
-  from (
-    select
-      array_agg(distinct upper(coalesce(pbi.pay_channel,'')) order by upper(coalesce(pbi.pay_channel,'')))
-        filter (where upper(coalesce(pbi.pay_channel,'')) in ('PAYE','UMBRELLA')) as channels
-    from public.pay_batch_items pbi
-    join public.pay_batch_candidates pbc
-      on pbc.id = pbi.pay_batch_candidate_id
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbi.item_type <> 'DEBT_CREATED'
-  ) ch;
-
-  -- ✅ C: load schedule defaults for UI preselect (do not change batch state)
-  select
-    sd.default_schedule_umbrella_local,
-    sd.default_schedule_paye_local,
-    sd.funds_warning_hours_json,
-    sd.rail_default_funding_account_ref
-  into
-    v_default_schedule_umbrella_local,
-    v_default_schedule_paye_local,
-    v_funds_warning_hours_json,
-    v_rail_default_funding_account_ref
-  from public.settings_defaults sd
-  where sd.id = 1
-  limit 1;
-
-  -- ✅ D: authorisation summary (latest active request if present)
-  v_auth := jsonb_build_object(
-    'auth_request_id', null,
-    'auth_state', null,
-    'required_quantity', null,
-    'approved_count', 0,
-    'approved_by', '[]'::jsonb,
-    'invited_to', '[]'::jsonb,
-    'golden_key_used', false,
-    'golden_key_user_id', null
-  );
-
-  select
-    pbar0.id as auth_request_id,
-    pbar0.state as auth_state,
-    pbar0.required_quantity as required_quantity,
-    pbar0.golden_key_used as golden_key_used,
-    pbar0.golden_key_user_id as golden_key_user_id
-  into v_ar
-  from public.pay_batch_auth_requests pbar0
-  where pbar0.pay_batch_id = p_pay_batch_id
-    and pbar0.state in ('AWAITING','AUTHORISED')
-  order by pbar0.created_at_utc desc, pbar0.id desc
-  limit 1;
-
-  if v_ar.auth_request_id is not null then
-    select count(*)::int
-    into v_auth_approved_count
-    from public.pay_batch_auth_actions pbaa0
-    where pbaa0.auth_request_id = v_ar.auth_request_id
-      and pbaa0.action in ('AUTHORISE','USE_GOLDEN_KEY');
-
-    select coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'actor_user_id', pbaa1.actor_user_id::text,
-          'actor_display_name', tu1.display_name,
-          'action', pbaa1.action,
-          'action_at_utc', pbaa1.action_at_utc,
-          'note', pbaa1.note
-        )
-        order by pbaa1.action_at_utc asc nulls last, pbaa1.id asc
-      ),
-      '[]'::jsonb
-    )
-    into v_auth_approved_by
-    from public.pay_batch_auth_actions pbaa1
-    left join public.tms_users tu1
-      on tu1.id = pbaa1.actor_user_id
-    where pbaa1.auth_request_id = v_ar.auth_request_id;
-
-    select coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'target_user_id', pbat0.target_user_id::text,
-          'target_display_name', tu2.display_name,
-          'invited_at_utc', pbat0.created_at_utc,
-          'expires_at_utc', pbat0.expires_at_utc,
-          'used_at_utc', pbat0.used_at_utc
-        )
-        order by pbat0.created_at_utc asc nulls last, pbat0.token asc
-      ),
-      '[]'::jsonb
-    )
-    into v_auth_invited_to
-    from public.pay_batch_auth_tokens pbat0
-    left join public.tms_users tu2
-      on tu2.id = pbat0.target_user_id
-    where pbat0.auth_request_id = v_ar.auth_request_id;
-
-    v_auth := jsonb_build_object(
-      'auth_request_id', v_ar.auth_request_id::text,
-      'auth_state', v_ar.auth_state,
-      'required_quantity', v_ar.required_quantity,
-      'approved_count', v_auth_approved_count,
-      'approved_by', v_auth_approved_by,
-      'invited_to', v_auth_invited_to,
-      'golden_key_used', coalesce(v_ar.golden_key_used,false),
-      'golden_key_user_id', case when v_ar.golden_key_user_id is null then null else v_ar.golden_key_user_id::text end
-    );
-  end if;
-
-  -- Candidates + PAYE net input summary (latest per candidate)
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'id', pbc.id::text,
-        'candidate_id', pbc.candidate_id::text,
-        'candidate_tms_ref', pbc.candidate_tms_ref,
-        'candidate_display_name', pbc.candidate_display_name,
-        'paye_state', pbc.paye_state,
-        'mismatch_settlement_choice', pbc.mismatch_settlement_choice,
-        'gross_preview', pbc.gross_preview,
-        'net_bank_amount', pbc.net_bank_amount,
-        'debt_created', pbc.debt_created,
-        'loan_repayment_taken', pbc.loan_repayment_taken,
-        'settlement_status', pbc.settlement_status,
-        'settled_at_utc', pbc.settled_at_utc,
-        'settled_via', pbc.settled_via,
-        'settled_note', pbc.settled_note,
-
-        -- Latest PAYE net input summary
-        'paye_net_amount', ni.net_amount,
-        'paye_net_source', ni.source,
-        'paye_net_imported_at_utc', ni.imported_at_utc,
-        'paye_net_file_name', ni.file_name
-      )
-      order by pbc.candidate_display_name nulls last, pbc.candidate_tms_ref nulls last, pbc.candidate_id
-    ),
-    '[]'::jsonb
-  )
-  into v_candidates
-  from public.pay_batch_candidates pbc
-  left join lateral (
-    select
-      pni.net_amount,
-      pni.source,
-      pni.imported_at_utc,
-      pni.file_name
-    from public.pay_batch_paye_net_inputs pni
-    where pni.pay_batch_candidate_id = pbc.id
-    order by pni.imported_at_utc desc
-    limit 1
-  ) ni on true
-  where pbc.pay_batch_id = p_pay_batch_id;
-
-  -- Transfers + snapshot fields + rail-generic fields
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'id', pbt.id::text,
-        'candidate_id', case when pbt.candidate_id is null then null else pbt.candidate_id::text end,
-        'umbrella_id', case when pbt.umbrella_id is null then null else pbt.umbrella_id::text end,
-        'pay_channel', pbt.pay_channel,
-        'amount', pbt.amount,
-        'currency', pbt.currency,
-        'status', pbt.status,
-
-        -- Rail-generic equivalents
-        'rail_provider', pbt.rail_provider,
-        'rail_env', pbt.rail_env,
-        'request_id', pbt.request_id,
-        'rail_tx_id', pbt.rail_tx_id,
-        'rail_state', pbt.rail_state,
-        'rail_meta_json', pbt.rail_meta_json,
-
-        -- Snapshot bank fields
-        'payment_reference', pbt.payment_reference,
-        'payee_name', pbt.payee_name,
-        'sort_code', pbt.sort_code,
-        'account_number', pbt.account_number,
-        'account_type', pbt.account_type,
-        'bank_details_hash_snapshot', pbt.bank_details_hash_snapshot,
-
-        -- Drilldown/grouping fields
-        'transfer_group_key', pbt.transfer_group_key,
-        'grouping_mode_used', pbt.grouping_mode_used,
-        'week_ending_bucket', case when pbt.week_ending_bucket is null then null else pbt.week_ending_bucket::text end,
-
-        'created_at_utc', pbt.created_at_utc,
-        'completed_at_utc', pbt.completed_at_utc,
-        'failed_reason', pbt.failed_reason
-      )
-      order by pbt.pay_channel, pbt.amount desc, pbt.id
-    ),
-    '[]'::jsonb
-  )
-  into v_transfers
-  from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id;
-
-  -- Items unchanged (still returned for audit/debug and UI fallback)
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'id', pbi.id::text,
-        'pay_batch_candidate_id', pbi.pay_batch_candidate_id::text,
-        'item_type', pbi.item_type,
-        'timesheet_id', case when pbi.timesheet_id is null then null else pbi.timesheet_id::text end,
-        'segment_key', pbi.segment_key,
-        'source_ref', pbi.source_ref,
-        'description', pbi.description,
-        'amount_ex_vat', pbi.amount_ex_vat,
-        'amount_vat', pbi.amount_vat,
-        'amount_inc_vat', pbi.amount_inc_vat,
-        'pay_channel', pbi.pay_channel,
-        'umbrella_id', case when pbi.umbrella_id is null then null else pbi.umbrella_id::text end,
-        'pay_bank_transfer_id', case when pbi.pay_bank_transfer_id is null then null else pbi.pay_bank_transfer_id::text end,
-        'repayment_week_start', case when pbi.repayment_week_start is null then null else pbi.repayment_week_start::text end
-      )
-      order by pbi.pay_batch_candidate_id, pbi.id
-    ),
-    '[]'::jsonb
-  )
-  into v_items
-  from public.pay_batch_items pbi
-  join public.pay_batch_candidates pbc2
-    on pbc2.id = pbi.pay_batch_candidate_id
-  where pbc2.pay_batch_id = p_pay_batch_id;
-
-  -- ✅ NEW: candidate_breakdown for child modal (aggregates + status rollup)
-  with cand as (
-    select
-      pbc.id as pay_batch_candidate_id,
-      pbc.candidate_id,
-      pbc.candidate_tms_ref,
-      pbc.candidate_display_name,
-      pbc.paye_state
-    from public.pay_batch_candidates pbc
-    where pbc.pay_batch_id = p_pay_batch_id
-  ),
-  ni as (
-    select
-      pbc.id as pay_batch_candidate_id,
-      pni.net_amount,
-      pni.source,
-      pni.imported_at_utc,
-      pni.file_name
-    from public.pay_batch_candidates pbc
-    left join lateral (
-      select
-        pni0.net_amount,
-        pni0.source,
-        pni0.imported_at_utc,
-        pni0.file_name
-      from public.pay_batch_paye_net_inputs pni0
-      where pni0.pay_batch_candidate_id = pbc.id
-      order by pni0.imported_at_utc desc
-      limit 1
-    ) pni on true
-    where pbc.pay_batch_id = p_pay_batch_id
-  ),
-  sums as (
-    select
-      pbc.id as pay_batch_candidate_id,
-      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,'')) = 'PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as paye_total_ex_vat,
-      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as umbrella_total_inc_vat
-    from public.pay_batch_candidates pbc
-    left join public.pay_batch_items pbi
-      on pbi.pay_batch_candidate_id = pbc.id
-    where pbc.pay_batch_id = p_pay_batch_id
-    group by pbc.id
-  ),
-  tr as (
-    select
-      pbc.id as pay_batch_candidate_id,
-      count(distinct pbi.pay_bank_transfer_id) filter (
-        where pbi.item_type <> 'DEBT_CREATED'
-          and pbi.pay_bank_transfer_id is not null
-      )::int as total_transfers,
-      count(distinct pbi.pay_bank_transfer_id) filter (
-        where pbi.item_type <> 'DEBT_CREATED'
-          and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'BLOCKED'
-      )::int as blocked_transfers,
-      count(distinct pbi.pay_bank_transfer_id) filter (
-        where pbi.item_type <> 'DEBT_CREATED'
-          and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'FAILED'
-      )::int as failed_transfers,
-      count(distinct pbi.pay_bank_transfer_id) filter (
-        where pbi.item_type <> 'DEBT_CREATED'
-          and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'COMPLETED'
-      )::int as completed_transfers,
-      count(distinct pbi.pay_bank_transfer_id) filter (
-        where pbi.item_type <> 'DEBT_CREATED'
-          and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'PENDING'
-      )::int as pending_transfers
-    from public.pay_batch_candidates pbc
-    left join public.pay_batch_items pbi
-      on pbi.pay_batch_candidate_id = pbc.id
-    left join public.pay_bank_transfers pbt
-      on pbt.id = pbi.pay_bank_transfer_id
-     and pbt.pay_batch_id = p_pay_batch_id
-    where pbc.pay_batch_id = p_pay_batch_id
-    group by pbc.id
-  )
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'pay_batch_candidate_id', c.pay_batch_candidate_id::text,
-        'candidate_id', c.candidate_id::text,
-        'candidate_tms_ref', c.candidate_tms_ref,
-        'candidate_display_name', c.candidate_display_name,
-        'batch_kind', v_batch_kind,
-        'paye_state', c.paye_state,
-        'paye_net_amount', n.net_amount,
-        'paye_net_source', n.source,
-        'paye_net_imported_at_utc', n.imported_at_utc,
-        'paye_net_file_name', n.file_name,
-        'awaiting_net_amount',
-          (case
-            when v_batch_kind = 'PAYE' then (n.net_amount is null)
-            else false
-          end),
-        'paye_total_ex_vat', s.paye_total_ex_vat,
-        'umbrella_total_inc_vat', s.umbrella_total_inc_vat,
-        'payment_amount',
-          (case
-            when v_batch_kind = 'PAYE' then s.paye_total_ex_vat
-            when v_batch_kind = 'UMBRELLA' then s.umbrella_total_inc_vat
-            else round(coalesce(s.paye_total_ex_vat,0) + coalesce(s.umbrella_total_inc_vat,0),2)
-          end),
-        'transfer_rollup', jsonb_build_object(
-          'total', tr0.total_transfers,
-          'pending', tr0.pending_transfers,
-          'blocked', tr0.blocked_transfers,
-          'failed', tr0.failed_transfers,
-          'completed', tr0.completed_transfers
-        ),
-        'payment_status',
-          (case
-            when coalesce(tr0.total_transfers,0) = 0 then 'DRAFT'
-            when coalesce(tr0.blocked_transfers,0) > 0 then 'BLOCKED'
-            when coalesce(tr0.failed_transfers,0) > 0 then 'FAILED'
-            when coalesce(tr0.completed_transfers,0) = coalesce(tr0.total_transfers,0) then 'PAID'
-            else 'PENDING'
-          end)
-      )
-      order by c.candidate_display_name nulls last, c.candidate_tms_ref nulls last, c.candidate_id
-    ),
-    '[]'::jsonb
-  )
-  into v_candidate_breakdown
-  from cand c
-  left join ni n
-    on n.pay_batch_candidate_id = c.pay_batch_candidate_id
-  left join sums s
-    on s.pay_batch_candidate_id = c.pay_batch_candidate_id
-  left join tr tr0
-    on tr0.pay_batch_candidate_id = c.pay_batch_candidate_id;
-
-  -- ✅ NEW: candidate_lines for expandable table (timesheet lines + non-timesheet items)
-  with pbci as (
-    select
-      pbc.id as pay_batch_candidate_id,
-      pbc.candidate_id,
-      pbc.candidate_display_name,
-      pbc.candidate_tms_ref
-    from public.pay_batch_candidates pbc
-    where pbc.pay_batch_id = p_pay_batch_id
-  ),
-  ts_group as (
-    select
-      pbc.id as pay_batch_candidate_id,
-      pbc.candidate_id,
-      pbi.timesheet_id,
-      upper(coalesce(pbi.pay_channel,'')) as pay_channel,
-      round(coalesce(sum(coalesce(pbi.amount_ex_vat,0)) filter (where upper(coalesce(pbi.pay_channel,''))='PAYE' and pbi.item_type <> 'DEBT_CREATED'),0),2) as subtotal_paye_ex_vat,
-      round(coalesce(sum(coalesce(pbi.amount_inc_vat,0)) filter (where upper(coalesce(pbi.pay_channel,''))='UMBRELLA' and pbi.item_type <> 'DEBT_CREATED'),0),2) as subtotal_umbrella_inc_vat
-    from public.pay_batch_candidates pbc
-    join public.pay_batch_items pbi
-      on pbi.pay_batch_candidate_id = pbc.id
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbi.timesheet_id is not null
-    group by pbc.id, pbc.candidate_id, pbi.timesheet_id, upper(coalesce(pbi.pay_channel,''))
-  ),
-  ts_lines as (
-    select
-      g.pay_batch_candidate_id,
-      g.candidate_id,
-      'TIMESHEET'::text as line_kind,
-      g.timesheet_id,
-      vts.week_ending_date,
-      vts.client_id,
-      vts.client_name,
-      nullif(btrim(coalesce(vts.hospital_norm,'')), '') as hospital_norm,
-      round(coalesce(vts.total_hours,0),2) as units,
-      round(coalesce(g.subtotal_paye_ex_vat,0),2) as subtotal_ex_vat,
-      round(coalesce(g.subtotal_umbrella_inc_vat,0),2) as subtotal_inc_vat,
-      case
-        when v_batch_kind = 'PAYE' then round(coalesce(g.subtotal_paye_ex_vat,0),2)
-        when v_batch_kind = 'UMBRELLA' then round(coalesce(g.subtotal_umbrella_inc_vat,0),2)
-        else round(coalesce(g.subtotal_paye_ex_vat,0) + coalesce(g.subtotal_umbrella_inc_vat,0),2)
-      end as payment_amount,
-      case
-        when round(coalesce(vts.total_hours,0),2) > 0 then
-          round(
-            (
-              case
-                when v_batch_kind = 'PAYE' then coalesce(g.subtotal_paye_ex_vat,0)
-                when v_batch_kind = 'UMBRELLA' then coalesce(g.subtotal_umbrella_inc_vat,0)
-                else coalesce(g.subtotal_paye_ex_vat,0) + coalesce(g.subtotal_umbrella_inc_vat,0)
-              end
-            ) / round(coalesce(vts.total_hours,0),2),
-            2
-          )
-        else null
-      end as rate,
-      nullif(btrim(coalesce(vts.hospital_norm,'')), '') as unit_name
-    from ts_group g
-    left join public.v_timesheets_summary_base vts
-      on vts.timesheet_id = g.timesheet_id
-  ),
-  non_ts_group as (
-    select
-      pbc.id as pay_batch_candidate_id,
-      pbc.candidate_id,
-      upper(coalesce(pbi.pay_channel,'')) as pay_channel,
-      pbi.item_type as item_type,
-      pbi.source_ref as source_ref,
-      pbi.repayment_week_start as repayment_week_start,
-      max(pbi.description) as description,
-      round(coalesce(sum(coalesce(pbi.amount_ex_vat,0)) filter (where upper(coalesce(pbi.pay_channel,''))='PAYE'),0),2) as subtotal_paye_ex_vat,
-      round(coalesce(sum(coalesce(pbi.amount_inc_vat,0)) filter (where upper(coalesce(pbi.pay_channel,''))='UMBRELLA'),0),2) as subtotal_umbrella_inc_vat
-    from public.pay_batch_candidates pbc
-    join public.pay_batch_items pbi
-      on pbi.pay_batch_candidate_id = pbc.id
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbi.timesheet_id is null
-    group by pbc.id, pbc.candidate_id, upper(coalesce(pbi.pay_channel,'')), pbi.item_type, pbi.source_ref, pbi.repayment_week_start
-  ),
-  non_ts_lines as (
-    select
-      g.pay_batch_candidate_id,
-      g.candidate_id,
-      g.item_type as line_kind,
-      null::uuid as timesheet_id,
-      case
-        when g.repayment_week_start is not null then (g.repayment_week_start + 6)
-        else null::date
-      end as week_ending_date,
-      null::uuid as client_id,
-      null::text as client_name,
-      null::text as hospital_norm,
-      null::numeric as units,
-      round(coalesce(g.subtotal_paye_ex_vat,0),2) as subtotal_ex_vat,
-      round(coalesce(g.subtotal_umbrella_inc_vat,0),2) as subtotal_inc_vat,
-      case
-        when v_batch_kind = 'PAYE' then round(coalesce(g.subtotal_paye_ex_vat,0),2)
-        when v_batch_kind = 'UMBRELLA' then round(coalesce(g.subtotal_umbrella_inc_vat,0),2)
-        else round(coalesce(g.subtotal_paye_ex_vat,0) + coalesce(g.subtotal_umbrella_inc_vat,0),2)
-      end as payment_amount,
-      null::numeric as rate,
-      coalesce(nullif(btrim(coalesce(g.description,'')), ''), g.item_type) as unit_name
-    from non_ts_group g
-  ),
-  all_lines as (
-    select * from ts_lines
-    union all
-    select * from non_ts_lines
-  )
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'pay_batch_candidate_id', p.pay_batch_candidate_id::text,
-        'candidate_id', p.candidate_id::text,
-        'line_kind', a.line_kind,
-        'timesheet_id', case when a.timesheet_id is null then null else a.timesheet_id::text end,
-        'week_ending_date', case when a.week_ending_date is null then null else a.week_ending_date::text end,
-        'client_id', case when a.client_id is null then null else a.client_id::text end,
-        'client_name', a.client_name,
-        'unit_name', a.unit_name,
-        'units', a.units,
-        'rate', a.rate,
-        'subtotal_ex_vat', a.subtotal_ex_vat,
-        'subtotal_inc_vat', a.subtotal_inc_vat,
-        'payment_amount', a.payment_amount
-      )
-      order by p.candidate_display_name nulls last, a.week_ending_date desc nulls last, a.line_kind, a.timesheet_id::text nulls last
-    ),
-    '[]'::jsonb
-  )
-  into v_candidate_lines
-  from pbci p
-  join all_lines a
-    on a.pay_batch_candidate_id = p.pay_batch_candidate_id;
-
-  return jsonb_build_object(
-    'ok', true,
-
-    -- ✅ NEW: batch kind + channels for UI
-    'batch_kind', v_batch_kind,
-    'pay_channels_present', v_pay_channels_present,
-
-    -- ✅ NEW: child modal datasets
-    'candidate_breakdown', v_candidate_breakdown,
-    'candidate_lines', v_candidate_lines,
-
-    -- schedule recommendations for UI preselect (includes default funding account)
-    'schedule_recommendations', jsonb_build_object(
-      'default_schedule_umbrella_local', v_default_schedule_umbrella_local,
-      'default_schedule_paye_local', v_default_schedule_paye_local,
-      'funds_warning_hours_json', v_funds_warning_hours_json,
-      'rail_default_funding_account_ref', v_rail_default_funding_account_ref
-    ),
-
-    -- authorisation summary for Banking UI
-    'auth', v_auth,
-
-    'batch', jsonb_build_object(
-      'id', v_batch.id::text,
-      'pay_date', v_batch.pay_date::text,
-      'created_at_utc', v_batch.created_at_utc,
-      'created_by_user_id', case when v_batch.created_by_user_id is null then null else v_batch.created_by_user_id::text end,
-      'status', v_batch.status,
-      'banking_system_snapshot', v_batch.banking_system_snapshot,
-      'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
-
-      -- Neutral (rail-generic) manual confirm aliases (keep legacy keys too)
-      'manual_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
-      'manual_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
-
-      'monzo_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
-      'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
-
-      'last_status_checked_at_utc', v_batch.last_status_checked_at_utc,
-
-      -- Rail-generic scheduling/execution fields
-      'rail_provider_snapshot', v_batch.rail_provider_snapshot,
-      'rail_env_snapshot', v_batch.rail_env_snapshot,
-      'schedule_kind', v_batch.schedule_kind,
-      'scheduled_at_utc', v_batch.scheduled_at_utc,
-      'executing_started_at_utc', v_batch.executing_started_at_utc,
-
-      -- Bulk payment reference fields
-      'bulk_ref_num', v_batch.bulk_ref_num,
-      'bulk_ref_date', case when v_batch.bulk_ref_date is null then null else v_batch.bulk_ref_date::text end,
-      'bulk_reference', v_batch.bulk_reference
-    ),
-    'candidates', v_candidates,
-    'transfers', v_transfers,
-    'items', v_items
-  );
-end;
-$$;
 
 
 -- =========================================================
@@ -5848,7 +5237,789 @@ begin;
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
 
+create or replace function public.pay_batch_get(p_pay_batch_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_batch record;
+  v_candidates jsonb := '[]'::jsonb;
+  v_transfers jsonb := '[]'::jsonb;
+  v_items jsonb := '[]'::jsonb;
 
+  -- ✅ NEW: derived batch kind + channels
+  v_batch_kind text := null;
+  v_pay_channels_present jsonb := '[]'::jsonb;
+
+  -- ✅ NEW: child modal support payloads
+  v_candidate_breakdown jsonb := '[]'::jsonb;
+  v_candidate_lines jsonb := '[]'::jsonb;
+
+  -- ✅ C: schedule recommendations / UI defaults
+  v_default_schedule_umbrella_local text := null;
+  v_default_schedule_paye_local text := null;
+  v_funds_warning_hours_json jsonb := null;
+  v_rail_default_funding_account_ref text := null;
+
+  -- ✅ D: authorisation summary (lightweight, for Banking UI)
+  v_ar record;
+  v_auth_approved_count int := 0;
+  v_auth_approved_by jsonb := '[]'::jsonb;
+  v_auth_invited_to jsonb := '[]'::jsonb;
+  v_auth jsonb := null;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_batch_id is required';
+  end if;
+
+  select
+    pb.*
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  limit 1;
+
+  if not found then
+    raise exception 'pay_batch not found';
+  end if;
+
+  -- ✅ NEW: derive batch kind + channels from items (excludes DEBT_CREATED)
+  select
+    case
+      when ch.channels is null then null
+      when array_position(ch.channels,'PAYE') is not null and array_position(ch.channels,'UMBRELLA') is not null then 'MIXED'
+      when array_position(ch.channels,'PAYE') is not null then 'PAYE'
+      when array_position(ch.channels,'UMBRELLA') is not null then 'UMBRELLA'
+      else null
+    end as batch_kind,
+    coalesce(to_jsonb(ch.channels), '[]'::jsonb) as channels_json
+  into
+    v_batch_kind,
+    v_pay_channels_present
+  from (
+    select
+      array_agg(distinct upper(coalesce(pbi.pay_channel,'')) order by upper(coalesce(pbi.pay_channel,'')))
+        filter (where upper(coalesce(pbi.pay_channel,'')) in ('PAYE','UMBRELLA')) as channels
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.item_type <> 'DEBT_CREATED'
+  ) ch;
+
+  -- ✅ C: load schedule defaults for UI preselect (do not change batch state)
+  select
+    sd.default_schedule_umbrella_local,
+    sd.default_schedule_paye_local,
+    sd.funds_warning_hours_json,
+    sd.rail_default_funding_account_ref
+  into
+    v_default_schedule_umbrella_local,
+    v_default_schedule_paye_local,
+    v_funds_warning_hours_json,
+    v_rail_default_funding_account_ref
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  -- ✅ D: authorisation summary (latest active request if present)
+  v_auth := jsonb_build_object(
+    'auth_request_id', null,
+    'auth_state', null,
+    'required_quantity', null,
+    'approved_count', 0,
+    'approved_by', '[]'::jsonb,
+    'invited_to', '[]'::jsonb,
+    'golden_key_used', false,
+    'golden_key_user_id', null
+  );
+
+  select
+    pbar0.id as auth_request_id,
+    pbar0.state as auth_state,
+    pbar0.required_quantity as required_quantity,
+    pbar0.golden_key_used as golden_key_used,
+    pbar0.golden_key_user_id as golden_key_user_id
+  into v_ar
+  from public.pay_batch_auth_requests pbar0
+  where pbar0.pay_batch_id = p_pay_batch_id
+    and pbar0.state in ('AWAITING','AUTHORISED')
+  order by pbar0.created_at_utc desc, pbar0.id desc
+  limit 1;
+
+  if v_ar.auth_request_id is not null then
+    select count(*)::int
+    into v_auth_approved_count
+    from public.pay_batch_auth_actions pbaa0
+    where pbaa0.auth_request_id = v_ar.auth_request_id
+      and pbaa0.action in ('AUTHORISE','USE_GOLDEN_KEY');
+
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'actor_user_id', pbaa1.actor_user_id::text,
+          'actor_display_name', tu1.display_name,
+          'action', pbaa1.action,
+          'action_at_utc', pbaa1.action_at_utc,
+          'note', pbaa1.note
+        )
+        order by pbaa1.action_at_utc asc nulls last, pbaa1.id asc
+      ),
+      '[]'::jsonb
+    )
+    into v_auth_approved_by
+    from public.pay_batch_auth_actions pbaa1
+    left join public.tms_users tu1
+      on tu1.id = pbaa1.actor_user_id
+    where pbaa1.auth_request_id = v_ar.auth_request_id;
+
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'target_user_id', pbat0.target_user_id::text,
+          'target_display_name', tu2.display_name,
+          'invited_at_utc', pbat0.created_at_utc,
+          'expires_at_utc', pbat0.expires_at_utc,
+          'used_at_utc', pbat0.used_at_utc
+        )
+        order by pbat0.created_at_utc asc nulls last, pbat0.token asc
+      ),
+      '[]'::jsonb
+    )
+    into v_auth_invited_to
+    from public.pay_batch_auth_tokens pbat0
+    left join public.tms_users tu2
+      on tu2.id = pbat0.target_user_id
+    where pbat0.auth_request_id = v_ar.auth_request_id;
+
+    v_auth := jsonb_build_object(
+      'auth_request_id', v_ar.auth_request_id::text,
+      'auth_state', v_ar.auth_state,
+      'required_quantity', v_ar.required_quantity,
+      'approved_count', v_auth_approved_count,
+      'approved_by', v_auth_approved_by,
+      'invited_to', v_auth_invited_to,
+      'golden_key_used', coalesce(v_ar.golden_key_used,false),
+      'golden_key_user_id', case when v_ar.golden_key_user_id is null then null else v_ar.golden_key_user_id::text end
+    );
+  end if;
+
+  -- Candidates + PAYE net input summary (latest per candidate)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbc.id::text,
+        'candidate_id', pbc.candidate_id::text,
+        'candidate_tms_ref', pbc.candidate_tms_ref,
+        'candidate_display_name', pbc.candidate_display_name,
+        'paye_state', pbc.paye_state,
+        'mismatch_settlement_choice', pbc.mismatch_settlement_choice,
+        'gross_preview', pbc.gross_preview,
+        'net_bank_amount', pbc.net_bank_amount,
+        'debt_created', pbc.debt_created,
+        'loan_repayment_taken', pbc.loan_repayment_taken,
+        'settlement_status', pbc.settlement_status,
+        'settled_at_utc', pbc.settled_at_utc,
+        'settled_via', pbc.settled_via,
+        'settled_note', pbc.settled_note,
+
+        -- Latest PAYE net input summary
+        'paye_net_amount', ni.net_amount,
+        'paye_net_source', ni.source,
+        'paye_net_imported_at_utc', ni.imported_at_utc,
+        'paye_net_file_name', ni.file_name
+      )
+      order by pbc.candidate_display_name nulls last, pbc.candidate_tms_ref nulls last, pbc.candidate_id
+    ),
+    '[]'::jsonb
+  )
+  into v_candidates
+  from public.pay_batch_candidates pbc
+  left join lateral (
+    select
+      pni.net_amount,
+      pni.source,
+      pni.imported_at_utc,
+      pni.file_name
+    from public.pay_batch_paye_net_inputs pni
+    where pni.pay_batch_candidate_id = pbc.id
+    order by pni.imported_at_utc desc
+    limit 1
+  ) ni on true
+  where pbc.pay_batch_id = p_pay_batch_id;
+
+  -- Transfers + snapshot fields + rail-generic fields
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbt.id::text,
+        'candidate_id', case when pbt.candidate_id is null then null else pbt.candidate_id::text end,
+        'umbrella_id', case when pbt.umbrella_id is null then null else pbt.umbrella_id::text end,
+        'pay_channel', pbt.pay_channel,
+        'amount', pbt.amount,
+        'currency', pbt.currency,
+        'status', pbt.status,
+
+        -- Rail-generic equivalents
+        'rail_provider', pbt.rail_provider,
+        'rail_env', pbt.rail_env,
+        'request_id', pbt.request_id,
+        'rail_tx_id', pbt.rail_tx_id,
+        'rail_state', pbt.rail_state,
+        'rail_meta_json', pbt.rail_meta_json,
+
+        -- Snapshot bank fields
+        'payment_reference', pbt.payment_reference,
+        'payee_name', pbt.payee_name,
+        'sort_code', pbt.sort_code,
+        'account_number', pbt.account_number,
+        'account_type', pbt.account_type,
+        'bank_details_hash_snapshot', pbt.bank_details_hash_snapshot,
+
+        -- Drilldown/grouping fields
+        'transfer_group_key', pbt.transfer_group_key,
+        'grouping_mode_used', pbt.grouping_mode_used,
+        'week_ending_bucket', case when pbt.week_ending_bucket is null then null else pbt.week_ending_bucket::text end,
+
+        'created_at_utc', pbt.created_at_utc,
+        'completed_at_utc', pbt.completed_at_utc,
+        'failed_reason', pbt.failed_reason
+      )
+      order by pbt.pay_channel, pbt.amount desc, pbt.id
+    ),
+    '[]'::jsonb
+  )
+  into v_transfers
+  from public.pay_bank_transfers pbt
+  where pbt.pay_batch_id = p_pay_batch_id;
+
+  -- Items unchanged (still returned for audit/debug and UI fallback)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pbi.id::text,
+        'pay_batch_candidate_id', pbi.pay_batch_candidate_id::text,
+        'item_type', pbi.item_type,
+        'timesheet_id', case when pbi.timesheet_id is null then null else pbi.timesheet_id::text end,
+        'segment_key', pbi.segment_key,
+        'source_ref', pbi.source_ref,
+        'description', pbi.description,
+        'amount_ex_vat', pbi.amount_ex_vat,
+        'amount_vat', pbi.amount_vat,
+        'amount_inc_vat', pbi.amount_inc_vat,
+        'pay_channel', pbi.pay_channel,
+        'umbrella_id', case when pbi.umbrella_id is null then null else pbi.umbrella_id::text end,
+        'pay_bank_transfer_id', case when pbi.pay_bank_transfer_id is null then null else pbi.pay_bank_transfer_id::text end,
+        'repayment_week_start', case when pbi.repayment_week_start is null then null else pbi.repayment_week_start::text end
+      )
+      order by pbi.pay_batch_candidate_id, pbi.id
+    ),
+    '[]'::jsonb
+  )
+  into v_items
+  from public.pay_batch_items pbi
+  join public.pay_batch_candidates pbc2
+    on pbc2.id = pbi.pay_batch_candidate_id
+  where pbc2.pay_batch_id = p_pay_batch_id;
+
+  -- ✅ NEW: candidate_breakdown for child modal (aggregates + status rollup)
+  with cand as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id,
+      pbc.candidate_tms_ref,
+      pbc.candidate_display_name,
+      pbc.paye_state
+    from public.pay_batch_candidates pbc
+    where pbc.pay_batch_id = p_pay_batch_id
+  ),
+  ni as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      pni.net_amount,
+      pni.source,
+      pni.imported_at_utc,
+      pni.file_name
+    from public.pay_batch_candidates pbc
+    left join lateral (
+      select
+        pni0.net_amount,
+        pni0.source,
+        pni0.imported_at_utc,
+        pni0.file_name
+      from public.pay_batch_paye_net_inputs pni0
+      where pni0.pay_batch_candidate_id = pbc.id
+      order by pni0.imported_at_utc desc
+      limit 1
+    ) pni on true
+    where pbc.pay_batch_id = p_pay_batch_id
+  ),
+  sums as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,'')) = 'PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as paye_total_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as umbrella_total_inc_vat
+    from public.pay_batch_candidates pbc
+    left join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    where pbc.pay_batch_id = p_pay_batch_id
+    group by pbc.id
+  ),
+  tr as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      count(distinct pbi.pay_bank_transfer_id) filter (
+        where pbi.item_type <> 'DEBT_CREATED'
+          and pbi.pay_bank_transfer_id is not null
+      )::int as total_transfers,
+      count(distinct pbi.pay_bank_transfer_id) filter (
+        where pbi.item_type <> 'DEBT_CREATED'
+          and pbi.pay_bank_transfer_id is not null
+          and upper(coalesce(pbt.status,'')) = 'BLOCKED'
+      )::int as blocked_transfers,
+      count(distinct pbi.pay_bank_transfer_id) filter (
+        where pbi.item_type <> 'DEBT_CREATED'
+          and pbi.pay_bank_transfer_id is not null
+          and upper(coalesce(pbt.status,'')) = 'FAILED'
+      )::int as failed_transfers,
+      count(distinct pbi.pay_bank_transfer_id) filter (
+        where pbi.item_type <> 'DEBT_CREATED'
+          and pbi.pay_bank_transfer_id is not null
+          and upper(coalesce(pbt.status,'')) = 'COMPLETED'
+      )::int as completed_transfers,
+      count(distinct pbi.pay_bank_transfer_id) filter (
+        where pbi.item_type <> 'DEBT_CREATED'
+          and pbi.pay_bank_transfer_id is not null
+          and upper(coalesce(pbt.status,'')) = 'PENDING'
+      )::int as pending_transfers
+    from public.pay_batch_candidates pbc
+    left join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    left join public.pay_bank_transfers pbt
+      on pbt.id = pbi.pay_bank_transfer_id
+     and pbt.pay_batch_id = p_pay_batch_id
+    where pbc.pay_batch_id = p_pay_batch_id
+    group by pbc.id
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'pay_batch_candidate_id', c.pay_batch_candidate_id::text,
+        'candidate_id', c.candidate_id::text,
+        'candidate_tms_ref', c.candidate_tms_ref,
+        'candidate_display_name', c.candidate_display_name,
+        'batch_kind', v_batch_kind,
+        'paye_state', c.paye_state,
+        'paye_net_amount', n.net_amount,
+        'paye_net_source', n.source,
+        'paye_net_imported_at_utc', n.imported_at_utc,
+        'paye_net_file_name', n.file_name,
+        'awaiting_net_amount',
+          (case
+            when v_batch_kind = 'PAYE' then (n.net_amount is null)
+            else false
+          end),
+        'paye_total_ex_vat', s.paye_total_ex_vat,
+        'umbrella_total_inc_vat', s.umbrella_total_inc_vat,
+        'payment_amount',
+          (case
+            when v_batch_kind = 'PAYE' then s.paye_total_ex_vat
+            when v_batch_kind = 'UMBRELLA' then s.umbrella_total_inc_vat
+            else round(coalesce(s.paye_total_ex_vat,0) + coalesce(s.umbrella_total_inc_vat,0),2)
+          end),
+        'transfer_rollup', jsonb_build_object(
+          'total', tr0.total_transfers,
+          'pending', tr0.pending_transfers,
+          'blocked', tr0.blocked_transfers,
+          'failed', tr0.failed_transfers,
+          'completed', tr0.completed_transfers
+        ),
+        'payment_status',
+          (case
+            when coalesce(tr0.total_transfers,0) = 0 then 'DRAFT'
+            when coalesce(tr0.blocked_transfers,0) > 0 then 'BLOCKED'
+            when coalesce(tr0.failed_transfers,0) > 0 then 'FAILED'
+            when coalesce(tr0.completed_transfers,0) = coalesce(tr0.total_transfers,0) then 'PAID'
+            else 'PENDING'
+          end)
+      )
+      order by c.candidate_display_name nulls last, c.candidate_tms_ref nulls last, c.candidate_id
+    ),
+    '[]'::jsonb
+  )
+  into v_candidate_breakdown
+  from cand c
+  left join ni n
+    on n.pay_batch_candidate_id = c.pay_batch_candidate_id
+  left join sums s
+    on s.pay_batch_candidate_id = c.pay_batch_candidate_id
+  left join tr tr0
+    on tr0.pay_batch_candidate_id = c.pay_batch_candidate_id;
+
+  -- ✅ UPDATED: candidate_lines for expandable table
+  -- HARD RULE: do NOT derive units/rate from total_hours; use canonical pay_batch_item_breakdowns.
+  with pbci as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id,
+      pbc.candidate_display_name,
+      pbc.candidate_tms_ref
+    from public.pay_batch_candidates pbc
+    where pbc.pay_batch_id = p_pay_batch_id
+  ),
+  ts_groups as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id as candidate_id,
+      pbi.timesheet_id as timesheet_id,
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,''))='PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as subtotal_paye_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,''))='UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as subtotal_umbrella_inc_vat
+    from public.pay_batch_candidates pbc
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.timesheet_id is not null
+    group by pbc.id, pbc.candidate_id, pbi.timesheet_id
+  ),
+  ts_enriched as (
+    select
+      tg.pay_batch_candidate_id,
+      tg.candidate_id,
+      tg.timesheet_id,
+      vts.week_ending_date,
+      vts.client_id,
+      vts.client_name,
+      nullif(btrim(coalesce(vts.hospital_norm,'')), '') as hospital_norm,
+      tg.subtotal_paye_ex_vat,
+      tg.subtotal_umbrella_inc_vat,
+      case
+        when v_batch_kind = 'PAYE' then tg.subtotal_paye_ex_vat
+        when v_batch_kind = 'UMBRELLA' then tg.subtotal_umbrella_inc_vat
+        else round(coalesce(tg.subtotal_paye_ex_vat,0) + coalesce(tg.subtotal_umbrella_inc_vat,0),2)
+      end as payment_amount
+    from ts_groups tg
+    left join public.v_timesheets_summary_base vts
+      on vts.timesheet_id = tg.timesheet_id
+  ),
+  ts_breakdown_rows as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id as candidate_id,
+      pbi.timesheet_id as timesheet_id,
+      pbib.line_kind as line_kind,
+      pbib.bucket_code as bucket_code,
+      pbib.unit_name as unit_name,
+      pbib.rate as rate,
+      case
+        when bool_and(pbib.units is null) then null::numeric
+        else round(sum(coalesce(pbib.units,0)),2)
+      end as units,
+      round(coalesce(sum(coalesce(pbib.amount_ex_vat,0)),0),2) as amount_ex_vat,
+      round(coalesce(sum(coalesce(pbib.amount_vat,0)),0),2) as amount_vat,
+      round(coalesce(sum(coalesce(pbib.amount_inc_vat,0)),0),2) as amount_inc_vat
+    from public.pay_batch_candidates pbc
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    join public.pay_batch_item_breakdowns pbib
+      on pbib.pay_batch_item_id = pbi.id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.timesheet_id is not null
+    group by
+      pbc.id,
+      pbc.candidate_id,
+      pbi.timesheet_id,
+      pbib.line_kind,
+      pbib.bucket_code,
+      pbib.unit_name,
+      pbib.rate
+    having
+      round(coalesce(sum(coalesce(pbib.amount_ex_vat,0)),0),2) <> 0
+      or round(coalesce(sum(coalesce(pbib.amount_inc_vat,0)),0),2) <> 0
+      or (case when bool_and(pbib.units is null) then 0 else round(sum(coalesce(pbib.units,0)),2) end) <> 0
+  ),
+  ts_breakdown_json as (
+    select
+      tbr.pay_batch_candidate_id,
+      tbr.candidate_id,
+      tbr.timesheet_id,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'line_kind', tbr.line_kind,
+            'bucket_code', tbr.bucket_code,
+            'unit_name', tbr.unit_name,
+            'units', tbr.units,
+            'rate', tbr.rate,
+            'amount_ex_vat', tbr.amount_ex_vat,
+            'amount_vat', tbr.amount_vat,
+            'amount_inc_vat', tbr.amount_inc_vat
+          )
+          order by
+            case upper(coalesce(tbr.line_kind,''))
+              when 'TS_BUCKET' then 1
+              when 'ADDITIONAL_UNIT' then 2
+              when 'MILEAGE' then 3
+              when 'EXPENSE' then 4
+              when 'ADJUSTMENT' then 5
+              when 'CONVERSION_ADJ' then 6
+              when 'LOAN_REPAYMENT' then 7
+              when 'DEBT_CREATED' then 8
+              else 99
+            end,
+            case upper(coalesce(tbr.bucket_code,''))
+              when 'DAY' then 1
+              when 'NIGHT' then 2
+              when 'SAT' then 3
+              when 'SUN' then 4
+              when 'BH' then 5
+              else 99
+            end,
+            coalesce(tbr.unit_name,'') asc,
+            coalesce(tbr.rate,0) asc
+        ),
+        '[]'::jsonb
+      ) as breakdown_lines
+    from ts_breakdown_rows tbr
+    group by tbr.pay_batch_candidate_id, tbr.candidate_id, tbr.timesheet_id
+  ),
+  ts_lines as (
+    select
+      te.pay_batch_candidate_id,
+      te.candidate_id,
+      jsonb_build_object(
+        'timesheet_id', te.timesheet_id::text,
+        'week_ending_date', case when te.week_ending_date is null then null else te.week_ending_date::text end,
+        'client_id', case when te.client_id is null then null else te.client_id::text end,
+        'client_name', te.client_name,
+        'hospital_norm', te.hospital_norm,
+        'subtotal_paye_ex_vat', te.subtotal_paye_ex_vat,
+        'subtotal_umbrella_inc_vat', te.subtotal_umbrella_inc_vat,
+        'payment_amount', te.payment_amount,
+        'breakdown_lines', coalesce(tbj.breakdown_lines, '[]'::jsonb)
+      ) as ts_line
+    from ts_enriched te
+    left join ts_breakdown_json tbj
+      on tbj.pay_batch_candidate_id = te.pay_batch_candidate_id
+     and tbj.timesheet_id = te.timesheet_id
+  ),
+  non_ts_groups as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id as candidate_id,
+      pbi.item_type as item_type,
+      pbi.source_ref as source_ref,
+      pbi.repayment_week_start as repayment_week_start,
+      max(pbi.description) as description,
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,''))='PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as subtotal_paye_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,''))='UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end),0),2) as subtotal_umbrella_inc_vat
+    from public.pay_batch_candidates pbc
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.timesheet_id is null
+    group by pbc.id, pbc.candidate_id, pbi.item_type, pbi.source_ref, pbi.repayment_week_start
+  ),
+  non_ts_breakdown_rows as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id as candidate_id,
+      pbi.item_type as item_type,
+      pbi.source_ref as source_ref,
+      pbi.repayment_week_start as repayment_week_start,
+      pbib.line_kind as line_kind,
+      pbib.bucket_code as bucket_code,
+      pbib.unit_name as unit_name,
+      pbib.rate as rate,
+      case
+        when bool_and(pbib.units is null) then null::numeric
+        else round(sum(coalesce(pbib.units,0)),2)
+      end as units,
+      round(coalesce(sum(coalesce(pbib.amount_ex_vat,0)),0),2) as amount_ex_vat,
+      round(coalesce(sum(coalesce(pbib.amount_vat,0)),0),2) as amount_vat,
+      round(coalesce(sum(coalesce(pbib.amount_inc_vat,0)),0),2) as amount_inc_vat
+    from public.pay_batch_candidates pbc
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    join public.pay_batch_item_breakdowns pbib
+      on pbib.pay_batch_item_id = pbi.id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.timesheet_id is null
+    group by
+      pbc.id,
+      pbc.candidate_id,
+      pbi.item_type,
+      pbi.source_ref,
+      pbi.repayment_week_start,
+      pbib.line_kind,
+      pbib.bucket_code,
+      pbib.unit_name,
+      pbib.rate
+  ),
+  non_ts_breakdown_json as (
+    select
+      ntr.pay_batch_candidate_id,
+      ntr.candidate_id,
+      ntr.item_type,
+      ntr.source_ref,
+      ntr.repayment_week_start,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'line_kind', ntr.line_kind,
+            'bucket_code', ntr.bucket_code,
+            'unit_name', ntr.unit_name,
+            'units', ntr.units,
+            'rate', ntr.rate,
+            'amount_ex_vat', ntr.amount_ex_vat,
+            'amount_vat', ntr.amount_vat,
+            'amount_inc_vat', ntr.amount_inc_vat
+          )
+          order by
+            case upper(coalesce(ntr.line_kind,''))
+              when 'TS_BUCKET' then 1
+              when 'ADDITIONAL_UNIT' then 2
+              when 'MILEAGE' then 3
+              when 'EXPENSE' then 4
+              when 'ADJUSTMENT' then 5
+              when 'CONVERSION_ADJ' then 6
+              when 'LOAN_REPAYMENT' then 7
+              when 'DEBT_CREATED' then 8
+              else 99
+            end,
+            coalesce(ntr.unit_name,'') asc
+        ),
+        '[]'::jsonb
+      ) as breakdown_lines
+    from non_ts_breakdown_rows ntr
+    group by ntr.pay_batch_candidate_id, ntr.candidate_id, ntr.item_type, ntr.source_ref, ntr.repayment_week_start
+  ),
+  non_ts_lines as (
+    select
+      ng.pay_batch_candidate_id,
+      ng.candidate_id,
+      jsonb_build_object(
+        'item_type', ng.item_type,
+        'source_ref', ng.source_ref,
+        'repayment_week_start', case when ng.repayment_week_start is null then null else ng.repayment_week_start::text end,
+        'week_ending_date', case when ng.repayment_week_start is null then null else (ng.repayment_week_start + 6)::text end,
+        'description', ng.description,
+        'subtotal_paye_ex_vat', ng.subtotal_paye_ex_vat,
+        'subtotal_umbrella_inc_vat', ng.subtotal_umbrella_inc_vat,
+        'payment_amount',
+          case
+            when v_batch_kind = 'PAYE' then ng.subtotal_paye_ex_vat
+            when v_batch_kind = 'UMBRELLA' then ng.subtotal_umbrella_inc_vat
+            else round(coalesce(ng.subtotal_paye_ex_vat,0) + coalesce(ng.subtotal_umbrella_inc_vat,0),2)
+          end,
+        'breakdown_lines', coalesce(ntbj.breakdown_lines, '[]'::jsonb)
+      ) as non_ts_line
+    from non_ts_groups ng
+    left join non_ts_breakdown_json ntbj
+      on ntbj.pay_batch_candidate_id = ng.pay_batch_candidate_id
+     and ntbj.item_type = ng.item_type
+     and ntbj.source_ref is not distinct from ng.source_ref
+     and ntbj.repayment_week_start is not distinct from ng.repayment_week_start
+  ),
+  cand_lines as (
+    select
+      p.pay_batch_candidate_id,
+      p.candidate_id,
+      p.candidate_display_name,
+      p.candidate_tms_ref,
+      coalesce(
+        jsonb_agg(ts.ts_line order by (ts.ts_line->>'week_ending_date')::date desc nulls last, ts.ts_line->>'timesheet_id')
+          filter (where ts.ts_line is not null),
+        '[]'::jsonb
+      ) as ts_lines,
+      coalesce(
+        jsonb_agg(nt.non_ts_line order by nt.non_ts_line->>'item_type', nt.non_ts_line->>'source_ref')
+          filter (where nt.non_ts_line is not null),
+        '[]'::jsonb
+      ) as non_ts_lines
+    from pbci p
+    left join ts_lines ts
+      on ts.pay_batch_candidate_id = p.pay_batch_candidate_id
+    left join non_ts_lines nt
+      on nt.pay_batch_candidate_id = p.pay_batch_candidate_id
+    group by p.pay_batch_candidate_id, p.candidate_id, p.candidate_display_name, p.candidate_tms_ref
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'pay_batch_candidate_id', cl.pay_batch_candidate_id::text,
+        'candidate_id', cl.candidate_id::text,
+        'candidate_display_name', cl.candidate_display_name,
+        'candidate_tms_ref', cl.candidate_tms_ref,
+        'ts_lines', cl.ts_lines,
+        'non_ts_lines', cl.non_ts_lines
+      )
+      order by cl.candidate_display_name nulls last, cl.candidate_tms_ref nulls last, cl.candidate_id
+    ),
+    '[]'::jsonb
+  )
+  into v_candidate_lines
+  from cand_lines cl;
+
+  return jsonb_build_object(
+    'ok', true,
+
+    -- ✅ NEW: batch kind + channels for UI
+    'batch_kind', v_batch_kind,
+    'pay_channels_present', v_pay_channels_present,
+
+    -- ✅ child modal datasets
+    'candidate_breakdown', v_candidate_breakdown,
+    'candidate_lines', v_candidate_lines,
+
+    -- schedule recommendations for UI preselect (includes default funding account)
+    'schedule_recommendations', jsonb_build_object(
+      'default_schedule_umbrella_local', v_default_schedule_umbrella_local,
+      'default_schedule_paye_local', v_default_schedule_paye_local,
+      'funds_warning_hours_json', v_funds_warning_hours_json,
+      'rail_default_funding_account_ref', v_rail_default_funding_account_ref
+    ),
+
+    -- authorisation summary for Banking UI
+    'auth', v_auth,
+
+    'batch', jsonb_build_object(
+      'id', v_batch.id::text,
+      'pay_date', v_batch.pay_date::text,
+      'created_at_utc', v_batch.created_at_utc,
+      'created_by_user_id', case when v_batch.created_by_user_id is null then null else v_batch.created_by_user_id::text end,
+      'status', v_batch.status,
+      'banking_system_snapshot', v_batch.banking_system_snapshot,
+      'external_paye_system_snapshot', v_batch.external_paye_system_snapshot,
+
+      -- Neutral (rail-generic) manual confirm aliases (keep legacy keys too)
+      'manual_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
+      'manual_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+
+      'monzo_confirmed_at_utc', v_batch.monzo_confirmed_at_utc,
+      'monzo_confirmed_by_user_id', case when v_batch.monzo_confirmed_by_user_id is null then null else v_batch.monzo_confirmed_by_user_id::text end,
+
+      'last_status_checked_at_utc', v_batch.last_status_checked_at_utc,
+
+      -- Rail-generic scheduling/execution fields
+      'rail_provider_snapshot', v_batch.rail_provider_snapshot,
+      'rail_env_snapshot', v_batch.rail_env_snapshot,
+      'schedule_kind', v_batch.schedule_kind,
+      'scheduled_at_utc', v_batch.scheduled_at_utc,
+      'executing_started_at_utc', v_batch.executing_started_at_utc,
+
+      -- Bulk payment reference fields
+      'bulk_ref_num', v_batch.bulk_ref_num,
+      'bulk_ref_date', case when v_batch.bulk_ref_date is null then null else v_batch.bulk_ref_date::text end,
+      'bulk_reference', v_batch.bulk_reference
+    ),
+    'candidates', v_candidates,
+    'transfers', v_transfers,
+    'items', v_items
+  );
+end;
+$$;
 
 -- =========================================================
 -- A4.10 pay_timesheet_impact_preview(p_timesheet_id)
