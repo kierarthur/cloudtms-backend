@@ -13789,12 +13789,12 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     hours
   };
 
-  // If per-day key is provided, derive weekly totals from per-day to keep coherence.
+  // Store exactly what is provided (frontend is source of truth); never derive/overwrite.
+  if (additionalUnitsWeek !== undefined) {
+    totals_json.additional_units_week = additionalUnitsWeek;
+  }
   if (additionalUnitsPerDay !== undefined) {
     totals_json.additional_units_per_day = additionalUnitsPerDay;
-    totals_json.additional_units_week = deriveWeekFromPerDay(additionalUnitsPerDay);
-  } else if (additionalUnitsWeek !== undefined) {
-    totals_json.additional_units_week = additionalUnitsWeek;
   }
 
   const patch = {
@@ -13822,7 +13822,6 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
 
   return withCORS(env, req, ok(row || { updated: true, week_id: weekId, hours }));
 }
-
 
 async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -14669,31 +14668,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       unitsPerDay = cleaned;
     }
 
-    // Derive weekly totals from per-day if weekly wasn't provided in this request
-    if (hasUnitsPerDayKey && !hasUnitsWeekKey) {
-      const derived = {};
-      for (const cfgRaw of (addlConfig || [])) {
-        if (!cfgRaw || typeof cfgRaw !== 'object') continue;
-        const code = String(cfgRaw.code || '').toUpperCase() || 'EX1';
-        const freq = normaliseFreq(cfgRaw.frequency);
-
-        if (freq === 'ONE_PER_WEEK') continue;
-
-        const perRaw = (unitsPerDay && unitsPerDay[code] && typeof unitsPerDay[code] === 'object') ? unitsPerDay[code] : {};
-        let sum = 0;
-
-        for (const meta of (weekDates || [])) {
-          if (!shouldIncludeDay(freq, meta)) continue;
-          const v = Number(perRaw[meta.ymd]);
-          if (!Number.isFinite(v) || v <= 0) continue;
-          sum += v;
-        }
-
-        if (sum > 0) derived[code] = sum;
-      }
-
-      unitsWeek = derived;
-    }
+    // ✅ Do NOT derive weekly totals from per-day here.
+    // Backend stores exactly what it receives; frontend is responsible for coherence.
   } catch {}
 
   let additional_units_json = {};
@@ -15093,9 +15069,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     if (hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
     if (hasUnitsPerDayKey) patchBody.additional_units_per_day = unitsPerDay || {};
 
-    // ✅ Keep stored weekly totals coherent when per-day was provided
-    if (hasUnitsPerDayKey && !hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
-
     // do NOT set day_references_json here (obsolete)
 
     await fetch(
@@ -15411,9 +15384,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   const existingWeekTotals = (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
   const mergedWeekTotals = { ...existingWeekTotals, hours };
 
-  // ✅ Persist weekly totals if provided OR derived from per-day
+  // ✅ Persist weekly totals only when provided (frontend is source of truth)
   if (hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
-  if (hasUnitsPerDayKey && !hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
 
   // ✅ Persist per-day units when provided
   if (hasUnitsPerDayKey) mergedWeekTotals.additional_units_per_day = unitsPerDay || {};
@@ -47222,128 +47194,6 @@ async function sbUpdateUserPassword(env, user_id, newHash) {
   }
 
   return updated;
-}
-
-async function handleGetSettings(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized('Unauthorized');
-
-  try {
-    const select =
-      [
-        'id',
-
-        // Agency branding
-        'agency_name',
-        'agency_logo',
-
-        // Timesheet PDF text blocks
-        'timesheet_header_json',
-        'timesheet_footer_json',
-
-        // ✅ Remittances (new settings tab)
-        'remittance_includes_json',
-        'remittance_header_message',
-        'remittance_footer_message',
-
-        // ✅ NEW: remittance detailed default + candidate umbrella-copy default
-        'remittances_detailed_breakdown',
-        'remittance_receive_when_umbrella_paid',
-
-        // ✅ PAYE remittances gate
-        'paye_remittances_enabled',
-
-        // ✅ NEW: remittance test routing (send all remittances to this email when payroll_testing=true)
-        'remittance_test_recipient_email',
-
-        // ✅ NEW: payment authoriser quantity
-        'payment_authoriser_quantity',
-
-        // ✅ NEW: pay eligibility window (Option A)
-        'pay_eligibility_months_back',
-        // NOTE: pay_eligibility_weeks_ahead is deprecated (cutoff date controls upper bound); do not expose.
-
-        // ✅ NEW: configurable export CSV columns/order
-        'pay_export_csv_columns_json',
-
-        // Global shift patterns + timezone
-        'timezone_id',
-        'day_start','day_end',
-        'night_start','night_end',
-        'sat_start','sat_end',
-        'sun_start','sun_end',
-        'bh_start','bh_end',
-
-        // BH calendar config
-        'bh_source','bh_list','bh_feed_url',
-
-        // Global policy flags
-        'ts_reference_required',
-
-        // ✅ Adaptability config
-        'import_config_json',
-
-        // Bank details still live on settings_defaults
-        'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
-
-        // ✅ Banking rail defaults (for UI preselect)
-        'rail_default_funding_account_ref',
-
-        // ✅ NEW: payroll testing mode flag (simulate payments; no real bank payments)
-        'payroll_testing',
-
-        // Email settings (global)
-        'finance_email',
-        'finance_email_settings',
-        'system_email',
-        'system_emails',
-        'max_attachments_per_email'
-      ].join(',');
-
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${select}`
-    );
-
-    // Finance windows list (new) — SQL-first RPC, single call
-    let finance_windows = [];
-    try {
-      const fw = await sbRpc(env, 'settings_finance_list', {});
-      finance_windows = Array.isArray(fw) ? fw : [];
-    } catch {
-      finance_windows = [];
-    }
-
-    const src = (rows && rows.length)
-      ? rows
-      : (await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=${select}&limit=1`)).rows;
-
-    if (!src || !src.length) return notFound("settings_defaults not found");
-
-    const settings = { ...src[0] };
-    delete settings.id;
-
-    // ✅ Redact webhook URLs (do not expose secrets)
-    const redactWebhook = (obj) => {
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-      const out = { ...obj };
-      const wasSet = (typeof out.webhook_url === 'string') && out.webhook_url.trim().length > 0;
-      if ('webhook_url' in out) out.webhook_url = '';
-      delete out.webhook_url_redacted;
-      out.webhook_url_set = !!wasSet;
-      return out;
-    };
-
-    settings.finance_email_settings = redactWebhook(settings.finance_email_settings);
-    settings.system_emails = redactWebhook(settings.system_emails);
-
-    return withCORS(env, req, ok({
-      settings,
-      finance_windows
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
-  }
 }
 
 async function handleGetSettings(env, req) {
