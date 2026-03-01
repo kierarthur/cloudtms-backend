@@ -8547,33 +8547,46 @@ async function handleBankingIdPreview(env, req, user) {
     const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
 
     const totals = {
-      delta_ex_vat: (p.total_delta_ex_vat !== undefined) ? p.total_delta_ex_vat : 0,
-      delta_vat: (p.total_delta_vat !== undefined) ? p.total_delta_vat : 0,
-      delta_inc_vat: (p.total_delta_inc_vat !== undefined) ? p.total_delta_inc_vat : 0,
-
-      current_ex_vat: (p.total_current_ex_vat !== undefined) ? p.total_current_ex_vat : 0,
-      current_vat: (p.total_current_vat !== undefined) ? p.total_current_vat : 0,
-      current_inc_vat: (p.total_current_inc_vat !== undefined) ? p.total_current_inc_vat : 0,
-
-      reportable_current_ex_vat: (p.total_reportable_current_ex_vat !== undefined) ? p.total_reportable_current_ex_vat : 0,
-      reportable_current_vat: (p.total_reportable_current_vat !== undefined) ? p.total_reportable_current_vat : 0,
-      reportable_current_inc_vat: (p.total_reportable_current_inc_vat !== undefined) ? p.total_reportable_current_inc_vat : 0
+      total_delta_ex_vat: (p.total_delta_ex_vat !== undefined && p.total_delta_ex_vat !== null) ? p.total_delta_ex_vat : 0,
+      total_delta_vat: (p.total_delta_vat !== undefined && p.total_delta_vat !== null) ? p.total_delta_vat : 0,
+      total_delta_inc_vat: (p.total_delta_inc_vat !== undefined && p.total_delta_inc_vat !== null) ? p.total_delta_inc_vat : 0
     };
 
-    const lines = Array.isArray(p.lines) ? p.lines : [];
+    const debug = {
+      total_current_ex_vat: (p.total_current_ex_vat !== undefined && p.total_current_ex_vat !== null) ? p.total_current_ex_vat : 0,
+      total_current_vat: (p.total_current_vat !== undefined && p.total_current_vat !== null) ? p.total_current_vat : 0,
+      total_current_inc_vat: (p.total_current_inc_vat !== undefined && p.total_current_inc_vat !== null) ? p.total_current_inc_vat : 0,
+
+      total_reportable_current_ex_vat: (p.total_reportable_current_ex_vat !== undefined && p.total_reportable_current_ex_vat !== null) ? p.total_reportable_current_ex_vat : 0,
+      total_reportable_current_vat: (p.total_reportable_current_vat !== undefined && p.total_reportable_current_vat !== null) ? p.total_reportable_current_vat : 0,
+      total_reportable_current_inc_vat: (p.total_reportable_current_inc_vat !== undefined && p.total_reportable_current_inc_vat !== null) ? p.total_reportable_current_inc_vat : 0
+    };
+
+    const rawLines = Array.isArray(p.lines) ? p.lines : [];
+    const lines = rawLines.map((ln) => {
+      const invNo = (ln && ln.invoice_number !== undefined && ln.invoice_number !== null) ? String(ln.invoice_number).trim() : '';
+      const clientName = (ln && ln.client_name !== undefined && ln.client_name !== null) ? String(ln.client_name).trim() : '';
+      return {
+        invoice_number: invNo || null,
+        client_name: clientName || null,
+        delta_ex_vat: (ln && ln.delta_ex_vat !== undefined && ln.delta_ex_vat !== null) ? ln.delta_ex_vat : 0,
+        delta_inc_vat: (ln && ln.delta_inc_vat !== undefined && ln.delta_inc_vat !== null) ? ln.delta_inc_vat : 0
+      };
+    });
+
     const line_count = Number.isFinite(Number(p.line_count)) ? Math.trunc(Number(p.line_count)) : lines.length;
 
     return withCORS(env, req, ok({
       ok: true,
-      totals,
       line_count,
-      lines
+      totals,
+      lines,
+      debug
     }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 
 async function handleBankingIdRunsList(env, req, user) {
   let limit = 50;
@@ -80105,6 +80118,140 @@ async function verifyTsq1(qrText, env) {
   }
 }
 
+async function handleBankingIdRunDraftStart(env, req, user) {
+  try {
+    let body = null;
+    try { body = await parseJSONBody(req); } catch { body = null; }
+
+    // Body is optional for this route. Accept empty body; if provided, must be an object.
+    if (body === null) body = {};
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return withCORS(env, req, badRequest('Invalid JSON'));
+    }
+
+    const noteRaw = (body.note === null || body.note === undefined) ? null : String(body.note).trim();
+    const note = noteRaw ? noteRaw : null;
+
+    const rpcRes = await sbRpc(env, 'id_consolidation_run_draft_start', {
+      p_actor_user_id: user.id,
+      p_note: note
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'id_consolidation_run_draft_start')) {
+        payload = payload.id_consolidation_run_draft_start;
+      }
+    } catch {}
+
+    const draft_run = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    return withCORS(env, req, ok({
+      ok: true,
+      draft_run
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+async function handleBankingIdRunDraftCommit(env, req, user, idRef) {
+  const id_ref = String(idRef || '').trim();
+  if (!id_ref) return withCORS(env, req, badRequest('id_ref is required'));
+  if (!/^[0-9]{6}$/.test(id_ref)) return withCORS(env, req, badRequest('id_ref must be 6 digits'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const bankUploadCode = String(body.bank_upload_code || '').trim();
+  if (!bankUploadCode) return withCORS(env, req, badRequest('bank_upload_code is required'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'id_consolidation_run_draft_commit', {
+      p_id_ref: id_ref,
+      p_bank_upload_code: bankUploadCode,
+      p_actor_user_id: user.id
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'id_consolidation_run_draft_commit')) {
+        payload = payload.id_consolidation_run_draft_commit;
+      }
+    } catch {}
+
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const run = {
+      id_ref: (p.id_ref !== undefined && p.id_ref !== null) ? p.id_ref : id_ref,
+      bank_upload_code: (p.bank_upload_code !== undefined && p.bank_upload_code !== null) ? p.bank_upload_code : bankUploadCode,
+      bank_uploaded_at_utc: (p.bank_uploaded_at_utc !== undefined) ? p.bank_uploaded_at_utc : null,
+      totals: (p.totals && typeof p.totals === 'object') ? p.totals : {},
+      line_count: Number.isFinite(Number(p.line_count)) ? Math.trunc(Number(p.line_count)) : 0,
+      state: (p.state !== undefined && p.state !== null) ? p.state : 'COMMITTED'
+    };
+
+    return withCORS(env, req, ok({
+      ok: true,
+      run
+    }));
+  } catch (e) {
+    const msg = String(e?.json?.message || e?.message || e || '');
+    if (msg === 'ID_RUN_NOT_FOUND') return withCORS(env, req, notFound('ID_RUN_NOT_FOUND'));
+    if (msg === 'BANK_UPLOAD_CODE_REQUIRED') return withCORS(env, req, badRequest('BANK_UPLOAD_CODE_REQUIRED'));
+    if (msg === 'CANNOT_CANCEL_COMMITTED_RUN') return withCORS(env, req, conflict('CANNOT_CANCEL_COMMITTED_RUN'));
+    if (msg === 'ID_RUN_ALREADY_COMMITTED_DIFFERENT_CODE' || msg === 'RUN_ALREADY_COMMITTED_DIFFERENT_CODE') {
+      return withCORS(env, req, conflict('RUN_ALREADY_COMMITTED_DIFFERENT_CODE'));
+    }
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingIdRunDraftCancel(env, req, user, idRef) {
+  const id_ref = String(idRef || '').trim();
+  if (!id_ref) return withCORS(env, req, badRequest('id_ref is required'));
+  if (!/^[0-9]{6}$/.test(id_ref)) return withCORS(env, req, badRequest('id_ref must be 6 digits'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'id_consolidation_run_draft_cancel', {
+      p_id_ref: id_ref,
+      p_actor_user_id: user.id
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'id_consolidation_run_draft_cancel')) {
+        payload = payload.id_consolidation_run_draft_cancel;
+      }
+    } catch {}
+
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    return withCORS(env, req, ok({
+      ok: true,
+      result: p
+    }));
+  } catch (e) {
+    const msg = String(e?.json?.message || e?.message || e || '');
+    if (msg === 'CANNOT_CANCEL_COMMITTED_RUN') return withCORS(env, req, conflict('CANNOT_CANCEL_COMMITTED_RUN'));
+    if (msg === 'ID_RUN_NOT_FOUND') return withCORS(env, req, notFound('ID_RUN_NOT_FOUND'));
+    if (msg === 'INVALID_ID_REF') return withCORS(env, req, badRequest('INVALID_ID_REF'));
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+
+
 
 async function handleContractWeekPlanPatch(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
@@ -82353,7 +82500,30 @@ if (req.method === 'POST' && p === '/api/banking/pay/bank-name-check/clear-overr
   return handleBankingBankNameCheckClearOverride(env, req, user);
 }
 
+// ====================== BANKING (Invoice Discounting — Draft runs) ======================
+// Insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
+// after `user` has been resolved, alongside the other /api/banking/id/* routes.
 
+// POST /api/banking/id/run/draft-start
+if (req.method === 'POST' && p === '/api/banking/id/run/draft-start') {
+  return handleBankingIdRunDraftStart(env, req, user);
+}
+
+// POST /api/banking/id/run/:id_ref/commit
+{
+  const m = matchPath(p, '/api/banking/id/run/:id_ref/commit');
+  if (m && req.method === 'POST') {
+    return handleBankingIdRunDraftCommit(env, req, user, m.id_ref);
+  }
+}
+
+// POST /api/banking/id/run/:id_ref/cancel
+{
+  const m = matchPath(p, '/api/banking/id/run/:id_ref/cancel');
+  if (m && req.method === 'POST') {
+    return handleBankingIdRunDraftCancel(env, req, user, m.id_ref);
+  }
+}
 {
   const m = matchPath(p, '/api/banking/pay/batch/:id/paye-net/sage');
   if (m && req.method === 'POST') {
