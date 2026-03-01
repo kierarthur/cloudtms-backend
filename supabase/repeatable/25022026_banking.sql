@@ -4938,7 +4938,7 @@ begin
       pb.scheduled_at_utc,
       pb.funding_account_ref
     from public.pay_batches pb
-    where upper(coalesce(pb.status,'')) in ('SCHEDULED','AUTHORISED_FOR_PAYMENT')
+    where upper(coalesce(pb.status,'')) in ('AUTHORISED_FOR_PAYMENT')
       and pb.scheduled_at_utc is not null
       and pb.scheduled_at_utc <= v_cutoff
       and nullif(btrim(coalesce(pb.funding_account_ref,'')), '') is not null
@@ -4992,6 +4992,7 @@ begin
   );
 end;
 $$;
+
 
 create or replace function public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
