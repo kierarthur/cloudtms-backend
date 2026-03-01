@@ -2535,729 +2535,9 @@ $$;
 
 
 
-create or replace function public.pay_remittance_build(
-  p_pay_batch_id uuid,
-  p_scope text default 'ALL'
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
-  v_batch record;
 
-  v_jobs_umb jsonb := '[]'::jsonb;
-  v_jobs_paye jsonb := '[]'::jsonb;
 
-  -- ✅ NEW: remittance settings (single-row settings_defaults)
-  v_remittance_includes_json jsonb := null;
-  v_remittance_header_message text := null;
-  v_remittance_footer_message text := null;
 
-  -- ✅ NEW: derived defaults for config evaluation
-  v_missing_scope text := 'WEEKLY';
-  v_unknown_item_type_default boolean := true;
-
-  v_unknown_item_type_default_text text := 'true';
-begin
-  if p_pay_batch_id is null then
-    raise exception 'pay_remittance_build: pay_batch_id is required';
-  end if;
-
-  if v_scope not in ('ALL','PAYE','UMBRELLA') then
-    raise exception 'pay_remittance_build: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
-  end if;
-
-  -- ✅ NEW: load remittance settings (single row)
-  select
-    sd.remittance_includes_json,
-    sd.remittance_header_message,
-    sd.remittance_footer_message
-  into
-    v_remittance_includes_json,
-    v_remittance_header_message,
-    v_remittance_footer_message
-  from public.settings_defaults sd
-  limit 1;
-
-  -- ✅ NEW: normalize config defaults (safe when config is NULL or not an object)
-  if v_remittance_includes_json is not null and jsonb_typeof(v_remittance_includes_json) = 'object' then
-    v_missing_scope := upper(btrim(coalesce(v_remittance_includes_json->'defaults'->>'missing_scope', 'WEEKLY')));
-
-    v_unknown_item_type_default_text := lower(btrim(coalesce(v_remittance_includes_json->'defaults'->>'unknown_item_type', 'true')));
-    v_unknown_item_type_default := (v_unknown_item_type_default_text in ('true','1','yes','y','on'));
-  else
-    v_missing_scope := 'WEEKLY';
-    v_unknown_item_type_default := true;
-  end if;
-
-  if v_unknown_item_type_default then
-    v_unknown_item_type_default_text := 'true';
-  else
-    v_unknown_item_type_default_text := 'false';
-  end if;
-
-  select
-    pb.id,
-    pb.pay_date,
-    pb.status,
-    pb.bulk_reference,
-    pb.banking_system_snapshot,
-    pb.external_paye_system_snapshot
-  into v_batch
-  from public.pay_batches pb
-  where pb.id = p_pay_batch_id;
-
-  if v_batch.id is null then
-    raise exception 'pay_remittance_build: pay batch % not found.', p_pay_batch_id;
-  end if;
-
-  -- ============================================================
-  -- Umbrella remittance jobs (recipient = umbrella; per-candidate breakdown)
-  -- Uses ONLY batch artifacts:
-  --  - pay_bank_transfers (COMPLETED in-scope)
-  --  - pay_batch_items (in-scope)
-  --  - pay_batch_candidates (display metadata)
-  -- Plus read-only enrichment from:
-  --  - candidates, umbrellas, timesheets, contracts, v_timesheets_summary (client + scope)
-  -- ============================================================
-  if v_scope in ('ALL','UMBRELLA') then
-    with umb_transfers as (
-      select
-        pbt.id as transfer_id,
-        pbt.pay_batch_id,
-        pbt.candidate_id,
-        pbt.umbrella_id,
-        pbt.pay_channel,
-        pbt.amount,
-        pbt.currency,
-        pbt.status,
-        pbt.payment_reference,
-        pbt.completed_at_utc,
-
-        -- ✅ NEW: rail settlement metadata for audit/labelling
-        pbt.rail_tx_id,
-        pbt.rail_state,
-        pbt.rail_meta_json,
-        pbt.failed_reason,
-
-        -- ✅ NEW: computed simulated flag from artifacts only
-        (
-          upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
-          or (
-            pbt.rail_meta_json is not null
-            and (pbt.rail_meta_json ? 'simulated')
-            and lower(btrim(coalesce(pbt.rail_meta_json->>'simulated',''))) in ('true','1','yes','y','on')
-          )
-        ) as is_simulated
-      from public.pay_bank_transfers pbt
-      where pbt.pay_batch_id = p_pay_batch_id
-        and pbt.pay_channel = 'UMBRELLA'
-        and pbt.status = 'COMPLETED'
-        and pbt.umbrella_id is not null
-        and pbt.candidate_id is not null
-    ),
-    umb_groups as (
-      select
-        ut.umbrella_id,
-        max(u.name) as umbrella_name,
-        max(u.remittance_email) as remittance_email,
-        bool_or(coalesce(ut.is_simulated,false)) as test_mode,
-        jsonb_agg(
-          jsonb_build_object(
-            'transfer_id', ut.transfer_id::text,
-            'completed_at_utc', case when ut.completed_at_utc is null then null else ut.completed_at_utc::text end,
-            'candidate', jsonb_build_object(
-              'candidate_id', c.id::text,
-              'tms_ref', c.tms_ref,
-              'display_name', c.display_name,
-              'email', c.email
-            ),
-            'transfer', jsonb_build_object(
-              'pay_channel', ut.pay_channel,
-              'amount', ut.amount,
-              'currency', ut.currency,
-              'status', ut.status,
-              'payment_reference', ut.payment_reference,
-
-              -- ✅ NEW fields
-              'rail_tx_id', ut.rail_tx_id,
-              'rail_state', ut.rail_state,
-              'rail_meta_json', ut.rail_meta_json,
-              'failed_reason', ut.failed_reason,
-              'is_simulated', coalesce(ut.is_simulated,false)
-            ),
-            'items', coalesce((
-              select jsonb_agg(
-                jsonb_build_object(
-                  'item_id', pbi.id::text,
-                  'item_type', pbi.item_type,
-                  'description', pbi.description,
-                  'timesheet_id', case when pbi.timesheet_id is null then null else pbi.timesheet_id::text end,
-                  'segment_key', pbi.segment_key,
-                  'source_ref', pbi.source_ref,
-                  'amount_ex_vat', pbi.amount_ex_vat,
-                  'amount_vat', pbi.amount_vat,
-                  'amount_inc_vat', pbi.amount_inc_vat,
-                  'pay_channel', pbi.pay_channel,
-
-                  -- ✅ sheet scope (DAILY/WEEKLY) for the item, from v_timesheets_summary when present
-                  'sheet_scope', upper(coalesce(vs.sheet_scope::text, v_missing_scope)),
-
-                  -- ✅ client identity for grouping (week ending → client), from v_timesheets_summary
-                  'client_id', case
-                    when (
-                      case
-                        when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                          (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
-                        else
-                          (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
-                      end
-                    )
-                    then case when vs.client_id is null then null else vs.client_id::text end
-                    else null
-                  end,
-                  'client_name', case
-                    when (
-                      case
-                        when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                          (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
-                        else
-                          (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
-                      end
-                    )
-                    then vs.client_name
-                    else null
-                  end,
-
-                  -- ✅ job title + band (if enabled by config; best available source = contract fallback)
-                  'job_title', case
-                    when (
-                      case
-                        when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                          (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'job_title','true'))) in ('true','1','yes','y','on'))
-                        else
-                          (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'job_title','true'))) in ('true','1','yes','y','on'))
-                      end
-                    )
-                    then nullif(btrim(coalesce(ct.role, ts.job_title_norm)), '')
-                    else null
-                  end,
-                  'band', case
-                    when (
-                      case
-                        when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                          (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'band','true'))) in ('true','1','yes','y','on'))
-                        else
-                          (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'band','true'))) in ('true','1','yes','y','on'))
-                      end
-                    )
-                    then nullif(btrim(coalesce(ct.band, ts.band)), '')
-                    else null
-                  end,
-
-                  'timesheet', case
-                    when pbi.timesheet_id is null then null
-                    else jsonb_build_object(
-                      'week_ending_date', case
-                        when (
-                          case
-                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'week_ending_date','true'))) in ('true','1','yes','y','on'))
-                            else
-                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'week_ending_date','true'))) in ('true','1','yes','y','on'))
-                          end
-                        )
-                        then case when ts.week_ending_date is null then null else ts.week_ending_date::text end
-                        else null
-                      end,
-                      'reference_number', case
-                        when (
-                          case
-                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'reference_number','true'))) in ('true','1','yes','y','on'))
-                            else
-                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'reference_number','true'))) in ('true','1','yes','y','on'))
-                          end
-                        )
-                        then ts.reference_number
-                        else null
-                      end,
-                      'worked_start_iso', case
-                        when (
-                          case
-                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                            else
-                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                          end
-                        )
-                        then ts.worked_start_iso
-                        else null
-                      end,
-                      'worked_end_iso', case
-                        when (
-                          case
-                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                            else
-                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                          end
-                        )
-                        then ts.worked_end_iso
-                        else null
-                      end,
-                      'break_minutes', case
-                        when (
-                          case
-                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                            else
-                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                          end
-                        )
-                        then ts.break_minutes
-                        else null
-                      end,
-                      'worked_minutes', case
-                        when (
-                          case
-                            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                              (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                            else
-                              (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                          end
-                        )
-                        then ts.worked_minutes
-                        else null
-                      end
-                    )
-                  end
-                )
-                order by pbi.timesheet_id nulls last, pbi.id
-              )
-              from public.pay_batch_candidates pbc
-              join public.pay_batch_items pbi
-                on pbi.pay_batch_candidate_id = pbc.id
-              left join public.timesheets ts
-                on ts.timesheet_id = pbi.timesheet_id
-               and ts.is_current = true
-              left join public.contracts ct
-                on ct.id = ts.contract_id
-              left join public.v_timesheets_summary vs
-                on vs.timesheet_id = pbi.timesheet_id
-              where pbc.pay_batch_id = p_pay_batch_id
-                and pbc.candidate_id = c.id
-                and pbi.pay_channel = 'UMBRELLA'
-                and (
-                  case
-                    when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                      (
-                        case
-                          when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
-                          then true else false end
-                      )
-                    else
-                      (
-                        case
-                          when lower(coalesce(v_remittance_includes_json->'weekly'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
-                          then true else false end
-                      )
-                  end
-                )
-            ), '[]'::jsonb),
-            'totals', jsonb_build_object(
-              'items_total_inc_vat', coalesce((
-                select round(coalesce(sum(coalesce(pbi2.amount_inc_vat,0)),0),2)
-                from public.pay_batch_candidates pbc2
-                join public.pay_batch_items pbi2
-                  on pbi2.pay_batch_candidate_id = pbc2.id
-                where pbc2.pay_batch_id = p_pay_batch_id
-                  and pbc2.candidate_id = c.id
-                  and pbi2.pay_channel = 'UMBRELLA'
-                  and pbi2.item_type <> 'DEBT_CREATED'
-              ), 0),
-              'items_total_ex_vat', coalesce((
-                select round(coalesce(sum(coalesce(pbi3.amount_ex_vat,0)),0),2)
-                from public.pay_batch_candidates pbc3
-                join public.pay_batch_items pbi3
-                  on pbi3.pay_batch_candidate_id = pbc3.id
-                where pbc3.pay_batch_id = p_pay_batch_id
-                  and pbc3.candidate_id = c.id
-                  and pbi3.pay_channel = 'UMBRELLA'
-                  and pbi3.item_type <> 'DEBT_CREATED'
-              ), 0),
-              'debt_created_total', coalesce((
-                select round(coalesce(sum(coalesce(pbi4.amount_inc_vat,0)),0),2)
-                from public.pay_batch_candidates pbc4
-                join public.pay_batch_items pbi4
-                  on pbi4.pay_batch_candidate_id = pbc4.id
-                where pbc4.pay_batch_id = p_pay_batch_id
-                  and pbc4.candidate_id = c.id
-                  and pbi4.pay_channel = 'UMBRELLA'
-                  and pbi4.item_type = 'DEBT_CREATED'
-              ), 0)
-            )
-          )
-          order by c.display_name nulls last, c.tms_ref nulls last, c.id
-        ) as candidate_transfers_json,
-        round(coalesce(sum(ut.amount),0),2) as umbrella_total_amount
-      from umb_transfers ut
-      join public.umbrellas u
-        on u.id = ut.umbrella_id
-      join public.candidates c
-        on c.id = ut.candidate_id
-      group by ut.umbrella_id
-    )
-    select coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'job_kind', 'UMBRELLA_REMITTANCE',
-          'pay_batch_id', v_batch.id::text,
-          'scope', 'UMBRELLA',
-          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
-          'bulk_reference', v_batch.bulk_reference,
-
-          -- ✅ NEW: job-level marker derived only from transfer artifacts
-          'test_mode', coalesce(ug.test_mode,false),
-
-          'recipient', jsonb_build_object(
-            'entity_kind', 'UMBRELLA',
-            'umbrella_id', ug.umbrella_id::text,
-            'name', ug.umbrella_name,
-            'remittance_email', ug.remittance_email
-          ),
-          'summary', jsonb_build_object(
-            'total_amount', ug.umbrella_total_amount,
-            'currency', 'GBP',
-            'transfer_count', jsonb_array_length(coalesce(ug.candidate_transfers_json,'[]'::jsonb))
-          ),
-          'candidates', coalesce(ug.candidate_transfers_json,'[]'::jsonb)
-        )
-        order by ug.umbrella_name nulls last, ug.umbrella_id
-      ),
-      '[]'::jsonb
-    )
-    into v_jobs_umb
-    from umb_groups ug;
-  end if;
-
-  -- ============================================================
-  -- PAYE remittance jobs (recipient = candidate)
-  -- Uses ONLY batch artifacts + read-only enrichment
-  -- ============================================================
-  if v_scope in ('ALL','PAYE') then
-    with paye_transfers as (
-      select
-        pbt.id as transfer_id,
-        pbt.pay_batch_id,
-        pbt.candidate_id,
-        pbt.pay_channel,
-        pbt.amount,
-        pbt.currency,
-        pbt.status,
-        pbt.payment_reference,
-        pbt.completed_at_utc,
-
-        -- ✅ NEW: rail settlement metadata for audit/labelling
-        pbt.rail_tx_id,
-        pbt.rail_state,
-        pbt.rail_meta_json,
-        pbt.failed_reason,
-
-        -- ✅ NEW: computed simulated flag from artifacts only
-        (
-          upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
-          or (
-            pbt.rail_meta_json is not null
-            and (pbt.rail_meta_json ? 'simulated')
-            and lower(btrim(coalesce(pbt.rail_meta_json->>'simulated',''))) in ('true','1','yes','y','on')
-          )
-        ) as is_simulated
-      from public.pay_bank_transfers pbt
-      where pbt.pay_batch_id = p_pay_batch_id
-        and pbt.pay_channel = 'PAYE'
-        and pbt.status = 'COMPLETED'
-        and pbt.candidate_id is not null
-    ),
-    paye_groups as (
-      select
-        pt.candidate_id,
-        max(c.tms_ref) as tms_ref,
-        max(c.display_name) as display_name,
-        max(c.email) as email,
-        round(coalesce(sum(pt.amount),0),2) as total_amount,
-        bool_or(coalesce(pt.is_simulated,false)) as test_mode,
-        jsonb_agg(
-          jsonb_build_object(
-            'transfer_id', pt.transfer_id::text,
-            'completed_at_utc', case when pt.completed_at_utc is null then null else pt.completed_at_utc::text end,
-            'transfer', jsonb_build_object(
-              'pay_channel', pt.pay_channel,
-              'amount', pt.amount,
-              'currency', pt.currency,
-              'status', pt.status,
-              'payment_reference', pt.payment_reference,
-
-              -- ✅ NEW fields
-              'rail_tx_id', pt.rail_tx_id,
-              'rail_state', pt.rail_state,
-              'rail_meta_json', pt.rail_meta_json,
-              'failed_reason', pt.failed_reason,
-              'is_simulated', coalesce(pt.is_simulated,false)
-            )
-          )
-          order by pt.transfer_id
-        ) as transfers_json
-      from paye_transfers pt
-      join public.candidates c
-        on c.id = pt.candidate_id
-      group by pt.candidate_id
-    )
-    select coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'job_kind', 'PAYE_REMITTANCE',
-          'pay_batch_id', v_batch.id::text,
-          'scope', 'PAYE',
-          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
-          'bulk_reference', v_batch.bulk_reference,
-
-          -- ✅ NEW: job-level marker derived only from transfer artifacts
-          'test_mode', coalesce(pg.test_mode,false),
-
-          'recipient', jsonb_build_object(
-            'entity_kind', 'CANDIDATE',
-            'candidate_id', pg.candidate_id::text,
-            'tms_ref', pg.tms_ref,
-            'display_name', pg.display_name,
-            'email', pg.email
-          ),
-          'summary', jsonb_build_object(
-            'total_amount', pg.total_amount,
-            'currency', 'GBP'
-          ),
-          'net_input', coalesce((
-            select jsonb_build_object(
-              'source', pni.source,
-              'net_amount', pni.net_amount,
-              'imported_at_utc', case when pni.imported_at_utc is null then null else pni.imported_at_utc::text end,
-              'file_name', pni.file_name
-            )
-            from public.pay_batch_candidates pbc
-            join public.pay_batch_paye_net_inputs pni
-              on pni.pay_batch_candidate_id = pbc.id
-            where pbc.pay_batch_id = p_pay_batch_id
-              and pbc.candidate_id = pg.candidate_id
-            order by pni.imported_at_utc desc
-            limit 1
-          ), null),
-          'items', coalesce((
-            select jsonb_agg(
-              jsonb_build_object(
-                'item_id', pbix.id::text,
-                'item_type', pbix.item_type,
-                'description', pbix.description,
-                'timesheet_id', case when pbix.timesheet_id is null then null else pbix.timesheet_id::text end,
-                'segment_key', pbix.segment_key,
-                'source_ref', pbix.source_ref,
-                'amount_ex_vat', pbix.amount_ex_vat,
-                'amount_vat', pbix.amount_vat,
-                'amount_inc_vat', pbix.amount_inc_vat,
-                'pay_channel', pbix.pay_channel,
-
-                -- ✅ sheet scope (DAILY/WEEKLY) for the item, from v_timesheets_summary when present
-                'sheet_scope', upper(coalesce(vs2.sheet_scope::text, v_missing_scope)),
-
-                -- ✅ client identity for grouping (week ending → client), from v_timesheets_summary
-                'client_id', case
-                  when (
-                    case
-                      when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                        (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
-                      else
-                        (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
-                    end
-                  )
-                  then case when vs2.client_id is null then null else vs2.client_id::text end
-                  else null
-                end,
-                'client_name', case
-                  when (
-                    case
-                      when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                        (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
-                      else
-                        (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'client','true'))) in ('true','1','yes','y','on'))
-                    end
-                  )
-                  then vs2.client_name
-                  else null
-                end,
-
-                -- ✅ job title + band (if enabled by config; best available source = contract fallback)
-                'job_title', case
-                  when (
-                    case
-                      when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                        (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'job_title','true'))) in ('true','1','yes','y','on'))
-                      else
-                        (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'job_title','true'))) in ('true','1','yes','y','on'))
-                    end
-                  )
-                  then nullif(btrim(coalesce(ct2.role, ts2.job_title_norm)), '')
-                  else null
-                end,
-                'band', case
-                  when (
-                    case
-                      when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                        (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'band','true'))) in ('true','1','yes','y','on'))
-                      else
-                        (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'band','true'))) in ('true','1','yes','y','on'))
-                    end
-                  )
-                  then nullif(btrim(coalesce(ct2.band, ts2.band)), '')
-                  else null
-                end,
-
-                'timesheet', case
-                  when pbix.timesheet_id is null then null
-                  else jsonb_build_object(
-                    'week_ending_date', case
-                      when (
-                        case
-                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'week_ending_date','true'))) in ('true','1','yes','y','on'))
-                          else
-                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'week_ending_date','true'))) in ('true','1','yes','y','on'))
-                        end
-                      )
-                      then case when ts2.week_ending_date is null then null else ts2.week_ending_date::text end
-                      else null
-                    end,
-                    'reference_number', case
-                      when (
-                        case
-                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'reference_number','true'))) in ('true','1','yes','y','on'))
-                          else
-                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'reference_number','true'))) in ('true','1','yes','y','on'))
-                        end
-                      )
-                      then ts2.reference_number
-                      else null
-                    end,
-                    'worked_start_iso', case
-                      when (
-                        case
-                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                          else
-                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                        end
-                      )
-                      then ts2.worked_start_iso
-                      else null
-                    end,
-                    'worked_end_iso', case
-                      when (
-                        case
-                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                          else
-                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                        end
-                      )
-                      then ts2.worked_end_iso
-                      else null
-                    end,
-                    'break_minutes', case
-                      when (
-                        case
-                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                          else
-                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                        end
-                      )
-                      then ts2.break_minutes
-                      else null
-                    end,
-                    'worked_minutes', case
-                      when (
-                        case
-                          when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                            (lower(btrim(coalesce(v_remittance_includes_json->'daily'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                          else
-                            (lower(btrim(coalesce(v_remittance_includes_json->'weekly'->'include_fields'->>'worked_times','true'))) in ('true','1','yes','y','on'))
-                        end
-                      )
-                      then ts2.worked_minutes
-                      else null
-                    end
-                  )
-                end
-              )
-              order by pbix.timesheet_id nulls last, pbix.id
-            )
-            from public.pay_batch_candidates pbcx
-            join public.pay_batch_items pbix
-              on pbix.pay_batch_candidate_id = pbcx.id
-            left join public.timesheets ts2
-              on ts2.timesheet_id = pbix.timesheet_id
-             and ts2.is_current = true
-            left join public.contracts ct2
-              on ct2.id = ts2.contract_id
-            left join public.v_timesheets_summary vs2
-              on vs2.timesheet_id = pbix.timesheet_id
-            where pbcx.pay_batch_id = p_pay_batch_id
-              and pbcx.candidate_id = pg.candidate_id
-              and pbix.pay_channel = 'PAYE'
-              and (
-                case
-                  when upper(coalesce(vs2.sheet_scope::text, v_missing_scope)) = 'DAILY' then
-                    (
-                      case
-                        when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbix.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
-                        then true else false end
-                    )
-                  else
-                    (
-                      case
-                        when lower(coalesce(v_remittance_includes_json->'weekly'->'include_item_types'->>pbix.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
-                        then true else false end
-                    )
-                end
-              )
-          ), '[]'::jsonb),
-          'transfers', coalesce(pg.transfers_json,'[]'::jsonb)
-        )
-        order by pg.display_name nulls last, pg.tms_ref nulls last, pg.candidate_id
-      ),
-      '[]'::jsonb
-    )
-    into v_jobs_paye
-    from paye_groups pg;
-  end if;
-
-  return jsonb_build_object(
-    'ok', true,
-    'pay_batch_id', v_batch.id::text,
-    'scope', v_scope,
-    'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
-    'bulk_reference', v_batch.bulk_reference,
-
-    -- ✅ surface header/footer for email rendering (no extra settings fetch required)
-    'remittance_header_message', v_remittance_header_message,
-    'remittance_footer_message', v_remittance_footer_message,
-
-    'jobs', (coalesce(v_jobs_umb,'[]'::jsonb) || coalesce(v_jobs_paye,'[]'::jsonb))
-  );
-end;
-$$;
 
 create or replace function public.pay_remittance_mark_sent(
   p_pay_batch_id uuid,
@@ -3327,9 +2607,9 @@ begin
 end;
 $$;
 
-create or replace function public.pay_reconcile_external_payment(
-  p_actor_user_id uuid,
-  p_payload_json jsonb
+create or replace function public.pay_remittance_build(
+  p_pay_batch_id uuid,
+  p_scope text default 'ALL'
 )
 returns jsonb
 language plpgsql
@@ -3337,375 +2617,1867 @@ security definer
 set search_path = public
 as $$
 declare
-  v_pay_date date;
-  v_note text;
-  v_payment_reference text;
+  v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
+  v_batch record;
 
-  v_settings record;
-  v_batch_id uuid;
+  v_jobs_umb jsonb := '[]'::jsonb;
+  v_jobs_paye jsonb := '[]'::jsonb;
+  v_jobs_cand_umb_copy jsonb := '[]'::jsonb;
 
-  v_timesheet_ids uuid[] := array[]::uuid[];
-  v_dup jsonb := '[]'::jsonb;
-  v_missing jsonb := '[]'::jsonb;
+  -- ✅ Remittance settings (single-row settings_defaults)
+  v_remittance_includes_json jsonb := null;
+  v_remittance_header_message text := null;
+  v_remittance_footer_message text := null;
 
-  v_now timestamptz := now();
+  -- ✅ New defaults
+  v_sd_paye_remittances_enabled boolean := false;
+  v_sd_remittances_detailed_breakdown boolean := false;
+  v_sd_remittance_receive_when_umbrella_paid boolean := false;
 
-  v_ts record;
-  v_snapshot jsonb;
-  v_signature text;
-
-  v_timesheet_count int := 0;
-  v_candidate_count int := 0;
+  -- ✅ derived defaults for config evaluation
+  v_missing_scope text := 'WEEKLY';
+  v_unknown_item_type_default boolean := true;
+  v_unknown_item_type_default_text text := 'true';
 begin
-  if p_payload_json is null or jsonb_typeof(p_payload_json) <> 'object' then
-    raise exception 'pay_reconcile_external_payment: payload_json must be an object';
+  if p_pay_batch_id is null then
+    raise exception 'pay_remittance_build: pay_batch_id is required';
   end if;
 
-  if nullif(btrim(coalesce(p_payload_json->>'pay_date','')), '') is null then
-    raise exception 'pay_reconcile_external_payment: payload.pay_date is required (YYYY-MM-DD)';
+  if v_scope not in ('ALL','PAYE','UMBRELLA') then
+    raise exception 'pay_remittance_build: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
   end if;
 
-  begin
-    v_pay_date := (p_payload_json->>'pay_date')::date;
-  exception when others then
-    raise exception 'pay_reconcile_external_payment: payload.pay_date is not a valid date (YYYY-MM-DD)';
-  end;
-
-  v_note := nullif(btrim(coalesce(p_payload_json->>'note','')), '');
-
-  v_payment_reference := nullif(
-    btrim(
-      coalesce(
-        p_payload_json->>'payment_reference',
-        p_payload_json->>'bulk_reference',
-        p_payload_json->>'bank_reference',
-        ''
-      )
-    ),
-    ''
-  );
-
-  if v_payment_reference is null then
-    raise exception 'pay_reconcile_external_payment: payload.payment_reference is required';
-  end if;
-
-  if jsonb_typeof(p_payload_json->'timesheet_ids') <> 'array' then
-    raise exception 'pay_reconcile_external_payment: payload.timesheet_ids must be an array of UUID strings';
-  end if;
-
-  select coalesce(array_agg((x::text)::uuid), array[]::uuid[])
-  into v_timesheet_ids
-  from jsonb_array_elements_text(p_payload_json->'timesheet_ids') x;
-
-  if array_length(v_timesheet_ids, 1) is null or array_length(v_timesheet_ids, 1) = 0 then
-    raise exception 'pay_reconcile_external_payment: payload.timesheet_ids must not be empty';
-  end if;
-
-  -- Duplicates guard
-  select coalesce(jsonb_agg(d.ts_id::text), '[]'::jsonb)
-  into v_dup
-  from (
-    select t.ts_id
-    from (
-      select unnest(v_timesheet_ids) as ts_id
-    ) t
-    group by t.ts_id
-    having count(*) > 1
-  ) d;
-
-  if jsonb_array_length(v_dup) > 0 then
-    raise exception 'pay_reconcile_external_payment: duplicate timesheet_ids %', v_dup::text;
-  end if;
-
-  -- Validate settings exist (for snapshot fields required by pay_batches checks)
+  -- ✅ Load remittance settings + new defaults (single row, id=1 semantics)
   select
-    sd.banking_system,
-    sd.external_paye_system
-  into v_settings
+    sd.remittance_includes_json,
+    sd.remittance_header_message,
+    sd.remittance_footer_message,
+    coalesce(sd.paye_remittances_enabled,false) as paye_remittances_enabled,
+    coalesce(sd.remittances_detailed_breakdown,false) as remittances_detailed_breakdown,
+    coalesce(sd.remittance_receive_when_umbrella_paid,false) as remittance_receive_when_umbrella_paid
+  into
+    v_remittance_includes_json,
+    v_remittance_header_message,
+    v_remittance_footer_message,
+    v_sd_paye_remittances_enabled,
+    v_sd_remittances_detailed_breakdown,
+    v_sd_remittance_receive_when_umbrella_paid
   from public.settings_defaults sd
   where sd.id = 1
   limit 1;
 
-  if v_settings.banking_system is null or v_settings.external_paye_system is null then
-    raise exception 'pay_reconcile_external_payment: settings_defaults missing banking_system/external_paye_system';
+  -- ✅ Normalize include config defaults (safe when config is NULL or not an object)
+  if v_remittance_includes_json is not null and jsonb_typeof(v_remittance_includes_json) = 'object' then
+    v_missing_scope := upper(btrim(coalesce(v_remittance_includes_json->'defaults'->>'missing_scope', 'WEEKLY')));
+
+    v_unknown_item_type_default_text := lower(btrim(coalesce(v_remittance_includes_json->'defaults'->>'unknown_item_type', 'true')));
+    v_unknown_item_type_default := (v_unknown_item_type_default_text in ('true','1','yes','y','on'));
+  else
+    v_missing_scope := 'WEEKLY';
+    v_unknown_item_type_default := true;
   end if;
 
-  -- Validate timesheets exist and are current
-  select coalesce(jsonb_agg(m.ts_id::text), '[]'::jsonb)
-  into v_missing
-  from (
-    select u.ts_id
-    from (select unnest(v_timesheet_ids) as ts_id) u
-    left join public.timesheets ts
-      on ts.timesheet_id = u.ts_id
-     and ts.is_current = true
-    where ts.timesheet_id is null
-  ) m;
-
-  if jsonb_array_length(v_missing) > 0 then
-    raise exception 'pay_reconcile_external_payment: timesheet(s) not found or not current %', v_missing::text;
+  if v_unknown_item_type_default then
+    v_unknown_item_type_default_text := 'true';
+  else
+    v_unknown_item_type_default_text := 'false';
   end if;
 
-  -- Create a settled batch for audit/history linkage
-  insert into public.pay_batches(
-    pay_date,
-    created_at_utc,
-    created_by_user_id,
-    status,
-    banking_system_snapshot,
-    external_paye_system_snapshot,
-    rail_provider_snapshot,
-    rail_env_snapshot,
-    bulk_reference
-  )
-  values (
-    v_pay_date,
-    v_now,
-    p_actor_user_id,
-    'SETTLED',
-    v_settings.banking_system,
-    v_settings.external_paye_system,
-    'EXTERNAL',
-    'EXTERNAL',
-    v_payment_reference
-  )
-  returning id into v_batch_id;
-
-  -- Create pay_batch_candidates (for history drill-down)
-  insert into public.pay_batch_candidates(
-    pay_batch_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    settlement_status,
-    settled_at_utc,
-    settled_via,
-    settled_note
-  )
   select
-    v_batch_id,
-    c.id,
-    c.tms_ref,
-    c.display_name,
-    'SETTLED',
-    v_now,
-    'EXTERNAL_RECONCILE',
-    v_note
-  from public.timesheets_financials tf
-  join public.timesheets ts
-    on ts.timesheet_id = tf.timesheet_id
-   and ts.is_current = true
-  join public.candidates c
-    on c.id = tf.candidate_id
-  where tf.is_current = true
-    and tf.timesheet_id = any(v_timesheet_ids)
-  group by c.id, c.tms_ref, c.display_name;
+    pb.id,
+    pb.pay_date,
+    pb.status,
+    pb.bulk_reference,
+    pb.banking_system_snapshot,
+    pb.external_paye_system_snapshot
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id;
 
-  get diagnostics v_candidate_count = row_count;
+  if v_batch.id is null then
+    raise exception 'pay_remittance_build: pay batch % not found.', p_pay_batch_id;
+  end if;
 
-  -- For each timesheet: build CURRENT snapshot and write to pay_state + history (+ pay_batch_timesheet_snapshots)
-  for v_ts in
-    select
-      tf.timesheet_id,
-      tf.candidate_id,
-      upper(coalesce(tf.pay_method,'')) as pay_method,
-      tf.total_pay_ex_vat,
-      tf.expenses_pay_ex_vat,
-      tf.travel_pay_ex_vat,
-      tf.accommodation_pay_ex_vat,
-      tf.other_pay_ex_vat,
-      tf.mileage_pay_ex_vat,
-      tf.invoice_breakdown_json,
-      ts.reference_number
-    from public.timesheets_financials tf
-    join public.timesheets ts
-      on ts.timesheet_id = tf.timesheet_id
-     and ts.is_current = true
-    where tf.is_current = true
-      and tf.timesheet_id = any(v_timesheet_ids)
-  loop
-    -- Build segments snapshot (mirrors pay_preview "current" shape)
-    v_snapshot := jsonb_build_object(
-      'segments',
-        case
-          when v_ts.invoice_breakdown_json is not null
-           and jsonb_typeof(v_ts.invoice_breakdown_json) = 'object'
-           and upper(coalesce(v_ts.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-           and jsonb_typeof(v_ts.invoice_breakdown_json->'segments') = 'array'
-          then (
-            select coalesce(jsonb_agg(
-              jsonb_build_object(
-                'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')), ''),
-                'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
-                'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
-                'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), '')
-              )
-            ), '[]'::jsonb)
-            from jsonb_array_elements(v_ts.invoice_breakdown_json->'segments') seg
-            where seg is not null and jsonb_typeof(seg)='object'
+  -- ============================================================
+  -- Umbrella remittance jobs (recipient = umbrella)
+  -- HARD RULES:
+  --  - generate only when umbrella transfers exist AND umbrella remittance_email exists
+  --  - detailed_breakdown resolved from umbrella overrides vs settings_defaults
+  --  - when detailed_breakdown=true and SEGMENT timesheet: include schedule rows (worked shifts only)
+  --  - aggregate timesheets never include schedules
+  --  - include canonical breakdown lines via pay_batch_item_breakdowns (no derived rates)
+  -- ============================================================
+  if v_scope in ('ALL','UMBRELLA') then
+    with umb_transfers as (
+      select
+        pbt.id as transfer_id,
+        pbt.pay_batch_id,
+        pbt.candidate_id,
+        pbt.umbrella_id,
+        pbt.pay_channel,
+        pbt.amount,
+        pbt.currency,
+        pbt.status,
+        pbt.payment_reference,
+        pbt.completed_at_utc,
+        pbt.rail_tx_id,
+        pbt.rail_state,
+        pbt.rail_meta_json,
+        pbt.failed_reason,
+        (
+          upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
+          or (
+            pbt.rail_meta_json is not null
+            and (pbt.rail_meta_json ? 'simulated')
+            and lower(btrim(coalesce(pbt.rail_meta_json->>'simulated',''))) in ('true','1','yes','y','on')
           )
-          else jsonb_build_array(
-            jsonb_build_object(
-              'segment_id', ('ts:' || v_ts.timesheet_id::text),
-              'pay_amount', round(coalesce(v_ts.total_pay_ex_vat,0),2),
-              'exclude_from_pay', false,
-              'ref_num', nullif(btrim(coalesce(v_ts.reference_number,'')), '')
+        ) as is_simulated
+      from public.pay_bank_transfers pbt
+      where pbt.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA'
+        and upper(coalesce(pbt.status,'')) = 'COMPLETED'
+        and pbt.umbrella_id is not null
+        and pbt.candidate_id is not null
+    ),
+    umb_roster as (
+      select
+        ut.umbrella_id,
+        max(u.name) as umbrella_name,
+        max(u.remittance_email) as remittance_email,
+        max(coalesce(u.remittance_overrides_enabled,false)) as umb_override_enabled,
+        max(coalesce(u.remittances_detailed_breakdown,false)) as umb_detail_enabled,
+        bool_or(coalesce(ut.is_simulated,false)) as test_mode
+      from umb_transfers ut
+      join public.umbrellas u
+        on u.id = ut.umbrella_id
+      group by ut.umbrella_id
+      having nullif(btrim(coalesce(max(u.remittance_email),'')),'') is not null
+    ),
+    umb_job_flags as (
+      select
+        ur.umbrella_id,
+        case
+          when ur.umb_override_enabled then ur.umb_detail_enabled
+          else v_sd_remittances_detailed_breakdown
+        end as detailed_breakdown
+      from umb_roster ur
+    ),
+    umb_candidates as (
+      select distinct
+        ut.umbrella_id,
+        ut.candidate_id
+      from umb_transfers ut
+    ),
+    cand_meta as (
+      select
+        uc.umbrella_id,
+        c.id as candidate_id,
+        c.tms_ref as tms_ref,
+        c.display_name as display_name,
+        c.email as email
+      from umb_candidates uc
+      join public.candidates c
+        on c.id = uc.candidate_id
+    ),
+    cand_items as (
+      select
+        uc.umbrella_id,
+        pbc.candidate_id,
+        pbi.id as pay_batch_item_id,
+        pbi.item_type,
+        pbi.description,
+        pbi.timesheet_id,
+        pbi.segment_key,
+        pbi.source_ref,
+        pbi.amount_ex_vat,
+        pbi.amount_vat,
+        pbi.amount_inc_vat,
+        pbi.pay_channel,
+        pbi.umbrella_id,
+        upper(coalesce(vs.sheet_scope::text, v_missing_scope)) as sheet_scope_norm
+      from umb_candidates uc
+      join public.pay_batch_candidates pbc
+        on pbc.pay_batch_id = p_pay_batch_id
+       and pbc.candidate_id = uc.candidate_id
+      join public.pay_batch_items pbi
+        on pbi.pay_batch_candidate_id = pbc.id
+      left join public.v_timesheets_summary vs
+        on vs.timesheet_id = pbi.timesheet_id
+      where upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA'
+        and pbi.item_type <> 'DEBT_CREATED'
+        and (
+          case
+            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+              (case
+                 when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                 then true else false end)
+            else
+              (case
+                 when lower(coalesce(v_remittance_includes_json->'weekly'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                 then true else false end)
+          end
+        )
+    ),
+    ts_meta as (
+      select
+        ci.umbrella_id,
+        ci.candidate_id,
+        ts.timesheet_id,
+        ts.week_ending_date,
+        ts.reference_number,
+        ts.contract_id,
+        nullif(btrim(coalesce(ts.job_title_norm,'')),'') as job_title_norm,
+        nullif(btrim(coalesce(ts.band,'')),'') as band_norm
+      from cand_items ci
+      join public.timesheets ts
+        on ts.timesheet_id = ci.timesheet_id
+       and ts.is_current = true
+      group by
+        ci.umbrella_id, ci.candidate_id, ts.timesheet_id,
+        ts.week_ending_date, ts.reference_number, ts.contract_id, ts.job_title_norm, ts.band
+    ),
+    ts_enrich as (
+      select
+        tm.umbrella_id,
+        tm.candidate_id,
+        tm.timesheet_id,
+        tm.week_ending_date,
+        tm.reference_number,
+        vs.client_id as client_id,
+        vs.client_name as client_name,
+        upper(coalesce(vs.sheet_scope::text, v_missing_scope)) as sheet_scope,
+        nullif(btrim(coalesce(ct.role, tm.job_title_norm)),'') as job_title,
+        nullif(btrim(coalesce(ct.band, tm.band_norm)),'') as band
+      from ts_meta tm
+      left join public.contracts ct
+        on ct.id = tm.contract_id
+      left join public.v_timesheets_summary vs
+        on vs.timesheet_id = tm.timesheet_id
+    ),
+    ts_snap as (
+      select
+        tss.pay_batch_id,
+        tss.timesheet_id,
+        tss.candidate_id,
+        tss.pay_channel,
+        tss.base_snapshot_json,
+        tss.target_snapshot_json
+      from public.pay_batch_timesheet_snapshots tss
+      where tss.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(tss.pay_channel,'')) = 'UMBRELLA'
+    ),
+    ts_class as (
+      select
+        te.umbrella_id,
+        te.candidate_id,
+        te.timesheet_id,
+        te.week_ending_date,
+        te.reference_number,
+        te.client_id,
+        te.client_name,
+        te.sheet_scope,
+        te.job_title,
+        te.band,
+        tsn.base_snapshot_json,
+        tsn.target_snapshot_json,
+        case
+          when tsn.target_snapshot_json is not null
+           and jsonb_typeof(tsn.target_snapshot_json) = 'object'
+           and jsonb_typeof(tsn.target_snapshot_json->'segments') = 'array'
+           and exists (
+             select 1
+             from jsonb_array_elements(tsn.target_snapshot_json->'segments') s
+             where s is not null
+               and jsonb_typeof(s)='object'
+               and nullif(btrim(coalesce(s->>'date','')),'') is not null
+           )
+          then 'SEGMENT'
+          else 'AGGREGATE'
+        end as timesheet_render_mode,
+        case
+          when tsn.base_snapshot_json is null then 'Standard'
+          when tsn.base_snapshot_json = '{}'::jsonb then 'Standard'
+          when (
+            exists (
+              select 1
+              from jsonb_array_elements(coalesce(tsn.base_snapshot_json->'segments','[]'::jsonb)) s
+              where s is not null and jsonb_typeof(s)='object'
+                and round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) <> 0
+            )
+            or round(coalesce(nullif(tsn.base_snapshot_json->>'additional_pay_ex_vat','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0),2) <> 0
+            or (
+              jsonb_typeof(tsn.base_snapshot_json->'adjustments')='array'
+              and jsonb_array_length(tsn.base_snapshot_json->'adjustments') > 0
             )
           )
-        end,
-      'adjustments', coalesce((
-        select jsonb_agg(
-          jsonb_build_object(
-            'id', a.id::text,
-            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
-          )
-          order by a.created_at nulls last, a.id
-        )
-        from public.ts_pay_adjustments a
-        where a.as_advance = false
-          and a.timesheet_id = v_ts.timesheet_id
-      ), '[]'::jsonb),
-      'additional_pay_ex_vat',
-        case
-          when v_ts.invoice_breakdown_json is not null
-           and jsonb_typeof(v_ts.invoice_breakdown_json)='object'
-           and upper(coalesce(v_ts.invoice_breakdown_json->>'mode',''))='SEGMENTS'
-          then round(coalesce(nullif(v_ts.invoice_breakdown_json #>> '{additional,pay_ex_vat}','')::numeric,0),2)
-          else 0::numeric
-        end,
-      'expenses', jsonb_build_object(
-        'expenses_pay_ex_vat', round(coalesce(v_ts.expenses_pay_ex_vat,0),2),
-        'travel_pay_ex_vat', round(coalesce(v_ts.travel_pay_ex_vat,0),2),
-        'accommodation_pay_ex_vat', round(coalesce(v_ts.accommodation_pay_ex_vat,0),2),
-        'other_pay_ex_vat', round(coalesce(v_ts.other_pay_ex_vat,0),2),
-        'mileage_pay_ex_vat', round(coalesce(v_ts.mileage_pay_ex_vat,0),2)
-      ),
-      'reconciled_external', true,
-      'reconciled_pay_batch_id', v_batch_id::text,
-      'reconciled_at_utc', v_now::text,
-      'external_payment_reference', v_payment_reference
-    );
-
-    v_signature := md5(v_snapshot::text);
-
-    -- Optional but strong: write pay_batch_timesheet_snapshots for full batch artefact auditability
-    insert into public.pay_batch_timesheet_snapshots(
-      pay_batch_id,
-      timesheet_id,
-      candidate_id,
-      pay_channel,
-      base_snapshot_json,
-      target_snapshot_json,
-      signature
-    )
-    values (
-      v_batch_id,
-      v_ts.timesheet_id,
-      v_ts.candidate_id,
-      case when v_ts.pay_method = 'PAYE' then 'PAYE' else 'UMBRELLA' end,
-      v_snapshot,
-      v_snapshot,
-      v_signature
-    );
-
-    insert into public.timesheet_pay_state(
-      timesheet_id,
-      last_settled_snapshot_json,
-      last_settled_signature,
-      last_settled_pay_batch_id,
-      last_settled_at_utc
-    )
-    values (
-      v_ts.timesheet_id,
-      v_snapshot,
-      v_signature,
-      v_batch_id,
-      v_now
-    )
-    on conflict (timesheet_id)
-    do update set
-      last_settled_snapshot_json = excluded.last_settled_snapshot_json,
-      last_settled_signature = excluded.last_settled_signature,
-      last_settled_pay_batch_id = excluded.last_settled_pay_batch_id,
-      last_settled_at_utc = excluded.last_settled_at_utc;
-
-    insert into public.timesheet_pay_state_history(
-      timesheet_id,
-      pay_batch_id,
-      settled_at_utc,
-      snapshot_json,
-      signature
-    )
-    values (
-      v_ts.timesheet_id,
-      v_batch_id,
-      v_now,
-      v_snapshot,
-      v_signature
-    );
-
-    insert into public.audit_events(
-      actor_user_id,
-      object_type,
-      object_id_text,
-      action,
-      before_json,
-      after_json,
-      reason
-    )
-    values (
-      p_actor_user_id,
-      'timesheet',
-      v_ts.timesheet_id::text,
-      'PAY_EXTERNAL_RECONCILE',
-      null,
-      jsonb_build_object(
-        'pay_batch_id', v_batch_id::text,
-        'pay_date', v_pay_date::text,
-        'timesheet_id', v_ts.timesheet_id::text,
-        'candidate_id', v_ts.candidate_id::text,
-        'pay_method', v_ts.pay_method,
-        'payment_reference', v_payment_reference
-      ),
-      v_note
-    );
-
-    v_timesheet_count := v_timesheet_count + 1;
-  end loop;
-
-  -- Batch-level audit
-  insert into public.audit_events(
-    actor_user_id,
-    object_type,
-    object_id_text,
-    action,
-    before_json,
-    after_json,
-    reason
-  )
-  values (
-    p_actor_user_id,
-    'pay_batch',
-    v_batch_id::text,
-    'PAY_EXTERNAL_RECONCILE_BATCH',
-    null,
-    jsonb_build_object(
-      'pay_batch_id', v_batch_id::text,
-      'pay_date', v_pay_date::text,
-      'payment_reference', v_payment_reference,
-      'timesheet_ids', (select jsonb_agg(t::text) from unnest(v_timesheet_ids) t),
-      'note', v_note
+          then 'Adjustment'
+          else 'Standard'
+        end as timesheet_type
+      from ts_enrich te
+      left join ts_snap tsn
+        on tsn.timesheet_id = te.timesheet_id
+       and tsn.candidate_id = te.candidate_id
     ),
-    v_note
-  );
+    breakdown_raw as (
+      select
+        ci.umbrella_id,
+        ci.candidate_id,
+        ci.timesheet_id,
+        pbib.line_kind,
+        pbib.bucket_code,
+        pbib.unit_name,
+        pbib.units,
+        pbib.rate,
+        pbib.amount_ex_vat,
+        pbib.amount_vat,
+        pbib.amount_inc_vat
+      from cand_items ci
+      join public.pay_batch_item_breakdowns pbib
+        on pbib.pay_batch_item_id = ci.pay_batch_item_id
+      where ci.timesheet_id is not null
+    ),
+    ts_unit_rows as (
+      select
+        br.umbrella_id,
+        br.candidate_id,
+        br.timesheet_id,
+        br.line_kind,
+        br.bucket_code,
+        br.unit_name,
+        br.rate,
+        round(sum(coalesce(br.units,0)),2) as quantity,
+        round(sum(coalesce(br.amount_ex_vat,0)),2) as total_ex_vat,
+        round(sum(coalesce(br.amount_vat,0)),2) as total_vat,
+        round(sum(coalesce(br.amount_inc_vat,0)),2) as total_inc_vat
+      from breakdown_raw br
+      group by br.umbrella_id, br.candidate_id, br.timesheet_id, br.line_kind, br.bucket_code, br.unit_name, br.rate
+      having
+        round(sum(coalesce(br.units,0)),2) <> 0
+        or round(sum(coalesce(br.amount_ex_vat,0)),2) <> 0
+        or round(sum(coalesce(br.amount_inc_vat,0)),2) <> 0
+    ),
+    ts_sections as (
+      select
+        tc.umbrella_id,
+        tc.candidate_id,
+        tc.timesheet_id,
+        tc.week_ending_date,
+        tc.reference_number,
+        tc.client_id,
+        tc.client_name,
+        tc.job_title,
+        tc.band,
+        tc.timesheet_render_mode,
+        tc.timesheet_type,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by
+              case upper(coalesce(r.bucket_code,''))
+                when 'DAY' then 1
+                when 'NIGHT' then 2
+                when 'SAT' then 3
+                when 'SUN' then 4
+                when 'BH' then 5
+                else 99
+              end,
+              coalesce(r.unit_name,'') asc,
+              coalesce(r.rate,0) asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) = 'TS_BUCKET'),
+          '[]'::jsonb
+        ) as unit_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by coalesce(r.unit_name,'') asc, coalesce(r.rate,0) asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) = 'ADDITIONAL_UNIT'),
+          '[]'::jsonb
+        ) as additional_units_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by coalesce(r.unit_name,'') asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) in ('EXPENSE','MILEAGE')),
+          '[]'::jsonb
+        ) as expenses_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat,
+              'line_kind', r.line_kind
+            )
+            order by coalesce(r.unit_name,'') asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','DEBT_CREATED')),
+          '[]'::jsonb
+        ) as other_rows,
+        round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
+        round(coalesce(sum(r.total_vat),0),2) as totals_vat,
+        round(coalesce(sum(r.total_inc_vat),0),2) as totals_inc_vat,
+        tc.base_snapshot_json,
+        tc.target_snapshot_json
+      from ts_class tc
+      left join ts_unit_rows r
+        on r.umbrella_id = tc.umbrella_id
+       and r.candidate_id = tc.candidate_id
+       and r.timesheet_id = tc.timesheet_id
+      group by
+        tc.umbrella_id,
+        tc.candidate_id,
+        tc.timesheet_id,
+        tc.week_ending_date,
+        tc.reference_number,
+        tc.client_id,
+        tc.client_name,
+        tc.job_title,
+        tc.band,
+        tc.timesheet_render_mode,
+        tc.timesheet_type,
+        tc.base_snapshot_json,
+        tc.target_snapshot_json
+    ),
+    ts_schedule_rows_all as (
+      select
+        ts.umbrella_id,
+        ts.candidate_id,
+        ts.timesheet_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'segment_id', nullif(btrim(coalesce(s->>'segment_id','')),''),
+              'date', nullif(btrim(coalesce(s->>'date','')),''),
+              'start_utc', nullif(btrim(coalesce(s->>'start_utc','')),''),
+              'end_utc', nullif(btrim(coalesce(s->>'end_utc','')),''),
+              'break_mins', coalesce(nullif(s->>'break_mins','')::numeric,0),
+              'breaks', coalesce(s->'breaks','[]'::jsonb)
+            )
+            order by
+              nullif(btrim(coalesce(s->>'date','')),'') asc,
+              nullif(btrim(coalesce(s->>'start_utc','')),'') asc,
+              nullif(btrim(coalesce(s->>'segment_id','')),'') asc
+          ),
+          '[]'::jsonb
+        ) as schedule_rows
+      from ts_sections ts
+      join lateral jsonb_array_elements(coalesce(ts.target_snapshot_json->'segments','[]'::jsonb)) s
+        on ts.target_snapshot_json is not null
+       and jsonb_typeof(ts.target_snapshot_json)='object'
+      where ts.timesheet_render_mode = 'SEGMENT'
+        and s is not null
+        and jsonb_typeof(s)='object'
+        and coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) = false
+        and (
+          coalesce(nullif(s->>'hours_day','')::numeric,0)
+          + coalesce(nullif(s->>'hours_night','')::numeric,0)
+          + coalesce(nullif(s->>'hours_sat','')::numeric,0)
+          + coalesce(nullif(s->>'hours_sun','')::numeric,0)
+          + coalesce(nullif(s->>'hours_bh','')::numeric,0)
+        ) > 0
+      group by ts.umbrella_id, ts.candidate_id, ts.timesheet_id
+    ),
+    ts_schedule_changes_all as (
+      select
+        ts.umbrella_id,
+        ts.candidate_id,
+        ts.timesheet_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'segment_id', seg_id,
+              'date', coalesce(before_seg->>'date', after_seg->>'date'),
+              'before', jsonb_build_object(
+                'start_utc', before_seg->>'start_utc',
+                'end_utc', before_seg->>'end_utc',
+                'break_mins', coalesce(nullif(before_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(before_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(before_seg->>'exclude_from_pay','')::boolean,false)
+              ),
+              'after', jsonb_build_object(
+                'start_utc', after_seg->>'start_utc',
+                'end_utc', after_seg->>'end_utc',
+                'break_mins', coalesce(nullif(after_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(after_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(after_seg->>'exclude_from_pay','')::boolean,false)
+              )
+            )
+            order by
+              coalesce(before_seg->>'date', after_seg->>'date') asc,
+              coalesce(before_seg->>'start_utc', after_seg->>'start_utc') asc,
+              seg_id asc
+          ),
+          '[]'::jsonb
+        ) as schedule_changes
+      from (
+        select
+          ts0.umbrella_id,
+          ts0.candidate_id,
+          ts0.timesheet_id,
+          nullif(btrim(coalesce(ids->>'segment_id','')),'') as seg_id,
+          bseg.seg as before_seg,
+          aseg.seg as after_seg
+        from ts_sections ts0
+        join lateral (
+          select s
+          from (
+            select s0 as s from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s0
+            union all
+            select s1 as s from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s1
+          ) u
+          where u.s is not null and jsonb_typeof(u.s)='object'
+        ) ids
+          on ts0.timesheet_render_mode = 'SEGMENT'
+         and ts0.timesheet_type = 'Adjustment'
+        left join lateral (
+          select s as seg
+          from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s
+          where s is not null and jsonb_typeof(s)='object'
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+          limit 1
+        ) bseg on true
+        left join lateral (
+          select s as seg
+          from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s
+          where s is not null and jsonb_typeof(s)='object'
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+          limit 1
+        ) aseg on true
+      ) x
+      join ts_sections ts
+        on ts.umbrella_id = x.umbrella_id
+       and ts.candidate_id = x.candidate_id
+       and ts.timesheet_id = x.timesheet_id
+      where x.seg_id is not null
+        and (
+          coalesce(x.before_seg->>'start_utc','') <> coalesce(x.after_seg->>'start_utc','')
+          or coalesce(x.before_seg->>'end_utc','') <> coalesce(x.after_seg->>'end_utc','')
+          or coalesce(nullif(x.before_seg->>'break_mins','')::numeric,0) <> coalesce(nullif(x.after_seg->>'break_mins','')::numeric,0)
+          or coalesce(x.before_seg->'breaks','[]'::jsonb) <> coalesce(x.after_seg->'breaks','[]'::jsonb)
+          or coalesce(nullif(x.before_seg->>'exclude_from_pay','')::boolean,false) <> coalesce(nullif(x.after_seg->>'exclude_from_pay','')::boolean,false)
+        )
+      group by ts.umbrella_id, ts.candidate_id, ts.timesheet_id
+    ),
+    cand_timesheets as (
+      select
+        ts.umbrella_id,
+        ts.candidate_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'timesheet_id', ts.timesheet_id::text,
+              'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
+              'reference_number', ts.reference_number,
+              'client_id', case when ts.client_id is null then null else ts.client_id::text end,
+              'client_name', ts.client_name,
+              'job_title', ts.job_title,
+              'band', ts.band,
+              'timesheet_render_mode', ts.timesheet_render_mode,
+              'timesheet_type', ts.timesheet_type,
+              'unit_rows', ts.unit_rows,
+              'additional_units_rows', ts.additional_units_rows,
+              'expenses_rows', ts.expenses_rows,
+              'other_rows', ts.other_rows,
+              'totals', jsonb_build_object(
+                'total_ex_vat', ts.totals_ex_vat,
+                'vat', ts.totals_vat,
+                'total_inc_vat', ts.totals_inc_vat
+              ),
+              'schedule_rows', case
+                when coalesce(ujf.detailed_breakdown,false) = true and ts.timesheet_render_mode = 'SEGMENT'
+                  then coalesce(sr.schedule_rows,'[]'::jsonb)
+                else '[]'::jsonb
+              end,
+              'schedule_changes', case
+                when coalesce(ujf.detailed_breakdown,false) = true and ts.timesheet_render_mode = 'SEGMENT' and ts.timesheet_type = 'Adjustment'
+                  then coalesce(sc.schedule_changes,'[]'::jsonb)
+                else '[]'::jsonb
+              end
+            )
+            order by ts.week_ending_date desc nulls last, ts.client_name nulls last, ts.reference_number nulls last, ts.timesheet_id
+          ),
+          '[]'::jsonb
+        ) as timesheets_json
+      from ts_sections ts
+      join umb_job_flags ujf
+        on ujf.umbrella_id = ts.umbrella_id
+      left join ts_schedule_rows_all sr
+        on sr.umbrella_id = ts.umbrella_id
+       and sr.candidate_id = ts.candidate_id
+       and sr.timesheet_id = ts.timesheet_id
+      left join ts_schedule_changes_all sc
+        on sc.umbrella_id = ts.umbrella_id
+       and sc.candidate_id = ts.candidate_id
+       and sc.timesheet_id = ts.timesheet_id
+      group by ts.umbrella_id, ts.candidate_id
+    ),
+    candidate_payload as (
+      select
+        cm.umbrella_id,
+        cm.candidate_id,
+        jsonb_build_object(
+          'candidate_id', cm.candidate_id::text,
+          'tms_ref', cm.tms_ref,
+          'display_name', cm.display_name,
+          'email', cm.email,
+          'timesheets', coalesce(ct.timesheets_json,'[]'::jsonb)
+        ) as candidate_json
+      from cand_meta cm
+      left join cand_timesheets ct
+        on ct.umbrella_id = cm.umbrella_id
+       and ct.candidate_id = cm.candidate_id
+    ),
+    umb_job as (
+      select
+        ur.umbrella_id,
+        ur.umbrella_name,
+        ur.remittance_email,
+        ur.test_mode,
+        ujf.detailed_breakdown,
+        round(coalesce(sum(ut.amount),0),2) as umbrella_total_amount,
+        coalesce(
+          jsonb_agg(cp.candidate_json order by (cp.candidate_json->>'display_name') nulls last, (cp.candidate_json->>'tms_ref') nulls last),
+          '[]'::jsonb
+        ) as candidates_json
+      from umb_roster ur
+      join umb_job_flags ujf
+        on ujf.umbrella_id = ur.umbrella_id
+      join umb_transfers ut
+        on ut.umbrella_id = ur.umbrella_id
+      join candidate_payload cp
+        on cp.umbrella_id = ur.umbrella_id
+      group by ur.umbrella_id, ur.umbrella_name, ur.remittance_email, ur.test_mode, ujf.detailed_breakdown
+    )
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'job_kind', 'UMBRELLA_REMITTANCE',
+          'pay_batch_id', v_batch.id::text,
+          'scope', 'UMBRELLA',
+          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+          'bulk_reference', v_batch.bulk_reference,
+          'test_mode', coalesce(uj.test_mode,false),
+          'detailed_breakdown', coalesce(uj.detailed_breakdown,false),
+          'recipient', jsonb_build_object(
+            'entity_kind', 'UMBRELLA',
+            'umbrella_id', uj.umbrella_id::text,
+            'name', uj.umbrella_name,
+            'remittance_email', uj.remittance_email
+          ),
+          'summary', jsonb_build_object(
+            'total_amount', uj.umbrella_total_amount,
+            'currency', 'GBP'
+          ),
+          'candidates', coalesce(uj.candidates_json,'[]'::jsonb)
+        )
+        order by uj.umbrella_name nulls last, uj.umbrella_id
+      ),
+      '[]'::jsonb
+    )
+    into v_jobs_umb
+    from umb_job uj;
+  end if;
+
+  -- ============================================================
+  -- Candidate PAYE remittance jobs (recipient = candidate)
+  -- LOCKED RULE:
+  --  - generated only if effective receive is true:
+  --    overrides? candidate.remittance_receive_enabled : settings_defaults.paye_remittances_enabled
+  --  - detailed_breakdown resolved from candidate overrides vs settings_defaults
+  -- ============================================================
+  if v_scope in ('ALL','PAYE') then
+    with paye_transfers as (
+      select
+        pbt.id as transfer_id,
+        pbt.pay_batch_id,
+        pbt.candidate_id,
+        pbt.pay_channel,
+        pbt.amount,
+        pbt.currency,
+        pbt.status,
+        pbt.payment_reference,
+        pbt.completed_at_utc,
+        pbt.rail_tx_id,
+        pbt.rail_state,
+        pbt.rail_meta_json,
+        pbt.failed_reason,
+        (
+          upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
+          or (
+            pbt.rail_meta_json is not null
+            and (pbt.rail_meta_json ? 'simulated')
+            and lower(btrim(coalesce(pbt.rail_meta_json->>'simulated',''))) in ('true','1','yes','y','on')
+          )
+        ) as is_simulated
+      from public.pay_bank_transfers pbt
+      where pbt.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(pbt.pay_channel,'')) = 'PAYE'
+        and upper(coalesce(pbt.status,'')) = 'COMPLETED'
+        and pbt.candidate_id is not null
+    ),
+    cand_cfg as (
+      select
+        c.id as candidate_id,
+        c.tms_ref,
+        c.display_name,
+        c.email,
+        coalesce(c.remittance_overrides_enabled,false) as overrides_enabled,
+        coalesce(c.remittance_receive_enabled,false) as paye_receive_enabled,
+        coalesce(c.remittances_detailed_breakdown,false) as detailed_enabled
+      from public.candidates c
+      where c.id in (select distinct pt.candidate_id from paye_transfers pt)
+    ),
+    cand_effective as (
+      select
+        cc.*,
+        (case when cc.overrides_enabled then cc.paye_receive_enabled else v_sd_paye_remittances_enabled end) as eff_paye_receive,
+        (case when cc.overrides_enabled then cc.detailed_enabled else v_sd_remittances_detailed_breakdown end) as eff_detailed
+      from cand_cfg cc
+    ),
+    cand_allowed as (
+      select *
+      from cand_effective ce
+      where ce.eff_paye_receive = true
+    ),
+    cand_items as (
+      select
+        ca.candidate_id,
+        pbi.id as pay_batch_item_id,
+        pbi.item_type,
+        pbi.description,
+        pbi.timesheet_id,
+        pbi.segment_key,
+        pbi.source_ref,
+        pbi.amount_ex_vat,
+        pbi.amount_vat,
+        pbi.amount_inc_vat,
+        pbi.pay_channel
+      from cand_allowed ca
+      join public.pay_batch_candidates pbc
+        on pbc.pay_batch_id = p_pay_batch_id
+       and pbc.candidate_id = ca.candidate_id
+      join public.pay_batch_items pbi
+        on pbi.pay_batch_candidate_id = pbc.id
+      left join public.v_timesheets_summary vs
+        on vs.timesheet_id = pbi.timesheet_id
+      where upper(coalesce(pbi.pay_channel,'')) = 'PAYE'
+        and pbi.item_type <> 'DEBT_CREATED'
+        and (
+          case
+            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+              (case
+                 when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                 then true else false end)
+            else
+              (case
+                 when lower(coalesce(v_remittance_includes_json->'weekly'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                 then true else false end)
+          end
+        )
+    ),
+    ts_meta as (
+      select
+        ci.candidate_id,
+        ts.timesheet_id,
+        ts.week_ending_date,
+        ts.reference_number,
+        ts.contract_id,
+        nullif(btrim(coalesce(ts.job_title_norm,'')),'') as job_title_norm,
+        nullif(btrim(coalesce(ts.band,'')),'') as band_norm
+      from cand_items ci
+      join public.timesheets ts
+        on ts.timesheet_id = ci.timesheet_id
+       and ts.is_current = true
+      group by ci.candidate_id, ts.timesheet_id, ts.week_ending_date, ts.reference_number, ts.contract_id, ts.job_title_norm, ts.band
+    ),
+    ts_enrich as (
+      select
+        tm.candidate_id,
+        tm.timesheet_id,
+        tm.week_ending_date,
+        tm.reference_number,
+        vs.client_id as client_id,
+        vs.client_name as client_name,
+        upper(coalesce(vs.sheet_scope::text, v_missing_scope)) as sheet_scope,
+        nullif(btrim(coalesce(ct.role, tm.job_title_norm)),'') as job_title,
+        nullif(btrim(coalesce(ct.band, tm.band_norm)),'') as band
+      from ts_meta tm
+      left join public.contracts ct
+        on ct.id = tm.contract_id
+      left join public.v_timesheets_summary vs
+        on vs.timesheet_id = tm.timesheet_id
+    ),
+    ts_snap as (
+      select
+        tss.timesheet_id,
+        tss.candidate_id,
+        tss.base_snapshot_json,
+        tss.target_snapshot_json
+      from public.pay_batch_timesheet_snapshots tss
+      where tss.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(tss.pay_channel,'')) = 'PAYE'
+    ),
+    ts_class as (
+      select
+        te.candidate_id,
+        te.timesheet_id,
+        te.week_ending_date,
+        te.reference_number,
+        te.client_id,
+        te.client_name,
+        te.sheet_scope,
+        te.job_title,
+        te.band,
+        tsn.base_snapshot_json,
+        tsn.target_snapshot_json,
+        case
+          when tsn.target_snapshot_json is not null
+           and jsonb_typeof(tsn.target_snapshot_json) = 'object'
+           and jsonb_typeof(tsn.target_snapshot_json->'segments') = 'array'
+           and exists (
+             select 1
+             from jsonb_array_elements(tsn.target_snapshot_json->'segments') s
+             where s is not null
+               and jsonb_typeof(s)='object'
+               and nullif(btrim(coalesce(s->>'date','')),'') is not null
+           )
+          then 'SEGMENT'
+          else 'AGGREGATE'
+        end as timesheet_render_mode,
+        case
+          when tsn.base_snapshot_json is null then 'Standard'
+          when tsn.base_snapshot_json = '{}'::jsonb then 'Standard'
+          when (
+            exists (
+              select 1
+              from jsonb_array_elements(coalesce(tsn.base_snapshot_json->'segments','[]'::jsonb)) s
+              where s is not null and jsonb_typeof(s)='object'
+                and round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) <> 0
+            )
+            or round(coalesce(nullif(tsn.base_snapshot_json->>'additional_pay_ex_vat','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0),2) <> 0
+            or (
+              jsonb_typeof(tsn.base_snapshot_json->'adjustments')='array'
+              and jsonb_array_length(tsn.base_snapshot_json->'adjustments') > 0
+            )
+          )
+          then 'Adjustment'
+          else 'Standard'
+        end as timesheet_type
+      from ts_enrich te
+      left join ts_snap tsn
+        on tsn.timesheet_id = te.timesheet_id
+       and tsn.candidate_id = te.candidate_id
+    ),
+    breakdown_raw as (
+      select
+        ci.candidate_id,
+        ci.timesheet_id,
+        pbib.line_kind,
+        pbib.bucket_code,
+        pbib.unit_name,
+        pbib.units,
+        pbib.rate,
+        pbib.amount_ex_vat,
+        pbib.amount_vat,
+        pbib.amount_inc_vat
+      from cand_items ci
+      join public.pay_batch_item_breakdowns pbib
+        on pbib.pay_batch_item_id = ci.pay_batch_item_id
+      where ci.timesheet_id is not null
+    ),
+    ts_unit_rows as (
+      select
+        br.candidate_id,
+        br.timesheet_id,
+        br.line_kind,
+        br.bucket_code,
+        br.unit_name,
+        br.rate,
+        round(sum(coalesce(br.units,0)),2) as quantity,
+        round(sum(coalesce(br.amount_ex_vat,0)),2) as total_ex_vat,
+        round(sum(coalesce(br.amount_vat,0)),2) as total_vat,
+        round(sum(coalesce(br.amount_inc_vat,0)),2) as total_inc_vat
+      from breakdown_raw br
+      group by br.candidate_id, br.timesheet_id, br.line_kind, br.bucket_code, br.unit_name, br.rate
+      having
+        round(sum(coalesce(br.units,0)),2) <> 0
+        or round(sum(coalesce(br.amount_ex_vat,0)),2) <> 0
+        or round(sum(coalesce(br.amount_inc_vat,0)),2) <> 0
+    ),
+    ts_sections as (
+      select
+        tc.candidate_id,
+        tc.timesheet_id,
+        tc.week_ending_date,
+        tc.reference_number,
+        tc.client_id,
+        tc.client_name,
+        tc.job_title,
+        tc.band,
+        tc.timesheet_render_mode,
+        tc.timesheet_type,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by
+              case upper(coalesce(r.bucket_code,''))
+                when 'DAY' then 1
+                when 'NIGHT' then 2
+                when 'SAT' then 3
+                when 'SUN' then 4
+                when 'BH' then 5
+                else 99
+              end,
+              coalesce(r.unit_name,'') asc,
+              coalesce(r.rate,0) asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) = 'TS_BUCKET'),
+          '[]'::jsonb
+        ) as unit_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by coalesce(r.unit_name,'') asc, coalesce(r.rate,0) asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) = 'ADDITIONAL_UNIT'),
+          '[]'::jsonb
+        ) as additional_units_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by coalesce(r.unit_name,'') asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) in ('EXPENSE','MILEAGE')),
+          '[]'::jsonb
+        ) as expenses_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat,
+              'line_kind', r.line_kind
+            )
+            order by coalesce(r.unit_name,'') asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','DEBT_CREATED')),
+          '[]'::jsonb
+        ) as other_rows,
+        round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
+        round(coalesce(sum(r.total_vat),0),2) as totals_vat,
+        round(coalesce(sum(r.total_inc_vat),0),2) as totals_inc_vat,
+        tc.base_snapshot_json,
+        tc.target_snapshot_json
+      from ts_class tc
+      left join ts_unit_rows r
+        on r.candidate_id = tc.candidate_id
+       and r.timesheet_id = tc.timesheet_id
+      group by
+        tc.candidate_id,
+        tc.timesheet_id,
+        tc.week_ending_date,
+        tc.reference_number,
+        tc.client_id,
+        tc.client_name,
+        tc.job_title,
+        tc.band,
+        tc.timesheet_render_mode,
+        tc.timesheet_type,
+        tc.base_snapshot_json,
+        tc.target_snapshot_json
+    ),
+    ts_schedule_rows_all as (
+      select
+        ts.candidate_id,
+        ts.timesheet_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'segment_id', nullif(btrim(coalesce(s->>'segment_id','')),''),
+              'date', nullif(btrim(coalesce(s->>'date','')),''),
+              'start_utc', nullif(btrim(coalesce(s->>'start_utc','')),''),
+              'end_utc', nullif(btrim(coalesce(s->>'end_utc','')),''),
+              'break_mins', coalesce(nullif(s->>'break_mins','')::numeric,0),
+              'breaks', coalesce(s->'breaks','[]'::jsonb)
+            )
+            order by
+              nullif(btrim(coalesce(s->>'date','')),'') asc,
+              nullif(btrim(coalesce(s->>'start_utc','')),'') asc,
+              nullif(btrim(coalesce(s->>'segment_id','')),'') asc
+          ),
+          '[]'::jsonb
+        ) as schedule_rows
+      from ts_sections ts
+      join lateral jsonb_array_elements(coalesce(ts.target_snapshot_json->'segments','[]'::jsonb)) s
+        on ts.target_snapshot_json is not null
+       and jsonb_typeof(ts.target_snapshot_json)='object'
+      where ts.timesheet_render_mode = 'SEGMENT'
+        and s is not null
+        and jsonb_typeof(s)='object'
+        and coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) = false
+        and (
+          coalesce(nullif(s->>'hours_day','')::numeric,0)
+          + coalesce(nullif(s->>'hours_night','')::numeric,0)
+          + coalesce(nullif(s->>'hours_sat','')::numeric,0)
+          + coalesce(nullif(s->>'hours_sun','')::numeric,0)
+          + coalesce(nullif(s->>'hours_bh','')::numeric,0)
+        ) > 0
+      group by ts.candidate_id, ts.timesheet_id
+    ),
+    ts_schedule_changes_all as (
+      select
+        ts.candidate_id,
+        ts.timesheet_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'segment_id', seg_id,
+              'date', coalesce(before_seg->>'date', after_seg->>'date'),
+              'before', jsonb_build_object(
+                'start_utc', before_seg->>'start_utc',
+                'end_utc', before_seg->>'end_utc',
+                'break_mins', coalesce(nullif(before_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(before_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(before_seg->>'exclude_from_pay','')::boolean,false)
+              ),
+              'after', jsonb_build_object(
+                'start_utc', after_seg->>'start_utc',
+                'end_utc', after_seg->>'end_utc',
+                'break_mins', coalesce(nullif(after_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(after_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(after_seg->>'exclude_from_pay','')::boolean,false)
+              )
+            )
+            order by
+              coalesce(before_seg->>'date', after_seg->>'date') asc,
+              coalesce(before_seg->>'start_utc', after_seg->>'start_utc') asc,
+              seg_id asc
+          ),
+          '[]'::jsonb
+        ) as schedule_changes
+      from (
+        select
+          ts0.candidate_id,
+          ts0.timesheet_id,
+          nullif(btrim(coalesce(ids->>'segment_id','')),'') as seg_id,
+          bseg.seg as before_seg,
+          aseg.seg as after_seg
+        from ts_sections ts0
+        join lateral (
+          select s
+          from (
+            select s0 as s from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s0
+            union all
+            select s1 as s from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s1
+          ) u
+          where u.s is not null and jsonb_typeof(u.s)='object'
+        ) ids
+          on ts0.timesheet_render_mode = 'SEGMENT'
+         and ts0.timesheet_type = 'Adjustment'
+        left join lateral (
+          select s as seg
+          from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s
+          where s is not null and jsonb_typeof(s)='object'
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+          limit 1
+        ) bseg on true
+        left join lateral (
+          select s as seg
+          from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s
+          where s is not null and jsonb_typeof(s)='object'
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+          limit 1
+        ) aseg on true
+      ) x
+      join ts_sections ts
+        on ts.candidate_id = x.candidate_id
+       and ts.timesheet_id = x.timesheet_id
+      where x.seg_id is not null
+        and (
+          coalesce(x.before_seg->>'start_utc','') <> coalesce(x.after_seg->>'start_utc','')
+          or coalesce(x.before_seg->>'end_utc','') <> coalesce(x.after_seg->>'end_utc','')
+          or coalesce(nullif(x.before_seg->>'break_mins','')::numeric,0) <> coalesce(nullif(x.after_seg->>'break_mins','')::numeric,0)
+          or coalesce(x.before_seg->'breaks','[]'::jsonb) <> coalesce(x.after_seg->'breaks','[]'::jsonb)
+          or coalesce(nullif(x.before_seg->>'exclude_from_pay','')::boolean,false) <> coalesce(nullif(x.after_seg->>'exclude_from_pay','')::boolean,false)
+        )
+      group by ts.candidate_id, ts.timesheet_id
+    ),
+    cand_timesheets as (
+      select
+        ts.candidate_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'timesheet_id', ts.timesheet_id::text,
+              'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
+              'reference_number', ts.reference_number,
+              'client_id', case when ts.client_id is null then null else ts.client_id::text end,
+              'client_name', ts.client_name,
+              'job_title', ts.job_title,
+              'band', ts.band,
+              'timesheet_render_mode', ts.timesheet_render_mode,
+              'timesheet_type', ts.timesheet_type,
+              'unit_rows', ts.unit_rows,
+              'additional_units_rows', ts.additional_units_rows,
+              'expenses_rows', ts.expenses_rows,
+              'other_rows', ts.other_rows,
+              'totals', jsonb_build_object(
+                'total_ex_vat', ts.totals_ex_vat,
+                'vat', ts.totals_vat,
+                'total_inc_vat', ts.totals_inc_vat
+              ),
+              'schedule_rows', case
+                when coalesce(ca.eff_detailed,false) = true and ts.timesheet_render_mode = 'SEGMENT'
+                  then coalesce(sr.schedule_rows,'[]'::jsonb)
+                else '[]'::jsonb
+              end,
+              'schedule_changes', case
+                when coalesce(ca.eff_detailed,false) = true and ts.timesheet_render_mode = 'SEGMENT' and ts.timesheet_type = 'Adjustment'
+                  then coalesce(sc.schedule_changes,'[]'::jsonb)
+                else '[]'::jsonb
+              end
+            )
+            order by ts.week_ending_date desc nulls last, ts.client_name nulls last, ts.reference_number nulls last, ts.timesheet_id
+          ),
+          '[]'::jsonb
+        ) as timesheets_json
+      from ts_sections ts
+      join cand_allowed ca
+        on ca.candidate_id = ts.candidate_id
+      left join ts_schedule_rows_all sr
+        on sr.candidate_id = ts.candidate_id
+       and sr.timesheet_id = ts.timesheet_id
+      left join ts_schedule_changes_all sc
+        on sc.candidate_id = ts.candidate_id
+       and sc.timesheet_id = ts.timesheet_id
+      group by ts.candidate_id
+    ),
+    cand_job as (
+      select
+        ca.candidate_id,
+        ca.tms_ref,
+        ca.display_name,
+        ca.email,
+        ca.eff_detailed,
+        bool_or(coalesce(pt.is_simulated,false)) as test_mode,
+        round(coalesce(sum(pt.amount),0),2) as total_amount,
+        coalesce(ct.timesheets_json,'[]'::jsonb) as timesheets_json,
+        coalesce(jsonb_agg(
+          jsonb_build_object(
+            'transfer_id', pt.transfer_id::text,
+            'completed_at_utc', case when pt.completed_at_utc is null then null else pt.completed_at_utc::text end,
+            'transfer', jsonb_build_object(
+              'pay_channel', pt.pay_channel,
+              'amount', pt.amount,
+              'currency', pt.currency,
+              'status', pt.status,
+              'payment_reference', pt.payment_reference,
+              'rail_tx_id', pt.rail_tx_id,
+              'rail_state', pt.rail_state,
+              'rail_meta_json', pt.rail_meta_json,
+              'failed_reason', pt.failed_reason,
+              'is_simulated', coalesce(pt.is_simulated,false)
+            )
+          )
+          order by pt.transfer_id
+        ), '[]'::jsonb) as transfers_json
+      from cand_allowed ca
+      join paye_transfers pt
+        on pt.candidate_id = ca.candidate_id
+      left join cand_timesheets ct
+        on ct.candidate_id = ca.candidate_id
+      group by ca.candidate_id, ca.tms_ref, ca.display_name, ca.email, ca.eff_detailed, ct.timesheets_json
+    )
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'job_kind', 'PAYE_REMITTANCE',
+          'pay_batch_id', v_batch.id::text,
+          'scope', 'PAYE',
+          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+          'bulk_reference', v_batch.bulk_reference,
+          'test_mode', coalesce(cj.test_mode,false),
+          'detailed_breakdown', coalesce(cj.eff_detailed,false),
+          'recipient', jsonb_build_object(
+            'entity_kind', 'CANDIDATE',
+            'candidate_id', cj.candidate_id::text,
+            'tms_ref', cj.tms_ref,
+            'display_name', cj.display_name,
+            'email', cj.email
+          ),
+          'summary', jsonb_build_object(
+            'total_amount', cj.total_amount,
+            'currency', 'GBP'
+          ),
+          'timesheets', coalesce(cj.timesheets_json,'[]'::jsonb),
+          'transfers', coalesce(cj.transfers_json,'[]'::jsonb),
+          'net_input', coalesce((
+            select jsonb_build_object(
+              'source', pni.source,
+              'net_amount', pni.net_amount,
+              'imported_at_utc', case when pni.imported_at_utc is null then null else pni.imported_at_utc::text end,
+              'file_name', pni.file_name
+            )
+            from public.pay_batch_candidates pbc
+            join public.pay_batch_paye_net_inputs pni
+              on pni.pay_batch_candidate_id = pbc.id
+            where pbc.pay_batch_id = p_pay_batch_id
+              and pbc.candidate_id = cj.candidate_id
+            order by pni.imported_at_utc desc
+            limit 1
+          ), null)
+        )
+        order by cj.display_name nulls last, cj.tms_ref nulls last, cj.candidate_id
+      ),
+      '[]'::jsonb
+    )
+    into v_jobs_paye
+    from cand_job cj;
+  end if;
+
+  -- ============================================================
+  -- Candidate umbrella-copy jobs (recipient=candidate; umbrella items only)
+  -- LOCKED RULE:
+  --  - generated only if effective receive_when_umbrella_paid is true:
+  --    overrides? candidate.remittance_receive_when_umbrella_paid : settings_defaults.remittance_receive_when_umbrella_paid
+  --  - detailed_breakdown resolved from candidate overrides vs settings_defaults
+  -- ============================================================
+  if v_scope in ('ALL','UMBRELLA') then
+    with umb_transfers as (
+      select
+        pbt.id as transfer_id,
+        pbt.pay_batch_id,
+        pbt.candidate_id,
+        pbt.umbrella_id,
+        pbt.pay_channel,
+        pbt.amount,
+        pbt.currency,
+        pbt.status,
+        pbt.payment_reference,
+        pbt.completed_at_utc,
+        pbt.rail_tx_id,
+        pbt.rail_state,
+        pbt.rail_meta_json,
+        pbt.failed_reason,
+        (
+          upper(coalesce(pbt.rail_state,'')) = 'PAYROLL_TESTING'
+          or (
+            pbt.rail_meta_json is not null
+            and (pbt.rail_meta_json ? 'simulated')
+            and lower(btrim(coalesce(pbt.rail_meta_json->>'simulated',''))) in ('true','1','yes','y','on')
+          )
+        ) as is_simulated
+      from public.pay_bank_transfers pbt
+      where pbt.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA'
+        and upper(coalesce(pbt.status,'')) = 'COMPLETED'
+        and pbt.umbrella_id is not null
+        and pbt.candidate_id is not null
+    ),
+    cand_cfg as (
+      select
+        c.id as candidate_id,
+        c.tms_ref,
+        c.display_name,
+        c.email,
+        coalesce(c.remittance_overrides_enabled,false) as overrides_enabled,
+        coalesce(c.remittances_detailed_breakdown,false) as detailed_enabled,
+        coalesce(c.remittance_receive_when_umbrella_paid,false) as umb_copy_enabled
+      from public.candidates c
+      where c.id in (select distinct ut.candidate_id from umb_transfers ut)
+    ),
+    cand_effective as (
+      select
+        cc.*,
+        (case when cc.overrides_enabled then cc.umb_copy_enabled else v_sd_remittance_receive_when_umbrella_paid end) as eff_copy,
+        (case when cc.overrides_enabled then cc.detailed_enabled else v_sd_remittances_detailed_breakdown end) as eff_detailed
+      from cand_cfg cc
+    ),
+    cand_allowed as (
+      select *
+      from cand_effective ce
+      where ce.eff_copy = true
+    ),
+    cand_items as (
+      select
+        ca.candidate_id,
+        pbi.id as pay_batch_item_id,
+        pbi.item_type,
+        pbi.description,
+        pbi.timesheet_id,
+        pbi.segment_key,
+        pbi.source_ref,
+        pbi.amount_ex_vat,
+        pbi.amount_vat,
+        pbi.amount_inc_vat,
+        pbi.pay_channel
+      from cand_allowed ca
+      join public.pay_batch_candidates pbc
+        on pbc.pay_batch_id = p_pay_batch_id
+       and pbc.candidate_id = ca.candidate_id
+      join public.pay_batch_items pbi
+        on pbi.pay_batch_candidate_id = pbc.id
+      left join public.v_timesheets_summary vs
+        on vs.timesheet_id = pbi.timesheet_id
+      where upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA'
+        and pbi.item_type <> 'DEBT_CREATED'
+        and (
+          case
+            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+              (case
+                 when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                 then true else false end)
+            else
+              (case
+                 when lower(coalesce(v_remittance_includes_json->'weekly'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
+                 then true else false end)
+          end
+        )
+    ),
+    ts_meta as (
+      select
+        ci.candidate_id,
+        ts.timesheet_id,
+        ts.week_ending_date,
+        ts.reference_number,
+        ts.contract_id,
+        nullif(btrim(coalesce(ts.job_title_norm,'')),'') as job_title_norm,
+        nullif(btrim(coalesce(ts.band,'')),'') as band_norm
+      from cand_items ci
+      join public.timesheets ts
+        on ts.timesheet_id = ci.timesheet_id
+       and ts.is_current = true
+      group by ci.candidate_id, ts.timesheet_id, ts.week_ending_date, ts.reference_number, ts.contract_id, ts.job_title_norm, ts.band
+    ),
+    ts_enrich as (
+      select
+        tm.candidate_id,
+        tm.timesheet_id,
+        tm.week_ending_date,
+        tm.reference_number,
+        vs.client_id as client_id,
+        vs.client_name as client_name,
+        upper(coalesce(vs.sheet_scope::text, v_missing_scope)) as sheet_scope,
+        nullif(btrim(coalesce(ct.role, tm.job_title_norm)),'') as job_title,
+        nullif(btrim(coalesce(ct.band, tm.band_norm)),'') as band
+      from ts_meta tm
+      left join public.contracts ct
+        on ct.id = tm.contract_id
+      left join public.v_timesheets_summary vs
+        on vs.timesheet_id = tm.timesheet_id
+    ),
+    ts_snap as (
+      select
+        tss.timesheet_id,
+        tss.candidate_id,
+        tss.base_snapshot_json,
+        tss.target_snapshot_json
+      from public.pay_batch_timesheet_snapshots tss
+      where tss.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(tss.pay_channel,'')) = 'UMBRELLA'
+    ),
+    ts_class as (
+      select
+        te.candidate_id,
+        te.timesheet_id,
+        te.week_ending_date,
+        te.reference_number,
+        te.client_id,
+        te.client_name,
+        te.sheet_scope,
+        te.job_title,
+        te.band,
+        tsn.base_snapshot_json,
+        tsn.target_snapshot_json,
+        case
+          when tsn.target_snapshot_json is not null
+           and jsonb_typeof(tsn.target_snapshot_json) = 'object'
+           and jsonb_typeof(tsn.target_snapshot_json->'segments') = 'array'
+           and exists (
+             select 1
+             from jsonb_array_elements(tsn.target_snapshot_json->'segments') s
+             where s is not null
+               and jsonb_typeof(s)='object'
+               and nullif(btrim(coalesce(s->>'date','')),'') is not null
+           )
+          then 'SEGMENT'
+          else 'AGGREGATE'
+        end as timesheet_render_mode,
+        case
+          when tsn.base_snapshot_json is null then 'Standard'
+          when tsn.base_snapshot_json = '{}'::jsonb then 'Standard'
+          when (
+            exists (
+              select 1
+              from jsonb_array_elements(coalesce(tsn.base_snapshot_json->'segments','[]'::jsonb)) s
+              where s is not null and jsonb_typeof(s)='object'
+                and round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) <> 0
+            )
+            or round(coalesce(nullif(tsn.base_snapshot_json->>'additional_pay_ex_vat','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0),2) <> 0
+            or round(coalesce(nullif(tsn.base_snapshot_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0),2) <> 0
+            or (
+              jsonb_typeof(tsn.base_snapshot_json->'adjustments')='array'
+              and jsonb_array_length(tsn.base_snapshot_json->'adjustments') > 0
+            )
+          )
+          then 'Adjustment'
+          else 'Standard'
+        end as timesheet_type
+      from ts_enrich te
+      left join ts_snap tsn
+        on tsn.timesheet_id = te.timesheet_id
+       and tsn.candidate_id = te.candidate_id
+    ),
+    breakdown_raw as (
+      select
+        ci.candidate_id,
+        ci.timesheet_id,
+        pbib.line_kind,
+        pbib.bucket_code,
+        pbib.unit_name,
+        pbib.units,
+        pbib.rate,
+        pbib.amount_ex_vat,
+        pbib.amount_vat,
+        pbib.amount_inc_vat
+      from cand_items ci
+      join public.pay_batch_item_breakdowns pbib
+        on pbib.pay_batch_item_id = ci.pay_batch_item_id
+      where ci.timesheet_id is not null
+    ),
+    ts_unit_rows as (
+      select
+        br.candidate_id,
+        br.timesheet_id,
+        br.line_kind,
+        br.bucket_code,
+        br.unit_name,
+        br.rate,
+        round(sum(coalesce(br.units,0)),2) as quantity,
+        round(sum(coalesce(br.amount_ex_vat,0)),2) as total_ex_vat,
+        round(sum(coalesce(br.amount_vat,0)),2) as total_vat,
+        round(sum(coalesce(br.amount_inc_vat,0)),2) as total_inc_vat
+      from breakdown_raw br
+      group by br.candidate_id, br.timesheet_id, br.line_kind, br.bucket_code, br.unit_name, br.rate
+      having
+        round(sum(coalesce(br.units,0)),2) <> 0
+        or round(sum(coalesce(br.amount_ex_vat,0)),2) <> 0
+        or round(sum(coalesce(br.amount_inc_vat,0)),2) <> 0
+    ),
+    ts_sections as (
+      select
+        tc.candidate_id,
+        tc.timesheet_id,
+        tc.week_ending_date,
+        tc.reference_number,
+        tc.client_id,
+        tc.client_name,
+        tc.job_title,
+        tc.band,
+        tc.timesheet_render_mode,
+        tc.timesheet_type,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by
+              case upper(coalesce(r.bucket_code,''))
+                when 'DAY' then 1
+                when 'NIGHT' then 2
+                when 'SAT' then 3
+                when 'SUN' then 4
+                when 'BH' then 5
+                else 99
+              end,
+              coalesce(r.unit_name,'') asc,
+              coalesce(r.rate,0) asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) = 'TS_BUCKET'),
+          '[]'::jsonb
+        ) as unit_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by coalesce(r.unit_name,'') asc, coalesce(r.rate,0) asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) = 'ADDITIONAL_UNIT'),
+          '[]'::jsonb
+        ) as additional_units_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat
+            )
+            order by coalesce(r.unit_name,'') asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) in ('EXPENSE','MILEAGE')),
+          '[]'::jsonb
+        ) as expenses_rows,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'unit', r.unit_name,
+              'quantity', r.quantity,
+              'rate', r.rate,
+              'total_ex_vat', r.total_ex_vat,
+              'total_vat', r.total_vat,
+              'total_inc_vat', r.total_inc_vat,
+              'line_kind', r.line_kind
+            )
+            order by coalesce(r.unit_name,'') asc
+          )
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','DEBT_CREATED')),
+          '[]'::jsonb
+        ) as other_rows,
+        round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
+        round(coalesce(sum(r.total_vat),0),2) as totals_vat,
+        round(coalesce(sum(r.total_inc_vat),0),2) as totals_inc_vat,
+        tc.base_snapshot_json,
+        tc.target_snapshot_json
+      from ts_class tc
+      left join ts_unit_rows r
+        on r.candidate_id = tc.candidate_id
+       and r.timesheet_id = tc.timesheet_id
+      group by
+        tc.candidate_id,
+        tc.timesheet_id,
+        tc.week_ending_date,
+        tc.reference_number,
+        tc.client_id,
+        tc.client_name,
+        tc.job_title,
+        tc.band,
+        tc.timesheet_render_mode,
+        tc.timesheet_type,
+        tc.base_snapshot_json,
+        tc.target_snapshot_json
+    ),
+    ts_schedule_rows_all as (
+      select
+        ts.candidate_id,
+        ts.timesheet_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'segment_id', nullif(btrim(coalesce(s->>'segment_id','')),''),
+              'date', nullif(btrim(coalesce(s->>'date','')),''),
+              'start_utc', nullif(btrim(coalesce(s->>'start_utc','')),''),
+              'end_utc', nullif(btrim(coalesce(s->>'end_utc','')),''),
+              'break_mins', coalesce(nullif(s->>'break_mins','')::numeric,0),
+              'breaks', coalesce(s->'breaks','[]'::jsonb)
+            )
+            order by
+              nullif(btrim(coalesce(s->>'date','')),'') asc,
+              nullif(btrim(coalesce(s->>'start_utc','')),'') asc,
+              nullif(btrim(coalesce(s->>'segment_id','')),'') asc
+          ),
+          '[]'::jsonb
+        ) as schedule_rows
+      from ts_sections ts
+      join lateral jsonb_array_elements(coalesce(ts.target_snapshot_json->'segments','[]'::jsonb)) s
+        on ts.target_snapshot_json is not null
+       and jsonb_typeof(ts.target_snapshot_json)='object'
+      where ts.timesheet_render_mode = 'SEGMENT'
+        and s is not null
+        and jsonb_typeof(s)='object'
+        and coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) = false
+        and (
+          coalesce(nullif(s->>'hours_day','')::numeric,0)
+          + coalesce(nullif(s->>'hours_night','')::numeric,0)
+          + coalesce(nullif(s->>'hours_sat','')::numeric,0)
+          + coalesce(nullif(s->>'hours_sun','')::numeric,0)
+          + coalesce(nullif(s->>'hours_bh','')::numeric,0)
+        ) > 0
+      group by ts.candidate_id, ts.timesheet_id
+    ),
+    ts_schedule_changes_all as (
+      select
+        ts.candidate_id,
+        ts.timesheet_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'segment_id', seg_id,
+              'date', coalesce(before_seg->>'date', after_seg->>'date'),
+              'before', jsonb_build_object(
+                'start_utc', before_seg->>'start_utc',
+                'end_utc', before_seg->>'end_utc',
+                'break_mins', coalesce(nullif(before_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(before_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(before_seg->>'exclude_from_pay','')::boolean,false)
+              ),
+              'after', jsonb_build_object(
+                'start_utc', after_seg->>'start_utc',
+                'end_utc', after_seg->>'end_utc',
+                'break_mins', coalesce(nullif(after_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(after_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(after_seg->>'exclude_from_pay','')::boolean,false)
+              )
+            )
+            order by
+              coalesce(before_seg->>'date', after_seg->>'date') asc,
+              coalesce(before_seg->>'start_utc', after_seg->>'start_utc') asc,
+              seg_id asc
+          ),
+          '[]'::jsonb
+        ) as schedule_changes
+      from (
+        select
+          ts0.candidate_id,
+          ts0.timesheet_id,
+          nullif(btrim(coalesce(ids->>'segment_id','')),'') as seg_id,
+          bseg.seg as before_seg,
+          aseg.seg as after_seg
+        from ts_sections ts0
+        join lateral (
+          select s
+          from (
+            select s0 as s from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s0
+            union all
+            select s1 as s from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s1
+          ) u
+          where u.s is not null and jsonb_typeof(u.s)='object'
+        ) ids
+          on ts0.timesheet_render_mode = 'SEGMENT'
+         and ts0.timesheet_type = 'Adjustment'
+        left join lateral (
+          select s as seg
+          from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s
+          where s is not null and jsonb_typeof(s)='object'
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+          limit 1
+        ) bseg on true
+        left join lateral (
+          select s as seg
+          from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s
+          where s is not null and jsonb_typeof(s)='object'
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+          limit 1
+        ) aseg on true
+      ) x
+      join ts_sections ts
+        on ts.candidate_id = x.candidate_id
+       and ts.timesheet_id = x.timesheet_id
+      where x.seg_id is not null
+        and (
+          coalesce(x.before_seg->>'start_utc','') <> coalesce(x.after_seg->>'start_utc','')
+          or coalesce(x.before_seg->>'end_utc','') <> coalesce(x.after_seg->>'end_utc','')
+          or coalesce(nullif(x.before_seg->>'break_mins','')::numeric,0) <> coalesce(nullif(x.after_seg->>'break_mins','')::numeric,0)
+          or coalesce(x.before_seg->'breaks','[]'::jsonb) <> coalesce(x.after_seg->'breaks','[]'::jsonb)
+          or coalesce(nullif(x.before_seg->>'exclude_from_pay','')::boolean,false) <> coalesce(nullif(x.after_seg->>'exclude_from_pay','')::boolean,false)
+        )
+      group by ts.candidate_id, ts.timesheet_id
+    ),
+    cand_timesheets as (
+      select
+        ts.candidate_id,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'timesheet_id', ts.timesheet_id::text,
+              'week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
+              'reference_number', ts.reference_number,
+              'client_id', case when ts.client_id is null then null else ts.client_id::text end,
+              'client_name', ts.client_name,
+              'job_title', ts.job_title,
+              'band', ts.band,
+              'timesheet_render_mode', ts.timesheet_render_mode,
+              'timesheet_type', ts.timesheet_type,
+              'unit_rows', ts.unit_rows,
+              'additional_units_rows', ts.additional_units_rows,
+              'expenses_rows', ts.expenses_rows,
+              'other_rows', ts.other_rows,
+              'totals', jsonb_build_object(
+                'total_ex_vat', ts.totals_ex_vat,
+                'vat', ts.totals_vat,
+                'total_inc_vat', ts.totals_inc_vat
+              ),
+              'schedule_rows', case
+                when coalesce(ca.eff_detailed,false) = true and ts.timesheet_render_mode = 'SEGMENT'
+                  then coalesce(sr.schedule_rows,'[]'::jsonb)
+                else '[]'::jsonb
+              end,
+              'schedule_changes', case
+                when coalesce(ca.eff_detailed,false) = true and ts.timesheet_render_mode = 'SEGMENT' and ts.timesheet_type = 'Adjustment'
+                  then coalesce(sc.schedule_changes,'[]'::jsonb)
+                else '[]'::jsonb
+              end
+            )
+            order by ts.week_ending_date desc nulls last, ts.client_name nulls last, ts.reference_number nulls last, ts.timesheet_id
+          ),
+          '[]'::jsonb
+        ) as timesheets_json
+      from ts_sections ts
+      join cand_allowed ca
+        on ca.candidate_id = ts.candidate_id
+      left join ts_schedule_rows_all sr
+        on sr.candidate_id = ts.candidate_id
+       and sr.timesheet_id = ts.timesheet_id
+      left join ts_schedule_changes_all sc
+        on sc.candidate_id = ts.candidate_id
+       and sc.timesheet_id = ts.timesheet_id
+      group by ts.candidate_id
+    ),
+    cand_job as (
+      select
+        ca.candidate_id,
+        ca.tms_ref,
+        ca.display_name,
+        ca.email,
+        ca.eff_detailed,
+        bool_or(coalesce(ut.is_simulated,false)) as test_mode,
+        round(coalesce(sum(ut.amount),0),2) as total_amount,
+        coalesce(ct.timesheets_json,'[]'::jsonb) as timesheets_json,
+        coalesce(jsonb_agg(
+          jsonb_build_object(
+            'transfer_id', ut.transfer_id::text,
+            'completed_at_utc', case when ut.completed_at_utc is null then null else ut.completed_at_utc::text end,
+            'transfer', jsonb_build_object(
+              'pay_channel', ut.pay_channel,
+              'amount', ut.amount,
+              'currency', ut.currency,
+              'status', ut.status,
+              'payment_reference', ut.payment_reference,
+              'rail_tx_id', ut.rail_tx_id,
+              'rail_state', ut.rail_state,
+              'rail_meta_json', ut.rail_meta_json,
+              'failed_reason', ut.failed_reason,
+              'is_simulated', coalesce(ut.is_simulated,false)
+            )
+          )
+          order by ut.transfer_id
+        ), '[]'::jsonb) as transfers_json
+      from cand_allowed ca
+      join umb_transfers ut
+        on ut.candidate_id = ca.candidate_id
+      left join cand_timesheets ct
+        on ct.candidate_id = ca.candidate_id
+      group by ca.candidate_id, ca.tms_ref, ca.display_name, ca.email, ca.eff_detailed, ct.timesheets_json
+    )
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'job_kind', 'CANDIDATE_UMBRELLA_COPY_REMITTANCE',
+          'pay_batch_id', v_batch.id::text,
+          'scope', 'UMBRELLA',
+          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+          'bulk_reference', v_batch.bulk_reference,
+          'test_mode', coalesce(cj.test_mode,false),
+          'detailed_breakdown', coalesce(cj.eff_detailed,false),
+          'recipient', jsonb_build_object(
+            'entity_kind', 'CANDIDATE',
+            'candidate_id', cj.candidate_id::text,
+            'tms_ref', cj.tms_ref,
+            'display_name', cj.display_name,
+            'email', cj.email
+          ),
+          'summary', jsonb_build_object(
+            'total_amount', cj.total_amount,
+            'currency', 'GBP'
+          ),
+          'timesheets', coalesce(cj.timesheets_json,'[]'::jsonb),
+          'transfers', coalesce(cj.transfers_json,'[]'::jsonb)
+        )
+        order by cj.display_name nulls last, cj.tms_ref nulls last, cj.candidate_id
+      ),
+      '[]'::jsonb
+    )
+    into v_jobs_cand_umb_copy
+    from cand_job cj;
+  end if;
 
   return jsonb_build_object(
     'ok', true,
-    'pay_batch_id', v_batch_id::text,
-    'pay_date', v_pay_date::text,
-    'payment_reference', v_payment_reference,
-    'settled_timesheet_count', v_timesheet_count,
-    'candidate_count', v_candidate_count
+    'pay_batch_id', v_batch.id::text,
+    'scope', v_scope,
+    'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+    'bulk_reference', v_batch.bulk_reference,
+    'remittance_header_message', v_remittance_header_message,
+    'remittance_footer_message', v_remittance_footer_message,
+    'jobs', (coalesce(v_jobs_umb,'[]'::jsonb) || coalesce(v_jobs_paye,'[]'::jsonb) || coalesce(v_jobs_cand_umb_copy,'[]'::jsonb))
   );
 end;
 $$;
