@@ -4288,7 +4288,7 @@ begin
       on tps.timesheet_id = tf.timesheet_id
     where tf.is_current = true
   ),
-  cur0 as (
+   cur0 as (
     select
       t.*,
       case
@@ -4333,138 +4333,53 @@ begin
          and upper(coalesce(t.invoice_breakdown_json->>'mode',''))='SEGMENTS'
         then round(coalesce(nullif(t.invoice_breakdown_json #>> '{additional,pay_ex_vat}','')::numeric,0),2)
         else 0::numeric
-      end as cur_additional
-    from tf0 t
-  ),
-  seg_ids as (
-    select
-      c.timesheet_id,
-      nullif(btrim(coalesce(s->>'segment_id','')),'') as segment_id
-    from cur0 c
-    join lateral jsonb_array_elements(coalesce(c.cur_segments,'[]'::jsonb)) s on true
-    where s is not null and jsonb_typeof(s)='object'
-    union
-    select
-      c.timesheet_id,
-      nullif(btrim(coalesce(s->>'segment_id','')),'') as segment_id
-    from cur0 c
-    join lateral jsonb_array_elements(coalesce(c.base_json->'segments','[]'::jsonb)) s on true
-    where s is not null and jsonb_typeof(s)='object'
-  ),
-  seg_calc as (
-    select
-      c.timesheet_id,
-      c.candidate_id,
-      c.require_reference_to_pay,
-      i.segment_id,
-
-      coalesce(cur.pay_amount, 0)::numeric(12,2) as cur_pay_amount,
-      coalesce(cur.exclude_from_pay, false) as cur_exclude_from_pay,
-      cur.ref_num as cur_ref_num,
-
-      coalesce(bas.pay_amount, 0)::numeric(12,2) as bas_pay_amount,
-      coalesce(bas.exclude_from_pay, false) as bas_exclude_from_pay,
-
-      (case when coalesce(cur.exclude_from_pay,false) then 0 else coalesce(cur.pay_amount,0) end)::numeric(12,2) as cur_payable,
-      (case when coalesce(bas.exclude_from_pay,false) then 0 else coalesce(bas.pay_amount,0) end)::numeric(12,2) as bas_payable,
-
-      round(
-        (case when coalesce(cur.exclude_from_pay,false) then 0 else coalesce(cur.pay_amount,0) end)
-        -
-        (case when coalesce(bas.exclude_from_pay,false) then 0 else coalesce(bas.pay_amount,0) end),
-        2
-      ) as raw_delta_ex,
-
-      (
-        c.require_reference_to_pay = true
-        and coalesce(cur.exclude_from_pay,false) = false
-        and nullif(btrim(coalesce(cur.ref_num,'')),'') is null
-        and round(
-              (case when coalesce(cur.exclude_from_pay,false) then 0 else coalesce(cur.pay_amount,0) end)
-              -
-              (case when coalesce(bas.exclude_from_pay,false) then 0 else coalesce(bas.pay_amount,0) end),
-              2
-            ) > 0
-      ) as is_blocked,
-
-      cur.seg_json as cur_seg_json,
-      bas.seg_json as bas_seg_json
-    from cur0 c
-    join (select distinct timesheet_id, segment_id from seg_ids where segment_id is not null) i
-      on i.timesheet_id = c.timesheet_id
-    left join lateral (
-      select
-        round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
-        coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
-        nullif(btrim(coalesce(s->>'ref_num','')),'') as ref_num,
-        s as seg_json
-      from jsonb_array_elements(coalesce(c.cur_segments,'[]'::jsonb)) s
-      where s is not null and jsonb_typeof(s)='object'
-        and nullif(btrim(coalesce(s->>'segment_id','')),'') = i.segment_id
-      limit 1
-    ) cur on true
-    left join lateral (
-      select
-        round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
-        coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
-        s as seg_json
-      from jsonb_array_elements(coalesce(c.base_json->'segments','[]'::jsonb)) s
-      where s is not null and jsonb_typeof(s)='object'
-        and nullif(btrim(coalesce(s->>'segment_id','')),'') = i.segment_id
-      limit 1
-    ) bas on true
-  ),
-  new_segments as (
-    select
-      sc.timesheet_id,
-      jsonb_agg(
-        jsonb_build_object(
-          'segment_id', sc.segment_id,
-          'date', case when sc.is_blocked then nullif(btrim(coalesce(sc.bas_seg_json->>'date','')),'') else nullif(btrim(coalesce(sc.cur_seg_json->>'date','')),'') end,
-          'start_utc', case when sc.is_blocked then nullif(btrim(coalesce(sc.bas_seg_json->>'start_utc','')),'') else nullif(btrim(coalesce(sc.cur_seg_json->>'start_utc','')),'') end,
-          'end_utc', case when sc.is_blocked then nullif(btrim(coalesce(sc.bas_seg_json->>'end_utc','')),'') else nullif(btrim(coalesce(sc.cur_seg_json->>'end_utc','')),'') end,
-          'break_mins', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'break_mins','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'break_mins','')::numeric,0) end,
-          'breaks', case when sc.is_blocked then coalesce(sc.bas_seg_json->'breaks','[]'::jsonb) else coalesce(sc.cur_seg_json->'breaks','[]'::jsonb) end,
-          'hours_day', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_day','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_day','')::numeric,0) end,
-          'hours_night', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_night','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_night','')::numeric,0) end,
-          'hours_sat', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_sat','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_sat','')::numeric,0) end,
-          'hours_sun', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_sun','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_sun','')::numeric,0) end,
-          'hours_bh', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_bh','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_bh','')::numeric,0) end,
-          'pay_amount', case when sc.is_blocked then sc.bas_pay_amount else sc.cur_pay_amount end,
-          'exclude_from_pay', case when sc.is_blocked then sc.bas_exclude_from_pay else sc.cur_exclude_from_pay end,
-          'ref_num', sc.cur_ref_num
-        )
-        order by sc.segment_id
-      ) as segments_json
-    from seg_calc sc
-    group by sc.timesheet_id
-  ),
-  new_adjustments as (
-    select
-      c.timesheet_id,
+      end as cur_additional,
       coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'id', a.id::text,
-            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
+        (
+          select coalesce(
+            jsonb_agg(
+              jsonb_build_object(
+                'id', a.id::text,
+                'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
+              )
+              order by a.id
+            ),
+            '[]'::jsonb
           )
-          order by a.id
+          from public.ts_pay_adjustments a
+          where a.timesheet_id = t.timesheet_id
+            and a.as_advance = false
         ),
         '[]'::jsonb
-      ) as adjustments_json
-    from cur0 c
-    left join public.ts_pay_adjustments a
-      on a.timesheet_id = c.timesheet_id
-     and a.as_advance = false
-    group by c.timesheet_id
-  ),
-  snap as (
+      ) as cur_adjs
+    from tf0 t
+  )
+  insert into public.pay_batch_timesheet_snapshots(
+    pay_batch_id,
+    timesheet_id,
+    candidate_id,
+    pay_channel,
+    base_snapshot_json,
+    target_snapshot_json,
+    signature,
+    created_at_utc
+  )
+  select
+    v_batch_id,
+    s.timesheet_id,
+    s.candidate_id,
+    tc.pay_channel_used,
+    s.base_snapshot_json,
+    s.target_snapshot_json,
+    md5(s.target_snapshot_json::text),
+    now()
+  from (
     select
       c.timesheet_id,
       c.candidate_id,
       coalesce(c.base_json, '{}'::jsonb) as base_snapshot_json,
       jsonb_build_object(
-        'segments', coalesce(ns.segments_json, '[]'::jsonb),
+        'segments', coalesce(c.cur_segments, '[]'::jsonb),
         'additional_pay_ex_vat', round(coalesce(c.cur_additional,0),2),
         'additional_units_json', coalesce(c.additional_units_json, '{}'::jsonb),
         'hours_day', round(coalesce(c.hours_day,0),2),
@@ -4486,32 +4401,10 @@ begin
           'other_pay_ex_vat', round(coalesce(c.other_pay_ex_vat,0),2),
           'mileage_pay_ex_vat', round(coalesce(c.mileage_pay_ex_vat,0),2)
         ),
-        'adjustments', coalesce(na.adjustments_json, '[]'::jsonb)
+        'adjustments', coalesce(c.cur_adjs, '[]'::jsonb)
       ) as target_snapshot_json
     from cur0 c
-    left join new_segments ns on ns.timesheet_id = c.timesheet_id
-    left join new_adjustments na on na.timesheet_id = c.timesheet_id
-  )
-  insert into public.pay_batch_timesheet_snapshots(
-    pay_batch_id,
-    timesheet_id,
-    candidate_id,
-    pay_channel,
-    base_snapshot_json,
-    target_snapshot_json,
-    signature,
-    created_at_utc
-  )
-  select
-    v_batch_id,
-    s.timesheet_id,
-    s.candidate_id,
-    tc.pay_channel_used,
-    s.base_snapshot_json,
-    s.target_snapshot_json,
-    md5(s.target_snapshot_json::text),
-    now()
-  from snap s
+  ) s
   join ts_channel tc
     on tc.timesheet_id = s.timesheet_id;
 
@@ -4793,9 +4686,9 @@ begin
       ar.line_kind,
       ar.bucket_code,
       (ar.unit_name || ' (rate change)') as unit_name,
-      round(coalesce(nullif((ar.base_units->>'unit_count','')::numeric,0),0),2) as units,
+      round(coalesce(nullif(ar.base_units->>'unit_count','')::numeric,0),2) as units,
       round(ar.cur_rate - ar.bas_rate, 2) as rate,
-      round(round(coalesce(nullif((ar.base_units->>'unit_count','')::numeric,0),0),2) * round(ar.cur_rate - ar.bas_rate,2),2) as ex_calc,
+      round(round(coalesce(nullif(ar.base_units->>'unit_count','')::numeric,0),2) * round(ar.cur_rate - ar.bas_rate,2),2) as ex_calc,
       ar.parent_ex,
       ar.parent_vat,
       ar.parent_inc,
@@ -4809,7 +4702,7 @@ begin
         on bf.pay_batch_item_id = ar0.pay_batch_item_id
     ) ar
     where round(ar.cur_rate - ar.bas_rate, 2) <> 0
-      and round(coalesce(nullif((ar.base_units->>'unit_count','')::numeric,0),0),2) <> 0
+      and round(coalesce(nullif(ar.base_units->>'unit_count','')::numeric,0),2) <> 0
   ),
   addl_ranked as (
     select
@@ -5176,9 +5069,6 @@ begin
   );
 end;
 $$;
-
-
-
 
 
 
