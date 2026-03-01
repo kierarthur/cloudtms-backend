@@ -8886,7 +8886,6 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   }
 }
 
-
 async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -8905,7 +8904,6 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
 
   // ✅ Load remittance policy + messages (single-row settings_defaults)
   let payrollTesting = false;
-  let payeRemittancesEnabled = false;
   let settingsHeaderMsg = null;
   let settingsFooterMsg = null;
   let remittanceTestRecipientEmail = null;
@@ -8913,7 +8911,6 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
   try {
     const sel = [
       'payroll_testing',
-      'paye_remittances_enabled',
       'remittance_header_message',
       'remittance_footer_message',
       'remittance_test_recipient_email'
@@ -8923,7 +8920,6 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     const r0 = (rows && rows[0]) ? rows[0] : null;
 
     payrollTesting = !!(r0 && r0.payroll_testing === true);
-    payeRemittancesEnabled = !!(r0 && r0.paye_remittances_enabled === true);
     settingsHeaderMsg = (r0 && typeof r0.remittance_header_message === 'string') ? r0.remittance_header_message : null;
     settingsFooterMsg = (r0 && typeof r0.remittance_footer_message === 'string') ? r0.remittance_footer_message : null;
 
@@ -8963,8 +8959,13 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
   const headerMsgFromBuild = (build && typeof build.remittance_header_message === 'string') ? build.remittance_header_message : null;
   const footerMsgFromBuild = (build && typeof build.remittance_footer_message === 'string') ? build.remittance_footer_message : null;
 
-  const headerMsg = (headerMsgFromBuild && headerMsgFromBuild.trim().length) ? headerMsgFromBuild : (settingsHeaderMsg && settingsHeaderMsg.trim().length ? settingsHeaderMsg : null);
-  const footerMsg = (footerMsgFromBuild && footerMsgFromBuild.trim().length) ? footerMsgFromBuild : (settingsFooterMsg && settingsFooterMsg.trim().length ? settingsFooterMsg : null);
+  const headerMsg = (headerMsgFromBuild && headerMsgFromBuild.trim().length)
+    ? headerMsgFromBuild
+    : (settingsHeaderMsg && settingsHeaderMsg.trim().length ? settingsHeaderMsg : null);
+
+  const footerMsg = (footerMsgFromBuild && footerMsgFromBuild.trim().length)
+    ? footerMsgFromBuild
+    : (settingsFooterMsg && settingsFooterMsg.trim().length ? settingsFooterMsg : null);
 
   const queued = [];
   const skipped = [];
@@ -8975,89 +8976,257 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     return n.toFixed(2);
   };
 
-  const safeLabelForItem = (item) => {
-    const itemType = (item && item.item_type != null) ? String(item.item_type).toUpperCase() : '';
-    const descRaw = (item && item.description != null) ? String(item.description) : '';
-    if (itemType === 'DEBT_CREATED') return 'Overpayment correction';
-    if (/debt/i.test(descRaw)) return 'Overpayment correction';
-    const d = descRaw.trim();
-    if (d.length) return d;
-    return itemType || 'Item';
+  const asNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   };
 
-  const groupItemsWeekClient = (items) => {
-    const map = new Map();
-    for (const it of (Array.isArray(items) ? items : [])) {
-      const ts = (it && typeof it.timesheet === 'object' && it.timesheet) ? it.timesheet : null;
-      const week = (ts && ts.week_ending_date) ? String(ts.week_ending_date) : '';
-      const client = (it && it.client_name) ? String(it.client_name) : '';
-      const weekKey = week || 'NO_WEEK';
-      const clientKey = client || 'NO_CLIENT';
-      if (!map.has(weekKey)) map.set(weekKey, new Map());
-      const cm = map.get(weekKey);
-      if (!cm.has(clientKey)) cm.set(clientKey, []);
-      cm.get(clientKey).push(it);
+  const fmtDateShort = (isoOrDateStr) => {
+    const s = String(isoOrDateStr || '').trim();
+    if (!s) return '';
+    let d;
+    if (s.includes('T')) d = new Date(s);
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(`${s}T00:00:00.000Z`);
+    else d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return s;
+
+    const wd = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short' }).format(d);
+    const ddmmyy = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    return `${wd} ${ddmmyy}`;
+  };
+
+  const fmtTime = (isoStr) => {
+    const s = String(isoStr || '').trim();
+    if (!s) return '';
+    const d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+  };
+
+  const fmtBreak = (seg) => {
+    if (!seg || typeof seg !== 'object') return '';
+    const breaks = seg.breaks;
+    if (Array.isArray(breaks) && breaks.length > 0) {
+      const b0 = breaks[0];
+      const bs = (b0 && (b0.start_utc || b0.start_iso || b0.start)) ? String(b0.start_utc || b0.start_iso || b0.start) : '';
+      const be = (b0 && (b0.end_utc || b0.end_iso || b0.end)) ? String(b0.end_utc || b0.end_iso || b0.end) : '';
+      const t1 = fmtTime(bs);
+      const t2 = fmtTime(be);
+      if (t1 && t2) return `${t1}–${t2}`;
     }
-    return map;
+    const bm = asNum(seg.break_mins);
+    if (bm == null) return '';
+    return `${bm}m`;
   };
 
-  const renderGroupedItems = (lines, items) => {
-    const grouped = groupItemsWeekClient(items);
-    const weekKeys = Array.from(grouped.keys()).sort();
+  const printTable = (lines, headers, rows) => {
+    const cols = headers.length;
+    const widths = new Array(cols).fill(0);
 
-    for (const wk of weekKeys) {
-      const wkLabel = (wk === 'NO_WEEK') ? 'Other items (not linked to a timesheet)' : `Week ending: ${wk}`;
-      lines.push(wkLabel);
+    const measure = (x) => String(x ?? '').length;
 
-      const clientMap = grouped.get(wk);
-      const clientKeys = Array.from(clientMap.keys()).sort((a, b) => a.localeCompare(b));
+    for (let i = 0; i < cols; i++) widths[i] = Math.max(widths[i], measure(headers[i]));
+    for (const r of rows) {
+      for (let i = 0; i < cols; i++) widths[i] = Math.max(widths[i], measure(r[i]));
+    }
 
-      for (const ck of clientKeys) {
-        const clientLabel = (ck === 'NO_CLIENT') ? 'Client: (unknown)' : `Client: ${ck}`;
+    const pad = (s, w) => {
+      const str = String(s ?? '');
+      if (str.length >= w) return str;
+      return str + ' '.repeat(w - str.length);
+    };
 
-        const its = clientMap.get(ck) || [];
-        let role = null;
-        let band = null;
-        for (const it of its) {
-          if (!role && it && it.job_title != null && String(it.job_title).trim().length) role = String(it.job_title).trim();
-          if (!band && it && it.band != null && String(it.band).trim().length) band = String(it.band).trim();
-          if (role && band) break;
+    lines.push(headers.map((h, i) => pad(h, widths[i])).join('  '));
+    for (const r of rows) {
+      lines.push(r.map((v, i) => pad(v, widths[i])).join('  '));
+    }
+  };
+
+  const normalizeUnitRows = (rows, useInc) => {
+    const out = [];
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      const unit = (r && r.unit != null) ? String(r.unit) : '';
+      const qty = asNum(r?.quantity);
+      const rate = asNum(r?.rate);
+      const total = useInc ? asNum(r?.total_inc_vat) : asNum(r?.total_ex_vat);
+
+      // zero suppression: do not show a row with zero quantity (or a row that is effectively all zeros)
+      if (qty == null || Math.abs(qty) < 1e-9) continue;
+      if (total == null || Math.abs(total) < 1e-9) continue;
+
+      out.push({
+        unit,
+        quantity: qty,
+        rate: rate,
+        total: total
+      });
+    }
+    return out;
+  };
+
+  const renderTimesheetSection = (lines, ctx) => {
+    const candidateDisplay = ctx.candidateDisplay || '';
+    const clientName = ctx.clientName || '';
+    const weekEnding = ctx.weekEnding || '';
+    const jobTitle = ctx.jobTitle || '';
+    const band = ctx.band || '';
+    const timesheetType = ctx.timesheetType || 'Standard';
+    const renderMode = ctx.renderMode || 'AGGREGATE';
+    const detailed = !!ctx.detailed;
+
+    const unitRows = normalizeUnitRows(ctx.unit_rows, false);
+    const addlRows = normalizeUnitRows(ctx.additional_units_rows, false);
+    const expRows = normalizeUnitRows(ctx.expenses_rows, false);
+    const otherRows = normalizeUnitRows(ctx.other_rows, false);
+
+    const totals = (ctx.totals && typeof ctx.totals === 'object') ? ctx.totals : {};
+    const totalEx = asNum(totals.total_ex_vat);
+    const totalVat = asNum(totals.vat);
+    const totalInc = asNum(totals.total_inc_vat);
+
+    // Header block (template-style)
+    lines.push(`Candidate\t${candidateDisplay}`);
+    lines.push(`Client\t${clientName}`);
+    lines.push(`Week Ending\t${weekEnding}`);
+    lines.push(`Job Title\t${jobTitle}`);
+    lines.push(`Band\t${band}`);
+    lines.push(`Timesheet Type\t${timesheetType}`);
+    lines.push('');
+
+    // Detailed schedule (segments only) per locked rules
+    if (detailed && renderMode === 'SEGMENT') {
+      if (timesheetType === 'Adjustment') {
+        const changes = Array.isArray(ctx.schedule_changes) ? ctx.schedule_changes : [];
+        if (changes.length) {
+          lines.push('Schedule changes');
+          const rows = [];
+          for (const ch of changes) {
+            const dateLbl = fmtDateShort(ch?.date);
+            const before = (ch && typeof ch.before === 'object' && ch.before) ? ch.before : null;
+            const after = (ch && typeof ch.after === 'object' && ch.after) ? ch.after : null;
+
+            const bStart = before ? fmtTime(before.start_utc) : '';
+            const bEnd = before ? fmtTime(before.end_utc) : '';
+            const bBreak = before ? fmtBreak(before) : '';
+
+            const aStart = after ? fmtTime(after.start_utc) : '';
+            const aEnd = after ? fmtTime(after.end_utc) : '';
+            const aBreak = after ? fmtBreak(after) : '';
+
+            rows.push([dateLbl, 'Before', bStart, bEnd, bBreak]);
+            rows.push([dateLbl, 'After', aStart, aEnd, aBreak]);
+          }
+          printTable(lines, ['Date', 'Type', 'Start', 'End', 'Break'], rows);
+          lines.push('');
         }
-
-        const roleBandBits = [];
-        if (role) roleBandBits.push(`Role: ${role}`);
-        if (band) roleBandBits.push(`Band: ${band}`);
-        const rb = roleBandBits.length ? ` (${roleBandBits.join(' · ')})` : '';
-
-        lines.push(`  ${clientLabel}${rb}`);
-
-        for (const it of its) {
-          const label = safeLabelForItem(it);
-          const amt = (it && it.amount_inc_vat != null) ? asMoney(it.amount_inc_vat) :
-                      (it && it.amount_ex_vat != null) ? asMoney(it.amount_ex_vat) : null;
-
-          const ts = (it && typeof it.timesheet === 'object' && it.timesheet) ? it.timesheet : null;
-          const refNum = (ts && ts.reference_number != null && String(ts.reference_number).trim().length) ? String(ts.reference_number).trim() : null;
-
-          const bits = [];
-          if (refNum) bits.push(`Ref: ${refNum}`);
-          if (amt != null) bits.push(`£${amt}`);
-
-          lines.push(`    - ${label}${bits.length ? ` — ${bits.join(' | ')}` : ''}`);
+      } else {
+        const sched = Array.isArray(ctx.schedule_rows) ? ctx.schedule_rows : [];
+        if (sched.length) {
+          lines.push('Schedule');
+          const rows = [];
+          for (const seg of sched) {
+            const dateLbl = fmtDateShort(seg?.date);
+            const start = fmtTime(seg?.start_utc);
+            const end = fmtTime(seg?.end_utc);
+            const br = fmtBreak(seg);
+            rows.push([dateLbl, start, end, br]);
+          }
+          printTable(lines, ['Date', 'Start', 'End', 'Break'], rows);
+          lines.push('');
         }
       }
+    }
 
+    // Unit table (always rendered, aggregate-style)
+    const unitTableRows = [];
+    for (const r of unitRows) {
+      unitTableRows.push([
+        r.unit,
+        String(r.quantity),
+        (r.rate == null ? '' : String(r.rate)),
+        `£${asMoney(r.total)}`
+      ]);
+    }
+
+    // If there are no unit rows but there are other rows (rare), we still show the table header with those in other sections.
+    if (unitTableRows.length) {
+      printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], unitTableRows);
+      lines.push('');
+    } else {
+      // Still show the unit header if everything is in otherRows, but do not fabricate zeros.
+      lines.push('Unit  Quantity  Rate  Total');
       lines.push('');
     }
+
+    // Additional Units section
+    if (addlRows.length) {
+      lines.push('Additional Units');
+      const rows = [];
+      for (const r of addlRows) {
+        rows.push([
+          r.unit,
+          String(r.quantity),
+          (r.rate == null ? '' : String(r.rate)),
+          `£${asMoney(r.total)}`
+        ]);
+      }
+      printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], rows);
+      lines.push('');
+    }
+
+    // Expenses section
+    if (expRows.length) {
+      lines.push('Expenses');
+      const rows = [];
+      for (const r of expRows) {
+        rows.push([
+          r.unit,
+          String(r.quantity),
+          (r.rate == null ? '' : String(r.rate)),
+          `£${asMoney(r.total)}`
+        ]);
+      }
+      printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], rows);
+      lines.push('');
+    }
+
+    // Other rows section (optional)
+    if (otherRows.length) {
+      lines.push('Other');
+      const rows = [];
+      for (const r of otherRows) {
+        rows.push([
+          r.unit,
+          String(r.quantity),
+          (r.rate == null ? '' : String(r.rate)),
+          `£${asMoney(r.total)}`
+        ]);
+      }
+      printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], rows);
+      lines.push('');
+    }
+
+    // Totals block (VAT rule)
+    if (totalVat != null && Math.abs(totalVat) > 1e-9) {
+      lines.push(`Total (exc VAT)\t\t\t£${asMoney(totalEx) ?? ''}`);
+      lines.push(`VAT\t\t\t£${asMoney(totalVat) ?? ''}`);
+      lines.push(`Total (inc VAT)\t\t\t£${asMoney(totalInc) ?? ''}`);
+    } else {
+      const gross = (totalInc != null ? totalInc : totalEx);
+      lines.push(`Gross Pay\t\t\t£${asMoney(gross) ?? ''}`);
+    }
+
+    lines.push('');
   };
 
   for (const job of jobs) {
     const jobKindRaw = String(job?.job_kind || '').trim().toUpperCase();
-    const isUmbrella = jobKindRaw.includes('UMBRELLA');
-    const isPaye = jobKindRaw.includes('PAYE');
 
-    // Skip unknown job kinds rather than accidentally sending
-    if (!isUmbrella && !isPaye) {
+    const isUmbrellaJob = (jobKindRaw === 'UMBRELLA_REMITTANCE');
+    const isPayeJob = (jobKindRaw === 'PAYE_REMITTANCE');
+    const isUmbrellaCopyJob = (jobKindRaw === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE');
+
+    if (!isUmbrellaJob && !isPayeJob && !isUmbrellaCopyJob) {
       skipped.push({
         job_kind: jobKindRaw || null,
         reason: 'UNKNOWN_JOB_KIND'
@@ -9065,23 +9234,13 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
       continue;
     }
 
-    // ✅ PAYE remittance gate
-    if (isPaye && !payeRemittancesEnabled) {
-      const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
-      skipped.push({
-        job_kind: jobKindRaw || null,
-        payee_entity_kind: recipient?.entity_kind ?? null,
-        payee_entity_id: recipient?.candidate_id ?? null,
-        reason: 'PAYE_REMITTANCES_DISABLED'
-      });
-      continue;
-    }
-
     const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
+    const detailed = !!(job && job.detailed_breakdown === true);
 
-    const toEmailRaw = isUmbrella
-      ? (recipient?.remittance_email ?? recipient?.email ?? null)
-      : (recipient?.email ?? recipient?.remittance_email ?? null);
+    const toEmailRaw =
+      isUmbrellaJob
+        ? (recipient?.remittance_email ?? recipient?.email ?? null)
+        : (recipient?.email ?? recipient?.remittance_email ?? null);
 
     const intendedToEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
 
@@ -9102,7 +9261,13 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     const effectiveTestMode = !!(jobTestMode || payrollTesting);
 
     const payPeriodLabel = payDate ? payDate : 'Pay run';
-    const subject = effectiveTestMode ? `[TEST MODE] Remittance Advice – ${payPeriodLabel}` : `Remittance Advice – ${payPeriodLabel}`;
+
+    let subjectSuffix = 'Remittance Advice';
+    if (isUmbrellaJob) subjectSuffix = 'Remittance Advice – Umbrella';
+    if (isPayeJob) subjectSuffix = 'Remittance Advice – PAYE';
+    if (isUmbrellaCopyJob) subjectSuffix = 'Remittance Advice – Umbrella copy';
+
+    const subject = effectiveTestMode ? `[TEST MODE] ${subjectSuffix} – ${payPeriodLabel}` : `${subjectSuffix} – ${payPeriodLabel}`;
 
     const lines = [];
     if (headerMsg) {
@@ -9129,68 +9294,67 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     lines.push(`Scope: ${scope}`);
     lines.push('');
 
-    if (isPaye) {
-      const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
-      const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
-      if (displayName || tmsRef) {
-        lines.push(`Candidate: ${[displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ')}`);
-        lines.push('');
-      }
-
-      const summary = (job && typeof job.summary === 'object' && job.summary) ? job.summary : {};
-      const totalAmount = (summary.total_amount != null) ? asMoney(summary.total_amount) : null;
-      if (totalAmount != null) lines.push(`Total: £${totalAmount}`);
-      lines.push('');
-
-      const items = Array.isArray(job?.items) ? job.items : [];
-      renderGroupedItems(lines, items);
-
-      const netInput = (job && typeof job.net_input === 'object' && job.net_input) ? job.net_input : null;
-      if (netInput) {
-        const src = (netInput.source != null) ? String(netInput.source) : null;
-        const amt = (netInput.net_amount != null) ? asMoney(netInput.net_amount) : null;
-        if (src || amt) {
-          lines.push('PAYE net input (latest):');
-          if (src) lines.push(`  Source: ${src}`);
-          if (amt != null) lines.push(`  Net amount: £${amt}`);
-          lines.push('');
-        }
-      }
-    } else if (isUmbrella) {
+    if (isUmbrellaJob) {
       const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
       if (umbName) {
         lines.push(`Umbrella: ${umbName}`);
         lines.push('');
       }
 
-      const summary = (job && typeof job.summary === 'object' && job.summary) ? job.summary : {};
-      const totalAmount = (summary.total_amount != null) ? asMoney(summary.total_amount) : null;
-      if (totalAmount != null) lines.push(`Total: £${totalAmount}`);
-      lines.push('');
-
       const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
       for (const c of candidates) {
-        const cand = (c && typeof c.candidate === 'object' && c.candidate) ? c.candidate : {};
-        const dn = (cand.display_name && String(cand.display_name).trim()) ? String(cand.display_name).trim() : '';
-        const tr = (cand.tms_ref && String(cand.tms_ref).trim()) ? String(cand.tms_ref).trim() : '';
-        const header = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ');
-        if (header) {
-          lines.push(`Candidate: ${header}`);
-        } else {
-          lines.push('Candidate: (unknown)');
-        }
+        const dn = (c?.display_name && String(c.display_name).trim()) ? String(c.display_name).trim() : '';
+        const tr = (c?.tms_ref && String(c.tms_ref).trim()) ? String(c.tms_ref).trim() : '';
+        const candidateDisplay = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ') || '(unknown)';
 
-        const totals = (c && typeof c.totals === 'object' && c.totals) ? c.totals : null;
-        if (totals) {
-          const inc = (totals.items_total_inc_vat != null) ? asMoney(totals.items_total_inc_vat) : null;
-          if (inc != null) lines.push(`  Items total: £${inc}`);
-          const debtCreated = (totals.debt_created_total != null) ? asMoney(totals.debt_created_total) : null;
-          if (debtCreated != null && debtCreated !== '0.00') lines.push(`  Overpayment correction: £${debtCreated}`);
+        const timesheets = Array.isArray(c?.timesheets) ? c.timesheets : [];
+        for (const ts of timesheets) {
+          const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
+          renderTimesheetSection(lines, {
+            candidateDisplay,
+            clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
+            weekEnding,
+            jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
+            band: (ts?.band != null) ? String(ts.band) : '',
+            timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
+            renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
+            detailed,
+            unit_rows: ts?.unit_rows,
+            additional_units_rows: ts?.additional_units_rows,
+            expenses_rows: ts?.expenses_rows,
+            other_rows: ts?.other_rows,
+            totals: ts?.totals,
+            schedule_rows: ts?.schedule_rows,
+            schedule_changes: ts?.schedule_changes
+          });
         }
-        lines.push('');
+      }
+    } else {
+      // Candidate jobs (PAYE remittance or Umbrella copy)
+      const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
+      const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
+      const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
 
-        const items = Array.isArray(c?.items) ? c.items : [];
-        renderGroupedItems(lines, items);
+      const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
+      for (const ts of timesheets) {
+        const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
+        renderTimesheetSection(lines, {
+          candidateDisplay,
+          clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
+          weekEnding,
+          jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
+          band: (ts?.band != null) ? String(ts.band) : '',
+          timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
+          renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
+          detailed,
+          unit_rows: ts?.unit_rows,
+          additional_units_rows: ts?.additional_units_rows,
+          expenses_rows: ts?.expenses_rows,
+          other_rows: ts?.other_rows,
+          totals: ts?.totals,
+          schedule_rows: ts?.schedule_rows,
+          schedule_changes: ts?.schedule_changes
+        });
       }
     }
 
@@ -9206,9 +9370,9 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
 
     const payeeEntityKind = (recipient?.entity_kind && String(recipient.entity_kind).trim())
       ? String(recipient.entity_kind).trim()
-      : (isUmbrella ? 'UMBRELLA' : 'CANDIDATE');
+      : (isUmbrellaJob ? 'UMBRELLA' : 'CANDIDATE');
 
-    const payeeEntityId = (isUmbrella
+    const payeeEntityId = (isUmbrellaJob
       ? (recipient?.umbrella_id ?? null)
       : (recipient?.candidate_id ?? null));
 
@@ -9306,6 +9470,8 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     skipped
   }));
 }
+
+
 /**
  * Minimal HTML escape for safe <pre> usage.
  * (mail_outbox ultimately renders HTML; keep it safe.)
@@ -47080,6 +47246,10 @@ async function handleGetSettings(env, req) {
         'remittance_header_message',
         'remittance_footer_message',
 
+        // ✅ NEW: remittance detailed default + candidate umbrella-copy default
+        'remittances_detailed_breakdown',
+        'remittance_receive_when_umbrella_paid',
+
         // ✅ PAYE remittances gate
         'paye_remittances_enabled',
 
@@ -47176,502 +47346,106 @@ async function handleGetSettings(env, req) {
   }
 }
 
-async function handleUpdateSettings(env, req) {
+async function handleGetSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
 
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  const allowed = [
-    'timezone_id',
-    'day_start','day_end','night_start','night_end',
-    'sat_start','sat_end','sun_start','sun_end',
-    'bh_start','bh_end',
-    'bh_source','bh_list','bh_feed_url',
-
-    'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
-    'ts_reference_required',
-
-    // ✅ Adaptability config
-    'import_config_json',
-
-    // ✅ Banking rail default (UI preselect only; batches still store funding_account_ref on the batch)
-    'rail_default_funding_account_ref',
-
-    // ✅ NEW: configurable export CSV columns/order
-    'pay_export_csv_columns_json',
-
-    // ✅ NEW: payroll testing mode flag (simulate payments; no real bank payments)
-    'payroll_testing',
-
-    // ✅ PAYE remittances gate
-    'paye_remittances_enabled',
-
-    // ✅ NEW: remittance test routing (send all remittances to this email when payroll_testing=true)
-    'remittance_test_recipient_email',
-
-    // ✅ NEW: payment authoriser quantity
-    'payment_authoriser_quantity',
-
-    // ✅ NEW: pay eligibility window (Option A)
-    'pay_eligibility_months_back',
-    // NOTE: pay_eligibility_weeks_ahead is deprecated (cutoff date controls upper bound); ignore updates.
-
-    // ✅ Remittances (new settings tab)
-    'remittance_includes_json',
-    'remittance_header_message',
-    'remittance_footer_message',
-
-    // Email settings
-    'finance_email',
-    'finance_email_settings',
-    'system_email',
-    'system_emails',
-    'max_attachments_per_email'
-  ];
-
-  const payload = { updated_at: new Date().toISOString() };
-
-  // If we need to merge webhook_url without exposing it, fetch current values once
-  const needsWebhookMerge = ('finance_email_settings' in data) || ('system_emails' in data);
-
-  // If we need to validate default funding account ref, fetch rail defaults once
-  const needsRailFundingValidation = ('rail_default_funding_account_ref' in data);
-
-  let currentEmailSettings = null;
-  let currentRailDefaults = null;
-
-  if (needsWebhookMerge || needsRailFundingValidation) {
-    try {
-      const selParts = [];
-      if (needsWebhookMerge) selParts.push('finance_email_settings', 'system_emails');
-      if (needsRailFundingValidation) selParts.push('rail_provider_default', 'rail_env_default');
-      const sel = selParts.join(',');
-
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}`
-      );
-
-      const row0 = (rows && rows[0]) ? rows[0] : {};
-
-      if (needsWebhookMerge) {
-        currentEmailSettings = {
-          finance_email_settings: row0.finance_email_settings || {},
-          system_emails: row0.system_emails || {}
-        };
-      }
-
-      if (needsRailFundingValidation) {
-        currentRailDefaults = {
-          rail_provider_default: row0.rail_provider_default,
-          rail_env_default: row0.rail_env_default
-        };
-      }
-    } catch {
-      if (needsWebhookMerge) currentEmailSettings = { finance_email_settings: {}, system_emails: {} };
-      if (needsRailFundingValidation) currentRailDefaults = { rail_provider_default: null, rail_env_default: null };
-    }
-  }
-
-  const mergeWebhookSettings = (existingRaw, incomingRaw) => {
-    const existing = (existingRaw && typeof existingRaw === 'object' && !Array.isArray(existingRaw)) ? existingRaw : {};
-    const incoming = (incomingRaw && typeof incomingRaw === 'object' && !Array.isArray(incomingRaw)) ? incomingRaw : {};
-
-    // strip non-persisted UI hints
-    const cleanIncoming = { ...incoming };
-    delete cleanIncoming.webhook_url_set;
-    delete cleanIncoming.webhook_url_redacted;
-
-    const out = { ...existing };
-
-    // headers: if present in incoming, replace (allow null to clear)
-    if ('headers' in cleanIncoming) {
-      const h = cleanIncoming.headers;
-      if (h == null) out.headers = {};
-      else if (typeof h === 'object' && !Array.isArray(h)) out.headers = h;
-      else throw new Error('invalid_headers');
-    }
-
-    // webhook_url: only overwrite when a non-empty real value is supplied
-    if ('webhook_url' in cleanIncoming) {
-      const w = cleanIncoming.webhook_url;
-      if (w == null) {
-        // keep existing
-      } else if (typeof w === 'string') {
-        const v = w.trim();
-        if (v && v !== '[REDACTED]') out.webhook_url = v;
-      } else {
-        throw new Error('invalid_webhook_url');
-      }
-    }
-
-    return out;
-  };
-
-  const isPlainObj = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
-
-  const normalizeTextOrNull = (raw) => {
-    if (raw === null || raw === undefined) return null;
-    const s = String(raw);
-    const t = s.trim();
-    return t.length ? s : null;
-  };
-
-  const validateRemittanceIncludesJson = (obj) => {
-    if (obj == null) return null;
-    if (!isPlainObj(obj)) throw new Error('remittance_includes_json_not_object');
-
-    const weekly = obj.weekly;
-    const daily = obj.daily;
-
-    if (!isPlainObj(weekly) || !isPlainObj(daily)) throw new Error('remittance_includes_json_missing_scopes');
-
-    if ('include_item_types' in weekly && !isPlainObj(weekly.include_item_types)) throw new Error('remittance_includes_json_weekly_item_types');
-    if ('include_fields' in weekly && !isPlainObj(weekly.include_fields)) throw new Error('remittance_includes_json_weekly_fields');
-
-    if ('include_item_types' in daily && !isPlainObj(daily.include_item_types)) throw new Error('remittance_includes_json_daily_item_types');
-    if ('include_fields' in daily && !isPlainObj(daily.include_fields)) throw new Error('remittance_includes_json_daily_fields');
-
-    if ('defaults' in obj && obj.defaults != null && !isPlainObj(obj.defaults)) throw new Error('remittance_includes_json_defaults');
-
-    return obj;
-  };
-
-  const MAX_REM_MSG_LEN = 2000;
-
-  for (const k of allowed) {
-    if (!(k in data)) continue;
-
-    if (k === 'import_config_json') {
-      const raw = data.import_config_json;
-      let parsed = null;
-
-      if (raw && typeof raw === 'object') {
-        parsed = raw;
-      } else if (typeof raw === 'string') {
-        parsed = _safeJsonParseMaybe(raw, null);
-      } else if (raw == null) {
-        parsed = {};
-      }
-
-      if (!parsed || typeof parsed !== 'object') {
-        return withCORS(env, req, badRequest("import_config_json must be a JSON object (or a JSON string that parses to an object)."));
-      }
-
-      payload.import_config_json = parsed;
-      continue;
-    }
-
-    if (k === 'pay_export_csv_columns_json') {
-      const raw = data.pay_export_csv_columns_json;
-      let parsed = null;
-
-      if (raw == null) {
-        payload.pay_export_csv_columns_json = null;
-        continue;
-      } else if (Array.isArray(raw)) {
-        parsed = raw;
-      } else if (typeof raw === 'string') {
-        parsed = _safeJsonParseMaybe(raw, null);
-      }
-
-      if (!Array.isArray(parsed)) {
-        return withCORS(env, req, badRequest('pay_export_csv_columns_json must be a JSON array (or null)'));
-      }
-
-      // Validate: must be an array of non-empty strings (duplicates are allowed here but will be rejected by export RPC)
-      for (const it of parsed) {
-        const s = (it === null || it === undefined) ? '' : String(it).trim();
-        if (!s) {
-          return withCORS(env, req, badRequest('pay_export_csv_columns_json must contain only non-empty strings'));
-        }
-      }
-
-      payload.pay_export_csv_columns_json = parsed.map((it) => String(it).trim());
-      continue;
-    }
-
-    if (k === 'remittance_includes_json') {
-      const raw = data.remittance_includes_json;
-      let parsed = null;
-
-      if (raw == null) {
-        parsed = null;
-      } else if (isPlainObj(raw)) {
-        parsed = raw;
-      } else if (typeof raw === 'string') {
-        parsed = _safeJsonParseMaybe(raw, null);
-      }
-
-      try {
-        payload.remittance_includes_json = validateRemittanceIncludesJson(parsed);
-      } catch (e) {
-        const msg = String(e?.message || e || '');
-        const err =
-          (msg === 'remittance_includes_json_not_object') ? 'remittance_includes_json must be a JSON object (or null)' :
-          (msg === 'remittance_includes_json_missing_scopes') ? 'remittance_includes_json must include weekly and daily objects' :
-          (msg === 'remittance_includes_json_weekly_item_types') ? 'remittance_includes_json.weekly.include_item_types must be an object' :
-          (msg === 'remittance_includes_json_weekly_fields') ? 'remittance_includes_json.weekly.include_fields must be an object' :
-          (msg === 'remittance_includes_json_daily_item_types') ? 'remittance_includes_json.daily.include_item_types must be an object' :
-          (msg === 'remittance_includes_json_daily_fields') ? 'remittance_includes_json.daily.include_fields must be an object' :
-          (msg === 'remittance_includes_json_defaults') ? 'remittance_includes_json.defaults must be an object' :
-          'remittance_includes_json invalid';
-        return withCORS(env, req, badRequest(err));
-      }
-      continue;
-    }
-
-    if (k === 'remittance_header_message') {
-      const v = normalizeTextOrNull(data.remittance_header_message);
-      if (v != null && v.length > MAX_REM_MSG_LEN) {
-        return withCORS(env, req, badRequest(`remittance_header_message too long (max ${MAX_REM_MSG_LEN})`));
-      }
-      payload.remittance_header_message = v;
-      continue;
-    }
-
-    if (k === 'remittance_footer_message') {
-      const v = normalizeTextOrNull(data.remittance_footer_message);
-      if (v != null && v.length > MAX_REM_MSG_LEN) {
-        return withCORS(env, req, badRequest(`remittance_footer_message too long (max ${MAX_REM_MSG_LEN})`));
-      }
-      payload.remittance_footer_message = v;
-      continue;
-    }
-
-    if (k === 'finance_email_settings') {
-      const raw = data.finance_email_settings;
-      let parsed = null;
-
-      if (raw && typeof raw === 'object') parsed = raw;
-      else if (typeof raw === 'string') parsed = _safeJsonParseMaybe(raw, null);
-      else if (raw == null) parsed = {};
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return withCORS(env, req, badRequest("finance_email_settings must be a JSON object (or a JSON string that parses to an object)."));
-      }
-
-      try {
-        payload.finance_email_settings = mergeWebhookSettings(currentEmailSettings?.finance_email_settings, parsed);
-      } catch (e) {
-        const msg = (String(e?.message || e) === 'invalid_headers') ? 'finance_email_settings.headers must be an object' :
-                    (String(e?.message || e) === 'invalid_webhook_url') ? 'finance_email_settings.webhook_url must be a string' :
-                    'finance_email_settings invalid';
-        return withCORS(env, req, badRequest(msg));
-      }
-      continue;
-    }
-
-    if (k === 'system_emails') {
-      const raw = data.system_emails;
-      let parsed = null;
-
-      if (raw && typeof raw === 'object') parsed = raw;
-      else if (typeof raw === 'string') parsed = _safeJsonParseMaybe(raw, null);
-      else if (raw == null) parsed = {};
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return withCORS(env, req, badRequest("system_emails must be a JSON object (or a JSON string that parses to an object)."));
-      }
-
-      try {
-        payload.system_emails = mergeWebhookSettings(currentEmailSettings?.system_emails, parsed);
-      } catch (e) {
-        const msg = (String(e?.message || e) === 'invalid_headers') ? 'system_emails.headers must be an object' :
-                    (String(e?.message || e) === 'invalid_webhook_url') ? 'system_emails.webhook_url must be a string' :
-                    'system_emails invalid';
-        return withCORS(env, req, badRequest(msg));
-      }
-      continue;
-    }
-
-    if (k === 'max_attachments_per_email') {
-      const n = Number(data.max_attachments_per_email);
-      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
-
-      if (!(v >= 1 && v <= 100)) {
-        return withCORS(env, req, badRequest("max_attachments_per_email must be an integer between 1 and 100."));
-      }
-
-      payload.max_attachments_per_email = v;
-      continue;
-    }
-
-    if (k === 'finance_email') {
-      const v = (data.finance_email == null) ? null : String(data.finance_email).trim();
-      payload.finance_email = v && v.length ? v : null;
-      continue;
-    }
-
-    if (k === 'system_email') {
-      const v0 = (data.system_email == null) ? null : String(data.system_email).trim();
-      if (v0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v0)) {
-        return withCORS(env, req, badRequest('invalid_system_email'));
-      }
-      payload.system_email = v0 && v0.length ? v0 : null;
-      continue;
-    }
-
-    if (k === 'payroll_testing') {
-      const raw = data.payroll_testing;
-
-      let v = null;
-      if (typeof raw === 'boolean') {
-        v = raw;
-      } else if (typeof raw === 'string') {
-        const t = raw.trim().toLowerCase();
-        if (t === 'true') v = true;
-        else if (t === 'false') v = false;
-      }
-
-      if (v === null) {
-        return withCORS(env, req, badRequest('payroll_testing must be boolean'));
-      }
-
-      payload.payroll_testing = v;
-      continue;
-    }
-
-    if (k === 'paye_remittances_enabled') {
-      const raw = data.paye_remittances_enabled;
-
-      let v = null;
-      if (typeof raw === 'boolean') {
-        v = raw;
-      } else if (typeof raw === 'string') {
-        const t = raw.trim().toLowerCase();
-        if (t === 'true') v = true;
-        else if (t === 'false') v = false;
-      }
-
-      if (v === null) {
-        return withCORS(env, req, badRequest('paye_remittances_enabled must be boolean'));
-      }
-
-      payload.paye_remittances_enabled = v;
-      continue;
-    }
-
-    if (k === 'remittance_test_recipient_email') {
-      const v0 = (data.remittance_test_recipient_email == null) ? null : String(data.remittance_test_recipient_email).trim();
-      if (!v0) {
-        payload.remittance_test_recipient_email = null;
-        continue;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+\.[^\s@]+$/.test(v0)) {
-        // keep existing error code format as-is
-        return withCORS(env, req, badRequest('invalid_remittance_test_recipient_email'));
-      }
-      payload.remittance_test_recipient_email = v0;
-      continue;
-    }
-
-    if (k === 'payment_authoriser_quantity') {
-      const raw = data.payment_authoriser_quantity;
-      const n = Number(raw);
-      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
-      if (!(v >= 1 && v <= 10)) {
-        return withCORS(env, req, badRequest('payment_authoriser_quantity must be an integer between 1 and 10'));
-      }
-      payload.payment_authoriser_quantity = v;
-      continue;
-    }
-
-    if (k === 'pay_eligibility_months_back') {
-      const raw = data.pay_eligibility_months_back;
-      const n = Number(raw);
-      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
-      if (!(v >= 0 && v <= 120)) {
-        return withCORS(env, req, badRequest('pay_eligibility_months_back must be an integer between 0 and 120'));
-      }
-      payload.pay_eligibility_months_back = v;
-      continue;
-    }
-
-    if (k === 'rail_default_funding_account_ref') {
-      const v0 = (data.rail_default_funding_account_ref === null || data.rail_default_funding_account_ref === undefined)
-        ? null
-        : (String(data.rail_default_funding_account_ref).trim() || null);
-
-      // Allow clearing
-      if (v0 == null) {
-        payload.rail_default_funding_account_ref = null;
-        continue;
-      }
-
-      // Validate against current rail adapter
-      const provider = String(currentRailDefaults?.rail_provider_default || 'CSV').trim().toUpperCase();
-      const railEnv = String(currentRailDefaults?.rail_env_default || 'PROD').trim().toUpperCase();
-
-      const adapter = getRailAdapter(provider);
-      if (!adapter || typeof adapter.validateFundingAccountRef !== 'function') {
-        return withCORS(env, req, badRequest('FUNDING_ACCOUNT_REF_NOT_SUPPORTED_FOR_THIS_RAIL'));
-      }
-
-      // ✅ OPTION (1): Only validate if the rail is configured/available. If not available, allow saving without validation
-      // to avoid wedging Global Settings when Revolut OAuth/redirect config is incomplete.
-      if (typeof adapter.capabilities === 'function') {
-        let caps = null;
-        try {
-          caps = await adapter.capabilities(env);
-        } catch (e) {
-          caps = { available: false, reason: (e && e.message) ? String(e.message) : 'CAPABILITIES_FAILED' };
-        }
-
-        if (caps && typeof caps === 'object' && caps.available === false) {
-          payload.rail_default_funding_account_ref = v0;
-          continue;
-        }
-      }
-
-      let vres = null;
-      try {
-        vres = await adapter.validateFundingAccountRef(env, { rail_env: railEnv, funding_account_ref: v0 });
-      } catch (e) {
-        const msg = (e && e.message) ? String(e.message) : String(e || 'FUNDING_ACCOUNT_VALIDATE_FAILED');
-        return withCORS(env, req, badRequest(msg));
-      }
-
-      const valid = !!(vres && typeof vres === 'object' && vres.valid === true);
-      if (!valid) {
-        const reason = (vres && typeof vres === 'object' && vres.reason) ? String(vres.reason) : 'FUNDING_ACCOUNT_REF_INVALID';
-        return withCORS(env, req, badRequest(reason));
-      }
-
-      const acct = (vres && typeof vres === 'object') ? (vres.account || null) : null;
-      const ccy = (acct && acct.currency !== undefined && acct.currency !== null) ? String(acct.currency).trim().toUpperCase() : null;
-      if (ccy && ccy !== 'GBP') {
-        return withCORS(env, req, badRequest('FUNDING_ACCOUNT_REF_MUST_BE_GBP'));
-      }
-
-      payload.rail_default_funding_account_ref = v0;
-      continue;
-    }
-
-    // Normal field passthrough
-    payload[k] = data[k];
-  }
-
   try {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1`, {
-      method: "PATCH",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify(payload)
-    });
+    const select =
+      [
+        'id',
 
-    if (!res.ok) {
-      const err = await res.text();
-      return withCORS(env, req, badRequest(`Update failed: ${err}`));
+        // Agency branding
+        'agency_name',
+        'agency_logo',
+
+        // Timesheet PDF text blocks
+        'timesheet_header_json',
+        'timesheet_footer_json',
+
+        // ✅ Remittances (new settings tab)
+        'remittance_includes_json',
+        'remittance_header_message',
+        'remittance_footer_message',
+
+        // ✅ NEW: remittance detailed default + candidate umbrella-copy default
+        'remittances_detailed_breakdown',
+        'remittance_receive_when_umbrella_paid',
+
+        // ✅ PAYE remittances gate
+        'paye_remittances_enabled',
+
+        // ✅ NEW: remittance test routing (send all remittances to this email when payroll_testing=true)
+        'remittance_test_recipient_email',
+
+        // ✅ NEW: payment authoriser quantity
+        'payment_authoriser_quantity',
+
+        // ✅ NEW: pay eligibility window (Option A)
+        'pay_eligibility_months_back',
+        // NOTE: pay_eligibility_weeks_ahead is deprecated (cutoff date controls upper bound); do not expose.
+
+        // ✅ NEW: configurable export CSV columns/order
+        'pay_export_csv_columns_json',
+
+        // Global shift patterns + timezone
+        'timezone_id',
+        'day_start','day_end',
+        'night_start','night_end',
+        'sat_start','sat_end',
+        'sun_start','sun_end',
+        'bh_start','bh_end',
+
+        // BH calendar config
+        'bh_source','bh_list','bh_feed_url',
+
+        // Global policy flags
+        'ts_reference_required',
+
+        // ✅ Adaptability config
+        'import_config_json',
+
+        // Bank details still live on settings_defaults
+        'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
+
+        // ✅ Banking rail defaults (for UI preselect)
+        'rail_default_funding_account_ref',
+
+        // ✅ NEW: payroll testing mode flag (simulate payments; no real bank payments)
+        'payroll_testing',
+
+        // Email settings (global)
+        'finance_email',
+        'finance_email_settings',
+        'system_email',
+        'system_emails',
+        'max_attachments_per_email'
+      ].join(',');
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${select}`
+    );
+
+    // Finance windows list (new) — SQL-first RPC, single call
+    let finance_windows = [];
+    try {
+      const fw = await sbRpc(env, 'settings_finance_list', {});
+      finance_windows = Array.isArray(fw) ? fw : [];
+    } catch {
+      finance_windows = [];
     }
 
-    const json = await res.json().catch(() => ({}));
-    const settings = Array.isArray(json) ? json[0] : json;
+    const src = (rows && rows.length)
+      ? rows
+      : (await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=${select}&limit=1`)).rows;
+
+    if (!src || !src.length) return notFound("settings_defaults not found");
+
+    const settings = { ...src[0] };
     delete settings.id;
 
-    // Bust TTL cache so next loadSettingsDefaults fetches fresh values
-    __SETTINGS_DEFAULTS_CACHE = { ts: 0, value: null };
-
-    // Redact webhook URLs in response
+    // ✅ Redact webhook URLs (do not expose secrets)
     const redactWebhook = (obj) => {
       if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
       const out = { ...obj };
@@ -47681,12 +47455,16 @@ async function handleUpdateSettings(env, req) {
       out.webhook_url_set = !!wasSet;
       return out;
     };
+
     settings.finance_email_settings = redactWebhook(settings.finance_email_settings);
     settings.system_emails = redactWebhook(settings.system_emails);
 
-    return withCORS(env, req, ok({ settings }));
-  } catch {
-    return withCORS(env, req, serverError("Failed to update settings_defaults"));
+    return withCORS(env, req, ok({
+      settings,
+      finance_windows
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError("Failed to fetch settings_defaults"));
   }
 }
 
@@ -53425,12 +53203,31 @@ async function handleListUmbrellas(env, req) {
   }
 }
 
+
 async function handleCreateUmbrella(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
 
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  // ✅ NEW: normalise remittance override booleans on create (accept 'on'/'true'/1, empty => false)
+  const normalizeBoolish = (v) => {
+    if (typeof v === 'boolean') return v;
+    if (v === null || v === undefined) return false;
+    if (typeof v === 'number') return v === 1;
+    const s = String(v).trim().toLowerCase();
+    if (!s) return false;
+    if (['true','1','yes','y','on'].includes(s)) return true;
+    if (['false','0','no','n','off'].includes(s)) return false;
+    return false;
+  };
+  const normalizeBoolField = (obj, key) => {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) return;
+    obj[key] = normalizeBoolish(obj[key]);
+  };
+  normalizeBoolField(data, 'remittance_overrides_enabled');
+  normalizeBoolField(data, 'remittances_detailed_breakdown');
 
   try {
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/umbrellas`, {
@@ -53449,6 +53246,7 @@ async function handleCreateUmbrella(env, req) {
     return withCORS(env, req, serverError("Failed to create umbrella"));
   }
 }
+
 async function handleGetUmbrella(env, req, umbrellaId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -53471,6 +53269,24 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 
   const data = await parseJSONBody(req);
   if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  // ✅ NEW: normalise remittance override booleans on update (accept 'on'/'true'/1, empty => false)
+  const normalizeBoolish = (v) => {
+    if (typeof v === 'boolean') return v;
+    if (v === null || v === undefined) return false;
+    if (typeof v === 'number') return v === 1;
+    const s = String(v).trim().toLowerCase();
+    if (!s) return false;
+    if (['true','1','yes','y','on'].includes(s)) return true;
+    if (['false','0','no','n','off'].includes(s)) return false;
+    return false;
+  };
+  const normalizeBoolField = (obj, key) => {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) return;
+    obj[key] = normalizeBoolish(obj[key]);
+  };
+  normalizeBoolField(data, 'remittance_overrides_enabled');
+  normalizeBoolField(data, 'remittances_detailed_breakdown');
 
   try {
     // 1) Load current umbrella (for change detection)
@@ -53537,6 +53353,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     return withCORS(env, req, serverError("Failed to update umbrella"));
   }
 }
+
 
 // ====================== CANDIDATES ======================
 /**
@@ -54643,6 +54460,26 @@ async function handleCreateCandidate(env, req) {
 
   const enc = encodeURIComponent;
 
+  // ✅ NEW: normalise remittance override booleans on create (accept 'on'/'true'/1, empty => false)
+  const normalizeBoolish = (v) => {
+    if (typeof v === 'boolean') return v;
+    if (v === null || v === undefined) return false;
+    if (typeof v === 'number') return v === 1;
+    const s = String(v).trim().toLowerCase();
+    if (!s) return false;
+    if (['true','1','yes','y','on'].includes(s)) return true;
+    if (['false','0','no','n','off'].includes(s)) return false;
+    return false;
+  };
+  const normalizeBoolField = (obj, key) => {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) return;
+    obj[key] = normalizeBoolish(obj[key]);
+  };
+  normalizeBoolField(data, 'remittance_overrides_enabled');
+  normalizeBoolField(data, 'remittance_receive_enabled');
+  normalizeBoolField(data, 'remittances_detailed_breakdown');
+  normalizeBoolField(data, 'remittance_receive_when_umbrella_paid');
+
   // Normalise NHSP/HR name aliases (JSONB) if provided
   if (Object.prototype.hasOwnProperty.call(data, 'nhsp_hr_name_aliases')) {
     const rawAliases = data.nhsp_hr_name_aliases;
@@ -54859,6 +54696,7 @@ return withCORS(env, req, ok({
 }
 
 
+
 async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -54868,6 +54706,26 @@ async function handleUpdateCandidate(env, req, candidateId) {
 
   // Strip any accidental CCR fields (immutable/minted by DB)
   const { tms_ref, ccr_num, job_titles, ...data } = raw;
+
+  // ✅ NEW: normalise remittance override booleans (accept 'on'/'true'/1, empty => false)
+  const normalizeBoolish = (v) => {
+    if (typeof v === 'boolean') return v;
+    if (v === null || v === undefined) return false;
+    if (typeof v === 'number') return v === 1;
+    const s = String(v).trim().toLowerCase();
+    if (!s) return false;
+    if (['true','1','yes','y','on'].includes(s)) return true;
+    if (['false','0','no','n','off'].includes(s)) return false;
+    return false;
+  };
+  const normalizeBoolField = (obj, key) => {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) return;
+    obj[key] = normalizeBoolish(obj[key]);
+  };
+  normalizeBoolField(data, 'remittance_overrides_enabled');
+  normalizeBoolField(data, 'remittance_receive_enabled');
+  normalizeBoolField(data, 'remittances_detailed_breakdown');
+  normalizeBoolField(data, 'remittance_receive_when_umbrella_paid');
 
   // Normalise NHSP/HR name aliases (JSONB) if provided
   let aliasesChanged = false;
@@ -55282,6 +55140,8 @@ return withCORS(env, req, ok({
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
+
+
 async function handleGetCandidate(env, req, candidateId) {
   const enc  = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
