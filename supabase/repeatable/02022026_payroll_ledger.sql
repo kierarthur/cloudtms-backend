@@ -2912,6 +2912,9 @@ begin
 end;
 $function$;
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -2989,25 +2992,158 @@ declare
   v_breakdown_missing_ct int := 0;
   v_breakdown_bad_ct int := 0;
   v_breakdown_bad jsonb := '[]'::jsonb;
+
+  ----------------------------------------------------------------
+  -- DEBUG / AUDIT vars (non-functional)
+  ----------------------------------------------------------------
+  v_stage text := 'INIT';
+  v_rows int := 0;
+  v_rows_ins_items int := 0;
+  v_rows_ins_candidates int := 0;
+  v_rows_del_candidates int := 0;
+  v_rows_upd_candidates_loan int := 0;
+  v_rows_ins_loan_items int := 0;
+  v_rows_ins_debt_items int := 0;
+  v_rows_upd_candidates_debt int := 0;
+  v_rows_upd_candidates_summaries int := 0;
+  v_rows_ins_snapshots int := 0;
+  v_rows_ins_breakdowns int := 0;
+  v_sample_candidate_ids jsonb := '[]'::jsonb;
+  v_preview_candidate_filter_ct int := 0;
+  v_preview_decisions_keys jsonb := '{}'::jsonb;
 begin
+  v_stage := 'STAGE_00_INPUTS';
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_00_INPUTS',
+      jsonb_build_object(
+        'pay_date', coalesce(p_pay_date::text, null),
+        'week_ending_cutoff', coalesce(p_week_ending_cutoff::text, null),
+        'pay_channel_scope_raw', coalesce(p_pay_channel_scope, null),
+        'scope_norm', coalesce(v_scope, null),
+        'actor_user_id', coalesce(p_actor_user_id::text, null),
+        'candidate_id_param', coalesce(p_candidate_id::text, null),
+        'client_id_param', coalesce(p_client_id::text, null),
+        'preview_decisions_json_type', jsonb_typeof(p_preview_decisions_json),
+        'preview_decisions_json_keys_sample', (
+          select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
+          from (
+            select e.key
+            from jsonb_each(coalesce(p_preview_decisions_json,'{}'::jsonb)) e
+            order by e.key
+            limit 50
+          ) k
+        )
+      ),
+      'pay_create_draft_batch',
+      coalesce('pay_date:'||p_pay_date::text, 'pay_date:null'),
+      null,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
   if p_pay_date is null then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_PAY_DATE_REQUIRED',
+        jsonb_build_object(
+          'stage', v_stage,
+          'error', 'pay_date is required'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:null',
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'pay_date is required';
   end if;
 
   if p_week_ending_cutoff is null then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_WEEK_ENDING_CUTOFF_REQUIRED',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_date', p_pay_date::text,
+          'error', 'week_ending_cutoff is required'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'week_ending_cutoff is required';
   end if;
 
   if v_scope not in ('PAYE','UMBRELLA') then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_INVALID_SCOPE',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_date', p_pay_date::text,
+          'scope_norm', v_scope,
+          'error', 'Invalid pay_channel_scope (expected PAYE or UMBRELLA)'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'Invalid pay_channel_scope (expected PAYE or UMBRELLA)';
   end if;
 
   if to_regclass('public.settings_defaults') is null then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_SETTINGS_DEFAULTS_MISSING',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_date', p_pay_date::text,
+          'error', 'settings_defaults missing'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'settings_defaults missing';
   end if;
   if to_regclass('public.settings_finance_windows') is null then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_SETTINGS_FINANCE_WINDOWS_MISSING',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_date', p_pay_date::text,
+          'error', 'settings_finance_windows missing'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'settings_finance_windows missing';
   end if;
+
+  v_stage := 'STAGE_01_FILTERS_BACKCOMPAT';
 
   -- Optional filters can be supplied via preview_decisions_json for backward-compatible callers
   begin
@@ -3024,9 +3160,45 @@ begin
         v_client_filter_single := v_filter_text::uuid;
       end if;
     end if;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:STAGE_01_FILTERS_BACKCOMPAT',
+        jsonb_build_object(
+          'stage', v_stage,
+          'candidate_filter_single', coalesce(v_candidate_filter_single::text, null),
+          'client_filter_single', coalesce(v_client_filter_single::text, null),
+          'candidate_filter_id_raw', nullif(btrim(coalesce(p_preview_decisions_json->>'candidate_filter_id','')), ''),
+          'client_filter_id_raw', nullif(btrim(coalesce(p_preview_decisions_json->>'client_filter_id','')), '')
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
   exception when invalid_text_representation then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_INVALID_FILTER_UUID',
+        jsonb_build_object(
+          'stage', v_stage,
+          'candidate_filter_id_raw', nullif(btrim(coalesce(p_preview_decisions_json->>'candidate_filter_id','')), ''),
+          'client_filter_id_raw', nullif(btrim(coalesce(p_preview_decisions_json->>'client_filter_id','')), ''),
+          'error', 'Invalid candidate_filter_id/client_filter_id (must be UUID)'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'Invalid candidate_filter_id/client_filter_id (must be UUID)';
   end;
+
+  v_stage := 'STAGE_02_FINANCE_WINDOW';
 
   select
     sfw.vat_rate_pct,
@@ -3040,9 +3212,44 @@ begin
   order by sfw.date_from desc
   limit 1;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_02_FINANCE_WINDOW',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_date', p_pay_date::text,
+        'vat_rate_pct', v_vat_rate_pct,
+        'erni_pct', v_erni_pct
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   if v_vat_rate_pct is null or v_erni_pct is null then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_NO_FINANCE_WINDOW',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_date', p_pay_date::text,
+          'vat_rate_pct', v_vat_rate_pct,
+          'erni_pct', v_erni_pct,
+          'error', 'No finance window found'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'No finance window found for pay_date %', p_pay_date;
   end if;
+
+  v_stage := 'STAGE_03_SETTINGS_DEFAULTS';
 
   select
     sd.banking_system,
@@ -3055,11 +3262,61 @@ begin
   where sd.id = 1
   limit 1;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_03_SETTINGS_DEFAULTS',
+      jsonb_build_object(
+        'stage', v_stage,
+        'banking_system', coalesce(v_settings.banking_system, null),
+        'external_paye_system', coalesce(v_settings.external_paye_system, null),
+        'rail_provider_default', coalesce(v_settings.rail_provider_default, null),
+        'rail_env_default', coalesce(v_settings.rail_env_default, null),
+        'rail_supports_name_check', coalesce(v_settings.rail_supports_name_check, null)
+      ),
+      'settings_defaults',
+      '1',
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_SETTINGS_DEFAULTS_MISSING_BANKING_EXTERNAL_PAYE',
+        jsonb_build_object(
+          'stage', v_stage,
+          'banking_system', coalesce(v_settings.banking_system, null),
+          'external_paye_system', coalesce(v_settings.external_paye_system, null),
+          'error', 'settings_defaults missing banking_system/external_paye_system'
+        ),
+        'settings_defaults',
+        '1',
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'settings_defaults missing banking_system/external_paye_system';
   end if;
 
   if v_settings.rail_provider_default is null or v_settings.rail_env_default is null then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_SETTINGS_DEFAULTS_MISSING_RAIL_DEFAULTS',
+        jsonb_build_object(
+          'stage', v_stage,
+          'rail_provider_default', coalesce(v_settings.rail_provider_default, null),
+          'rail_env_default', coalesce(v_settings.rail_env_default, null),
+          'error', 'settings_defaults missing rail_provider_default/rail_env_default'
+        ),
+        'settings_defaults',
+        '1',
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'settings_defaults missing rail_provider_default/rail_env_default';
   end if;
 
@@ -3068,8 +3325,27 @@ begin
 
   v_requires_payee_map := (upper(btrim(coalesce(v_settings.rail_provider_default,''))) <> 'CSV');
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_03B_DERIVED_RAIL_FLAGS',
+      jsonb_build_object(
+        'stage', 'STAGE_03B_DERIVED_RAIL_FLAGS',
+        'scope', v_scope,
+        'rail_provider_default_norm', upper(btrim(coalesce(v_settings.rail_provider_default,''))),
+        'rail_env_default_norm', upper(btrim(coalesce(v_settings.rail_env_default,''))),
+        'need_name_check', v_need_name_check,
+        'requires_payee_map', v_requires_payee_map
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   -- ✅ Load eligibility window knobs from settings_defaults (Option A)
   -- NOTE: use exception guard so function is robust even if column is absent at runtime.
+  v_stage := 'STAGE_04_ELIGIBILITY_KNOBS';
   begin
     select
       sd.pay_eligibility_months_back,
@@ -3091,6 +3367,27 @@ begin
   v_eligibility_from_date := (v_today_uk - (v_pay_eligibility_months_back::text || ' months')::interval)::date;
   v_eligibility_to_date   := (v_today_uk + (v_pay_eligibility_weeks_ahead::text || ' weeks')::interval)::date;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_04_ELIGIBILITY_WINDOW',
+      jsonb_build_object(
+        'stage', v_stage,
+        'today_uk', v_today_uk::text,
+        'pay_eligibility_months_back', v_pay_eligibility_months_back,
+        'pay_eligibility_weeks_ahead', v_pay_eligibility_weeks_ahead,
+        'eligibility_from_date', v_eligibility_from_date::text,
+        'eligibility_to_date', v_eligibility_to_date::text,
+        'week_ending_cutoff', p_week_ending_cutoff::text
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_05_CANDIDATE_FILTER_ARRAY';
+
   if jsonb_typeof(p_preview_decisions_json->'candidate_ids') = 'array' then
     select coalesce(array_agg((x::text)::uuid), array[]::uuid[])
     into v_candidate_filter
@@ -3101,6 +3398,57 @@ begin
   if v_candidate_filter is not null and array_length(v_candidate_filter, 1) is null then
     v_candidate_filter := null;
   end if;
+
+  begin
+    select coalesce(jsonb_agg(x.id order by x.id), '[]'::jsonb), count(*)::int
+    into v_sample_candidate_ids, v_preview_candidate_filter_ct
+    from (
+      select u::text as id
+      from unnest(coalesce(v_candidate_filter, array[]::uuid[])) u
+      limit 50
+    ) x;
+
+    v_preview_decisions_keys := jsonb_build_object(
+      'mismatch_choices_keys_sample', (
+        select coalesce(jsonb_agg(k.k order by k.k), '[]'::jsonb)
+        from (
+          select e.key as k
+          from jsonb_each(coalesce(v_mismatch_choices,'{}'::jsonb)) e
+          order by e.key
+          limit 50
+        ) k
+      ),
+      'loan_caps_keys_sample', (
+        select coalesce(jsonb_agg(k.k order by k.k), '[]'::jsonb)
+        from (
+          select e.key as k
+          from jsonb_each(coalesce(v_loan_caps,'{}'::jsonb)) e
+          order by e.key
+          limit 50
+        ) k
+      )
+    );
+
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_05_CANDIDATE_FILTER_ARRAY',
+      jsonb_build_object(
+        'stage', v_stage,
+        'candidate_filter_array_ct', v_preview_candidate_filter_ct,
+        'candidate_filter_array_sample', v_sample_candidate_ids,
+        'candidate_filter_single', coalesce(v_candidate_filter_single::text, null),
+        'client_filter_single', coalesce(v_client_filter_single::text, null),
+        'preview_decisions_key_samples', v_preview_decisions_keys
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then
+    null;
+  end;
+
+  v_stage := 'STAGE_06_BUILD_CANDIDATE_SET_FROM_PREVIEW';
 
   -- Candidate set from pay_preview.
   -- Compatible with both preview shapes:
@@ -3137,7 +3485,30 @@ begin
   into v_candidate_ids
   from selected s;
 
+  begin
+    select coalesce(jsonb_agg(x.candidate_id::text order by x.candidate_id::text), '[]'::jsonb)
+    into v_sample_candidate_ids
+    from (
+      select unnest(coalesce(v_candidate_ids, array[]::uuid[])) as candidate_id
+      limit 50
+    ) x;
+
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_06_CANDIDATE_SET_RESULT',
+      jsonb_build_object(
+        'stage', v_stage,
+        'candidate_ids_count', coalesce(array_length(v_candidate_ids,1),0),
+        'candidate_ids_sample', v_sample_candidate_ids
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   -- Apply client filter (single) as an additional narrowing step (must not create candidates outside the requested client)
+  v_stage := 'STAGE_07_APPLY_CLIENT_FILTER_SINGLE';
   if v_client_filter_single is not null then
     with cand_ids as (
       select unnest(v_candidate_ids) as candidate_id
@@ -3169,11 +3540,67 @@ begin
     from cand_ids ci
     join cand_ok ok
       on ok.candidate_id = ci.candidate_id;
+
+    begin
+      select coalesce(jsonb_agg(x.candidate_id::text order by x.candidate_id::text), '[]'::jsonb)
+      into v_sample_candidate_ids
+      from (
+        select unnest(coalesce(v_candidate_ids, array[]::uuid[])) as candidate_id
+        limit 50
+      ) x;
+
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:STAGE_07_CLIENT_FILTER_RESULT',
+        jsonb_build_object(
+          'stage', v_stage,
+          'client_filter_single', v_client_filter_single::text,
+          'candidate_ids_count_after_client_filter', coalesce(array_length(v_candidate_ids,1),0),
+          'candidate_ids_sample_after_client_filter', v_sample_candidate_ids
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+  else
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:STAGE_07_CLIENT_FILTER_SKIPPED',
+        jsonb_build_object(
+          'stage', v_stage,
+          'client_filter_single', null
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
   end if;
 
+  v_stage := 'STAGE_08_ASSERT_NON_EMPTY_CANDIDATES';
+
   if array_length(v_candidate_ids,1) is null or array_length(v_candidate_ids,1) = 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_NOTHING_TO_PAY_AFTER_BLOCKERS',
+        jsonb_build_object(
+          'stage', v_stage,
+          'candidate_ids_count', coalesce(array_length(v_candidate_ids,1),0),
+          'error', 'Nothing to pay (no payable deltas after blockers)'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'Nothing to pay (no payable deltas after blockers)';
   end if;
+
+  v_stage := 'STAGE_09_VALIDATE_MISMATCH_DECISIONS';
 
   -- Validate mismatch decisions completeness for included candidates (scope-agnostic)
   with preview as (
@@ -3201,9 +3628,41 @@ begin
   into v_reserved
   from missing m;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_09_MISMATCH_DECISIONS_RESULT',
+      jsonb_build_object(
+        'stage', v_stage,
+        'missing_mismatch_decisions_candidate_ids', v_reserved,
+        'missing_count', jsonb_array_length(v_reserved)
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   if jsonb_array_length(v_reserved) > 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_MISMATCH_DECISIONS_REQUIRED',
+        jsonb_build_object(
+          'stage', v_stage,
+          'missing_candidates', v_reserved,
+          'error', 'MISMATCH_DECISIONS_REQUIRED'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'MISMATCH_DECISIONS_REQUIRED for candidates %', v_reserved::text;
   end if;
+
+  v_stage := 'STAGE_10_CREATE_BATCH';
 
   insert into public.pay_batches(
     pay_date,
@@ -3227,6 +3686,30 @@ begin
   )
   returning id into v_batch_id;
 
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_10_BATCH_CREATED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'row_count', v_rows,
+        'pay_batch_id', v_batch_id::text,
+        'status', 'DRAFT',
+        'pay_date', p_pay_date::text,
+        'scope', v_scope,
+        'rail_provider_snapshot', coalesce(v_settings.rail_provider_default, null),
+        'rail_env_snapshot', coalesce(v_settings.rail_env_default, null)
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_11_INSERT_PAY_BATCH_CANDIDATES';
+
   insert into public.pay_batch_candidates(
     pay_batch_id,
     candidate_id,
@@ -3249,6 +3732,34 @@ begin
     null, null, 0, 0
   from public.candidates c
   where c.id = any(v_candidate_ids);
+
+  GET DIAGNOSTICS v_rows_ins_candidates = ROW_COUNT;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_11_CANDIDATES_INSERTED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'scope', v_scope,
+        'inserted_candidate_rows', v_rows_ins_candidates,
+        'candidate_ids_count', coalesce(array_length(v_candidate_ids,1),0),
+        'candidate_ids_sample', (
+          select coalesce(jsonb_agg(x.candidate_id::text order by x.candidate_id::text), '[]'::jsonb)
+          from (
+            select unnest(coalesce(v_candidate_ids, array[]::uuid[])) as candidate_id
+            limit 50
+          ) x
+        )
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
 
   -- Build pay_batch_items with segment-level ref gating:
   -- blocked-positive segments (missing ref_num where required) are excluded (delta forced to 0).
@@ -3922,6 +4433,26 @@ begin
   join public.candidates c
     on c.id = fi.candidate_id;
 
+  GET DIAGNOSTICS v_rows_ins_items = ROW_COUNT;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_12_ITEMS_INSERTED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'scope', v_scope,
+        'inserted_item_rows', v_rows_ins_items
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
+
   -- Remove any candidate rows that ended up with no items for this scoped batch
   delete from public.pay_batch_candidates pbc_del
   where pbc_del.pay_batch_id = v_batch_id
@@ -3933,14 +4464,51 @@ begin
       limit 1
     );
 
+  GET DIAGNOSTICS v_rows_del_candidates = ROW_COUNT;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_13_EMPTY_CANDIDATES_DELETED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'deleted_candidate_rows', v_rows_del_candidates
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_14_ASSERT_ANY_CANDIDATES_REMAIN';
+
   if not exists (
     select 1
     from public.pay_batch_candidates pbc_any
     where pbc_any.pay_batch_id = v_batch_id
     limit 1
   ) then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_NOTHING_TO_PAY_FOR_SCOPE_AFTER_BLOCKERS',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'scope', v_scope,
+          'error', 'Nothing to pay (no payable items for scope after blockers)'
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'Nothing to pay (no payable items for scope % after blockers)', v_scope;
   end if;
+
+  v_stage := 'STAGE_15_DOUBLE_PAY_CONFLICT_CHECK';
 
   -- Double-pay prevention (race-safe). Align reserving statuses with preview exclusion.
   with my_items as (
@@ -3994,9 +4562,43 @@ begin
   into v_reserved
   from conflicts;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_15_DOUBLE_PAY_CONFLICTS_RESULT',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'conflicts', v_reserved,
+        'conflict_count', jsonb_array_length(v_reserved)
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   if jsonb_array_length(v_reserved) > 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_DOUBLE_PAY_BLOCK',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'conflicts', v_reserved,
+          'error', 'DOUBLE_PAY_BLOCK'
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'DOUBLE_PAY_BLOCK: items already reserved in batches %', v_reserved::text;
   end if;
+
+  v_stage := 'STAGE_16_APPLY_LOAN_REPAYMENTS';
 
   -- Apply loan repayments (catch-up: include overdue weeks <= v_week_start; oldest-first)
   -- IMPORTANT: to avoid double-deduction when you create two batches (PAYE + UMBRELLA),
@@ -4015,7 +4617,44 @@ begin
     v_cand_pm := v_rec.cand_pay_method;
     v_cand_umb := v_rec.umbrella_id;
 
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_CANDIDATE_START',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'pay_batch_candidate_id', v_pbci::text,
+          'candidate_id', v_rec.candidate_id::text,
+          'cand_pay_method', v_cand_pm,
+          'scope', v_scope,
+          'umbrella_id', coalesce(v_cand_umb::text, null)
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     if v_cand_pm is distinct from v_scope then
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_SKIP_CANDIDATE_SCOPE_MISMATCH',
+          jsonb_build_object(
+            'stage', v_stage,
+            'pay_batch_id', v_batch_id::text,
+            'candidate_id', v_rec.candidate_id::text,
+            'cand_pay_method', v_cand_pm,
+            'scope', v_scope,
+            'decision', 'continue'
+          ),
+          'pay_batches',
+          v_batch_id::text,
+          null, null, null, null, null
+        );
+      exception when others then null; end;
+
       continue;
     end if;
 
@@ -4039,10 +4678,63 @@ begin
     v_min_take := nullif(v_cap->>'min_take_home','')::numeric;
     v_max_ded  := nullif(v_cap->>'max_deduction','')::numeric;
 
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_CAPS_AND_GROSS',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'candidate_id', v_rec.candidate_id::text,
+          'gross_main', v_gross_main,
+          'loan_caps_raw', v_cap,
+          'min_take_home', v_min_take,
+          'max_deduction', v_max_ded
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     if v_min_take is not null and v_min_take < 0 then
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_CREATE_DRAFT_BATCH:ERROR_INVALID_MIN_TAKE_HOME',
+          jsonb_build_object(
+            'stage', v_stage,
+            'pay_batch_id', v_batch_id::text,
+            'candidate_id', v_rec.candidate_id::text,
+            'min_take_home', v_min_take,
+            'error', 'Invalid min_take_home'
+          ),
+          'pay_batches',
+          v_batch_id::text,
+          null, null, null, null, null
+        );
+      exception when others then null; end;
+
       raise exception 'Invalid min_take_home for candidate %', v_rec.candidate_id::text;
     end if;
     if v_max_ded is not null and v_max_ded < 0 then
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_CREATE_DRAFT_BATCH:ERROR_INVALID_MAX_DEDUCTION',
+          jsonb_build_object(
+            'stage', v_stage,
+            'pay_batch_id', v_batch_id::text,
+            'candidate_id', v_rec.candidate_id::text,
+            'max_deduction', v_max_ded,
+            'error', 'Invalid max_deduction'
+          ),
+          'pay_batches',
+          v_batch_id::text,
+          null, null, null, null, null
+        );
+      exception when others then null; end;
+
       raise exception 'Invalid max_deduction for candidate %', v_rec.candidate_id::text;
     end if;
 
@@ -4054,6 +4746,23 @@ begin
     if v_max_ded is not null then
       v_remaining := least(v_remaining, round(v_max_ded,2));
     end if;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_REMAINING_COMPUTED',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'candidate_id', v_rec.candidate_id::text,
+          'gross_main', v_gross_main,
+          'remaining_after_caps', v_remaining
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
 
     for v_adv in
       select
@@ -4071,11 +4780,51 @@ begin
     loop
       v_sched_amt := round(coalesce(v_adv.due_amt,0),2);
       if v_sched_amt <= 0 then
+        begin
+          perform public._imp_debug_audit(
+            p_actor_user_id,
+            'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_ADVANCE_SKIP_NON_POSITIVE',
+            jsonb_build_object(
+              'stage', v_stage,
+              'pay_batch_id', v_batch_id::text,
+              'candidate_id', v_rec.candidate_id::text,
+              'advance_id', v_adv.advance_id::text,
+              'due_week_start', coalesce(v_adv.due_week_start::text, null),
+              'due_amt', v_adv.due_amt,
+              'sched_amt', v_sched_amt,
+              'decision', 'continue'
+            ),
+            'pay_batches',
+            v_batch_id::text,
+            null, null, null, null, null
+          );
+        exception when others then null; end;
+
         continue;
       end if;
 
       v_take_amt := least(v_sched_amt, v_remaining);
       v_take_amt := round(greatest(v_take_amt,0),2);
+
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_ADVANCE_EVAL',
+          jsonb_build_object(
+            'stage', v_stage,
+            'pay_batch_id', v_batch_id::text,
+            'candidate_id', v_rec.candidate_id::text,
+            'advance_id', v_adv.advance_id::text,
+            'due_week_start', coalesce(v_adv.due_week_start::text, null),
+            'sched_amt', v_sched_amt,
+            'remaining_before', v_remaining,
+            'take_amt', v_take_amt
+          ),
+          'pay_batches',
+          v_batch_id::text,
+          null, null, null, null, null
+        );
+      exception when others then null; end;
 
       if v_take_amt > 0 then
         insert into public.pay_batch_items(
@@ -4107,10 +4856,50 @@ begin
           v_adv.due_week_start
         );
 
+        GET DIAGNOSTICS v_rows = ROW_COUNT;
+        v_rows_ins_loan_items := coalesce(v_rows_ins_loan_items,0) + coalesce(v_rows,0);
+
+        begin
+          perform public._imp_debug_audit(
+            p_actor_user_id,
+            'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_ITEM_INSERTED',
+            jsonb_build_object(
+              'stage', v_stage,
+              'pay_batch_id', v_batch_id::text,
+              'candidate_id', v_rec.candidate_id::text,
+              'pay_batch_candidate_id', v_pbci::text,
+              'advance_id', v_adv.advance_id::text,
+              'repayment_week_start', coalesce(v_adv.due_week_start::text, null),
+              'take_amt', v_take_amt,
+              'row_count', v_rows
+            ),
+            'pay_batches',
+            v_batch_id::text,
+            null, null, null, null, null
+          );
+        exception when others then null; end;
+
         v_remaining := round(v_remaining - v_take_amt,2);
       end if;
 
       if v_remaining <= 0 then
+        begin
+          perform public._imp_debug_audit(
+            p_actor_user_id,
+            'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_EXIT_NO_REMAINING',
+            jsonb_build_object(
+              'stage', v_stage,
+              'pay_batch_id', v_batch_id::text,
+              'candidate_id', v_rec.candidate_id::text,
+              'remaining', v_remaining,
+              'decision', 'exit'
+            ),
+            'pay_batches',
+            v_batch_id::text,
+            null, null, null, null, null
+          );
+        exception when others then null; end;
+
         exit;
       end if;
     end loop;
@@ -4123,7 +4912,46 @@ begin
         and pbi.item_type = 'LOAN_REPAYMENT'
     ),0)
     where pbc.id = v_pbci;
+
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    v_rows_upd_candidates_loan := coalesce(v_rows_upd_candidates_loan,0) + coalesce(v_rows,0);
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:LOAN_LOOP_CANDIDATE_UPDATED_SUMMARY',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'candidate_id', v_rec.candidate_id::text,
+          'pay_batch_candidate_id', v_pbci::text,
+          'row_count', v_rows,
+          'remaining_final', v_remaining
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
   end loop;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_16_LOAN_REPAYMENTS_SUMMARY',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'loan_items_inserted_total', coalesce(v_rows_ins_loan_items,0),
+        'candidates_updated_total', coalesce(v_rows_upd_candidates_loan,0)
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_17_CLIP_NEGATIVES_TO_DEBT_CREATED';
 
   -- Clip negatives into DEBT_CREATED (single-channel)
   for v_rec in
@@ -4147,6 +4975,24 @@ begin
 
       v_debt_scope := round(greatest(-coalesce(v_sum_scope,0),0),2);
 
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_CREATE_DRAFT_BATCH:DEBT_CLIP_EVAL_PAYE',
+          jsonb_build_object(
+            'stage', v_stage,
+            'pay_batch_id', v_batch_id::text,
+            'candidate_id', v_rec.candidate_id::text,
+            'pay_batch_candidate_id', v_pbci::text,
+            'sum_scope', v_sum_scope,
+            'debt_scope', v_debt_scope
+          ),
+          'pay_batches',
+          v_batch_id::text,
+          null, null, null, null, null
+        );
+      exception when others then null; end;
+
       if v_debt_scope > 0 then
         insert into public.pay_batch_items(
           pay_batch_candidate_id,item_type,timesheet_id,segment_key,source_ref,description,
@@ -4156,11 +5002,36 @@ begin
           v_pbci,'DEBT_CREATED',null,null,'debt:paye','Debt created (clipped negative)',
           v_debt_scope,0,v_debt_scope,'PAYE',null
         );
+
+        GET DIAGNOSTICS v_rows = ROW_COUNT;
+        v_rows_ins_debt_items := coalesce(v_rows_ins_debt_items,0) + coalesce(v_rows,0);
+
+        begin
+          perform public._imp_debug_audit(
+            p_actor_user_id,
+            'PAY_CREATE_DRAFT_BATCH:DEBT_CLIP_INSERTED_PAYE',
+            jsonb_build_object(
+              'stage', v_stage,
+              'pay_batch_id', v_batch_id::text,
+              'candidate_id', v_rec.candidate_id::text,
+              'pay_batch_candidate_id', v_pbci::text,
+              'debt_scope', v_debt_scope,
+              'row_count', v_rows
+            ),
+            'pay_batches',
+            v_batch_id::text,
+            null, null, null, null, null
+          );
+        exception when others then null; end;
       end if;
 
       update public.pay_batch_candidates pbc
       set debt_created = round(coalesce(v_debt_scope,0),2)
       where pbc.id = v_pbci;
+
+      GET DIAGNOSTICS v_rows = ROW_COUNT;
+      v_rows_upd_candidates_debt := coalesce(v_rows_upd_candidates_debt,0) + coalesce(v_rows,0);
+
     else
       select round(coalesce(sum(pbi.amount_inc_vat),0),2)
       into v_sum_scope
@@ -4171,6 +5042,25 @@ begin
 
       v_debt_scope := round(greatest(-coalesce(v_sum_scope,0),0),2);
 
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_CREATE_DRAFT_BATCH:DEBT_CLIP_EVAL_UMBRELLA',
+          jsonb_build_object(
+            'stage', v_stage,
+            'pay_batch_id', v_batch_id::text,
+            'candidate_id', v_rec.candidate_id::text,
+            'pay_batch_candidate_id', v_pbci::text,
+            'sum_scope', v_sum_scope,
+            'debt_scope', v_debt_scope,
+            'umbrella_id', coalesce(v_rec.umbrella_id::text, null)
+          ),
+          'pay_batches',
+          v_batch_id::text,
+          null, null, null, null, null
+        );
+      exception when others then null; end;
+
       if v_debt_scope > 0 then
         insert into public.pay_batch_items(
           pay_batch_candidate_id,item_type,timesheet_id,segment_key,source_ref,description,
@@ -4180,13 +5070,56 @@ begin
           v_pbci,'DEBT_CREATED',null,null,'debt:umbrella','Debt created (clipped negative)',
           v_debt_scope,0,v_debt_scope,'UMBRELLA',v_rec.umbrella_id
         );
+
+        GET DIAGNOSTICS v_rows = ROW_COUNT;
+        v_rows_ins_debt_items := coalesce(v_rows_ins_debt_items,0) + coalesce(v_rows,0);
+
+        begin
+          perform public._imp_debug_audit(
+            p_actor_user_id,
+            'PAY_CREATE_DRAFT_BATCH:DEBT_CLIP_INSERTED_UMBRELLA',
+            jsonb_build_object(
+              'stage', v_stage,
+              'pay_batch_id', v_batch_id::text,
+              'candidate_id', v_rec.candidate_id::text,
+              'pay_batch_candidate_id', v_pbci::text,
+              'debt_scope', v_debt_scope,
+              'umbrella_id', coalesce(v_rec.umbrella_id::text, null),
+              'row_count', v_rows
+            ),
+            'pay_batches',
+            v_batch_id::text,
+            null, null, null, null, null
+          );
+        exception when others then null; end;
       end if;
 
       update public.pay_batch_candidates pbc
       set debt_created = round(coalesce(v_debt_scope,0),2)
       where pbc.id = v_pbci;
+
+      GET DIAGNOSTICS v_rows = ROW_COUNT;
+      v_rows_upd_candidates_debt := coalesce(v_rows_upd_candidates_debt,0) + coalesce(v_rows,0);
     end if;
   end loop;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_17_DEBT_CLIP_SUMMARY',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'debt_items_inserted_total', coalesce(v_rows_ins_debt_items,0),
+        'candidates_updated_total', coalesce(v_rows_upd_candidates_debt,0)
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_18_POPULATE_CANDIDATE_SUMMARIES';
 
   -- Populate gross_preview/net_bank_amount summaries (single-channel)
   update public.pay_batch_candidates pbc
@@ -4220,6 +5153,25 @@ begin
     end,
     mismatch_settlement_choice = nullif(v_mismatch_choices->>pbc.candidate_id::text,'')
   where pbc.pay_batch_id = v_batch_id;
+
+  GET DIAGNOSTICS v_rows_upd_candidates_summaries = ROW_COUNT;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_18_SUMMARIES_UPDATED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'updated_candidate_rows', v_rows_upd_candidates_summaries
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_19_CREATE_TIMESHEET_SNAPSHOTS';
 
   -- Create frozen timesheet snapshots for settlement baselines (do NOT advance blocked segments)
   with touched_ts as (
@@ -4407,6 +5359,25 @@ begin
   ) s
   join ts_channel tc
     on tc.timesheet_id = s.timesheet_id;
+
+  GET DIAGNOSTICS v_rows_ins_snapshots = ROW_COUNT;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_19_SNAPSHOTS_INSERTED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'inserted_snapshot_rows', v_rows_ins_snapshots
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_20_BUILD_ITEM_BREAKDOWNS';
 
   -- ✅ NEW: Build canonical breakdown lines for ALL items in this batch (including LOAN_REPAYMENT + DEBT_CREATED)
   with my_items as (
@@ -4669,7 +5640,7 @@ begin
     select
       ar.pay_batch_item_id,
       ar.line_kind,
-      ar.bucket_code,
+      ak.code as bucket_code,
       ar.unit_name,
       ar.units_delta as units,
       ar.cur_rate as rate,
@@ -4679,6 +5650,9 @@ begin
       ar.parent_inc,
       'HOURS'::text as component
     from addl_rows_raw ar
+    join addl_keys ak
+      on ak.pay_batch_item_id = ar.pay_batch_item_id
+     and ak.code = ar.bucket_code
     where ar.units_delta <> 0
     union all
     select
@@ -4827,6 +5801,25 @@ begin
     al.meta_json
   from all_lines al;
 
+  GET DIAGNOSTICS v_rows_ins_breakdowns = ROW_COUNT;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_20_BREAKDOWNS_INSERTED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'inserted_breakdown_rows', v_rows_ins_breakdowns
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
+
   -- ✅ Integrity checks: every item must have ≥1 breakdown row; sums must match exactly
   select count(*)
   into v_breakdown_missing_ct
@@ -4841,9 +5834,42 @@ begin
       limit 1
     );
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_21_BREAKDOWN_MISSING_COUNT',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'breakdown_missing_ct', coalesce(v_breakdown_missing_ct,0)
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   if coalesce(v_breakdown_missing_ct,0) > 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_BREAKDOWN_MISSING',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'breakdown_missing_ct', coalesce(v_breakdown_missing_ct,0),
+          'error', 'PAY_BATCH_BREAKDOWN_MISSING'
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'PAY_BATCH_BREAKDOWN_MISSING: % items have no breakdown rows', v_breakdown_missing_ct;
   end if;
+
+  v_stage := 'STAGE_22_BREAKDOWN_INTEGRITY_SUM_MATCH';
 
   with sums as (
     select
@@ -4890,9 +5916,56 @@ begin
   into v_breakdown_bad_ct, v_breakdown_bad
   from bad b;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_22_BREAKDOWN_SUMS_RESULT',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'breakdown_bad_ct', coalesce(v_breakdown_bad_ct,0),
+        'breakdown_bad_sample', (
+          case
+            when jsonb_typeof(v_breakdown_bad) = 'array' then (
+              select coalesce(jsonb_agg(x order by (x->>'pay_batch_item_id')), '[]'::jsonb)
+              from (
+                select e as x
+                from jsonb_array_elements(v_breakdown_bad) e
+                limit 50
+              ) s
+            )
+            else v_breakdown_bad
+          end
+        )
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   if coalesce(v_breakdown_bad_ct,0) > 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_BREAKDOWN_MISMATCH',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'breakdown_bad_ct', coalesce(v_breakdown_bad_ct,0),
+          'breakdown_bad', v_breakdown_bad,
+          'error', 'PAY_BATCH_BREAKDOWN_MISMATCH'
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'PAY_BATCH_BREAKDOWN_MISMATCH %', v_breakdown_bad::text;
   end if;
+
+  v_stage := 'STAGE_23_FINAL_SAFETY_ASSERT_BLOCKERS';
 
   -- Final safety assertion: draft must not contain candidates blocked by bank readiness (for this scope).
   with cands as (
@@ -5051,9 +6124,93 @@ begin
   into v_blocked_candidates
   from bad b;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_23_BLOCKER_ASSERT_RESULT',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'blocked_candidates', (
+          case
+            when jsonb_typeof(v_blocked_candidates) = 'array' then (
+              select coalesce(jsonb_agg(x order by (x->>'candidate_id')), '[]'::jsonb)
+              from (
+                select e as x
+                from jsonb_array_elements(v_blocked_candidates) e
+                limit 50
+              ) s
+            )
+            else v_blocked_candidates
+          end
+        ),
+        'blocked_count', jsonb_array_length(v_blocked_candidates)
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
   if jsonb_array_length(v_blocked_candidates) > 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_DRAFT_CONTAINS_BLOCKED_ITEMS',
+        jsonb_build_object(
+          'stage', v_stage,
+          'pay_batch_id', v_batch_id::text,
+          'blocked_candidates', v_blocked_candidates,
+          'error', 'DRAFT_CONTAINS_BLOCKED_ITEMS'
+        ),
+        'pay_batches',
+        v_batch_id::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
     raise exception 'DRAFT_CONTAINS_BLOCKED_ITEMS %', v_blocked_candidates::text;
   end if;
+
+  v_stage := 'STAGE_24_RETURN';
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_24_RETURN',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'return', jsonb_build_object(
+          'ok', true,
+          'pay_batch_id', v_batch_id::text,
+          'pay_date', p_pay_date::text,
+          'pay_week_start', v_week_start::text,
+          'week_ending_cutoff_date', p_week_ending_cutoff::text,
+          'pay_channel_scope', v_scope,
+          'banking_system_snapshot', v_settings.banking_system,
+          'external_paye_system_snapshot', v_settings.external_paye_system,
+          'rail_provider_snapshot', v_settings.rail_provider_default,
+          'rail_env_snapshot', v_settings.rail_env_default
+        ),
+        'dml_summary', jsonb_build_object(
+          'batch_insert_rowcount', v_rows,
+          'candidates_inserted', v_rows_ins_candidates,
+          'items_inserted', v_rows_ins_items,
+          'candidates_deleted_empty', v_rows_del_candidates,
+          'loan_items_inserted', coalesce(v_rows_ins_loan_items,0),
+          'debt_items_inserted', coalesce(v_rows_ins_debt_items,0),
+          'snapshots_inserted', v_rows_ins_snapshots,
+          'breakdowns_inserted', v_rows_ins_breakdowns,
+          'breakdown_missing_ct', coalesce(v_breakdown_missing_ct,0),
+          'breakdown_bad_ct', coalesce(v_breakdown_bad_ct,0)
+        )
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
 
   return jsonb_build_object(
     'ok', true,
@@ -5067,10 +6224,47 @@ begin
     'rail_provider_snapshot', v_settings.rail_provider_default,
     'rail_env_snapshot', v_settings.rail_env_default
   );
+
+exception when others then
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:UNHANDLED_EXCEPTION',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', coalesce(v_batch_id::text, null),
+        'pay_date', coalesce(p_pay_date::text, null),
+        'week_ending_cutoff', coalesce(p_week_ending_cutoff::text, null),
+        'scope', coalesce(v_scope, null),
+        'candidate_filter_single', coalesce(v_candidate_filter_single::text, null),
+        'client_filter_single', coalesce(v_client_filter_single::text, null),
+        'candidate_ids_count', coalesce(array_length(v_candidate_ids,1),0),
+        'candidate_ids_sample', (
+          select coalesce(jsonb_agg(x.candidate_id::text order by x.candidate_id::text), '[]'::jsonb)
+          from (
+            select unnest(coalesce(v_candidate_ids, array[]::uuid[])) as candidate_id
+            limit 50
+          ) x
+        ),
+        'last_reserved_json', v_reserved,
+        'blocked_candidates', v_blocked_candidates,
+        'breakdown_missing_ct', coalesce(v_breakdown_missing_ct,0),
+        'breakdown_bad_ct', coalesce(v_breakdown_bad_ct,0),
+        'breakdown_bad', v_breakdown_bad,
+        'sqlstate', sqlstate,
+        'sqlerrm', sqlerrm
+      ),
+      'pay_batches',
+      coalesce(v_batch_id::text, 'pay_date:'||coalesce(p_pay_date::text,'null')),
+      null, null, null, null, null
+    );
+  exception when others then
+    null;
+  end;
+
+  raise;
 end;
 $$;
-
-
 
 
 
