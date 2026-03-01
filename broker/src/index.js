@@ -8900,6 +8900,28 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
   }
 
+  try {
+    const res = await sendPayBatchRemittancesInternal(env, {
+      payBatchId,
+      scope,
+      actorUserId: user.id
+    });
+    return withCORS(env, req, ok(res));
+  } catch (e) {
+    const msg = String(e?.message || e || 'REM_SEND_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function sendPayBatchRemittancesInternal(env, opts) {
+  const payBatchId = opts && opts.payBatchId ? String(opts.payBatchId) : '';
+  const actorUserId = opts && opts.actorUserId ? String(opts.actorUserId) : '';
+  const scope = String(opts?.scope ?? opts?.pay_channel_scope ?? 'ALL').trim().toUpperCase();
+
+  if (!payBatchId) throw new Error('pay_batch_id is required');
+  if (!actorUserId) throw new Error('actor_user_id is required');
+  if (!['ALL', 'PAYE', 'UMBRELLA'].includes(scope)) throw new Error('Invalid scope (ALL|PAYE|UMBRELLA)');
+
   const nowIso = new Date().toISOString();
 
   // ✅ Load remittance policy + messages (single-row settings_defaults)
@@ -8926,7 +8948,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     const te = (r0 && typeof r0.remittance_test_recipient_email === 'string') ? r0.remittance_test_recipient_email.trim() : '';
     remittanceTestRecipientEmail = te && te.length ? te : null;
   } catch (e) {
-    return withCORS(env, req, serverError('Failed to load remittance settings'));
+    throw new Error('Failed to load remittance settings');
   }
 
   // ✅ Test-mode policy: allow sending ONLY if a test recipient email is configured.
@@ -8936,7 +8958,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
 
   if (payrollTesting) {
     if (!remittanceTestRecipientEmail || !isEmail(remittanceTestRecipientEmail)) {
-      return withCORS(env, req, badRequest('REMITTANCE_TEST_RECIPIENT_EMAIL_REQUIRED_IN_PAYROLL_TESTING'));
+      throw new Error('REMITTANCE_TEST_RECIPIENT_EMAIL_REQUIRED_IN_PAYROLL_TESTING');
     }
     testTo = remittanceTestRecipientEmail.trim();
   }
@@ -8949,7 +8971,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     });
   } catch (e) {
     const msg = (e && e.message) ? String(e.message) : String(e || 'REM_BUILD_FAILED');
-    return withCORS(env, req, serverError(msg));
+    throw new Error(msg);
   }
 
   const jobs = Array.isArray(build?.jobs) ? build.jobs : [];
@@ -9380,6 +9402,48 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
 
     const reference = `remit:pay_batch:${payBatchId}:${jobKindRaw || 'JOB'}:${payeeEntityKind}:${payeeEntityIdText}`;
 
+    // ✅ Idempotency / dedupe: skip if an identical (type,to,reference) already exists
+    try {
+      const qType = encodeURIComponent('REMITTANCE');
+      const qTo = encodeURIComponent(toEmail);
+      const qRef = encodeURIComponent(reference);
+
+      const { rows: existing } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=id,status,created_at_utc&type=eq.${qType}&to=eq.${qTo}&reference=eq.${qRef}&limit=1`
+      );
+
+      if (Array.isArray(existing) && existing.length > 0) {
+        const ex0 = existing[0] || {};
+        skipped.push({
+          job_kind: jobKindRaw || null,
+          payee_entity_kind: payeeEntityKind,
+          payee_entity_id: payeeEntityIdText,
+          to: toEmail,
+          intended_to: intendedToEmail,
+          subject,
+          reference,
+          reason: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
+          existing_mail_outbox_id: ex0.id ? String(ex0.id) : null,
+          existing_status: ex0.status ? String(ex0.status) : null
+        });
+        continue;
+      }
+    } catch (e) {
+      skipped.push({
+        job_kind: jobKindRaw || null,
+        payee_entity_kind: payeeEntityKind,
+        payee_entity_id: payeeEntityIdText,
+        to: toEmail,
+        intended_to: intendedToEmail,
+        subject,
+        reference,
+        reason: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
+        error: String(e?.message || e || 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED').slice(0, 500)
+      });
+      continue;
+    }
+
     const outboxRow = {
       type: 'REMITTANCE',
       to: toEmail,
@@ -9390,7 +9454,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
       attachments: null,
       status: 'QUEUED',
       reference,
-      created_by: user?.id || null,
+      created_by: actorUserId || null,
       created_at_utc: nowIso
     };
 
@@ -9449,14 +9513,14 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
       p_pay_batch_id: payBatchId,
       p_scope: scope,
       p_results_json: { queued, skipped, pay_date: payDate, bulk_reference: bulkRef, payroll_testing: payrollTesting, test_recipient: testTo },
-      p_actor_user_id: user.id
+      p_actor_user_id: actorUserId
     });
   } catch (e) {
     // Non-fatal: emails are queued; audit mark can be retried.
     console.warn('[banking][remittances] pay_remittance_mark_sent failed:', e?.message || e);
   }
 
-  return withCORS(env, req, ok({
+  return {
     ok: true,
     pay_batch_id: payBatchId,
     scope,
@@ -9468,7 +9532,7 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     skipped_count: skipped.length,
     queued,
     skipped
-  }));
+  };
 }
 
 
@@ -10664,7 +10728,6 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
-
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -10983,37 +11046,27 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 4) Auto-remittances (only when it actually became authorised for payment)
+    // 4) Remittances are deferred until settlement (COMPLETED transfers).
+    //    Do NOT attempt to send on AUTHORISED_FOR_PAYMENT, because pay_remittance_build
+    //    only produces jobs once transfers are COMPLETED.
     // ─────────────────────────────────────────────────────────────
     let remittancesAttempted = false;
     let remittancesSent = false;
     let remittancesReason = null;
 
-    try {
-      const becameAuthorisedForPayment =
-        scheduleAttempted
-        && ((scheduledOut && scheduledOut.became_authorised === true)
-            || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT'));
+    const becameAuthorisedForPayment =
+      scheduleAttempted
+      && ((scheduledOut && scheduledOut.became_authorised === true)
+          || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT'));
 
-      if (becameAuthorisedForPayment) {
-        remittancesAttempted = true;
-
-        const headers = new Headers(req.headers);
-        headers.set('Content-Type', 'application/json');
-        const req2 = new Request(req.url, { method: 'POST', headers, body: JSON.stringify({ scope: payChannelScope }) });
-
-        const resp = await handleBankingPayBatchRemittancesSend(env, req2, id);
-        remittancesSent = !!(resp && typeof resp === 'object' && resp.ok);
-        remittancesReason = null;
-      } else {
-        remittancesAttempted = false;
-        remittancesSent = false;
-        remittancesReason = scheduleAttempted ? 'NOT_YET_AUTHORISED' : 'SCHEDULING_NOT_APPLICABLE';
-      }
-    } catch (e) {
-      remittancesAttempted = true;
+    if (becameAuthorisedForPayment) {
+      remittancesAttempted = false;
       remittancesSent = false;
-      remittancesReason = (e && e.message) ? String(e.message) : String(e || 'REMITTANCES_FAILED');
+      remittancesReason = 'DEFERRED_UNTIL_SETTLED';
+    } else {
+      remittancesAttempted = false;
+      remittancesSent = false;
+      remittancesReason = scheduleAttempted ? 'NOT_YET_AUTHORISED' : 'SCHEDULING_NOT_APPLICABLE';
     }
 
     // Always return fresh batch snapshot
@@ -11036,7 +11089,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       remittances: {
         attempted: remittancesAttempted,
         sent: remittancesSent,
-        reason: remittancesReason
+        reason: remittancesReason,
+        deferred_until_settled: true,
+        scope: payChannelScope
       },
       batch_get: afterGet
     }));
@@ -12967,6 +13022,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   }
 }
 
+
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -12977,6 +13033,59 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
   body = body || {};
+
+  const scopeProvided =
+    Object.prototype.hasOwnProperty.call(body, 'scope')
+    || Object.prototype.hasOwnProperty.call(body, 'pay_channel_scope')
+    || Object.prototype.hasOwnProperty.call(body, 'payChannelScope');
+
+  const scopeRaw = scopeProvided ? String(body.scope ?? body.pay_channel_scope ?? body.payChannelScope ?? 'ALL').trim().toUpperCase() : 'ALL';
+  const scope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : null;
+  if (!scope) {
+    return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _settlementAdvanced = (settledObj) => {
+    if (!settledObj || typeof settledObj !== 'object') return false;
+
+    const arr = settledObj.newly_settled_candidates;
+    if (Array.isArray(arr) && arr.length > 0) return true;
+
+    const n = Number(settledObj.newly_settled_count);
+    if (Number.isFinite(n) && n > 0) return true;
+
+    const st = String(settledObj.batch_status ?? settledObj.status ?? '').trim().toUpperCase();
+    if (st === 'SETTLED') return true;
+
+    return false;
+  };
+
+  const trySendRemittancesIfAdvanced = async (settledObj, providerLabel) => {
+    if (!_settlementAdvanced(settledObj)) {
+      return { attempted: false, ok: false, reason: 'NO_SETTLEMENT_ADVANCE', provider: providerLabel || null };
+    }
+
+    try {
+      const r = await sendPayBatchRemittancesInternal(env, {
+        payBatchId: id,
+        scope,
+        actorUserId: String(user.id)
+      });
+      return { attempted: true, ok: true, reason: null, provider: providerLabel || null, result: r };
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'REMITTANCES_FAILED');
+      return { attempted: true, ok: false, reason: msg, provider: providerLabel || null };
+    }
+  };
 
   try {
     // Determine provider from batch snapshot
@@ -13019,7 +13128,8 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
         ...freshObj,
         poll_result: { ok: true, skipped: true, reason: 'THROTTLED', throttle_ms: THROTTLE_MS, last_status_checked_at_utc: lastCheckedIso },
         poll_provider: provider,
-        poll_server_utc: new Date().toISOString()
+        poll_server_utc: new Date().toISOString(),
+        remittances: { attempted: false, ok: false, reason: 'THROTTLED' }
       }));
     }
 
@@ -13030,19 +13140,24 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
         ...freshObj,
         poll_result: { ok: true, skipped: true, reason: 'NO_PENDING' },
         poll_provider: provider,
-        poll_server_utc: new Date().toISOString()
+        poll_server_utc: new Date().toISOString(),
+        remittances: { attempted: false, ok: false, reason: 'NO_PENDING' }
       }));
     }
 
     // ✅ If pending exists but nothing is pollable, do NOT call rail; return safe skipped result.
     if (!hasPollable) {
+      let settleNoopRes = null;
       try {
-        await sbRpc(env, 'pay_settle_rail', {
+        settleNoopRes = await sbRpc(env, 'pay_settle_rail', {
           p_pay_batch_id: String(id),
           p_settlement_json: [],
           p_actor_user_id: String(user.id)
         });
       } catch {}
+
+      const settleNoopPayload = unwrapRpc(settleNoopRes, 'pay_settle_rail');
+      const remitInfo = await trySendRemittancesIfAdvanced(settleNoopPayload, provider);
 
       const batchRes2 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
 
@@ -13059,7 +13174,8 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
         ...freshObj2,
         poll_result: { ok: true, skipped: true, reason: 'NO_POLLABLE_RAIL_TX_ID' },
         poll_provider: provider,
-        poll_server_utc: new Date().toISOString()
+        poll_server_utc: new Date().toISOString(),
+        remittances: remitInfo
       }));
     }
 
@@ -13094,6 +13210,8 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     }
 
     let polled = null;
+    let remitInfoFromPoll = { attempted: false, ok: false, reason: 'NOT_ATTEMPTED' };
+
     try {
       polled = await adapter.pollBatch(env, id, user.id);
     } catch (e) {
@@ -13111,13 +13229,17 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
 
       // ✅ Soft-fail: do NOT 500-loop on rail "not found" during pending states; return safe skipped.
       if (isRevolutNotFound) {
+        let settleNoopRes2 = null;
         try {
-          await sbRpc(env, 'pay_settle_rail', {
+          settleNoopRes2 = await sbRpc(env, 'pay_settle_rail', {
             p_pay_batch_id: String(id),
             p_settlement_json: [],
             p_actor_user_id: String(user.id)
           });
         } catch {}
+
+        const settleNoopPayload2 = unwrapRpc(settleNoopRes2, 'pay_settle_rail');
+        const remitInfo = await trySendRemittancesIfAdvanced(settleNoopPayload2, provider);
 
         const batchRes3 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
 
@@ -13134,7 +13256,8 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
           ...freshObj3,
           poll_result: { ok: true, skipped: true, reason: 'RAIL_RESOURCE_NOT_FOUND', detail: msg },
           poll_provider: provider,
-          poll_server_utc: new Date().toISOString()
+          poll_server_utc: new Date().toISOString(),
+          remittances: remitInfo
         }));
       }
 
@@ -13153,6 +13276,15 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       }
     } catch {}
 
+    // ✅ Remittances: if settlement advanced, send now (idempotent sender handles repeats safely)
+    try {
+      const settledObj2 = (polled && typeof polled === 'object') ? polled.settled : null;
+      remitInfoFromPoll = await trySendRemittancesIfAdvanced(settledObj2, provider);
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'REMITTANCES_FAILED');
+      remitInfoFromPoll = { attempted: true, ok: false, reason: msg, provider };
+    }
+
     // ✅ Always return refreshed pay_batch_get for UI
     const batchRes2 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
 
@@ -13170,14 +13302,13 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       ...freshObj,
       poll_result: (polled && typeof polled === 'object') ? polled : {},
       poll_provider: provider,
-      poll_server_utc: new Date().toISOString()
+      poll_server_utc: new Date().toISOString(),
+      remittances: remitInfoFromPoll
     }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 
 
 
@@ -78416,6 +78547,7 @@ async function csvAdapter_confirmManual(env, batchId, bankConfirmRef, actorUserI
   });
 }
 
+
 async function bankingCronTick(env, opts = {}) {
   const nowUtc = (() => {
     const v = opts && opts.nowUtc ? new Date(opts.nowUtc) : new Date();
@@ -78534,6 +78666,21 @@ async function bankingCronTick(env, opts = {}) {
     }
 
     return { ok: true, reverted };
+  };
+
+  const _settlementAdvanced = (settledObj) => {
+    if (!settledObj || typeof settledObj !== 'object') return false;
+
+    const arr = settledObj.newly_settled_candidates;
+    if (Array.isArray(arr) && arr.length > 0) return true;
+
+    const n = Number(settledObj.newly_settled_count);
+    if (Number.isFinite(n) && n > 0) return true;
+
+    const st = String(settledObj.batch_status ?? settledObj.status ?? '').trim().toUpperCase();
+    if (st === 'SETTLED') return true;
+
+    return false;
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -78659,6 +78806,34 @@ async function bankingCronTick(env, opts = {}) {
 
       try {
         const polled = await adapter.pollBatch(env, batchId, actorUserId);
+
+        let remAttempted = false;
+        let remOk = false;
+        let remError = null;
+        let remResult = null;
+
+        const settledObj = (polled && typeof polled === 'object') ? polled.settled : null;
+        if (settledObj !== undefined && settledObj !== null && _settlementAdvanced(settledObj)) {
+          remAttempted = true;
+          try {
+            remResult = await sendPayBatchRemittancesInternal(env, {
+              payBatchId: batchId,
+              scope: 'ALL',
+              actorUserId
+            });
+            remOk = true;
+          } catch (e) {
+            remOk = false;
+            remError = _errMsg(e);
+            summary.warnings.push({
+              code: 'REMITTANCES_SEND_FAILED',
+              provider: prov,
+              pay_batch_id: batchId,
+              error: remError
+            });
+          }
+        }
+
         summary.polled_batches.push({
           pay_batch_id: batchId,
           provider: prov,
@@ -78669,7 +78844,13 @@ async function bankingCronTick(env, opts = {}) {
           summary.settled_batches.push({
             pay_batch_id: batchId,
             provider: prov,
-            settled: polled.settled
+            settled: polled.settled,
+            remittances: {
+              attempted: remAttempted,
+              ok: remOk,
+              error: remError,
+              result: remResult
+            }
           });
         }
       } catch (e) {
@@ -78705,8 +78886,6 @@ async function bankingCronTick(env, opts = {}) {
 
   return summary;
 }
-
-
 
 
 
