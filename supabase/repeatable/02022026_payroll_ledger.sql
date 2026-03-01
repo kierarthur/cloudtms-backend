@@ -3523,15 +3523,6 @@ begin
 end;
 $function$;
 
-
-
-
-
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3604,6 +3595,11 @@ declare
 
   v_sum_scope numeric;
   v_debt_scope numeric;
+
+  -- breakdown integrity vars
+  v_breakdown_missing_ct int := 0;
+  v_breakdown_bad_ct int := 0;
+  v_breakdown_bad jsonb := '[]'::jsonb;
 begin
   if p_pay_date is null then
     raise exception 'pay_date is required';
@@ -3939,6 +3935,23 @@ begin
       ) as require_reference_to_pay,
 
       tf.invoice_breakdown_json,
+
+      -- ✅ hours + rates snapshots (required for canonical breakdown)
+      tf.hours_day,
+      tf.hours_night,
+      tf.hours_sat,
+      tf.hours_sun,
+      tf.hours_bh,
+      tf.pay_day,
+      tf.pay_night,
+      tf.pay_sat,
+      tf.pay_sun,
+      tf.pay_bh,
+
+      tf.additional_units_json,
+      tf.mileage_units,
+      tf.mileage_pay_rate,
+
       round(coalesce(tf.total_pay_ex_vat,0),2) as total_pay_ex_vat,
       round(coalesce(tf.expenses_pay_ex_vat,0),2) as expenses_pay_ex_vat,
       round(coalesce(tf.travel_pay_ex_vat,0),2) as travel_pay_ex_vat,
@@ -4011,6 +4024,16 @@ begin
           select coalesce(jsonb_agg(
             jsonb_build_object(
               'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')),''),
+              'date', nullif(btrim(coalesce(seg->>'date','')),''),
+              'start_utc', nullif(btrim(coalesce(seg->>'start_utc','')),''),
+              'end_utc', nullif(btrim(coalesce(seg->>'end_utc','')),''),
+              'break_mins', coalesce(nullif(seg->>'break_mins','')::numeric,0),
+              'breaks', coalesce(seg->'breaks','[]'::jsonb),
+              'hours_day', coalesce(nullif(seg->>'hours_day','')::numeric,0),
+              'hours_night', coalesce(nullif(seg->>'hours_night','')::numeric,0),
+              'hours_sat', coalesce(nullif(seg->>'hours_sat','')::numeric,0),
+              'hours_sun', coalesce(nullif(seg->>'hours_sun','')::numeric,0),
+              'hours_bh', coalesce(nullif(seg->>'hours_bh','')::numeric,0),
               'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
               'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
               'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')),'')
@@ -4435,6 +4458,7 @@ begin
         else r.delta_ex
       end as ex_amt_for_channel
     from filtered r
+    where r.pay_channel in ('PAYE','UMBRELLA')
   ),
   final_items as (
     select
@@ -4837,6 +4861,19 @@ begin
       ts.contract_id,
       ts.reference_number,
       tf.invoice_breakdown_json,
+      tf.hours_day,
+      tf.hours_night,
+      tf.hours_sat,
+      tf.hours_sun,
+      tf.hours_bh,
+      tf.pay_day,
+      tf.pay_night,
+      tf.pay_sat,
+      tf.pay_sun,
+      tf.pay_bh,
+      tf.additional_units_json,
+      tf.mileage_units,
+      tf.mileage_pay_rate,
       round(coalesce(tf.total_pay_ex_vat,0),2) as total_pay_ex_vat,
       round(coalesce(tf.expenses_pay_ex_vat,0),2) as expenses_pay_ex_vat,
       round(coalesce(tf.travel_pay_ex_vat,0),2) as travel_pay_ex_vat,
@@ -4874,6 +4911,16 @@ begin
           select coalesce(jsonb_agg(
             jsonb_build_object(
               'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')),''),
+              'date', nullif(btrim(coalesce(seg->>'date','')),''),
+              'start_utc', nullif(btrim(coalesce(seg->>'start_utc','')),''),
+              'end_utc', nullif(btrim(coalesce(seg->>'end_utc','')),''),
+              'break_mins', coalesce(nullif(seg->>'break_mins','')::numeric,0),
+              'breaks', coalesce(seg->'breaks','[]'::jsonb),
+              'hours_day', coalesce(nullif(seg->>'hours_day','')::numeric,0),
+              'hours_night', coalesce(nullif(seg->>'hours_night','')::numeric,0),
+              'hours_sat', coalesce(nullif(seg->>'hours_sat','')::numeric,0),
+              'hours_sun', coalesce(nullif(seg->>'hours_sun','')::numeric,0),
+              'hours_bh', coalesce(nullif(seg->>'hours_bh','')::numeric,0),
               'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
               'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
               'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')),'')
@@ -4949,7 +4996,10 @@ begin
               (case when coalesce(bas.exclude_from_pay,false) then 0 else coalesce(bas.pay_amount,0) end),
               2
             ) > 0
-      ) as is_blocked
+      ) as is_blocked,
+
+      cur.seg_json as cur_seg_json,
+      bas.seg_json as bas_seg_json
     from cur0 c
     join (select distinct timesheet_id, segment_id from seg_ids where segment_id is not null) i
       on i.timesheet_id = c.timesheet_id
@@ -4957,7 +5007,8 @@ begin
       select
         round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
         coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
-        nullif(btrim(coalesce(s->>'ref_num','')),'') as ref_num
+        nullif(btrim(coalesce(s->>'ref_num','')),'') as ref_num,
+        s as seg_json
       from jsonb_array_elements(coalesce(c.cur_segments,'[]'::jsonb)) s
       where s is not null and jsonb_typeof(s)='object'
         and nullif(btrim(coalesce(s->>'segment_id','')),'') = i.segment_id
@@ -4966,7 +5017,8 @@ begin
     left join lateral (
       select
         round(coalesce(nullif(s->>'pay_amount','')::numeric,0),2) as pay_amount,
-        coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay
+        coalesce(nullif(s->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
+        s as seg_json
       from jsonb_array_elements(coalesce(c.base_json->'segments','[]'::jsonb)) s
       where s is not null and jsonb_typeof(s)='object'
         and nullif(btrim(coalesce(s->>'segment_id','')),'') = i.segment_id
@@ -4979,6 +5031,16 @@ begin
       jsonb_agg(
         jsonb_build_object(
           'segment_id', sc.segment_id,
+          'date', case when sc.is_blocked then nullif(btrim(coalesce(sc.bas_seg_json->>'date','')),'') else nullif(btrim(coalesce(sc.cur_seg_json->>'date','')),'') end,
+          'start_utc', case when sc.is_blocked then nullif(btrim(coalesce(sc.bas_seg_json->>'start_utc','')),'') else nullif(btrim(coalesce(sc.cur_seg_json->>'start_utc','')),'') end,
+          'end_utc', case when sc.is_blocked then nullif(btrim(coalesce(sc.bas_seg_json->>'end_utc','')),'') else nullif(btrim(coalesce(sc.cur_seg_json->>'end_utc','')),'') end,
+          'break_mins', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'break_mins','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'break_mins','')::numeric,0) end,
+          'breaks', case when sc.is_blocked then coalesce(sc.bas_seg_json->'breaks','[]'::jsonb) else coalesce(sc.cur_seg_json->'breaks','[]'::jsonb) end,
+          'hours_day', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_day','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_day','')::numeric,0) end,
+          'hours_night', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_night','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_night','')::numeric,0) end,
+          'hours_sat', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_sat','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_sat','')::numeric,0) end,
+          'hours_sun', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_sun','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_sun','')::numeric,0) end,
+          'hours_bh', case when sc.is_blocked then coalesce(nullif(sc.bas_seg_json->>'hours_bh','')::numeric,0) else coalesce(nullif(sc.cur_seg_json->>'hours_bh','')::numeric,0) end,
           'pay_amount', case when sc.is_blocked then sc.bas_pay_amount else sc.cur_pay_amount end,
           'exclude_from_pay', case when sc.is_blocked then sc.bas_exclude_from_pay else sc.cur_exclude_from_pay end,
           'ref_num', sc.cur_ref_num
@@ -5015,6 +5077,19 @@ begin
       jsonb_build_object(
         'segments', coalesce(ns.segments_json, '[]'::jsonb),
         'additional_pay_ex_vat', round(coalesce(c.cur_additional,0),2),
+        'additional_units_json', coalesce(c.additional_units_json, '{}'::jsonb),
+        'hours_day', round(coalesce(c.hours_day,0),2),
+        'hours_night', round(coalesce(c.hours_night,0),2),
+        'hours_sat', round(coalesce(c.hours_sat,0),2),
+        'hours_sun', round(coalesce(c.hours_sun,0),2),
+        'hours_bh', round(coalesce(c.hours_bh,0),2),
+        'pay_day', round(coalesce(c.pay_day,0),2),
+        'pay_night', round(coalesce(c.pay_night,0),2),
+        'pay_sat', round(coalesce(c.pay_sat,0),2),
+        'pay_sun', round(coalesce(c.pay_sun,0),2),
+        'pay_bh', round(coalesce(c.pay_bh,0),2),
+        'mileage_units', round(coalesce(c.mileage_units,0),2),
+        'mileage_pay_rate', c.mileage_pay_rate,
         'expenses', jsonb_build_object(
           'expenses_pay_ex_vat', round(coalesce(c.expenses_pay_ex_vat,0),2),
           'travel_pay_ex_vat', round(coalesce(c.travel_pay_ex_vat,0),2),
@@ -5050,6 +5125,492 @@ begin
   from snap s
   join ts_channel tc
     on tc.timesheet_id = s.timesheet_id;
+
+  -- ✅ NEW: Build canonical breakdown lines for ALL items in this batch (including LOAN_REPAYMENT + DEBT_CREATED)
+  with my_items as (
+    select
+      pbi.id as pay_batch_item_id,
+      pbi.item_type,
+      pbi.timesheet_id,
+      pbi.segment_key,
+      pbi.source_ref,
+      pbi.description,
+      pbi.amount_ex_vat,
+      pbi.amount_vat,
+      pbi.amount_inc_vat,
+      pbi.pay_channel
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = v_batch_id
+      and not exists (
+        select 1
+        from public.pay_batch_item_breakdowns pbib
+        where pbib.pay_batch_item_id = pbi.id
+        limit 1
+      )
+  ),
+  cur_fin as (
+    select
+      mi.*,
+      tf.invoice_breakdown_json as cur_invoice_breakdown_json,
+      tf.hours_day as cur_hours_day,
+      tf.hours_night as cur_hours_night,
+      tf.hours_sat as cur_hours_sat,
+      tf.hours_sun as cur_hours_sun,
+      tf.hours_bh as cur_hours_bh,
+      tf.pay_day as cur_pay_day,
+      tf.pay_night as cur_pay_night,
+      tf.pay_sat as cur_pay_sat,
+      tf.pay_sun as cur_pay_sun,
+      tf.pay_bh as cur_pay_bh,
+      tf.additional_units_json as cur_additional_units_json,
+      tf.mileage_units as cur_mileage_units,
+      tf.mileage_pay_rate as cur_mileage_pay_rate,
+      tps.last_settled_at_utc as last_settled_at_utc
+    from my_items mi
+    left join public.timesheets_financials tf
+      on tf.timesheet_id = mi.timesheet_id
+     and tf.is_current = true
+    left join public.timesheet_pay_state tps
+      on tps.timesheet_id = mi.timesheet_id
+  ),
+  base_fin as (
+    select
+      cf.*,
+      btf.invoice_breakdown_json as base_invoice_breakdown_json,
+      btf.hours_day as base_hours_day,
+      btf.hours_night as base_hours_night,
+      btf.hours_sat as base_hours_sat,
+      btf.hours_sun as base_hours_sun,
+      btf.hours_bh as base_hours_bh,
+      btf.pay_day as base_pay_day,
+      btf.pay_night as base_pay_night,
+      btf.pay_sat as base_pay_sat,
+      btf.pay_sun as base_pay_sun,
+      btf.pay_bh as base_pay_bh,
+      btf.additional_units_json as base_additional_units_json,
+      btf.mileage_units as base_mileage_units,
+      btf.mileage_pay_rate as base_mileage_pay_rate
+    from cur_fin cf
+    left join lateral (
+      select btf0.*
+      from public.timesheets_financials btf0
+      where btf0.timesheet_id = cf.timesheet_id
+        and btf0.is_current = false
+        and cf.last_settled_at_utc is not null
+        and btf0.updated_at <= cf.last_settled_at_utc
+      order by btf0.updated_at desc, btf0.id desc
+      limit 1
+    ) btf on true
+  ),
+  seg_join as (
+    select
+      bf.*,
+      cur_seg.seg as cur_seg,
+      bas_seg.seg as bas_seg
+    from base_fin bf
+    left join lateral (
+      select s as seg
+      from jsonb_array_elements(coalesce(bf.cur_invoice_breakdown_json->'segments','[]'::jsonb)) s
+      where s is not null and jsonb_typeof(s)='object'
+        and nullif(btrim(coalesce(s->>'segment_id','')),'') = bf.segment_key
+      limit 1
+    ) cur_seg on true
+    left join lateral (
+      select s as seg
+      from jsonb_array_elements(coalesce(bf.base_invoice_breakdown_json->'segments','[]'::jsonb)) s
+      where s is not null and jsonb_typeof(s)='object'
+        and nullif(btrim(coalesce(s->>'segment_id','')),'') = bf.segment_key
+      limit 1
+    ) bas_seg on true
+  ),
+  bucket_src as (
+    select
+      sj.pay_batch_item_id,
+      sj.item_type,
+      sj.pay_channel,
+      sj.amount_ex_vat as parent_ex,
+      sj.amount_vat as parent_vat,
+      sj.amount_inc_vat as parent_inc,
+
+      sj.segment_key,
+
+      -- payable hours: if exclude_from_pay then treat as 0
+      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_day','')::numeric, sj.cur_hours_day, 0) end) as cur_h_day,
+      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_night','')::numeric, sj.cur_hours_night, 0) end) as cur_h_night,
+      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_sat','')::numeric, sj.cur_hours_sat, 0) end) as cur_h_sat,
+      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_sun','')::numeric, sj.cur_hours_sun, 0) end) as cur_h_sun,
+      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_bh','')::numeric, sj.cur_hours_bh, 0) end) as cur_h_bh,
+
+      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_day','')::numeric, sj.base_hours_day, 0) end) as bas_h_day,
+      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_night','')::numeric, sj.base_hours_night, 0) end) as bas_h_night,
+      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_sat','')::numeric, sj.base_hours_sat, 0) end) as bas_h_sat,
+      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_sun','')::numeric, sj.base_hours_sun, 0) end) as bas_h_sun,
+      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_bh','')::numeric, sj.base_hours_bh, 0) end) as bas_h_bh,
+
+      coalesce(sj.cur_pay_day,0) as r_day,
+      coalesce(sj.cur_pay_night,0) as r_night,
+      coalesce(sj.cur_pay_sat,0) as r_sat,
+      coalesce(sj.cur_pay_sun,0) as r_sun,
+      coalesce(sj.cur_pay_bh,0) as r_bh
+    from seg_join sj
+    where sj.item_type = 'SEGMENT_DELTA'
+  ),
+  bucket_rows as (
+    select
+      bs.pay_batch_item_id,
+      'TS_BUCKET'::text as line_kind,
+      b.bucket_code,
+      b.unit_name,
+      b.units,
+      b.rate,
+      round(b.units * b.rate, 2) as ex_calc,
+      bs.parent_ex,
+      bs.parent_vat,
+      bs.parent_inc
+    from bucket_src bs
+    join lateral (
+      values
+        ('DAY'::text, 'Day'::text, round(bs.cur_h_day - bs.bas_h_day, 2), round(bs.r_day, 2)),
+        ('NIGHT'::text, 'Night'::text, round(bs.cur_h_night - bs.bas_h_night, 2), round(bs.r_night, 2)),
+        ('SAT'::text, 'Sat'::text, round(bs.cur_h_sat - bs.bas_h_sat, 2), round(bs.r_sat, 2)),
+        ('SUN'::text, 'Sun'::text, round(bs.cur_h_sun - bs.bas_h_sun, 2), round(bs.r_sun, 2)),
+        ('BH'::text, 'BH'::text, round(bs.cur_h_bh - bs.bas_h_bh, 2), round(bs.r_bh, 2))
+    ) as b(bucket_code, unit_name, units, rate)
+      on true
+    where b.units <> 0
+  ),
+  bucket_ranked as (
+    select
+      br.*,
+      sum(br.ex_calc) over (partition by br.pay_batch_item_id) as sum_ex,
+      sum(abs(br.ex_calc)) over (partition by br.pay_batch_item_id) as sum_abs_ex,
+      row_number() over (partition by br.pay_batch_item_id order by abs(br.ex_calc) desc, br.bucket_code) as rn
+    from bucket_rows br
+  ),
+  bucket_fixed as (
+    select
+      br.pay_batch_item_id,
+      br.line_kind,
+      br.bucket_code,
+      br.unit_name,
+      br.units,
+      br.rate,
+      case
+        when br.rn = 1 then round(br.parent_ex - (br.sum_ex - br.ex_calc), 2)
+        else br.ex_calc
+      end as amount_ex_vat,
+      br.parent_vat,
+      br.parent_inc,
+      br.sum_abs_ex,
+      br.rn
+    from bucket_ranked br
+  ),
+  bucket_vat as (
+    select
+      bf.pay_batch_item_id,
+      bf.line_kind,
+      bf.bucket_code,
+      bf.unit_name,
+      bf.units,
+      bf.rate,
+      bf.amount_ex_vat,
+      case
+        when bf.parent_vat = 0 then 0::numeric
+        when bf.sum_abs_ex = 0 then 0::numeric
+        when bf.rn = 1 then round(bf.parent_vat - (sum(round(bf.parent_vat * (abs(bf.amount_ex_vat) / bf.sum_abs_ex), 2)) over (partition by bf.pay_batch_item_id) - round(bf.parent_vat * (abs(bf.amount_ex_vat) / bf.sum_abs_ex), 2)), 2)
+        else round(bf.parent_vat * (abs(bf.amount_ex_vat) / bf.sum_abs_ex), 2)
+      end as amount_vat
+    from bucket_fixed bf
+  ),
+  bucket_final as (
+    select
+      bv.pay_batch_item_id,
+      bv.line_kind,
+      bv.bucket_code,
+      bv.unit_name,
+      bv.units,
+      bv.rate,
+      bv.amount_ex_vat,
+      bv.amount_vat,
+      round(bv.amount_ex_vat + bv.amount_vat, 2) as amount_inc_vat,
+      '{}'::jsonb as meta_json
+    from bucket_vat bv
+  ),
+  addl_keys as (
+    select
+      bf.pay_batch_item_id,
+      key as code
+    from base_fin bf
+    join lateral (
+      select key
+      from jsonb_each(coalesce(bf.cur_additional_units_json,'{}'::jsonb))
+      union
+      select key
+      from jsonb_each(coalesce(bf.base_additional_units_json,'{}'::jsonb))
+    ) k on true
+    where bf.item_type = 'EXPENSE_DELTA'
+      and bf.source_ref = 'additional'
+  ),
+  addl_rows_raw as (
+    select
+      bf.pay_batch_item_id,
+      'ADDITIONAL_UNIT'::text as line_kind,
+      ak.code as bucket_code,
+      coalesce(
+        nullif(btrim(coalesce((bf.cur_additional_units_json->ak.code)->>'bucket_name','')),''),
+        nullif(btrim(coalesce((bf.base_additional_units_json->ak.code)->>'bucket_name','')),''),
+        ak.code
+      ) || ' - ' ||
+      coalesce(
+        nullif(btrim(coalesce((bf.cur_additional_units_json->ak.code)->>'unit_name','')),''),
+        nullif(btrim(coalesce((bf.base_additional_units_json->ak.code)->>'unit_name','')),''),
+        ak.code
+      ) as unit_name,
+      round(
+        coalesce(nullif((bf.cur_additional_units_json->ak.code)->>'unit_count','')::numeric,0)
+        -
+        coalesce(nullif((bf.base_additional_units_json->ak.code)->>'unit_count','')::numeric,0),
+        2
+      ) as units_delta,
+      round(coalesce(nullif((bf.cur_additional_units_json->ak.code)->>'pay_rate','')::numeric,0),2) as cur_rate,
+      round(coalesce(nullif((bf.base_additional_units_json->ak.code)->>'pay_rate','')::numeric,0),2) as bas_rate,
+      bf.amount_ex_vat as parent_ex,
+      bf.amount_vat as parent_vat,
+      bf.amount_inc_vat as parent_inc
+    from base_fin bf
+    join addl_keys ak
+      on ak.pay_batch_item_id = bf.pay_batch_item_id
+  ),
+  addl_lines as (
+    select
+      ar.pay_batch_item_id,
+      ar.line_kind,
+      ar.bucket_code,
+      ar.unit_name,
+      ar.units_delta as units,
+      ar.cur_rate as rate,
+      round(ar.units_delta * ar.cur_rate, 2) as ex_calc,
+      ar.parent_ex,
+      ar.parent_vat,
+      ar.parent_inc,
+      'HOURS'::text as component
+    from addl_rows_raw ar
+    where ar.units_delta <> 0
+    union all
+    select
+      ar.pay_batch_item_id,
+      ar.line_kind,
+      ar.bucket_code,
+      (ar.unit_name || ' (rate change)') as unit_name,
+      round(coalesce(nullif((ar.base_units->>'unit_count','')::numeric,0),0),2) as units,
+      round(ar.cur_rate - ar.bas_rate, 2) as rate,
+      round(round(coalesce(nullif((ar.base_units->>'unit_count','')::numeric,0),0),2) * round(ar.cur_rate - ar.bas_rate,2),2) as ex_calc,
+      ar.parent_ex,
+      ar.parent_vat,
+      ar.parent_inc,
+      'RATE'::text as component
+    from (
+      select
+        ar0.*,
+        (bf.base_additional_units_json->ar0.bucket_code) as base_units
+      from addl_rows_raw ar0
+      join base_fin bf
+        on bf.pay_batch_item_id = ar0.pay_batch_item_id
+    ) ar
+    where round(ar.cur_rate - ar.bas_rate, 2) <> 0
+      and round(coalesce(nullif((ar.base_units->>'unit_count','')::numeric,0),0),2) <> 0
+  ),
+  addl_ranked as (
+    select
+      al.*,
+      sum(al.ex_calc) over (partition by al.pay_batch_item_id) as sum_ex,
+      sum(abs(al.ex_calc)) over (partition by al.pay_batch_item_id) as sum_abs_ex,
+      row_number() over (partition by al.pay_batch_item_id order by abs(al.ex_calc) desc, al.bucket_code) as rn
+    from addl_lines al
+  ),
+  addl_fixed as (
+    select
+      ar.pay_batch_item_id,
+      ar.line_kind,
+      ar.bucket_code,
+      ar.unit_name,
+      ar.units,
+      ar.rate,
+      case
+        when ar.rn = 1 then round(ar.parent_ex - (ar.sum_ex - ar.ex_calc), 2)
+        else ar.ex_calc
+      end as amount_ex_vat,
+      ar.parent_vat,
+      ar.parent_inc,
+      ar.sum_abs_ex,
+      ar.rn,
+      ar.component
+    from addl_ranked ar
+  ),
+  addl_vat as (
+    select
+      af.pay_batch_item_id,
+      af.line_kind,
+      af.bucket_code,
+      af.unit_name,
+      af.units,
+      af.rate,
+      af.amount_ex_vat,
+      case
+        when af.parent_vat = 0 then 0::numeric
+        when af.sum_abs_ex = 0 then 0::numeric
+        when af.rn = 1 then round(af.parent_vat - (sum(round(af.parent_vat * (abs(af.amount_ex_vat) / af.sum_abs_ex), 2)) over (partition by af.pay_batch_item_id) - round(af.parent_vat * (abs(af.amount_ex_vat) / af.sum_abs_ex), 2)), 2)
+        else round(af.parent_vat * (abs(af.amount_ex_vat) / af.sum_abs_ex), 2)
+      end as amount_vat,
+      af.component
+    from addl_fixed af
+  ),
+  addl_final as (
+    select
+      av.pay_batch_item_id,
+      av.line_kind,
+      av.bucket_code,
+      av.unit_name,
+      av.units,
+      av.rate,
+      av.amount_ex_vat,
+      av.amount_vat,
+      round(av.amount_ex_vat + av.amount_vat, 2) as amount_inc_vat,
+      jsonb_build_object('component', av.component) as meta_json
+    from addl_vat av
+  ),
+  simple_lines as (
+    select
+      bf.pay_batch_item_id,
+      case
+        when bf.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
+        when bf.item_type = 'EXPENSE_DELTA' then 'EXPENSE'
+        when bf.item_type = 'ADJUSTMENT_DELTA' then 'ADJUSTMENT'
+        when bf.item_type = 'CONVERSION_ADJ' then 'CONVERSION_ADJ'
+        when bf.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+        when bf.item_type = 'DEBT_CREATED' then 'DEBT_CREATED'
+        else 'ADJUSTMENT'
+      end as line_kind,
+      null::text as bucket_code,
+      case
+        when bf.item_type = 'MILEAGE_DELTA' then 'Mileage'
+        when bf.item_type = 'EXPENSE_DELTA' then initcap(coalesce(bf.source_ref,'Expense'))
+        when bf.item_type = 'ADJUSTMENT_DELTA' then 'Adjustment'
+        when bf.item_type = 'CONVERSION_ADJ' then 'Conversion adjustment'
+        when bf.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+        when bf.item_type = 'DEBT_CREATED' then 'Debt created'
+        else 'Adjustment'
+      end as unit_name,
+      null::numeric as units,
+      null::numeric as rate,
+      bf.amount_ex_vat,
+      bf.amount_vat,
+      bf.amount_inc_vat,
+      '{}'::jsonb as meta_json
+    from base_fin bf
+    where not (bf.item_type = 'EXPENSE_DELTA' and bf.source_ref = 'additional')
+      and bf.item_type <> 'SEGMENT_DELTA'
+  ),
+  all_lines as (
+    select * from bucket_final
+    union all
+    select * from addl_final
+    union all
+    select * from simple_lines
+  )
+  insert into public.pay_batch_item_breakdowns(
+    pay_batch_item_id,
+    line_kind,
+    bucket_code,
+    unit_name,
+    units,
+    rate,
+    amount_ex_vat,
+    amount_vat,
+    amount_inc_vat,
+    meta_json
+  )
+  select
+    al.pay_batch_item_id,
+    al.line_kind,
+    al.bucket_code,
+    al.unit_name,
+    al.units,
+    al.rate,
+    al.amount_ex_vat,
+    al.amount_vat,
+    al.amount_inc_vat,
+    al.meta_json
+  from all_lines al;
+
+  -- ✅ Integrity checks: every item must have ≥1 breakdown row; sums must match exactly
+  select count(*)
+  into v_breakdown_missing_ct
+  from public.pay_batch_items pbi_m
+  join public.pay_batch_candidates pbc_m
+    on pbc_m.id = pbi_m.pay_batch_candidate_id
+  where pbc_m.pay_batch_id = v_batch_id
+    and not exists (
+      select 1
+      from public.pay_batch_item_breakdowns pbib_m
+      where pbib_m.pay_batch_item_id = pbi_m.id
+      limit 1
+    );
+
+  if coalesce(v_breakdown_missing_ct,0) > 0 then
+    raise exception 'PAY_BATCH_BREAKDOWN_MISSING: % items have no breakdown rows', v_breakdown_missing_ct;
+  end if;
+
+  with sums as (
+    select
+      pbi_s.id as pay_batch_item_id,
+      round(pbi_s.amount_ex_vat,2) as item_ex,
+      round(pbi_s.amount_vat,2) as item_vat,
+      round(pbi_s.amount_inc_vat,2) as item_inc,
+      round(coalesce(sum(pbib_s.amount_ex_vat),0),2) as sum_ex,
+      round(coalesce(sum(pbib_s.amount_vat),0),2) as sum_vat,
+      round(coalesce(sum(pbib_s.amount_inc_vat),0),2) as sum_inc
+    from public.pay_batch_items pbi_s
+    join public.pay_batch_candidates pbc_s
+      on pbc_s.id = pbi_s.pay_batch_candidate_id
+    left join public.pay_batch_item_breakdowns pbib_s
+      on pbib_s.pay_batch_item_id = pbi_s.id
+    where pbc_s.pay_batch_id = v_batch_id
+    group by pbi_s.id, pbi_s.amount_ex_vat, pbi_s.amount_vat, pbi_s.amount_inc_vat
+  ),
+  bad as (
+    select
+      s.pay_batch_item_id,
+      s.item_ex, s.sum_ex,
+      s.item_vat, s.sum_vat,
+      s.item_inc, s.sum_inc
+    from sums s
+    where s.item_ex <> s.sum_ex
+       or s.item_vat <> s.sum_vat
+       or s.item_inc <> s.sum_inc
+  )
+  select
+    count(*),
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'pay_batch_item_id', b.pay_batch_item_id::text,
+          'item_ex', b.item_ex, 'sum_ex', b.sum_ex,
+          'item_vat', b.item_vat, 'sum_vat', b.sum_vat,
+          'item_inc', b.item_inc, 'sum_inc', b.sum_inc
+        )
+        order by b.pay_batch_item_id::text
+      ),
+      '[]'::jsonb
+    )
+  into v_breakdown_bad_ct, v_breakdown_bad
+  from bad b;
+
+  if coalesce(v_breakdown_bad_ct,0) > 0 then
+    raise exception 'PAY_BATCH_BREAKDOWN_MISMATCH %', v_breakdown_bad::text;
+  end if;
 
   -- Final safety assertion: draft must not contain candidates blocked by bank readiness (for this scope).
   with cands as (
@@ -5226,6 +5787,12 @@ begin
   );
 end;
 $$;
+
+
+
+
+
+
 
 
 
