@@ -3011,6 +3011,10 @@ declare
   v_sample_candidate_ids jsonb := '[]'::jsonb;
   v_preview_candidate_filter_ct int := 0;
   v_preview_decisions_keys jsonb := '{}'::jsonb;
+-- ✅ Optional: timesheet_ids to exclude from drafting (non-blocking TSFIN path)
+v_exclude_timesheet_ids uuid[] := array[]::uuid[];
+v_exclude_ts_raw text;
+v_exclude_ts_uuid uuid;
 begin
   v_stage := 'STAGE_00_INPUTS';
 
@@ -3045,6 +3049,39 @@ begin
       null,
       null
     );
+
+-- ✅ Parse exclude_timesheet_ids from preview decisions (silent on invalid UUID strings)
+begin
+  if p_preview_decisions_json is not null
+     and jsonb_typeof(p_preview_decisions_json) = 'object'
+     and (p_preview_decisions_json ? 'exclude_timesheet_ids')
+     and jsonb_typeof(p_preview_decisions_json->'exclude_timesheet_ids') = 'array'
+  then
+    for v_exclude_ts_raw in
+      select jsonb_array_elements_text(p_preview_decisions_json->'exclude_timesheet_ids')
+    loop
+      begin
+        v_exclude_ts_uuid := nullif(btrim(coalesce(v_exclude_ts_raw,'')),'')::uuid;
+        if v_exclude_ts_uuid is not null then
+          v_exclude_timesheet_ids := array_append(v_exclude_timesheet_ids, v_exclude_ts_uuid);
+        end if;
+      exception when others then
+        null;
+      end;
+    end loop;
+  end if;
+
+  v_exclude_timesheet_ids := coalesce(
+    (
+      select array_agg(distinct t.x)
+      from unnest(coalesce(v_exclude_timesheet_ids, array[]::uuid[])) as t(x)
+    ),
+    array[]::uuid[]
+  );
+exception when others then
+  v_exclude_timesheet_ids := array[]::uuid[];
+end;
+
   exception when others then
     null;
   end;
@@ -3881,6 +3918,7 @@ begin
       and upper(coalesce(c.pay_method,'')) in ('PAYE','UMBRELLA')
       and tf.candidate_id = any(v_candidate_ids)
       and (v_client_filter_single is null or tf.client_id = v_client_filter_single)
+      and not (tf.timesheet_id = any(v_exclude_timesheet_ids))
 
       -- ✅ Option A: match pay_preview eligibility window (relative to UK “today”).
       and ts.week_ending_date::date >= v_eligibility_from_date
@@ -5457,60 +5495,132 @@ begin
       limit 1
     ) btf on true
   ),
-  seg_join as (
-    select
-      bf.*,
-      cur_seg.seg as cur_seg,
-      bas_seg.seg as bas_seg
-    from base_fin bf
-    left join lateral (
-      select s as seg
-      from jsonb_array_elements(coalesce(bf.cur_invoice_breakdown_json->'segments','[]'::jsonb)) s
-      where s is not null and jsonb_typeof(s)='object'
-        and nullif(btrim(coalesce(s->>'segment_id','')),'') = bf.segment_key
-      limit 1
-    ) cur_seg on true
-    left join lateral (
-      select s as seg
-      from jsonb_array_elements(coalesce(bf.base_invoice_breakdown_json->'segments','[]'::jsonb)) s
-      where s is not null and jsonb_typeof(s)='object'
-        and nullif(btrim(coalesce(s->>'segment_id','')),'') = bf.segment_key
-      limit 1
-    ) bas_seg on true
-  ),
-  bucket_src as (
-    select
-      sj.pay_batch_item_id,
-      sj.item_type,
-      sj.pay_channel,
-      sj.amount_ex_vat as parent_ex,
-      sj.amount_vat as parent_vat,
-      sj.amount_inc_vat as parent_inc,
 
-      sj.segment_key,
+seg_join as (
+  select
+    bf.*,
 
-      -- payable hours: if exclude_from_pay then treat as 0
-      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_day','')::numeric, sj.cur_hours_day, 0) end) as cur_h_day,
-      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_night','')::numeric, sj.cur_hours_night, 0) end) as cur_h_night,
-      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_sat','')::numeric, sj.cur_hours_sat, 0) end) as cur_h_sat,
-      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_sun','')::numeric, sj.cur_hours_sun, 0) end) as cur_h_sun,
-      (case when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.cur_seg->>'hours_bh','')::numeric, sj.cur_hours_bh, 0) end) as cur_h_bh,
+    pbts.base_snapshot_json as snap_base_json,
+    pbts.target_snapshot_json as snap_target_json,
 
-      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_day','')::numeric, sj.base_hours_day, 0) end) as bas_h_day,
-      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_night','')::numeric, sj.base_hours_night, 0) end) as bas_h_night,
-      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_sat','')::numeric, sj.base_hours_sat, 0) end) as bas_h_sat,
-      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_sun','')::numeric, sj.base_hours_sun, 0) end) as bas_h_sun,
-      (case when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0 else coalesce(nullif(sj.bas_seg->>'hours_bh','')::numeric, sj.base_hours_bh, 0) end) as bas_h_bh,
+    (bf.segment_key = ('ts:' || bf.timesheet_id::text)) as is_ts_total,
 
-      coalesce(sj.cur_pay_day,0) as r_day,
-      coalesce(sj.cur_pay_night,0) as r_night,
-      coalesce(sj.cur_pay_sat,0) as r_sat,
-      coalesce(sj.cur_pay_sun,0) as r_sun,
-      coalesce(sj.cur_pay_bh,0) as r_bh
-    from seg_join sj
-    where sj.item_type = 'SEGMENT_DELTA'
-  ),
-  bucket_rows as (
+    -- snapshot totals (used only for synthetic 'ts:<timesheet_id>' segment)
+    round(coalesce(nullif(pbts.target_snapshot_json->>'hours_day','')::numeric,0),2) as snap_cur_h_day_total,
+    round(coalesce(nullif(pbts.target_snapshot_json->>'hours_night','')::numeric,0),2) as snap_cur_h_night_total,
+    round(coalesce(nullif(pbts.target_snapshot_json->>'hours_sat','')::numeric,0),2) as snap_cur_h_sat_total,
+    round(coalesce(nullif(pbts.target_snapshot_json->>'hours_sun','')::numeric,0),2) as snap_cur_h_sun_total,
+    round(coalesce(nullif(pbts.target_snapshot_json->>'hours_bh','')::numeric,0),2) as snap_cur_h_bh_total,
+
+    round(coalesce(nullif(pbts.base_snapshot_json->>'hours_day','')::numeric,0),2) as snap_bas_h_day_total,
+    round(coalesce(nullif(pbts.base_snapshot_json->>'hours_night','')::numeric,0),2) as snap_bas_h_night_total,
+    round(coalesce(nullif(pbts.base_snapshot_json->>'hours_sat','')::numeric,0),2) as snap_bas_h_sat_total,
+    round(coalesce(nullif(pbts.base_snapshot_json->>'hours_sun','')::numeric,0),2) as snap_bas_h_sun_total,
+    round(coalesce(nullif(pbts.base_snapshot_json->>'hours_bh','')::numeric,0),2) as snap_bas_h_bh_total,
+
+    -- snapshot pay rates (always sourced from target snapshot)
+    round(coalesce(nullif(pbts.target_snapshot_json->>'pay_day','')::numeric,0),2) as snap_r_day,
+    round(coalesce(nullif(pbts.target_snapshot_json->>'pay_night','')::numeric,0),2) as snap_r_night,
+    round(coalesce(nullif(pbts.target_snapshot_json->>'pay_sat','')::numeric,0),2) as snap_r_sat,
+    round(coalesce(nullif(pbts.target_snapshot_json->>'pay_sun','')::numeric,0),2) as snap_r_sun,
+    round(coalesce(nullif(pbts.target_snapshot_json->>'pay_bh','')::numeric,0),2) as snap_r_bh,
+
+    cur_seg.seg as cur_seg,
+    bas_seg.seg as bas_seg
+  from base_fin bf
+  join public.pay_batch_timesheet_snapshots pbts
+    on pbts.pay_batch_id = v_batch_id
+   and pbts.timesheet_id = bf.timesheet_id
+  left join lateral (
+    select s as seg
+    from jsonb_array_elements(coalesce(pbts.target_snapshot_json->'segments','[]'::jsonb)) s
+    where s is not null and jsonb_typeof(s)='object'
+      and nullif(btrim(coalesce(s->>'segment_id','')),'') = bf.segment_key
+    limit 1
+  ) cur_seg on true
+  left join lateral (
+    select s as seg
+    from jsonb_array_elements(coalesce(pbts.base_snapshot_json->'segments','[]'::jsonb)) s
+    where s is not null and jsonb_typeof(s)='object'
+      and nullif(btrim(coalesce(s->>'segment_id','')),'') = bf.segment_key
+    limit 1
+  ) bas_seg on true
+),
+bucket_src as (
+  select
+    sj.pay_batch_item_id,
+    sj.item_type,
+    sj.pay_channel,
+    sj.amount_ex_vat as parent_ex,
+    sj.amount_vat as parent_vat,
+    sj.amount_inc_vat as parent_inc,
+
+    sj.segment_key,
+
+    -- ✅ Correct rule for SEGMENT_DELTA: missing segment on a side == 0 hours (NOT timesheet totals).
+    -- Totals are only used for synthetic 'ts:<timesheet_id>' segment_key.
+    (case
+      when sj.is_ts_total then sj.snap_cur_h_day_total
+      when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.cur_seg->>'hours_day','')::numeric, 0)
+    end) as cur_h_day,
+    (case
+      when sj.is_ts_total then sj.snap_cur_h_night_total
+      when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.cur_seg->>'hours_night','')::numeric, 0)
+    end) as cur_h_night,
+    (case
+      when sj.is_ts_total then sj.snap_cur_h_sat_total
+      when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.cur_seg->>'hours_sat','')::numeric, 0)
+    end) as cur_h_sat,
+    (case
+      when sj.is_ts_total then sj.snap_cur_h_sun_total
+      when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.cur_seg->>'hours_sun','')::numeric, 0)
+    end) as cur_h_sun,
+    (case
+      when sj.is_ts_total then sj.snap_cur_h_bh_total
+      when coalesce(nullif(sj.cur_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.cur_seg->>'hours_bh','')::numeric, 0)
+    end) as cur_h_bh,
+
+    (case
+      when sj.is_ts_total then sj.snap_bas_h_day_total
+      when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.bas_seg->>'hours_day','')::numeric, 0)
+    end) as bas_h_day,
+    (case
+      when sj.is_ts_total then sj.snap_bas_h_night_total
+      when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.bas_seg->>'hours_night','')::numeric, 0)
+    end) as bas_h_night,
+    (case
+      when sj.is_ts_total then sj.snap_bas_h_sat_total
+      when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.bas_seg->>'hours_sat','')::numeric, 0)
+    end) as bas_h_sat,
+    (case
+      when sj.is_ts_total then sj.snap_bas_h_sun_total
+      when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.bas_seg->>'hours_sun','')::numeric, 0)
+    end) as bas_h_sun,
+    (case
+      when sj.is_ts_total then sj.snap_bas_h_bh_total
+      when coalesce(nullif(sj.bas_seg->>'exclude_from_pay','')::boolean,false) then 0
+      else coalesce(nullif(sj.bas_seg->>'hours_bh','')::numeric, 0)
+    end) as bas_h_bh,
+
+    coalesce(sj.snap_r_day,0) as r_day,
+    coalesce(sj.snap_r_night,0) as r_night,
+    coalesce(sj.snap_r_sat,0) as r_sat,
+    coalesce(sj.snap_r_sun,0) as r_sun,
+    coalesce(sj.snap_r_bh,0) as r_bh
+  from seg_join sj
+  where sj.item_type = 'SEGMENT_DELTA'
+),
+bucket_rows as (
+
     select
       bs.pay_batch_item_id,
       'TS_BUCKET'::text as line_kind,
