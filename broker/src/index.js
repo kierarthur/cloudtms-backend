@@ -10329,7 +10329,6 @@ async function handleBankingPayPreview(env, req, user) {
   }
 }
 
-
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -10527,6 +10526,216 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return eligible;
   };
 
+  // ✅ NEW: targeted TSFIN best-effort “make ready” before drafting.
+  // - Determine in-scope timesheets from preview itemisation for eligible candidates.
+  // - If TSFIN outbox rows exist for those timesheets, priority-bump + drain inline (bounded).
+  // - Any timesheets still in outbox after the attempt are excluded from this draft run.
+  const collectEligibleTimesheetsForDraft = (preview, decisions, includeCandidateIds) => {
+    const dec = (decisions && typeof decisions === 'object') ? decisions : {};
+    const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object') ? dec.mismatch_choices : {};
+
+    const includeSetNorm = (() => {
+      if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
+      const s = new Set();
+      for (const x of includeCandidateIds) s.add(String(x));
+      return s;
+    })();
+
+    const candidates = [];
+    try {
+      const paye = Array.isArray(preview?.paye_candidates) ? preview.paye_candidates : [];
+      const non = Array.isArray(preview?.non_paye_payees) ? preview.non_paye_payees : [];
+      for (const c of paye) candidates.push(c);
+      for (const c of non) candidates.push(c);
+    } catch {}
+
+    const eligibleCandidateIds = new Set();
+
+    for (const c of candidates) {
+      if (!c || typeof c !== 'object') continue;
+
+      const candId = String(c.candidate_id || '').trim();
+      if (!candId) continue;
+
+      if (includeSetNorm && !includeSetNorm.has(candId)) continue;
+
+      const hasAnyDelta = (c.has_any_delta === true);
+      if (!hasAnyDelta) continue;
+
+      const isReadyForDraft = (c.is_ready_for_draft === true);
+      if (!isReadyForDraft) continue;
+
+      const hasMismatch = !!(c.mismatch && typeof c.mismatch === 'object' && c.mismatch.has_mismatch === true);
+      if (hasMismatch) {
+        const choiceRaw = mismatchChoices[candId];
+        const choice = String(choiceRaw || '').trim().toUpperCase();
+        if (choice !== 'PAYE' && choice !== 'UMBRELLA') continue;
+      }
+
+      eligibleCandidateIds.add(candId);
+    }
+
+    const timesheetIds = new Set();
+    const timesheetToCandidateId = new Map();
+
+    for (const c of candidates) {
+      if (!c || typeof c !== 'object') continue;
+
+      const candId = String(c.candidate_id || '').trim();
+      if (!candId) continue;
+      if (!eligibleCandidateIds.has(candId)) continue;
+
+      const items = Array.isArray(c.itemisation) ? c.itemisation : [];
+      for (const it of items) {
+        if (!it || typeof it !== 'object') continue;
+        const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+        if (!tid || !uuidRe.test(tid)) continue;
+        timesheetIds.add(tid);
+        if (!timesheetToCandidateId.has(tid)) timesheetToCandidateId.set(tid, candId);
+      }
+    }
+
+    return { eligibleCandidateIds, timesheetIds: Array.from(timesheetIds), timesheetToCandidateId };
+  };
+
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr?.length || 0); i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  const fetchOutboxRowsForTimesheets = async (timesheetIds) => {
+    const enc = encodeURIComponent;
+    const ids = Array.isArray(timesheetIds) ? timesheetIds.filter(Boolean) : [];
+    if (!ids.length) return [];
+
+    const out = [];
+    const chunks = chunk(ids, 150);
+
+    for (const part of chunks) {
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox` +
+        `?timesheet_id=in.(${part.map(enc).join(',')})` +
+        `&select=timesheet_id,reason,attempt_count,next_attempt_at,last_error,created_at`;
+
+      const { rows } = await sbFetch(env, url);
+      for (const r of rows || []) out.push(r);
+    }
+
+    return out;
+  };
+
+  const priorityBumpOutboxRows = async (rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return 0;
+
+    const byReason = new Map(); // reason -> Set(timesheet_id)
+    for (const r of rows) {
+      const tid = String(r?.timesheet_id || '').trim();
+      const reason = String(r?.reason || '').trim();
+      if (!tid || !reason) continue;
+      if (!uuidRe.test(tid)) continue;
+      if (!byReason.has(reason)) byReason.set(reason, new Set());
+      byReason.get(reason).add(tid);
+    }
+
+    let bumped = 0;
+
+    for (const [reason, set] of byReason.entries()) {
+      const ids = Array.from(set);
+      if (!ids.length) continue;
+      try {
+        const n = await sbRpc(env, 'enqueue_ts_financials_priority', {
+          _timesheet_ids: ids,
+          _reason: reason
+        });
+        if (Number.isFinite(Number(n))) bumped += Number(n);
+      } catch (e) {
+        // Non-blocking: do not throw; best-effort only.
+        try {
+          console.warn('[handleBankingPayCreateDraft] TSFIN priority bump failed', { reason, err: String(e?.message || e) });
+        } catch {}
+      }
+    }
+
+    return bumped;
+  };
+
+  const bestEffortDrainTsfinForTimesheets = async (timesheetIds) => {
+    const ids = Array.isArray(timesheetIds) ? timesheetIds.filter(Boolean) : [];
+    if (!ids.length) return { excludedTimesheetIds: [], outboxRowsFinal: [] };
+
+    // Initial pending discovery
+    let outboxRows = [];
+    try {
+      outboxRows = await fetchOutboxRowsForTimesheets(ids);
+    } catch (e) {
+      // If we cannot query outbox, still try one targeted worker pass (non-blocking) and re-check once.
+      try {
+        await runTsfinWorkerOnce(env, { limit: Math.min(200, ids.length), onlyTimesheetIds: ids });
+      } catch {}
+      try {
+        outboxRows = await fetchOutboxRowsForTimesheets(ids);
+      } catch {
+        outboxRows = [];
+      }
+    }
+
+    if (!outboxRows.length) return { excludedTimesheetIds: [], outboxRowsFinal: [] };
+
+    // Bounded drain loop
+    const startMs = Date.now();
+    const maxMs = 4500; // keep UI responsive (non-blocking)
+    const maxLoops = 6;
+
+    let lastCount = outboxRows.length;
+
+    for (let i = 0; i < maxLoops; i++) {
+      if (!outboxRows.length) break;
+      if ((Date.now() - startMs) > maxMs) break;
+
+      // Priority-bump so rows are runnable immediately (clears next_attempt_at/backoff)
+      await priorityBumpOutboxRows(outboxRows);
+
+      const pendingIds = Array.from(new Set(outboxRows.map(r => String(r?.timesheet_id || '').trim()).filter(x => uuidRe.test(x))));
+      if (!pendingIds.length) break;
+
+      // Run one TSFIN worker pass targeted to these timesheets
+      try {
+        await runTsfinWorkerOnce(env, { limit: Math.min(200, pendingIds.length), onlyTimesheetIds: pendingIds });
+      } catch (e) {
+        // Non-blocking: if worker errors, stop attempting further; we'll exclude remaining outbox rows.
+        try {
+          console.warn('[handleBankingPayCreateDraft] TSFIN drain pass failed (non-fatal)', { err: String(e?.message || e) });
+        } catch {}
+        break;
+      }
+
+      // Re-check pending outbox
+      try {
+        outboxRows = await fetchOutboxRowsForTimesheets(ids);
+      } catch {
+        // If re-check fails, stop further attempts; exclude none (best effort already made).
+        outboxRows = [];
+        break;
+      }
+
+      const curCount = outboxRows.length;
+
+      // If no progress, don't spin: stop early (bounded)
+      if (curCount >= lastCount) {
+        break;
+      }
+
+      lastCount = curCount;
+    }
+
+    const excludedTimesheetIds = Array.from(
+      new Set((outboxRows || []).map(r => String(r?.timesheet_id || '').trim()).filter(x => uuidRe.test(x)))
+    );
+
+    return { excludedTimesheetIds, outboxRowsFinal: outboxRows };
+  };
+
   try {
     // Friendly early validation: if nothing is eligible, return a clear 400 before attempting draft creation.
     const preview0 = await callPayPreview();
@@ -10534,6 +10743,55 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
     if (eligibleCount <= 0) {
       return withCORS(env, req, badRequest('Nothing eligible to draft; resolve Review required items and refresh preview.'));
+    }
+
+    // ✅ Determine in-scope timesheets from preview itemisation for eligible candidates.
+    const { timesheetIds: inScopeTimesheetIds, timesheetToCandidateId } =
+      collectEligibleTimesheetsForDraft(preview0, previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+
+    // If we could not identify any timesheets from preview, we still proceed (do not block payroll),
+    // but the TSFIN make-ready step will be a no-op.
+    const uniqueInScopeIds = Array.isArray(inScopeTimesheetIds)
+      ? Array.from(new Set(inScopeTimesheetIds.filter(x => uuidRe.test(String(x || '').trim()))))
+      : [];
+
+    // ✅ Best-effort TSFIN make-ready: try to clear outbox for in-scope timesheets.
+    const tsfinAttempt = await bestEffortDrainTsfinForTimesheets(uniqueInScopeIds);
+    const excludedTimesheetIds = Array.isArray(tsfinAttempt?.excludedTimesheetIds) ? tsfinAttempt.excludedTimesheetIds : [];
+    const outboxRowsFinal = Array.isArray(tsfinAttempt?.outboxRowsFinal) ? tsfinAttempt.outboxRowsFinal : [];
+
+    // If everything in-scope is excluded, do not create an empty draft (return explicit 409).
+    const excludedSet = new Set(excludedTimesheetIds.map(x => String(x)));
+    const remainingInScope = uniqueInScopeIds.filter(tid => !excludedSet.has(String(tid)));
+
+    if (uniqueInScopeIds.length > 0 && remainingInScope.length === 0 && excludedTimesheetIds.length > 0) {
+      return withCORS(env, req, new Response(
+        JSON.stringify({
+          error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
+          message: 'No timesheets were ready to draft (calculations still processing). Please try again shortly.',
+          excluded_timesheets: excludedTimesheetIds.map((tid) => ({
+            timesheet_id: tid,
+            candidate_id: timesheetToCandidateId.get(tid) || null,
+            reason_summary: 'CALCULATIONS_STILL_PROCESSING'
+          }))
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      ));
+    }
+
+    // ✅ Merge exclusions into preview_decisions_json (server-side)
+    if (excludedTimesheetIds.length > 0) {
+      const existing = Array.isArray(previewDecisions.exclude_timesheet_ids) ? previewDecisions.exclude_timesheet_ids : [];
+      const exSet = new Set();
+      for (const x of existing) {
+        const s = String(x || '').trim();
+        if (uuidRe.test(s)) exSet.add(s);
+      }
+      for (const s of excludedTimesheetIds) {
+        const id = String(s || '').trim();
+        if (uuidRe.test(id)) exSet.add(id);
+      }
+      previewDecisions.exclude_timesheet_ids = Array.from(exSet);
     }
 
     let rpcRes = null;
@@ -10567,12 +10825,516 @@ async function handleBankingPayCreateDraft(env, req, user) {
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    const outPayload = (payload && typeof payload === 'object') ? payload : {};
+
+    // ✅ Attach user-friendly exclusions warning payload (Option 2)
+    if (excludedTimesheetIds.length > 0) {
+      const rowsByTimesheet = new Map();
+      for (const r of outboxRowsFinal || []) {
+        const tid = String(r?.timesheet_id || '').trim();
+        if (!tid || !uuidRe.test(tid)) continue;
+        if (!rowsByTimesheet.has(tid)) rowsByTimesheet.set(tid, []);
+        rowsByTimesheet.get(tid).push(r);
+      }
+
+      outPayload.excluded_timesheets = excludedTimesheetIds.map((tid) => {
+        const cid = timesheetToCandidateId.get(tid) || null;
+
+        const rs = rowsByTimesheet.get(tid) || [];
+        const reasons = Array.from(new Set(rs.map(x => String(x?.reason || '').trim()).filter(Boolean)));
+        const lastErr = rs.map(x => String(x?.last_error || '').trim()).find(Boolean) || null;
+        const nextAttemptAt = rs.map(x => x?.next_attempt_at).find(v => v != null) || null;
+
+        let reasonSummary = 'CALCULATIONS_STILL_PROCESSING';
+        if (lastErr) reasonSummary = lastErr;
+
+        return {
+          timesheet_id: tid,
+          candidate_id: cid,
+          reason_summary: reasonSummary,
+          tsfin_reasons: reasons,
+          next_attempt_at: nextAttemptAt
+        };
+      });
+    }
+
+    return withCORS(env, req, ok(outPayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
 
+function collectDraftTimesheetIdsFromPreview(previewJson, previewDecisionsJson) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+  };
+
+  const toNum = (v) => {
+    if (v == null) return 0;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+    const s = String(v).trim();
+    if (!s) return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const isNonZeroMoneyLike = (it) => {
+    if (!it || typeof it !== 'object') return false;
+
+    const candidates = [
+      it.payment_amount,
+      it.payment_amount_ex_vat,
+      it.payment_amount_inc_vat,
+      it.raw_delta_ex_vat,
+      it.delta_ex_vat,
+      it.amount_ex_vat,
+      it.amount
+    ];
+
+    for (const v of candidates) {
+      if (v == null) continue;
+      const n = toNum(v);
+      if (Math.round(n * 100) / 100 !== 0) return true;
+
+      const s = String(v).trim();
+      if (s && s !== '0' && s !== '0.0' && s !== '0.00') {
+        const n2 = Number(s);
+        if (!Number.isFinite(n2)) return true;
+      }
+    }
+
+    return false;
+  };
+
+  const dec = (previewDecisionsJson && typeof previewDecisionsJson === 'object' && !Array.isArray(previewDecisionsJson))
+    ? previewDecisionsJson
+    : {};
+
+  const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object' && !Array.isArray(dec.mismatch_choices))
+    ? dec.mismatch_choices
+    : {};
+
+  const includeCandidateIds = Array.isArray(dec.candidate_ids) ? dec.candidate_ids : null;
+
+  const includeSetNorm = (() => {
+    if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
+    const s = new Set();
+    for (const x of includeCandidateIds) {
+      const id = String(x || '').trim();
+      if (uuidRe.test(id)) s.add(id);
+    }
+    return s.size ? s : null;
+  })();
+
+  const allCands = [];
+  try {
+    const paye = Array.isArray(previewJson?.paye_candidates) ? previewJson.paye_candidates : [];
+    const non  = Array.isArray(previewJson?.non_paye_payees) ? previewJson.non_paye_payees : [];
+    for (const c of paye) allCands.push(c);
+    for (const c of non) allCands.push(c);
+  } catch {}
+
+  const blockedTimesheetIds = new Set();
+  const doNotPayTimesheetIds = new Set();
+  const snoozedTimesheetIds = new Set();
+
+  try {
+    const blockedItems = Array.isArray(previewJson?.blocked_items) ? previewJson.blocked_items : [];
+    for (const it of blockedItems) {
+      if (!it || typeof it !== 'object') continue;
+      const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+      if (uuidRe.test(tid)) blockedTimesheetIds.add(tid);
+    }
+  } catch {}
+
+  try {
+    const dnpItems = Array.isArray(previewJson?.do_not_pay_items) ? previewJson.do_not_pay_items : [];
+    for (const it of dnpItems) {
+      if (!it || typeof it !== 'object') continue;
+      const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+      if (uuidRe.test(tid)) doNotPayTimesheetIds.add(tid);
+    }
+  } catch {}
+
+  try {
+    const snoozedItems = Array.isArray(previewJson?.snoozed_items) ? previewJson.snoozed_items : [];
+    for (const it of snoozedItems) {
+      if (!it || typeof it !== 'object') continue;
+      const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+      if (uuidRe.test(tid)) snoozedTimesheetIds.add(tid);
+    }
+  } catch {}
+
+  const eligibleCandidateIds = new Set();
+
+  for (const c of allCands) {
+    if (!c || typeof c !== 'object') continue;
+
+    const candId = String(c.candidate_id || '').trim();
+    if (!uuidRe.test(candId)) continue;
+
+    if (includeSetNorm && !includeSetNorm.has(candId)) continue;
+
+    if (!asBool(c.has_any_delta)) continue;
+    if (!asBool(c.is_ready_for_draft)) continue;
+
+    const mismatchObj = (c.mismatch && typeof c.mismatch === 'object') ? c.mismatch : null;
+    const hasMismatch = mismatchObj ? asBool(mismatchObj.has_mismatch) : false;
+
+    if (hasMismatch) {
+      const choiceRaw = mismatchChoices[candId];
+      const choice = String(choiceRaw || '').trim().toUpperCase();
+      if (choice !== 'PAYE' && choice !== 'UMBRELLA') continue;
+    }
+
+    eligibleCandidateIds.add(candId);
+  }
+
+  const timesheetIdSet = new Set();
+  const timesheetToCandidateId = {};
+
+  for (const c of allCands) {
+    if (!c || typeof c !== 'object') continue;
+
+    const candId = String(c.candidate_id || '').trim();
+    if (!eligibleCandidateIds.has(candId)) continue;
+
+    const items = Array.isArray(c.itemisation) ? c.itemisation : [];
+    if (!items.length) continue;
+
+    for (const it of items) {
+      if (!it || typeof it !== 'object') continue;
+
+      const tid = String(it.timesheet_id || it.timesheetId || '').trim();
+      if (!uuidRe.test(tid)) continue;
+
+      if (blockedTimesheetIds.has(tid)) continue;
+      if (doNotPayTimesheetIds.has(tid)) continue;
+      if (snoozedTimesheetIds.has(tid)) continue;
+
+      const isBlockedMarker =
+        asBool(it.is_blocked) || asBool(it.blocked) || asBool(it.blocked_item) || asBool(it.isBlocked);
+      const isDoNotPayMarker =
+        asBool(it.do_not_pay) || asBool(it.is_do_not_pay) || asBool(it.doNotPay) || asBool(it.isDoNotPay);
+
+      if (isBlockedMarker) continue;
+      if (isDoNotPayMarker) continue;
+
+      if (!isNonZeroMoneyLike(it)) continue;
+
+      timesheetIdSet.add(tid);
+      if (!Object.prototype.hasOwnProperty.call(timesheetToCandidateId, tid)) {
+        timesheetToCandidateId[tid] = candId;
+      }
+    }
+  }
+
+  const timesheetIds = Array.from(timesheetIdSet).sort((a, b) => a.localeCompare(b));
+
+  return {
+    timesheetIds,
+    timesheetToCandidateId
+  };
+}
+async function tsfinBestEffortMakeReadyForDraft(env, timesheetIds, opts = {}) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const enc = encodeURIComponent;
+
+  const chunk = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < (arr?.length || 0); i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
+  const unwrapRpcJsonb = (raw, fnName) => {
+    const j = raw;
+    if (Array.isArray(j)) {
+      const row0 = j[0];
+      if (row0 && typeof row0 === 'object' && fnName && Object.prototype.hasOwnProperty.call(row0, fnName)) {
+        return row0[fnName];
+      }
+      return row0;
+    }
+    if (j && typeof j === 'object' && fnName && Object.prototype.hasOwnProperty.call(j, fnName)) {
+      return j[fnName];
+    }
+    return j;
+  };
+
+  const uniqAll = Array.from(new Set((Array.isArray(timesheetIds) ? timesheetIds : [])
+    .map(x => String(x || '').trim())
+    .filter(x => uuidRe.test(x))));
+
+  const maxTimesheets =
+    (opts && Number.isFinite(Number(opts.maxTimesheets)) && Number(opts.maxTimesheets) > 0)
+      ? Math.floor(Number(opts.maxTimesheets))
+      : 500;
+
+  const uniq = uniqAll.slice(0, maxTimesheets);
+
+  const maxLoops =
+    (opts && Number.isFinite(Number(opts.maxLoops)) && Number(opts.maxLoops) > 0)
+      ? Math.floor(Number(opts.maxLoops))
+      : 6;
+
+  const drainLimit =
+    (opts && Number.isFinite(Number(opts.drainLimit)) && Number(opts.drainLimit) > 0)
+      ? Math.floor(Number(opts.drainLimit))
+      : 80;
+
+  const maxMs =
+    (opts && Number.isFinite(Number(opts.maxMs)) && Number(opts.maxMs) > 0)
+      ? Math.floor(Number(opts.maxMs))
+      : 4500;
+
+  const fetchOutboxRowsForTimesheets = async (ids) => {
+    const list = Array.isArray(ids) ? ids.filter(x => uuidRe.test(String(x || '').trim())) : [];
+    if (!list.length) return [];
+
+    const rowsOut = [];
+    const parts = chunk(list, 150);
+
+    for (const part of parts) {
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox` +
+        `?timesheet_id=in.(${part.map(enc).join(',')})` +
+        `&select=timesheet_id,reason,attempt_count,next_attempt_at,last_error,created_at`;
+
+      const { rows } = await sbFetch(env, url);
+      for (const r of rows || []) rowsOut.push(r);
+    }
+
+    return rowsOut;
+  };
+
+  const groupOutboxRowsByReason = (rows) => {
+    const byReason = new Map();
+    for (const r of rows || []) {
+      const tid = String(r?.timesheet_id || '').trim();
+      const reason = String(r?.reason || '').trim();
+      if (!uuidRe.test(tid)) continue;
+      if (!reason) continue;
+      if (!byReason.has(reason)) byReason.set(reason, new Set());
+      byReason.get(reason).add(tid);
+    }
+    return byReason;
+  };
+
+  const priorityBumpExistingOutboxRows = async (rows) => {
+    const byReason = groupOutboxRowsByReason(rows);
+    let bumped = 0;
+
+    for (const [reason, set] of byReason.entries()) {
+      const ids = Array.from(set);
+      if (!ids.length) continue;
+
+      try {
+        const res = await sbRpc(env, 'enqueue_ts_financials_priority', {
+          _timesheet_ids: ids,
+          _reason: reason
+        });
+
+        let cnt = 0;
+        if (typeof res === 'number') cnt = res;
+        else if (typeof res === 'string') {
+          const n = Number(res);
+          cnt = Number.isFinite(n) ? n : 0;
+        } else if (Array.isArray(res) && res[0] != null) {
+          const v = res[0]?.enqueue_ts_financials_priority ?? res[0]?.count ?? res[0]?.row_count ?? null;
+          const n = Number(v);
+          cnt = Number.isFinite(n) ? n : 0;
+        }
+
+        bumped += (cnt > 0 ? cnt : ids.length);
+      } catch (e) {
+        try {
+          console.warn('[tsfinBestEffortMakeReadyForDraft] enqueue_ts_financials_priority failed (non-fatal)', {
+            reason,
+            err: String(e?.message || e || '')
+          });
+        } catch {}
+      }
+    }
+
+    return bumped;
+  };
+
+  const getPendingSummary = async (ids) => {
+    try {
+      const raw = await sbRpc(env, 'tsfin_outbox_pending_summary', { p_timesheet_ids: ids });
+      const payload = unwrapRpcJsonb(raw, 'tsfin_outbox_pending_summary');
+      const total = Number(payload?.total ?? 0);
+      const ready = Number(payload?.ready ?? 0);
+      return {
+        total: Number.isFinite(total) ? total : 0,
+        ready: Number.isFinite(ready) ? ready : 0,
+        next_attempt_at_min: payload?.next_attempt_at_min ?? null
+      };
+    } catch {
+      return { total: 0, ready: 0, next_attempt_at_min: null };
+    }
+  };
+
+  if (!uniq.length) {
+    return {
+      excludedTimesheetIds: [],
+      stats: {
+        capped: (uniqAll.length > maxTimesheets),
+        input_count: uniqAll.length,
+        used_count: uniq.length,
+        loops: 0,
+        maxLoops,
+        drainLimit,
+        maxMs,
+        pending_before_total: 0,
+        pending_after_total: 0,
+        processed_now: 0,
+        ran: 0,
+        picked: 0,
+        ok: 0,
+        fail: 0,
+        progress_made: false
+      },
+      lastErrorByTimesheetId: {}
+    };
+  }
+
+  const pendingBefore = await getPendingSummary(uniq);
+  let outboxRows = await fetchOutboxRowsForTimesheets(uniq).catch(() => []);
+  const pendingBeforeTotal = (Array.isArray(outboxRows) ? outboxRows.length : pendingBefore.total);
+
+  if (!outboxRows.length) {
+    return {
+      excludedTimesheetIds: [],
+      stats: {
+        capped: (uniqAll.length > maxTimesheets),
+        input_count: uniqAll.length,
+        used_count: uniq.length,
+        loops: 0,
+        maxLoops,
+        drainLimit,
+        maxMs,
+        pending_before_total: pendingBeforeTotal,
+        pending_after_total: 0,
+        processed_now: 0,
+        ran: 0,
+        picked: 0,
+        ok: 0,
+        fail: 0,
+        progress_made: false
+      },
+      lastErrorByTimesheetId: {}
+    };
+  }
+
+  const startMs = Date.now();
+
+  let loops = 0;
+  let ran = 0;
+  let picked = 0;
+  let ok = 0;
+  let fail = 0;
+
+  let lastCount = outboxRows.length;
+  let progressMade = false;
+
+  for (loops = 0; loops < maxLoops; loops++) {
+    if (!outboxRows.length) break;
+    if ((Date.now() - startMs) > maxMs) break;
+
+    await priorityBumpExistingOutboxRows(outboxRows);
+
+    const activeTimesheetIds = Array.from(new Set(outboxRows
+      .map(r => String(r?.timesheet_id || '').trim())
+      .filter(x => uuidRe.test(x))));
+
+    if (!activeTimesheetIds.length) break;
+
+    try {
+      const res = await runTsfinWorkerOnce(env, {
+        limit: Math.max(1, Math.min(drainLimit, activeTimesheetIds.length)),
+        onlyTimesheetIds: activeTimesheetIds
+      });
+
+      ran += 1;
+      picked += Number(res?.picked || 0);
+      ok += Number(res?.ok || 0);
+      fail += Number(res?.fail || 0);
+    } catch (e) {
+      try {
+        console.warn('[tsfinBestEffortMakeReadyForDraft] runTsfinWorkerOnce failed (non-fatal)', {
+          err: String(e?.message || e || '')
+        });
+      } catch {}
+      break;
+    }
+
+    outboxRows = await fetchOutboxRowsForTimesheets(uniq).catch(() => []);
+
+    const curCount = outboxRows.length;
+
+    if (curCount < lastCount) {
+      progressMade = true;
+      lastCount = curCount;
+      continue;
+    }
+
+    break;
+  }
+
+  const excludedTimesheetIds = Array.from(new Set((outboxRows || [])
+    .map(r => String(r?.timesheet_id || '').trim())
+    .filter(x => uuidRe.test(x)))).sort((a, b) => a.localeCompare(b));
+
+  const lastErrorByTimesheetId = {};
+  for (const r of outboxRows || []) {
+    const tid = String(r?.timesheet_id || '').trim();
+    if (!uuidRe.test(tid)) continue;
+
+    const lastErr = String(r?.last_error || '').trim();
+    if (lastErr && !Object.prototype.hasOwnProperty.call(lastErrorByTimesheetId, tid)) {
+      lastErrorByTimesheetId[tid] = lastErr;
+    }
+  }
+
+  const pendingAfter = await getPendingSummary(uniq);
+  const pendingAfterTotal = Number.isFinite(Number(pendingAfter?.total)) ? Number(pendingAfter.total) : excludedTimesheetIds.length;
+
+  const processedNow = Math.max(0, pendingBeforeTotal - pendingAfterTotal);
+
+  return {
+    excludedTimesheetIds,
+    stats: {
+      capped: (uniqAll.length > maxTimesheets),
+      input_count: uniqAll.length,
+      used_count: uniq.length,
+      loops,
+      maxLoops,
+      drainLimit,
+      maxMs,
+      pending_before_total: pendingBeforeTotal,
+      pending_before_ready: Number.isFinite(Number(pendingBefore?.ready)) ? Number(pendingBefore.ready) : null,
+      pending_before_next_attempt_at_min: pendingBefore?.next_attempt_at_min ?? null,
+      pending_after_total: pendingAfterTotal,
+      pending_after_ready: Number.isFinite(Number(pendingAfter?.ready)) ? Number(pendingAfter.ready) : null,
+      pending_after_next_attempt_at_min: pendingAfter?.next_attempt_at_min ?? null,
+      processed_now: processedNow,
+      ran,
+      picked,
+      ok,
+      fail,
+      progress_made: progressMade
+    },
+    lastErrorByTimesheetId
+  };
+}
 
 async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
