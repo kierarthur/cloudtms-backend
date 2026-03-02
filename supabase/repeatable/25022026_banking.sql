@@ -79,6 +79,728 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public._pay_timesheet_components(p_snapshot_json jsonb)
+RETURNS TABLE (
+  key_type text,
+  key_value text,
+  amount_ex_vat numeric,
+  amount_inc_vat numeric
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+with
+seg_raw as (
+  select
+    nullif(btrim(coalesce(seg->>'segment_id','')), '') as segment_id,
+    nullif(btrim(coalesce(seg->>'date','')), '') as seg_date_raw,
+    coalesce(nullif(seg->>'exclude_from_pay','')::boolean, false) as exclude_from_pay,
+    case
+      when coalesce(seg->>'pay_amount','') ~ '^-?\d+(\.\d+)?$' then (seg->>'pay_amount')::numeric
+      else 0::numeric
+    end as pay_amount_ex
+  from jsonb_array_elements(coalesce(p_snapshot_json->'segments','[]'::jsonb)) as seg
+  where seg is not null and jsonb_typeof(seg) = 'object'
+),
+seg_norm as (
+  select
+    case
+      when sr.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then 'TS_DAY'
+      else 'TS_TOTAL'
+    end as key_type,
+    case
+      when sr.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sr.seg_date_raw
+      else 'TOTAL'
+    end as key_value,
+    round(
+      sum(
+        case
+          when sr.exclude_from_pay then 0::numeric
+          else coalesce(sr.pay_amount_ex,0)
+        end
+      ),
+      2
+    ) as amount_ex_vat
+  from seg_raw sr
+  where sr.segment_id is not null
+  group by 1,2
+),
+add_kv as (
+  select
+    upper(btrim(e.key)) as code,
+    e.value as obj
+  from jsonb_each(coalesce(p_snapshot_json->'additional_units_json','{}'::jsonb)) as e
+  where e.key is not null
+    and btrim(e.key) <> ''
+    and e.value is not null
+    and jsonb_typeof(e.value) = 'object'
+),
+add_by_code as (
+  select
+    'ADDITIONAL_CODE'::text as key_type,
+    ak.code as key_value,
+    round(
+      coalesce(
+        case when coalesce(ak.obj->>'pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'pay_ex_vat')::numeric end,
+        case when coalesce(ak.obj->>'amount_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'amount_ex_vat')::numeric end,
+        (
+          coalesce(
+            case when coalesce(ak.obj->>'unit_count','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'unit_count')::numeric end,
+            case when coalesce(ak.obj->>'units_week','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'units_week')::numeric end,
+            0::numeric
+          )
+          *
+          coalesce(
+            case when coalesce(ak.obj->>'pay_rate','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'pay_rate')::numeric end,
+            case when coalesce(ak.obj->>'rate','') ~ '^-?\d+(\.\d+)?$' then (ak.obj->>'rate')::numeric end,
+            0::numeric
+          )
+        ),
+        0::numeric
+      ),
+      2
+    ) as amount_ex_vat
+  from add_kv ak
+),
+add_sum as (
+  select
+    round(coalesce(sum(abc.amount_ex_vat),0),2) as sum_ex
+  from add_by_code abc
+),
+add_total_fallback as (
+  select
+    'ADDITIONAL_CODE'::text as key_type,
+    'TOTAL'::text as key_value,
+    round(
+      case
+        when coalesce(p_snapshot_json->>'additional_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (p_snapshot_json->>'additional_pay_ex_vat')::numeric
+        else 0::numeric
+      end,
+      2
+    ) as amount_ex_vat
+  where (select coalesce(a.sum_ex,0) from add_sum a) = 0
+    and (
+      coalesce(p_snapshot_json->>'additional_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+      and (p_snapshot_json->>'additional_pay_ex_vat')::numeric <> 0
+    )
+),
+exp_vals as (
+  select
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,travel_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,travel_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as travel_ex,
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,accommodation_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,accommodation_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as accom_ex,
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,other_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,other_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as other_ex,
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,mileage_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,mileage_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as mileage_ex,
+    round(
+      case when coalesce(p_snapshot_json #>> '{expenses,expenses_pay_ex_vat}','') ~ '^-?\d+(\.\d+)?$'
+           then (p_snapshot_json #>> '{expenses,expenses_pay_ex_vat}')::numeric else 0::numeric end, 2
+    ) as expenses_rollup_ex
+),
+exp_has_cats as (
+  select
+    (coalesce(ev.travel_ex,0) <> 0)
+    or (coalesce(ev.accom_ex,0) <> 0)
+    or (coalesce(ev.other_ex,0) <> 0)
+    or (coalesce(ev.mileage_ex,0) <> 0) as has_any_cat
+  from exp_vals ev
+),
+exp_components as (
+  select 'EXPENSE_CODE'::text as key_type, 'TRAVEL'::text as key_value, ev.travel_ex as amount_ex_vat
+  from exp_vals ev
+  where coalesce(ev.travel_ex,0) <> 0
+  union all
+  select 'EXPENSE_CODE'::text, 'ACCOMMODATION'::text, ev.accom_ex
+  from exp_vals ev
+  where coalesce(ev.accom_ex,0) <> 0
+  union all
+  select 'EXPENSE_CODE'::text, 'OTHER'::text, ev.other_ex
+  from exp_vals ev
+  where coalesce(ev.other_ex,0) <> 0
+  union all
+  select 'EXPENSE_CODE'::text, 'MILEAGE'::text, ev.mileage_ex
+  from exp_vals ev
+  where coalesce(ev.mileage_ex,0) <> 0
+  union all
+  select 'EXPENSE_CODE'::text, 'EXPENSES'::text, ev.expenses_rollup_ex
+  from exp_vals ev
+  where (select eh.has_any_cat from exp_has_cats eh) = false
+    and coalesce(ev.expenses_rollup_ex,0) <> 0
+),
+adj_components as (
+  select
+    'EXPENSE_CODE'::text as key_type,
+    upper('ADJ:' || nullif(btrim(coalesce(adj->>'id','')), '')) as key_value,
+    round(
+      case
+        when coalesce(adj->>'delta_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (adj->>'delta_pay_ex_vat')::numeric
+        else 0::numeric
+      end,
+      2
+    ) as amount_ex_vat
+  from jsonb_array_elements(coalesce(p_snapshot_json->'adjustments','[]'::jsonb)) as adj
+  where adj is not null
+    and jsonb_typeof(adj)='object'
+    and nullif(btrim(coalesce(adj->>'id','')), '') is not null
+    and (
+      coalesce(adj->>'delta_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+      and (adj->>'delta_pay_ex_vat')::numeric <> 0
+    )
+)
+select
+  s.key_type,
+  s.key_value,
+  s.amount_ex_vat,
+  s.amount_ex_vat as amount_inc_vat
+from seg_norm s
+
+union all
+select
+  abc.key_type,
+  abc.key_value,
+  abc.amount_ex_vat,
+  abc.amount_ex_vat
+from add_by_code abc
+where abc.amount_ex_vat <> 0
+
+union all
+select
+  atf.key_type,
+  atf.key_value,
+  atf.amount_ex_vat,
+  atf.amount_ex_vat
+from add_total_fallback atf
+
+union all
+select
+  ec.key_type,
+  ec.key_value,
+  ec.amount_ex_vat,
+  ec.amount_ex_vat
+from exp_components ec
+
+union all
+select
+  ac.key_type,
+  ac.key_value,
+  ac.amount_ex_vat,
+  ac.amount_ex_vat
+from adj_components ac;
+$$;
+
+CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
+RETURNS TABLE (
+  timesheet_id uuid,
+  key_type text,
+  key_value text,
+  amount_ex_vat numeric,
+  amount_inc_vat numeric
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+with
+inp as (
+  select coalesce(
+    (select array_agg(distinct x) from unnest(coalesce(p_timesheet_ids, array[]::uuid[])) as t(x) where x is not null),
+    array[]::uuid[]
+  ) as ts_ids
+),
+active_items as (
+  select
+    pb_r.id as pay_batch_id,
+    pbi.timesheet_id as timesheet_id,
+    pbc_r.candidate_id as candidate_id,
+    pbi.item_type as item_type,
+    pbi.segment_key as segment_key,
+    pbi.source_ref as source_ref,
+    coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0)::numeric as amount_ex_vat,
+    coalesce(pbi.amount_inc_vat, pbi.amount_ex_vat, 0)::numeric as amount_inc_vat
+  from inp i
+  join public.pay_batch_items pbi
+    on pbi.timesheet_id = any(i.ts_ids)
+  join public.pay_batch_candidates pbc_r
+    on pbc_r.id = pbi.pay_batch_candidate_id
+  join public.pay_batches pb_r
+    on pb_r.id = pbc_r.pay_batch_id
+  where pbi.timesheet_id is not null
+    and pbi.pay_channel in ('PAYE','UMBRELLA')
+    and upper(coalesce(pb_r.status,'')) in (
+      'DRAFT',
+      'DRAFT_CREATED',
+      'READY',
+      'WAITING_BANK_CONFIRM',
+      'PARTIAL',
+      'FAILED',
+      'BLOCKED_FUNDS',
+      'SCHEDULED',
+      'EXECUTING',
+      'AWAITING_AUTHORISATION',
+      'AUTHORISED_FOR_PAYMENT'
+    )
+    and pbi.item_type not in (
+      'DEBT_CREATED',
+      'LOAN_REPAYMENT',
+      'OVERPAYMENT_RECOVERY',
+      'LOAN_PAYOUT'
+    )
+),
+snap_choice as (
+  select
+    ai.pay_batch_id,
+    ai.timesheet_id,
+    (
+      select pbs1.target_snapshot_json
+      from public.pay_batch_timesheet_snapshots pbs1
+      where pbs1.pay_batch_id = ai.pay_batch_id
+        and pbs1.timesheet_id = ai.timesheet_id
+      order by pbs1.created_at_utc desc, pbs1.id desc
+      limit 1
+    ) as target_snapshot_json
+  from (select distinct pay_batch_id, timesheet_id from active_items) ai
+),
+seg_lookup as (
+  select
+    ai.pay_batch_id,
+    ai.timesheet_id,
+    coalesce(
+      nullif(btrim(coalesce(ai.segment_key,'')), ''),
+      case
+        when ai.source_ref is not null and btrim(ai.source_ref) like 'seg:%'
+          then nullif(btrim(split_part(ai.source_ref,':',2)), '')
+        else null
+      end
+    ) as seg_id
+  from active_items ai
+  where ai.item_type = 'SEGMENT_DELTA'
+),
+seg_date_map as (
+  select
+    sl.pay_batch_id,
+    sl.timesheet_id,
+    sl.seg_id,
+    nullif(btrim(coalesce(seg->>'date','')), '') as seg_date_raw
+  from seg_lookup sl
+  join snap_choice sc
+    on sc.pay_batch_id = sl.pay_batch_id
+   and sc.timesheet_id = sl.timesheet_id
+  join lateral jsonb_array_elements(coalesce(sc.target_snapshot_json->'segments','[]'::jsonb)) as seg on true
+  where sl.seg_id is not null
+    and seg is not null
+    and jsonb_typeof(seg)='object'
+    and nullif(btrim(coalesce(seg->>'segment_id','')), '') = sl.seg_id
+),
+seg_date_final as (
+  select
+    sdm.pay_batch_id,
+    sdm.timesheet_id,
+    sdm.seg_id,
+    case when sdm.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sdm.seg_date_raw else null end as seg_date
+  from seg_date_map sdm
+),
+reserved_components as (
+  select
+    ai.timesheet_id,
+    case
+      when ai.item_type = 'SEGMENT_DELTA'
+        then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+      when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        then case
+          when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%' or btrim(ai.source_ref) = 'additional')
+            then 'ADDITIONAL_CODE'
+          else 'EXPENSE_CODE'
+        end
+      else 'EXPENSE_CODE'
+    end as key_type,
+    case
+      when ai.item_type = 'SEGMENT_DELTA'
+        then coalesce(sdf.seg_date, 'TOTAL')
+      when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        then case
+          when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
+            then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
+          when ai.source_ref is not null and btrim(ai.source_ref) = 'additional'
+            then 'TOTAL'
+          when ai.source_ref is not null and btrim(ai.source_ref) <> ''
+            then upper(btrim(ai.source_ref))
+          else 'UNKNOWN'
+        end
+      else 'UNKNOWN'
+    end as key_value,
+    round(sum(coalesce(ai.amount_ex_vat,0)),2) as amount_ex_vat,
+    round(sum(coalesce(ai.amount_inc_vat,0)),2) as amount_inc_vat
+  from active_items ai
+  left join seg_date_final sdf
+    on sdf.pay_batch_id = ai.pay_batch_id
+   and sdf.timesheet_id = ai.timesheet_id
+   and sdf.seg_id = coalesce(
+     nullif(btrim(coalesce(ai.segment_key,'')), ''),
+     case
+       when ai.source_ref is not null and btrim(ai.source_ref) like 'seg:%'
+         then nullif(btrim(split_part(ai.source_ref,':',2)), '')
+       else null
+     end
+   )
+  where ai.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA')
+  group by
+    ai.timesheet_id,
+    case
+      when ai.item_type = 'SEGMENT_DELTA'
+        then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+      when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        then case
+          when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%' or btrim(ai.source_ref) = 'additional')
+            then 'ADDITIONAL_CODE'
+          else 'EXPENSE_CODE'
+        end
+      else 'EXPENSE_CODE'
+    end,
+    case
+      when ai.item_type = 'SEGMENT_DELTA'
+        then coalesce(sdf.seg_date, 'TOTAL')
+      when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        then case
+          when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
+            then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
+          when ai.source_ref is not null and btrim(ai.source_ref) = 'additional'
+            then 'TOTAL'
+          when ai.source_ref is not null and btrim(ai.source_ref) <> ''
+            then upper(btrim(ai.source_ref))
+          else 'UNKNOWN'
+        end
+      else 'UNKNOWN'
+    end
+)
+select
+  rc.timesheet_id,
+  rc.key_type,
+  rc.key_value,
+  rc.amount_ex_vat,
+  rc.amount_inc_vat
+from reserved_components rc
+where rc.key_value is not null and btrim(rc.key_value) <> '';
+$$;
+CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
+RETURNS TABLE (
+  timesheet_id uuid,
+  key_type text,
+  key_value text,
+  truth_ex_vat numeric,
+  baseline_ex_vat numeric,
+  reserved_ex_vat numeric,
+  outstanding_ex_vat numeric,
+  truth_inc_vat numeric,
+  baseline_inc_vat numeric,
+  reserved_inc_vat numeric,
+  outstanding_inc_vat numeric,
+  reservation_overrun_detected boolean
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+with
+inp as (
+  select coalesce(
+    (select array_agg(distinct x) from unnest(coalesce(p_timesheet_ids, array[]::uuid[])) as t(x) where x is not null),
+    array[]::uuid[]
+  ) as ts_ids
+),
+tf as (
+  select
+    tfin.timesheet_id,
+    tfin.total_pay_ex_vat,
+    tfin.invoice_breakdown_json,
+    tfin.additional_units_json,
+    tfin.expenses_pay_ex_vat,
+    tfin.travel_pay_ex_vat,
+    tfin.accommodation_pay_ex_vat,
+    tfin.other_pay_ex_vat,
+    tfin.mileage_pay_ex_vat
+  from inp i
+  left join public.timesheets_financials tfin
+    on tfin.is_current = true
+   and tfin.timesheet_id = any(i.ts_ids)
+),
+truth_segments as (
+  select
+    tf0.timesheet_id,
+    case
+      when tf0.invoice_breakdown_json is not null
+       and jsonb_typeof(tf0.invoice_breakdown_json)='object'
+       and upper(coalesce(tf0.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+       and jsonb_typeof(tf0.invoice_breakdown_json->'segments')='array'
+      then (
+        select coalesce(
+          jsonb_agg(seg),
+          '[]'::jsonb
+        )
+        from jsonb_array_elements(tf0.invoice_breakdown_json->'segments') as seg
+        where seg is not null and jsonb_typeof(seg)='object'
+      )
+      else jsonb_build_array(
+        jsonb_build_object(
+          'segment_id', ('ts:' || tf0.timesheet_id::text),
+          'pay_amount', round(coalesce(tf0.total_pay_ex_vat,0),2),
+          'exclude_from_pay', false
+        )
+      )
+    end as segments_json
+  from tf tf0
+),
+truth_snapshot_like as (
+  select
+    ts.timesheet_id,
+    jsonb_build_object(
+      'segments', ts.segments_json,
+      'additional_units_json', coalesce(tf1.additional_units_json,'{}'::jsonb),
+      'additional_pay_ex_vat', 0,
+      'expenses', jsonb_build_object(
+        'expenses_pay_ex_vat', round(coalesce(tf1.expenses_pay_ex_vat,0),2),
+        'travel_pay_ex_vat', round(coalesce(tf1.travel_pay_ex_vat,0),2),
+        'accommodation_pay_ex_vat', round(coalesce(tf1.accommodation_pay_ex_vat,0),2),
+        'other_pay_ex_vat', round(coalesce(tf1.other_pay_ex_vat,0),2),
+        'mileage_pay_ex_vat', round(coalesce(tf1.mileage_pay_ex_vat,0),2)
+      ),
+      'adjustments', coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', a.id::text,
+            'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
+          )
+          order by a.created_at nulls last, a.id
+        )
+        from public.ts_pay_adjustments a
+        where a.as_advance = false
+          and a.timesheet_id = ts.timesheet_id
+      ), '[]'::jsonb)
+    ) as snap_json
+  from truth_segments ts
+  join tf tf1
+    on tf1.timesheet_id = ts.timesheet_id
+),
+truth_components as (
+  select
+    tsl.timesheet_id,
+    tc.key_type,
+    tc.key_value,
+    tc.amount_ex_vat,
+    tc.amount_inc_vat
+  from truth_snapshot_like tsl
+  join lateral public._pay_timesheet_components(tsl.snap_json) as tc on true
+),
+baseline_components as (
+  select
+    tps.timesheet_id,
+    bc.key_type,
+    bc.key_value,
+    bc.amount_ex_vat,
+    bc.amount_inc_vat
+  from inp i
+  join public.timesheet_pay_state tps
+    on tps.timesheet_id = any(i.ts_ids)
+  join lateral public._pay_timesheet_components(coalesce(tps.last_settled_snapshot_json,'{}'::jsonb)) as bc on true
+),
+reserved_components as (
+  select
+    rc.timesheet_id,
+    rc.key_type,
+    rc.key_value,
+    rc.amount_ex_vat,
+    rc.amount_inc_vat
+  from public._pay_reserved_components((select ts_ids from inp)) rc
+),
+all_keys as (
+  select distinct
+    x.timesheet_id,
+    x.key_type,
+    x.key_value
+  from (
+    select tc.timesheet_id, tc.key_type, tc.key_value from truth_components tc
+    union all
+    select bc.timesheet_id, bc.key_type, bc.key_value from baseline_components bc
+    union all
+    select rc.timesheet_id, rc.key_type, rc.key_value from reserved_components rc
+  ) x
+),
+joined as (
+  select
+    ak.timesheet_id,
+    ak.key_type,
+    ak.key_value,
+    coalesce(tc.amount_ex_vat,0) as truth_ex_vat,
+    coalesce(bc.amount_ex_vat,0) as baseline_ex_vat,
+    coalesce(rc.amount_ex_vat,0) as reserved_ex_vat,
+    coalesce(tc.amount_inc_vat,0) as truth_inc_vat,
+    coalesce(bc.amount_inc_vat,0) as baseline_inc_vat,
+    coalesce(rc.amount_inc_vat,0) as reserved_inc_vat
+  from all_keys ak
+  left join truth_components tc
+    on tc.timesheet_id = ak.timesheet_id
+   and tc.key_type = ak.key_type
+   and tc.key_value = ak.key_value
+  left join baseline_components bc
+    on bc.timesheet_id = ak.timesheet_id
+   and bc.key_type = ak.key_type
+   and bc.key_value = ak.key_value
+  left join reserved_components rc
+    on rc.timesheet_id = ak.timesheet_id
+   and rc.key_type = ak.key_type
+   and rc.key_value = ak.key_value
+)
+select
+  j.timesheet_id,
+  j.key_type,
+  j.key_value,
+  round(j.truth_ex_vat,2) as truth_ex_vat,
+  round(j.baseline_ex_vat,2) as baseline_ex_vat,
+  round(j.reserved_ex_vat,2) as reserved_ex_vat,
+  round(j.truth_ex_vat - j.baseline_ex_vat - j.reserved_ex_vat,2) as outstanding_ex_vat,
+  round(j.truth_inc_vat,2) as truth_inc_vat,
+  round(j.baseline_inc_vat,2) as baseline_inc_vat,
+  round(j.reserved_inc_vat,2) as reserved_inc_vat,
+  round(j.truth_inc_vat - j.baseline_inc_vat - j.reserved_inc_vat,2) as outstanding_inc_vat,
+  (
+    round(j.reserved_ex_vat,2) >
+    round(greatest(j.truth_ex_vat - j.baseline_ex_vat, 0),2)
+  ) as reservation_overrun_detected
+from joined j
+where j.timesheet_id is not null
+  and j.key_type is not null
+  and j.key_value is not null;
+$$;
+CREATE OR REPLACE FUNCTION public._pay_candidate_week_totals(p_candidate_ids uuid[], p_week_start date)
+RETURNS TABLE (
+  candidate_id uuid,
+  week_start date,
+  paid_wtd numeric,
+  loan_repaid_wtd numeric,
+  overpay_recovered_wtd numeric
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+with
+inp as (
+  select
+    coalesce(
+      (select array_agg(distinct x) from unnest(coalesce(p_candidate_ids, array[]::uuid[])) as t(x) where x is not null),
+      array[]::uuid[]
+    ) as cand_ids,
+    p_week_start as week_start,
+    (p_week_start + interval '6 days')::date as week_end
+),
+eligible_batches as (
+  select
+    pb.id as pay_batch_id
+  from inp i
+  join public.pay_batches pb
+    on pb.pay_date >= i.week_start
+   and pb.pay_date <= i.week_end
+  where upper(coalesce(pb.status,'')) in (
+    'DRAFT',
+    'DRAFT_CREATED',
+    'READY',
+    'WAITING_BANK_CONFIRM',
+    'PARTIAL',
+    'FAILED',
+    'BLOCKED_FUNDS',
+    'SCHEDULED',
+    'EXECUTING',
+    'AWAITING_AUTHORISATION',
+    'AUTHORISED_FOR_PAYMENT',
+    'SETTLED'
+  )
+    and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
+),
+cand_rows as (
+  select
+    pbc.candidate_id,
+    pbc.pay_batch_id,
+    coalesce(pbc.net_bank_amount,0)::numeric as net_bank_amount
+  from inp i
+  join public.pay_batch_candidates pbc
+    on pbc.candidate_id = any(i.cand_ids)
+  join eligible_batches eb
+    on eb.pay_batch_id = pbc.pay_batch_id
+),
+paid as (
+  select
+    cr.candidate_id,
+    round(sum(cr.net_bank_amount),2) as paid_wtd
+  from cand_rows cr
+  group by cr.candidate_id
+),
+loan_rep as (
+  select
+    pbc.candidate_id,
+    round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))),2) as loan_repaid_wtd
+  from inp i
+  join public.pay_batch_candidates pbc
+    on pbc.candidate_id = any(i.cand_ids)
+  join eligible_batches eb
+    on eb.pay_batch_id = pbc.pay_batch_id
+  join public.pay_batch_items pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  where pbi.item_type = 'LOAN_REPAYMENT'
+  group by pbc.candidate_id
+),
+overpay_rec as (
+  select
+    pbc.candidate_id,
+    round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))),2) as overpay_recovered_wtd
+  from inp i
+  join public.pay_batch_candidates pbc
+    on pbc.candidate_id = any(i.cand_ids)
+  join eligible_batches eb
+    on eb.pay_batch_id = pbc.pay_batch_id
+  join public.pay_batch_items pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  where pbi.item_type = 'OVERPAYMENT_RECOVERY'
+  group by pbc.candidate_id
+)
+select
+  c.id as candidate_id,
+  (select week_start from inp) as week_start,
+  coalesce(p.paid_wtd,0) as paid_wtd,
+  coalesce(l.loan_repaid_wtd,0) as loan_repaid_wtd,
+  coalesce(o.overpay_recovered_wtd,0) as overpay_recovered_wtd
+from inp i
+join public.candidates c
+  on c.id = any(i.cand_ids)
+left join paid p
+  on p.candidate_id = c.id
+left join loan_rep l
+  on l.candidate_id = c.id
+left join overpay_rec o
+  on o.candidate_id = c.id;
+$$;
+
+
+
+
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
