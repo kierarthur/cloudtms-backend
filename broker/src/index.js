@@ -1062,10 +1062,15 @@ async function postToPowerAutomate(env, payload, channel = 'finance') {
     }
   }
 
+  // ✅ Batch Flow expects { items: [...] }. For single payloads, wrap into one-item batch.
+  const outgoing = (payload && typeof payload === 'object' && Array.isArray(payload.items))
+    ? payload
+    : { items: [payload] };
+
   const res = await fetch(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify(payload),
+    body: JSON.stringify(outgoing),
   });
 
   let body;
@@ -1076,7 +1081,13 @@ async function postToPowerAutomate(env, payload, channel = 'finance') {
   let provider_message_id = undefined;
   try {
     const j = JSON.parse(body);
-    provider_message_id = j.provider_message_id || j.id || j.messageId || undefined;
+    provider_message_id =
+      j.provider_message_id ||
+      j.correlationId ||
+      j.correlation_id ||
+      j.id ||
+      j.messageId ||
+      undefined;
   } catch {}
 
   return { ok, status: res.status, body, provider_message_id };
@@ -46184,7 +46195,7 @@ function _asEmailString(v) {
 }
 
 function normalizeEmailPayload(raw) {
-  // Match Apps Script: to/cc/bcc/replyTo are strings, not arrays. :contentReference[oaicite:7]{index=7}
+  // Match Apps Script: to/cc/bcc/replyTo are strings, not arrays.
   const to = _asEmailString(raw.to);
   const cc = _asEmailString(raw.cc);
   const bcc = _asEmailString(raw.bcc);
@@ -46192,7 +46203,7 @@ function normalizeEmailPayload(raw) {
 
   const subject = String(raw.subject || '').trim();
 
-  // Apps Script uses htmlBody + body (Flow coalesce). :contentReference[oaicite:8]{index=8}
+  // Apps Script uses htmlBody + body (Flow coalesce).
   const htmlBodyStr =
     raw.htmlBody != null ? String(raw.htmlBody) :
     raw.html != null ? String(raw.html) :
@@ -46213,6 +46224,14 @@ function normalizeEmailPayload(raw) {
   const htmlBody = (htmlBodyStr != null ? htmlBodyStr : (actualBody || ''));
   const body = (textBodyStr != null ? textBodyStr : (actualBody || ''));
 
+  // Importance (optional): normalize to High|Normal|Low. Default is Normal if omitted.
+  const rawImp = (raw && raw.importance != null) ? String(raw.importance).trim() : '';
+  const impLower = rawImp.toLowerCase();
+  const importance =
+    impLower === 'high' ? 'High' :
+    impLower === 'low' ? 'Low' :
+    impLower ? 'Normal' : ''; // omit if not supplied; callers may default it later
+
   // Attachments can arrive as:
   // - attachmentsV2: [{Name,ContentBytes}] (already PA-ready)
   // - attachments:   [{name,contentBase64}] or [{filename,contentBase64}] or placeholders
@@ -46230,7 +46249,7 @@ function normalizeEmailPayload(raw) {
     // If a is a string (bad outbox normalisation), ignore safely
     if (typeof a !== 'object') continue;
 
-    // Already in Apps Script "new" shape: { Name, ContentBytes } :contentReference[oaicite:9]{index=9}
+    // Already in Apps Script "new" shape: { Name, ContentBytes }
     if (a.ContentBytes && (a.Name || a.name || a.filename)) {
       attachments.push({
         name: String(a.Name || a.name || a.filename || 'attachment'),
@@ -46274,6 +46293,7 @@ function normalizeEmailPayload(raw) {
     cc: cc || '',
     bcc: bcc || '',
     replyTo: replyTo || '',
+    importance,
     subject,
     htmlBody,
     body,
@@ -46281,7 +46301,6 @@ function normalizeEmailPayload(raw) {
     metadata: raw.metadata ?? null
   };
 }
-
 function validateEmailPayload(p) {
   if (!p || typeof p !== 'object') return 'Missing payload';
   if (!p.to || !String(p.to).trim()) return 'Recipient is required.';
@@ -46300,12 +46319,13 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
     cc: outboxRow.cc,
     bcc: outboxRow.bcc,
     replyTo: outboxRow.replyTo,
+    importance: outboxRow.importance,
     subject: outboxRow.subject,
     body_html: outboxRow.body_html,
     body_text: outboxRow.body_text,
     // IMPORTANT: outboxRow.attachments may be jsonb OR a JSON-string-in-text
     attachments: outboxRow.attachments,
-    // Only include metadata if your Flow schema allows it (Apps Script only adds if provided). :contentReference[oaicite:10]{index=10}
+    // Only include metadata if your Flow schema allows it (Apps Script only adds if provided).
     // metadata: ...
   });
 
@@ -46327,7 +46347,7 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
 
   const enc = encodeURIComponent;
 
-  // Resolve to Apps Script attachmentsV2: [{ Name, ContentBytes }] :contentReference[oaicite:11]{index=11}
+  // Resolve to Apps Script attachmentsV2: [{ Name, ContentBytes }]
   const attachmentsV2 = [];
 
   for (const a of (base.attachments || [])) {
@@ -46407,30 +46427,38 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
     }
   }
 
-  // Filter out empties (Apps Script does this too) :contentReference[oaicite:12]{index=12}
+  // Filter out empties (Apps Script does this too)
   const attachmentsV2Clean = attachmentsV2.filter(x => x && x.ContentBytes);
 
-  // FINAL payload: match Apps Script keys exactly. :contentReference[oaicite:13]{index=13}
+  // FINAL payload: match Flow keys exactly.
   const payload = {
     to: String(base.to).trim(),
     subject: String(base.subject).trim(),
     htmlBody: String(base.htmlBody || ''),
     body: String(base.body || ''),
-    attachmentsV2: attachmentsV2Clean
+    attachmentsV2: attachmentsV2Clean,
+    // ✅ meta is echoed back by the batch Flow so we can map results to outbox rows
+    meta: {
+      outbox_id: outboxRow.id,
+      type: outboxRow.type || null,
+      reference: outboxRow.reference || null
+    }
   };
 
-  // Optional fields: only add if non-empty (Apps Script behaviour). :contentReference[oaicite:14]{index=14}
+  // Optional fields: only add if non-empty.
   if (base.cc && String(base.cc).trim()) payload.cc = String(base.cc).trim();
   if (base.bcc && String(base.bcc).trim()) payload.bcc = String(base.bcc).trim();
   if (base.replyTo && String(base.replyTo).trim()) payload.replyTo = String(base.replyTo).trim();
+
+  // ✅ Importance: default Normal if not supplied
+  payload.importance = String(base.importance || 'Normal');
+
   if (base.metadata && typeof base.metadata === 'object') payload.metadata = base.metadata;
 
   return payload;
 }
 
-
-
-async function limitOrLinkAttachments(env, payload) {
+async function limitOrLinkAttachments(env, { payload }) {
   const limitBytes = Number(env.EMAIL_MAX_PAYLOAD_BYTES) || EMAIL_MAX_PAYLOAD_BYTES;
   let currentBytes = estimatePayloadSizeBytes(payload);
   if (currentBytes <= limitBytes) return { payload, trimmed: false };
@@ -46438,11 +46466,11 @@ async function limitOrLinkAttachments(env, payload) {
   // Prefer to keep a PDF invoice if present, trim the rest and inject links.
   const kept = [];
   const trimmed = [];
-  for (const a of payload.attachments) {
+  for (const a of (payload.attachments || [])) {
     const isInvoice = /invoice/i.test(a.name || '') && /\.pdf$/i.test(a.name || '');
     if (isInvoice && kept.length === 0) { kept.push(a); } else { trimmed.push(a); }
   }
-  if (kept.length === 0 && payload.attachments.length > 0) {
+  if (kept.length === 0 && (payload.attachments || []).length > 0) {
     // keep the first as a compromise
     kept.push(payload.attachments[0]);
     trimmed.splice(0, 1);
@@ -46461,17 +46489,17 @@ async function limitOrLinkAttachments(env, payload) {
     linksText += `\n- ${a.name || key}: ${url}`;
   }
 
-  let html = payload.html || '';
-  let text = payload.text || '';
+  let htmlBody = payload.htmlBody || '';
+  let body = payload.body || '';
 
   if (linksHtml) {
-    html += `\n<hr/><p>Some large attachments were replaced with links:</p><ul>${linksHtml}</ul>`;
+    htmlBody += `\n<hr/><p>Some large attachments were replaced with links:</p><ul>${linksHtml}</ul>`;
   }
   if (linksText) {
-    text += `\n\nSome large attachments were replaced with links:${linksText}`;
+    body += `\n\nSome large attachments were replaced with links:${linksText}`;
   }
 
-  const newPayload = { ...payload, attachments: kept, html, text };
+  const newPayload = { ...payload, attachments: kept, htmlBody, body };
   return { payload: newPayload, trimmed: true };
 }
 
@@ -46495,15 +46523,19 @@ async function signDownloadUrlForR2Key(env, r2Key, { ttlSecs }) {
 // Queue drain logic
 // ------------------------------
 async function drainEmailOutboxOnce(env, { limit, types } = {}) {
-  const take = Math.max(1, Math.min(Number(limit) || Number(env.EMAIL_DRAIN_LIMIT_DEFAULT) || DEFAULT_DRAIN_LIMIT, 100));
+  const take = Math.max(
+    1,
+    Math.min(Number(limit) || Number(env.EMAIL_DRAIN_LIMIT_DEFAULT) || DEFAULT_DRAIN_LIMIT, 100)
+  );
   const typeFilter = Array.isArray(types) && types.length ? types : null;
 
-  let url = `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=*` +
-            `&status=eq.QUEUED` +
-            `&order=created_at_utc.asc` +
-            `&limit=${take}`;
+  let url =
+    `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=*` +
+    `&status=eq.QUEUED` +
+    `&order=created_at_utc.asc` +
+    `&limit=${take}`;
   if (typeFilter) {
-    const t = typeFilter.map((t) => `"${enc(t)}"`).join(',');
+    const t = typeFilter.map((t) => `"${enc(t)}"`).join(",");
     url += `&type=in.(${t})`;
   }
 
@@ -46519,80 +46551,197 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const errors = [];
 
   const nowPlusMinutesIso = (mins) => {
-    const ms = Date.now() + (Math.max(1, Number(mins) || 5) * 60 * 1000);
+    const ms = Date.now() + Math.max(1, Number(mins) || 5) * 60 * 1000;
     return new Date(ms).toISOString();
   };
 
+  // Build up to 25 provider jobs for the batch Flow (skip deferred PDF_NOT_READY rows).
+  const BATCH_MAX = 25;
+  const jobs = [];
+  const jobRowIds = [];
+
   for (const row of picked) {
+    if (jobs.length >= BATCH_MAX) break;
+
     try {
       const payload = await buildEmailPayloadFromOutboxRow(env, row);
-      const res = await postToPowerAutomate(env, payload);
-
-      if (res.ok) {
-        const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-          method: 'PATCH',
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: 'SENT',
-            sent_at: nowIso(),
-            provider_message_id: res.provider_message_id || null,
-            last_error: null,
-            failed_at: null
-          })
-        });
-        if (!upd.ok) {
-          const errTxt = await upd.text();
-          throw new Error(`Sent but failed to update status: ${errTxt}`);
-        }
-        sent += 1;
-        await recordEmailAudit(env, null, 'EMAIL_SENT', { outbox_id: row.id, provider_message_id: res.provider_message_id, type: row.type });
-      } else {
-        const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-          method: 'PATCH', headers: sbHeaders(env),
-          body: JSON.stringify({ status: 'FAILED', failed_at: nowIso(), last_error: String(res.body || res.status) })
-        });
-        if (!upd.ok) {
-          const errTxt = await upd.text();
-          throw new Error(`Provider fail and update fail: ${errTxt}`);
-        }
-        failed += 1;
-        errors.push({ id: row.id, error: res.body || `HTTP ${res.status}` });
-        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: res.body || `HTTP ${res.status}`, type: row.type });
-      }
+      jobs.push(payload);
+      jobRowIds.push(row.id);
     } catch (e) {
       const msg = String(e?.message || e);
 
       // ✅ RETRYABLE DEFERRAL: PDFs not ready yet
-      if (msg.startsWith('PDF_NOT_READY:')) {
+      if (msg.startsWith("PDF_NOT_READY:")) {
         try {
           await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-            method: 'PATCH',
+            method: "PATCH",
             headers: sbHeaders(env),
             body: JSON.stringify({
               // keep QUEUED so it retries later
-              status: 'QUEUED',
+              status: "QUEUED",
               last_error: msg,
               // push it back in the queue to avoid hot-looping
-              created_at_utc: nowPlusMinutesIso(10)
-            })
+              created_at_utc: nowPlusMinutesIso(10),
+            }),
           });
         } catch {}
         deferred += 1;
         errors.push({ id: row.id, error: msg, deferred: true });
-        await recordEmailAudit(env, null, 'EMAIL_DEFERRED', { outbox_id: row.id, reason: msg, type: row.type });
+        await recordEmailAudit(env, null, "EMAIL_DEFERRED", {
+          outbox_id: row.id,
+          reason: msg,
+          type: row.type,
+        });
         continue;
       }
 
       // defensive failure (non-retryable)
       try {
         await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-          method: 'PATCH', headers: sbHeaders(env),
-          body: JSON.stringify({ status: 'FAILED', failed_at: nowIso(), last_error: msg })
+          method: "PATCH",
+          headers: sbHeaders(env),
+          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: msg }),
         });
       } catch {}
       failed += 1;
       errors.push({ id: row.id, error: msg });
-      await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: row.id, error: msg, type: row.type });
+    }
+  }
+
+  if (jobs.length === 0) {
+    return { picked: picked.length, sent, failed, deferred, errors };
+  }
+
+  // Single provider call for up to 25 emails.
+  const batchPayload = { items: jobs };
+  const res = await postToPowerAutomate(env, batchPayload);
+
+  if (!res.ok) {
+    // Provider-level failure: mark all jobs as FAILED.
+    const errMsg = String(res.body || `HTTP ${res.status}`);
+    for (const rowId of jobRowIds) {
+      try {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+          method: "PATCH",
+          headers: sbHeaders(env),
+          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg }),
+        });
+      } catch {}
+      failed += 1;
+      errors.push({ id: rowId, error: errMsg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
+    }
+    return { picked: picked.length, sent, failed, deferred, errors };
+  }
+
+  // Parse per-item results from the batch Flow response.
+  let results = null;
+  try {
+    const j = typeof res.body === "string" ? JSON.parse(res.body) : res.body;
+    results = Array.isArray(j?.results) ? j.results : null;
+  } catch {
+    results = null;
+  }
+
+  // If results missing, conservatively mark all as FAILED (cannot reconcile).
+  if (!Array.isArray(results) || results.length === 0) {
+    const errMsg = "Provider returned no per-item results (cannot reconcile)";
+    for (const rowId of jobRowIds) {
+      try {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+          method: "PATCH",
+          headers: sbHeaders(env),
+          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg }),
+        });
+      } catch {}
+      failed += 1;
+      errors.push({ id: rowId, error: errMsg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
+    }
+    return { picked: picked.length, sent, failed, deferred, errors };
+  }
+
+  // Build lookup: meta.outbox_id -> result. Fall back to index order if meta missing.
+  const byOutboxId = new Map();
+  for (const r of results) {
+    const oid = r?.meta?.outbox_id || r?.meta?.outboxId || r?.meta?.id || null;
+    if (oid) byOutboxId.set(String(oid), r);
+  }
+
+  for (let i = 0; i < jobRowIds.length; i++) {
+    const rowId = jobRowIds[i];
+    const r = byOutboxId.get(String(rowId)) || results[i] || null;
+
+    const status = String(r?.status || "").toUpperCase();
+    const isSuccess = status === "SUCCESS";
+    const isFailed = status === "FAILED" || status === "FAIL" || status === "ERROR";
+
+    if (isSuccess) {
+      const providerMessageId = r?.provider_message_id || r?.providerMessageId || res.provider_message_id || null;
+
+      const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+        method: "PATCH",
+        headers: sbHeaders(env),
+        body: JSON.stringify({
+          status: "SENT",
+          sent_at: nowIso(),
+          provider_message_id: providerMessageId || null,
+          last_error: null,
+          failed_at: null,
+        }),
+      });
+
+      if (!upd.ok) {
+        const errTxt = await upd.text();
+        throw new Error(`Sent but failed to update status: ${errTxt}`);
+      }
+
+      sent += 1;
+      await recordEmailAudit(env, null, "EMAIL_SENT", {
+        outbox_id: rowId,
+        provider_message_id: providerMessageId,
+        type: r?.meta?.type || "BATCH",
+      });
+      continue;
+    }
+
+    if (isFailed) {
+      const errMsg = String(r?.error || r?.body || r?.message || "Provider failed");
+      const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+        method: "PATCH",
+        headers: sbHeaders(env),
+        body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg }),
+      });
+
+      if (!upd.ok) {
+        const errTxt = await upd.text();
+        throw new Error(`Provider fail and update fail: ${errTxt}`);
+      }
+
+      failed += 1;
+      errors.push({ id: rowId, error: errMsg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", {
+        outbox_id: rowId,
+        error: errMsg,
+        type: r?.meta?.type || "BATCH",
+      });
+      continue;
+    }
+
+    // Unknown status -> treat as failure
+    {
+      const errMsg = String(r?.error || r?.body || r?.message || "Unknown provider status");
+      try {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+          method: "PATCH",
+          headers: sbHeaders(env),
+          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg }),
+        });
+      } catch {}
+      failed += 1;
+      errors.push({ id: rowId, error: errMsg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
     }
   }
 
@@ -46617,7 +46766,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   }
 }
 
- async function handleEmailSend(env, req) {
+async function handleEmailSend(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -46625,7 +46774,14 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
   const normalized = normalizeEmailPayload(body);
-  const err = validateEmailPayload(normalized);
+
+  // Default importance to Normal if not supplied
+  const importance =
+    normalized.importance && String(normalized.importance).trim()
+      ? String(normalized.importance).trim()
+      : 'Normal';
+
+  const err = validateEmailPayload({ ...normalized, importance });
   if (err) return withCORS(env, req, badRequest(err));
 
   // If caller asks to queue instead of immediate send
@@ -46634,11 +46790,15 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       method: 'POST', headers: { ...sbHeaders(env), Prefer: 'return=representation' },
       body: JSON.stringify({
         type: body?.type || 'BROADCAST',
-        to: normalized.to.join(','), cc: normalized.cc?.join(',') || null,
+        to: normalized.to,
+        cc: normalized.cc || null,
+        bcc: normalized.bcc || null,
+        replyTo: normalized.replyTo || null,
+        importance,
         subject: normalized.subject,
-        body_html: normalized.html || null,
-        body_text: normalized.text || null,
-        attachments: body.attachments || null,
+        body_html: normalized.htmlBody || null,
+        body_text: normalized.body || null,
+        attachments: body.attachments || body.attachmentsV2 || null,
         status: 'QUEUED',
         reference: body?.reference || null,
         created_by: user?.id || null,
@@ -46657,19 +46817,53 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   // Immediate send via provider
   // Resolve any R2 attachments
   const resolved = [];
-  for (const a of normalized.attachments) {
+  for (const a of (normalized.attachments || [])) {
     if (a.contentBase64 && a.name) { resolved.push(a); }
     else if (a.r2_key) {
       const contentBase64 = await fetchAttachmentBase64FromR2(env, a.r2_key);
-      resolved.push({ name: a.name || 'attachment', contentBase64 });
+      resolved.push({ name: a.name || 'attachment', contentBase64, r2_key: a.r2_key });
     }
   }
 
-  const outgoing = await limitOrLinkAttachments(env, { payload: { ...normalized, attachments: resolved } });
-  const resp = await postToPowerAutomate(env, outgoing.payload);
+  // Option A chosen for the outbox drain path; ad-hoc send still applies payload limiting/linking here.
+  const outgoing = await limitOrLinkAttachments(env, { payload: { ...normalized, importance, attachments: resolved } });
+
+  // Convert to the batch Flow "item" shape (attachmentsV2 required).
+  const attachmentsV2 = [];
+  for (const a of (outgoing.payload.attachments || [])) {
+    if (a && a.contentBase64 && a.name) {
+      attachmentsV2.push({ Name: String(a.name), ContentBytes: String(a.contentBase64) });
+    }
+  }
+  const attachmentsV2Clean = attachmentsV2.filter(x => x && x.ContentBytes);
+
+  const flowItem = {
+    to: String(outgoing.payload.to || '').trim(),
+    subject: String(outgoing.payload.subject || '').trim(),
+    htmlBody: String(outgoing.payload.htmlBody || ''),
+    body: String(outgoing.payload.body || ''),
+    attachmentsV2: attachmentsV2Clean,
+    importance: String(importance || 'Normal')
+  };
+
+  if (outgoing.payload.cc && String(outgoing.payload.cc).trim()) flowItem.cc = String(outgoing.payload.cc).trim();
+  if (outgoing.payload.bcc && String(outgoing.payload.bcc).trim()) flowItem.bcc = String(outgoing.payload.bcc).trim();
+  if (outgoing.payload.replyTo && String(outgoing.payload.replyTo).trim()) flowItem.replyTo = String(outgoing.payload.replyTo).trim();
+
+  const resp = await postToPowerAutomate(env, flowItem);
   if (!resp.ok) {
     return withCORS(env, req, serverError(`Provider rejected: ${resp.status} ${resp.body || ''}`));
   }
+
+  // If provider returned per-item results, enforce SUCCESS for the single item.
+  try {
+    const j = typeof resp.body === 'string' ? JSON.parse(resp.body) : resp.body;
+    const r0 = Array.isArray(j?.results) ? j.results[0] : null;
+    if (r0 && String(r0.status || '').toUpperCase() === 'FAILED') {
+      const errMsg = String(r0.error || r0.body || 'Provider failed');
+      return withCORS(env, req, serverError(`Provider rejected: ${errMsg}`));
+    }
+  } catch {}
 
   await recordEmailAudit(env, user, 'EMAIL_SENT', { ad_hoc: true, provider_message_id: resp.provider_message_id });
   return withCORS(env, req, ok({ sent: true, provider_message_id: resp.provider_message_id }));
