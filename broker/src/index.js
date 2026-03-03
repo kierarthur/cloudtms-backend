@@ -45423,6 +45423,7 @@ async function handleSearchInvoices(env, req) {
 // SEARCH — Clients (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
 
+
 async function handleSearchClients(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -45503,6 +45504,9 @@ async function handleSearchClients(env, req) {
   const updatedFrom   = q('updated_from');
   const updatedTo     = q('updated_to');
 
+  // ✅ NEW: Notes exact match (case-insensitive)
+  const notesExact = q('notes');
+
   let url =
     `${env.SUPABASE_URL}/rest/v1/clients` +
     // ✅ IMPORTANT: return full row-shape so grid column prefs can't "lose" fields when FE switches summary to search()
@@ -45517,6 +45521,13 @@ async function handleSearchClients(env, req) {
   if (invoiceAddr)  url += `&invoice_address=ilike.*${enc(invoiceAddr)}*`;
   // NOTE: postcode is not a real column on clients table yet, so we don't add a filter here
   if (apPhone)      url += `&ap_phone=ilike.*${enc(apPhone)}*`;
+
+  // ✅ Notes exact match (case-insensitive): use ilike with NO wildcards.
+  // Escape literal '*' and '\' to avoid treating user input as a pattern.
+  if (notesExact) {
+    const escExact = String(notesExact).replace(/\\/g, '\\\\').replace(/\*/g, '\\*');
+    url += `&notes=ilike.${enc(escExact)}`;
+  }
 
   if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
   if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
@@ -45614,6 +45625,7 @@ async function handleSearchClients(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
+
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
@@ -49890,6 +49902,13 @@ async function handleUpdateClient(env, req, clientId) {
     return s ? s : null;
   };
 
+  // ✅ NEW: normalise free-text fields with explicit clear semantics
+  const normText = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s ? s : null;
+  };
+
   // ✅ NEW: canonical invoice consolidation mode (never write junk)
   // Allowed: NONE | BY_WEEK | ANY_WEEK (UI may send ALL → ANY_WEEK)
   const normInvoiceConsol = (v) => {
@@ -49907,7 +49926,7 @@ async function handleUpdateClient(env, req, clientId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/clients` +
       `?id=eq.${encodeURIComponent(clientId)}` +
-      `&select=id,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,updated_at`
+      `&select=id,name,invoice_address,primary_invoice_email,ap_phone,vat_chargeable,payment_terms_days,mileage_charge_rate,ts_queries_email,notes,updated_at`
     );
     if (!beforeClientRows?.length) return withCORS(env, req, notFound("Client not found"));
     const beforeClient = beforeClientRows[0];
@@ -50077,6 +50096,15 @@ async function handleUpdateClient(env, req, clientId) {
     if (Object.prototype.hasOwnProperty.call(clientPatchRaw, 'ts_queries_email')) {
       clientPatch.ts_queries_email = normEmail(clientPatchRaw.ts_queries_email);
       delete clientPatchRaw.ts_queries_email;
+    }
+
+    // ✅ Explicit clear semantics for notes:
+    // - if key present and blank => set NULL (clears the field)
+    // - if key present and non-blank => trimmed string
+    // - if not present => no change
+    if (Object.prototype.hasOwnProperty.call(clientPatchRaw, 'notes')) {
+      clientPatch.notes = normText(clientPatchRaw.notes);
+      delete clientPatchRaw.notes;
     }
 
     for (const [k, v] of Object.entries(clientPatchRaw)) {
@@ -50289,7 +50317,6 @@ async function handleUpdateClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
-
 
 async function handleCreateClient(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -50685,6 +50712,8 @@ async function handleGetClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to fetch client"));
   }
 }
+
+
 
 /**
  * @openapi
@@ -54289,6 +54318,9 @@ async function handleSearchCandidates(env, req) {
   const createdFrom = q('created_from');
   const createdTo   = q('created_to');
 
+  // ✅ NEW: Notes exact match (case-insensitive)
+  const notesExact = q('notes');
+
   // New job-title filters
   const jobTitleContainsAll     = q('job_title_contains');            // all job titles
   const primaryJobTitleContains = q('primary_job_title_contains');    // primary only
@@ -54429,6 +54461,13 @@ async function handleSearchCandidates(env, req) {
   if (lastName)    url += `&last_name=ilike.*${enc(lastName)}*`;
   if (email)       url += `&email=ilike.*${enc(email)}*`;
   if (phone)       url += `&phone=ilike.*${enc(phone)}*`;
+
+  // ✅ Notes exact match (case-insensitive): use ilike with NO wildcards.
+  // Escape literal '*' and '\' to avoid treating user input as a pattern.
+  if (notesExact) {
+    const escExact = String(notesExact).replace(/\\/g, '\\\\').replace(/\*/g, '\\*');
+    url += `&notes=ilike.${enc(escExact)}`;
+  }
 
   // Pay method: PAYE, UMBRELLA, or BLANK (null)
   if (payMethod === 'BLANK') {
