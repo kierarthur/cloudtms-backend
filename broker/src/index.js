@@ -45504,7 +45504,7 @@ async function handleSearchClients(env, req) {
   const updatedFrom   = q('updated_from');
   const updatedTo     = q('updated_to');
 
-  // ✅ NEW: Notes exact match (case-insensitive)
+  // ✅ Notes contains (case-insensitive)
   const notesExact = q('notes');
 
   let url =
@@ -45522,11 +45522,15 @@ async function handleSearchClients(env, req) {
   // NOTE: postcode is not a real column on clients table yet, so we don't add a filter here
   if (apPhone)      url += `&ap_phone=ilike.*${enc(apPhone)}*`;
 
-  // ✅ Notes exact match (case-insensitive): use ilike with NO wildcards.
-  // Escape literal '*' and '\' to avoid treating user input as a pattern.
+  // ✅ Notes contains (case-insensitive): use ilike with wildcards at both ends.
+  // Escape literal '*' and '\' (and LIKE wildcards) to avoid treating user input as a pattern.
   if (notesExact) {
-    const escExact = String(notesExact).replace(/\\/g, '\\\\').replace(/\*/g, '\\*');
-    url += `&notes=ilike.${enc(escExact)}`;
+    const escMid = String(notesExact)
+      .replace(/\\/g, '\\\\')
+      .replace(/\*/g, '\\*')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+    url += `&notes=ilike.*${enc(escMid)}*`;
   }
 
   if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
@@ -45625,7 +45629,6 @@ async function handleSearchClients(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
-
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
@@ -54318,7 +54321,7 @@ async function handleSearchCandidates(env, req) {
   const createdFrom = q('created_from');
   const createdTo   = q('created_to');
 
-  // ✅ NEW: Notes exact match (case-insensitive)
+  // ✅ Notes contains (case-insensitive)
   const notesExact = q('notes');
 
   // New job-title filters
@@ -54462,11 +54465,15 @@ async function handleSearchCandidates(env, req) {
   if (email)       url += `&email=ilike.*${enc(email)}*`;
   if (phone)       url += `&phone=ilike.*${enc(phone)}*`;
 
-  // ✅ Notes exact match (case-insensitive): use ilike with NO wildcards.
-  // Escape literal '*' and '\' to avoid treating user input as a pattern.
+  // ✅ Notes contains (case-insensitive): use ilike with wildcards at both ends.
+  // Escape literal '*' and '\' (and LIKE wildcards) to avoid treating user input as a pattern.
   if (notesExact) {
-    const escExact = String(notesExact).replace(/\\/g, '\\\\').replace(/\*/g, '\\*');
-    url += `&notes=ilike.${enc(escExact)}`;
+    const escMid = String(notesExact)
+      .replace(/\\/g, '\\\\')
+      .replace(/\*/g, '\\*')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+    url += `&notes=ilike.*${enc(escMid)}*`;
   }
 
   // Pay method: PAYE, UMBRELLA, or BLANK (null)
@@ -54686,7 +54693,6 @@ async function handleSearchCandidates(env, req) {
     count: respCount
   }));
 }
-
  async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
