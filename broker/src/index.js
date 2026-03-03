@@ -46430,12 +46430,12 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   // Filter out empties (Apps Script does this too)
   const attachmentsV2Clean = attachmentsV2.filter(x => x && x.ContentBytes);
 
-  // FINAL payload: match Flow keys exactly.
+  // FINAL payload: match Flow keys exactly (schema expects textBody, NOT body).
   const payload = {
     to: String(base.to).trim(),
     subject: String(base.subject).trim(),
     htmlBody: String(base.htmlBody || ''),
-    body: String(base.body || ''),
+    textBody: String(base.body || ''),
     attachmentsV2: attachmentsV2Clean,
     // ✅ meta is echoed back by the batch Flow so we can map results to outbox rows
     meta: {
@@ -46765,7 +46765,6 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleEmailSend(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -46841,7 +46840,7 @@ async function handleEmailSend(env, req) {
     to: String(outgoing.payload.to || '').trim(),
     subject: String(outgoing.payload.subject || '').trim(),
     htmlBody: String(outgoing.payload.htmlBody || ''),
-    body: String(outgoing.payload.body || ''),
+    textBody: String(outgoing.payload.body || ''),
     attachmentsV2: attachmentsV2Clean,
     importance: String(importance || 'Normal')
   };
