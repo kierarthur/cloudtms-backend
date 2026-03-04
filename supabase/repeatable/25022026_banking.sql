@@ -795,19 +795,16 @@ $$;
 
 
 
-
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
   p_actor_user_id uuid,
   p_preview_decisions_json jsonb,
   p_candidate_id uuid default null,
-  p_client_id uuid default null
+  p_client_id uuid default null,
+  p_force_include_timesheet_ids uuid[] default null,
+  p_override_reason text default null,
+  p_override_mode public.pay_override_mode_enum default 'NONE'::public.pay_override_mode_enum
 )
 returns jsonb
 language plpgsql
@@ -822,6 +819,18 @@ declare
   v_paye_pay_batch_id uuid;
 
   v_err text;
+
+  v_override_mode public.pay_override_mode_enum := coalesce(p_override_mode, 'NONE'::public.pay_override_mode_enum);
+  v_is_timesheet_advance boolean := (v_override_mode = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum);
+
+  v_force_include_timesheet_ids uuid[] := array[]::uuid[];
+  v_candidate_id_effective uuid;
+
+  v_candidate_ids_from_ts uuid[] := array[]::uuid[];
+
+  v_cand_pay_method text;
+  v_cand_umbrella_id uuid;
+  v_route_scope text;
 begin
   if p_pay_date is null then
     raise exception 'pay_date is required';
@@ -835,53 +844,271 @@ begin
     raise exception 'actor_user_id is required';
   end if;
 
-  -- Create UMBRELLA draft (READY umbrella items only; enforced by pay_create_draft_batch scope logic)
-  begin
-    v_umbrella_res := public.pay_create_draft_batch(
-      p_pay_date,
-      p_week_ending_cutoff,
-      'UMBRELLA',
-      p_actor_user_id,
-      p_preview_decisions_json,
-      p_candidate_id,
-      p_client_id
-    );
+  v_force_include_timesheet_ids := coalesce(
+    (
+      select array_agg(distinct t.x)
+      from unnest(coalesce(p_force_include_timesheet_ids, array[]::uuid[])) as t(x)
+      where t.x is not null
+    ),
+    array[]::uuid[]
+  );
 
-    v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
-  exception
-    when others then
-      v_err := coalesce(SQLERRM, '');
-      -- Treat "Nothing to pay ..." as non-fatal: allow PAYE draft to still be created.
-      if position('Nothing to pay' in v_err) = 1 then
-        v_umbrella_pay_batch_id := null;
-      else
-        raise;
-      end if;
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCHES_SPLIT:INPUTS',
+      jsonb_build_object(
+        'pay_date', p_pay_date::text,
+        'week_ending_cutoff', p_week_ending_cutoff::text,
+        'actor_user_id', p_actor_user_id::text,
+        'candidate_id_param', coalesce(p_candidate_id::text, null),
+        'client_id_param', coalesce(p_client_id::text, null),
+        'override_mode', coalesce(v_override_mode::text, null),
+        'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null),
+        'force_include_timesheet_ids', (
+          select coalesce(jsonb_agg(x::text order by x::text), '[]'::jsonb)
+          from unnest(v_force_include_timesheet_ids) as x
+        ),
+        'preview_decisions_json_keys_sample', (
+          select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
+          from (
+            select e.key
+            from jsonb_each(coalesce(p_preview_decisions_json,'{}'::jsonb)) e
+            order by e.key
+            limit 50
+          ) k
+        )
+      ),
+      'pay_create_draft_batches_split',
+      'pay_date:'||p_pay_date::text,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
   end;
 
-  -- Create PAYE draft (worksheet batch; net can be set later; pay_create_draft_batch does not require net)
-  begin
-    v_paye_res := public.pay_create_draft_batch(
-      p_pay_date,
-      p_week_ending_cutoff,
-      'PAYE',
-      p_actor_user_id,
-      p_preview_decisions_json,
-      p_candidate_id,
-      p_client_id
-    );
+  if v_is_timesheet_advance then
+    if coalesce(array_length(v_force_include_timesheet_ids, 1), 0) = 0 then
+      raise exception 'TIMESHEET_ADVANCE requires force_include_timesheet_ids';
+    end if;
 
-    v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
-  exception
-    when others then
-      v_err := coalesce(SQLERRM, '');
-      -- Treat "Nothing to pay ..." as non-fatal: allow UMBRELLA draft to still be created.
-      if position('Nothing to pay' in v_err) = 1 then
+    v_candidate_id_effective := p_candidate_id;
+
+    select array_agg(distinct ct.candidate_id)
+      into v_candidate_ids_from_ts
+    from public.timesheets ts
+    join public.contracts ct
+      on ct.id = ts.contract_id
+    where ts.timesheet_id = any(v_force_include_timesheet_ids);
+
+    if v_candidate_ids_from_ts is null or coalesce(array_length(v_candidate_ids_from_ts, 1), 0) = 0 then
+      raise exception 'force_include_timesheet_ids did not resolve any candidate_id (via timesheets.contract_id -> contracts.candidate_id)';
+    end if;
+
+    if coalesce(array_length(v_candidate_ids_from_ts, 1), 0) <> 1 then
+      raise exception 'force_include_timesheet_ids span multiple candidate_ids (count=%)', array_length(v_candidate_ids_from_ts, 1);
+    end if;
+
+    if v_candidate_ids_from_ts[1] is null then
+      raise exception 'force_include_timesheet_ids resolved a NULL candidate_id (contracts.candidate_id is NULL)';
+    end if;
+
+    if v_candidate_id_effective is null then
+      v_candidate_id_effective := v_candidate_ids_from_ts[1];
+    else
+      if v_candidate_id_effective <> v_candidate_ids_from_ts[1] then
+        raise exception 'candidate_id_param does not match force_include_timesheet_ids candidate_id (param=% vs resolved=%)',
+          v_candidate_id_effective::text,
+          v_candidate_ids_from_ts[1]::text;
+      end if;
+    end if;
+
+    select
+      upper(btrim(coalesce(ca.pay_method,''))) as cand_pay_method,
+      ca.umbrella_id as cand_umbrella_id
+      into v_cand_pay_method, v_cand_umbrella_id
+    from public.candidates ca
+    where ca.id = v_candidate_id_effective
+    limit 1;
+
+    if v_cand_pay_method is null or btrim(v_cand_pay_method) = '' then
+      raise exception 'candidate pay_method missing for candidate_id=%', v_candidate_id_effective::text;
+    end if;
+
+    if v_cand_pay_method not in ('PAYE','UMBRELLA') then
+      raise exception 'candidate pay_method invalid (expected PAYE/UMBRELLA) for candidate_id=% (got=%)',
+        v_candidate_id_effective::text,
+        v_cand_pay_method;
+    end if;
+
+    v_route_scope := v_cand_pay_method;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCHES_SPLIT:TS_ADV_ROUTE_SELECTED',
+        jsonb_build_object(
+          'candidate_id', v_candidate_id_effective::text,
+          'cand_pay_method', v_cand_pay_method,
+          'cand_umbrella_id', coalesce(v_cand_umbrella_id::text, null),
+          'route_scope', v_route_scope,
+          'force_include_timesheet_ids', (
+            select coalesce(jsonb_agg(x::text order by x::text), '[]'::jsonb)
+            from unnest(v_force_include_timesheet_ids) as x
+          ),
+          'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null)
+        ),
+        'pay_create_draft_batches_split',
+        'pay_date:'||p_pay_date::text,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      );
+    exception when others then
+      null;
+    end;
+
+    if v_route_scope = 'UMBRELLA' then
+      begin
+        v_umbrella_res := public.pay_create_draft_batch(
+          p_pay_date,
+          p_week_ending_cutoff,
+          'UMBRELLA',
+          p_actor_user_id,
+          p_preview_decisions_json,
+          v_candidate_id_effective,
+          p_client_id,
+          v_force_include_timesheet_ids,
+          p_override_reason,
+          v_override_mode
+        );
+
+        v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
         v_paye_pay_batch_id := null;
-      else
-        raise;
-      end if;
-  end;
+      exception
+        when others then
+          v_err := coalesce(SQLERRM, '');
+          if position('Nothing to pay' in v_err) = 1 then
+            v_umbrella_pay_batch_id := null;
+            v_paye_pay_batch_id := null;
+          else
+            raise;
+          end if;
+      end;
+    else
+      begin
+        v_paye_res := public.pay_create_draft_batch(
+          p_pay_date,
+          p_week_ending_cutoff,
+          'PAYE',
+          p_actor_user_id,
+          p_preview_decisions_json,
+          v_candidate_id_effective,
+          p_client_id,
+          v_force_include_timesheet_ids,
+          p_override_reason,
+          v_override_mode
+        );
+
+        v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
+        v_umbrella_pay_batch_id := null;
+      exception
+        when others then
+          v_err := coalesce(SQLERRM, '');
+          if position('Nothing to pay' in v_err) = 1 then
+            v_umbrella_pay_batch_id := null;
+            v_paye_pay_batch_id := null;
+          else
+            raise;
+          end if;
+      end;
+    end if;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCHES_SPLIT:TS_ADV_RESULT',
+        jsonb_build_object(
+          'route_scope', v_route_scope,
+          'umbrella_pay_batch_id', coalesce(v_umbrella_pay_batch_id::text, null),
+          'paye_pay_batch_id', coalesce(v_paye_pay_batch_id::text, null)
+        ),
+        'pay_create_draft_batches_split',
+        'pay_date:'||p_pay_date::text,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      );
+    exception when others then
+      null;
+    end;
+
+  else
+    -- Create UMBRELLA draft (READY umbrella items only; enforced by pay_create_draft_batch scope logic)
+    begin
+      v_umbrella_res := public.pay_create_draft_batch(
+        p_pay_date,
+        p_week_ending_cutoff,
+        'UMBRELLA',
+        p_actor_user_id,
+        p_preview_decisions_json,
+        p_candidate_id,
+        p_client_id,
+        v_force_include_timesheet_ids,
+        p_override_reason,
+        v_override_mode
+      );
+
+      v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
+    exception
+      when others then
+        v_err := coalesce(SQLERRM, '');
+        -- Treat "Nothing to pay ..." as non-fatal: allow PAYE draft to still be created.
+        if position('Nothing to pay' in v_err) = 1 then
+          v_umbrella_pay_batch_id := null;
+        else
+          raise;
+        end if;
+    end;
+
+    -- Create PAYE draft (worksheet batch; net can be set later; pay_create_draft_batch does not require net)
+    begin
+      v_paye_res := public.pay_create_draft_batch(
+        p_pay_date,
+        p_week_ending_cutoff,
+        'PAYE',
+        p_actor_user_id,
+        p_preview_decisions_json,
+        p_candidate_id,
+        p_client_id,
+        v_force_include_timesheet_ids,
+        p_override_reason,
+        v_override_mode
+      );
+
+      v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
+    exception
+      when others then
+        v_err := coalesce(SQLERRM, '');
+        -- Treat "Nothing to pay ..." as non-fatal: allow UMBRELLA draft to still be created.
+        if position('Nothing to pay' in v_err) = 1 then
+          v_paye_pay_batch_id := null;
+        else
+          raise;
+        end if;
+    end;
+  end if;
 
   if v_umbrella_pay_batch_id is null and v_paye_pay_batch_id is null then
     raise exception 'Nothing to pay (no payable items for UMBRELLA or PAYE after readiness blockers)';
@@ -894,6 +1121,10 @@ begin
   );
 end;
 $$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
   p_provider text,
