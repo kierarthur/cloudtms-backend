@@ -1722,6 +1722,361 @@ end;
 $$;
 
 
+create or replace function public.outbox_unified_list(
+  p_status text,
+  p_channel text,
+  p_search text,
+  p_limit int,
+  p_offset int
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_status text := nullif(upper(btrim(coalesce(p_status,''))), '');
+  v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
+  v_search text := nullif(btrim(coalesce(p_search,'')), '');
+
+  v_limit int := coalesce(p_limit, 50);
+  v_offset int := coalesce(p_offset, 0);
+
+  v_total bigint := 0;
+  v_items jsonb := '[]'::jsonb;
+begin
+  if v_limit < 1 then v_limit := 1; end if;
+  if v_limit > 500 then v_limit := 500; end if;
+  if v_offset < 0 then v_offset := 0; end if;
+
+  with filtered as (
+    select
+      u.channel,
+      u.outbox_id,
+      u.outbox_type,
+      u.status,
+      u.delivery_status,
+      u.created_at_utc,
+      u.sent_at,
+      u.delivered_at,
+      u.read_at,
+      u.failed_at,
+      u.to_address,
+      u.subject,
+      u.body_text,
+      u.reference,
+      u.provider_message_id,
+      u.last_error,
+      u.created_by,
+      u.recipient_kind,
+      u.recipient_id,
+      u.context_kind,
+      u.context_id,
+      u.mailshot_run_id,
+      u.document_template_id
+    from public.v_outbox_unified u
+    where
+      (v_status is null or upper(coalesce(u.status,'')) = v_status)
+      and (v_channel is null or upper(coalesce(u.channel,'')) = v_channel)
+      and (
+        v_search is null
+        or coalesce(u.to_address,'') ilike ('%' || v_search || '%')
+        or coalesce(u.subject,'') ilike ('%' || v_search || '%')
+        or coalesce(u.body_text,'') ilike ('%' || v_search || '%')
+        or coalesce(u.reference,'') ilike ('%' || v_search || '%')
+        or coalesce(u.last_error,'') ilike ('%' || v_search || '%')
+      )
+  ),
+  counted as (
+    select count(*)::bigint as total_count
+    from filtered
+  ),
+  paged as (
+    select *
+    from filtered
+    order by created_at_utc desc, outbox_id::text desc
+    limit v_limit offset v_offset
+  )
+  select
+    (select total_count from counted),
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'channel', p.channel,
+          'outbox_id', p.outbox_id::text,
+          'outbox_type', p.outbox_type,
+          'status', p.status,
+          'delivery_status', p.delivery_status,
+          'created_at_utc', p.created_at_utc::text,
+          'sent_at', case when p.sent_at is null then null else p.sent_at::text end,
+          'delivered_at', case when p.delivered_at is null then null else p.delivered_at::text end,
+          'read_at', case when p.read_at is null then null else p.read_at::text end,
+          'failed_at', case when p.failed_at is null then null else p.failed_at::text end,
+          'to_address', p.to_address,
+          'subject', p.subject,
+          'body_preview', case
+            when p.body_text is null then null
+            when char_length(p.body_text) <= 200 then p.body_text
+            else left(p.body_text, 200) || '…'
+          end,
+          'reference', p.reference,
+          'provider_message_id', p.provider_message_id,
+          'last_error', p.last_error,
+          'created_by', case when p.created_by is null then null else p.created_by::text end,
+          'recipient_kind', p.recipient_kind,
+          'recipient_id', case when p.recipient_id is null then null else p.recipient_id::text end,
+          'context_kind', p.context_kind,
+          'context_id', case when p.context_id is null then null else p.context_id::text end,
+          'mailshot_run_id', case when p.mailshot_run_id is null then null else p.mailshot_run_id::text end,
+          'document_template_id', case when p.document_template_id is null then null else p.document_template_id::text end
+        )
+        order by p.created_at_utc desc, p.outbox_id::text desc
+      ),
+      '[]'::jsonb
+    )
+  into v_total, v_items
+  from paged p;
+
+  return jsonb_build_object(
+    'ok', true,
+    'filters', jsonb_build_object(
+      'status', v_status,
+      'channel', v_channel,
+      'search', v_search
+    ),
+    'limit', v_limit,
+    'offset', v_offset,
+    'total_count', v_total,
+    'items', v_items
+  );
+end;
+$$;
+
+create or replace function public.outbox_unified_get(
+  p_channel text,
+  p_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
+  v_row record;
+begin
+  if v_channel is null then
+    raise exception 'channel required';
+  end if;
+
+  if p_id is null then
+    raise exception 'id required';
+  end if;
+
+  select
+    u.channel,
+    u.outbox_id,
+    u.outbox_type,
+    u.status,
+    u.delivery_status,
+    u.created_at_utc,
+    u.sent_at,
+    u.delivered_at,
+    u.read_at,
+    u.failed_at,
+    u.to_address,
+    u.cc,
+    u.bcc,
+    u.reply_to,
+    u.importance,
+    u.email_type,
+    u.subject,
+    u.body_text,
+    u.body_html,
+    u.attachments,
+    u.reference,
+    u.provider_message_id,
+    u.last_error,
+    u.created_by,
+    u.recipient_kind,
+    u.recipient_id,
+    u.context_kind,
+    u.context_id,
+    u.mailshot_run_id,
+    u.document_template_id
+  into v_row
+  from public.v_outbox_unified u
+  where upper(coalesce(u.channel,'')) = v_channel
+    and u.outbox_id = p_id;
+
+  if not found then
+    raise exception 'outbox row not found for channel % id %', v_channel, p_id;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'row', jsonb_build_object(
+      'channel', v_row.channel,
+      'outbox_id', v_row.outbox_id::text,
+      'outbox_type', v_row.outbox_type,
+      'status', v_row.status,
+      'delivery_status', v_row.delivery_status,
+      'created_at_utc', v_row.created_at_utc::text,
+      'sent_at', case when v_row.sent_at is null then null else v_row.sent_at::text end,
+      'delivered_at', case when v_row.delivered_at is null then null else v_row.delivered_at::text end,
+      'read_at', case when v_row.read_at is null then null else v_row.read_at::text end,
+      'failed_at', case when v_row.failed_at is null then null else v_row.failed_at::text end,
+      'to_address', v_row.to_address,
+      'cc', v_row.cc,
+      'bcc', v_row.bcc,
+      'reply_to', v_row.reply_to,
+      'importance', v_row.importance,
+      'email_type', v_row.email_type,
+      'subject', v_row.subject,
+      'body_text', v_row.body_text,
+      'body_html', v_row.body_html,
+      'attachments', v_row.attachments,
+      'reference', v_row.reference,
+      'provider_message_id', v_row.provider_message_id,
+      'last_error', v_row.last_error,
+      'created_by', case when v_row.created_by is null then null else v_row.created_by::text end,
+      'recipient_kind', v_row.recipient_kind,
+      'recipient_id', case when v_row.recipient_id is null then null else v_row.recipient_id::text end,
+      'context_kind', v_row.context_kind,
+      'context_id', case when v_row.context_id is null then null else v_row.context_id::text end,
+      'mailshot_run_id', case when v_row.mailshot_run_id is null then null else v_row.mailshot_run_id::text end,
+      'document_template_id', case when v_row.document_template_id is null then null else v_row.document_template_id::text end
+    )
+  );
+end;
+$$;
+
+
+create or replace function public.comms_by_recipient(
+  p_recipient_kind text,
+  p_recipient_id uuid,
+  p_limit int,
+  p_offset int
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_kind text := nullif(lower(btrim(coalesce(p_recipient_kind,''))), '');
+  v_limit int := coalesce(p_limit, 50);
+  v_offset int := coalesce(p_offset, 0);
+
+  v_total bigint := 0;
+  v_items jsonb := '[]'::jsonb;
+begin
+  if v_kind is null then
+    raise exception 'recipient_kind required';
+  end if;
+
+  if p_recipient_id is null then
+    raise exception 'recipient_id required';
+  end if;
+
+  if v_limit < 1 then v_limit := 1; end if;
+  if v_limit > 500 then v_limit := 500; end if;
+  if v_offset < 0 then v_offset := 0; end if;
+
+  with filtered as (
+    select
+      u.channel,
+      u.outbox_id,
+      u.outbox_type,
+      u.status,
+      u.delivery_status,
+      u.created_at_utc,
+      u.sent_at,
+      u.delivered_at,
+      u.read_at,
+      u.failed_at,
+      u.to_address,
+      u.subject,
+      u.body_text,
+      u.reference,
+      u.provider_message_id,
+      u.last_error,
+      u.created_by,
+      u.recipient_kind,
+      u.recipient_id,
+      u.context_kind,
+      u.context_id,
+      u.mailshot_run_id,
+      u.document_template_id
+    from public.v_outbox_unified u
+    where lower(coalesce(u.recipient_kind,'')) = v_kind
+      and u.recipient_id = p_recipient_id
+  ),
+  counted as (
+    select count(*)::bigint as total_count
+    from filtered
+  ),
+  paged as (
+    select *
+    from filtered
+    order by created_at_utc desc, outbox_id::text desc
+    limit v_limit offset v_offset
+  )
+  select
+    (select total_count from counted),
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'channel', p.channel,
+          'outbox_id', p.outbox_id::text,
+          'outbox_type', p.outbox_type,
+          'status', p.status,
+          'delivery_status', p.delivery_status,
+          'created_at_utc', p.created_at_utc::text,
+          'sent_at', case when p.sent_at is null then null else p.sent_at::text end,
+          'delivered_at', case when p.delivered_at is null then null else p.delivered_at::text end,
+          'read_at', case when p.read_at is null then null else p.read_at::text end,
+          'failed_at', case when p.failed_at is null then null else p.failed_at::text end,
+          'to_address', p.to_address,
+          'subject', p.subject,
+          'body_preview', case
+            when p.body_text is null then null
+            when char_length(p.body_text) <= 200 then p.body_text
+            else left(p.body_text, 200) || '…'
+          end,
+          'reference', p.reference,
+          'provider_message_id', p.provider_message_id,
+          'last_error', p.last_error,
+          'created_by', case when p.created_by is null then null else p.created_by::text end,
+          'recipient_kind', p.recipient_kind,
+          'recipient_id', case when p.recipient_id is null then null else p.recipient_id::text end,
+          'context_kind', p.context_kind,
+          'context_id', case when p.context_id is null then null else p.context_id::text end,
+          'mailshot_run_id', case when p.mailshot_run_id is null then null else p.mailshot_run_id::text end,
+          'document_template_id', case when p.document_template_id is null then null else p.document_template_id::text end
+        )
+        order by p.created_at_utc desc, p.outbox_id::text desc
+      ),
+      '[]'::jsonb
+    )
+  into v_total, v_items
+  from paged p;
+
+  return jsonb_build_object(
+    'ok', true,
+    'recipient_kind', v_kind,
+    'recipient_id', p_recipient_id::text,
+    'limit', v_limit,
+    'offset', v_offset,
+    'total_count', v_total,
+    'items', v_items
+  );
+end;
+$$;
+
 
 
 
