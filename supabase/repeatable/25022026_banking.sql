@@ -1751,6 +1751,8 @@ end;
 $function$;
 
 
+
+
 create or replace function public.pay_batch_schedule(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -1782,6 +1784,14 @@ declare
   v_blocked_name int := 0;
   v_missing_map int := 0;
   v_pending_transfers int := 0;
+
+  v_fresh jsonb := null;
+  v_is_stale boolean := false;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+
+  v_batch_kind_fixed text := null;
+  v_bad_loans_payee_ct int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception '%', jsonb_build_object(
@@ -1811,6 +1821,7 @@ begin
   select
     pb.id,
     pb.status,
+    pb.batch_kind_fixed,
     pb.pay_date,
     pb.rail_provider_snapshot,
     pb.rail_env_snapshot
@@ -1825,6 +1836,47 @@ begin
       'code', 'PAY_BATCH_NOT_FOUND',
       'message', 'pay_batch_schedule: pay_batch not found',
       'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed,'')));
+
+  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+
+  if v_is_stale = true then
+    select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+      into v_diff_sample
+    from (
+      select elem
+      from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+      limit 50
+    ) x;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_SCHEDULE:STALE',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'stale_reasons', v_stale_reasons,
+          'diff_sample', v_diff_sample
+        ),
+        'pay_batches',
+        p_pay_batch_id::text
+      );
+    exception when others then
+      null;
+    end;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'BATCH_STALE',
+      'message', 'pay_batch_schedule: batch is stale; regenerate draft before proceeding',
+      'pay_batch_id', p_pay_batch_id::text,
+      'stale_reasons', v_stale_reasons,
+      'diff', v_diff_sample
     )::text;
   end if;
 
@@ -1936,6 +1988,49 @@ begin
     )::text;
   end if;
 
+  if v_batch_kind_fixed = 'LOANS' then
+    select count(*)::int
+    into v_bad_loans_payee_ct
+    from public.pay_bank_transfers pbt2
+    where pbt2.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(pbt2.status,'')) = 'PENDING'
+      and upper(
+        coalesce(
+          pbt2.payee_entity_kind,
+          case
+            when upper(coalesce(pbt2.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA'
+            else 'CANDIDATE'
+          end
+        )
+      ) <> 'CANDIDATE';
+
+    if v_bad_loans_payee_ct > 0 then
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_BATCH_SCHEDULE:BLOCKED_LOANS_PAYEE_KIND',
+          jsonb_build_object(
+            'pay_batch_id', p_pay_batch_id::text,
+            'bad_transfer_count', v_bad_loans_payee_ct
+          ),
+          'pay_batches',
+          p_pay_batch_id::text
+        );
+      exception when others then
+        null;
+      end;
+
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_SCHEDULE_BLOCKED',
+        'code', 'LOANS_PAYEE_MUST_BE_CANDIDATE',
+        'message', 'pay_batch_schedule: LOANS batches must pay candidates (not umbrellas)',
+        'pay_batch_id', p_pay_batch_id::text,
+        'bad_transfer_count', v_bad_loans_payee_ct,
+        'ui_hint', 'REGENERATE_TRANSFERS_AS_CANDIDATE_PAYEES'
+      )::text;
+    end if;
+  end if;
+
   with t as (
     select
       upper(coalesce(pbt.payee_entity_kind,
@@ -1973,6 +2068,21 @@ begin
   from t;
 
   if v_missing_bank > 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_SCHEDULE:BLOCKED_BANK_DETAILS',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'count', v_missing_bank
+        ),
+        'pay_batches',
+        p_pay_batch_id::text
+      );
+    exception when others then
+      null;
+    end;
+
     raise exception '%', jsonb_build_object(
       'error', 'PAY_BATCH_SCHEDULE_BLOCKED',
       'code', 'BLOCKED_BANK_DETAILS',
@@ -2036,6 +2146,21 @@ begin
    and bnc.bank_details_hash = t.bank_hash;
 
   if v_blocked_name > 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_SCHEDULE:BLOCKED_NAME_CHECK',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'count', v_blocked_name
+        ),
+        'pay_batches',
+        p_pay_batch_id::text
+      );
+    exception when others then
+      null;
+    end;
+
     raise exception '%', jsonb_build_object(
       'error', 'PAY_BATCH_SCHEDULE_BLOCKED',
       'code', 'BLOCKED_NAME_CHECK',
@@ -2095,6 +2220,21 @@ begin
    and bpm.bank_details_hash = t.bank_hash;
 
   if v_missing_map > 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_SCHEDULE:BLOCKED_NO_PAYEE_MAP',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'count', v_missing_map
+        ),
+        'pay_batches',
+        p_pay_batch_id::text
+      );
+    exception when others then
+      null;
+    end;
+
     raise exception '%', jsonb_build_object(
       'error', 'PAY_BATCH_SCHEDULE_BLOCKED',
       'code', 'BLOCKED_NO_PAYEE_MAP',
@@ -2115,6 +2255,26 @@ begin
     status = 'SCHEDULED'
   where pb.id = p_pay_batch_id;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_BATCH_SCHEDULE:OK',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'schedule_kind', v_kind,
+        'scheduled_at_utc', v_sched_at::text,
+        'funding_account_ref', v_funding,
+        'rail_provider_snapshot', v_batch.rail_provider_snapshot,
+        'rail_env_snapshot', v_batch.rail_env_snapshot,
+        'pending_transfers', v_pending_transfers
+      ),
+      'pay_batches',
+      p_pay_batch_id::text
+    );
+  exception when others then
+    null;
+  end;
+
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
@@ -2128,7 +2288,6 @@ begin
   );
 end;
 $$;
-
 
 
 create or replace function public.pay_batch_prepare(
@@ -2618,6 +2777,7 @@ end;
 $$;
 
 
+
 create or replace function public.pay_batch_mark_blocked_funds(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -3081,7 +3241,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -3119,6 +3278,14 @@ declare
 
   v_linked_transfer_ct int := 0;
   v_has_pos_net boolean := false;
+
+  v_fresh jsonb := null;
+  v_is_stale boolean := false;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+
+  v_overpay_patched_ct int := 0;
+  v_loan_payout_updated_ct int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_settle_rail: pay_batch_id is required';
@@ -3136,7 +3303,8 @@ begin
     pb.status,
     pb.pay_date,
     pb.rail_provider_snapshot,
-    pb.rail_env_snapshot
+    pb.rail_env_snapshot,
+    pb.batch_kind_fixed
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -3144,6 +3312,40 @@ begin
 
   if v_batch.id is null then
     raise exception 'pay_settle_rail: pay_batch not found';
+  end if;
+
+  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+
+  if v_is_stale = true then
+    select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+      into v_diff_sample
+    from (
+      select elem
+      from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+      limit 50
+    ) x;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_SETTLE_RAIL:STALE_PROCEEDING',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'stale_reasons', v_stale_reasons,
+          'diff_sample', v_diff_sample
+        ),
+        'pay_batches',
+        p_pay_batch_id::text,
+        null,
+        null,
+        null,
+        null
+      );
+    exception when others then
+      null;
+    end;
   end if;
 
   create temp table if not exists _tmp_settle_in (
@@ -3229,6 +3431,7 @@ begin
     on pbc_chk.id = pbi_chk.pay_batch_candidate_id
   where pbc_chk.pay_batch_id = p_pay_batch_id
     and pbi_chk.item_type <> 'DEBT_CREATED'
+    and pbi_chk.is_voided = false
     and pbi_chk.pay_bank_transfer_id is not null;
 
   select exists (
@@ -3255,10 +3458,12 @@ begin
       pbc.candidate_id as candidate_id,
       count(distinct pbi.pay_bank_transfer_id) filter (
         where pbi.item_type <> 'DEBT_CREATED'
+          and pbi.is_voided = false
           and pbi.pay_bank_transfer_id is not null
       ) as total_transfers,
       count(distinct pbi.pay_bank_transfer_id) filter (
         where pbi.item_type <> 'DEBT_CREATED'
+          and pbi.is_voided = false
           and pbi.pay_bank_transfer_id is not null
           and upper(coalesce(pbt.status,'')) = 'COMPLETED'
       ) as completed_transfers
@@ -3310,6 +3515,7 @@ begin
     where pbc.pay_batch_id = p_pay_batch_id
       and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
       and pbi.item_type <> 'DEBT_CREATED'
+      and pbi.is_voided = false
       and pbi.timesheet_id is not null
   ),
   have_snap as (
@@ -3432,6 +3638,7 @@ begin
     on pbc.id = pbi.pay_batch_candidate_id
   where pbc.pay_batch_id = p_pay_batch_id
     and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
+    and pbi.is_voided = false
     and pbi.item_type = 'LOAN_REPAYMENT'
     and pbi.repayment_week_start is not null
     and pbi.source_ref is not null
@@ -3553,6 +3760,134 @@ begin
     );
   end loop;
 
+  create temp table if not exists _tmp_overpay_taken (
+    advance_id uuid not null,
+    taken_amount numeric not null,
+    primary key (advance_id)
+  ) on commit drop;
+
+  truncate table _tmp_overpay_taken;
+
+  insert into _tmp_overpay_taken(advance_id, taken_amount)
+  select
+    nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid as advance_id,
+    round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))),2) as taken_amount
+  from public.pay_batch_items pbi
+  join public.pay_batch_candidates pbc
+    on pbc.id = pbi.pay_batch_candidate_id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
+    and pbi.is_voided = false
+    and pbi.item_type = 'OVERPAYMENT_RECOVERY'
+    and pbi.source_ref is not null
+    and btrim(coalesce(pbi.source_ref,'')) like 'advance:%'
+  group by
+    nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid
+  having round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))),2) > 0;
+
+  v_overpay_patched_ct := 0;
+
+  for v_adv_id in
+    select distinct ot.advance_id
+    from _tmp_overpay_taken ot
+    where ot.advance_id is not null
+  loop
+    select
+      pa.schedule_json,
+      pa.outstanding_amount,
+      pa.next_due_week_start
+    into
+      v_old_sched,
+      v_old_out,
+      v_old_next
+    from public.pay_advances pa
+    where pa.id = v_adv_id
+      and pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+    for update;
+
+    select round(coalesce(ot.taken_amount,0),2)
+    into v_total_taken
+    from _tmp_overpay_taken ot
+    where ot.advance_id = v_adv_id;
+
+    v_new_out := round(greatest(coalesce(v_old_out,0) - coalesce(v_total_taken,0), 0), 2);
+
+    v_new_sched := v_old_sched;
+    v_new_next := v_old_next;
+
+    update public.pay_advances pa2
+    set
+      outstanding_amount = v_new_out,
+      status = case
+        when v_new_out <= 0 then 'PAID_OFF'::pay_advance_status_enum
+        else pa2.status
+      end,
+      updated_at = v_now
+    where pa2.id = v_adv_id;
+
+    insert into public.pay_advance_patches(
+      advance_id,
+      pay_batch_id,
+      old_outstanding_amount,
+      new_outstanding_amount,
+      old_schedule_json,
+      new_schedule_json,
+      old_next_due_week_start,
+      new_next_due_week_start
+    )
+    values (
+      v_adv_id,
+      p_pay_batch_id,
+      v_old_out,
+      v_new_out,
+      v_old_sched,
+      v_new_sched,
+      v_old_next,
+      v_new_next
+    );
+
+    v_overpay_patched_ct := v_overpay_patched_ct + 1;
+  end loop;
+
+  v_loan_payout_updated_ct := 0;
+
+  if upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then
+    with payouts as (
+      select distinct
+        replace(pbi.source_ref, 'advance:', '')::uuid as loan_id,
+        pbi.pay_bank_transfer_id as transfer_id
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc
+        on pbc.id = pbi.pay_batch_candidate_id
+      join public.pay_bank_transfers pbt
+        on pbt.id = pbi.pay_bank_transfer_id
+       and pbt.pay_batch_id = p_pay_batch_id
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
+        and pbi.is_voided = false
+        and pbi.item_type = 'LOAN_PAYOUT'
+        and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+        and pbi.pay_bank_transfer_id is not null
+        and upper(coalesce(pbt.status,'')) = 'COMPLETED'
+    ),
+    upd as (
+      update public.pay_advances pa
+      set
+        payout_status = 'PAID'::public.pay_advance_payout_status_enum,
+        payout_pay_batch_id = p_pay_batch_id,
+        payout_transfer_id = p.transfer_id,
+        updated_at = v_now
+      from payouts p
+      where pa.id = p.loan_id
+        and pa.advance_kind = 'LOAN'::public.pay_advance_kind_enum
+        and coalesce(pa.payout_status::text,'') <> 'PAID'
+      returning pa.id
+    )
+    select count(*)::int
+    into v_loan_payout_updated_ct
+    from upd;
+  end if;
+
   with payable_transfer_ids as (
     select distinct
       pbi.pay_bank_transfer_id as transfer_id
@@ -3561,6 +3896,7 @@ begin
       on pbc.id = pbi.pay_batch_candidate_id
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.item_type <> 'DEBT_CREATED'
+      and pbi.is_voided = false
       and pbi.pay_bank_transfer_id is not null
   ),
   stats as (
@@ -3651,6 +3987,30 @@ begin
   where pbt.pay_batch_id = p_pay_batch_id
     and upper(coalesce(pbt.status,'')) = 'BLOCKED';
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_SETTLE_RAIL:COUNTS',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'is_stale', v_is_stale,
+        'stale_reasons', v_stale_reasons,
+        'newly_settled_candidates_count', jsonb_array_length(coalesce(v_newly_settled_candidates,'[]'::jsonb)),
+        'overpayment_patches_applied', v_overpay_patched_ct,
+        'loan_payouts_marked_paid', v_loan_payout_updated_ct,
+        'batch_status', v_batch_status
+      ),
+      'pay_batches',
+      p_pay_batch_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
@@ -3658,13 +4018,19 @@ begin
     'newly_settled_candidates', v_newly_settled_candidates,
     'still_pending_transfers', v_pending_transfers,
     'failed_transfers', v_failed_transfers,
-    'blocked_transfers', v_blocked_transfers
+    'blocked_transfers', v_blocked_transfers,
+    'freshness', jsonb_build_object(
+      'is_stale', v_is_stale,
+      'stale_reasons', v_stale_reasons,
+      'diff_sample', v_diff_sample
+    ),
+    'patch_summary', jsonb_build_object(
+      'overpayment_patches_applied', v_overpay_patched_ct,
+      'loan_payouts_marked_paid', v_loan_payout_updated_ct
+    )
   );
 end;
 $$;
-
-
-
 
 
 
@@ -6281,6 +6647,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.pay_batch_auth_start(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -6645,6 +7012,7 @@ begin
   end if;
 end;
 $$;
+
 
 create or replace function public.pay_batch_auth_apply_action(
   p_auth_request_id uuid,
