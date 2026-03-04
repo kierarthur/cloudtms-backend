@@ -9274,4 +9274,402 @@ begin
 end;
 $$;
 
+create or replace function public.pay_batch_export_csv_rows(
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
 
+  v_batch record;
+  v_batch_kind text := null;
+  v_channels text[] := null;
+
+  v_is_cancelled boolean := false;
+
+  v_fresh jsonb := null;
+  v_is_stale boolean := false;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+
+  v_rows jsonb := '[]'::jsonb;
+  v_row_count int := 0;
+  v_kind_counts jsonb := '{}'::jsonb;
+begin
+  if p_pay_batch_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_EXPORT_CSV_ROWS',
+      'code', 'PAY_BATCH_ID_REQUIRED',
+      'message', 'pay_batch_export_csv_rows: pay_batch_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_EXPORT_CSV_ROWS',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_batch_export_csv_rows: actor_user_id is required',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  select
+    pb.id,
+    pb.status,
+    pb.pay_date,
+    pb.cancelled_at_utc,
+    pb.batch_kind_fixed
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  limit 1;
+
+  if v_batch.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_EXPORT_CSV_ROWS',
+      'code', 'PAY_BATCH_NOT_FOUND',
+      'message', 'pay_batch_export_csv_rows: pay_batch not found',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  v_is_cancelled := (v_batch.cancelled_at_utc is not null);
+
+  -- Derived kind from batch items (PAYE/UMBRELLA/MIXED); fixed kind can override display (e.g. LOANS).
+  select ch.channels
+  into v_channels
+  from (
+    select
+      array_agg(distinct upper(coalesce(pbi.pay_channel,'')) order by upper(coalesce(pbi.pay_channel,'')))
+        filter (where upper(coalesce(pbi.pay_channel,'')) in ('PAYE','UMBRELLA')) as channels
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.item_type <> 'DEBT_CREATED'
+      and pbi.is_voided = false
+  ) ch;
+
+  v_batch_kind := case
+    when v_channels is null then null
+    when array_position(v_channels,'PAYE') is not null and array_position(v_channels,'UMBRELLA') is not null then 'MIXED'
+    when array_position(v_channels,'PAYE') is not null then 'PAYE'
+    when array_position(v_channels,'UMBRELLA') is not null then 'UMBRELLA'
+    else null
+  end;
+
+  if upper(coalesce(v_batch.batch_kind_fixed,'')) = 'LOANS' then
+    v_batch_kind := 'LOANS';
+  end if;
+
+  -- Freshness interaction:
+  -- - Non-cancelled batches: block export if stale.
+  -- - Cancelled batches: export must still work; include stale summary in metadata.
+  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+
+  select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+  into v_diff_sample
+  from (
+    select elem
+    from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+    limit 50
+  ) x;
+
+  if v_is_cancelled = false and v_is_stale = true then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_EXPORT_CSV_ROWS',
+      'code', 'BATCH_STALE',
+      'message', 'pay_batch_export_csv_rows: batch is stale; regenerate draft before exporting',
+      'pay_batch_id', p_pay_batch_id::text,
+      'stale_reasons', v_stale_reasons,
+      'diff', v_diff_sample
+    )::text;
+  end if;
+
+  create temp table if not exists _tmp_pay_export_rows (
+    sort_surname text not null,
+    sort_work_date date null,
+    sort_timesheet_id uuid null,
+    sort_line_kind text not null,
+    sort_bucket_code text null,
+    sort_unit_name text null,
+    line_kind text not null,
+    row_json jsonb not null
+  ) on commit drop;
+
+  truncate table _tmp_pay_export_rows;
+
+  insert into _tmp_pay_export_rows(
+    sort_surname,
+    sort_work_date,
+    sort_timesheet_id,
+    sort_line_kind,
+    sort_bucket_code,
+    sort_unit_name,
+    line_kind,
+    row_json
+  )
+  with
+  net_latest as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      (
+        select pni.net_amount
+        from public.pay_batch_paye_net_inputs pni
+        where pni.pay_batch_candidate_id = pbc.id
+        order by pni.imported_at_utc desc
+        limit 1
+      ) as paye_net_amount
+    from public.pay_batch_candidates pbc
+    where pbc.pay_batch_id = p_pay_batch_id
+  ),
+  base as (
+    select
+      pbc.candidate_id as candidate_id,
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_tms_ref as candidate_tms_ref_snap,
+      pbc.candidate_display_name as candidate_display_name_snap,
+
+      c.first_name as cand_first_name,
+      c.last_name as cand_last_name,
+      c.tms_ref as cand_tms_ref_live,
+
+      pbi.id as pay_batch_item_id,
+      pbi.item_type as item_type,
+      pbi.timesheet_id as timesheet_id,
+      pbi.segment_key as segment_key,
+      pbi.source_ref as source_ref,
+      pbi.pay_channel as pay_channel,
+      pbi.repayment_week_start as repayment_week_start,
+
+      pbib.line_kind as line_kind,
+      pbib.bucket_code as bucket_code,
+      pbib.unit_name as unit_name,
+      pbib.units as units,
+      pbib.rate as rate,
+      pbib.amount_ex_vat as amount_ex_vat,
+      pbib.amount_vat as amount_vat,
+      pbib.amount_inc_vat as amount_inc_vat,
+
+      ts.week_ending_date as week_ending_date,
+      ts.reference_number as reference_number,
+      cl.id as client_id,
+      cl.name as client_name,
+
+      nl.paye_net_amount as paye_net_amount,
+
+      segd.work_date as seg_work_date
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+     and pbc.pay_batch_id = p_pay_batch_id
+    join public.pay_batch_item_breakdowns pbib
+      on pbib.pay_batch_item_id = pbi.id
+    left join public.candidates c
+      on c.id = pbc.candidate_id
+    left join public.timesheets ts
+      on ts.timesheet_id = pbi.timesheet_id
+     and ts.is_current = true
+    left join public.contracts ct
+      on ct.id = ts.contract_id
+    left join public.clients cl
+      on cl.id = ct.client_id
+    left join net_latest nl
+      on nl.pay_batch_candidate_id = pbc.id
+    left join public.pay_batch_timesheet_snapshots pbts
+      on pbts.pay_batch_id = p_pay_batch_id
+     and pbts.timesheet_id = pbi.timesheet_id
+     and pbts.candidate_id = pbc.candidate_id
+     and upper(coalesce(pbts.pay_channel,'')) = upper(coalesce(pbi.pay_channel,''))
+    left join lateral (
+      select
+        nullif(btrim(coalesce(seg->>'date','')),'')::date as work_date
+      from jsonb_array_elements(coalesce(pbts.target_snapshot_json->'segments','[]'::jsonb)) seg
+      where pbi.item_type = 'SEGMENT_DELTA'
+        and seg is not null
+        and jsonb_typeof(seg) = 'object'
+        and nullif(btrim(coalesce(seg->>'segment_id','')),'') = coalesce(
+          nullif(btrim(coalesce(pbi.segment_key,'')), ''),
+          case
+            when pbi.source_ref is not null and btrim(coalesce(pbi.source_ref,'')) like 'seg:%'
+              then nullif(btrim(split_part(pbi.source_ref,':',2)),'')
+            else null
+          end
+        )
+        and nullif(btrim(coalesce(seg->>'date','')),'') ~ '^\d{4}-\d{2}-\d{2}$'
+      limit 1
+    ) segd on true
+    where pbi.item_type <> 'DEBT_CREATED'
+      and pbi.is_voided = false
+  ),
+  rows0 as (
+    select
+      coalesce(
+        nullif(btrim(coalesce(b.cand_last_name,'')), ''),
+        nullif(btrim(regexp_replace(coalesce(b.candidate_display_name_snap,''), '^.*\s', '')), ''),
+        nullif(btrim(coalesce(b.candidate_display_name_snap,'')), ''),
+        b.candidate_id::text
+      ) as sort_surname,
+
+      coalesce(b.seg_work_date, b.week_ending_date) as sort_work_date,
+
+      b.timesheet_id as sort_timesheet_id,
+
+      upper(coalesce(b.line_kind,'')) as sort_line_kind,
+      upper(nullif(btrim(coalesce(b.bucket_code,'')),'') ) as sort_bucket_code,
+      nullif(btrim(coalesce(b.unit_name,'')),'') as sort_unit_name,
+
+      upper(coalesce(b.line_kind,'')) as line_kind,
+
+      jsonb_build_object(
+        'candidate_id', b.candidate_id::text,
+        'candidate_tms_ref', coalesce(
+          nullif(btrim(coalesce(b.candidate_tms_ref_snap,'')), ''),
+          nullif(btrim(coalesce(b.cand_tms_ref_live,'')), ''),
+          null
+        ),
+        'candidate_first_name', nullif(btrim(coalesce(b.cand_first_name,'')), ''),
+        'candidate_last_name', nullif(btrim(coalesce(b.cand_last_name,'')), ''),
+        'candidate_display_name', nullif(btrim(coalesce(b.candidate_display_name_snap,'')), ''),
+
+        'client_id', case when b.client_id is null then null else b.client_id::text end,
+        'client_name', b.client_name,
+
+        'timesheet_id', case when b.timesheet_id is null then null else b.timesheet_id::text end,
+        'week_ending_date', case when b.week_ending_date is null then null else b.week_ending_date::text end,
+        'work_date', case
+          when b.timesheet_id is null then null
+          when b.seg_work_date is not null then b.seg_work_date::text
+          else case when b.week_ending_date is null then null else b.week_ending_date::text end
+        end,
+        'reference_number', b.reference_number,
+
+        'pay_channel', upper(coalesce(b.pay_channel,'')),
+        'item_type', b.item_type,
+
+        'line_kind', b.line_kind,
+        'bucket_code', b.bucket_code,
+
+        'unit_name', b.unit_name,
+        'units', b.units,
+        'rate', b.rate,
+
+        'amount_ex_vat', b.amount_ex_vat,
+        'amount_vat', b.amount_vat,
+        'amount_inc_vat', b.amount_inc_vat,
+
+        'is_overpayment_recovery', (b.item_type = 'OVERPAYMENT_RECOVERY'),
+        'is_loan_repayment', (b.item_type = 'LOAN_REPAYMENT'),
+        'deduction_amount_ex_vat', case
+          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_ex_vat,0)),2)
+          else null
+        end,
+
+        'paye_net_amount', case
+          when upper(coalesce(b.pay_channel,'')) = 'PAYE' then b.paye_net_amount
+          else null
+        end,
+
+        'source_ref', b.source_ref,
+        'repayment_week_start', case when b.repayment_week_start is null then null else b.repayment_week_start::text end
+      ) as row_json
+    from base b
+  )
+  select
+    r.sort_surname,
+    r.sort_work_date,
+    r.sort_timesheet_id,
+    r.sort_line_kind,
+    r.sort_bucket_code,
+    r.sort_unit_name,
+    r.line_kind,
+    r.row_json
+  from rows0 r;
+
+  select count(*)::int
+  into v_row_count
+  from _tmp_pay_export_rows;
+
+  select coalesce(
+    jsonb_object_agg(t.lk, t.ct),
+    '{}'::jsonb
+  )
+  into v_kind_counts
+  from (
+    select
+      coalesce(nullif(btrim(coalesce(per.line_kind,'')),'') , 'UNKNOWN') as lk,
+      count(*)::int as ct
+    from _tmp_pay_export_rows per
+    group by coalesce(nullif(btrim(coalesce(per.line_kind,'')),'') , 'UNKNOWN')
+  ) t;
+
+  select coalesce(
+    jsonb_agg(
+      per.row_json
+      order by
+        per.sort_surname asc,
+        per.sort_work_date asc nulls last,
+        per.sort_timesheet_id asc nulls last,
+        per.sort_line_kind asc,
+        per.sort_bucket_code asc nulls last,
+        per.sort_unit_name asc nulls last
+    ),
+    '[]'::jsonb
+  )
+  into v_rows
+  from _tmp_pay_export_rows per;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_BATCH_EXPORT_CSV_ROWS',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'row_count', v_row_count,
+        'line_kind_counts', v_kind_counts,
+        'is_cancelled', v_is_cancelled,
+        'is_stale', v_is_stale,
+        'stale_reasons', v_stale_reasons
+      ),
+      'pay_batches',
+      p_pay_batch_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'batch', jsonb_build_object(
+      'id', v_batch.id::text,
+      'status', v_batch.status,
+      'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+      'batch_kind', v_batch_kind,
+      'batch_kind_fixed', case when v_batch.batch_kind_fixed is null then null else v_batch.batch_kind_fixed end,
+      'is_cancelled', v_is_cancelled,
+      'generated_at_utc', v_now_utc::text
+    ),
+    'freshness', jsonb_build_object(
+      'is_stale', v_is_stale,
+      'stale_reasons', v_stale_reasons,
+      'diff_sample', v_diff_sample
+    ),
+    'summary', jsonb_build_object(
+      'row_count', v_row_count,
+      'line_kind_counts', v_kind_counts
+    ),
+    'rows', v_rows
+  );
+end;
+$$;
