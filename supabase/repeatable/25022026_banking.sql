@@ -6117,7 +6117,7 @@ begin
     'jobs', (coalesce(v_jobs_umb,'[]'::jsonb) || coalesce(v_jobs_paye,'[]'::jsonb) || coalesce(v_jobs_cand_umb_copy,'[]'::jsonb))
   );
 end;
-$function$
+$function$;
 
 
 
