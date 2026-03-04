@@ -788,11 +788,6 @@ $$;
 
 
 
-
-
-
-
-
 create or replace function public.invoice_issue_and_queue_emails_batch(
   p_invoice_ids uuid[],
   p_actor_user_id uuid,
@@ -1098,25 +1093,49 @@ begin
     type,
     "to",
     cc,
+    bcc,
+    reply_to,
+    importance,
+    email_type,
     subject,
     body_text,
     attachments,
     status,
     reference,
     created_at_utc,
-    created_by
+    created_by,
+
+    -- ✅ NEW: comms log metadata
+    recipient_kind,
+    recipient_id,
+    context_kind,
+    context_id,
+    mailshot_run_id,
+    document_template_id
   )
   select
     'INVOICE'::text,
     m.to_email,
     null::text,
+    null::text,
+    null::text,
+    'Normal'::text,
+    'plain'::text,
     'Invoices – Week ending ' || coalesce(m.week_ending_date::text, ''),
     'Please find the attached invoices.',
     m.attachments,
     'QUEUED'::public.mail_status_enum,
     'invoice_batch:' || m.client_id::text || ':' || coalesce(m.week_ending_date::text,'') || ':part:' || (m.chunk_idx + 1)::text,
     v_now,
-    p_actor_user_id
+    p_actor_user_id,
+
+    -- ✅ NEW: recipient/context for unified outbox + comms tabs
+    'client'::text,
+    m.client_id,
+    'invoices'::text,
+    null::uuid,
+    null::uuid,
+    null::uuid
   from tmp_mail_rows m
   where not exists (
     select 1
@@ -1125,6 +1144,29 @@ begin
       and o2.reference = ('invoice_batch:' || m.client_id::text || ':' || coalesce(m.week_ending_date::text,'') || ':part:' || (m.chunk_idx + 1)::text)
       and o2."to" = m.to_email
   );
+
+  -- ✅ NEW: ensure existing (already-present) queued invoice emails get comms metadata too (idempotent backfill-on-touch)
+  update public.mail_outbox o3
+  set
+    recipient_kind = 'client'::text,
+    recipient_id = m3.client_id,
+    context_kind = 'invoices'::text,
+    context_id = null::uuid,
+    mailshot_run_id = null::uuid,
+    document_template_id = null::uuid,
+    email_type = coalesce(o3.email_type, 'plain'::text),
+    importance = coalesce(o3.importance, 'Normal'::text)
+  from tmp_mail_rows m3
+  where o3.type = 'INVOICE'
+    and o3."to" = m3.to_email
+    and o3.reference = ('invoice_batch:' || m3.client_id::text || ':' || coalesce(m3.week_ending_date::text,'') || ':part:' || (m3.chunk_idx + 1)::text)
+    and (
+      o3.recipient_kind is null
+      or o3.recipient_id is null
+      or o3.context_kind is null
+      or o3.email_type is null
+      or o3.importance is null
+    );
 
   -- collect email outbox rows as json
   -- ✅ NEW: return rows matching the intended (reference,to) for this run, whether inserted now or already present.
@@ -1226,6 +1268,7 @@ exception
     raise;
 end;
 $$;
+
 
 -- ============================================================
 -- CloudTMS RPC: invoice_closeout_zero_charge_timesheets
