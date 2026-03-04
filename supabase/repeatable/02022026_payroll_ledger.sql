@@ -7234,6 +7234,8 @@ declare
   v_auth_approved_by jsonb := '[]'::jsonb;
   v_auth_invited_to jsonb := '[]'::jsonb;
   v_auth jsonb := null;
+
+  v_batch_kind_fixed text := null;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -7249,6 +7251,8 @@ begin
   if not found then
     raise exception 'pay_batch not found';
   end if;
+
+  v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed,'')));
 
   -- ✅ NEW: derive batch kind + channels from items (excludes DEBT_CREATED)
   select
@@ -7384,7 +7388,9 @@ begin
         'gross_preview', pbc.gross_preview,
         'net_bank_amount', pbc.net_bank_amount,
         'debt_created', pbc.debt_created,
+        'overpayment_recovery_taken', pbc.overpayment_recovery_taken,
         'loan_repayment_taken', pbc.loan_repayment_taken,
+        'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(pbc.awaiting_net_amount,false) end,
         'settlement_status', pbc.settlement_status,
         'settled_at_utc', pbc.settled_at_utc,
         'settled_via', pbc.settled_via,
@@ -7496,7 +7502,10 @@ begin
       pbc.candidate_id,
       pbc.candidate_tms_ref,
       pbc.candidate_display_name,
-      pbc.paye_state
+      pbc.paye_state,
+      pbc.net_bank_amount,
+      pbc.overpayment_recovery_taken,
+      pbc.loan_repayment_taken
     from public.pay_batch_candidates pbc
     where pbc.pay_batch_id = p_pay_batch_id
   ),
@@ -7576,6 +7585,7 @@ begin
         'candidate_tms_ref', c.candidate_tms_ref,
         'candidate_display_name', c.candidate_display_name,
         'batch_kind', v_batch_kind,
+        'batch_kind_fixed', case when v_batch.batch_kind_fixed is null then null else v_batch.batch_kind_fixed end,
         'paye_state', c.paye_state,
         'paye_net_amount', n.net_amount,
         'paye_net_source', n.source,
@@ -7583,9 +7593,13 @@ begin
         'paye_net_file_name', n.file_name,
         'awaiting_net_amount',
           (case
+            when v_batch_kind_fixed = 'LOANS' then false
             when v_batch_kind = 'PAYE' then (n.net_amount is null)
             else false
           end),
+        'overpayment_recovery_taken', c.overpayment_recovery_taken,
+        'loan_repayment_taken', c.loan_repayment_taken,
+        'final_net_paid', c.net_bank_amount,
         'paye_total_ex_vat', s.paye_total_ex_vat,
         'umbrella_total_inc_vat', s.umbrella_total_inc_vat,
         'payment_amount',
@@ -7932,6 +7946,7 @@ begin
 
     -- ✅ NEW: batch kind + channels for UI
     'batch_kind', v_batch_kind,
+    'batch_kind_fixed', case when v_batch.batch_kind_fixed is null then null else v_batch.batch_kind_fixed end,
     'pay_channels_present', v_pay_channels_present,
 
     -- ✅ child modal datasets
@@ -7985,6 +8000,7 @@ begin
   );
 end;
 $$;
+
 
 -- =========================================================
 -- A4.10 pay_timesheet_impact_preview(p_timesheet_id)
@@ -8716,6 +8732,14 @@ $$;
 -- =========================================================
 -- A4.8 pay_unpay_batch(p_pay_batch_id, p_actor_user_id, p_reason, p_force boolean)
 -- =========================================================
+
+
+
+
+-- =========================================================
+-- A4.9 pay_batches_list / pay_batch_get
+-- =========================================================
+
 create or replace function public.pay_unpay_batch(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -8752,7 +8776,8 @@ begin
 
   select
     pb.id,
-    pb.status
+    pb.status,
+    pb.batch_kind_fixed
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -8791,6 +8816,31 @@ begin
 
     v_reverted_adv := v_reverted_adv + 1;
   end loop;
+
+  -- Revert LOANS payout status (if this batch paid out loans)
+  if upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then
+    with loan_ids as (
+      select distinct
+        replace(pbi.source_ref, 'advance:', '')::uuid as loan_id
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc
+        on pbc.id = pbi.pay_batch_candidate_id
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbi.item_type = 'LOAN_PAYOUT'
+        and pbi.is_voided = false
+        and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+    )
+    update public.pay_advances pa
+    set
+      payout_status = 'PENDING'::public.pay_advance_payout_status_enum,
+      payout_pay_batch_id = null,
+      payout_transfer_id = null,
+      updated_at = v_now
+    from loan_ids li
+    where pa.id = li.loan_id
+      and pa.advance_kind = 'LOAN'::public.pay_advance_kind_enum
+      and pa.payout_pay_batch_id = p_pay_batch_id;
+  end if;
 
   -- Gather affected timesheets from history rows for this batch
   select coalesce(array_agg(distinct h.timesheet_id), array[]::uuid[])
@@ -8873,10 +8923,6 @@ begin
   );
 end;
 $$;
-
--- =========================================================
--- A4.9 pay_batches_list / pay_batch_get
--- =========================================================
 
 
 
