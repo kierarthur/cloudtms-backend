@@ -4106,16 +4106,12 @@ begin
 end;
 $$;
 
-
-create or replace function public.pay_remittance_build(
-  p_pay_batch_id uuid,
-  p_scope text default 'ALL'
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
   v_batch record;
@@ -4305,6 +4301,7 @@ begin
         on vs.timesheet_id = pbi.timesheet_id
       where upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA'
         and pbi.item_type <> 'DEBT_CREATED'
+        and coalesce(pbi.is_voided,false) = false
         and (
           case
             when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
@@ -4542,7 +4539,7 @@ begin
             )
             order by coalesce(r.unit_name,'') asc
           )
-          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','DEBT_CREATED')),
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','DEBT_CREATED')),
           '[]'::jsonb
         ) as other_rows,
         round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
@@ -4752,7 +4749,47 @@ begin
           'tms_ref', cm.tms_ref,
           'display_name', cm.display_name,
           'email', cm.email,
-          'timesheets', coalesce(ct.timesheets_json,'[]'::jsonb)
+          'timesheets', coalesce(ct.timesheets_json,'[]'::jsonb),
+          'totals', coalesce((
+            select jsonb_build_object(
+              'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
+              'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
+              'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2)
+            )
+            from public.pay_batch_candidates pbc_tot
+            where pbc_tot.pay_batch_id = p_pay_batch_id
+              and pbc_tot.candidate_id = cm.candidate_id
+            limit 1
+          ), '{}'::jsonb),
+          'non_timesheet_lines', coalesce((
+            select coalesce(
+              jsonb_agg(
+                jsonb_build_object(
+                  'line_kind', pbib_nt.line_kind,
+                  'bucket_code', pbib_nt.bucket_code,
+                  'unit', pbib_nt.unit_name,
+                  'quantity', pbib_nt.units,
+                  'rate', pbib_nt.rate,
+                  'total_ex_vat', pbib_nt.amount_ex_vat,
+                  'total_vat', pbib_nt.amount_vat,
+                  'total_inc_vat', pbib_nt.amount_inc_vat
+                )
+                order by coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate,0)
+              ),
+              '[]'::jsonb
+            )
+            from public.pay_batch_candidates pbc_nt
+            join public.pay_batch_items pbi_nt
+              on pbi_nt.pay_batch_candidate_id = pbc_nt.id
+            join public.pay_batch_item_breakdowns pbib_nt
+              on pbib_nt.pay_batch_item_id = pbi_nt.id
+            where pbc_nt.pay_batch_id = p_pay_batch_id
+              and pbc_nt.candidate_id = cm.candidate_id
+              and pbi_nt.is_voided = false
+              and pbi_nt.timesheet_id is null
+              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT')
+          ), '[]'::jsonb)
         ) as candidate_json
       from cand_meta cm
       left join cand_timesheets ct
@@ -4894,6 +4931,7 @@ begin
         on vs.timesheet_id = pbi.timesheet_id
       where upper(coalesce(pbi.pay_channel,'')) = 'PAYE'
         and pbi.item_type <> 'DEBT_CREATED'
+        and coalesce(pbi.is_voided,false) = false
         and (
           case
             when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
@@ -5121,7 +5159,7 @@ begin
             )
             order by coalesce(r.unit_name,'') asc
           )
-          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','DEBT_CREATED')),
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','DEBT_CREATED')),
           '[]'::jsonb
         ) as other_rows,
         round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
@@ -5386,7 +5424,65 @@ begin
               and pbc.candidate_id = cj.candidate_id
             order by pni.imported_at_utc desc
             limit 1
-          ), null)
+          ), null),
+          'pay_totals', coalesce((
+            select jsonb_build_object(
+              'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
+              'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
+              'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2)
+            )
+            from public.pay_batch_candidates pbc_tot
+            where pbc_tot.pay_batch_id = p_pay_batch_id
+              and pbc_tot.candidate_id = cj.candidate_id
+            limit 1
+          ), '{}'::jsonb),
+          'paye_net_advisory', coalesce((
+            select jsonb_build_object(
+              'original_net_input', (
+                select pni2.net_amount
+                from public.pay_batch_paye_net_inputs pni2
+                where pni2.pay_batch_candidate_id = pbc_adv.id
+                order by pni2.imported_at_utc desc
+                limit 1
+              ),
+              'loan_repayment_taken', round(coalesce(pbc_adv.loan_repayment_taken,0),2),
+              'overpayment_recovery_taken', round(coalesce(pbc_adv.overpayment_recovery_taken,0),2),
+              'final_net_paid', round(coalesce(pbc_adv.net_bank_amount,0),2)
+            )
+            from public.pay_batch_candidates pbc_adv
+            where pbc_adv.pay_batch_id = p_pay_batch_id
+              and pbc_adv.candidate_id = cj.candidate_id
+            limit 1
+          ), null),
+          'non_timesheet_lines', coalesce((
+            select coalesce(
+              jsonb_agg(
+                jsonb_build_object(
+                  'line_kind', pbib_nt.line_kind,
+                  'bucket_code', pbib_nt.bucket_code,
+                  'unit', pbib_nt.unit_name,
+                  'quantity', pbib_nt.units,
+                  'rate', pbib_nt.rate,
+                  'total_ex_vat', pbib_nt.amount_ex_vat,
+                  'total_vat', pbib_nt.amount_vat,
+                  'total_inc_vat', pbib_nt.amount_inc_vat
+                )
+                order by coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate,0)
+              ),
+              '[]'::jsonb
+            )
+            from public.pay_batch_candidates pbc_nt
+            join public.pay_batch_items pbi_nt
+              on pbi_nt.pay_batch_candidate_id = pbc_nt.id
+            join public.pay_batch_item_breakdowns pbib_nt
+              on pbib_nt.pay_batch_item_id = pbi_nt.id
+            where pbc_nt.pay_batch_id = p_pay_batch_id
+              and pbc_nt.candidate_id = cj.candidate_id
+              and pbi_nt.is_voided = false
+              and pbi_nt.timesheet_id is null
+              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT')
+          ), '[]'::jsonb)
         )
         order by cj.display_name nulls last, cj.tms_ref nulls last, cj.candidate_id
       ),
@@ -5482,6 +5578,7 @@ begin
         on vs.timesheet_id = pbi.timesheet_id
       where upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA'
         and pbi.item_type <> 'DEBT_CREATED'
+        and coalesce(pbi.is_voided,false) = false
         and (
           case
             when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
@@ -5709,7 +5806,7 @@ begin
             )
             order by coalesce(r.unit_name,'') asc
           )
-          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','DEBT_CREATED')),
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','DEBT_CREATED')),
           '[]'::jsonb
         ) as other_rows,
         round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
@@ -5959,7 +6056,47 @@ begin
             'currency', 'GBP'
           ),
           'timesheets', coalesce(cj.timesheets_json,'[]'::jsonb),
-          'transfers', coalesce(cj.transfers_json,'[]'::jsonb)
+          'transfers', coalesce(cj.transfers_json,'[]'::jsonb),
+          'pay_totals', coalesce((
+            select jsonb_build_object(
+              'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
+              'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
+              'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2)
+            )
+            from public.pay_batch_candidates pbc_tot
+            where pbc_tot.pay_batch_id = p_pay_batch_id
+              and pbc_tot.candidate_id = cj.candidate_id
+            limit 1
+          ), '{}'::jsonb),
+          'non_timesheet_lines', coalesce((
+            select coalesce(
+              jsonb_agg(
+                jsonb_build_object(
+                  'line_kind', pbib_nt.line_kind,
+                  'bucket_code', pbib_nt.bucket_code,
+                  'unit', pbib_nt.unit_name,
+                  'quantity', pbib_nt.units,
+                  'rate', pbib_nt.rate,
+                  'total_ex_vat', pbib_nt.amount_ex_vat,
+                  'total_vat', pbib_nt.amount_vat,
+                  'total_inc_vat', pbib_nt.amount_inc_vat
+                )
+                order by coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate,0)
+              ),
+              '[]'::jsonb
+            )
+            from public.pay_batch_candidates pbc_nt
+            join public.pay_batch_items pbi_nt
+              on pbi_nt.pay_batch_candidate_id = pbc_nt.id
+            join public.pay_batch_item_breakdowns pbib_nt
+              on pbib_nt.pay_batch_item_id = pbi_nt.id
+            where pbc_nt.pay_batch_id = p_pay_batch_id
+              and pbc_nt.candidate_id = cj.candidate_id
+              and pbi_nt.is_voided = false
+              and pbi_nt.timesheet_id is null
+              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT')
+          ), '[]'::jsonb)
         )
         order by cj.display_name nulls last, cj.tms_ref nulls last, cj.candidate_id
       ),
@@ -5980,7 +6117,12 @@ begin
     'jobs', (coalesce(v_jobs_umb,'[]'::jsonb) || coalesce(v_jobs_paye,'[]'::jsonb) || coalesce(v_jobs_cand_umb_copy,'[]'::jsonb))
   );
 end;
-$$;
+$function$
+
+
+
+
+
 
 
 create or replace function public.pay_reconcile_external_payment(
