@@ -300,6 +300,7 @@ select
 from adj_components ac;
 $$;
 
+
 CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
   timesheet_id uuid,
@@ -418,6 +419,8 @@ reserved_components as (
     case
       when ai.item_type = 'SEGMENT_DELTA'
         then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+      when ai.item_type = 'MILEAGE_DELTA'
+        then 'EXPENSE_CODE'
       when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
         then case
           when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%' or btrim(ai.source_ref) = 'additional')
@@ -429,6 +432,8 @@ reserved_components as (
     case
       when ai.item_type = 'SEGMENT_DELTA'
         then coalesce(sdf.seg_date, 'TOTAL')
+      when ai.item_type = 'MILEAGE_DELTA'
+        then 'MILEAGE'
       when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
         then case
           when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
@@ -455,12 +460,14 @@ reserved_components as (
        else null
      end
    )
-  where ai.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA')
+  where ai.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
   group by
     ai.timesheet_id,
     case
       when ai.item_type = 'SEGMENT_DELTA'
         then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+      when ai.item_type = 'MILEAGE_DELTA'
+        then 'EXPENSE_CODE'
       when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
         then case
           when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%' or btrim(ai.source_ref) = 'additional')
@@ -472,6 +479,8 @@ reserved_components as (
     case
       when ai.item_type = 'SEGMENT_DELTA'
         then coalesce(sdf.seg_date, 'TOTAL')
+      when ai.item_type = 'MILEAGE_DELTA'
+        then 'MILEAGE'
       when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
         then case
           when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
@@ -494,6 +503,8 @@ select
 from reserved_components rc
 where rc.key_value is not null and btrim(rc.key_value) <> '';
 $$;
+
+
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
   timesheet_id uuid,
