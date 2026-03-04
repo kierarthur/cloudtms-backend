@@ -8877,6 +8877,10 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
+
+
+
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -8911,12 +8915,31 @@ declare
 
   v_transfers jsonb := '[]'::jsonb;
   v_blocked_reasons jsonb := '[]'::jsonb;
+
+  v_fresh jsonb := null;
+  v_is_stale boolean := false;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+
+  v_batch_kind_fixed text := null;
+  v_is_loans boolean := false;
+
+  v_do_paye boolean := false;
+  v_do_umbrella boolean := false;
+  v_do_loans boolean := false;
+
+  v_invalid_loans_items int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
   end if;
-  if v_scope not in ('PAYE','UMBRELLA','ALL') then
-    raise exception 'Invalid pay_channel_scope (PAYE|UMBRELLA|ALL)';
+
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id is required';
+  end if;
+
+  if v_scope not in ('PAYE','UMBRELLA','ALL','LOANS') then
+    raise exception 'Invalid pay_channel_scope (PAYE|UMBRELLA|ALL|LOANS)';
   end if;
 
   -- Lock the batch row to prevent concurrent execution / bulk ref allocation races
@@ -8930,7 +8953,8 @@ begin
     pb.bulk_ref_date,
     pb.bulk_reference,
     pb.rail_provider_snapshot,
-    pb.rail_env_snapshot
+    pb.rail_env_snapshot,
+    pb.batch_kind_fixed
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -8938,6 +8962,58 @@ begin
 
   if v_batch.id is null then
     raise exception 'pay_batch not found';
+  end if;
+
+  v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed,'')));
+  v_is_loans := (v_batch_kind_fixed = 'LOANS');
+
+  v_do_loans := v_is_loans;
+
+  if v_do_loans = true then
+    v_do_paye := false;
+    v_do_umbrella := false;
+  else
+    v_do_paye := (v_scope in ('PAYE','ALL'));
+    v_do_umbrella := (v_scope in ('UMBRELLA','ALL'));
+  end if;
+
+  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+
+  if v_is_stale = true then
+    select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+      into v_diff_sample
+    from (
+      select elem
+      from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+      limit 50
+    ) x;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_EXECUTE_BANK:STALE',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'stale_reasons', v_stale_reasons,
+          'diff_sample', v_diff_sample
+        ),
+        'pay_batches',
+        p_pay_batch_id::text
+      );
+    exception when others then
+      null;
+    end;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_BANK',
+      'code', 'BATCH_STALE',
+      'message', 'pay_execute_bank: batch is stale; regenerate draft before proceeding',
+      'pay_batch_id', p_pay_batch_id::text,
+      'stale_reasons', v_stale_reasons,
+      'diff', v_diff_sample
+    )::text;
   end if;
 
   if v_batch.status not in ('DRAFT','READY','PARTIAL','WAITING_BANK_CONFIRM','DRAFT_CREATED') then
@@ -8992,8 +9068,8 @@ begin
   v_pay_week_start := public._pay_week_start_monday(v_batch.pay_date);
   v_pay_week_end := (v_pay_week_start + 6);
 
-  -- Validate PAYE net inputs if PAYE is being executed
-  if v_scope in ('PAYE','ALL') then
+  -- Validate PAYE net inputs if PAYE is being executed (not for LOANS batches)
+  if v_do_paye = true then
     if exists (
       select 1
       from public.pay_batch_candidates pbc_chk
@@ -9023,27 +9099,56 @@ begin
       raise exception 'PAYE_NET_MISSING: missing net pay for one or more PAYE candidates';
     end if;
 
-    -- ✅ Defensive validation: latest net amount must be >= 0 and exactly 2dp
     if exists (
       select 1
       from public.pay_batch_candidates pbc_chk3
-      left join lateral (
-        select pni_chk3.net_amount
-        from public.pay_batch_paye_net_inputs pni_chk3
-        where pni_chk3.pay_batch_candidate_id = pbc_chk3.id
-        order by pni_chk3.imported_at_utc desc
-        limit 1
-      ) ni_chk3 on true
       where pbc_chk3.pay_batch_id = p_pay_batch_id
         and pbc_chk3.paye_state is not null
-        and ni_chk3.net_amount is not null
+        and (pbc_chk3.net_bank_amount is null)
+      limit 1
+    ) then
+      raise exception 'PAYE_NET_BANK_AMOUNT_MISSING: net_bank_amount missing for one or more PAYE candidates';
+    end if;
+
+    if exists (
+      select 1
+      from public.pay_batch_candidates pbc_chk4
+      where pbc_chk4.pay_batch_id = p_pay_batch_id
+        and pbc_chk4.paye_state is not null
+        and pbc_chk4.net_bank_amount is not null
         and (
-          ni_chk3.net_amount < 0
-          or ni_chk3.net_amount <> round(ni_chk3.net_amount, 2)
+          pbc_chk4.net_bank_amount < 0
+          or pbc_chk4.net_bank_amount <> round(pbc_chk4.net_bank_amount, 2)
         )
       limit 1
     ) then
-      raise exception 'PAYE_NET_INVALID: net pay must be >= 0 and 2dp';
+      raise exception 'PAYE_NET_BANK_AMOUNT_INVALID: net_bank_amount must be >= 0 and 2dp';
+    end if;
+  end if;
+
+  if v_do_loans = true then
+    select count(*)::int
+    into v_invalid_loans_items
+    from public.pay_batch_items pbi_l
+    join public.pay_batch_candidates pbc_l
+      on pbc_l.id = pbi_l.pay_batch_candidate_id
+    where pbc_l.pay_batch_id = p_pay_batch_id
+      and pbi_l.is_voided = false
+      and pbi_l.item_type = 'LOAN_PAYOUT'
+      and (
+        pbi_l.source_ref is null
+        or btrim(pbi_l.source_ref) = ''
+        or btrim(pbi_l.source_ref) !~ '^advance:[0-9a-fA-F-]{36}$'
+        or not exists (
+          select 1
+          from public.pay_advances pa
+          where pa.id = replace(pbi_l.source_ref, 'advance:', '')::uuid
+            and pa.advance_kind = 'LOAN'::public.pay_advance_kind_enum
+        )
+      );
+
+    if v_invalid_loans_items > 0 then
+      raise exception 'LOANS_PAYOUT_INVALID: one or more LOAN_PAYOUT items missing/invalid advance reference';
     end if;
   end if;
 
@@ -9073,9 +9178,10 @@ begin
   truncate table _tmp_pay_transfer_groups;
 
   -- =========================================================
-  -- PAYE groups: candidate_id only (one transfer per candidate)
+  -- LOANS groups: candidate_id only (one transfer per candidate)
+  -- Payee is candidate (loan payout direct)
   -- =========================================================
-  if v_scope in ('PAYE','ALL') then
+  if v_do_loans = true then
     insert into _tmp_pay_transfer_groups(
       pay_channel,
       candidate_id,
@@ -9102,7 +9208,124 @@ begin
       pbc.candidate_id,
       null::uuid as umbrella_id,
       null::date as week_ending_bucket,
-      round(ni.net_amount, 2) as amount,
+      round(g.sum_amt, 2) as amount,
+      'GBP'::text as currency,
+
+      case
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED'
+        else 'PENDING'
+      end as status,
+
+      case
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED_BANK_DETAILS'
+        else null
+      end as rail_state,
+
+      case
+        when (sc_norm is null or acct_norm is null or payee_nm is null) then
+          jsonb_build_object(
+            'reason_code', 'BANK_DETAILS_MISSING',
+            'missing', (
+              select jsonb_agg(x.m)
+              from (
+                select 'sort_code'::text as m where sc_norm is null
+                union all
+                select 'account_number'::text where acct_norm is null
+                union all
+                select 'payee_name'::text where payee_nm is null
+              ) x
+            )
+          )
+        else null
+      end as rail_meta_json,
+
+      ('Loan payout - week ' || v_tax_week::text) as payment_reference,
+
+      payee_nm as payee_name,
+      sc_norm as sort_code,
+      acct_norm as account_number,
+      'Personal'::text as account_type,
+
+      c.bank_details_hash as bank_details_hash_snapshot,
+
+      'CANDIDATE'::text as payee_entity_kind,
+      pbc.candidate_id as payee_entity_id,
+
+      (pbc.candidate_id::text) as transfer_group_key,
+      'CANDIDATE'::text as grouping_mode_used
+    from (
+      select
+        pbc0.id as pay_batch_candidate_id,
+        pbc0.candidate_id,
+        sum(coalesce(pbi0.amount_ex_vat, pbi0.amount_inc_vat, 0))::numeric as sum_amt
+      from public.pay_batch_candidates pbc0
+      join public.pay_batch_items pbi0
+        on pbi0.pay_batch_candidate_id = pbc0.id
+       and pbi0.item_type = 'LOAN_PAYOUT'
+       and pbi0.is_voided = false
+      where pbc0.pay_batch_id = p_pay_batch_id
+      group by pbc0.id, pbc0.candidate_id
+      having round(greatest(sum(coalesce(pbi0.amount_ex_vat, pbi0.amount_inc_vat, 0)),0),2) > 0
+    ) g
+    join public.pay_batch_candidates pbc
+      on pbc.id = g.pay_batch_candidate_id
+    join public.candidates c
+      on c.id = pbc.candidate_id
+    join lateral (
+      select
+        nullif(btrim(coalesce(c.account_holder, c.display_name, concat_ws(' ', c.first_name, c.last_name))), '') as payee_nm,
+        case
+          when length(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g')) = 6 then
+            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+          else null
+        end as sc_norm,
+        nullif(regexp_replace(coalesce(c.account_number,''), '[^0-9]', '', 'g'), '') as acct_norm
+    ) b on true;
+
+    if exists (
+      select 1
+      from _tmp_pay_transfer_groups gchk
+      where gchk.pay_channel = 'PAYE'
+        and round(coalesce(gchk.amount,0),2) <= 0
+      limit 1
+    ) then
+      raise exception 'LOANS_PAYOUT_INVALID: payout amount must be > 0';
+    end if;
+  end if;
+
+  -- =========================================================
+  -- PAYE groups: candidate_id only (one transfer per candidate)
+  -- =========================================================
+  if v_do_paye = true then
+    insert into _tmp_pay_transfer_groups(
+      pay_channel,
+      candidate_id,
+      umbrella_id,
+      week_ending_bucket,
+      amount,
+      currency,
+      status,
+      rail_state,
+      rail_meta_json,
+      payment_reference,
+      payee_name,
+      sort_code,
+      account_number,
+      account_type,
+      bank_details_hash_snapshot,
+      payee_entity_kind,
+      payee_entity_id,
+      transfer_group_key,
+      grouping_mode_used
+    )
+    select
+      'PAYE'::text as pay_channel,
+      pbc.candidate_id,
+      null::uuid as umbrella_id,
+      null::date as week_ending_bucket,
+      round(pbc.net_bank_amount, 2) as amount,
       'GBP'::text as currency,
 
       case
@@ -9151,13 +9374,6 @@ begin
     join public.candidates c
       on c.id = pbc.candidate_id
     join lateral (
-      select pni.net_amount
-      from public.pay_batch_paye_net_inputs pni
-      where pni.pay_batch_candidate_id = pbc.id
-      order by pni.imported_at_utc desc
-      limit 1
-    ) ni on true
-    join lateral (
       select
         nullif(btrim(coalesce(c.account_holder, c.display_name, concat_ws(' ', c.first_name, c.last_name))), '') as payee_nm,
         case
@@ -9171,14 +9387,14 @@ begin
     ) b on true
     where pbc.pay_batch_id = p_pay_batch_id
       and pbc.paye_state is not null
-      and round(coalesce(ni.net_amount,0),2) > 0;
+      and round(coalesce(pbc.net_bank_amount,0),2) > 0;
   end if;
 
   -- =========================================================
   -- UMBRELLA groups: candidate_id + week_ending_bucket (default)
   -- Payee is umbrella (funds go to umbrella)
   -- =========================================================
-  if v_scope in ('UMBRELLA','ALL') then
+  if v_do_umbrella = true then
     insert into _tmp_pay_transfer_groups(
       pay_channel,
       candidate_id,
@@ -9249,7 +9465,6 @@ begin
       sc_norm as sort_code,
       acct_norm as account_number,
 
-      -- ✅ FIX (A3): umbrellas table has no account_type column; snapshot is always Business
       'Business'::text as account_type,
 
       u.bank_details_hash as bank_details_hash_snapshot,
@@ -9297,8 +9512,8 @@ begin
     ) b on true;
   end if;
 
-  -- Clear old item→transfer links for this scope (rebuild coherently)
-  if v_scope in ('PAYE','ALL') then
+  -- Clear old item→transfer links for executed scopes (rebuild coherently)
+  if v_do_paye = true then
     update public.pay_batch_items pbi_clr
     set pay_bank_transfer_id = null
     from public.pay_batch_candidates pbc_clr
@@ -9308,7 +9523,7 @@ begin
       and pbi_clr.item_type <> 'DEBT_CREATED';
   end if;
 
-  if v_scope in ('UMBRELLA','ALL') then
+  if v_do_umbrella = true then
     update public.pay_batch_items pbi_clr2
     set pay_bank_transfer_id = null
     from public.pay_batch_candidates pbc_clr2
@@ -9316,6 +9531,15 @@ begin
       and pbc_clr2.pay_batch_id = p_pay_batch_id
       and pbi_clr2.pay_channel = 'UMBRELLA'
       and pbi_clr2.item_type <> 'DEBT_CREATED';
+  end if;
+
+  if v_do_loans = true then
+    update public.pay_batch_items pbi_clr3
+    set pay_bank_transfer_id = null
+    from public.pay_batch_candidates pbc_clr3
+    where pbi_clr3.pay_batch_candidate_id = pbc_clr3.id
+      and pbc_clr3.pay_batch_id = p_pay_batch_id
+      and pbi_clr3.item_type = 'LOAN_PAYOUT';
   end if;
 
   -- Upsert transfers (idempotent by (pay_batch_id, pay_channel, transfer_group_key))
@@ -9371,7 +9595,11 @@ begin
     g.grouping_mode_used,
     g.week_ending_bucket
   from _tmp_pay_transfer_groups g
-  where (v_scope = 'ALL' or g.pay_channel = v_scope)
+  where (
+    (v_do_paye = true and g.pay_channel = 'PAYE')
+    or (v_do_umbrella = true and g.pay_channel = 'UMBRELLA')
+    or (v_do_loans = true and g.pay_channel = 'PAYE')
+  )
   on conflict (pay_batch_id, pay_channel, transfer_group_key)
   do update set
     candidate_id = excluded.candidate_id,
@@ -9399,11 +9627,15 @@ begin
   update public.pay_bank_transfers pbt_req
   set request_id = coalesce(nullif(pbt_req.request_id,''), pbt_req.id::text)
   where pbt_req.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or pbt_req.pay_channel = v_scope)
+    and (
+      (v_do_paye = true and pbt_req.pay_channel = 'PAYE')
+      or (v_do_umbrella = true and pbt_req.pay_channel = 'UMBRELLA')
+      or (v_do_loans = true and pbt_req.pay_channel = 'PAYE')
+    )
     and (pbt_req.request_id is null or pbt_req.request_id = '');
 
   -- Link items → transfers
-  if v_scope in ('PAYE','ALL') then
+  if v_do_paye = true then
     update public.pay_batch_items pbi_l
     set pay_bank_transfer_id = pbt_l.id
     from public.pay_batch_candidates pbc_l
@@ -9418,7 +9650,7 @@ begin
       and pbi_l.item_type <> 'DEBT_CREATED';
   end if;
 
-  if v_scope in ('UMBRELLA','ALL') then
+  if v_do_umbrella = true then
     update public.pay_batch_items pbi_u
     set pay_bank_transfer_id = pbt_u.id
     from public.pay_batch_candidates pbc_u
@@ -9435,19 +9667,41 @@ begin
       and pbi_u.item_type <> 'DEBT_CREATED';
   end if;
 
+  if v_do_loans = true then
+    update public.pay_batch_items pbi_ln
+    set pay_bank_transfer_id = pbt_ln.id
+    from public.pay_batch_candidates pbc_ln
+    join public.pay_bank_transfers pbt_ln
+      on pbt_ln.pay_batch_id = p_pay_batch_id
+     and pbt_ln.pay_channel = 'PAYE'
+     and pbt_ln.candidate_id = pbc_ln.candidate_id
+     and pbt_ln.transfer_group_key = (pbc_ln.candidate_id::text)
+    where pbi_ln.pay_batch_candidate_id = pbc_ln.id
+      and pbc_ln.pay_batch_id = p_pay_batch_id
+      and pbi_ln.item_type = 'LOAN_PAYOUT';
+  end if;
+
   -- Counts for UI
   select count(*)::int
   into v_pending_count
   from public.pay_bank_transfers pbt_cnt
   where pbt_cnt.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or pbt_cnt.pay_channel = v_scope)
+    and (
+      (v_do_paye = true and pbt_cnt.pay_channel = 'PAYE')
+      or (v_do_umbrella = true and pbt_cnt.pay_channel = 'UMBRELLA')
+      or (v_do_loans = true and pbt_cnt.pay_channel = 'PAYE')
+    )
     and pbt_cnt.status = 'PENDING';
 
   select count(*)::int
   into v_blocked_count
   from public.pay_bank_transfers pbt_cnt2
   where pbt_cnt2.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or pbt_cnt2.pay_channel = v_scope)
+    and (
+      (v_do_paye = true and pbt_cnt2.pay_channel = 'PAYE')
+      or (v_do_umbrella = true and pbt_cnt2.pay_channel = 'UMBRELLA')
+      or (v_do_loans = true and pbt_cnt2.pay_channel = 'PAYE')
+    )
     and pbt_cnt2.status = 'BLOCKED';
 
   select coalesce(
@@ -9469,10 +9723,14 @@ begin
   into v_blocked_reasons
   from public.pay_bank_transfers pbt_blk
   where pbt_blk.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or pbt_blk.pay_channel = v_scope)
+    and (
+      (v_do_paye = true and pbt_blk.pay_channel = 'PAYE')
+      or (v_do_umbrella = true and pbt_blk.pay_channel = 'UMBRELLA')
+      or (v_do_loans = true and pbt_blk.pay_channel = 'PAYE')
+    )
     and pbt_blk.status = 'BLOCKED';
 
-  -- ✅ FIX (B-safe): determine READY vs WAITING_BANK_CONFIRM from rail capability, not provider string
+  -- Determine READY vs WAITING_BANK_CONFIRM from rail capability, not provider string
   select coalesce(sd.rail_supports_auto_execute, false)
   into v_auto_execute
   from public.settings_defaults sd
@@ -9526,7 +9784,31 @@ begin
   into v_transfers
   from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or pbt.pay_channel = v_scope);
+    and (
+      (v_do_paye = true and pbt.pay_channel = 'PAYE')
+      or (v_do_umbrella = true and pbt.pay_channel = 'UMBRELLA')
+      or (v_do_loans = true and pbt.pay_channel = 'PAYE')
+    );
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_EXECUTE_BANK:OK',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'batch_kind_fixed', v_batch_kind_fixed,
+        'scope', v_scope,
+        'provider', v_provider,
+        'env', v_env,
+        'pending_count', v_pending_count,
+        'blocked_count', v_blocked_count
+      ),
+      'pay_batches',
+      p_pay_batch_id::text
+    );
+  exception when others then
+    null;
+  end;
 
   return jsonb_build_object(
     'ok', true,
@@ -9546,4 +9828,3 @@ begin
   );
 end;
 $$;
-
