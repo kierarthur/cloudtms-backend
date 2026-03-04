@@ -1389,7 +1389,6 @@ begin;
 begin;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1689,21 +1688,14 @@ eligible_tsfin as (
       c.bank_details_hash as cand_bank_hash,
 
       ts.reference_number,
-      coalesce(cl.require_reference_to_pay,false) as require_reference_to_pay,
+      case when coalesce(con.overrideclientsettings,false) = true then coalesce(con.require_reference_to_pay,false) else coalesce(cs.pay_reference_required,false) end as require_reference_to_pay,
 
       -- Timesheet advance: force-include even if unauthorised/outside window
       (fi.timesheet_id is not null) as is_forced_advance,
 
-      tf.vat_rate_pct,
-      tf.charge_vat,
-
-      tf.timesheet_render_mode,
       tf.invoice_breakdown_json,
-      tf.adjustments_json,
 
       tf.total_pay_ex_vat,
-      tf.total_pay_inc_vat,
-      tf.total_pay_gbp,
 
       -- ✅ Use TSFIN canonical totals for additional units
       tf.additional_pay_ex_vat,
@@ -1729,6 +1721,10 @@ eligible_tsfin as (
       on ts.timesheet_id = tf.timesheet_id
     join public.clients cl
       on cl.id = tf.client_id
+    left join public.contracts con
+      on con.id = ts.contract_id
+    left join public.client_settings cs
+      on cs.client_id = tf.client_id
     join public.candidates c
       on c.id = tf.candidate_id
     left join public.timesheet_pay_state tps
@@ -3352,6 +3348,7 @@ ts_itemised as (
   );
 end;
 $function$;
+
 
 
 
