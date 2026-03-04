@@ -2130,6 +2130,7 @@ end;
 $$;
 
 
+
 create or replace function public.pay_batch_prepare(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -2151,6 +2152,17 @@ declare
   v_payees jsonb := '[]'::jsonb;
   v_summary jsonb := '{}'::jsonb;
   v_has_hard_blockers boolean := false;
+
+  v_fresh jsonb := null;
+  v_is_stale boolean := false;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+
+  v_batch_kind_fixed text := null;
+  v_has_paye boolean := false;
+  v_has_awaiting_net boolean := false;
+
+  v_bad_loans_payee_ct int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception '%', jsonb_build_object(
@@ -2171,6 +2183,7 @@ begin
   select
     pb.id,
     pb.status,
+    pb.batch_kind_fixed,
     pb.pay_date,
     pb.rail_provider_snapshot,
     pb.rail_env_snapshot,
@@ -2189,6 +2202,144 @@ begin
       'message', 'pay_batch_prepare: pay_batch not found',
       'pay_batch_id', p_pay_batch_id::text
     )::text;
+  end if;
+
+  v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed,'')));
+
+  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+
+  if v_is_stale = true then
+    select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+      into v_diff_sample
+    from (
+      select elem
+      from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+      limit 50
+    ) x;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_PREPARE:STALE',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'stale_reasons', v_stale_reasons,
+          'diff_sample', v_diff_sample
+        ),
+        'pay_batches',
+        p_pay_batch_id::text,
+        null,
+        null,
+        null,
+        null
+      );
+    exception when others then
+      null;
+    end;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_PREPARE',
+      'code', 'BATCH_STALE',
+      'message', 'pay_batch_prepare: batch is stale; regenerate draft before proceeding',
+      'pay_batch_id', p_pay_batch_id::text,
+      'stale_reasons', v_stale_reasons,
+      'diff', v_diff_sample
+    )::text;
+  end if;
+
+  select exists(
+    select 1
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.pay_channel = 'PAYE'
+      and pbi.is_voided = false
+  )
+  into v_has_paye;
+
+  select exists(
+    select 1
+    from public.pay_batch_candidates pbc2
+    where pbc2.pay_batch_id = p_pay_batch_id
+      and coalesce(pbc2.awaiting_net_amount,false) = true
+  )
+  into v_has_awaiting_net;
+
+  if v_batch_kind_fixed <> 'LOANS' and v_has_paye = true and v_has_awaiting_net = true then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_PREPARE:BLOCKED_AWAITING_NET',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'has_paye', v_has_paye,
+          'has_awaiting_net', v_has_awaiting_net
+        ),
+        'pay_batches',
+        p_pay_batch_id::text,
+        null,
+        null,
+        null,
+        null
+      );
+    exception when others then
+      null;
+    end;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_PREPARE',
+      'code', 'PAYE_NET_REQUIRED',
+      'message', 'pay_batch_prepare: PAYE net amounts are required before this batch can proceed',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  if v_batch_kind_fixed = 'LOANS' then
+    select count(*)::int
+      into v_bad_loans_payee_ct
+    from public.pay_bank_transfers pbt
+    where pbt.pay_batch_id = p_pay_batch_id
+      and upper(
+        coalesce(
+          pbt.payee_entity_kind,
+          case
+            when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA'
+            else 'CANDIDATE'
+          end
+        )
+      ) <> 'CANDIDATE';
+
+    if v_bad_loans_payee_ct > 0 then
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_BATCH_PREPARE:BLOCKED_LOANS_PAYEE_KIND',
+          jsonb_build_object(
+            'pay_batch_id', p_pay_batch_id::text,
+            'bad_transfer_count', v_bad_loans_payee_ct
+          ),
+          'pay_batches',
+          p_pay_batch_id::text,
+          null,
+          null,
+          null,
+          null
+        );
+      exception when others then
+        null;
+      end;
+
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_PREPARE',
+        'code', 'LOANS_PAYEE_MUST_BE_CANDIDATE',
+        'message', 'pay_batch_prepare: LOANS batches must pay candidates (not umbrellas)',
+        'pay_batch_id', p_pay_batch_id::text,
+        'bad_transfer_count', v_bad_loans_payee_ct
+      )::text;
+    end if;
   end if;
 
   v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot,'')));
@@ -2417,6 +2568,25 @@ begin
     coalesce((select hb.has_any from hard_blockers hb), false)
   into v_payees, v_summary, v_has_hard_blockers;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_BATCH_PREPARE:READY',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'has_hard_blockers', v_has_hard_blockers
+      ),
+      'pay_batches',
+      p_pay_batch_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch.id::text,
@@ -2446,7 +2616,6 @@ begin
   );
 end;
 $$;
-
 
 
 create or replace function public.pay_batch_mark_blocked_funds(
@@ -6112,7 +6281,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_batch_auth_start(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -6142,6 +6310,15 @@ declare
   v_req_id uuid := null;
 
   v_batch record;
+
+  v_fresh jsonb := null;
+  v_is_stale boolean := false;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+
+  v_batch_kind_fixed text := null;
+  v_has_paye boolean := false;
+  v_has_awaiting_net boolean := false;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_auth_start: pay_batch_id is required';
@@ -6193,7 +6370,8 @@ begin
 
   select
     pb.id,
-    pb.status
+    pb.status,
+    pb.batch_kind_fixed
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -6201,6 +6379,101 @@ begin
 
   if v_batch.id is null then
     raise exception 'pay_batch_auth_start: pay_batch not found';
+  end if;
+
+  v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed,'')));
+
+  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+
+  if v_is_stale = true then
+    select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+      into v_diff_sample
+    from (
+      select elem
+      from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+      limit 50
+    ) x;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_AUTH_START:STALE',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'stale_reasons', v_stale_reasons,
+          'diff_sample', v_diff_sample
+        ),
+        'pay_batches',
+        p_pay_batch_id::text,
+        null,
+        null,
+        null,
+        null
+      );
+    exception when others then
+      null;
+    end;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_AUTH_START',
+      'code', 'BATCH_STALE',
+      'message', 'pay_batch_auth_start: batch is stale; regenerate draft before proceeding',
+      'pay_batch_id', p_pay_batch_id::text,
+      'stale_reasons', v_stale_reasons,
+      'diff', v_diff_sample
+    )::text;
+  end if;
+
+  if v_batch_kind_fixed <> 'LOANS' then
+    select exists(
+      select 1
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc
+        on pbc.id = pbi.pay_batch_candidate_id
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbi.pay_channel = 'PAYE'
+        and pbi.is_voided = false
+    )
+    into v_has_paye;
+
+    select exists(
+      select 1
+      from public.pay_batch_candidates pbc2
+      where pbc2.pay_batch_id = p_pay_batch_id
+        and coalesce(pbc2.awaiting_net_amount,false) = true
+    )
+    into v_has_awaiting_net;
+
+    if v_has_paye = true and v_has_awaiting_net = true then
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_BATCH_AUTH_START:BLOCKED_AWAITING_NET',
+          jsonb_build_object(
+            'pay_batch_id', p_pay_batch_id::text,
+            'has_paye', v_has_paye,
+            'has_awaiting_net', v_has_awaiting_net
+          ),
+          'pay_batches',
+          p_pay_batch_id::text,
+          null,
+          null,
+          null,
+          null
+        );
+      exception when others then
+        null;
+      end;
+
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_AUTH_START',
+        'code', 'PAYE_NET_REQUIRED',
+        'message', 'pay_batch_auth_start: PAYE net amounts are required before authorisation can proceed',
+        'pay_batch_id', p_pay_batch_id::text
+      )::text;
+    end if;
   end if;
 
   select
@@ -6300,6 +6573,28 @@ begin
     set status = 'AUTHORISED_FOR_PAYMENT'
     where pb3.id = p_pay_batch_id;
 
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_AUTH_START:AUTHORISED',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'auth_request_id', v_req_id::text,
+          'required_quantity', v_req_qty,
+          'became_authorised', true,
+          'golden_key_used', v_use_golden
+        ),
+        'pay_batches',
+        p_pay_batch_id::text,
+        null,
+        null,
+        null,
+        null
+      );
+    exception when others then
+      null;
+    end;
+
     return jsonb_build_object(
       'ok', true,
       'pay_batch_id', p_pay_batch_id::text,
@@ -6314,6 +6609,28 @@ begin
     update public.pay_batches pb5
     set status = 'AWAITING_AUTHORISATION'
     where pb5.id = p_pay_batch_id;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_BATCH_AUTH_START:AWAITING',
+        jsonb_build_object(
+          'pay_batch_id', p_pay_batch_id::text,
+          'auth_request_id', v_req_id::text,
+          'required_quantity', v_req_qty,
+          'became_authorised', false,
+          'golden_key_used', v_use_golden
+        ),
+        'pay_batches',
+        p_pay_batch_id::text,
+        null,
+        null,
+        null,
+        null
+      );
+    exception when others then
+      null;
+    end;
 
     return jsonb_build_object(
       'ok', true,
