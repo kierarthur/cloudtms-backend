@@ -3363,6 +3363,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3387,6 +3388,9 @@ declare
 
   -- ✅ UK “today” anchor for eligibility window (Option A)
   v_today_uk date := (now() at time zone 'Europe/London')::date;
+
+  -- ✅ UTC now anchor (timestamptz)
+  v_now_utc timestamptz := now();
 
   -- ✅ Eligibility window knobs (from settings_defaults; fallback to defaults if column absent)
   v_pay_eligibility_months_back int := 6;
@@ -4996,10 +5000,8 @@ end;
     select distinct
       tf.timesheet_id as timesheet_id
     from public.pay_batch_candidates pbc_ts
-    join public.candidate_timesheets ct
-      on ct.candidate_id = pbc_ts.candidate_id
     join public.timesheets_financials tf
-      on tf.candidate_timesheet_id = ct.id
+      on tf.candidate_id = pbc_ts.candidate_id
      and tf.is_current = true
     where pbc_ts.pay_batch_id = v_batch_id
   ),
@@ -5372,7 +5374,7 @@ end;
   update public.pay_batch_candidates pbc
   set
     awaiting_net_amount = (
-      pbc.pay_channel = 'PAYE'
+      (v_scope = 'PAYE')
       and not exists (
         select 1
         from public.pay_batch_paye_net_inputs pni
@@ -5408,11 +5410,13 @@ end;
     select
       pbc.id as pay_batch_candidate_id,
       pbc.candidate_id,
-      pbc.pay_channel,
-      pbc.umbrella_id,
+      v_scope as pay_channel,
+      case when v_scope = 'UMBRELLA' then c_sc.umbrella_id else null end as umbrella_id,
       pbc.awaiting_net_amount,
       pni.net_amount as paye_net_amount
     from public.pay_batch_candidates pbc
+    join public.candidates c_sc
+      on c_sc.id = pbc.candidate_id
     left join public.pay_batch_paye_net_inputs pni
       on pni.pay_batch_candidate_id = pbc.id
     where pbc.pay_batch_id = v_batch_id
@@ -5585,12 +5589,14 @@ end;
     select
       pbc.id as pay_batch_candidate_id,
       pbc.candidate_id,
-      pbc.pay_channel,
-      pbc.umbrella_id,
+      v_scope as pay_channel,
+      case when v_scope = 'UMBRELLA' then c_sc.umbrella_id else null end as umbrella_id,
       pbc.awaiting_net_amount,
       coalesce(pbc.overpayment_recovery_taken, 0)::numeric(12,2) as overpayment_recovery_taken_ex,
       pni.net_amount as paye_net_amount
     from public.pay_batch_candidates pbc
+    join public.candidates c_sc
+      on c_sc.id = pbc.candidate_id
     left join public.pay_batch_paye_net_inputs pni
       on pni.pay_batch_candidate_id = pbc.id
     where pbc.pay_batch_id = v_batch_id
@@ -5897,7 +5903,7 @@ end;
   update public.pay_batch_candidates pbc
   set
     awaiting_net_amount = (
-      pbc.pay_channel = 'PAYE'
+      (v_scope = 'PAYE')
       and not exists (
         select 1
         from public.pay_batch_paye_net_inputs pni2
@@ -5906,7 +5912,7 @@ end;
     ),
 
     gross_preview = case
-      when pbc.pay_channel = 'PAYE' then sums.earnings_ex
+      when (v_scope = 'PAYE') then sums.earnings_ex
       else sums.earnings_inc
     end,
 
@@ -5914,10 +5920,10 @@ end;
     loan_repayment_taken = sums.loan_repayment_taken_ex,
 
     net_bank_amount = case
-      when pbc.pay_channel = 'PAYE' then
+      when (v_scope = 'PAYE') then
         case
           when (
-            pbc.pay_channel = 'PAYE'
+            (v_scope = 'PAYE')
             and not exists (
               select 1
               from public.pay_batch_paye_net_inputs pni3
@@ -7139,6 +7145,8 @@ exception when others then
   raise;
 end;
 $$;
+
+
 
 
 
