@@ -9673,3 +9673,466 @@ begin
   );
 end;
 $$;
+create or replace function public.pay_loans_grant(
+  p_candidate_id uuid,
+  p_principal_amount numeric,
+  p_weekly_due numeric,
+  p_weeks_total int,
+  p_start_week_start date,
+  p_actor_user_id uuid,
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_pay_date date := (now() at time zone 'Europe/London')::date;
+
+  v_settings record;
+  v_candidate record;
+
+  v_schedule_json jsonb := '[]'::jsonb;
+  v_next_due date := null;
+
+  v_advance_id uuid := null;
+  v_pay_batch_id uuid := null;
+  v_pay_batch_candidate_id uuid := null;
+  v_pay_batch_item_id uuid := null;
+
+  v_warnings jsonb := '[]'::jsonb;
+
+  v_provider text := null;
+  v_env text := null;
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+
+  v_bnc_status text := null;
+  v_bnc_has_override boolean := false;
+  v_bpm_present boolean := false;
+begin
+  if p_candidate_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'CANDIDATE_ID_REQUIRED',
+      'message', 'pay_loans_grant: candidate_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_loans_grant: actor_user_id is required'
+    )::text;
+  end if;
+
+  if p_principal_amount is null or round(p_principal_amount,2) <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'PRINCIPAL_INVALID',
+      'message', 'pay_loans_grant: principal_amount must be > 0'
+    )::text;
+  end if;
+
+  if p_weekly_due is null or round(p_weekly_due,2) <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'WEEKLY_DUE_INVALID',
+      'message', 'pay_loans_grant: weekly_due must be > 0'
+    )::text;
+  end if;
+
+  if p_weeks_total is null or p_weeks_total < 1 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'WEEKS_TOTAL_INVALID',
+      'message', 'pay_loans_grant: weeks_total must be >= 1'
+    )::text;
+  end if;
+
+  if p_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'START_WEEK_START_REQUIRED',
+      'message', 'pay_loans_grant: start_week_start is required'
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_loans_grant: start_week_start must be a Monday (week start)',
+      'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  select
+    sd.banking_system,
+    sd.external_paye_system,
+    sd.rail_provider_default,
+    sd.rail_env_default,
+    sd.rail_supports_name_check
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'SETTINGS_DEFAULTS_MISSING',
+      'message', 'pay_loans_grant: settings_defaults missing required banking defaults (id=1)'
+    )::text;
+  end if;
+
+  select
+    c.id,
+    c.active,
+    c.tms_ref,
+    c.display_name,
+    c.first_name,
+    c.last_name,
+    c.account_holder,
+    c.sort_code,
+    c.account_number,
+    c.bank_details_hash
+  into v_candidate
+  from public.candidates c
+  where c.id = p_candidate_id
+  limit 1;
+
+  if v_candidate.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', 'pay_loans_grant: candidate not found',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  if coalesce(v_candidate.active,false) = false then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'CANDIDATE_INACTIVE',
+      'message', 'pay_loans_grant: candidate is not active',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
+  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
+
+  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
+  v_requires_payee_map := (v_provider <> 'CSV');
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (p_start_week_start + (gs.i * 7))::date,
+          'amount', round(
+            -least(
+              round(p_weekly_due,2),
+              greatest(round(p_principal_amount,2) - (round(p_weekly_due,2) * gs.i), 0)
+            ),
+            2
+          )
+        )
+        order by (p_start_week_start + (gs.i * 7))::date asc
+      ),
+      '[]'::jsonb
+    )
+  into v_schedule_json
+  from generate_series(0, greatest(p_weeks_total,1) - 1) as gs(i);
+
+  select min(x.week_start)
+  into v_next_due
+  from (
+    select
+      (p_start_week_start + (gs2.i * 7))::date as week_start,
+      round(
+        -least(
+          round(p_weekly_due,2),
+          greatest(round(p_principal_amount,2) - (round(p_weekly_due,2) * gs2.i), 0)
+        ),
+        2
+      )::numeric as amt
+    from generate_series(0, greatest(p_weeks_total,1) - 1) as gs2(i)
+  ) x
+  where x.amt < 0;
+
+  insert into public.pay_advances(
+    candidate_id,
+    client_id,
+    reason,
+    original_amount,
+    outstanding_amount,
+    linked_shift_date,
+    schedule_json,
+    next_due_week_start,
+    status,
+    best_guess_hours,
+    notes,
+    created_at,
+    created_by,
+    updated_at,
+    advance_kind,
+    linked_timesheet_id,
+    baseline_signature,
+    payout_status,
+    payout_pay_batch_id,
+    payout_transfer_id,
+    weekly_due,
+    weeks_total,
+    start_week_start
+  )
+  values (
+    p_candidate_id,
+    null::uuid,
+    'LOAN'::public.pay_advance_reason_enum,
+    round(p_principal_amount,2),
+    round(p_principal_amount,2),
+    null::date,
+    coalesce(v_schedule_json,'[]'::jsonb),
+    v_next_due,
+    'ACTIVE'::public.pay_advance_status_enum,
+    null::jsonb,
+    nullif(btrim(coalesce(p_note,'')), ''),
+    v_now_utc,
+    p_actor_user_id,
+    v_now_utc,
+    'LOAN'::public.pay_advance_kind_enum,
+    null::uuid,
+    null::text,
+    'PENDING'::public.pay_advance_payout_status_enum,
+    null::uuid,
+    null::uuid,
+    round(p_weekly_due,2),
+    p_weeks_total,
+    p_start_week_start
+  )
+  returning id into v_advance_id;
+
+  insert into public.pay_batches(
+    pay_date,
+    created_at_utc,
+    created_by_user_id,
+    status,
+    banking_system_snapshot,
+    external_paye_system_snapshot,
+    rail_provider_snapshot,
+    rail_env_snapshot,
+    batch_kind_fixed
+  )
+  values (
+    v_pay_date,
+    v_now_utc,
+    p_actor_user_id,
+    'DRAFT',
+    v_settings.banking_system,
+    v_settings.external_paye_system,
+    v_settings.rail_provider_default,
+    v_settings.rail_env_default,
+    'LOANS'
+  )
+  returning id into v_pay_batch_id;
+
+  insert into public.pay_batch_candidates(
+    pay_batch_id,
+    candidate_id,
+    candidate_tms_ref,
+    candidate_display_name,
+    paye_state,
+    mismatch_settlement_choice,
+    gross_preview,
+    net_bank_amount,
+    debt_created,
+    loan_repayment_taken,
+    overpayment_recovery_taken,
+    awaiting_net_amount,
+    updated_at
+  )
+  values (
+    v_pay_batch_id,
+    p_candidate_id,
+    v_candidate.tms_ref,
+    v_candidate.display_name,
+    null,
+    null,
+    round(p_principal_amount,2),
+    round(p_principal_amount,2),
+    0,
+    0,
+    0,
+    false,
+    v_now_utc
+  )
+  returning id into v_pay_batch_candidate_id;
+
+  insert into public.pay_batch_items(
+    pay_batch_candidate_id,
+    item_type,
+    timesheet_id,
+    segment_key,
+    source_ref,
+    description,
+    amount_ex_vat,
+    amount_vat,
+    amount_inc_vat,
+    pay_channel,
+    umbrella_id,
+    bank_reference,
+    pay_bank_transfer_id,
+    repayment_week_start,
+    is_voided,
+    is_mismatch,
+    created_at,
+    updated_at
+  )
+  values (
+    v_pay_batch_candidate_id,
+    'LOAN_PAYOUT',
+    null::uuid,
+    null::text,
+    ('advance:' || v_advance_id::text),
+    'Loan payout',
+    round(p_principal_amount,2),
+    0,
+    round(p_principal_amount,2),
+    'PAYE',
+    null::uuid,
+    null::text,
+    null::uuid,
+    null::date,
+    false,
+    false,
+    v_now_utc,
+    v_now_utc
+  )
+  returning id into v_pay_batch_item_id;
+
+  insert into public.pay_batch_item_breakdowns(
+    pay_batch_item_id,
+    line_kind,
+    bucket_code,
+    unit_name,
+    units,
+    rate,
+    amount_ex_vat,
+    amount_vat,
+    amount_inc_vat,
+    meta_json
+  )
+  values (
+    v_pay_batch_item_id,
+    'LOAN_PAYOUT',
+    null,
+    'Loan payout',
+    null::numeric,
+    null::numeric,
+    round(p_principal_amount,2),
+    0,
+    round(p_principal_amount,2),
+    '{}'::jsonb
+  );
+
+  if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
+    v_warnings := v_warnings || jsonb_build_array(
+      jsonb_build_object(
+        'code', 'BLOCKED_BANK_DETAILS',
+        'message', 'Candidate bank details are missing; batch can be created but will be blocked at prepare/schedule until bank details are present.',
+        'candidate_id', p_candidate_id::text
+      )
+    );
+  else
+    if v_need_name_check = true then
+      select
+        coalesce(bnc.status, 'UNVERIFIED') as status,
+        (bnc.override_reason is not null and bnc.override_hash = v_candidate.bank_details_hash) as has_override
+      into
+        v_bnc_status,
+        v_bnc_has_override
+      from public.bank_name_checks bnc
+      where bnc.rail_provider = v_settings.rail_provider_default
+        and bnc.rail_env = v_settings.rail_env_default
+        and bnc.entity_kind = 'CANDIDATE'
+        and bnc.entity_id = p_candidate_id
+        and bnc.bank_details_hash = v_candidate.bank_details_hash
+      limit 1;
+
+      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NAME_CHECK',
+            'message', 'Name check has not passed (or override missing) for candidate bank details; scheduling/execution may be blocked until resolved.',
+            'candidate_id', p_candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+
+    if v_requires_payee_map = true then
+      select (bpm.payee_id is not null) as present
+      into v_bpm_present
+      from public.bank_payee_map bpm
+      where bpm.rail_provider = v_settings.rail_provider_default
+        and bpm.rail_env = v_settings.rail_env_default
+        and bpm.entity_kind = 'CANDIDATE'
+        and bpm.entity_id = p_candidate_id
+        and bpm.bank_details_hash = v_candidate.bank_details_hash
+      limit 1;
+
+      if coalesce(v_bpm_present,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NO_PAYEE_MAP',
+            'message', 'Payee map is missing for candidate bank details on this rail; scheduling/execution may be blocked until payee mapping exists.',
+            'candidate_id', p_candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+  end if;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_LOANS_GRANT',
+      jsonb_build_object(
+        'candidate_id', p_candidate_id::text,
+        'advance_id', v_advance_id::text,
+        'pay_batch_id', v_pay_batch_id::text,
+        'principal_amount', round(p_principal_amount,2),
+        'weekly_due', round(p_weekly_due,2),
+        'weeks_total', p_weeks_total,
+        'start_week_start', p_start_week_start::text,
+        'pay_date', v_pay_date::text,
+        'rail_provider', v_settings.rail_provider_default,
+        'rail_env', v_settings.rail_env_default,
+        'warnings', v_warnings
+      ),
+      'pay_batches',
+      v_pay_batch_id::text
+    );
+  exception when others then
+    null;
+  end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', v_pay_batch_id::text,
+    'advance_id', v_advance_id::text,
+    'pay_date', v_pay_date::text,
+    'batch_kind_fixed', 'LOANS',
+    'warnings', v_warnings
+  );
+end;
+$$;
