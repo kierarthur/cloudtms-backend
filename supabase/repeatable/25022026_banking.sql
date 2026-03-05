@@ -695,6 +695,10 @@ where j.timesheet_id is not null
   and j.key_type is not null
   and j.key_value is not null;
 $$;
+
+
+
+
 CREATE OR REPLACE FUNCTION public._pay_candidate_week_totals(p_candidate_ids uuid[], p_week_start date)
 RETURNS TABLE (
   candidate_id uuid,
