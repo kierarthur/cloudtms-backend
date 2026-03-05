@@ -10549,3 +10549,359 @@ begin
   );
 end;
 $$;
+
+
+CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
+  p_timesheet_id uuid,
+  p_actor_user_id uuid DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_now_utc timestamptz := now();
+  v_out jsonb;
+  v_has_tsfin boolean := false;
+BEGIN
+  IF p_timesheet_id IS NULL THEN
+    RAISE EXCEPTION 'timesheet_pay_state: timesheet_id is required';
+  END IF;
+
+  WITH
+  tf AS (
+    SELECT
+      tf.timesheet_id,
+      tf.pay_on_hold,
+      tf.invoice_breakdown_json
+    FROM public.timesheets_financials tf
+    WHERE tf.timesheet_id = p_timesheet_id
+      AND tf.is_current = true
+    LIMIT 1
+  ),
+  tf_norm AS (
+    SELECT
+      t.timesheet_id,
+      COALESCE(t.pay_on_hold, false) AS pay_on_hold,
+      CASE
+        WHEN t.invoice_breakdown_json IS NOT NULL AND jsonb_typeof(t.invoice_breakdown_json) = 'object'
+          THEN t.invoice_breakdown_json
+        ELSE NULL
+      END AS invoice_breakdown_json
+    FROM tf t
+  ),
+  is_seg AS (
+    SELECT
+      (tn.invoice_breakdown_json IS NOT NULL)
+      AND (upper(COALESCE(tn.invoice_breakdown_json->>'mode','')) = 'SEGMENTS')
+      AND (jsonb_typeof(tn.invoice_breakdown_json->'segments') = 'array') AS is_segments_mode
+    FROM tf_norm tn
+  ),
+  components AS (
+    -- Segment mode: one component per segment in invoice_breakdown_json
+    SELECT
+      nullif(btrim(COALESCE(seg->>'segment_id','')), '') AS component_id,
+      nullif(btrim(COALESCE(seg->>'date','')), '') AS component_date,
+      COALESCE(NULLIF(seg->>'exclude_from_pay','')::boolean, false) AS is_on_hold
+    FROM tf_norm tn
+    JOIN is_seg s ON true
+    JOIN LATERAL jsonb_array_elements(COALESCE(tn.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg ON true
+    WHERE s.is_segments_mode = true
+      AND seg IS NOT NULL
+      AND jsonb_typeof(seg) = 'object'
+      AND nullif(btrim(COALESCE(seg->>'segment_id','')), '') IS NOT NULL
+
+    UNION ALL
+
+    -- Non-segment mode: single TOTAL component
+    SELECT
+      'TOTAL'::text AS component_id,
+      NULL::text AS component_date,
+      tn.pay_on_hold AS is_on_hold
+    FROM tf_norm tn
+    JOIN is_seg s ON true
+    WHERE s.is_segments_mode = false
+  ),
+  pay_items AS (
+    SELECT
+      CASE
+        WHEN nullif(btrim(COALESCE(pbi.segment_key,'')), '') IS NOT NULL
+          THEN nullif(btrim(COALESCE(pbi.segment_key,'')), '')
+        WHEN pbi.source_ref IS NOT NULL AND btrim(COALESCE(pbi.source_ref,'')) LIKE 'seg:%'
+          THEN nullif(btrim(split_part(btrim(pbi.source_ref), ':', 2)), '')
+        ELSE 'TOTAL'
+      END AS component_id,
+      pb.status AS batch_status,
+      pb.override_mode AS override_mode,
+      pb.completed_at_utc AS completed_at_utc
+    FROM public.pay_batch_items pbi
+    JOIN public.pay_batch_candidates pbc
+      ON pbc.id = pbi.pay_batch_candidate_id
+    JOIN public.pay_batches pb
+      ON pb.id = pbc.pay_batch_id
+    WHERE pbi.timesheet_id = p_timesheet_id
+      AND pbi.is_voided = false
+      AND pbi.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+      AND pb.cancelled_at_utc IS NULL
+  ),
+  agg AS (
+    SELECT
+      pi.component_id,
+
+      -- settled flags
+      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) = 'SETTLED'
+                AND COALESCE(pi.override_mode::text,'') = 'TIMESHEET_ADVANCE'
+               THEN 1 ELSE 0 END)::int AS has_settled_adv,
+      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) = 'SETTLED'
+                AND COALESCE(pi.override_mode::text,'') <> 'TIMESHEET_ADVANCE'
+               THEN 1 ELSE 0 END)::int AS has_settled_norm,
+      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) = 'SETTLED'
+               THEN pi.completed_at_utc ELSE NULL END) AS settled_at_utc,
+
+      -- processing flags
+      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) IN (
+                 'DRAFT','DRAFT_CREATED','READY',
+                 'WAITING_BANK_CONFIRM','PARTIAL','FAILED','BLOCKED_FUNDS',
+                 'SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT'
+               )
+               AND COALESCE(pi.override_mode::text,'') = 'TIMESHEET_ADVANCE'
+               THEN 1 ELSE 0 END)::int AS has_proc_adv,
+      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) IN (
+                 'DRAFT','DRAFT_CREATED','READY',
+                 'WAITING_BANK_CONFIRM','PARTIAL','FAILED','BLOCKED_FUNDS',
+                 'SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT'
+               )
+               AND COALESCE(pi.override_mode::text,'') <> 'TIMESHEET_ADVANCE'
+               THEN 1 ELSE 0 END)::int AS has_proc_norm,
+      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) IN (
+                 'DRAFT','DRAFT_CREATED','READY',
+                 'WAITING_BANK_CONFIRM','PARTIAL','FAILED','BLOCKED_FUNDS',
+                 'SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT'
+               )
+               THEN 1 ELSE 0 END)::int AS has_proc_any
+
+    FROM pay_items pi
+    WHERE pi.component_id IS NOT NULL
+    GROUP BY pi.component_id
+  ),
+  comp_state AS (
+    SELECT
+      c.component_id,
+      c.component_date,
+      c.is_on_hold,
+      CASE
+        WHEN c.is_on_hold = true THEN 'ON_HOLD'
+        WHEN COALESCE(a.has_settled_adv,0) = 1 THEN 'ADVANCED'
+        WHEN COALESCE(a.has_settled_norm,0) = 1 THEN 'PAID'
+        WHEN COALESCE(a.has_proc_adv,0) = 1 THEN 'ADVANCE_PROCESSING'
+        WHEN COALESCE(a.has_proc_norm,0) = 1 THEN 'PAY_PROCESSING'
+        WHEN COALESCE(a.has_proc_any,0) = 1 THEN 'PAY_PROCESSING'
+        ELSE 'UNPAID'
+      END AS stage,
+      a.settled_at_utc
+    FROM components c
+    LEFT JOIN agg a
+      ON a.component_id = c.component_id
+  ),
+  counts AS (
+    SELECT
+      count(*)::int AS total_components,
+      count(*) FILTER (WHERE cs.is_on_hold = true)::int AS on_hold_components,
+      count(*) FILTER (WHERE cs.is_on_hold = false)::int AS payable_components,
+
+      count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage IN ('PAID','ADVANCED'))::int AS paid_components,
+      count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage = 'ADVANCED')::int AS advanced_components,
+      count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage IN ('PAY_PROCESSING','ADVANCE_PROCESSING'))::int AS processing_components,
+      count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage = 'UNPAID')::int AS unpaid_components,
+
+      max(CASE WHEN cs.is_on_hold = false AND cs.stage IN ('PAY_PROCESSING','ADVANCE_PROCESSING') THEN 1 ELSE 0 END)::int AS any_processing,
+      max(CASE WHEN cs.is_on_hold = false AND cs.stage = 'ADVANCED' THEN 1 ELSE 0 END)::int AS any_advanced,
+
+      max(CASE WHEN cs.is_on_hold = false AND cs.stage IN ('PAID','ADVANCED') THEN cs.settled_at_utc ELSE NULL END) AS paid_at_utc
+    FROM comp_state cs
+  ),
+  unpaid_sample AS (
+    SELECT
+      coalesce(
+        jsonb_agg(cs.component_date ORDER BY cs.component_date) FILTER (WHERE cs.component_date IS NOT NULL),
+        '[]'::jsonb
+      ) AS dates
+    FROM (
+      SELECT cs.component_date
+      FROM comp_state cs
+      WHERE cs.is_on_hold = false
+        AND cs.stage = 'UNPAID'
+        AND cs.component_date IS NOT NULL
+      ORDER BY cs.component_date
+      LIMIT 3
+    ) cs
+  ),
+  delta AS (
+    SELECT
+      round(coalesce(sum(coalesce(oc.truth_ex_vat,0) - coalesce(oc.baseline_ex_vat,0)),0),2)::numeric AS net_delta_ex_vat,
+      round(coalesce(sum(coalesce(oc.outstanding_ex_vat,0)),0),2)::numeric AS outstanding_ex_vat,
+      round(coalesce(sum(coalesce(oc.reserved_ex_vat,0)),0),2)::numeric AS reserved_ex_vat
+    FROM public._pay_outstanding_components(ARRAY[p_timesheet_id]) oc
+  ),
+  mode AS (
+    SELECT
+      COALESCE((SELECT is_segments_mode FROM is_seg), false) AS is_segments_mode
+  ),
+  comp_json AS (
+    SELECT
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'component_id', cs.component_id,
+            'date', cs.component_date,
+            'is_on_hold', cs.is_on_hold,
+            'stage', cs.stage,
+            'paid_at_utc', cs.settled_at_utc,
+            'paid_at_label_uk',
+              CASE
+                WHEN cs.settled_at_utc IS NULL THEN NULL
+                ELSE to_char(cs.settled_at_utc AT TIME ZONE 'Europe/London', 'Dy DD/MM/YYYY HH24:MI') || 'hrs'
+              END
+          )
+          ORDER BY
+            CASE WHEN cs.component_id = 'TOTAL' THEN 0 ELSE 1 END,
+            cs.component_date NULLS LAST,
+            cs.component_id
+        ),
+        '[]'::jsonb
+      ) AS components
+    FROM comp_state cs
+  ),
+  paid_status AS (
+    SELECT
+      CASE
+        WHEN c.payable_components IS NULL OR c.payable_components = 0 THEN 'UNPAID'
+        WHEN c.paid_components = c.payable_components THEN 'PAID'
+        WHEN c.paid_components > 0 THEN 'PARTIALLY_PAID'
+        WHEN c.processing_components > 0 THEN 'PROCESSING'
+        ELSE 'UNPAID'
+      END AS paid_status_code,
+      CASE
+        WHEN c.paid_at_utc IS NULL THEN NULL
+        ELSE to_char(c.paid_at_utc AT TIME ZONE 'Europe/London', 'Dy DD/MM/YYYY HH24:MI') || 'hrs'
+      END AS paid_at_label_uk
+    FROM counts c
+  ),
+  adjusted AS (
+    SELECT
+      d.net_delta_ex_vat,
+      d.outstanding_ex_vat,
+      d.reserved_ex_vat,
+      CASE
+        WHEN d.net_delta_ex_vat > 0 THEN 'PAY_OUTSTANDING'
+        WHEN d.net_delta_ex_vat < 0 THEN 'OVERPAID'
+        ELSE 'NONE'
+      END AS adjusted_pill,
+      CASE
+        WHEN d.net_delta_ex_vat > 0 THEN
+          'Timesheet adjusted after payment. Additional pay outstanding: £' || to_char(abs(d.net_delta_ex_vat), 'FM999999990D00')
+        WHEN d.net_delta_ex_vat < 0 THEN
+          'Timesheet adjusted after payment. Overpaid by: £' || to_char(abs(d.net_delta_ex_vat), 'FM999999990D00')
+        ELSE NULL
+      END AS adjusted_message
+    FROM delta d
+  ),
+  hover AS (
+    SELECT
+      jsonb_build_object(
+        'paid', c.paid_components,
+        'processing', c.processing_components,
+        'unpaid', c.unpaid_components,
+        'on_hold', c.on_hold_components,
+        'total', c.total_components,
+        'payable', c.payable_components,
+        'last_payment_utc', c.paid_at_utc,
+        'last_payment_label_uk',
+          CASE
+            WHEN c.paid_at_utc IS NULL THEN NULL
+            ELSE to_char(c.paid_at_utc AT TIME ZONE 'Europe/London', 'Dy DD/MM/YYYY HH24:MI') || 'hrs'
+          END,
+        'unpaid_sample_dates', us.dates,
+        'net_delta_ex_vat', d.net_delta_ex_vat,
+        'outstanding_ex_vat', d.outstanding_ex_vat,
+        'reserved_ex_vat', d.reserved_ex_vat
+      ) AS hover_summary
+    FROM counts c
+    CROSS JOIN unpaid_sample us
+    CROSS JOIN delta d
+  )
+  SELECT
+    jsonb_build_object(
+      'ok', true,
+      'timesheet_id', p_timesheet_id::text,
+      'is_segments_mode', m.is_segments_mode,
+      'paid_status', ps.paid_status_code,
+      'paid_at_utc', c.paid_at_utc,
+      'paid_at_label_uk', ps.paid_at_label_uk,
+      'advanced_any', (c.any_advanced = 1),
+      'processing_any', (c.any_processing = 1),
+      'counts', jsonb_build_object(
+        'total_components', c.total_components,
+        'payable_components', c.payable_components,
+        'on_hold_components', c.on_hold_components,
+        'paid_components', c.paid_components,
+        'advanced_components', c.advanced_components,
+        'processing_components', c.processing_components,
+        'unpaid_components', c.unpaid_components
+      ),
+      'adjusted', jsonb_build_object(
+        'net_delta_ex_vat', a.net_delta_ex_vat,
+        'pill', a.adjusted_pill,
+        'message', a.adjusted_message,
+        'outstanding_ex_vat', a.outstanding_ex_vat,
+        'reserved_ex_vat', a.reserved_ex_vat
+      ),
+      'hover', h.hover_summary,
+      'components', cj.components
+    )
+  INTO v_out
+  FROM counts c
+  CROSS JOIN mode m
+  CROSS JOIN paid_status ps
+  CROSS JOIN adjusted a
+  CROSS JOIN hover h
+  CROSS JOIN comp_json cj;
+
+  v_has_tsfin := EXISTS (
+    SELECT 1
+    FROM public.timesheets_financials tf
+    WHERE tf.timesheet_id = p_timesheet_id
+      AND tf.is_current = true
+  );
+
+  IF v_out IS NULL THEN
+    v_out := jsonb_build_object(
+      'ok', false,
+      'timesheet_id', p_timesheet_id::text,
+      'error', 'NO_DATA'
+    );
+  END IF;
+
+  -- Best-effort debug audit (gated inside _imp_debug_audit)
+  BEGIN
+    IF p_actor_user_id IS NOT NULL THEN
+      PERFORM public._imp_debug_audit(
+        p_actor_user_id,
+        'TIMESHEET_PAY_STATE',
+        jsonb_build_object(
+          'timesheet_id', p_timesheet_id::text,
+          'has_tsfin', v_has_tsfin,
+          'result', v_out
+        ),
+        'timesheets',
+        p_timesheet_id::text
+      );
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+
+  RETURN v_out;
+END;
+$$;
