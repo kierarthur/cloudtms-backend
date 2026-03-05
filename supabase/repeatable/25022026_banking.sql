@@ -10905,3 +10905,246 @@ BEGIN
   RETURN v_out;
 END;
 $$;
+
+
+CREATE OR REPLACE FUNCTION public.pay_candidate_advances_report(
+  p_candidate_id uuid,
+  p_actor_user_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
+  v_week_start date := public._pay_week_start_monday(v_today_uk);
+  v_week_end date := (public._pay_week_start_monday(v_today_uk) + 6);
+
+  v_cand record;
+
+  v_paid_wtd numeric := 0;
+  v_loan_repaid_wtd numeric := 0;
+  v_overpay_recovered_wtd numeric := 0;
+
+  v_loans jsonb := '[]'::jsonb;
+  v_overpayments jsonb := '[]'::jsonb;
+begin
+  if p_candidate_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_CANDIDATE_ADVANCES_REPORT',
+      'code', 'CANDIDATE_ID_REQUIRED',
+      'message', 'pay_candidate_advances_report: candidate_id is required'
+    )::text;
+  end if;
+
+  select
+    c.id,
+    c.tms_ref,
+    c.display_name,
+    c.first_name,
+    c.last_name,
+    c.active
+  into v_cand
+  from public.candidates c
+  where c.id = p_candidate_id
+  limit 1;
+
+  if v_cand.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_CANDIDATE_ADVANCES_REPORT',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', 'pay_candidate_advances_report: candidate not found',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  select
+    coalesce(wt.paid_wtd, 0),
+    coalesce(wt.loan_repaid_wtd, 0),
+    coalesce(wt.overpay_recovered_wtd, 0)
+  into
+    v_paid_wtd,
+    v_loan_repaid_wtd,
+    v_overpay_recovered_wtd
+  from public._pay_candidate_week_totals(array[p_candidate_id], v_week_start) wt
+  where wt.candidate_id = p_candidate_id
+  limit 1;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'advance_id', pa.id::text,
+          'advance_kind', pa.advance_kind::text,
+          'reason', pa.reason::text,
+          'principal', round(coalesce(pa.original_amount,0),2)::numeric(12,2),
+          'weekly_due', case when pa.weekly_due is null then null else round(pa.weekly_due,2)::numeric(12,2) end,
+          'weeks_total', pa.weeks_total,
+          'start_week_start', case when pa.start_week_start is null then null else pa.start_week_start::text end,
+          'payout_status', case when pa.payout_status is null then null else pa.payout_status::text end,
+          'payout_pay_batch_id', case when pa.payout_pay_batch_id is null then null else pa.payout_pay_batch_id::text end,
+          'payout_transfer_id', case when pa.payout_transfer_id is null then null else pa.payout_transfer_id::text end,
+          'repaid_wtd', round(coalesce(lrw.repaid_wtd,0),2)::numeric(12,2),
+          'remaining', round(coalesce(pa.outstanding_amount,0),2)::numeric(12,2),
+          'due_this_week', case
+            when pa.payout_status is distinct from 'PAID'::public.pay_advance_payout_status_enum then 0::numeric(12,2)
+            when pa.weekly_due is null or pa.weekly_due <= 0 then 0::numeric(12,2)
+            when pa.start_week_start is not null and pa.start_week_start > v_week_start then 0::numeric(12,2)
+            else round(
+              greatest(
+                least(round(pa.weekly_due,2), round(pa.outstanding_amount,2)) - coalesce(lrw.repaid_wtd,0),
+                0
+              ),
+              2
+            )::numeric(12,2)
+          end,
+          'created_at', pa.created_at,
+          'notes', pa.notes
+        )
+        order by pa.created_at asc, pa.id asc
+      ),
+      '[]'::jsonb
+    )
+  into v_loans
+  from public.pay_advances pa
+  left join (
+    with
+    eligible_batches as (
+      select
+        pb.id as pay_batch_id
+      from public.pay_batches pb
+      where pb.pay_date >= v_week_start
+        and pb.pay_date <= v_week_end
+        and pb.cancelled_at_utc is null
+        and upper(coalesce(pb.status,'')) in (
+          'DRAFT',
+          'DRAFT_CREATED',
+          'READY',
+          'WAITING_BANK_CONFIRM',
+          'PARTIAL',
+          'FAILED',
+          'BLOCKED_FUNDS',
+          'SCHEDULED',
+          'EXECUTING',
+          'AWAITING_AUTHORISATION',
+          'AUTHORISED_FOR_PAYMENT',
+          'SETTLED'
+        )
+        and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
+    )
+    select
+      replace(pbi.source_ref, 'advance:', '')::uuid as loan_id,
+      round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))), 2)::numeric(12,2) as repaid_wtd
+    from public.pay_batch_candidates pbc
+    join eligible_batches eb
+      on eb.pay_batch_id = pbc.pay_batch_id
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    where pbc.candidate_id = p_candidate_id
+      and pbi.is_voided = false
+      and pbi.item_type = 'LOAN_REPAYMENT'
+      and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+    group by replace(pbi.source_ref, 'advance:', '')::uuid
+  ) lrw
+    on lrw.loan_id = pa.id
+  where pa.candidate_id = p_candidate_id
+    and pa.advance_kind = 'LOAN'::public.pay_advance_kind_enum
+    and pa.status = 'ACTIVE'::public.pay_advance_status_enum
+    and pa.outstanding_amount > 0;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'advance_id', pa2.id::text,
+          'advance_kind', pa2.advance_kind::text,
+          'reason', pa2.reason::text,
+          'source_timesheet_id', case when pa2.linked_timesheet_id is null then null else pa2.linked_timesheet_id::text end,
+          'source_booking_id', ts.booking_id,
+          'source_week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
+          'source_shift_label_norm', ts.shift_label_norm,
+          'owed', round(coalesce(pa2.original_amount,0),2)::numeric(12,2),
+          'recovered_total', round(greatest(coalesce(pa2.original_amount,0) - coalesce(pa2.outstanding_amount,0), 0),2)::numeric(12,2),
+          'recovered_wtd', round(coalesce(orw.recovered_wtd,0),2)::numeric(12,2),
+          'remaining', round(coalesce(pa2.outstanding_amount,0),2)::numeric(12,2),
+          'baseline_signature', pa2.baseline_signature,
+          'created_at', pa2.created_at,
+          'notes', pa2.notes
+        )
+        order by pa2.created_at asc, pa2.id asc
+      ),
+      '[]'::jsonb
+    )
+  into v_overpayments
+  from public.pay_advances pa2
+  left join (
+    with
+    eligible_batches as (
+      select
+        pb.id as pay_batch_id
+      from public.pay_batches pb
+      where pb.pay_date >= v_week_start
+        and pb.pay_date <= v_week_end
+        and pb.cancelled_at_utc is null
+        and upper(coalesce(pb.status,'')) in (
+          'DRAFT',
+          'DRAFT_CREATED',
+          'READY',
+          'WAITING_BANK_CONFIRM',
+          'PARTIAL',
+          'FAILED',
+          'BLOCKED_FUNDS',
+          'SCHEDULED',
+          'EXECUTING',
+          'AWAITING_AUTHORISATION',
+          'AUTHORISED_FOR_PAYMENT',
+          'SETTLED'
+        )
+        and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
+    )
+    select
+      replace(pbi.source_ref, 'advance:', '')::uuid as overpay_id,
+      round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))), 2)::numeric(12,2) as recovered_wtd
+    from public.pay_batch_candidates pbc
+    join eligible_batches eb
+      on eb.pay_batch_id = pbc.pay_batch_id
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    where pbc.candidate_id = p_candidate_id
+      and pbi.is_voided = false
+      and pbi.item_type = 'OVERPAYMENT_RECOVERY'
+      and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+    group by replace(pbi.source_ref, 'advance:', '')::uuid
+  ) orw
+    on orw.overpay_id = pa2.id
+  left join public.timesheets ts
+    on ts.timesheet_id = pa2.linked_timesheet_id
+  where pa2.candidate_id = p_candidate_id
+    and pa2.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+    and pa2.status = 'ACTIVE'::public.pay_advance_status_enum
+    and pa2.outstanding_amount > 0;
+
+  return jsonb_build_object(
+    'ok', true,
+    'candidate', jsonb_build_object(
+      'id', v_cand.id::text,
+      'tms_ref', v_cand.tms_ref,
+      'display_name', v_cand.display_name,
+      'first_name', v_cand.first_name,
+      'last_name', v_cand.last_name,
+      'active', v_cand.active
+    ),
+    'week_start', v_week_start::text,
+    'week_end', v_week_end::text,
+    'summary', jsonb_build_object(
+      'paid_wtd', round(coalesce(v_paid_wtd,0),2)::numeric(12,2),
+      'loan_repaid_wtd', round(coalesce(v_loan_repaid_wtd,0),2)::numeric(12,2),
+      'overpay_recovered_wtd', round(coalesce(v_overpay_recovered_wtd,0),2)::numeric(12,2)
+    ),
+    'loans', coalesce(v_loans,'[]'::jsonb),
+    'overpayments', coalesce(v_overpayments,'[]'::jsonb)
+  );
+end;
+$function$;
