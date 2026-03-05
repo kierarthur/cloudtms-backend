@@ -1453,8 +1453,6 @@ begin
           v_rendered_message := left(v_rendered_message, v_whatsapp_max);
           v_truncated := true;
         end if;
-
-        v_provider_key := 'WATI';
       else
         if v_output_type = 'SMS' then
           if char_length(v_rendered_message) > v_sms_max then
@@ -1467,9 +1465,10 @@ begin
             v_truncated := true;
           end if;
         end if;
-
-        v_provider_key := 'CLICKSEND';
       end if;
+
+      -- ✅ Adaptor-at-drain-time core rule: never hardcode provider here.
+      v_provider_key := 'AUTO';
 
       insert into public.comms_outbox(
         channel,
