@@ -699,6 +699,8 @@ $$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public._pay_candidate_week_totals(p_candidate_ids uuid[], p_week_start date)
 RETURNS TABLE (
   candidate_id uuid,
@@ -711,7 +713,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
-AS $$
+AS $function$
 with
 inp as (
   select
@@ -729,20 +731,7 @@ eligible_batches as (
   join public.pay_batches pb
     on pb.pay_date >= i.week_start
    and pb.pay_date <= i.week_end
-  where upper(coalesce(pb.status,'')) in (
-    'DRAFT',
-    'DRAFT_CREATED',
-    'READY',
-    'WAITING_BANK_CONFIRM',
-    'PARTIAL',
-    'FAILED',
-    'BLOCKED_FUNDS',
-    'SCHEDULED',
-    'EXECUTING',
-    'AWAITING_AUTHORISATION',
-    'AUTHORISED_FOR_PAYMENT',
-    'SETTLED'
-  )
+  where pb.cancelled_at_utc is null
     and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
 ),
 cand_rows as (
@@ -755,6 +744,8 @@ cand_rows as (
     on pbc.candidate_id = any(i.cand_ids)
   join eligible_batches eb
     on eb.pay_batch_id = pbc.pay_batch_id
+  where pbc.settled_at_utc is not null
+    and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
 ),
 paid as (
   select
@@ -774,7 +765,10 @@ loan_rep as (
     on eb.pay_batch_id = pbc.pay_batch_id
   join public.pay_batch_items pbi
     on pbi.pay_batch_candidate_id = pbc.id
-  where pbi.item_type = 'LOAN_REPAYMENT'
+  where pbc.settled_at_utc is not null
+    and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
+    and pbi.is_voided = false
+    and pbi.item_type = 'LOAN_REPAYMENT'
   group by pbc.candidate_id
 ),
 overpay_rec as (
@@ -788,12 +782,15 @@ overpay_rec as (
     on eb.pay_batch_id = pbc.pay_batch_id
   join public.pay_batch_items pbi
     on pbi.pay_batch_candidate_id = pbc.id
-  where pbi.item_type = 'OVERPAYMENT_RECOVERY'
+  where pbc.settled_at_utc is not null
+    and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
+    and pbi.is_voided = false
+    and pbi.item_type = 'OVERPAYMENT_RECOVERY'
   group by pbc.candidate_id
 )
 select
   c.id as candidate_id,
-  (select week_start from inp) as week_start,
+  (select i2.week_start from inp i2) as week_start,
   coalesce(p.paid_wtd,0) as paid_wtd,
   coalesce(l.loan_repaid_wtd,0) as loan_repaid_wtd,
   coalesce(o.overpay_recovered_wtd,0) as overpay_recovered_wtd
@@ -806,7 +803,8 @@ left join loan_rep l
   on l.candidate_id = c.id
 left join overpay_rec o
   on o.candidate_id = c.id;
-$$;
+$function$;
+
 
 
 
@@ -10910,7 +10908,6 @@ BEGIN
 END;
 $$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_candidate_advances_report(
   p_candidate_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -11022,20 +11019,6 @@ begin
       where pb.pay_date >= v_week_start
         and pb.pay_date <= v_week_end
         and pb.cancelled_at_utc is null
-        and upper(coalesce(pb.status,'')) in (
-          'DRAFT',
-          'DRAFT_CREATED',
-          'READY',
-          'WAITING_BANK_CONFIRM',
-          'PARTIAL',
-          'FAILED',
-          'BLOCKED_FUNDS',
-          'SCHEDULED',
-          'EXECUTING',
-          'AWAITING_AUTHORISATION',
-          'AUTHORISED_FOR_PAYMENT',
-          'SETTLED'
-        )
         and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
     )
     select
@@ -11047,6 +11030,8 @@ begin
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
     where pbc.candidate_id = p_candidate_id
+      and pbc.settled_at_utc is not null
+      and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
       and pbi.is_voided = false
       and pbi.item_type = 'LOAN_REPAYMENT'
       and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
@@ -11092,20 +11077,6 @@ begin
       where pb.pay_date >= v_week_start
         and pb.pay_date <= v_week_end
         and pb.cancelled_at_utc is null
-        and upper(coalesce(pb.status,'')) in (
-          'DRAFT',
-          'DRAFT_CREATED',
-          'READY',
-          'WAITING_BANK_CONFIRM',
-          'PARTIAL',
-          'FAILED',
-          'BLOCKED_FUNDS',
-          'SCHEDULED',
-          'EXECUTING',
-          'AWAITING_AUTHORISATION',
-          'AUTHORISED_FOR_PAYMENT',
-          'SETTLED'
-        )
         and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
     )
     select
@@ -11117,6 +11088,8 @@ begin
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
     where pbc.candidate_id = p_candidate_id
+      and pbc.settled_at_utc is not null
+      and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
       and pbi.is_voided = false
       and pbi.item_type = 'OVERPAYMENT_RECOVERY'
       and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
@@ -11152,3 +11125,8 @@ begin
   );
 end;
 $function$;
+
+
+
+
+
