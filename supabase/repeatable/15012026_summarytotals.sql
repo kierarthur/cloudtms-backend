@@ -227,6 +227,7 @@ $$;
 -- Totals computed from v_timesheets_summary fields: total_pay_ex_vat, margin_ex_vat.
 -- ============================================================
 
+
 create or replace function public.timesheet_list_totals(p_filters jsonb)
 returns table (
   count_all bigint,
@@ -437,9 +438,11 @@ begin
     end if;
   end if;
 
+  -- ✅ Candidate paid: include advanced/paid/partly paid by checking rollup settlement timestamp.
+  -- This avoids double counting and matches the summary sheet behaviour.
   if v_candidate_paid is not null then
     if lower(v_candidate_paid) = 'true' then
-      v_sql := v_sql || ' and v.paid_at_utc is not null';
+      v_sql := v_sql || ' and v.pay_paid_at_utc is not null';
     end if;
   end if;
 
@@ -574,6 +577,9 @@ begin
   return query execute v_sql;
 end;
 $$;
+
+
+
 
 
 
