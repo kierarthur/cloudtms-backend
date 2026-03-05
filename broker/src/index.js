@@ -721,6 +721,7 @@ function _asPosInt(v, def) {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) && n > 0 ? n : def;
 }
+
 async function loadSettingsDefaults(env) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -737,7 +738,7 @@ async function loadSettingsDefaults(env) {
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/settings_defaults` +
-        `?select=timezone_id,import_config_json,finance_email,finance_email_settings,max_attachments_per_email,system_email,system_emails` +
+        `?select=timezone_id,import_config_json,finance_email,finance_email_settings,max_attachments_per_email,system_email,system_emails,comms_adaptors_json` +
         `&id=eq.1` +
         `&limit=1`
     );
@@ -902,6 +903,15 @@ async function loadSettingsDefaults(env) {
       ? sesRaw
       : (_safeJsonParseMaybe(sesRaw, {}) || {});
 
+    // ✅ NEW: comms adaptors config (db-driven)
+    const cadRaw = row.comms_adaptors_json;
+    const commsAdaptorsJson0 = (typeof cadRaw === 'object' && cadRaw !== null)
+      ? cadRaw
+      : (_safeJsonParseMaybe(cadRaw, {}) || {});
+    const commsAdaptorsJson = (commsAdaptorsJson0 && typeof commsAdaptorsJson0 === 'object' && !Array.isArray(commsAdaptorsJson0))
+      ? commsAdaptorsJson0
+      : {};
+
     const maxAttachments = (() => {
       const n = Number(row.max_attachments_per_email);
       const v = Number.isFinite(n) ? Math.trunc(n) : 30;
@@ -917,7 +927,10 @@ async function loadSettingsDefaults(env) {
       finance_email_settings: financeEmailSettings,
       system_email: systemEmail,
       system_emails: systemEmailSettings,
-      max_attachments_per_email: maxAttachments
+      max_attachments_per_email: maxAttachments,
+
+      // ✅ NEW: comms adaptors config for WATI/ClickSend + limits
+      comms_adaptors_json: commsAdaptorsJson
     };
 
     // Store TTL cache
@@ -930,7 +943,8 @@ async function loadSettingsDefaults(env) {
         importConfig,
         finance_email: financeEmail,
         system_email: systemEmail,
-        max_attachments_per_email: maxAttachments
+        max_attachments_per_email: maxAttachments,
+        comms_adaptors_json_present: !!(commsAdaptorsJson && typeof commsAdaptorsJson === 'object' && !Array.isArray(commsAdaptorsJson))
       }));
     }
 
@@ -1007,7 +1021,10 @@ async function loadSettingsDefaults(env) {
       finance_email_settings: {},
       system_email: null,
       system_emails: {},
-      max_attachments_per_email: 30
+      max_attachments_per_email: 30,
+
+      // ✅ NEW fallbacks
+      comms_adaptors_json: {}
     };
 
     __SETTINGS_DEFAULTS_CACHE = { ts: Date.now(), value: out };
@@ -8965,6 +8982,8 @@ async function sendPayBatchRemittancesInternal(env, opts) {
   // ✅ Test-mode policy: allow sending ONLY if a test recipient email is configured.
   // When enabled, ALL remittances are routed to this email and intended recipient emails are ignored.
   const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
+  const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || '').trim());
+
   let testTo = null;
 
   if (payrollTesting) {
@@ -9368,6 +9387,54 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
       const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
 
+      if (isPayeJob) {
+        const adv = (job && typeof job.paye_net_advisory === 'object' && job.paye_net_advisory) ? job.paye_net_advisory : null;
+
+        const originalNet = asNum(adv?.original_net_input);
+        const loanTaken = asNum(adv?.loan_repayment_taken);
+        const overpayTaken = asNum(adv?.overpayment_recovery_taken);
+        const finalNetPaid = asNum(adv?.final_net_paid);
+
+        const hasLoan = (loanTaken != null && loanTaken > 1e-9);
+        const hasOverpay = (overpayTaken != null && overpayTaken > 1e-9);
+
+        const dedTotal = Number(loanTaken || 0) + Number(overpayTaken || 0);
+        const hasAnyDeduction = (dedTotal > 1e-9);
+        const netMissing = (originalNet == null);
+
+        // ✅ Requirement:
+        // - If loan_repayment_taken > 0, include:
+        //   Original PAYE net, Loan repayment, Final paid (Y − X)
+        // - Also include overpayment recovery lines where applicable.
+        // - If PAYE net missing, include advisory text.
+        if (adv && (hasAnyDeduction || netMissing)) {
+          lines.push('PAYE net summary');
+
+          if (netMissing) {
+            lines.push('PAYE net not provided\t(advisory — final paid cannot be confirmed until net is entered)');
+          }
+
+          if (originalNet != null) lines.push(`Original PAYE net\t£${asMoney(originalNet) ?? ''}`);
+          else lines.push('Original PAYE net\t(not provided)');
+
+          if (hasLoan) lines.push(`Loan repayment\t-£${asMoney(loanTaken) ?? ''}`);
+          if (hasOverpay) lines.push(`Overpayment recovery\t-£${asMoney(overpayTaken) ?? ''}`);
+
+          if (originalNet != null && hasAnyDeduction) {
+            const computedFinal = Number(originalNet) - Number(dedTotal || 0);
+            lines.push(`Final paid\t£${asMoney(originalNet) ?? ''} − £${asMoney(dedTotal) ?? ''} = £${asMoney(computedFinal) ?? ''}`);
+          } else if (finalNetPaid != null) {
+            lines.push(`Final paid\t£${asMoney(finalNetPaid) ?? ''}`);
+          } else if (originalNet != null) {
+            lines.push(`Final paid\t£${asMoney(originalNet) ?? ''}`);
+          } else {
+            lines.push('Final paid\t(unknown — PAYE net not provided)');
+          }
+
+          lines.push('');
+        }
+      }
+
       const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
       for (const ts of timesheets) {
         const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
@@ -9455,10 +9522,17 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       continue;
     }
 
+    const recipientKindLower = (String(payeeEntityKind || '').trim().toUpperCase() === 'UMBRELLA') ? 'umbrella' : 'candidate';
+    const contextId = isUuid(payBatchId) ? payBatchId : null;
+
     const outboxRow = {
       type: 'REMITTANCE',
       to: toEmail,
       cc: null,
+      bcc: null,
+      reply_to: null,
+      importance: 'Normal',
+      email_type: 'html',
       subject,
       body_text: bodyText,
       body_html: bodyHtml,
@@ -9466,7 +9540,15 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       status: 'QUEUED',
       reference,
       created_by: actorUserId || null,
-      created_at_utc: nowIso
+      created_at_utc: nowIso,
+
+      // ✅ NEW: comms log metadata for unified outbox + Comms tabs
+      recipient_kind: recipientKindLower,
+      recipient_id: (payeeEntityId != null && isUuid(payeeEntityIdText)) ? payeeEntityIdText : null,
+      context_kind: 'pay_batches',
+      context_id: contextId,
+      mailshot_run_id: null,
+      document_template_id: null
     };
 
     try {
@@ -9545,6 +9627,461 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     skipped
   };
 }
+
+
+async function buildPayBatchDetailPdfFromRows(exportObj) {
+  const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
+
+  const PAGE_W_MM = 210; // A4 portrait
+  const PAGE_H_MM = 297;
+
+  const yFromTopMm = (yTopMm) => PAGE_H_MM - (Number(yTopMm) || 0);
+
+  const safeStr = (v) => (v == null ? '' : String(v));
+  const asNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const asMoney = (v) => {
+    const n = asNum(v);
+    if (n == null) return '';
+    return n.toFixed(2);
+  };
+
+  const batch = (exportObj && typeof exportObj === 'object' && exportObj.batch && typeof exportObj.batch === 'object')
+    ? exportObj.batch
+    : {};
+
+  const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+
+  const batchId = safeStr(batch.id || '');
+  const status = safeStr(batch.status || '');
+  const payDate = safeStr(batch.pay_date || '');
+  const kind = safeStr(batch.batch_kind || '');
+  const kindFixed = safeStr(batch.batch_kind_fixed || '');
+  const isCancelled = (batch && batch.is_cancelled === true);
+
+  const perCandidate = new Map();
+
+  const getCandidateKey = (r) => safeStr(r?.candidate_id || '');
+  const getCandidateName = (r) => {
+    const dn = safeStr(r?.candidate_display_name).trim();
+    const fn = safeStr(r?.candidate_first_name).trim();
+    const ln = safeStr(r?.candidate_last_name).trim();
+    const nm = dn || [fn, ln].filter(Boolean).join(' ').trim();
+    return nm || safeStr(r?.candidate_id || '').slice(0, 8);
+  };
+  const getCandidateRef = (r) => safeStr(r?.candidate_tms_ref).trim();
+
+  const isDeductionRow = (r) => (r?.is_overpayment_recovery === true) || (r?.is_loan_repayment === true);
+
+  for (const r of rows) {
+    const cid = getCandidateKey(r);
+    if (!cid) continue;
+
+    if (!perCandidate.has(cid)) {
+      perCandidate.set(cid, {
+        candidate_id: cid,
+        name: getCandidateName(r),
+        tms_ref: getCandidateRef(r),
+        pay_channel: safeStr(r?.pay_channel || '').trim(),
+        paye_net_amount: (asNum(r?.paye_net_amount) == null ? null : asNum(r.paye_net_amount)),
+        gross_ex: 0,
+        overpay_ex: 0,
+        loan_ex: 0,
+        deductions_ex: 0,
+        final_ex: 0
+      });
+    }
+
+    const rec = perCandidate.get(cid);
+
+    const payChannel = safeStr(r?.pay_channel || '').trim();
+    if (!rec.pay_channel && payChannel) rec.pay_channel = payChannel;
+
+    const net = asNum(r?.paye_net_amount);
+    if (rec.paye_net_amount == null && net != null) rec.paye_net_amount = net;
+
+    const amtEx = asNum(r?.amount_ex_vat) || 0;
+
+    if (r?.is_overpayment_recovery === true) {
+      const d = asNum(r?.deduction_amount_ex_vat);
+      const take = (d != null ? d : Math.abs(amtEx));
+      rec.overpay_ex += take;
+      rec.deductions_ex += take;
+    } else if (r?.is_loan_repayment === true) {
+      const d = asNum(r?.deduction_amount_ex_vat);
+      const take = (d != null ? d : Math.abs(amtEx));
+      rec.loan_ex += take;
+      rec.deductions_ex += take;
+    } else {
+      rec.gross_ex += amtEx;
+    }
+  }
+
+  for (const rec of perCandidate.values()) {
+    rec.final_ex = (rec.gross_ex - rec.deductions_ex);
+  }
+
+  const payeCandidates = [...perCandidate.values()].filter((c) => String(c.pay_channel || '').toUpperCase() === 'PAYE');
+  const payeNetProvided = (payeCandidates.length === 0)
+    ? null
+    : payeCandidates.every((c) => c.paye_net_amount != null);
+
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const state = { page: null, yTop: 0, pageNo: 0 };
+
+  const M = 10;
+  const lineH = 4.2;
+  const small = 8;
+  const tiny = 7;
+  const title = 12;
+
+  const drawText = (page, f, text, xMm, yTopMm, size, opts = {}) => {
+    const s = safeStr(text);
+    if (!s) return;
+    page.drawText(s, {
+      x: mmToPt(xMm),
+      y: mmToPt(yFromTopMm(yTopMm)),
+      size,
+      font: f,
+      ...opts
+    });
+  };
+
+  const textWidthMm = (f, text, size) => {
+    const s = safeStr(text);
+    if (!s) return 0;
+    const wPt = f.widthOfTextAtSize(s, size);
+    return (wPt * 25.4) / 72;
+  };
+
+  const fitText = (f, text, size, maxWmm) => {
+    const s = safeStr(text);
+    if (!s) return '';
+    if (textWidthMm(f, s, size) <= maxWmm) return s;
+    const ell = '…';
+    let out = s;
+    while (out.length > 1 && textWidthMm(f, out + ell, size) > maxWmm) {
+      out = out.slice(0, -1);
+    }
+    return out.length ? (out + ell) : ell;
+  };
+
+  const newPage = () => {
+    state.pageNo += 1;
+    state.page = pdfDoc.addPage([mmToPt(PAGE_W_MM), mmToPt(PAGE_H_MM)]);
+    state.yTop = M;
+    drawHeader();
+  };
+
+  const drawLine = (page, x1Mm, yTopMm, x2Mm) => {
+    page.drawLine({
+      start: { x: mmToPt(x1Mm), y: mmToPt(yFromTopMm(yTopMm)) },
+      end: { x: mmToPt(x2Mm), y: mmToPt(yFromTopMm(yTopMm)) },
+      thickness: 0.6,
+      color: rgb(0.85, 0.85, 0.85)
+    });
+  };
+
+  const drawHeader = () => {
+    const page = state.page;
+    const y = state.yTop;
+
+    drawText(page, fontBold, 'Pay Batch Detail Export', M, y, title);
+    drawText(page, font, `Batch: ${batchId}`, M, y + 7, small);
+    drawText(page, font, `Status: ${status}${isCancelled ? ' (CANCELLED)' : ''}`, M, y + 12, small);
+    drawText(page, font, `Pay date: ${payDate}`, M, y + 17, small);
+    drawText(page, font, `Kind: ${kindFixed || kind}`, M, y + 22, small);
+
+    if (payeNetProvided === false) {
+      drawText(page, fontBold, 'PAYE net not provided (one or more PAYE candidates).', M, y + 27, small);
+    } else if (payeNetProvided === true) {
+      drawText(page, font, 'PAYE net provided for all PAYE candidates.', M, y + 27, small);
+    }
+
+    drawText(page, font, `Generated: ${safeStr(batch.generated_at_utc || '')}`, M, y + 32, tiny);
+
+    drawText(page, font, `Page ${state.pageNo}`, PAGE_W_MM - M - 20, y, small);
+
+    drawLine(page, M, y + 36, PAGE_W_MM - M);
+
+    state.yTop = y + 40;
+  };
+
+  const ensureSpace = (neededMm) => {
+    const bottom = PAGE_H_MM - M;
+    if ((state.yTop + neededMm) > bottom) {
+      newPage();
+      return true;
+    }
+    return false;
+  };
+
+  const fmtCandidate = (c) => {
+    const nm = safeStr(c.name);
+    const ref = safeStr(c.tms_ref);
+    return ref ? `${nm} (${ref})` : nm;
+  };
+
+  newPage();
+
+  // ─────────────────────────────────────────────────────────────
+  // Section 1: Candidate totals summary
+  // ─────────────────────────────────────────────────────────────
+  const candList = [...perCandidate.values()].sort((a, b) => {
+    const an = safeStr(a.name).toLowerCase();
+    const bn = safeStr(b.name).toLowerCase();
+    if (an < bn) return -1;
+    if (an > bn) return 1;
+    return safeStr(a.candidate_id).localeCompare(safeStr(b.candidate_id));
+  });
+
+  drawText(state.page, fontBold, 'Candidate totals', M, state.yTop, small);
+  state.yTop += 6;
+
+  const cols = {
+    cand: { x: M, w: 78 },
+    chan: { x: M + 80, w: 16 },
+    gross: { x: M + 98, w: 22 },
+    over: { x: M + 122, w: 22 },
+    loan: { x: M + 146, w: 22 },
+    final: { x: M + 170, w: 22 }
+  };
+
+  const headY = state.yTop;
+  drawText(state.page, fontBold, 'Candidate', cols.cand.x, headY, tiny);
+  drawText(state.page, fontBold, 'Ch', cols.chan.x, headY, tiny);
+  drawText(state.page, fontBold, 'Gross', cols.gross.x, headY, tiny);
+  drawText(state.page, fontBold, 'Overpay', cols.over.x, headY, tiny);
+  drawText(state.page, fontBold, 'Loan', cols.loan.x, headY, tiny);
+  drawText(state.page, fontBold, 'Final', cols.final.x, headY, tiny);
+  state.yTop += 4.5;
+
+  drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
+  state.yTop += 2.0;
+
+  for (const c of candList) {
+    ensureSpace(lineH + 2);
+
+    const rowY = state.yTop;
+
+    const candTxt = fitText(font, fmtCandidate(c), tiny, cols.cand.w);
+    drawText(state.page, font, candTxt, cols.cand.x, rowY, tiny);
+
+    const ch = safeStr(c.pay_channel).toUpperCase().slice(0, 3);
+    drawText(state.page, font, ch, cols.chan.x, rowY, tiny);
+
+    drawText(state.page, font, `£${asMoney(c.gross_ex)}`, cols.gross.x, rowY, tiny);
+    drawText(state.page, font, `£${asMoney(c.overpay_ex)}`, cols.over.x, rowY, tiny);
+    drawText(state.page, font, `£${asMoney(c.loan_ex)}`, cols.loan.x, rowY, tiny);
+    drawText(state.page, fontBold, `£${asMoney(c.final_ex)}`, cols.final.x, rowY, tiny);
+
+    state.yTop += lineH;
+  }
+
+  state.yTop += 6;
+
+  // ─────────────────────────────────────────────────────────────
+  // Section 2: Line-level rows (grouped by candidate)
+  // ─────────────────────────────────────────────────────────────
+  drawText(state.page, fontBold, 'Line details (frozen batch artifacts)', M, state.yTop, small);
+  state.yTop += 6;
+
+  const dCols = {
+    date: { x: M, w: 20 },
+    client: { x: M + 22, w: 48 },
+    kind: { x: M + 72, w: 22 },
+    unit: { x: M + 96, w: 30 },
+    units: { x: M + 128, w: 12 },
+    rate: { x: M + 142, w: 16 },
+    amt: { x: M + 160, w: 30 }
+  };
+
+  const drawDetailHeaderRow = () => {
+    const y = state.yTop;
+    drawText(state.page, fontBold, 'Date', dCols.date.x, y, tiny);
+    drawText(state.page, fontBold, 'Client', dCols.client.x, y, tiny);
+    drawText(state.page, fontBold, 'Kind', dCols.kind.x, y, tiny);
+    drawText(state.page, fontBold, 'Unit', dCols.unit.x, y, tiny);
+    drawText(state.page, fontBold, 'Qty', dCols.units.x, y, tiny);
+    drawText(state.page, fontBold, 'Rate', dCols.rate.x, y, tiny);
+    drawText(state.page, fontBold, 'Amount (ex)', dCols.amt.x, y, tiny);
+    state.yTop += 4.5;
+    drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
+    state.yTop += 2.0;
+  };
+
+  drawDetailHeaderRow();
+
+  let currentCid = null;
+
+  for (const r of rows) {
+    const cid = getCandidateKey(r);
+    if (!cid) continue;
+
+    if (cid !== currentCid) {
+      currentCid = cid;
+      const c = perCandidate.get(cid);
+
+      ensureSpace(10);
+
+      drawText(state.page, fontBold, fmtCandidate(c || { name: getCandidateName(r), tms_ref: getCandidateRef(r) }), M, state.yTop, small);
+      state.yTop += 5;
+
+      if (c && String(c.pay_channel || '').toUpperCase() === 'PAYE') {
+        const netMsg = (c.paye_net_amount != null)
+          ? `PAYE net input: £${asMoney(c.paye_net_amount)}`
+          : 'PAYE net input: (not provided)';
+        drawText(state.page, font, netMsg, M, state.yTop, tiny);
+        state.yTop += 4.5;
+      }
+
+      const totalsMsg = c
+        ? `Gross £${asMoney(c.gross_ex)}  Deductions £${asMoney(c.deductions_ex)}  Final £${asMoney(c.final_ex)}`
+        : '';
+      if (totalsMsg) {
+        drawText(state.page, font, totalsMsg, M, state.yTop, tiny);
+        state.yTop += 6;
+      } else {
+        state.yTop += 2;
+      }
+
+      drawDetailHeaderRow();
+    }
+
+    ensureSpace(lineH + 2);
+
+    const date = safeStr(r?.work_date || r?.week_ending_date || '');
+    const client = safeStr(r?.client_name || '');
+    const lineKind = safeStr(r?.line_kind || '');
+    const bucket = safeStr(r?.bucket_code || '');
+    const kindTxt = bucket ? `${lineKind}/${bucket}` : lineKind;
+
+    const unit = safeStr(r?.unit_name || '');
+    const qty = (asNum(r?.units) == null) ? '' : String(asNum(r.units));
+    const rate = (asNum(r?.rate) == null) ? '' : `£${asMoney(r.rate)}`;
+    const amtEx = `£${asMoney(r?.amount_ex_vat)}`;
+
+    const isDed = isDeductionRow(r);
+    const kindShown = isDed
+      ? (r?.is_overpayment_recovery ? 'OVERPAY RECOVERY' : (r?.is_loan_repayment ? 'LOAN REPAY' : kindTxt))
+      : kindTxt;
+
+    drawText(state.page, font, fitText(font, date, tiny, dCols.date.w), dCols.date.x, state.yTop, tiny);
+    drawText(state.page, font, fitText(font, client, tiny, dCols.client.w), dCols.client.x, state.yTop, tiny);
+    drawText(state.page, font, fitText(font, kindShown, tiny, dCols.kind.w), dCols.kind.x, state.yTop, tiny);
+    drawText(state.page, font, fitText(font, unit, tiny, dCols.unit.w), dCols.unit.x, state.yTop, tiny);
+    drawText(state.page, font, qty, dCols.units.x, state.yTop, tiny);
+    drawText(state.page, font, rate, dCols.rate.x, state.yTop, tiny);
+    drawText(state.page, isDed ? fontBold : font, amtEx, dCols.amt.x, state.yTop, tiny);
+
+    state.yTop += lineH;
+  }
+
+  const pdfBytes = await pdfDoc.save();
+  return pdfBytes;
+}
+
+
+async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) {
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
+
+  try {
+    const raw0 = await sbRpc(env, 'pay_batch_export_csv_rows', {
+      p_pay_batch_id: id,
+      p_actor_user_id: user.id
+    });
+
+    const exportObj = unwrapRpc(raw0, 'pay_batch_export_csv_rows');
+
+    const pdfBytes = await buildPayBatchDetailPdfFromRows(exportObj);
+
+    const filename = `pay_batch_${id}_detail.pdf`;
+    const res = new Response(pdfBytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`
+      }
+    });
+
+    return withCORS(env, req, res);
+  } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
+    return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_PDF_FAILED')));
+  }
+}
+
 
 
 /**
@@ -11568,7 +12105,56 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return new Response(bodyOut, { status, headers });
   };
 
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
   const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR') => {
+    const stalePayload = _extractDbRaisedJson(e);
+    if (stalePayload && typeof stalePayload === 'object' && String(stalePayload.code || '').toUpperCase() === 'BATCH_STALE') {
+      return { status: 409, body: stalePayload };
+    }
+
     const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
     const status = (statusRaw && statusRaw >= 400 && statusRaw < 600) ? statusRaw : null;
 
@@ -11869,6 +12455,11 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       batch_get: afterGet
     }));
   } catch (e) {
+    const stalePayload = _extractDbRaisedJson(e);
+    if (stalePayload && typeof stalePayload === 'object' && String(stalePayload.code || '').toUpperCase() === 'BATCH_STALE') {
+      return withCORS(env, req, jsonResponse(409, stalePayload));
+    }
+
     const norm = normalizeRpcError(e, 'BANKING_EXECUTE_PAYMENT_FAILED');
     // If it looks like a 4xx (user-correctable), return 400; otherwise 500 with safe message.
     const status = (e && Number.isFinite(Number(e.status)) && Number(e.status) >= 400 && Number(e.status) < 500) ? Number(e.status) : 500;
@@ -11878,7 +12469,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
-
 
 
 
@@ -12109,7 +12699,6 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
   }
 }
 
-
 async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -12130,7 +12719,56 @@ async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
     return new Response(bodyOut, { status, headers });
   };
 
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
   const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR') => {
+    const stalePayload = _extractDbRaisedJson(e);
+    if (stalePayload && typeof stalePayload === 'object' && String(stalePayload.code || '').toUpperCase() === 'BATCH_STALE') {
+      return { status: 409, body: stalePayload };
+    }
+
     const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
     const status = (statusRaw && statusRaw >= 400 && statusRaw < 600) ? statusRaw : null;
 
@@ -12212,7 +12850,6 @@ async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
   }
 }
 
-
 async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -12252,6 +12889,60 @@ async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
   };
 
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
+
   try {
     const rpcRes0 = await sbRpc(env, 'pay_set_paye_net_from_sage', {
       p_pay_batch_id: id,
@@ -12266,6 +12957,8 @@ async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId
     try {
       batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
     } catch (e) {
+      const stale409 = _maybeStale409(e);
+      if (stale409) return stale409;
       return withCORS(env, req, serverError(String(e?.message || e)));
     }
     const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
@@ -12286,6 +12979,8 @@ async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId
       batch_get: (batchGet && typeof batchGet === 'object') ? batchGet : {}
     }));
   } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
@@ -12320,6 +13015,60 @@ async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId)
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
   };
 
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
+
   try {
     const rpcRes0 = await sbRpc(env, 'pay_set_paye_net_manual', {
       p_pay_batch_id: id,
@@ -12333,6 +13082,8 @@ async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId)
     try {
       batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
     } catch (e) {
+      const stale409 = _maybeStale409(e);
+      if (stale409) return stale409;
       return withCORS(env, req, serverError(String(e?.message || e)));
     }
     const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
@@ -12351,11 +13102,11 @@ async function handleBankingPayBatchPayeNetSetManual(env, req, user, payBatchId)
       batch_get: (batchGet && typeof batchGet === 'object') ? batchGet : {}
     }));
   } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 
 async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -12367,6 +13118,67 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
   body = body || {};
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      // sbRpc attaches parsed JSON in e.json (Supabase error envelope)
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      // Supabase envelope: { code, details, hint, message }
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      // If e.body exists, it may itself be the Supabase envelope JSON
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      // Last resort: try to parse from Error.message string
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object') {
+            if (typeof envObj.message === 'string') msg = envObj.message;
+            // Some callers might raise JSON directly in envelope (rare)
+            if (!msg && typeof envObj.code === 'string' && typeof envObj.error === 'string') return envObj;
+          }
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      // Many of our RPCs raise exception '%' with a JSON string payload.
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      // If msg contains an embedded JSON object, extract it.
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers: JSON_HEADERS }));
+    }
+    return null;
+  };
 
   try {
     // Read batch (rail provider/env snapshot) via pay_batch_get (single source for drilldown)
@@ -12438,6 +13250,8 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
         await adapter.prepareBatch(env, id, user.id);
       }
     } catch (e) {
+      const stale409 = _maybeStale409(e);
+      if (stale409) return stale409;
       return withCORS(env, req, serverError(String(e?.message || e)));
     }
 
@@ -12457,6 +13271,8 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
 
     return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
   } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
@@ -12509,6 +13325,60 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   } else {
     return withCORS(env, req, badRequest('warning_hours_json must be an array (e.g. [24,12])'));
   }
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
 
   // ✅ Re-auth required (password + 2FA already done client-side; server requires reauth_token)
   const reauthToken = String(body.reauth_token || '').trim();
@@ -12639,6 +13509,9 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
 
     return withCORS(env, req, ok(out));
   } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
+
     const msg = (e && e.message) ? String(e.message) : String(e || 'SCHEDULE_FAILED');
     if (msg.includes('not supported') || msg.includes('NOT_SUPPORTED') || msg.includes('scheduleBatch not supported')) {
       return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
@@ -12646,7 +13519,6 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 async function handlePaymentAuthorisersList(env, req, user) {
   const enc = encodeURIComponent;
 
@@ -12912,6 +13784,7 @@ async function handlePayBatchAuthInvitesSend(env, req, user, authRequestId) {
 
       const reference = `pay_auth_invite:${payBatchId}:${authId}:${tuid}`;
 
+// AFTER snippet #1
       try {
         const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
           method: 'POST',
@@ -12920,12 +13793,22 @@ async function handlePayBatchAuthInvitesSend(env, req, user, authRequestId) {
             type: 'BROADCAST',
             to: toEmail,
             cc: null,
+            bcc: null,
+            reply_to: null,
+            importance: 'Normal',
+            email_type: 'html',
             subject,
             body_html,
             body_text,
             attachments: null,
             status: 'QUEUED',
             reference,
+            recipient_kind: null,
+            recipient_id: null,
+            context_kind: 'pay_batches',
+            context_id: payBatchId,
+            mailshot_run_id: null,
+            document_template_id: null,
             created_by: user?.id || null
           })
         });
@@ -13273,6 +14156,60 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
 
   const note = (body.note === null || body.note === undefined) ? null : String(body.note).trim();
 
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
+
   // Validate actor eligibility (authoriser or golden key)
   try {
     const { rows: urows } = await sbFetch(
@@ -13336,6 +14273,8 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
       p_note: note
     });
   } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
     const msg = (e && e.message) ? String(e.message) : String(e || 'AUTH_ACTION_FAILED');
     return withCORS(env, req, serverError(msg));
   }
@@ -13471,12 +14410,22 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
               type: 'BROADCAST',
               to: toEmail,
               cc: null,
+              bcc: null,
+              reply_to: null,
+              importance: 'Normal',
+              email_type: 'html',
               subject,
               body_html,
               body_text,
               attachments: null,
               status: 'QUEUED',
               reference,
+              recipient_kind: null,
+              recipient_id: null,
+              context_kind: 'pay_batches',
+              context_id: id,
+              mailshot_run_id: null,
+              document_template_id: null,
               created_by: user?.id || null
             })
           }).catch(() => {});
@@ -13497,7 +14446,6 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
     auth: respAuth
   }));
 }
-
 
 
 async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, actorUserId) {
@@ -13628,12 +14576,22 @@ async function sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRe
           type: 'BROADCAST',
           to: toEmail,
           cc: null,
+          bcc: null,
+          reply_to: null,
+          importance: 'Normal',
+          email_type: 'html',
           subject,
           body_html,
           body_text,
           attachments: null,
           status: 'QUEUED',
           reference,
+          recipient_kind: null,
+          recipient_id: null,
+          context_kind: 'pay_batches',
+          context_id: (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : null),
+          mailshot_run_id: null,
+          document_template_id: null,
           created_by: actorUserId || null
         })
       });
@@ -13725,7 +14683,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
 
 
-
 async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -13734,7 +14691,91 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const scopeRaw = String(url.searchParams.get('scope') || 'ALL').trim().toUpperCase();
   const scope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
 
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
+
   try {
+    // ✅ Freshness gate (bank CSV should not export stale batches)
+    try {
+      const fr0 = await sbRpc(env, 'pay_batch_validate_freshness', {
+        p_pay_batch_id: id,
+        p_actor_user_id: user && user.id ? user.id : null
+      });
+      const fr = unwrapRpc(fr0, 'pay_batch_validate_freshness');
+      const isStale = !!(fr && typeof fr === 'object' && fr.is_stale === true);
+      if (isStale) {
+        const payload = (fr && typeof fr === 'object') ? fr : { is_stale: true, stale_reasons: [], diff: [] };
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/json; charset=utf-8');
+        return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+      }
+    } catch (e) {
+      const stale409 = _maybeStale409(e);
+      if (stale409) return stale409;
+      // If freshness RPC fails for any other reason, treat as server error (do not risk exporting stale).
+      return withCORS(env, req, serverError(String(e?.message || e)));
+    }
+
     // Resolve provider from batch snapshot; delegate export to adapter if supported.
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
 
@@ -13772,6 +14813,9 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     try {
       csvText = await adapter.exportCsv(env, id, { scope }, user && user.id ? user.id : null);
     } catch (e) {
+      const stale409 = _maybeStale409(e);
+      if (stale409) return stale409;
+
       const msg = (e && e.message) ? String(e.message) : String(e || 'EXPORT_FAILED');
       if (msg.includes('RAIL_ENV_MISMATCH')) {
         return withCORS(env, req, badRequest(msg));
@@ -13791,10 +14835,358 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
 
     return new Response(txt, { status: 200, headers });
   } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
 
+
+async function handleTimesheetAdvancePayment(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const idIn = String(timesheetId || '').trim();
+  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const overrideReason =
+    String(
+      body.override_reason ??
+      body.overrideReason ??
+      body.reason ??
+      body.note ??
+      ''
+    ).trim();
+
+  if (!overrideReason) {
+    return withCORS(env, req, badRequest('override_reason is required'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(idIn)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const toLondonYmd = (dt) => {
+    try {
+      const d = (dt instanceof Date) ? dt : new Date(dt);
+      if (!d || Number.isNaN(d.getTime())) return null;
+
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(d);
+
+      const y = parts.find(p => p.type === 'year')?.value || '';
+      const m = parts.find(p => p.type === 'month')?.value || '';
+      const dd = parts.find(p => p.type === 'day')?.value || '';
+      if (!y || !m || !dd) return null;
+
+      return `${y}-${m}-${dd}`;
+    } catch {
+      return null;
+    }
+  };
+
+  let resolved = null;
+  try {
+    resolved = await resolveTimesheetToCurrent(env, idIn);
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
+  }
+
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  if (!resolved.booking_id) {
+    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let ts = null;
+  try {
+    ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,contract_id,week_ending_date` +
+        `&limit=1`
+    );
+  } catch (e) {
+    ts = null;
+  }
+
+  if (!ts) {
+    return withCORS(env, req, notFound('Timesheet not found (current row missing)'));
+  }
+
+  const contractId = (ts.contract_id != null && String(ts.contract_id).trim()) ? String(ts.contract_id).trim() : null;
+  const weekEnding = (ts.week_ending_date != null && String(ts.week_ending_date).trim()) ? String(ts.week_ending_date).trim() : null;
+
+  if (!contractId || !uuidRe.test(contractId)) {
+    return withCORS(env, req, badRequest('Timesheet contract_id missing/invalid; cannot advance-payment'));
+  }
+  if (!weekEnding || !/^\d{4}-\d{2}-\d{2}$/.test(weekEnding)) {
+    return withCORS(env, req, badRequest('Timesheet week_ending_date missing/invalid; cannot advance-payment'));
+  }
+
+  let tsfin = null;
+  try {
+    tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
+    );
+  } catch {
+    tsfin = null;
+  }
+
+  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
+  if (!candidateId || !uuidRe.test(candidateId)) {
+    return withCORS(env, req, badRequest('Timesheet candidate_id not available (ts_financials missing); cannot advance-payment'));
+  }
+
+  const payDate = toLondonYmd(new Date()) || String(new Date().toISOString()).slice(0, 10);
+  const weekEndingCutoff = weekEnding;
+
+  let tsfinDrain = null;
+  try {
+    tsfinDrain = await tsfinBestEffortMakeReadyForDraft(env, [currentTimesheetId], {
+      maxTimesheets: 1,
+      maxLoops: 6,
+      drainLimit: 30,
+      maxMs: 4500
+    });
+  } catch (e) {
+    tsfinDrain = null;
+  }
+
+  const excluded = Array.isArray(tsfinDrain?.excludedTimesheetIds) ? tsfinDrain.excludedTimesheetIds : [];
+  if (excluded.includes(currentTimesheetId)) {
+    const lastErr =
+      (tsfinDrain && tsfinDrain.lastErrorByTimesheetId && typeof tsfinDrain.lastErrorByTimesheetId === 'object')
+        ? (tsfinDrain.lastErrorByTimesheetId[currentTimesheetId] || null)
+        : null;
+
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
+          message: 'Timesheet calculations are still processing. Please try again shortly.',
+          timesheet_id: currentTimesheetId,
+          candidate_id: candidateId,
+          tsfin_drain: tsfinDrain?.stats || null,
+          last_error: lastErr
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let preview = null;
+  try {
+    const pv0 = await sbRpc(env, 'pay_preview', {
+      p_pay_date: payDate,
+      p_week_ending_cutoff: weekEndingCutoff,
+      p_actor_user_id: user.id,
+      p_candidate_id: candidateId,
+      p_client_id: null,
+      p_force_include_timesheet_ids: [currentTimesheetId]
+    });
+    preview = unwrapRpc(pv0, 'pay_preview');
+  } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
+    return withCORS(env, req, serverError(String(e?.message || e || 'PAY_PREVIEW_FAILED')));
+  }
+
+  const blockedItems = Array.isArray(preview?.blocked_items) ? preview.blocked_items : [];
+  const doNotPayItems = Array.isArray(preview?.do_not_pay_items) ? preview.do_not_pay_items : [];
+  const snoozedItems = Array.isArray(preview?.snoozed_items) ? preview.snoozed_items : [];
+  const payees = Array.isArray(preview?.payees) ? preview.payees : [];
+
+  const payeeBlocked = payees.filter(p => p && typeof p === 'object' && p.is_ready_for_draft === false);
+  const warnings = [];
+
+  if (blockedItems.length) warnings.push({ code: 'PREVIEW_BLOCKED_ITEMS', count: blockedItems.length });
+  if (doNotPayItems.length) warnings.push({ code: 'PREVIEW_DO_NOT_PAY_ITEMS', count: doNotPayItems.length });
+  if (snoozedItems.length) warnings.push({ code: 'PREVIEW_SNOOZED_ITEMS', count: snoozedItems.length });
+  if (payeeBlocked.length) warnings.push({ code: 'PREVIEW_PAYEE_BLOCKERS', count: payeeBlocked.length });
+
+  const previewDecisionsJson = {
+    candidate_filter_id: candidateId
+  };
+
+  let created = null;
+  try {
+    const cr0 = await sbRpc(env, 'pay_create_draft_batches_split', {
+      p_pay_date: payDate,
+      p_week_ending_cutoff: weekEndingCutoff,
+      p_actor_user_id: user.id,
+      p_preview_decisions_json: previewDecisionsJson,
+      p_candidate_id: candidateId,
+      p_client_id: null,
+      p_force_include_timesheet_ids: [currentTimesheetId],
+      p_override_reason: overrideReason,
+      p_override_mode: 'TIMESHEET_ADVANCE'
+    });
+    created = unwrapRpc(cr0, 'pay_create_draft_batches_split');
+  } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
+    return withCORS(env, req, serverError(String(e?.message || e || 'PAY_CREATE_DRAFT_FAILED')));
+  }
+
+  const umbrellaId = (created && typeof created === 'object' && created.umbrella_pay_batch_id != null) ? String(created.umbrella_pay_batch_id).trim() : '';
+  const payeId = (created && typeof created === 'object' && created.paye_pay_batch_id != null) ? String(created.paye_pay_batch_id).trim() : '';
+
+  const createdUmb = umbrellaId && uuidRe.test(umbrellaId) ? umbrellaId : null;
+  const createdPaye = payeId && uuidRe.test(payeId) ? payeId : null;
+
+  if (!createdUmb && !createdPaye) {
+    return withCORS(env, req, badRequest('Nothing to pay (draft creation returned no batch id)'));
+  }
+
+  if (createdUmb && createdPaye) {
+    return withCORS(env, req, serverError('Timesheet advance must create exactly one route batch (both PAYE and UMBRELLA were created)'));
+  }
+
+  const payBatchId = createdUmb || createdPaye;
+
+  let batchGet = null;
+  try {
+    const bg0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId });
+    batchGet = unwrapRpc(bg0, 'pay_batch_get');
+  } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
+    batchGet = null;
+  }
+
+  const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
+  const batchKindFixed =
+    (batchObj && batchObj.batch_kind_fixed != null && String(batchObj.batch_kind_fixed).trim())
+      ? String(batchObj.batch_kind_fixed).trim()
+      : null;
+
+  try {
+    await writeAudit(
+      env,
+      user,
+      'TIMESHEET_ADVANCE_REQUESTED',
+      {
+        timesheet_id: currentTimesheetId,
+        candidate_id: candidateId,
+        reason: overrideReason,
+        pay_batch_id: payBatchId,
+        pay_date: payDate,
+        week_ending_cutoff_date: weekEndingCutoff
+      },
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: currentTimesheetId,
+    candidate_id: candidateId,
+    pay_batch_id: payBatchId,
+    batch_kind_fixed: batchKindFixed,
+    warnings,
+    preview_summary: (preview && typeof preview === 'object') ? (preview.summary || null) : null
+  }));
+}
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -14726,7 +16118,189 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
 
   return withCORS(env, req, ok(row || { updated: true, week_id: weekId, hours }));
 }
+async function handleLoansGrant(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
 
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const candidateId = String(body.candidate_id ?? body.candidateId ?? '').trim();
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
+  if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+
+  const principalRaw = (body.principal ?? body.principal_amount ?? body.amount ?? body.loan_amount);
+  const weeklyDueRaw = (body.weekly_due ?? body.weeklyDue);
+  const weeksTotalRaw = (body.weeks_total ?? body.weeksTotal);
+  const startWeekStartRaw = String(body.start_week_start ?? body.startWeekStart ?? '').trim();
+
+  const principal = Number(principalRaw);
+  if (!Number.isFinite(principal) || principal <= 0) return withCORS(env, req, badRequest('principal must be > 0'));
+
+  const weeklyDue = Number(weeklyDueRaw);
+  if (!Number.isFinite(weeklyDue) || weeklyDue <= 0) return withCORS(env, req, badRequest('weekly_due must be > 0'));
+
+  const weeksTotal = Number(weeksTotalRaw);
+  if (!Number.isFinite(weeksTotal) || (weeksTotal | 0) !== weeksTotal || weeksTotal < 1) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer >= 1'));
+  }
+
+  if (!startWeekStartRaw) return withCORS(env, req, badRequest('start_week_start is required'));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD (Monday week start)'));
+  }
+
+  const note = (body.note === null || body.note === undefined) ? null : String(body.note).trim() || null;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
+
+  try {
+    const rpcRes0 = await sbRpc(env, 'pay_loans_grant', {
+      p_candidate_id: candidateId,
+      p_principal_amount: principal,
+      p_weekly_due: weeklyDue,
+      p_weeks_total: weeksTotal,
+      p_start_week_start: startWeekStartRaw,
+      p_actor_user_id: user.id,
+      p_note: note
+    });
+
+    const payload = unwrapRpc(rpcRes0, 'pay_loans_grant');
+
+    const payBatchId = (payload && typeof payload === 'object' && payload.pay_batch_id != null) ? String(payload.pay_batch_id).trim() : '';
+    const advanceId = (payload && typeof payload === 'object' && payload.advance_id != null) ? String(payload.advance_id).trim() : '';
+    const warnings = (payload && typeof payload === 'object' && Array.isArray(payload.warnings)) ? payload.warnings : [];
+
+    if (!payBatchId || !uuidRe.test(payBatchId)) {
+      return withCORS(env, req, serverError('pay_loans_grant returned an invalid pay_batch_id'));
+    }
+    if (!advanceId || !uuidRe.test(advanceId)) {
+      return withCORS(env, req, serverError('pay_loans_grant returned an invalid advance_id'));
+    }
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'LOAN_GRANTED',
+        {
+          candidate_id: candidateId,
+          advance_id: advanceId,
+          pay_batch_id: payBatchId,
+          principal_amount: Math.round(principal * 100) / 100,
+          weekly_due: Math.round(weeklyDue * 100) / 100,
+          weeks_total: weeksTotal,
+          start_week_start: startWeekStartRaw,
+          note: note
+        },
+        { entity: 'candidate', subject_id: candidateId, reason: 'PAYMENT', req }
+      );
+    } catch {}
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'LOAN_PAYOUT_BATCH_CREATED',
+        {
+          candidate_id: candidateId,
+          advance_id: advanceId,
+          pay_batch_id: payBatchId,
+          principal_amount: Math.round(principal * 100) / 100,
+          weekly_due: Math.round(weeklyDue * 100) / 100,
+          weeks_total: weeksTotal,
+          start_week_start: startWeekStartRaw
+        },
+        { entity: 'pay_batches', subject_id: payBatchId, reason: 'PAYMENT', req }
+      );
+    } catch {}
+
+    return withCORS(env, req, ok({
+      ok: true,
+      candidate_id: candidateId,
+      pay_batch_id: payBatchId,
+      advance_id: advanceId,
+      warnings
+    }));
+  } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
+
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && (payload.code || payload.error || payload.message)) {
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 400, headers: JSON_HEADERS }));
+    }
+
+    return withCORS(env, req, serverError(String(e?.message || e || 'PAY_LOANS_GRANT_FAILED')));
+  }
+}
 async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -15119,6 +16693,225 @@ async function handleContractWeekReplaceManualPdf(env, req, weekId) {
 
   return withCORS(env, req, ok({ replaced: true, r2_key: newKey }));
 }
+
+
+async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _maybeStale409 = (e) => {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/json; charset=utf-8');
+      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
+    }
+    return null;
+  };
+
+  const csvEscape = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  try {
+    const raw0 = await sbRpc(env, 'pay_batch_export_csv_rows', {
+      p_pay_batch_id: id,
+      p_actor_user_id: user.id
+    });
+
+    const exportObj = unwrapRpc(raw0, 'pay_batch_export_csv_rows');
+
+    const batch = (exportObj && typeof exportObj === 'object' && exportObj.batch && typeof exportObj.batch === 'object')
+      ? exportObj.batch
+      : {};
+
+    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+
+    const batchId = (batch && batch.id != null) ? String(batch.id) : id;
+    const batchStatus = (batch && batch.status != null) ? String(batch.status) : '';
+    const payDate = (batch && batch.pay_date != null) ? String(batch.pay_date) : '';
+    const batchKind = (batch && batch.batch_kind != null) ? String(batch.batch_kind) : '';
+
+    const cols = [
+      'batch_id',
+      'batch_status',
+      'pay_date',
+      'batch_kind',
+
+      'candidate_last_name',
+      'candidate_first_name',
+      'candidate_ref',
+      'candidate_display_name',
+
+      'client_name',
+      'client_id',
+
+      'timesheet_id',
+      'work_date',
+      'week_ending_date',
+      'reference_number',
+
+      'line_kind',
+      'bucket_code',
+      'unit_name',
+      'units',
+      'rate',
+
+      'amount_ex_vat',
+      'vat_amount',
+      'amount_inc_vat',
+
+      'is_deduction',
+      'deduction_kind',
+      'deduction_amount',
+
+      'paye_net_amount',
+
+      'pay_channel',
+      'item_type',
+      'source_ref',
+      'repayment_week_start'
+    ];
+
+    const lines = [];
+    lines.push(cols.map(csvEscape).join(','));
+
+    for (const r of rows) {
+      const isOverpay = (r && r.is_overpayment_recovery === true);
+      const isLoanRepay = (r && r.is_loan_repayment === true);
+      const isDed = (isOverpay || isLoanRepay);
+
+      const deductionKind = isDed
+        ? (r && r.item_type != null ? String(r.item_type) : (isOverpay ? 'OVERPAYMENT_RECOVERY' : 'LOAN_REPAYMENT'))
+        : '';
+
+      const deductionAmount = isDed
+        ? (r && r.deduction_amount_ex_vat != null ? r.deduction_amount_ex_vat : '')
+        : '';
+
+      const vals = [
+        batchId,
+        batchStatus,
+        payDate,
+        batchKind,
+
+        (r && r.candidate_last_name != null) ? r.candidate_last_name : '',
+        (r && r.candidate_first_name != null) ? r.candidate_first_name : '',
+        (r && r.candidate_tms_ref != null) ? r.candidate_tms_ref : '',
+        (r && r.candidate_display_name != null) ? r.candidate_display_name : '',
+
+        (r && r.client_name != null) ? r.client_name : '',
+        (r && r.client_id != null) ? r.client_id : '',
+
+        (r && r.timesheet_id != null) ? r.timesheet_id : '',
+        (r && r.work_date != null) ? r.work_date : '',
+        (r && r.week_ending_date != null) ? r.week_ending_date : '',
+        (r && r.reference_number != null) ? r.reference_number : '',
+
+        (r && r.line_kind != null) ? r.line_kind : '',
+        (r && r.bucket_code != null) ? r.bucket_code : '',
+        (r && r.unit_name != null) ? r.unit_name : '',
+        (r && r.units != null) ? r.units : '',
+        (r && r.rate != null) ? r.rate : '',
+
+        (r && r.amount_ex_vat != null) ? r.amount_ex_vat : '',
+        (r && r.amount_vat != null) ? r.amount_vat : '',
+        (r && r.amount_inc_vat != null) ? r.amount_inc_vat : '',
+
+        isDed ? 'true' : 'false',
+        deductionKind,
+        deductionAmount,
+
+        (r && r.paye_net_amount != null) ? r.paye_net_amount : '',
+
+        (r && r.pay_channel != null) ? r.pay_channel : '',
+        (r && r.item_type != null) ? r.item_type : '',
+        (r && r.source_ref != null) ? r.source_ref : '',
+        (r && r.repayment_week_start != null) ? r.repayment_week_start : ''
+      ];
+
+      lines.push(vals.map(csvEscape).join(','));
+    }
+
+    const csvText = lines.join('\r\n');
+
+    const filename = `pay_batch_${batchId}_detail.csv`;
+    const res = new Response(csvText, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`
+      }
+    });
+
+    return withCORS(env, req, res);
+  } catch (e) {
+    const stale409 = _maybeStale409(e);
+    if (stale409) return stale409;
+    return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
+  }
+}
+
 
 async function handleContractWeekManualUpsert(env, req, weekId) {
 
@@ -16538,6 +18331,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 }
 
 
+
+
  async function handleManualTimesheetQueueGet(env, req, queueId) {
   const enc = encodeURIComponent;
 
@@ -17112,6 +18907,30 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     } catch {}
 
     // ─────────────────────────────────────────────────────────────
+    // ✅ NEW: pay_state (paid/partially paid/processing/advanced + adjusted delta)
+    // Computed in DB for consistency (segment-aware) via public.timesheet_pay_state
+    // ─────────────────────────────────────────────────────────────
+    let payState = null;
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: currentTimesheetId,
+        p_actor_user_id: user.id
+      });
+
+      let ps = ps0;
+      try {
+        if (Array.isArray(ps0) && ps0.length === 1 && ps0[0] && typeof ps0[0] === 'object') ps = ps0[0];
+        if (ps && typeof ps === 'object' && Object.prototype.hasOwnProperty.call(ps, 'timesheet_pay_state')) {
+          ps = ps.timesheet_pay_state;
+        }
+      } catch {}
+
+      payState = (ps && typeof ps === 'object' && !Array.isArray(ps)) ? ps : null;
+    } catch {
+      payState = null;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Contract-resolved EFFECTIVE flags (source of truth = v_timesheets_summary)
     // ─────────────────────────────────────────────────────────────
     let summaryRow = null;
@@ -17481,6 +19300,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
 
       policy,
       evidence: [],
+
+      pay_state: payState,
+
       action_flags
     }));
   } catch (e) {
@@ -21405,12 +23227,22 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
       type: 'TIMESHEET_QR',
       to: toEmail,
       cc: null,
+      bcc: null,
+      reply_to: null,
+      importance: 'Normal',
+      email_type: 'html',
       subject,
       body_html,
       body_text,
       attachments: [{ r2_key: pdfKey, filename: `Timesheet_${dateLabel || currentTimesheetId}.pdf` }],
       status: 'QUEUED',
       reference: `timesheet_qr:${String(result || 'send').toLowerCase()}:${currentTimesheetId}`,
+      recipient_kind: 'candidate',
+      recipient_id: contract.candidate_id || null,
+      context_kind: 'timesheets',
+      context_id: currentTimesheetId,
+      mailshot_run_id: null,
+      document_template_id: null,
       created_by: user?.id || null
     })
   });
@@ -22369,6 +24201,10 @@ async function handleTimesheetsSubmitWeekly(env, req) {
               type: 'TIMESHEET_QR',
               to: email,
               cc: null,
+              bcc: null,
+              reply_to: null,
+              importance: 'Normal',
+              email_type: 'html',
               subject,
               body_text: bodyText,
               body_html: bodyHtml,
@@ -22378,6 +24214,12 @@ async function handleTimesheetsSubmitWeekly(env, req) {
               }],
               status: 'QUEUED',
               reference: `timesheet_qr:weekly:${ts.timesheet_id}:${cw.week_ending_date}:candidate`,
+              recipient_kind: 'candidate',
+              recipient_id: contract.candidate_id || null,
+              context_kind: 'timesheets',
+              context_id: ts.timesheet_id,
+              mailshot_run_id: null,
+              document_template_id: null,
               created_by: null
             })
           }
@@ -26792,17 +28634,28 @@ async function handleRemittancesSend(env, req) {
         type: 'REMITTANCE',
         to: toEmail,
         cc: null,
+        bcc: null,
+        reply_to: null,
+        importance: 'Normal',
+        email_type: 'html',
         subject: `Remittance Advice – ${periodLabel}${testTo ? ' (TEST MODE)' : ''}`,
         body_html: html,
         body_text: text,
         attachments: null,
         status: 'QUEUED',
         reference,
+        recipient_kind: 'candidate',
+        recipient_id: candId,
+        context_kind: 'timesheets',
+        context_id: (rows.length === 1 && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(rows[0]?.timesheet_id || '').trim()))
+          ? String(rows[0].timesheet_id).trim()
+          : null,
+        mailshot_run_id: null,
+        document_template_id: null,
         created_by: user?.id || null,
         created_at_utc: new Date().toISOString()
       })
     });
-
     if (!outRes.ok) continue;
     const outJson = await outRes.json().catch(() => []);
     const mail = Array.isArray(outJson) ? outJson[0] : outJson;
@@ -34632,7 +36485,6 @@ async function applyWeeklyHoursCorrections(env, {
     warnings
   };
 }
-
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -34894,7 +36746,11 @@ async function handleTimesheetsSummary(env, req) {
       'basis',
       'tools_stage',
       'processing_status_display',
-      'invoice_is_paid'
+      'invoice_is_paid',
+      'pay_icon_code',
+      'pay_status_code',
+      'pay_paid_at_utc',
+      'net_delta_ex_vat'
     ].join(',') +
     `&limit=${effLimit}&offset=${effOffset}`;
 
@@ -34998,6 +36854,13 @@ async function handleTimesheetsSummary(env, req) {
       if (!Object.prototype.hasOwnProperty.call(o, 'tools_stage')) o.tools_stage = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'processing_status_display')) o.processing_status_display = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'invoice_is_paid')) o.invoice_is_paid = null;
+
+      // ✅ NEW: pay status rollup fields (from v_timesheets_summary_base/v_timesheets_summary)
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_icon_code')) o.pay_icon_code = 'NONE';
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_status_code')) o.pay_status_code = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_paid_at_utc')) o.pay_paid_at_utc = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'net_delta_ex_vat')) o.net_delta_ex_vat = 0;
+
       return o;
     });
 
@@ -44666,6 +46529,33 @@ async function handleHrAutoprocessApply(env, req, importId) {
     `;
 
     try {
+      let commsClientId = null;
+      try {
+        const fromItem = items.find(it => it && (it.client_id || it.clientId));
+        const cid = fromItem ? (fromItem.client_id || fromItem.clientId) : null;
+        if (cid && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(cid).trim())) {
+          commsClientId = String(cid).trim();
+        }
+      } catch {}
+
+      if (!commsClientId) {
+        try {
+          const firstTsId = String(tsIds[0] || '').trim();
+          if (firstTsId) {
+            const tgt = await resolveTsoRecipientForTimesheet(env, { timesheet_id: firstTsId, booking_id: null });
+            const cid2 = tgt?.client_id ? String(tgt.client_id).trim() : '';
+            if (cid2 && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cid2)) {
+              commsClientId = cid2;
+            }
+          }
+        } catch {}
+      }
+
+      const commsContextId =
+        (tsIds.length === 1 && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(tsIds[0] || '').trim()))
+          ? String(tsIds[0]).trim()
+          : null;
+
       const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
         method: 'POST',
         headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
@@ -44673,12 +46563,22 @@ async function handleHrAutoprocessApply(env, req, importId) {
           type: 'TSO_FAILURE',
           to: recipientEmail,
           cc: null,
+          bcc: null,
+          reply_to: null,
+          importance: 'Normal',
+          email_type: 'html',
           subject,
           body_html: bodyHtml,
           body_text: bodyText,
           attachments,
           status: 'QUEUED',
           reference: `hr_weekly_validation:${importId}:consolidated:${recipientEmail}`,
+          recipient_kind: 'client',
+          recipient_id: commsClientId,
+          context_kind: 'timesheets',
+          context_id: commsContextId,
+          mailshot_run_id: null,
+          document_template_id: null,
           created_by: user?.id || null
         })
       });
@@ -45114,7 +47014,17 @@ async function handleHrRotaQueueTsoEmail(env, req) {
       filename: `Timesheet_${timesheetId}.pdf`
     }],
     type: 'TSO_FAILURE',
-    reference: outboxReference
+    reference: outboxReference,
+    bcc: null,
+    reply_to: null,
+    importance: 'Normal',
+    email_type: 'html',
+    recipient_kind: 'client',
+    recipient_id: resolvedClientId ? resolvedClientId : null,
+    context_kind: 'timesheets',
+    context_id: timesheetId,
+    mailshot_run_id: null,
+    document_template_id: null
   }];
 
   try {
@@ -46318,7 +48228,10 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
     to: outboxRow.to,
     cc: outboxRow.cc,
     bcc: outboxRow.bcc,
-    replyTo: outboxRow.replyTo,
+
+    // ✅ FIX: DB column is reply_to (snake_case); preserve backward compatibility if any callers used replyTo.
+    replyTo: (outboxRow.reply_to != null ? outboxRow.reply_to : (outboxRow.replyTo != null ? outboxRow.replyTo : null)),
+
     importance: outboxRow.importance,
     subject: outboxRow.subject,
     body_html: outboxRow.body_html,
@@ -46457,7 +48370,6 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
 
   return payload;
 }
-
 async function limitOrLinkAttachments(env, { payload }) {
   const limitBytes = Number(env.EMAIL_MAX_PAYLOAD_BYTES) || EMAIL_MAX_PAYLOAD_BYTES;
   let currentBytes = estimatePayloadSizeBytes(payload);
@@ -46502,6 +48414,1160 @@ async function limitOrLinkAttachments(env, { payload }) {
   const newPayload = { ...payload, attachments: kept, htmlBody, body };
   return { payload: newPayload, trimmed: true };
 }
+
+async function drainCommsOutboxOnce(env, { limit } = {}) {
+  const enc = encodeURIComponent;
+
+  const nowIso = () => new Date().toISOString();
+
+  const clampInt = (n, lo, hi, dflt) => {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return dflt;
+    const y = Math.trunc(x);
+    if (y < lo) return lo;
+    if (y > hi) return hi;
+    return y;
+  };
+
+  const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
+
+  // Load DB-driven comms config (cached by loadSettingsDefaults)
+  let cfgAll = {};
+  try {
+    const s = await loadSettingsDefaults(env);
+    const cj = s && isPlainObject(s.comms_adaptors_json) ? s.comms_adaptors_json : {};
+    cfgAll = isPlainObject(cj) ? cj : {};
+  } catch {
+    cfgAll = {};
+  }
+
+  // New schema (preferred): cfgAll.channels + cfgAll.adaptors
+  const channelsCfg = isPlainObject(cfgAll.channels) ? cfgAll.channels : {};
+  const adaptorsCfg = isPlainObject(cfgAll.adaptors) ? cfgAll.adaptors : {};
+
+  // Backward-compat fallback: cfgAll.wati / cfgAll.clicksend
+  const watiCfg = isPlainObject(adaptorsCfg.wati)
+    ? adaptorsCfg.wati
+    : (isPlainObject(cfgAll.wati) ? cfgAll.wati : {});
+  const csCfg = isPlainObject(adaptorsCfg.clicksend)
+    ? adaptorsCfg.clicksend
+    : (isPlainObject(cfgAll.clicksend) ? cfgAll.clicksend : {});
+
+  const drainLimitsCfg = isPlainObject(cfgAll.drain_limits) ? cfgAll.drain_limits : {};
+  const defaultDrainLimits = { WHATSAPP: 200, SMS: 200, VOICE: 50 };
+  const drainLimits = {
+    WHATSAPP: clampInt(drainLimitsCfg.WHATSAPP, 1, 20000, defaultDrainLimits.WHATSAPP),
+    SMS: clampInt(drainLimitsCfg.SMS, 1, 20000, defaultDrainLimits.SMS),
+    VOICE: clampInt(drainLimitsCfg.VOICE, 1, 20000, defaultDrainLimits.VOICE),
+  };
+
+  // Provider selection MUST be at drain time via channels[] mapping.
+  // Defaults keep system usable if channels mapping is missing.
+  const channelToAdaptor = {
+    WHATSAPP: String(channelsCfg.WHATSAPP || 'wati').trim().toLowerCase(),
+    SMS: String(channelsCfg.SMS || 'clicksend').trim().toLowerCase(),
+    VOICE: String(channelsCfg.VOICE || 'clicksend').trim().toLowerCase(),
+  };
+
+  // Per-adaptor batch limits (fallback to drain_limits)
+  const watiBatchMax = clampInt(watiCfg.bulk_send_limit, 1, 20000, drainLimits.WHATSAPP);
+  const csBatchMax = clampInt(csCfg.bulk_send_limit, 1, 20000, Math.max(drainLimits.SMS, drainLimits.VOICE));
+
+  const globalLimit = (limit == null) ? null : clampInt(limit, 1, 50000, null);
+  let remaining = globalLimit;
+
+  const alloc = (channel) => {
+    const ch = String(channel || '').toUpperCase();
+    const dl = drainLimits[ch] || 0;
+    const ad = channelToAdaptor[ch] || '';
+    const adCap =
+      (ch === 'WHATSAPP' && ad === 'wati') ? watiBatchMax :
+      ((ch === 'SMS' || ch === 'VOICE') && ad === 'clicksend') ? csBatchMax :
+      dl;
+
+    const cap = Math.min(dl, adCap);
+
+    if (remaining == null) return cap;
+    if (remaining <= 0) return 0;
+    const take = Math.min(cap, remaining);
+    remaining -= take;
+    return take;
+  };
+
+  const fetchQueued = async (channel, take) => {
+    if (!take || take <= 0) return [];
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
+      `?select=*` +
+      `&status=eq.QUEUED` +
+      `&channel=eq.${enc(String(channel || '').toUpperCase())}` +
+      `&order=created_at_utc.asc` +
+      `&limit=${take}`;
+    const { rows } = await sbFetch(env, url, false);
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  const patchFailRow = async (id, msg, providerKey) => {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        status: 'FAILED',
+        failed_at: nowIso(),
+        last_error: String(msg || 'FAILED').slice(0, 500),
+        provider_key: providerKey || null
+      })
+    });
+  };
+
+  const report = {
+    picked: 0,
+    sent: 0,
+    failed: 0,
+    errors: [],
+    by_channel: {
+      WHATSAPP: { picked: 0, sent: 0, failed: 0 },
+      SMS: { picked: 0, sent: 0, failed: 0 },
+      VOICE: { picked: 0, sent: 0, failed: 0 },
+    },
+    now_utc: null
+  };
+
+  // Pull queued rows per channel (provider chosen later)
+  const pickedWhatsapp = await fetchQueued('WHATSAPP', alloc('WHATSAPP'));
+  const pickedSms = await fetchQueued('SMS', alloc('SMS'));
+  const pickedVoice = await fetchQueued('VOICE', alloc('VOICE'));
+
+  report.by_channel.WHATSAPP.picked = pickedWhatsapp.length;
+  report.by_channel.SMS.picked = pickedSms.length;
+  report.by_channel.VOICE.picked = pickedVoice.length;
+  report.picked = pickedWhatsapp.length + pickedSms.length + pickedVoice.length;
+
+  // Route by adaptor mapping (core rule)
+  if (pickedWhatsapp.length) {
+    const ad = channelToAdaptor.WHATSAPP;
+    if (ad === 'wati') {
+      const r = await sendViaWatiBulkTemplate(env, watiCfg, pickedWhatsapp);
+      report.sent += r.sent;
+      report.failed += r.failed;
+      report.errors.push(...(r.errors || []));
+      report.by_channel.WHATSAPP.sent += r.sent;
+      report.by_channel.WHATSAPP.failed += r.failed;
+    } else {
+      for (const row of pickedWhatsapp) {
+        const id = row && row.id ? String(row.id) : '';
+        if (!id) continue;
+        await patchFailRow(id, `NO_ADAPTOR_FOR_WHATSAPP:${ad || 'missing'}`, null);
+        report.failed += 1;
+        report.by_channel.WHATSAPP.failed += 1;
+        report.errors.push({ id, error: `NO_ADAPTOR_FOR_WHATSAPP:${ad || 'missing'}` });
+      }
+    }
+  }
+
+  if (pickedSms.length) {
+    const ad = channelToAdaptor.SMS;
+    if (ad === 'clicksend') {
+      const r = await sendViaClicksendSmsBulk(env, csCfg, pickedSms);
+      report.sent += r.sent;
+      report.failed += r.failed;
+      report.errors.push(...(r.errors || []));
+      report.by_channel.SMS.sent += r.sent;
+      report.by_channel.SMS.failed += r.failed;
+    } else {
+      for (const row of pickedSms) {
+        const id = row && row.id ? String(row.id) : '';
+        if (!id) continue;
+        await patchFailRow(id, `NO_ADAPTOR_FOR_SMS:${ad || 'missing'}`, null);
+        report.failed += 1;
+        report.by_channel.SMS.failed += 1;
+        report.errors.push({ id, error: `NO_ADAPTOR_FOR_SMS:${ad || 'missing'}` });
+      }
+    }
+  }
+
+  if (pickedVoice.length) {
+    const ad = channelToAdaptor.VOICE;
+    if (ad === 'clicksend') {
+      const r = await sendViaClicksendVoiceBulk(env, csCfg, pickedVoice);
+      report.sent += r.sent;
+      report.failed += r.failed;
+      report.errors.push(...(r.errors || []));
+      report.by_channel.VOICE.sent += r.sent;
+      report.by_channel.VOICE.failed += r.failed;
+    } else {
+      for (const row of pickedVoice) {
+        const id = row && row.id ? String(row.id) : '';
+        if (!id) continue;
+        await patchFailRow(id, `NO_ADAPTOR_FOR_VOICE:${ad || 'missing'}`, null);
+        report.failed += 1;
+        report.by_channel.VOICE.failed += 1;
+        report.errors.push({ id, error: `NO_ADAPTOR_FOR_VOICE:${ad || 'missing'}` });
+      }
+    }
+  }
+
+  report.now_utc = nowIso();
+  return report;
+}
+
+async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
+  const enc = encodeURIComponent;
+
+  const nowIso = () => new Date().toISOString();
+
+  const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
+
+  const clampInt = (n, lo, hi, dflt) => {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return dflt;
+    const y = Math.trunc(x);
+    if (y < lo) return lo;
+    if (y > hi) return hi;
+    return y;
+  };
+
+  const sanitizeWhatsappText = (s, maxChars) => {
+    let t = String(s || '');
+    t = t.replace(/[\r\n\t]+/g, ' ');
+    t = t.replace(/[^A-Za-z ,]+/g, '');
+    t = t.replace(/\s+/g, ' ').trim();
+    if (t.length > maxChars) t = t.slice(0, maxChars);
+    return t;
+  };
+
+  const toWatiWhatsAppNumber = (raw) => {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    if (s.startsWith('+')) s = s.slice(1);
+    s = s.replace(/[^\d]/g, '');
+    // UK convenience: 07xxxxxxxxx -> 44xxxxxxxxxx
+    if (s.length === 11 && s.startsWith('07')) s = '44' + s.slice(1);
+    return s;
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        provider_key: 'WATI',
+        status: 'SENT',
+        sent_at: nowIso(),
+        provider_message_id: providerMessageId || null,
+        provider_response_json: respJson || {},
+        last_error: null,
+        failed_at: null
+      })
+    });
+  };
+
+  const patchFailure = async (id, errMsg, respJson) => {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        provider_key: 'WATI',
+        status: 'FAILED',
+        failed_at: nowIso(),
+        provider_response_json: respJson || {},
+        last_error: String(errMsg || 'FAILED').slice(0, 500)
+      })
+    });
+  };
+
+  const cfg = isPlainObject(watiCfg) ? watiCfg : {};
+
+  const baseUrlRaw = (cfg.base_url != null) ? String(cfg.base_url).trim() : '';
+  const bearerRaw = (cfg.bearer_token != null) ? String(cfg.bearer_token).trim() : '';
+  const templateName = (cfg.template_name != null) ? String(cfg.template_name).trim() : '';
+  const paramName = (cfg.param_name != null) ? String(cfg.param_name).trim() : '';
+  const maxChars = clampInt(cfg.whatsapp_max_chars, 1, 2000, 600);
+  const batchMax = clampInt(cfg.bulk_send_limit, 1, 20000, 200);
+
+  const report = { sent: 0, failed: 0, errors: [] };
+
+  if (!baseUrlRaw || !bearerRaw || !templateName || !paramName) {
+    const msg = 'WATI_CONFIG_MISSING';
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      if (!r || !r.id) continue;
+      await patchFailure(r.id, msg, { error: msg });
+      report.failed += 1;
+      report.errors.push({ id: r.id, error: msg });
+    }
+    return report;
+  }
+
+  const baseUrl = baseUrlRaw.replace(/\/+$/, '');
+  const url = `${baseUrl}/api/v2/sendTemplateMessages`;
+
+  const slice = (Array.isArray(rows) ? rows : []).slice(0, batchMax);
+
+  const receivers = [];
+  const rowIds = [];
+
+  for (const r of slice) {
+    const id = r && r.id ? String(r.id) : '';
+    const toRaw = r && r.to_address != null ? String(r.to_address) : '';
+    const bodyRaw = r && r.message_text != null ? String(r.message_text) : '';
+
+    if (!id) continue;
+
+    const waNum = toWatiWhatsAppNumber(toRaw);
+    const msg = sanitizeWhatsappText(bodyRaw, maxChars);
+
+    if (!waNum) {
+      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      report.failed += 1;
+      report.errors.push({ id, error: 'MISSING_TO' });
+      continue;
+    }
+    if (!msg) {
+      await patchFailure(id, 'EMPTY_MESSAGE_AFTER_SANITIZE', { error: 'EMPTY_MESSAGE_AFTER_SANITIZE' });
+      report.failed += 1;
+      report.errors.push({ id, error: 'EMPTY_MESSAGE_AFTER_SANITIZE' });
+      continue;
+    }
+
+    receivers.push({
+      whatsappNumber: waNum,
+      customParams: [
+        { name: paramName, value: msg }
+      ]
+    });
+
+    rowIds.push(id);
+  }
+
+  if (receivers.length === 0) return report;
+
+  const payload = {
+    template_name: templateName,
+    broadcast_name: `CloudTMS_${Date.now()}`,
+    receivers
+  };
+
+  let respText = '';
+  let respJson = null;
+  let httpOk = false;
+  let httpStatus = 0;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${bearerRaw}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    httpOk = !!res.ok;
+    httpStatus = res.status;
+
+    respText = await res.text().catch(() => '');
+    try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
+  } catch (e) {
+    const errMsg = String(e?.message || e || 'WATI_REQUEST_FAILED');
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, { error: errMsg });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  if (!httpOk) {
+    const errMsg = `WATI_HTTP_${httpStatus}`;
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, { http_status: httpStatus, body: respText || null });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  const topResult = !!(respJson && typeof respJson === 'object' && respJson.result === true);
+  const receiversResp = (respJson && typeof respJson === 'object' && Array.isArray(respJson.receivers)) ? respJson.receivers : [];
+
+  if (!topResult || receiversResp.length === 0) {
+    const errMsg = topResult ? 'WATI_NO_RECEIVER_RESULTS' : (respJson && respJson.error ? String(respJson.error) : 'WATI_RESULT_FALSE');
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  // Map by index (request order)
+  for (let i = 0; i < rowIds.length; i++) {
+    const id = rowIds[i];
+    const rr = receiversResp[i] || null;
+
+    const localMessageId = rr && rr.localMessageId ? String(rr.localMessageId) : null;
+    const isValid = (rr && Object.prototype.hasOwnProperty.call(rr, 'isValidWhatsAppNumber')) ? (rr.isValidWhatsAppNumber === true) : true;
+    const errs = rr && Array.isArray(rr.errors) ? rr.errors : [];
+    const errStr = errs.length ? errs.map(x => String(x)).join('; ').slice(0, 500) : null;
+
+    if (!isValid || errStr) {
+      const msg = errStr || 'WATI_INVALID_WHATSAPP_NUMBER';
+      await patchFailure(id, msg, { wati: rr, full: respJson });
+      report.failed += 1;
+      report.errors.push({ id, error: msg });
+      continue;
+    }
+
+    await patchSuccess(id, localMessageId, { wati: rr, full: respJson });
+    report.sent += 1;
+  }
+
+  return report;
+}
+
+
+
+async function sendViaClicksendSmsBulk(env, csCfg, rows) {
+  const enc = encodeURIComponent;
+
+  const nowIso = () => new Date().toISOString();
+
+  const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
+
+  const clampInt = (n, lo, hi, dflt) => {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return dflt;
+    const y = Math.trunc(x);
+    if (y < lo) return lo;
+    if (y > hi) return hi;
+    return y;
+  };
+
+  const normalizeE164 = (raw) => {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    if (s.startsWith('00')) s = '+' + s.slice(2);
+    s = s.replace(/[^\d+]/g, '');
+    if (s.startsWith('+')) {
+      return '+' + s.slice(1).replace(/[^\d]/g, '');
+    }
+    const digits = s.replace(/[^\d]/g, '');
+    if (!digits) return '';
+    // UK convenience
+    if (digits.length === 11 && digits.startsWith('07')) return '+44' + digits.slice(1);
+    if (digits.startsWith('44')) return '+' + digits;
+    return '+' + digits;
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        provider_key: 'CLICKSEND',
+        status: 'SENT',
+        sent_at: nowIso(),
+        provider_message_id: providerMessageId || null,
+        provider_response_json: respJson || {},
+        last_error: null,
+        failed_at: null
+      })
+    });
+  };
+
+  const patchFailure = async (id, errMsg, respJson) => {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        provider_key: 'CLICKSEND',
+        status: 'FAILED',
+        failed_at: nowIso(),
+        provider_response_json: respJson || {},
+        last_error: String(errMsg || 'FAILED').slice(0, 500)
+      })
+    });
+  };
+
+  const cfg = isPlainObject(csCfg) ? csCfg : {};
+
+  const username = (cfg.username != null) ? String(cfg.username).trim() : '';
+  const apiKey = (cfg.api_key != null) ? String(cfg.api_key).trim() : '';
+  const baseUrl = ((cfg.base_url != null) ? String(cfg.base_url).trim() : 'https://rest.clicksend.com').replace(/\/+$/, '');
+  const smsMax = clampInt(cfg.sms_max_chars, 1, 5000, 1000);
+  const batchMax = clampInt(cfg.bulk_send_limit, 1, 20000, 200);
+
+  const report = { sent: 0, failed: 0, errors: [] };
+
+  if (!username || !apiKey) {
+    const msg = 'CLICKSEND_CONFIG_MISSING';
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      if (!r || !r.id) continue;
+      await patchFailure(r.id, msg, { error: msg });
+      report.failed += 1;
+      report.errors.push({ id: r.id, error: msg });
+    }
+    return report;
+  }
+
+  const auth = `Basic ${btoa(`${username}:${apiKey}`)}`;
+  const url = `${baseUrl}/v3/sms/send`;
+
+  const slice = (Array.isArray(rows) ? rows : []).slice(0, batchMax);
+
+  const messages = [];
+  const rowIds = [];
+
+  for (const r of slice) {
+    const id = r && r.id ? String(r.id) : '';
+    const toRaw = r && r.to_address != null ? String(r.to_address) : '';
+    let bodyRaw = r && r.message_text != null ? String(r.message_text) : '';
+
+    if (!id) continue;
+
+    const to = normalizeE164(toRaw);
+    if (!to) {
+      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      report.failed += 1;
+      report.errors.push({ id, error: 'MISSING_TO' });
+      continue;
+    }
+
+    if (bodyRaw.length > smsMax) bodyRaw = bodyRaw.slice(0, smsMax);
+
+    if (!String(bodyRaw).trim()) {
+      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
+      report.failed += 1;
+      report.errors.push({ id, error: 'EMPTY_MESSAGE' });
+      continue;
+    }
+
+    messages.push({
+      source: 'cloudtms',
+      body: bodyRaw,
+      to,
+      custom_string: id
+    });
+
+    rowIds.push(id);
+  }
+
+  if (messages.length === 0) return report;
+
+  let respText = '';
+  let respJson = null;
+  let httpOk = false;
+  let httpStatus = 0;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: auth,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ messages })
+    });
+
+    httpOk = !!res.ok;
+    httpStatus = res.status;
+    respText = await res.text().catch(() => '');
+    try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
+  } catch (e) {
+    const errMsg = String(e?.message || e || 'CLICKSEND_REQUEST_FAILED');
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, { error: errMsg });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  if (!httpOk) {
+    const errMsg = `CLICKSEND_HTTP_${httpStatus}`;
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, { http_status: httpStatus, body: respText || null });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  const okTop = !!(respJson && typeof respJson === 'object' && String(respJson.response_code || '').toUpperCase() === 'SUCCESS');
+  const data = (respJson && typeof respJson === 'object') ? (respJson.data || null) : null;
+  const msgsResp = (data && typeof data === 'object' && Array.isArray(data.messages)) ? data.messages : [];
+
+  if (!okTop) {
+    const errMsg = (respJson && respJson.response_msg) ? String(respJson.response_msg) : 'CLICKSEND_RESPONSE_NOT_SUCCESS';
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  // Map by custom_string if possible; otherwise index
+  const byCustom = new Map();
+  for (const m of msgsResp) {
+    const cs = (m && m.custom_string != null) ? String(m.custom_string) : '';
+    if (cs) byCustom.set(cs, m);
+  }
+
+  for (let i = 0; i < rowIds.length; i++) {
+    const id = rowIds[i];
+    const m = byCustom.get(id) || msgsResp[i] || null;
+
+    const messageId = m && (m.message_id || m.messageId) ? String(m.message_id || m.messageId) : null;
+    const status = m && m.status ? String(m.status).toUpperCase() : '';
+
+    if (status && status !== 'SUCCESS' && status !== 'QUEUED') {
+      const msg = m && m.status ? `CLICKSEND_${status}` : 'CLICKSEND_MESSAGE_FAILED';
+      await patchFailure(id, msg, { clicksend: m, full: respJson });
+      report.failed += 1;
+      report.errors.push({ id, error: msg });
+      continue;
+    }
+
+    await patchSuccess(id, messageId, { clicksend: m, full: respJson });
+    report.sent += 1;
+  }
+
+  return report;
+}
+
+async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
+  const enc = encodeURIComponent;
+
+  const nowIso = () => new Date().toISOString();
+
+  const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
+
+  const clampInt = (n, lo, hi, dflt) => {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return dflt;
+    const y = Math.trunc(x);
+    if (y < lo) return lo;
+    if (y > hi) return hi;
+    return y;
+  };
+
+  const normalizeE164 = (raw) => {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    if (s.startsWith('00')) s = '+' + s.slice(2);
+    s = s.replace(/[^\d+]/g, '');
+    if (s.startsWith('+')) {
+      return '+' + s.slice(1).replace(/[^\d]/g, '');
+    }
+    const digits = s.replace(/[^\d]/g, '');
+    if (!digits) return '';
+    // UK convenience
+    if (digits.length === 11 && digits.startsWith('07')) return '+44' + digits.slice(1);
+    if (digits.startsWith('44')) return '+' + digits;
+    return '+' + digits;
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        provider_key: 'CLICKSEND',
+        status: 'SENT',
+        sent_at: nowIso(),
+        provider_message_id: providerMessageId || null,
+        provider_response_json: respJson || {},
+        last_error: null,
+        failed_at: null
+      })
+    });
+  };
+
+  const patchFailure = async (id, errMsg, respJson) => {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        provider_key: 'CLICKSEND',
+        status: 'FAILED',
+        failed_at: nowIso(),
+        provider_response_json: respJson || {},
+        last_error: String(errMsg || 'FAILED').slice(0, 500)
+      })
+    });
+  };
+
+  const cfg = isPlainObject(csCfg) ? csCfg : {};
+
+  const username = (cfg.username != null) ? String(cfg.username).trim() : '';
+  const apiKey = (cfg.api_key != null) ? String(cfg.api_key).trim() : '';
+  const baseUrl = ((cfg.base_url != null) ? String(cfg.base_url).trim() : 'https://rest.clicksend.com').replace(/\/+$/, '');
+  const voiceMax = clampInt(cfg.voice_max_chars, 1, 10000, 1200);
+  const batchMax = clampInt(cfg.bulk_send_limit, 1, 20000, 50);
+
+  const voice = (cfg.voice != null) ? String(cfg.voice).trim().toLowerCase() : '';
+  const country = (cfg.country != null) ? String(cfg.country).trim().toUpperCase() : '';
+  const lang = (cfg.lang != null) ? String(cfg.lang).trim() : null;
+
+  const report = { sent: 0, failed: 0, errors: [] };
+
+  if (!username || !apiKey) {
+    const msg = 'CLICKSEND_CONFIG_MISSING';
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      if (!r || !r.id) continue;
+      await patchFailure(r.id, msg, { error: msg });
+      report.failed += 1;
+      report.errors.push({ id: r.id, error: msg });
+    }
+    return report;
+  }
+
+  if (!voice || (voice !== 'female' && voice !== 'male') || !country) {
+    const msg = 'CLICKSEND_VOICE_CONFIG_MISSING';
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      if (!r || !r.id) continue;
+      await patchFailure(r.id, msg, { error: msg });
+      report.failed += 1;
+      report.errors.push({ id: r.id, error: msg });
+    }
+    return report;
+  }
+
+  const auth = `Basic ${btoa(`${username}:${apiKey}`)}`;
+  const url = `${baseUrl}/v3/voice/send`;
+
+  const slice = (Array.isArray(rows) ? rows : []).slice(0, batchMax);
+
+  const messages = [];
+  const rowIds = [];
+
+  for (const r of slice) {
+    const id = r && r.id ? String(r.id) : '';
+    const toRaw = r && r.to_address != null ? String(r.to_address) : '';
+    let bodyRaw = r && r.message_text != null ? String(r.message_text) : '';
+
+    if (!id) continue;
+
+    const to = normalizeE164(toRaw);
+    if (!to) {
+      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      report.failed += 1;
+      report.errors.push({ id, error: 'MISSING_TO' });
+      continue;
+    }
+
+    if (bodyRaw.length > voiceMax) bodyRaw = bodyRaw.slice(0, voiceMax);
+
+    if (!String(bodyRaw).trim()) {
+      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
+      report.failed += 1;
+      report.errors.push({ id, error: 'EMPTY_MESSAGE' });
+      continue;
+    }
+
+    const msg = {
+      source: 'cloudtms',
+      body: bodyRaw,
+      to,
+      voice,
+      custom_string: id,
+      country
+    };
+
+    if (lang && String(lang).trim()) msg.lang = String(lang).trim();
+
+    messages.push(msg);
+    rowIds.push(id);
+  }
+
+  if (messages.length === 0) return report;
+
+  let respText = '';
+  let respJson = null;
+  let httpOk = false;
+  let httpStatus = 0;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: auth,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ messages })
+    });
+
+    httpOk = !!res.ok;
+    httpStatus = res.status;
+    respText = await res.text().catch(() => '');
+    try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
+  } catch (e) {
+    const errMsg = String(e?.message || e || 'CLICKSEND_REQUEST_FAILED');
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, { error: errMsg });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  if (!httpOk) {
+    const errMsg = `CLICKSEND_HTTP_${httpStatus}`;
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, { http_status: httpStatus, body: respText || null });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  const okTop = !!(respJson && typeof respJson === 'object' && String(respJson.response_code || '').toUpperCase() === 'SUCCESS');
+  const data = (respJson && typeof respJson === 'object') ? (respJson.data || null) : null;
+  const msgsResp = (data && typeof data === 'object' && Array.isArray(data.messages)) ? data.messages : [];
+
+  if (!okTop) {
+    const errMsg = (respJson && respJson.response_msg) ? String(respJson.response_msg) : 'CLICKSEND_RESPONSE_NOT_SUCCESS';
+    for (const id of rowIds) {
+      await patchFailure(id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+      report.failed += 1;
+      report.errors.push({ id, error: errMsg });
+    }
+    return report;
+  }
+
+  const byCustom = new Map();
+  for (const m of msgsResp) {
+    const cs = (m && m.custom_string != null) ? String(m.custom_string) : '';
+    if (cs) byCustom.set(cs, m);
+  }
+
+  for (let i = 0; i < rowIds.length; i++) {
+    const id = rowIds[i];
+    const m = byCustom.get(id) || msgsResp[i] || null;
+
+    const messageId = m && (m.message_id || m.messageId) ? String(m.message_id || m.messageId) : null;
+    const status = m && m.status ? String(m.status).toUpperCase() : '';
+
+    if (status && status !== 'SUCCESS' && status !== 'QUEUED') {
+      const msg = m && m.status ? `CLICKSEND_${status}` : 'CLICKSEND_MESSAGE_FAILED';
+      await patchFailure(id, msg, { clicksend: m, full: respJson });
+      report.failed += 1;
+      report.errors.push({ id, error: msg });
+      continue;
+    }
+
+    await patchSuccess(id, messageId, { clicksend: m, full: respJson });
+    report.sent += 1;
+  }
+
+  return report;
+}
+
+
+async function handleMailshotPrepare(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const contextKindRaw = String(body.context_kind || body.contextKind || '').trim();
+  const outputTypeRaw = String(body.output_type || body.outputType || '').trim();
+  const templateIdRaw = (body.document_template_id ?? body.documentTemplateId);
+
+  const contextKind = contextKindRaw.toLowerCase();
+  const outputType = outputTypeRaw.toUpperCase();
+
+  if (!contextKind) return withCORS(env, req, badRequest('context_kind is required'));
+  if (!outputType) return withCORS(env, req, badRequest('output_type is required'));
+
+  const allowedContext = new Set(['candidates', 'clients', 'contracts', 'timesheets', 'invoices', 'umbrellas', 'candidate', 'client', 'contract', 'timesheet', 'invoice', 'umbrella']);
+  if (!allowedContext.has(contextKind)) return withCORS(env, req, badRequest('invalid_context_kind'));
+
+  const allowedOutput = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE', 'WORD', 'EXCEL']);
+  if (!allowedOutput.has(outputType)) return withCORS(env, req, badRequest('invalid_output_type'));
+
+  let contextIds = body.context_ids ?? body.contextIds ?? body.ids ?? body.context_id_list;
+  if (contextIds == null) contextIds = [];
+  if (typeof contextIds === 'string') {
+    try { contextIds = JSON.parse(contextIds); } catch { contextIds = null; }
+  }
+  if (!Array.isArray(contextIds) || contextIds.length === 0) {
+    return withCORS(env, req, badRequest('context_ids[] required'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const ctxIdsClean = Array.from(new Set(
+    contextIds
+      .map((x) => (x == null ? '' : String(x).trim()))
+      .filter((x) => x && uuidRe.test(x))
+  ));
+  if (ctxIdsClean.length === 0) return withCORS(env, req, badRequest('context_ids must be UUIDs'));
+
+  let templateId = null;
+  if (templateIdRaw != null && String(templateIdRaw).trim()) {
+    const t = String(templateIdRaw).trim();
+    if (!uuidRe.test(t)) return withCORS(env, req, badRequest('invalid_document_template_id'));
+    templateId = t;
+  }
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_prepare', {
+      p_context_kind: contextKind,
+      p_context_ids: ctxIdsClean,
+      p_output_type: outputType,
+      p_document_template_id: templateId,
+      p_actor_user_id: user.id
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_prepare')) payload = payload.mailshot_prepare;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'MAILSHOT_PREPARE_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleMailshotEnqueue(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const prepareJson = body.prepare_json ?? body.prepareJson ?? null;
+  const finalEditsJson = body.final_edits_json ?? body.finalEditsJson ?? {};
+
+  if (!prepareJson || typeof prepareJson !== 'object' || Array.isArray(prepareJson)) {
+    return withCORS(env, req, badRequest('prepare_json object required'));
+  }
+  if (finalEditsJson == null || typeof finalEditsJson !== 'object' || Array.isArray(finalEditsJson)) {
+    return withCORS(env, req, badRequest('final_edits_json must be an object'));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_enqueue', {
+      p_prepare_json: prepareJson,
+      p_final_edits_json: finalEditsJson,
+      p_actor_user_id: user.id
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_enqueue')) payload = payload.mailshot_enqueue;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'MAILSHOT_ENQUEUE_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleMailshotExport(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const prepareJson = body.prepare_json ?? body.prepareJson ?? null;
+  const finalEditsJson = body.final_edits_json ?? body.finalEditsJson ?? {};
+  const formatRaw = String(body.format || body.export_format || body.file_format || '').trim();
+
+  if (!prepareJson || typeof prepareJson !== 'object' || Array.isArray(prepareJson)) {
+    return withCORS(env, req, badRequest('prepare_json object required'));
+  }
+  if (finalEditsJson == null || typeof finalEditsJson !== 'object' || Array.isArray(finalEditsJson)) {
+    return withCORS(env, req, badRequest('final_edits_json must be an object'));
+  }
+
+  const format = formatRaw.toUpperCase();
+  if (!format) return withCORS(env, req, badRequest('format is required'));
+  if (!['XLSX', 'CSV', 'WORD'].includes(format)) return withCORS(env, req, badRequest('format must be XLSX, CSV, or WORD'));
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_export', {
+      p_prepare_json: prepareJson,
+      p_final_edits_json: finalEditsJson,
+      p_format: format,
+      p_actor_user_id: user.id
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_export')) payload = payload.mailshot_export;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'MAILSHOT_EXPORT_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleOutboxUnifiedList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  try {
+    const url = new URL(req.url);
+
+    const statusRaw = String(url.searchParams.get('status') || '').trim();
+    const channelRaw = String(url.searchParams.get('channel') || '').trim();
+    const searchRaw = String(url.searchParams.get('search') || '').trim();
+
+    const limitRaw = url.searchParams.get('limit');
+    const offsetRaw = url.searchParams.get('offset');
+
+    const status = statusRaw ? statusRaw.toUpperCase() : null;
+    const channel = channelRaw ? channelRaw.toUpperCase() : null;
+    const search = searchRaw ? searchRaw : null;
+
+    const toInt = (v, dflt) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.trunc(n) : dflt;
+    };
+
+    let limit = toInt(limitRaw, 50);
+    let offset = toInt(offsetRaw, 0);
+
+    if (limit < 1) limit = 1;
+    if (limit > 500) limit = 500;
+    if (offset < 0) offset = 0;
+
+    // Allowlist for channel if provided
+    if (channel != null) {
+      const allowed = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE']);
+      if (!allowed.has(channel)) return withCORS(env, req, badRequest('invalid_channel'));
+    }
+
+    // status is passed through (DB function handles filtering); keep basic sanity
+    const statusOk = (status == null) || /^[A-Z_]+$/.test(status);
+    if (!statusOk) return withCORS(env, req, badRequest('invalid_status'));
+
+    let payload = await sbRpc(env, 'outbox_unified_list', {
+      p_status: status,
+      p_channel: channel,
+      p_search: search,
+      p_limit: limit,
+      p_offset: offset
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'outbox_unified_list')) payload = payload.outbox_unified_list;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'OUTBOX_LIST_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleOutboxUnifiedGet(env, req, channel, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const ch = String(channel || '').trim().toUpperCase();
+  const oid = String(id || '').trim();
+
+  if (!ch) return withCORS(env, req, badRequest('channel is required'));
+  if (!oid) return withCORS(env, req, badRequest('id is required'));
+  if (!uuidRe.test(oid)) return withCORS(env, req, badRequest('invalid_id'));
+
+  const allowed = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE']);
+  if (!allowed.has(ch)) return withCORS(env, req, badRequest('invalid_channel'));
+
+  try {
+    let payload = await sbRpc(env, 'outbox_unified_get', {
+      p_channel: ch,
+      p_id: oid
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'outbox_unified_get')) payload = payload.outbox_unified_get;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'OUTBOX_GET_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleCommsByRecipient(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  try {
+    const url = new URL(req.url);
+
+    const kindRaw = String(url.searchParams.get('recipient_kind') || '').trim();
+    const idRaw = String(url.searchParams.get('recipient_id') || '').trim();
+
+    const limitRaw = url.searchParams.get('limit');
+    const offsetRaw = url.searchParams.get('offset');
+
+    const kind = kindRaw.toLowerCase();
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    if (!kind) return withCORS(env, req, badRequest('recipient_kind is required'));
+    if (!idRaw) return withCORS(env, req, badRequest('recipient_id is required'));
+    if (!uuidRe.test(idRaw)) return withCORS(env, req, badRequest('invalid_recipient_id'));
+
+    const allowedKind = new Set(['candidate', 'client', 'umbrella']);
+    if (!allowedKind.has(kind)) return withCORS(env, req, badRequest('invalid_recipient_kind'));
+
+    const toInt = (v, dflt) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.trunc(n) : dflt;
+    };
+
+    let limit = toInt(limitRaw, 50);
+    let offset = toInt(offsetRaw, 0);
+
+    if (limit < 1) limit = 1;
+    if (limit > 500) limit = 500;
+    if (offset < 0) offset = 0;
+
+    let payload = await sbRpc(env, 'comms_by_recipient', {
+      p_recipient_kind: kind,
+      p_recipient_id: idRaw,
+      p_limit: limit,
+      p_offset: offset
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'comms_by_recipient')) payload = payload.comms_by_recipient;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'COMMS_BY_RECIPIENT_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+
+
+
+
 
 async function signDownloadUrlForR2Key(env, r2Key, { ttlSecs }) {
   // If you already expose a download endpoint like /files?key=...
@@ -46600,7 +49666,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
           method: "PATCH",
           headers: sbHeaders(env),
-          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: msg }),
+          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: msg, provider_status: "FAILED" }),
         });
       } catch {}
       failed += 1;
@@ -46625,7 +49691,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
           method: "PATCH",
           headers: sbHeaders(env),
-          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg }),
+          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg, provider_status: "FAILED" }),
         });
       } catch {}
       failed += 1;
@@ -46652,7 +49718,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
           method: "PATCH",
           headers: sbHeaders(env),
-          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg }),
+          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg, provider_status: "FAILED" }),
         });
       } catch {}
       failed += 1;
@@ -46687,6 +49753,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
           status: "SENT",
           sent_at: nowIso(),
           provider_message_id: providerMessageId || null,
+          provider_status: "ACCEPTED",
+          delivered_at: null,
+          read_at: null,
           last_error: null,
           failed_at: null,
         }),
@@ -46711,7 +49780,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
         method: "PATCH",
         headers: sbHeaders(env),
-        body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg }),
+        body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg, provider_status: "FAILED" }),
       });
 
       if (!upd.ok) {
@@ -46736,7 +49805,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
           method: "PATCH",
           headers: sbHeaders(env),
-          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg }),
+          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg, provider_status: "FAILED" }),
         });
       } catch {}
       failed += 1;
@@ -46747,7 +49816,6 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 
   return { picked: picked.length, sent, failed, deferred, errors };
 }
-
 // ------------------------------
 // HTTP handlers – Outbox ops
 // ------------------------------
@@ -46785,6 +49853,9 @@ async function handleEmailSend(env, req) {
 
   // If caller asks to queue instead of immediate send
   if (body?.queue === true) {
+    const htmlBodyStr = (normalized.htmlBody && String(normalized.htmlBody).trim()) ? String(normalized.htmlBody) : '';
+    const emailType = htmlBodyStr ? 'html' : 'plain';
+
     const insert = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
       method: 'POST', headers: { ...sbHeaders(env), Prefer: 'return=representation' },
       body: JSON.stringify({
@@ -46792,8 +49863,9 @@ async function handleEmailSend(env, req) {
         to: normalized.to,
         cc: normalized.cc || null,
         bcc: normalized.bcc || null,
-        replyTo: normalized.replyTo || null,
+        reply_to: normalized.replyTo || null,
         importance,
+        email_type: emailType,
         subject: normalized.subject,
         body_html: normalized.htmlBody || null,
         body_text: normalized.body || null,
@@ -46801,6 +49873,14 @@ async function handleEmailSend(env, req) {
         status: 'QUEUED',
         reference: body?.reference || null,
         created_by: user?.id || null,
+
+        // ✅ NEW: comms log metadata (optional for this endpoint; required for mailshots)
+        recipient_kind: body?.recipient_kind || null,
+        recipient_id: body?.recipient_id || null,
+        context_kind: body?.context_kind || null,
+        context_id: body?.context_id || null,
+        mailshot_run_id: body?.mailshot_run_id || null,
+        document_template_id: body?.document_template_id || null
       })
     });
     if (!insert.ok) {
@@ -46868,14 +49948,23 @@ async function handleEmailSend(env, req) {
   return withCORS(env, req, ok({ sent: true, provider_message_id: resp.provider_message_id }));
 }
 
- async function handleOutboxRetry(env, req, outboxId) {
+async function handleOutboxRetry(env, req, outboxId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   try {
     const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(outboxId)}`, {
       method: 'PATCH', headers: sbHeaders(env),
-      body: JSON.stringify({ status: 'QUEUED', failed_at: null, last_error: null })
+      body: JSON.stringify({
+        status: 'QUEUED',
+        sent_at: null,
+        delivered_at: null,
+        read_at: null,
+        failed_at: null,
+        last_error: null,
+        provider_message_id: null,
+        provider_status: null
+      })
     });
     if (!upd.ok) return withCORS(env, req, serverError(`Failed to retry: ${await upd.text()}`));
     await recordEmailAudit(env, user, 'EMAIL_RETRY', { outbox_id: outboxId });
@@ -46925,7 +50014,7 @@ async function handleListOutbox(env, req) {
   return withCORS(env, req, ok(rows[0]));
 }
 
- async function handleOutboxMarkSent(env, req) {
+async function handleOutboxMarkSent(env, req) {
   // Optional callback for provider -> system reconciliation
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -46937,7 +50026,16 @@ async function handleListOutbox(env, req) {
 
   const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(id)}`, {
     method: 'PATCH', headers: sbHeaders(env),
-    body: JSON.stringify({ status: 'SENT', sent_at: nowIso(), provider_message_id: provider_message_id || null, last_error: null, failed_at: null })
+    body: JSON.stringify({
+      status: 'SENT',
+      sent_at: nowIso(),
+      provider_message_id: provider_message_id || null,
+      provider_status: 'ACCEPTED',
+      delivered_at: null,
+      read_at: null,
+      last_error: null,
+      failed_at: null
+    })
   });
   if (!upd.ok) return withCORS(env, req, serverError(`Failed to mark sent: ${await upd.text()}`));
 
@@ -46945,7 +50043,8 @@ async function handleListOutbox(env, req) {
   return withCORS(env, req, ok({ ok: true }));
 }
 
- async function handleOutboxMarkFailed(env, req) {
+
+async function handleOutboxMarkFailed(env, req) {
   // Optional callback for provider -> system reconciliation
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -46957,7 +50056,12 @@ async function handleListOutbox(env, req) {
 
   const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(id)}`, {
     method: 'PATCH', headers: sbHeaders(env),
-    body: JSON.stringify({ status: 'FAILED', failed_at: nowIso(), last_error: String(error || 'Unknown error') })
+    body: JSON.stringify({
+      status: 'FAILED',
+      failed_at: nowIso(),
+      last_error: String(error || 'Unknown error'),
+      provider_status: 'FAILED'
+    })
   });
   if (!upd.ok) return withCORS(env, req, serverError(`Failed to mark failed: ${await upd.text()}`));
 
@@ -46996,12 +50100,24 @@ async function handleListOutbox(env, req) {
         type: 'TSO_FAILURE',
         to,
         cc: null,
+        bcc: null,
+        reply_to: null,
+        importance: 'Normal',
+        email_type: 'html',
         subject,
         body_html: html,
         body_text: text,
         attachments,
         status: 'QUEUED',
         reference: booking_id ? `tso_failure:booking:${booking_id}` : `tso_failure:timesheet:${timesheet_id}`,
+        recipient_kind: 'client',
+        recipient_id: client_id || null,
+        context_kind: 'timesheets',
+        context_id: (timesheet_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(timesheet_id).trim()))
+          ? String(timesheet_id).trim()
+          : null,
+        mailshot_run_id: null,
+        document_template_id: null,
         created_by: user?.id || null,
       })
     });
@@ -47598,10 +50714,20 @@ async function handleRemittanceEmailForCandidate(env, req) {
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
       body: JSON.stringify({
         type: 'REMITTANCE', to: toEmail, cc: null,
+        bcc: null,
+        reply_to: null,
+        importance: 'Normal',
+        email_type: 'html',
         subject: `Remittance Advice – ${periodLabel}`,
         body_html: html, body_text: text,
         attachments: null,
         status: 'QUEUED', reference,
+        recipient_kind: 'candidate',
+        recipient_id: candId,
+        context_kind: 'timesheets',
+        context_id: (finRows.length === 1 ? finRows[0].timesheet_id : null),
+        mailshot_run_id: null,
+        document_template_id: null,
         created_by: user?.id || null,
       })
     });
@@ -48296,7 +51422,6 @@ async function sbUpdateUserPassword(env, user_id, newHash) {
 
   return updated;
 }
-
 async function handleGetSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -48365,6 +51490,9 @@ async function handleGetSettings(env, req) {
         // ✅ NEW: payroll testing mode flag (simulate payments; no real bank payments)
         'payroll_testing',
 
+        // ✅ NEW: comms adaptors config (WATI/ClickSend + limits)
+        'comms_adaptors_json',
+
         // Email settings (global)
         'finance_email',
         'finance_email_settings',
@@ -48419,6 +51547,589 @@ async function handleGetSettings(env, req) {
   }
 }
 
+
+async function handleUpdateSettings(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return unauthorized('Unauthorized');
+
+  const data = await parseJSONBody(req);
+  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const allowed = [
+    'timezone_id',
+    'day_start','day_end','night_start','night_end',
+    'sat_start','sat_end','sun_start','sun_end',
+    'bh_start','bh_end',
+    'bh_source','bh_list','bh_feed_url',
+
+    'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
+    'ts_reference_required',
+
+    // ✅ Adaptability config
+    'import_config_json',
+
+    // ✅ Banking rail default (UI preselect only; batches still store funding_account_ref on the batch)
+    'rail_default_funding_account_ref',
+
+    // ✅ NEW: configurable export CSV columns/order
+    'pay_export_csv_columns_json',
+
+    // ✅ NEW: payroll testing mode flag (simulate payments; no real bank payments)
+    'payroll_testing',
+
+    // ✅ PAYE remittances gate (default for PAYE candidate remittances when candidate override disabled)
+    'paye_remittances_enabled',
+
+    // ✅ NEW: candidate umbrella-copy default when candidate override disabled
+    'remittance_receive_when_umbrella_paid',
+
+    // ✅ NEW: detailed remittances default
+    'remittances_detailed_breakdown',
+
+    // ✅ NEW: remittance test routing (send all remittances to this email when payroll_testing=true)
+    'remittance_test_recipient_email',
+
+    // ✅ NEW: payment authoriser quantity
+    'payment_authoriser_quantity',
+
+    // ✅ NEW: pay eligibility window (Option A)
+    'pay_eligibility_months_back',
+    // NOTE: pay_eligibility_weeks_ahead is deprecated (cutoff date controls upper bound); ignore updates.
+
+    // ✅ Remittances (new settings tab)
+    'remittance_includes_json',
+    'remittance_header_message',
+    'remittance_footer_message',
+
+    // ✅ NEW: comms adaptors config (WATI/ClickSend + limits)
+    'comms_adaptors_json',
+
+    // Email settings
+    'finance_email',
+    'finance_email_settings',
+    'system_email',
+    'system_emails',
+    'max_attachments_per_email'
+  ];
+
+  const payload = { updated_at: new Date().toISOString() };
+
+  // If we need to merge webhook_url without exposing it, fetch current values once
+  const needsWebhookMerge = ('finance_email_settings' in data) || ('system_emails' in data);
+
+  // If we need to validate default funding account ref, fetch rail defaults once
+  const needsRailFundingValidation = ('rail_default_funding_account_ref' in data);
+
+  let currentEmailSettings = null;
+  let currentRailDefaults = null;
+
+  if (needsWebhookMerge || needsRailFundingValidation) {
+    try {
+      const selParts = [];
+      if (needsWebhookMerge) selParts.push('finance_email_settings', 'system_emails');
+      if (needsRailFundingValidation) selParts.push('rail_provider_default', 'rail_env_default');
+      const sel = selParts.join(',');
+
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}`
+      );
+
+      const row0 = (rows && rows[0]) ? rows[0] : {};
+
+      if (needsWebhookMerge) {
+        currentEmailSettings = {
+          finance_email_settings: row0.finance_email_settings || {},
+          system_emails: row0.system_emails || {}
+        };
+      }
+
+      if (needsRailFundingValidation) {
+        currentRailDefaults = {
+          rail_provider_default: row0.rail_provider_default,
+          rail_env_default: row0.rail_env_default
+        };
+      }
+    } catch {
+      if (needsWebhookMerge) currentEmailSettings = { finance_email_settings: {}, system_emails: {} };
+      if (needsRailFundingValidation) currentRailDefaults = { rail_provider_default: null, rail_env_default: null };
+    }
+  }
+
+  const mergeWebhookSettings = (existingRaw, incomingRaw) => {
+    const existing = (existingRaw && typeof existingRaw === 'object' && !Array.isArray(existingRaw)) ? existingRaw : {};
+    const incoming = (incomingRaw && typeof incomingRaw === 'object' && !Array.isArray(incomingRaw)) ? incomingRaw : {};
+
+    // strip non-persisted UI hints
+    const cleanIncoming = { ...incoming };
+    delete cleanIncoming.webhook_url_set;
+    delete cleanIncoming.webhook_url_redacted;
+
+    const out = { ...existing };
+
+    // headers: if present in incoming, replace (allow null to clear)
+    if ('headers' in cleanIncoming) {
+      const h = cleanIncoming.headers;
+      if (h == null) out.headers = {};
+      else if (typeof h === 'object' && !Array.isArray(h)) out.headers = h;
+      else throw new Error('invalid_headers');
+    }
+
+    // webhook_url: only overwrite when a non-empty real value is supplied
+    if ('webhook_url' in cleanIncoming) {
+      const w = cleanIncoming.webhook_url;
+      if (w == null) {
+        // keep existing
+      } else if (typeof w === 'string') {
+        const v = w.trim();
+        if (v && v !== '[REDACTED]') out.webhook_url = v;
+      } else {
+        throw new Error('invalid_webhook_url');
+      }
+    }
+
+    return out;
+  };
+
+  const isPlainObj = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
+
+  const normalizeTextOrNull = (raw) => {
+    if (raw === null || raw === undefined) return null;
+    const s = String(raw);
+    const t = s.trim();
+    return t.length ? s : null;
+  };
+
+  const validateRemittanceIncludesJson = (obj) => {
+    if (obj == null) return null;
+    if (!isPlainObj(obj)) throw new Error('remittance_includes_json_not_object');
+
+    const weekly = obj.weekly;
+    const daily = obj.daily;
+
+    if (!isPlainObj(weekly) || !isPlainObj(daily)) throw new Error('remittance_includes_json_missing_scopes');
+
+    if ('include_item_types' in weekly && !isPlainObj(weekly.include_item_types)) throw new Error('remittance_includes_json_weekly_item_types');
+    if ('include_fields' in weekly && !isPlainObj(weekly.include_fields)) throw new Error('remittance_includes_json_weekly_fields');
+
+    if ('include_item_types' in daily && !isPlainObj(daily.include_item_types)) throw new Error('remittance_includes_json_daily_item_types');
+    if ('include_fields' in daily && !isPlainObj(daily.include_fields)) throw new Error('remittance_includes_json_daily_fields');
+
+    if ('defaults' in obj && obj.defaults != null && !isPlainObj(obj.defaults)) throw new Error('remittance_includes_json_defaults');
+
+    return obj;
+  };
+
+  const MAX_REM_MSG_LEN = 2000;
+
+  for (const k of allowed) {
+    if (!(k in data)) continue;
+
+    if (k === 'comms_adaptors_json') {
+      const raw = data.comms_adaptors_json;
+      let parsed = null;
+
+      if (raw == null) {
+        parsed = {};
+      } else if (isPlainObj(raw)) {
+        parsed = raw;
+      } else if (typeof raw === 'string') {
+        parsed = _safeJsonParseMaybe(raw, null);
+      }
+
+      if (!isPlainObj(parsed)) {
+        return withCORS(env, req, badRequest('comms_adaptors_json must be a JSON object (or a JSON string that parses to an object).'));
+      }
+
+      payload.comms_adaptors_json = parsed;
+      continue;
+    }
+
+    if (k === 'import_config_json') {
+      const raw = data.import_config_json;
+      let parsed = null;
+
+      if (raw && typeof raw === 'object') {
+        parsed = raw;
+      } else if (typeof raw === 'string') {
+        parsed = _safeJsonParseMaybe(raw, null);
+      } else if (raw == null) {
+        parsed = {};
+      }
+
+      if (!parsed || typeof parsed !== 'object') {
+        return withCORS(env, req, badRequest("import_config_json must be a JSON object (or a JSON string that parses to an object)."));
+      }
+
+      payload.import_config_json = parsed;
+      continue;
+    }
+
+    if (k === 'pay_export_csv_columns_json') {
+      const raw = data.pay_export_csv_columns_json;
+      let parsed = null;
+
+      if (raw == null) {
+        payload.pay_export_csv_columns_json = null;
+        continue;
+      } else if (Array.isArray(raw)) {
+        parsed = raw;
+      } else if (typeof raw === 'string') {
+        parsed = _safeJsonParseMaybe(raw, null);
+      }
+
+      if (!Array.isArray(parsed)) {
+        return withCORS(env, req, badRequest('pay_export_csv_columns_json must be a JSON array (or null)'));
+      }
+
+      // Validate: must be an array of non-empty strings (duplicates are allowed here but will be rejected by export RPC)
+      for (const it of parsed) {
+        const s = (it === null || it === undefined) ? '' : String(it).trim();
+        if (!s) {
+          return withCORS(env, req, badRequest('pay_export_csv_columns_json must contain only non-empty strings'));
+        }
+      }
+
+      payload.pay_export_csv_columns_json = parsed.map((it) => String(it).trim());
+      continue;
+    }
+
+    if (k === 'remittance_includes_json') {
+      const raw = data.remittance_includes_json;
+      let parsed = null;
+
+      if (raw == null) {
+        parsed = null;
+      } else if (isPlainObj(raw)) {
+        parsed = raw;
+      } else if (typeof raw === 'string') {
+        parsed = _safeJsonParseMaybe(raw, null);
+      }
+
+      try {
+        payload.remittance_includes_json = validateRemittanceIncludesJson(parsed);
+      } catch (e) {
+        const msg = String(e?.message || e || '');
+        const err =
+          (msg === 'remittance_includes_json_not_object') ? 'remittance_includes_json must be a JSON object (or null)' :
+          (msg === 'remittance_includes_json_missing_scopes') ? 'remittance_includes_json must include weekly and daily objects' :
+          (msg === 'remittance_includes_json_weekly_item_types') ? 'remittance_includes_json.weekly.include_item_types must be an object' :
+          (msg === 'remittance_includes_json_weekly_fields') ? 'remittance_includes_json.weekly.include_fields must be an object' :
+          (msg === 'remittance_includes_json_daily_item_types') ? 'remittance_includes_json.daily.include_item_types must be an object' :
+          (msg === 'remittance_includes_json_daily_fields') ? 'remittance_includes_json.daily.include_fields must be an object' :
+          (msg === 'remittance_includes_json_defaults') ? 'remittance_includes_json.defaults must be an object' :
+          'remittance_includes_json invalid';
+        return withCORS(env, req, badRequest(err));
+      }
+      continue;
+    }
+
+    if (k === 'remittance_header_message') {
+      const v = normalizeTextOrNull(data.remittance_header_message);
+      if (v != null && v.length > MAX_REM_MSG_LEN) {
+        return withCORS(env, req, badRequest(`remittance_header_message too long (max ${MAX_REM_MSG_LEN})`));
+      }
+      payload.remittance_header_message = v;
+      continue;
+    }
+
+    if (k === 'remittance_footer_message') {
+      const v = normalizeTextOrNull(data.remittance_footer_message);
+      if (v != null && v.length > MAX_REM_MSG_LEN) {
+        return withCORS(env, req, badRequest(`remittance_footer_message too long (max ${MAX_REM_MSG_LEN})`));
+      }
+      payload.remittance_footer_message = v;
+      continue;
+    }
+
+    if (k === 'finance_email_settings') {
+      const raw = data.finance_email_settings;
+      let parsed = null;
+
+      if (raw && typeof raw === 'object') parsed = raw;
+      else if (typeof raw === 'string') parsed = _safeJsonParseMaybe(raw, null);
+      else if (raw == null) parsed = {};
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return withCORS(env, req, badRequest("finance_email_settings must be a JSON object (or a JSON string that parses to an object)."));
+      }
+
+      try {
+        payload.finance_email_settings = mergeWebhookSettings(currentEmailSettings?.finance_email_settings, parsed);
+      } catch (e) {
+        const msg = (String(e?.message || e) === 'invalid_headers') ? 'finance_email_settings.headers must be an object' :
+                    (String(e?.message || e) === 'invalid_webhook_url') ? 'finance_email_settings.webhook_url must be a string' :
+                    'finance_email_settings invalid';
+        return withCORS(env, req, badRequest(msg));
+      }
+      continue;
+    }
+
+    if (k === 'system_emails') {
+      const raw = data.system_emails;
+      let parsed = null;
+
+      if (raw && typeof raw === 'object') parsed = raw;
+      else if (typeof raw === 'string') parsed = _safeJsonParseMaybe(raw, null);
+      else if (raw == null) parsed = {};
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return withCORS(env, req, badRequest("system_emails must be a JSON object (or a JSON string that parses to an object)."));
+      }
+
+      try {
+        payload.system_emails = mergeWebhookSettings(currentEmailSettings?.system_emails, parsed);
+      } catch (e) {
+        const msg = (String(e?.message || e) === 'invalid_headers') ? 'system_emails.headers must be an object' :
+                    (String(e?.message || e) === 'invalid_webhook_url') ? 'system_emails.webhook_url must be a string' :
+                    'system_emails invalid';
+        return withCORS(env, req, badRequest(msg));
+      }
+      continue;
+    }
+
+    if (k === 'max_attachments_per_email') {
+      const n = Number(data.max_attachments_per_email);
+      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
+
+      if (!(v >= 1 && v <= 100)) {
+        return withCORS(env, req, badRequest("max_attachments_per_email must be an integer between 1 and 100."));
+      }
+
+      payload.max_attachments_per_email = v;
+      continue;
+    }
+
+    if (k === 'finance_email') {
+      const v = (data.finance_email == null) ? null : String(data.finance_email).trim();
+      payload.finance_email = v && v.length ? v : null;
+      continue;
+    }
+
+    if (k === 'system_email') {
+      const v0 = (data.system_email == null) ? null : String(data.system_email).trim();
+      if (v0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v0)) {
+        return withCORS(env, req, badRequest('invalid_system_email'));
+      }
+      payload.system_email = v0 && v0.length ? v0 : null;
+      continue;
+    }
+
+    if (k === 'payroll_testing') {
+      const raw = data.payroll_testing;
+
+      let v = null;
+      if (typeof raw === 'boolean') {
+        v = raw;
+      } else if (typeof raw === 'string') {
+        const t = raw.trim().toLowerCase();
+        if (t === 'true') v = true;
+        else if (t === 'false') v = false;
+      }
+
+      if (v === null) {
+        return withCORS(env, req, badRequest('payroll_testing must be boolean'));
+      }
+
+      payload.payroll_testing = v;
+      continue;
+    }
+
+    if (k === 'paye_remittances_enabled') {
+      const raw = data.paye_remittances_enabled;
+
+      let v = null;
+      if (typeof raw === 'boolean') {
+        v = raw;
+      } else if (typeof raw === 'string') {
+        const t = raw.trim().toLowerCase();
+        if (t === 'true') v = true;
+        else if (t === 'false') v = false;
+      }
+
+      if (v === null) {
+        return withCORS(env, req, badRequest('paye_remittances_enabled must be boolean'));
+      }
+
+      payload.paye_remittances_enabled = v;
+      continue;
+    }
+
+    if (k === 'remittances_detailed_breakdown') {
+      const raw = data.remittances_detailed_breakdown;
+
+      let v = null;
+      if (typeof raw === 'boolean') {
+        v = raw;
+      } else if (typeof raw === 'string') {
+        const t = raw.trim().toLowerCase();
+        if (t === 'true') v = true;
+        else if (t === 'false') v = false;
+      }
+
+      if (v === null) {
+        return withCORS(env, req, badRequest('remittances_detailed_breakdown must be boolean'));
+      }
+
+      payload.remittances_detailed_breakdown = v;
+      continue;
+    }
+
+    if (k === 'remittance_receive_when_umbrella_paid') {
+      const raw = data.remittance_receive_when_umbrella_paid;
+
+      let v = null;
+      if (typeof raw === 'boolean') {
+        v = raw;
+      } else if (typeof raw === 'string') {
+        const t = raw.trim().toLowerCase();
+        if (t === 'true') v = true;
+        else if (t === 'false') v = false;
+      }
+
+      if (v === null) {
+        return withCORS(env, req, badRequest('remittance_receive_when_umbrella_paid must be boolean'));
+      }
+
+      payload.remittance_receive_when_umbrella_paid = v;
+      continue;
+    }
+
+    if (k === 'remittance_test_recipient_email') {
+      const v0 = (data.remittance_test_recipient_email == null) ? null : String(data.remittance_test_recipient_email).trim();
+      if (!v0) {
+        payload.remittance_test_recipient_email = null;
+        continue;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+\.[^\s@]+$/.test(v0)) {
+        // keep existing error code format as-is
+        return withCORS(env, req, badRequest('invalid_remittance_test_recipient_email'));
+      }
+      payload.remittance_test_recipient_email = v0;
+      continue;
+    }
+
+    if (k === 'payment_authoriser_quantity') {
+      const raw = data.payment_authoriser_quantity;
+      const n = Number(raw);
+      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
+      if (!(v >= 1 && v <= 10)) {
+        return withCORS(env, req, badRequest('payment_authoriser_quantity must be an integer between 1 and 10'));
+      }
+      payload.payment_authoriser_quantity = v;
+      continue;
+    }
+
+    if (k === 'pay_eligibility_months_back') {
+      const raw = data.pay_eligibility_months_back;
+      const n = Number(raw);
+      const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
+      if (!(v >= 0 && v <= 120)) {
+        return withCORS(env, req, badRequest('pay_eligibility_months_back must be an integer between 0 and 120'));
+      }
+      payload.pay_eligibility_months_back = v;
+      continue;
+    }
+
+    if (k === 'rail_default_funding_account_ref') {
+      const v0 = (data.rail_default_funding_account_ref === null || data.rail_default_funding_account_ref === undefined)
+        ? null
+        : (String(data.rail_default_funding_account_ref).trim() || null);
+
+      // Allow clearing
+      if (v0 == null) {
+        payload.rail_default_funding_account_ref = null;
+        continue;
+      }
+
+      // Validate against current rail adapter
+      const provider = String(currentRailDefaults?.rail_provider_default || 'CSV').trim().toUpperCase();
+      const railEnv = String(currentRailDefaults?.rail_env_default || 'PROD').trim().toUpperCase();
+
+      const adapter = getRailAdapter(provider);
+      if (!adapter || typeof adapter.validateFundingAccountRef !== 'function') {
+        return withCORS(env, req, badRequest('FUNDING_ACCOUNT_REF_NOT_SUPPORTED_FOR_THIS_RAIL'));
+      }
+
+      // ✅ OPTION (1): Only validate if the rail is configured/available. If not available, allow saving without validation
+      // to avoid wedging Global Settings when Revolut OAuth/redirect config is incomplete.
+      if (typeof adapter.capabilities === 'function') {
+        let caps = null;
+        try {
+          caps = await adapter.capabilities(env);
+        } catch (e) {
+          caps = { available: false, reason: (e && e.message) ? String(e.message) : 'CAPABILITIES_FAILED' };
+        }
+
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          payload.rail_default_funding_account_ref = v0;
+          continue;
+        }
+      }
+
+      let vres = null;
+      try {
+        vres = await adapter.validateFundingAccountRef(env, { rail_env: railEnv, funding_account_ref: v0 });
+      } catch (e) {
+        const msg = (e && e.message) ? String(e.message) : String(e || 'FUNDING_ACCOUNT_VALIDATE_FAILED');
+        return withCORS(env, req, badRequest(msg));
+      }
+
+      const valid = !!(vres && typeof vres === 'object' && vres.valid === true);
+      if (!valid) {
+        const reason = (vres && typeof vres === 'object' && vres.reason) ? String(vres.reason) : 'FUNDING_ACCOUNT_REF_INVALID';
+        return withCORS(env, req, badRequest(reason));
+      }
+
+      const acct = (vres && typeof vres === 'object') ? (vres.account || null) : null;
+      const ccy = (acct && acct.currency !== undefined && acct.currency !== null) ? String(acct.currency).trim().toUpperCase() : null;
+      if (ccy && ccy !== 'GBP') {
+        return withCORS(env, req, badRequest('FUNDING_ACCOUNT_REF_MUST_BE_GBP'));
+      }
+
+      payload.rail_default_funding_account_ref = v0;
+      continue;
+    }
+
+    // Normal field passthrough
+    payload[k] = data[k];
+  }
+
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1`, {
+      method: "PATCH",
+      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return withCORS(env, req, badRequest(`Update failed: ${err}`));
+    }
+
+    const json = await res.json().catch(() => ({}));
+    const settings = Array.isArray(json) ? json[0] : json;
+    delete settings.id;
+
+    // Bust TTL cache so next loadSettingsDefaults fetches fresh values
+    __SETTINGS_DEFAULTS_CACHE = { ts: 0, value: null };
+
+    // Redact webhook URLs in response
+    const redactWebhook = (obj) => {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+      const out = { ...obj };
+      const wasSet = (typeof out.webhook_url === 'string') && out.webhook_url.trim().length > 0;
+      if ('webhook_url' in out) out.webhook_url = '';
+      delete out.webhook_url_redacted;
+      out.webhook_url_set = !!wasSet;
+      return out;
+    };
+    settings.finance_email_settings = redactWebhook(settings.finance_email_settings);
+    settings.system_emails = redactWebhook(settings.system_emails);
+
+    return withCORS(env, req, ok({ settings }));
+  } catch {
+    return withCORS(env, req, serverError("Failed to update settings_defaults"));
+  }
+}
 
 
 
@@ -50054,6 +53765,418 @@ async function handleListClients(env, req) {
     sample_id: rows?.[0]?.id || null
   }));
 }
+
+
+async function handleGetClient(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  try {
+    // Client (explicit select=* so ts_queries_email etc always present)
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(clientId)}&select=*&limit=1`
+    );
+    if (!rows.length) return withCORS(env, req, notFound("Client not found"));
+    const client = rows[0];
+
+    // Latest client_settings
+    const { rows: csRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${enc(clientId)}` +
+      `&select=` +
+        [
+          'id','client_id',
+          'vat_rate_pct','holiday_pay_pct','erni_pct',
+          'apply_holiday_to','apply_erni_to','margin_includes',
+          'effective_from',
+          'timezone_id',
+          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
+          'bh_source','bh_list','bh_feed_url',
+          'hr_validation_required',
+          'ts_reference_required','pay_reference_required','invoice_reference_required',
+          'default_submission_mode',
+          'week_ending_weekday',
+          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
+          'no_timesheet_required','group_nightsat_sunbh',
+          'auto_invoice_default',
+          'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+
+          // ✅ NEW: client comms opt-ins (DB-backed)
+          'opt_in_email','opt_in_sms','opt_in_whatsapp',
+
+          // invoicing settings required by UI
+          'invoice_consolidation_mode',
+          'reference_number_required_to_issue_invoice',
+
+          // manual adjustment email routing
+          'send_manual_invoices_to_different_email',
+          'manual_invoices_alt_email_address',
+
+          'created_at','updated_at'
+        ].join(',') +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+    );
+
+    const client_settings = csRows?.[0] || null;
+
+    // has_e_history (client-level) for Client modal E-History tab enablement
+    let has_e_history = false;
+    try {
+      // Option B: smaller existence check via v_legacy_client_candidates
+      const { rows: histRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_legacy_client_candidates` +
+          `?client_id=eq.${enc(clientId)}` +
+          `&select=client_id` +
+          `&limit=1`
+      );
+      has_e_history = Array.isArray(histRows) && histRows.length > 0;
+    } catch (e) {
+      console.error('handleGetClient: legacy history existence check failed', {
+        client_id: clientId,
+        err: e?.message || String(e)
+      });
+      has_e_history = false;
+    }
+
+    return withCORS(env, req, ok({ client, client_settings, has_e_history }));
+  } catch (e) {
+    console.error('handleGetClient failed', {
+      client_id: clientId,
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, serverError("Failed to fetch client"));
+  }
+}
+
+async function handleCreateClient(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const data = await parseJSONBody(req);
+  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
+
+  const TIME_KEYS = [
+    'day_start','day_end',
+    'night_start','night_end',
+    'sat_start','sat_end',
+    'sun_start','sun_end',
+    'bh_start','bh_end'
+  ];
+
+  const normTime = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const m = s.match(/^(\d{2}:\d{2})/);
+    return m ? m[1] : s;
+  };
+
+  const asBool = (v) => {
+    if (v === true) return true;
+    if (v === false || v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'on';
+  };
+
+  const normEmail = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim();
+    return s ? s : null;
+  };
+
+  const normInvoiceConsol = (v) => {
+    if (v == null) return null;
+    const s = String(v).trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'ALL') return 'ANY_WEEK';
+    if (s === 'ANY') return 'ANY_WEEK';
+    if (s === 'NONE' || s === 'BY_WEEK' || s === 'ANY_WEEK') return s;
+    return '__INVALID__';
+  };
+
+  try {
+    const {
+      cli_ref,
+      cli_num,
+      client_settings: clientSettingsInput,
+      hr_validation_required,
+      ts_reference_required,
+      pay_reference_required,
+      invoice_reference_required,
+      default_submission_mode,
+
+      auto_invoice_default,
+
+      invoice_consolidation_mode,
+      reference_number_required_to_issue_invoice,
+
+      is_nhsp,
+      self_bill_no_invoices_sent,
+      daily_calc_of_invoices,
+      no_timesheet_required,
+      group_nightsat_sunbh,
+      requires_hr,
+      autoprocess_hr,
+      hr_attach_to_invoice,
+      ts_attach_to_invoice,
+
+      send_manual_invoices_to_different_email,
+      manual_invoices_alt_email_address,
+
+      ...clientOnly
+    } = data || {};
+
+    const nowIso = new Date().toISOString();
+
+    // ✅ Ensure ts_queries_email is clearable and normalised at create time
+    if (Object.prototype.hasOwnProperty.call(clientOnly, 'ts_queries_email')) {
+      clientOnly.ts_queries_email = normEmail(clientOnly.ts_queries_email);
+    }
+
+    const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
+      method: "POST",
+      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+      body: JSON.stringify({ ...clientOnly, created_at: nowIso })
+    });
+    if (!clientRes.ok) {
+      const err = await clientRes.text();
+      return withCORS(env, req, badRequest(`Client creation failed: ${err}`));
+    }
+    const clientJson = await clientRes.json().catch(() => ({}));
+    const client = Array.isArray(clientJson) ? clientJson[0] : clientJson;
+
+    const csInput = {
+      ...((clientSettingsInput && typeof clientSettingsInput === 'object') ? clientSettingsInput : {}),
+    };
+
+    delete csInput.weekly_mode;
+    delete csInput.hr_weekly_behaviour;
+    delete csInput.__from_ui;
+    delete csInput.ts_queries_email;
+
+    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!hr_validation_required;
+    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!ts_reference_required;
+    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!pay_reference_required;
+    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!invoice_reference_required;
+    if ('default_submission_mode' in data)       csInput.default_submission_mode       = default_submission_mode;
+
+    if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
+      csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? auto_invoice_default);
+    }
+
+    if ('invoice_consolidation_mode' in data || 'invoice_consolidation_mode' in csInput) {
+      const v = normInvoiceConsol(csInput.invoice_consolidation_mode ?? invoice_consolidation_mode);
+      if (v === '__INVALID__') {
+        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
+      }
+      if (v != null) csInput.invoice_consolidation_mode = v;
+    }
+
+    if ('reference_number_required_to_issue_invoice' in data || 'reference_number_required_to_issue_invoice' in csInput) {
+      csInput.reference_number_required_to_issue_invoice =
+        asBool(csInput.reference_number_required_to_issue_invoice ?? reference_number_required_to_issue_invoice);
+    }
+
+    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
+      csInput.is_nhsp = asBool(csInput.is_nhsp ?? is_nhsp);
+    }
+    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
+      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? self_bill_no_invoices_sent);
+    }
+    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
+      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? daily_calc_of_invoices);
+    }
+    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
+      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? no_timesheet_required);
+    }
+    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
+      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? group_nightsat_sunbh);
+    }
+
+    if ('requires_hr' in data || 'requires_hr' in csInput) {
+      csInput.requires_hr = asBool(csInput.requires_hr ?? requires_hr);
+    }
+    if ('autoprocess_hr' in data || 'autoprocess_hr' in csInput) {
+      csInput.autoprocess_hr = asBool(csInput.autoprocess_hr ?? autoprocess_hr);
+    }
+    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
+      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? hr_attach_to_invoice);
+    }
+    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
+      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? ts_attach_to_invoice);
+    }
+
+    if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
+      csInput.send_manual_invoices_to_different_email =
+        asBool(csInput.send_manual_invoices_to_different_email ?? send_manual_invoices_to_different_email);
+    }
+    if ('manual_invoices_alt_email_address' in data || 'manual_invoices_alt_email_address' in csInput) {
+      csInput.manual_invoices_alt_email_address =
+        normEmail(csInput.manual_invoices_alt_email_address ?? manual_invoices_alt_email_address);
+    }
+
+    // ✅ NEW: client comms opt-ins (DB-backed)
+    if ('opt_in_email' in data || 'opt_in_email' in csInput) {
+      csInput.opt_in_email = asBool(csInput.opt_in_email ?? data.opt_in_email);
+    }
+    if ('opt_in_sms' in data || 'opt_in_sms' in csInput) {
+      csInput.opt_in_sms = asBool(csInput.opt_in_sms ?? data.opt_in_sms);
+    }
+    if ('opt_in_whatsapp' in data || 'opt_in_whatsapp' in csInput) {
+      csInput.opt_in_whatsapp = asBool(csInput.opt_in_whatsapp ?? data.opt_in_whatsapp);
+    }
+
+    for (const k of TIME_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(csInput, k)) {
+        csInput[k] = normTime(csInput[k]);
+      }
+    }
+
+    const setDefaultBool = (key, val) => {
+      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
+    };
+
+    setDefaultBool('is_nhsp', false);
+    setDefaultBool('self_bill_no_invoices_sent', false);
+    setDefaultBool('daily_calc_of_invoices', false);
+    setDefaultBool('no_timesheet_required', false);
+    setDefaultBool('group_nightsat_sunbh', false);
+
+    setDefaultBool('hr_validation_required', false);
+    setDefaultBool('ts_reference_required', false);
+    setDefaultBool('pay_reference_required', false);
+    setDefaultBool('invoice_reference_required', false);
+
+    setDefaultBool('requires_hr', false);
+    setDefaultBool('autoprocess_hr', false);
+
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'hr_attach_to_invoice')) csInput.hr_attach_to_invoice = true;
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'ts_attach_to_invoice')) csInput.ts_attach_to_invoice = true;
+
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'auto_invoice_default')) csInput.auto_invoice_default = false;
+
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'invoice_consolidation_mode')) {
+      csInput.invoice_consolidation_mode = 'NONE';
+    } else {
+      const v = normInvoiceConsol(csInput.invoice_consolidation_mode);
+      if (v === '__INVALID__') {
+        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
+      }
+      csInput.invoice_consolidation_mode = v || 'NONE';
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'reference_number_required_to_issue_invoice')) {
+      csInput.reference_number_required_to_issue_invoice = false;
+    } else {
+      csInput.reference_number_required_to_issue_invoice = asBool(csInput.reference_number_required_to_issue_invoice);
+    }
+
+    // ✅ Defaults for client comms opt-ins (DB default is true; we set explicitly for consistency)
+    setDefaultBool('opt_in_email', true);
+    setDefaultBool('opt_in_sms', true);
+    setDefaultBool('opt_in_whatsapp', true);
+
+    if (asBool(csInput.self_bill_no_invoices_sent)) {
+      csInput.auto_invoice_default = false;
+    }
+
+    if (!asBool(csInput.send_manual_invoices_to_different_email)) {
+      csInput.send_manual_invoices_to_different_email = false;
+      csInput.manual_invoices_alt_email_address = null;
+    }
+
+    if (asBool(csInput.send_manual_invoices_to_different_email) && !csInput.manual_invoices_alt_email_address) {
+      return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
+    }
+
+    const setDefaultTimeIfMissing = (key, val) => {
+      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
+    };
+
+    setDefaultTimeIfMissing('day_start',   '06:00');
+    setDefaultTimeIfMissing('day_end',     '20:00');
+    setDefaultTimeIfMissing('night_start', '20:00');
+    setDefaultTimeIfMissing('night_end',   '06:00');
+
+    setDefaultTimeIfMissing('sat_start', '00:00');
+    setDefaultTimeIfMissing('sat_end',   '00:00');
+    setDefaultTimeIfMissing('sun_start', '00:00');
+    setDefaultTimeIfMissing('sun_end',   '00:00');
+    setDefaultTimeIfMissing('bh_start',  '00:00');
+    setDefaultTimeIfMissing('bh_end',    '00:00');
+
+    {
+      for (const k of TIME_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(csInput, k)) {
+          csInput[k] = normTime(csInput[k]);
+        }
+      }
+
+      const filled = TIME_KEYS.filter(k => csInput[k] != null && String(csInput[k]).trim() !== '');
+      if (filled.length > 0 && filled.length < TIME_KEYS.length) {
+        return withCORS(env, req, badRequest('Shift times must be either all blank (inherit global) or all filled.'));
+      }
+    }
+
+    const we = Number(csInput.week_ending_weekday);
+    csInput.week_ending_weekday = (Number.isInteger(we) && we>=0 && we<=6) ? we : 0;
+
+    if (!Object.prototype.hasOwnProperty.call(csInput, 'default_submission_mode')) {
+      csInput.default_submission_mode = 'ELECTRONIC';
+    }
+    {
+      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
+      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
+      csInput.default_submission_mode = dsm;
+    }
+
+    let client_settings;
+    if (Object.keys(csInput).length) {
+      const partsEf = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(new Date(nowIso));
+      const efMap = {};
+      for (const p of partsEf) efMap[p.type] = p.value;
+      const ukTodayYmd = `${efMap.year}-${efMap.month}-${efMap.day}`;
+
+      if (!Object.prototype.hasOwnProperty.call(csInput, 'effective_from') || !String(csInput.effective_from || '').trim()) {
+        csInput.effective_from = ukTodayYmd;
+      }
+
+      const csPayload = {
+        client_id: client.id,
+        ...csInput,
+        created_at: nowIso,
+        updated_at: nowIso
+      };
+
+      const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
+        method: "POST",
+        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
+        body: JSON.stringify(csPayload)
+      });
+      if (!csRes.ok) {
+        const err = await csRes.text();
+        return withCORS(env, req, ok({ client, warning: `Client created but client_settings insert failed: ${err}` }));
+      }
+      const csJson = await csRes.json().catch(() => ({}));
+      client_settings = Array.isArray(csJson) ? csJson[0] : csJson;
+    }
+
+    return withCORS(env, req, ok({ client, client_settings }));
+  } catch (e) {
+    return withCORS(env, req, serverError("Failed to create client"));
+  }
+}
+
 async function handleUpdateClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -50140,6 +54263,10 @@ async function handleUpdateClient(env, req, clientId) {
           'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
           'no_timesheet_required','group_nightsat_sunbh',
           'auto_invoice_default',
+
+          // ✅ NEW: client comms opt-ins (DB-backed)
+          'opt_in_email','opt_in_sms','opt_in_whatsapp',
+
           'effective_from','timezone_id',
           'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
           'bh_source','bh_list','bh_feed_url',
@@ -50218,7 +54345,18 @@ async function handleUpdateClient(env, req, clientId) {
         normEmail(csInput.manual_invoices_alt_email_address ?? data.manual_invoices_alt_email_address);
     }
 
-    // ✅ NEW: accept + validate invoice_consolidation_mode (reject invalid; never write junk)
+    // ✅ NEW: client comms opt-ins (DB-backed) — only apply when provided
+    if ('opt_in_email' in data || 'opt_in_email' in csInput) {
+      csInput.opt_in_email = asBool(csInput.opt_in_email ?? data.opt_in_email);
+    }
+    if ('opt_in_sms' in data || 'opt_in_sms' in csInput) {
+      csInput.opt_in_sms = asBool(csInput.opt_in_sms ?? data.opt_in_sms);
+    }
+    if ('opt_in_whatsapp' in data || 'opt_in_whatsapp' in csInput) {
+      csInput.opt_in_whatsapp = asBool(csInput.opt_in_whatsapp ?? data.opt_in_whatsapp);
+    }
+
+    // ✅ NEW: canonical invoice_consolidation_mode (reject invalid; never write junk)
     if ('invoice_consolidation_mode' in data || 'invoice_consolidation_mode' in csInput) {
       const v = normInvoiceConsol(csInput.invoice_consolidation_mode ?? data.invoice_consolidation_mode);
       if (v === '__INVALID__') {
@@ -50280,6 +54418,11 @@ async function handleUpdateClient(env, req, clientId) {
       invoice_consolidation_mode,
       reference_number_required_to_issue_invoice,
 
+      // ensure opt-ins never fall into clients table patch
+      opt_in_email,
+      opt_in_sms,
+      opt_in_whatsapp,
+
       ...clientPatchRaw
     } = data;
 
@@ -50340,6 +54483,25 @@ async function handleUpdateClient(env, req, clientId) {
       const hasBefore = !!beforeCs?.id;
 
       const canon = canonicalizeClientSettingsServer(beforeCs, csInput);
+
+      // ✅ Ensure canon contains opt-ins (canonicalizeClientSettingsServer does not currently include them)
+      if (Object.prototype.hasOwnProperty.call(csInput, 'opt_in_email')) {
+        canon.opt_in_email = asBool(csInput.opt_in_email);
+      } else if (beforeCs && Object.prototype.hasOwnProperty.call(beforeCs, 'opt_in_email')) {
+        canon.opt_in_email = asBool(beforeCs.opt_in_email);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(csInput, 'opt_in_sms')) {
+        canon.opt_in_sms = asBool(csInput.opt_in_sms);
+      } else if (beforeCs && Object.prototype.hasOwnProperty.call(beforeCs, 'opt_in_sms')) {
+        canon.opt_in_sms = asBool(beforeCs.opt_in_sms);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(csInput, 'opt_in_whatsapp')) {
+        canon.opt_in_whatsapp = asBool(csInput.opt_in_whatsapp);
+      } else if (beforeCs && Object.prototype.hasOwnProperty.call(beforeCs, 'opt_in_whatsapp')) {
+        canon.opt_in_whatsapp = asBool(beforeCs.opt_in_whatsapp);
+      }
 
       if (Object.prototype.hasOwnProperty.call(csInput, 'invoice_consolidation_mode')) {
         const v = normInvoiceConsol(csInput.invoice_consolidation_mode);
@@ -50513,403 +54675,6 @@ async function handleUpdateClient(env, req, clientId) {
     return withCORS(env, req, serverError("Failed to update client"));
   }
 }
-
-async function handleCreateClient(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const data = await parseJSONBody(req);
-  if (!data) return withCORS(env, req, badRequest("Invalid JSON"));
-
-  const TIME_KEYS = [
-    'day_start','day_end',
-    'night_start','night_end',
-    'sat_start','sat_end',
-    'sun_start','sun_end',
-    'bh_start','bh_end'
-  ];
-
-  const normTime = (v) => {
-    if (v == null) return null;
-    const s = String(v).trim();
-    if (!s) return null;
-    const m = s.match(/^(\d{2}:\d{2})/);
-    return m ? m[1] : s;
-  };
-
-  const asBool = (v) => {
-    if (v === true) return true;
-    if (v === false || v == null) return false;
-    const s = String(v).trim().toLowerCase();
-    return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'on';
-  };
-
-  const normEmail = (v) => {
-    if (v == null) return null;
-    const s = String(v).trim();
-    return s ? s : null;
-  };
-
-  const normInvoiceConsol = (v) => {
-    if (v == null) return null;
-    const s = String(v).trim().toUpperCase();
-    if (!s) return null;
-    if (s === 'ALL') return 'ANY_WEEK';
-    if (s === 'ANY') return 'ANY_WEEK';
-    if (s === 'NONE' || s === 'BY_WEEK' || s === 'ANY_WEEK') return s;
-    return '__INVALID__';
-  };
-
-  try {
-    const {
-      cli_ref,
-      cli_num,
-      client_settings: clientSettingsInput,
-      hr_validation_required,
-      ts_reference_required,
-      pay_reference_required,
-      invoice_reference_required,
-      default_submission_mode,
-
-      auto_invoice_default,
-
-      invoice_consolidation_mode,
-      reference_number_required_to_issue_invoice,
-
-      is_nhsp,
-      self_bill_no_invoices_sent,
-      daily_calc_of_invoices,
-      no_timesheet_required,
-      group_nightsat_sunbh,
-      requires_hr,
-      autoprocess_hr,
-      hr_attach_to_invoice,
-      ts_attach_to_invoice,
-
-      send_manual_invoices_to_different_email,
-      manual_invoices_alt_email_address,
-
-      ...clientOnly
-    } = data || {};
-
-    const nowIso = new Date().toISOString();
-
-    // ✅ Ensure ts_queries_email is clearable and normalised at create time
-    if (Object.prototype.hasOwnProperty.call(clientOnly, 'ts_queries_email')) {
-      clientOnly.ts_queries_email = normEmail(clientOnly.ts_queries_email);
-    }
-
-    const clientRes = await fetch(`${env.SUPABASE_URL}/rest/v1/clients`, {
-      method: "POST",
-      headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-      body: JSON.stringify({ ...clientOnly, created_at: nowIso })
-    });
-    if (!clientRes.ok) {
-      const err = await clientRes.text();
-      return withCORS(env, req, badRequest(`Client creation failed: ${err}`));
-    }
-    const clientJson = await clientRes.json().catch(() => ({}));
-    const client = Array.isArray(clientJson) ? clientJson[0] : clientJson;
-
-    const csInput = {
-      ...((clientSettingsInput && typeof clientSettingsInput === 'object') ? clientSettingsInput : {}),
-    };
-
-    delete csInput.weekly_mode;
-    delete csInput.hr_weekly_behaviour;
-    delete csInput.__from_ui;
-    delete csInput.ts_queries_email;
-
-    if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!hr_validation_required;
-    if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!ts_reference_required;
-    if ('pay_reference_required' in data)        csInput.pay_reference_required        = !!pay_reference_required;
-    if ('invoice_reference_required' in data)    csInput.invoice_reference_required    = !!invoice_reference_required;
-    if ('default_submission_mode' in data)       csInput.default_submission_mode       = default_submission_mode;
-
-    if ('auto_invoice_default' in data || 'auto_invoice_default' in csInput) {
-      csInput.auto_invoice_default = asBool(csInput.auto_invoice_default ?? auto_invoice_default);
-    }
-
-    if ('invoice_consolidation_mode' in data || 'invoice_consolidation_mode' in csInput) {
-      const v = normInvoiceConsol(csInput.invoice_consolidation_mode ?? invoice_consolidation_mode);
-      if (v === '__INVALID__') {
-        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
-      }
-      if (v != null) csInput.invoice_consolidation_mode = v;
-    }
-
-    if ('reference_number_required_to_issue_invoice' in data || 'reference_number_required_to_issue_invoice' in csInput) {
-      csInput.reference_number_required_to_issue_invoice =
-        asBool(csInput.reference_number_required_to_issue_invoice ?? reference_number_required_to_issue_invoice);
-    }
-
-    if ('is_nhsp' in data || 'is_nhsp' in csInput) {
-      csInput.is_nhsp = asBool(csInput.is_nhsp ?? is_nhsp);
-    }
-    if ('self_bill_no_invoices_sent' in data || 'self_bill_no_invoices_sent' in csInput) {
-      csInput.self_bill_no_invoices_sent = asBool(csInput.self_bill_no_invoices_sent ?? self_bill_no_invoices_sent);
-    }
-    if ('daily_calc_of_invoices' in data || 'daily_calc_of_invoices' in csInput) {
-      csInput.daily_calc_of_invoices = asBool(csInput.daily_calc_of_invoices ?? daily_calc_of_invoices);
-    }
-    if ('no_timesheet_required' in data || 'no_timesheet_required' in csInput) {
-      csInput.no_timesheet_required = asBool(csInput.no_timesheet_required ?? no_timesheet_required);
-    }
-    if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
-      csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? group_nightsat_sunbh);
-    }
-
-    if ('requires_hr' in data || 'requires_hr' in csInput) {
-      csInput.requires_hr = asBool(csInput.requires_hr ?? requires_hr);
-    }
-    if ('autoprocess_hr' in data || 'autoprocess_hr' in csInput) {
-      csInput.autoprocess_hr = asBool(csInput.autoprocess_hr ?? autoprocess_hr);
-    }
-    if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
-      csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? hr_attach_to_invoice);
-    }
-    if ('ts_attach_to_invoice' in data || 'ts_attach_to_invoice' in csInput) {
-      csInput.ts_attach_to_invoice = asBool(csInput.ts_attach_to_invoice ?? ts_attach_to_invoice);
-    }
-
-    if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
-      csInput.send_manual_invoices_to_different_email =
-        asBool(csInput.send_manual_invoices_to_different_email ?? send_manual_invoices_to_different_email);
-    }
-    if ('manual_invoices_alt_email_address' in data || 'manual_invoices_alt_email_address' in csInput) {
-      csInput.manual_invoices_alt_email_address =
-        normEmail(csInput.manual_invoices_alt_email_address ?? manual_invoices_alt_email_address);
-    }
-
-    for (const k of TIME_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(csInput, k)) {
-        csInput[k] = normTime(csInput[k]);
-      }
-    }
-
-    const setDefaultBool = (key, val) => {
-      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
-    };
-
-    setDefaultBool('is_nhsp', false);
-    setDefaultBool('self_bill_no_invoices_sent', false);
-    setDefaultBool('daily_calc_of_invoices', false);
-    setDefaultBool('no_timesheet_required', false);
-    setDefaultBool('group_nightsat_sunbh', false);
-
-    setDefaultBool('hr_validation_required', false);
-    setDefaultBool('ts_reference_required', false);
-    setDefaultBool('pay_reference_required', false);
-    setDefaultBool('invoice_reference_required', false);
-
-    setDefaultBool('requires_hr', false);
-    setDefaultBool('autoprocess_hr', false);
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'hr_attach_to_invoice')) csInput.hr_attach_to_invoice = true;
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'ts_attach_to_invoice')) csInput.ts_attach_to_invoice = true;
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'auto_invoice_default')) csInput.auto_invoice_default = false;
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'invoice_consolidation_mode')) {
-      csInput.invoice_consolidation_mode = 'NONE';
-    } else {
-      const v = normInvoiceConsol(csInput.invoice_consolidation_mode);
-      if (v === '__INVALID__') {
-        return withCORS(env, req, badRequest('invoice_consolidation_mode must be one of NONE, BY_WEEK, ANY_WEEK (or ALL).'));
-      }
-      csInput.invoice_consolidation_mode = v || 'NONE';
-    }
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'reference_number_required_to_issue_invoice')) {
-      csInput.reference_number_required_to_issue_invoice = false;
-    } else {
-      csInput.reference_number_required_to_issue_invoice = asBool(csInput.reference_number_required_to_issue_invoice);
-    }
-
-    if (asBool(csInput.self_bill_no_invoices_sent)) {
-      csInput.auto_invoice_default = false;
-    }
-
-    if (!asBool(csInput.send_manual_invoices_to_different_email)) {
-      csInput.send_manual_invoices_to_different_email = false;
-      csInput.manual_invoices_alt_email_address = null;
-    }
-
-    if (asBool(csInput.send_manual_invoices_to_different_email) && !csInput.manual_invoices_alt_email_address) {
-      return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
-    }
-
-    const setDefaultTimeIfMissing = (key, val) => {
-      if (!Object.prototype.hasOwnProperty.call(csInput, key)) csInput[key] = val;
-    };
-
-    setDefaultTimeIfMissing('day_start',   '06:00');
-    setDefaultTimeIfMissing('day_end',     '20:00');
-    setDefaultTimeIfMissing('night_start', '20:00');
-    setDefaultTimeIfMissing('night_end',   '06:00');
-
-    setDefaultTimeIfMissing('sat_start', '00:00');
-    setDefaultTimeIfMissing('sat_end',   '00:00');
-    setDefaultTimeIfMissing('sun_start', '00:00');
-    setDefaultTimeIfMissing('sun_end',   '00:00');
-    setDefaultTimeIfMissing('bh_start',  '00:00');
-    setDefaultTimeIfMissing('bh_end',    '00:00');
-
-    {
-      for (const k of TIME_KEYS) {
-        if (Object.prototype.hasOwnProperty.call(csInput, k)) {
-          csInput[k] = normTime(csInput[k]);
-        }
-      }
-
-      const filled = TIME_KEYS.filter(k => csInput[k] != null && String(csInput[k]).trim() !== '');
-      if (filled.length > 0 && filled.length < TIME_KEYS.length) {
-        return withCORS(env, req, badRequest('Shift times must be either all blank (inherit global) or all filled.'));
-      }
-    }
-
-    const we = Number(csInput.week_ending_weekday);
-    csInput.week_ending_weekday = (Number.isInteger(we) && we>=0 && we<=6) ? we : 0;
-
-    if (!Object.prototype.hasOwnProperty.call(csInput, 'default_submission_mode')) {
-      csInput.default_submission_mode = 'ELECTRONIC';
-    }
-    {
-      let dsm = String(csInput.default_submission_mode || '').toUpperCase();
-      if (!['ELECTRONIC','MANUAL'].includes(dsm)) dsm = 'ELECTRONIC';
-      csInput.default_submission_mode = dsm;
-    }
-
-    let client_settings;
-    if (Object.keys(csInput).length) {
-      const partsEf = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(new Date(nowIso));
-      const efMap = {};
-      for (const p of partsEf) efMap[p.type] = p.value;
-      const ukTodayYmd = `${efMap.year}-${efMap.month}-${efMap.day}`;
-
-      if (!Object.prototype.hasOwnProperty.call(csInput, 'effective_from') || !String(csInput.effective_from || '').trim()) {
-        csInput.effective_from = ukTodayYmd;
-      }
-
-      const csPayload = {
-        client_id: client.id,
-        ...csInput,
-        created_at: nowIso,
-        updated_at: nowIso
-      };
-
-      const csRes = await fetch(`${env.SUPABASE_URL}/rest/v1/client_settings`, {
-        method: "POST",
-        headers: { ...sbHeaders(env), "Prefer": "return=representation" },
-        body: JSON.stringify(csPayload)
-      });
-      if (!csRes.ok) {
-        const err = await csRes.text();
-        return withCORS(env, req, ok({ client, warning: `Client created but client_settings insert failed: ${err}` }));
-      }
-      const csJson = await csRes.json().catch(() => ({}));
-      client_settings = Array.isArray(csJson) ? csJson[0] : csJson;
-    }
-
-    return withCORS(env, req, ok({ client, client_settings }));
-  } catch (e) {
-    return withCORS(env, req, serverError("Failed to create client"));
-  }
-}
-
-
-// 1) GET /api/clients/:id  (full client + latest client_settings)
-
-
-async function handleGetClient(env, req, clientId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-
-  try {
-    // Client (explicit select=* so ts_queries_email etc always present)
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(clientId)}&select=*&limit=1`
-    );
-    if (!rows.length) return withCORS(env, req, notFound("Client not found"));
-    const client = rows[0];
-
-    // Latest client_settings
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-      `?client_id=eq.${enc(clientId)}` +
-      `&select=` +
-        [
-          'id','client_id',
-          'vat_rate_pct','holiday_pay_pct','erni_pct',
-          'apply_holiday_to','apply_erni_to','margin_includes',
-          'effective_from',
-          'timezone_id',
-          'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
-          'bh_source','bh_list','bh_feed_url',
-          'hr_validation_required',
-          'ts_reference_required','pay_reference_required','invoice_reference_required',
-          'default_submission_mode',
-          'week_ending_weekday',
-          'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
-          'no_timesheet_required','group_nightsat_sunbh',
-          'auto_invoice_default',
-          'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
-
-          // invoicing settings required by UI
-          'invoice_consolidation_mode',
-          'reference_number_required_to_issue_invoice',
-
-          // manual adjustment email routing
-          'send_manual_invoices_to_different_email',
-          'manual_invoices_alt_email_address',
-
-          'created_at','updated_at'
-        ].join(',') +
-      `&order=effective_from.desc,created_at.desc&limit=1`
-    );
-
-    const client_settings = csRows?.[0] || null;
-
-    // has_e_history (client-level) for Client modal E-History tab enablement
-    let has_e_history = false;
-    try {
-      // Option B: smaller existence check via v_legacy_client_candidates
-      const { rows: histRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/v_legacy_client_candidates` +
-          `?client_id=eq.${enc(clientId)}` +
-          `&select=client_id` +
-          `&limit=1`
-      );
-      has_e_history = Array.isArray(histRows) && histRows.length > 0;
-    } catch (e) {
-      console.error('handleGetClient: legacy history existence check failed', {
-        client_id: clientId,
-        err: e?.message || String(e)
-      });
-      has_e_history = false;
-    }
-
-    return withCORS(env, req, ok({ client, client_settings, has_e_history }));
-  } catch (e) {
-    console.error('handleGetClient failed', {
-      client_id: clientId,
-      err: e?.message || String(e)
-    });
-    return withCORS(env, req, serverError("Failed to fetch client"));
-  }
-}
-
-
 
 /**
  * @openapi
@@ -53560,6 +57325,10 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
             type: 'TIMESHEET_QR',
             to: email,
             cc: null,
+            bcc: null,
+            reply_to: null,
+            importance: 'Normal',
+            email_type: 'html',
             subject,
             body_text: bodyText,
             body_html: bodyHtml,
@@ -53569,6 +57338,12 @@ async function handleTimesheetDailyQrPrintable(env, req, timesheetId) {
             }],
             status: 'QUEUED',
             reference: `timesheet_qr:daily:${currentTimesheetId}:${workedDateYmd || ''}`,
+            recipient_kind: 'candidate',
+            recipient_id: ts.candidate_id || null,
+            context_kind: 'timesheets',
+            context_id: currentTimesheetId,
+            mailshot_run_id: null,
+            document_template_id: null,
             created_by: user?.id || null
           })
         }
@@ -57051,9 +60826,22 @@ async function handleBroadcastEmail(env, req) {
         type: "BROADCAST",
         reference: data.group ? String(data.group).toUpperCase() : "CUSTOM",
         to: `${emails.length} recipients`,
+        cc: null,
+        bcc: null,
+        reply_to: null,
+        importance: "Normal",
+        email_type: "plain",
         subject,
         body_text: bodyText.slice(0, 2000),
+        attachments: [{ kind: "broadcast_recipients", emails }],
         status: "SENT",
+        provider_status: "ACCEPTED",
+        recipient_kind: null,
+        recipient_id: null,
+        context_kind: "broadcast",
+        context_id: null,
+        mailshot_run_id: null,
+        document_template_id: null,
         created_at_utc: nowIso,
         sent_at: nowIso
       })
@@ -58880,23 +62668,32 @@ async function handleInvoiceEmail(env, req, invoiceId) {
     const invNo = inv.invoice_no || invoiceId;
     const subject = `Invoice ${invNo}`;
 
-    const outResp = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+     const outResp = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
       method: 'POST',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
       body: JSON.stringify({
         type: 'INVOICE',
         to,
         cc: null,
+        bcc: null,
+        reply_to: null,
+        importance: 'Normal',
+        email_type: 'plain',
         subject,
         body_text: `Please find Invoice ${invNo} attached.`,
         attachments: [{ invoice_id: String(invoiceId), filename: `Invoice_${invNo}.pdf` }],
         status: 'QUEUED',
         reference: `invoice:${invoiceId}`,
+        recipient_kind: 'client',
+        recipient_id: clientId,
+        context_kind: 'invoices',
+        context_id: invoiceId,
+        mailshot_run_id: null,
+        document_template_id: null,
         created_at_utc: nowIso(),
         created_by: user?.id || null,
       })
     });
-
     if (!outResp.ok) {
       const err = await outResp.text();
       return withCORS(env, req, serverError(`Failed to queue email: ${err}`));
@@ -66785,7 +70582,40 @@ async function handleOutboxGet(env, req, mailId) {
   if (!user) return unauthorized();
 
   try {
-    const q = `${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${encodeURIComponent(mailId)}&select=id,type,to,cc,subject,body_html,body_text,attachments,status,last_error,created_at_utc,sent_at,failed_at,reference,provider_message_id&limit=1`;
+    const q = `${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${encodeURIComponent(mailId)}&select=` +
+      [
+        'id',
+        'type',
+        'to',
+        'cc',
+        'bcc',
+        'reply_to',
+        'importance',
+        'email_type',
+        'subject',
+        'body_html',
+        'body_text',
+        'attachments',
+        'status',
+        'provider_status',
+        'last_error',
+        'created_at_utc',
+        'sent_at',
+        'delivered_at',
+        'read_at',
+        'failed_at',
+        'reference',
+        'provider_message_id',
+        'created_by',
+        'recipient_kind',
+        'recipient_id',
+        'context_kind',
+        'context_id',
+        'mailshot_run_id',
+        'document_template_id'
+      ].join(',') +
+      `&limit=1`;
+
     const res = await sbFetch(env, q);
     const row = (res.rows || [])[0];
     if (!row) return withCORS(env, req, notFound("Outbox message not found"));
@@ -66795,7 +70625,6 @@ async function handleOutboxGet(env, req, mailId) {
     return withCORS(env, req, serverError("Failed to fetch outbox message"));
   }
 }
-
 
 
 // ====================== FILES (R2, SIGNED) ======================
@@ -77433,10 +81262,14 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
       const bodyText = lines.join('\n');
       const bodyHtml = `<p>${lines.map(l => (l === '' ? '<br/>' : enc(l))).join('<br/>')}</p>`;
 
-      const outboxRow = {
+       const outboxRow = {
         type: 'TIMESHEET_QR',
         to: email,
         cc: null,
+        bcc: null,
+        reply_to: null,
+        importance: 'Normal',
+        email_type: 'html',
         subject,
         body_text: bodyText,
         body_html: bodyHtml,
@@ -77445,10 +81278,15 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
         ],
         status: 'QUEUED',
         reference: `timesheet_qr:weekly:${ts.timesheet_id}:${cw.week_ending_date}`,
+        recipient_kind: 'candidate',
+        recipient_id: contract.candidate_id || null,
+        context_kind: 'timesheets',
+        context_id: ts.timesheet_id,
+        mailshot_run_id: null,
+        document_template_id: null,
         created_by: user?.id || null,
         created_at_utc: now
       };
-
       const insOut = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
         method: 'POST',
         headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
@@ -77610,6 +81448,103 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     qr_r2_key,
     email_queued: emailQueued
   }));
+}
+
+async function handlePayCandidateAdvancesReport(env, req, candidateIdParam) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const candidateId =
+    (candidateIdParam != null && String(candidateIdParam).trim())
+      ? String(candidateIdParam).trim()
+      : (typeof getCandidateIdFromPath === 'function' ? getCandidateIdFromPath(req) : null);
+
+  if (!candidateId) {
+    return withCORS(env, req, badRequest('candidate_id missing in path'));
+  }
+  if (!uuidRe.test(candidateId)) {
+    return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+  }
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return payload;
+  };
+
+  try {
+    const raw0 = await sbRpc(env, 'pay_candidate_advances_report', {
+      p_candidate_id: candidateId,
+      p_actor_user_id: user.id
+    });
+
+    const report = unwrapRpc(raw0, 'pay_candidate_advances_report');
+
+    return withCORS(env, req, ok(report));
+  } catch (e) {
+    const payload = _extractDbRaisedJson(e);
+    if (payload && typeof payload === 'object') {
+      const code = String(payload.code || '').toUpperCase();
+
+      if (code === 'CANDIDATE_NOT_FOUND') {
+        return withCORS(env, req, notFound(payload.message || 'Candidate not found'));
+      }
+
+      return withCORS(env, req, badRequest(payload.message || 'Request failed', payload));
+    }
+
+    return withCORS(env, req, serverError(String(e?.message || e || 'PAY_CANDIDATE_ADVANCES_REPORT_FAILED')));
+  }
 }
 
 
@@ -80533,12 +84468,22 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
           type: 'TIMESHEET_REFUSAL',
           to: toEmail,
           cc: null,
+          bcc: null,
+          reply_to: null,
+          importance: 'Normal',
+          email_type: 'html',
           subject,
           body_html,
           body_text,
           attachments: null,
           status: 'QUEUED',
           reference: `timesheet_qr:refused:${afterId}`,
+          recipient_kind: 'candidate',
+          recipient_id: contract?.candidate_id || cand?.id || null,
+          context_kind: 'timesheets',
+          context_id: afterId,
+          mailshot_run_id: null,
+          document_template_id: null,
           created_by: user?.id || null
         })
       });
@@ -80667,6 +84612,481 @@ async function loadWeeklyContext(env, ts) {
 
   return { cw, contract };
 }
+
+
+async function handleDocumentTemplatesList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  try {
+    const url = new URL(req.url);
+    const entityTypeRaw = String(url.searchParams.get('entity_type') || '').trim();
+    const outputTypeRaw = String(url.searchParams.get('output_type') || '').trim();
+
+    const entityType = entityTypeRaw.toLowerCase();
+    const outputType = outputTypeRaw.toUpperCase();
+
+    if (!entityType) return withCORS(env, req, badRequest('entity_type is required'));
+    if (!outputType) return withCORS(env, req, badRequest('output_type is required'));
+
+    // Basic allowlist (matches DB usage; keep strict to prevent junk)
+    const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
+    const allowedOutput = new Set(['EMAIL', 'WORD', 'EXCEL', 'WHATSAPP', 'SMS', 'VOICE', 'SIGNATURE']);
+
+    if (!allowedEntity.has(entityType)) return withCORS(env, req, badRequest('invalid_entity_type'));
+    if (!allowedOutput.has(outputType)) return withCORS(env, req, badRequest('invalid_output_type'));
+
+    const rpcRes = await sbRpc(env, 'document_templates_list', {
+      p_entity_type: entityType,
+      p_output_type: outputType
+    });
+
+    const items = Array.isArray(rpcRes) ? rpcRes : [];
+
+    return withCORS(env, req, ok({ ok: true, items }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to list document templates');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleDocumentTemplatesGet(env, req, templateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const id = String(templateId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('template_id is required'));
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return withCORS(env, req, badRequest('invalid_template_id'));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'document_templates_get', { p_template_id: id });
+
+    // Normalize possible wrappers (supabase/postgrest sometimes wraps)
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'document_templates_get')) {
+        payload = payload.document_templates_get;
+      }
+    } catch {}
+
+    if (!payload || typeof payload !== 'object') {
+      return withCORS(env, req, notFound('document_template not found'));
+    }
+
+    return withCORS(env, req, ok({ ok: true, template: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to fetch document template');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+
+
+async function handleMailshotFieldsList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  try {
+    const url = new URL(req.url);
+
+    const entityTypeRaw = String(url.searchParams.get('entity_type') || '').trim();
+    const includeDisabledRaw = String(url.searchParams.get('include_disabled') || '').trim().toLowerCase();
+
+    const entityType = entityTypeRaw ? entityTypeRaw.toLowerCase() : null;
+
+    const includeDisabled =
+      includeDisabledRaw === 'true' ||
+      includeDisabledRaw === '1' ||
+      includeDisabledRaw === 'yes' ||
+      includeDisabledRaw === 'y';
+
+    // Optional allowlist for entity_type (null means global listing)
+    if (entityType != null) {
+      const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
+      if (!allowedEntity.has(entityType)) {
+        return withCORS(env, req, badRequest('invalid_entity_type'));
+      }
+    }
+
+    const rpcRes = await sbRpc(env, 'mailshot_fields_list', {
+      p_entity_type: entityType,
+      p_include_disabled: includeDisabled
+    });
+
+    const items = Array.isArray(rpcRes) ? rpcRes : [];
+
+    return withCORS(env, req, ok({ ok: true, items }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to list mailshot fields');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleMailshotFieldsUpsertGlobal(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const fieldIdRaw = (body.field_id ?? body.fieldId);
+  const fieldKeyRaw = (body.field_key ?? body.fieldKey);
+  const labelDefaultRaw = (body.label_default ?? body.labelDefault);
+  const enabledGlobalRaw = (body.enabled_global ?? body.enabledGlobal);
+  const allowedEntityTypesRaw = (body.allowed_entity_types ?? body.allowedEntityTypes);
+  const resolverSpecRaw = (body.resolver_spec_json ?? body.resolverSpecJson ?? body.resolver_spec ?? body.resolverSpec);
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const fieldId = (fieldIdRaw == null) ? null : String(fieldIdRaw).trim();
+  if (fieldId && !uuidRe.test(fieldId)) return withCORS(env, req, badRequest('invalid_field_id'));
+
+  const fieldKey = (fieldKeyRaw == null) ? '' : String(fieldKeyRaw).trim();
+  const labelDefault = (labelDefaultRaw == null) ? '' : String(labelDefaultRaw).trim();
+
+  const parseBool = (v, dflt) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return dflt;
+    const s = String(v).trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
+    return dflt;
+  };
+
+  const enabledGlobal = parseBool(enabledGlobalRaw, true);
+
+  let allowedEntityTypes = allowedEntityTypesRaw;
+  if (allowedEntityTypes == null) allowedEntityTypes = [];
+  if (typeof allowedEntityTypes === 'string') {
+    try { allowedEntityTypes = JSON.parse(allowedEntityTypes); } catch { allowedEntityTypes = null; }
+  }
+  if (!Array.isArray(allowedEntityTypes)) {
+    return withCORS(env, req, badRequest('allowed_entity_types must be an array (or JSON string array)'));
+  }
+  allowedEntityTypes = allowedEntityTypes
+    .map((x) => (x == null ? '' : String(x).trim().toLowerCase()))
+    .filter(Boolean);
+
+  // Optional allowlist for allowed_entity_types
+  {
+    const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
+    for (const et of allowedEntityTypes) {
+      if (!allowedEntity.has(et)) return withCORS(env, req, badRequest('invalid_allowed_entity_type'));
+    }
+  }
+
+  let resolverSpec = resolverSpecRaw;
+  if (resolverSpec == null) resolverSpec = {};
+  if (typeof resolverSpec === 'string') {
+    try { resolverSpec = JSON.parse(resolverSpec); } catch { resolverSpec = null; }
+  }
+  if (!(resolverSpec && typeof resolverSpec === 'object' && !Array.isArray(resolverSpec))) {
+    return withCORS(env, req, badRequest('resolver_spec_json must be an object (or JSON string object)'));
+  }
+
+  if (!fieldId && !fieldKey) {
+    return withCORS(env, req, badRequest('field_id or field_key is required'));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_fields_upsert_global', {
+      p_field_id: fieldId || null,
+      p_field_key: fieldKey || null,
+      p_label_default: labelDefault || null,
+      p_enabled_global: enabledGlobal,
+      p_allowed_entity_types: allowedEntityTypes,
+      p_resolver_spec_json: resolverSpec,
+      p_actor_user_id: user.id
+    });
+
+    // Normalize possible wrappers
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_fields_upsert_global')) {
+        payload = payload.mailshot_fields_upsert_global;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to upsert mailshot field');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleMailshotFieldsUpsertOverride(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const fieldIdRaw = (body.field_id ?? body.fieldId);
+  const entityTypeRaw = (body.entity_type ?? body.entityType);
+  const labelOverrideRaw = (body.label_override ?? body.labelOverride);
+  const enabledLocalRaw = (body.enabled_local ?? body.enabledLocal);
+
+  const fieldId = (fieldIdRaw == null) ? '' : String(fieldIdRaw).trim();
+  if (!fieldId) return withCORS(env, req, badRequest('field_id is required'));
+  if (!uuidRe.test(fieldId)) return withCORS(env, req, badRequest('invalid_field_id'));
+
+  const entityType = (entityTypeRaw == null) ? '' : String(entityTypeRaw).trim().toLowerCase();
+  if (!entityType) return withCORS(env, req, badRequest('entity_type is required'));
+
+  const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
+  if (!allowedEntity.has(entityType)) return withCORS(env, req, badRequest('invalid_entity_type'));
+
+  const labelOverride = (labelOverrideRaw == null) ? null : (String(labelOverrideRaw).trim() || null);
+
+  const parseBool = (v, dflt) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return dflt;
+    const s = String(v).trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
+    return dflt;
+  };
+
+  // Override always needs an explicit boolean; default true if omitted.
+  const enabledLocal = parseBool(enabledLocalRaw, true);
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_fields_upsert_override', {
+      p_field_id: fieldId,
+      p_entity_type: entityType,
+      p_label_override: labelOverride,
+      p_enabled_local: enabledLocal,
+      p_actor_user_id: user.id
+    });
+
+    // Normalize possible wrappers
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_fields_upsert_override')) {
+        payload = payload.mailshot_fields_upsert_override;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to upsert mailshot field override');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleMailshotFieldsSeedFromSchema(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_fields_seed_from_schema', {
+      p_actor_user_id: user.id
+    });
+
+    // Normalize possible wrappers
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_fields_seed_from_schema')) {
+        payload = payload.mailshot_fields_seed_from_schema;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to seed mailshot fields');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+
+
+
+async function handleDocumentTemplatesUpsert(env, req, templateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const idFromPath = (templateId == null) ? null : String(templateId || '').trim();
+  if (idFromPath && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idFromPath)) {
+    return withCORS(env, req, badRequest('invalid_template_id'));
+  }
+
+  const entityTypeRaw = String(body.entity_type || body.entityType || '').trim();
+  const outputTypeRaw = String(body.output_type || body.outputType || '').trim();
+  const filenameRaw = String(body.filename || body.file_name || '').trim();
+
+  const entityType = entityTypeRaw.toLowerCase();
+  const outputType = outputTypeRaw.toUpperCase();
+  const filename = filenameRaw;
+
+  if (!entityType) return withCORS(env, req, badRequest('entity_type is required'));
+  if (!outputType) return withCORS(env, req, badRequest('output_type is required'));
+  if (!filename) return withCORS(env, req, badRequest('filename is required'));
+
+  const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
+  const allowedOutput = new Set(['EMAIL', 'WORD', 'EXCEL', 'WHATSAPP', 'SMS', 'VOICE', 'SIGNATURE']);
+
+  if (!allowedEntity.has(entityType)) return withCORS(env, req, badRequest('invalid_entity_type'));
+  if (!allowedOutput.has(outputType)) return withCORS(env, req, badRequest('invalid_output_type'));
+
+  const description = (body.description == null) ? null : String(body.description);
+  const emailTypeRaw = (body.email_type ?? body.emailType);
+  const emailType = (emailTypeRaw == null) ? null : String(emailTypeRaw || '').trim().toLowerCase() || null;
+
+  if (emailType != null && emailType !== 'plain' && emailType !== 'html') {
+    return withCORS(env, req, badRequest('invalid_email_type'));
+  }
+
+  let selectedFieldKeys = body.selected_field_keys ?? body.selectedFieldKeys;
+  if (selectedFieldKeys == null) selectedFieldKeys = [];
+  if (typeof selectedFieldKeys === 'string') {
+    try {
+      const j = JSON.parse(selectedFieldKeys);
+      selectedFieldKeys = j;
+    } catch {
+      return withCORS(env, req, badRequest('selected_field_keys must be an array (or JSON string array)'));
+    }
+  }
+  if (!Array.isArray(selectedFieldKeys)) {
+    return withCORS(env, req, badRequest('selected_field_keys must be an array'));
+  }
+  selectedFieldKeys = selectedFieldKeys
+    .map((x) => (x == null ? '' : String(x).trim()))
+    .filter(Boolean);
+
+  let templateContent = body.template_content_json ?? body.templateContentJson ?? body.template_content ?? body.templateContent;
+  if (templateContent == null) templateContent = {};
+  if (typeof templateContent === 'string') {
+    try {
+      const j = JSON.parse(templateContent);
+      templateContent = j;
+    } catch {
+      return withCORS(env, req, badRequest('template_content_json must be an object (or JSON string object)'));
+    }
+  }
+  if (!(templateContent && typeof templateContent === 'object' && !Array.isArray(templateContent))) {
+    return withCORS(env, req, badRequest('template_content_json must be an object'));
+  }
+
+  const p_template_id = idFromPath || null;
+
+  try {
+    let payload = await sbRpc(env, 'document_templates_upsert', {
+      p_template_id,
+      p_entity_type: entityType,
+      p_output_type: outputType,
+      p_filename: filename,
+      p_description: description,
+      p_email_type: emailType,
+      p_selected_field_keys: selectedFieldKeys,
+      p_template_content_json: templateContent,
+      p_actor_user_id: user.id
+    });
+
+    // Normalize possible wrappers
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'document_templates_upsert')) {
+        payload = payload.document_templates_upsert;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to upsert document template');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleDocumentTemplatesDuplicate(env, req, templateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const id = String(templateId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('template_id is required'));
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return withCORS(env, req, badRequest('invalid_template_id'));
+  }
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const newFilenameRaw = String(body.new_filename || body.newFilename || '').trim();
+  if (!newFilenameRaw) return withCORS(env, req, badRequest('new_filename is required'));
+
+  try {
+    let payload = await sbRpc(env, 'document_templates_duplicate', {
+      p_template_id: id,
+      p_new_filename: newFilenameRaw,
+      p_actor_user_id: user.id
+    });
+
+    // Normalize possible wrappers
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'document_templates_duplicate')) {
+        payload = payload.document_templates_duplicate;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to duplicate document template');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleDocumentTemplatesDelete(env, req, templateId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const id = String(templateId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('template_id is required'));
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return withCORS(env, req, badRequest('invalid_template_id'));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'document_templates_delete', {
+      p_template_id: id,
+      p_actor_user_id: user.id
+    });
+
+    // Normalize possible wrappers
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'document_templates_delete')) {
+        payload = payload.document_templates_delete;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to delete document template');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+
 
 
 async function handleTimesheetDeletePreview(env, req, timesheetId) {
@@ -83950,7 +88370,13 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
       if (req.method === 'POST' && p === '/api/timesheets/bucket-preview') {
         return handleTimesheetBucketPreview(env, req);
       }
-
+// ROUTER (insert inside export default fetch(req, env) router, near other /timesheets/* routes)
+{
+  const m = matchPath(p, '/timesheets/:id/advance-payment');
+  if (m && req.method === 'POST') {
+    return await handleTimesheetAdvancePayment(env, req, m.id);
+  }
+}
       // TSFIN worker & utilities
       if (req.method === 'POST' && p === '/api/tsfin/queue/drain')           return handleTsfinDrain(env, req);
       if (req.method === 'POST' && p === '/api/tsfin/recompute')             return handleTsfinRecompute(env, req);
@@ -83992,7 +88418,10 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
           return handleTimesheetRevertToElectronic(env, req, m.id);
         }
       }
-
+// ROUTER (insert inside export default fetch(req, env) router, near other admin/backoffice routes)
+if (req.method === 'POST' && p === '/loans/grant') {
+  return handleLoansGrant(env, req);
+}
 // Evidence (timesheet_evidence)
 
 // GET /api/timesheets/:id/evidence
@@ -84302,6 +88731,21 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
         const m = matchPath(p, '/api/contract-weeks/:id/additional');
         if (m && req.method === 'POST') return handleContractWeekCreateAdditional(env, req, m.id);
       }
+// ROUTERS (insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
+// alongside the other /api/banking/pay/batch/:id/* routes, after `user` has been resolved.)
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/export-detail-csv');
+  if (m && req.method === 'GET') {
+    return handleBankingPayBatchExportDetailCsv(env, req, user, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/export-detail-pdf');
+  if (m && req.method === 'GET') {
+    return handleBankingPayBatchExportDetailPdf(env, req, user, m.id);
+  }
+}
+
 
       // Daily: create additional MANUAL adjustment timesheet
 {
@@ -84485,6 +88929,13 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
   if (m && req.method === 'POST') return handleTimesheetSwitchDailyToManual(env, req, m.id);
 }
 
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/export-detail-csv');
+  if (m && req.method === 'GET') {
+    return handleBankingPayBatchExportDetailCsv(env, req, user, m.id);
+  }
+}
+
 // NEW: generate DAILY QR printable (now auto-emails too in our updated handler)
 {
   const m = matchPath(p, '/api/timesheets/:id/daily-qr-printable');
@@ -84512,7 +88963,10 @@ if (req.method === 'POST' && p === '/auth/2fa/resend') {
         const m = matchPath(p, '/api/timesheets/:id/replace-manual-pdf');
         if (m && req.method === 'POST') return handleTimesheetReplaceManualPdf(env, req, m.id);
       }
-
+{
+  const m = matchPath(p, '/api/candidates/:id/advances/report');
+  if (m && req.method === 'GET') return handlePayCandidateAdvancesReport(env, req, m.id);
+}
 // ====================== ROUTERS (add inside fetch router) ======================
 
 // Candidate delete eligibility: GET /api/candidates/:id/delete-eligibility
@@ -84548,6 +89002,84 @@ if (req.method === 'POST' && p === '/auth/2fa/resend') {
     return handleClientDeleteApply(env, req, m.id);
   }
 }
+
+
+// ROUTER ADDITIONS — insert inside the existing fetch(req, env) router,
+// near the other "/api/..." admin/backoffice routes (same level as /api/settings/defaults).
+
+// Document Templates API
+if (req.method === 'GET' && p === '/api/document-templates') {
+  return handleDocumentTemplatesList(env, req);
+}
+if (req.method === 'POST' && p === '/api/document-templates') {
+  return handleDocumentTemplatesUpsert(env, req, null);
+}
+{
+  const m = matchPath(p, '/api/document-templates/:id');
+  if (m && req.method === 'GET') {
+    return handleDocumentTemplatesGet(env, req, m.id);
+  }
+  if (m && req.method === 'PUT') {
+    return handleDocumentTemplatesUpsert(env, req, m.id);
+  }
+  if (m && req.method === 'DELETE') {
+    return handleDocumentTemplatesDelete(env, req, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/document-templates/:id/duplicate');
+  if (m && req.method === 'POST') {
+    return handleDocumentTemplatesDuplicate(env, req, m.id);
+  }
+}
+
+// ROUTER ADDITIONS — insert inside the existing fetch(req, env) router,
+// near the other "/api/..." admin/backoffice routes (same level as /api/settings/defaults).
+
+// Mailshot Fields Manager API
+if (req.method === 'GET' && p === '/api/mailshot-fields') {
+  return handleMailshotFieldsList(env, req);
+}
+if (req.method === 'POST' && p === '/api/mailshot-fields/global') {
+  return handleMailshotFieldsUpsertGlobal(env, req);
+}
+if (req.method === 'POST' && p === '/api/mailshot-fields/override') {
+  return handleMailshotFieldsUpsertOverride(env, req);
+}
+if (req.method === 'POST' && p === '/api/mailshot-fields/seed') {
+  return handleMailshotFieldsSeedFromSchema(env, req);
+}
+
+// ROUTER ADDITIONS — insert inside the existing fetch(req, env) router,
+// near the other "/api/..." admin/backoffice routes.
+
+// Mailshots API
+if (req.method === 'POST' && p === '/api/mailshots/prepare') {
+  return handleMailshotPrepare(env, req);
+}
+if (req.method === 'POST' && p === '/api/mailshots/enqueue') {
+  return handleMailshotEnqueue(env, req);
+}
+if (req.method === 'POST' && p === '/api/mailshots/export') {
+  return handleMailshotExport(env, req);
+}
+
+// Unified Outbox API
+if (req.method === 'GET' && p === '/api/outbox') {
+  return handleOutboxUnifiedList(env, req);
+}
+{
+  const m = matchPath(p, '/api/outbox/:channel/:id');
+  if (m && req.method === 'GET') {
+    return handleOutboxUnifiedGet(env, req, m.channel, m.id);
+  }
+}
+
+// Comms history by recipient (Candidate/Client/Umbrella modals)
+if (req.method === 'GET' && p === '/api/comms/by-recipient') {
+  return handleCommsByRecipient(env, req);
+}
+
 
 
       // =============================================================================
@@ -84998,6 +89530,45 @@ async scheduled(event, env, ctx) {
       await drainEmailOutboxOnce(env, { limit: emailBatchLimit });
     } catch (e) {
       console.warn('[scheduled] Email drain failed:', e?.message || e);
+    }
+
+    // ✅ NEW: Comms outbox drain (after email drain)
+    try {
+      // Prefer DB-driven limits from settings_defaults.comms_adaptors_json.drain_limits.
+      // Fallback to env.COMMS_DRAIN_LIMIT_DEFAULT if provided; else no global cap (per-channel limits still apply inside drain).
+      let commsLimitFromDb = null;
+      try {
+        const cj = (settings && settings.comms_adaptors_json && typeof settings.comms_adaptors_json === 'object' && !Array.isArray(settings.comms_adaptors_json))
+          ? settings.comms_adaptors_json
+          : null;
+        const dl = (cj && cj.drain_limits && typeof cj.drain_limits === 'object' && !Array.isArray(cj.drain_limits))
+          ? cj.drain_limits
+          : null;
+
+        if (dl) {
+          const w = _clampInt(dl.WHATSAPP, 1, 20000, 0);
+          const s = _clampInt(dl.SMS, 1, 20000, 0);
+          const v = _clampInt(dl.VOICE, 1, 20000, 0);
+          const sum = (w || 0) + (s || 0) + (v || 0);
+          if (sum > 0) commsLimitFromDb = sum;
+        }
+      } catch {
+        commsLimitFromDb = null;
+      }
+
+      let commsLimitFromEnv = null;
+      try {
+        const n = parseInt(env.COMMS_DRAIN_LIMIT_DEFAULT || '', 10);
+        if (Number.isFinite(n) && n > 0) commsLimitFromEnv = n;
+      } catch {
+        commsLimitFromEnv = null;
+      }
+
+      const commsLimit = (commsLimitFromDb != null) ? commsLimitFromDb : commsLimitFromEnv;
+
+      await drainCommsOutboxOnce(env, (commsLimit != null ? { limit: commsLimit } : {}));
+    } catch (e) {
+      console.warn('[scheduled] Comms drain failed:', e?.message || e);
     }
   })());
 }
