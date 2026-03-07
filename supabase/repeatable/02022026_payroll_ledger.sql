@@ -4587,6 +4587,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -6604,6 +6606,22 @@ end;
     select cbr.timesheet_id, cbr.key_type, cbr.key_value
     from current_batch_reserved_sums cbr
   ),
+  ts_total_day_fallback as (
+    select
+      orw.timesheet_id,
+      round(
+        sum(
+          case
+            when orw.key_type = 'TS_DAY' and coalesce(orw.outstanding_ex_vat,0) > 0
+              then coalesce(orw.outstanding_ex_vat,0)
+            else 0
+          end
+        ),
+        2
+      ) as ts_total_payable_fallback_ex_vat
+    from outstanding_rows orw
+    group by orw.timesheet_id
+  ),
   checks as (
     select
       ku.timesheet_id,
@@ -6612,13 +6630,18 @@ end;
       round(coalesce(rs.reserved_ex_vat,0),2) as reserved_total_ex_vat,
       round(coalesce(cbr.current_batch_reserved_ex_vat,0),2) as current_batch_reserved_ex_vat,
       round(greatest(coalesce(rs.reserved_ex_vat,0) - coalesce(cbr.current_batch_reserved_ex_vat,0), 0),2) as reserved_before_ex_vat,
-      round(
-        greatest(
-          coalesce(rs.reserved_ex_vat,0) + coalesce(orw.outstanding_ex_vat,0),
-          0
-        ),
-        2
-      ) as payable_possible_ex_vat,
+      case
+        when ku.key_type = 'TS_TOTAL'
+         and orw.timesheet_id is null
+        then round(greatest(coalesce(tdf.ts_total_payable_fallback_ex_vat,0), 0), 2)
+        else round(
+          greatest(
+            coalesce(rs.reserved_ex_vat,0) + coalesce(orw.outstanding_ex_vat,0),
+            0
+          ),
+          2
+        )
+      end as payable_possible_ex_vat,
       0.01::numeric as tolerance_ex_vat
     from key_union ku
     left join reserved_sums rs
@@ -6633,6 +6656,8 @@ end;
       on cbr.timesheet_id = ku.timesheet_id
      and cbr.key_type = ku.key_type
      and cbr.key_value = ku.key_value
+    left join ts_total_day_fallback tdf
+      on tdf.timesheet_id = ku.timesheet_id
   ),
   overruns as (
     select
@@ -8486,6 +8511,7 @@ exception when others then
   raise;
 end;
 $$;
+
 
 
 
