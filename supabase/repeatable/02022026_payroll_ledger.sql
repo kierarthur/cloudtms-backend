@@ -4585,6 +4585,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -6290,8 +6291,8 @@ end;
             tps.last_settled_signature,
             md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
           )
-          and pa_exist.advance_kind = 'OVERPAYMENT'
-          and pa_exist.status in ('ACTIVE', 'PAID_OFF')
+          and pa_exist.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+          and pa_exist.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum)
       )
   ),
   ins as (
@@ -6307,13 +6308,16 @@ end;
     )
     select
       ows.candidate_id as candidate_id,
-      'OVERPAYMENT' as advance_kind,
-      'OVERPAYMENT' as reason,
+      'OVERPAYMENT'::public.pay_advance_kind_enum as advance_kind,
+      'OVERPAYMENT'::public.pay_advance_reason_enum as reason,
       ows.timesheet_id as linked_timesheet_id,
       ows.baseline_signature as baseline_signature,
       ows.owed_ex as original_amount,
       ows.owed_ex as outstanding_amount,
-      case when ows.owed_ex > 0 then 'ACTIVE' else 'PAID_OFF' end as status
+      case
+        when ows.owed_ex > 0 then 'ACTIVE'::public.pay_advance_status_enum
+        else 'PAID_OFF'::public.pay_advance_status_enum
+      end as status
     from owed_with_sig ows
     where ows.owed_ex > 0
     on conflict do nothing
@@ -6323,15 +6327,18 @@ end;
   set
     outstanding_amount = ows.owed_ex,
     original_amount = greatest(pa.original_amount, ows.owed_ex),
-    status = case when ows.owed_ex > 0 then 'ACTIVE' else 'PAID_OFF' end,
-    reason = 'OVERPAYMENT',
+    status = case
+      when ows.owed_ex > 0 then 'ACTIVE'::public.pay_advance_status_enum
+      else 'PAID_OFF'::public.pay_advance_status_enum
+    end,
+    reason = 'OVERPAYMENT'::public.pay_advance_reason_enum,
     updated_at = now()
   from owed_with_sig ows
   where pa.candidate_id = ows.candidate_id
     and pa.linked_timesheet_id = ows.timesheet_id
     and pa.baseline_signature = ows.baseline_signature
-    and pa.advance_kind = 'OVERPAYMENT'
-    and pa.status in ('ACTIVE', 'PAID_OFF');
+    and pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+    and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum);
 
   GET DIAGNOSTICS v_rows = ROW_COUNT;
 
@@ -8366,6 +8373,7 @@ exception when others then
   raise;
 end;
 $$;
+
 
 
 
