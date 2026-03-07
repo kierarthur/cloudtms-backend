@@ -3287,7 +3287,6 @@ umb_map as (
       ss.timesheet_id,
       ss.segment_id,
       ss.ref_num,
-      ss.require_reference_to_pay,
       ss.delta_pay_ex_vat as blocked_delta_ex,
       sn.snooze_id,
       sn.snooze_until_date,
@@ -3318,7 +3317,6 @@ blocked_items as (
       b.timesheet_id,
       b.segment_id,
       b.ref_num,
-      b.require_reference_to_pay,
       b.blocked_delta_ex,
       b.snooze_id,
       b.snooze_until_date,
@@ -4578,9 +4576,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
-
-
 
 
 
