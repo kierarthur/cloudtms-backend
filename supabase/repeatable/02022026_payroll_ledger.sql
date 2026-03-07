@@ -3305,7 +3305,6 @@ blocked_items as (
       b.timesheet_id,
       b.segment_id,
       b.ref_num,
-      b.require_reference_to_pay,
       b.blocked_delta_ex,
       b.snooze_id
     from blocked_items_all b
