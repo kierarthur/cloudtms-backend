@@ -1284,9 +1284,9 @@ async function handleAuthLogin(env, req) {
         to: String(user.email || email).trim(),
         subject,
         htmlBody,
-        body: bodyText,
+        textBody: bodyText,
         attachmentsV2: [],
-        metadata: { kind: '2FA', user_id: String(user.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
+        meta: { kind: '2FA', user_id: String(user.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
       };
       if (replyTo) emailPayload.replyTo = replyTo;
 
@@ -1514,9 +1514,9 @@ async function handleAuthForgot(env, req) {
           to: String(email).trim(),
           subject,
           htmlBody,
-          body: bodyText,
+          textBody: bodyText,
           attachmentsV2: [],
-          metadata: { kind: 'PASSWORD_RESET', user_id: String(user.id), issued_at_utc: new Date().toISOString() }
+          meta: { kind: 'PASSWORD_RESET', user_id: String(user.id), issued_at_utc: new Date().toISOString() }
         };
         if (replyTo) emailPayload.replyTo = replyTo;
 
@@ -36558,7 +36558,7 @@ async function handleTimesheetsSummary(env, req) {
   const qrStatus      = qrStatusRaw ? qrStatusRaw.toUpperCase() : null;
 
   // Tools checkboxes
-  const candidatePaid = q('candidate_paid'); // paid_at_utc checkbox
+  const candidatePaid = q('candidate_paid'); // pay_paid_at_utc checkbox (advanced/paid/partially paid)
   const isAdjusted    = q('is_adjusted');    // adjusted checkbox
   const isQr          = q('is_qr');          // legacy route checkbox
 
@@ -36818,7 +36818,7 @@ async function handleTimesheetsSummary(env, req) {
   if (isQr === 'true')        api += `&is_qr=eq.true`;
   if (isQr === 'false')       api += `&is_qr=eq.false`;
 
-  if (candidatePaid === 'true') api += `&paid_at_utc=is.not.null`;
+  if (candidatePaid === 'true') api += `&pay_paid_at_utc=is.not.null`;
 
   if (hrIssue) api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
 
@@ -36923,7 +36923,6 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
-
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -52340,9 +52339,9 @@ async function handleAuthReauthStart(env, req) {
     to: String(userRow.email || '').trim(),
     subject,
     htmlBody,
-    body: bodyText,
+    textBody: bodyText,
     attachmentsV2: [],
-    metadata: { kind: 'PAYMENT_REAUTH_2FA', user_id: String(userRow.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
+    meta: { kind: 'PAYMENT_REAUTH_2FA', user_id: String(userRow.id), challenge_id: String(challengeId), ip: ipKey, issued_at_utc: nowIso }
   };
   if (replyTo) emailPayload.replyTo = replyTo;
 
