@@ -4586,6 +4586,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -6420,8 +6421,9 @@ end;
   v_stage := 'STAGE_15_DOUBLE_PAY_CONFLICT_CHECK';
 
   -- Policy X: numeric reservation overrun check (stable keys).
-  -- Validate that total reserved across all active batches (including this draft batch)
-  -- does not exceed payable_possible = max(truth - baseline, 0) for any stable key.
+  -- Validate that THIS draft batch has not introduced or worsened an overrun on any
+  -- stable key. Pre-existing stale reservations in other active batches must not block
+  -- creation of a new draft; only new/worsened overrun caused by the current draft is an error.
   -- Stable keys come from _pay_outstanding_components / _pay_reserved_components:
   --   key_type: TS_DAY, TS_TOTAL, ADDITIONAL_CODE, EXPENSE_CODE
   --   key_value: work_date / TOTAL / code
@@ -6498,6 +6500,99 @@ end;
       and nullif(btrim(coalesce(o.j->>'key_type','')), '') is not null
       and nullif(btrim(coalesce(o.j->>'key_value','')), '') is not null
   ),
+  current_batch_items as (
+    select
+      pbi.id as pay_batch_item_id,
+      pbi.timesheet_id as timesheet_id,
+      pbi.item_type as item_type,
+      pbi.segment_key as segment_key,
+      pbi.source_ref as source_ref,
+      round(coalesce(pbi.amount_ex_vat,0),2) as amount_ex_vat
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = v_batch_id
+      and pbi.timesheet_id is not null
+      and coalesce(pbi.is_voided,false) = false
+      and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+  ),
+  current_batch_keyed as (
+    select
+      cbi.timesheet_id,
+      case
+        when cbi.item_type = 'SEGMENT_DELTA' then
+          case
+            when nullif(btrim(coalesce(cbi.segment_key,'')), '') like 'ts:%' then 'TS_TOTAL'
+            when seg_map.seg_date is not null then 'TS_DAY'
+            else 'TS_TOTAL'
+          end
+        when cbi.item_type = 'MILEAGE_DELTA' then 'EXPENSE_CODE'
+        when cbi.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA') then
+          case
+            when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%' or btrim(cbi.source_ref) = 'additional') then 'ADDITIONAL_CODE'
+            else 'EXPENSE_CODE'
+          end
+        else 'EXPENSE_CODE'
+      end as key_type,
+      case
+        when cbi.item_type = 'SEGMENT_DELTA' then
+          case
+            when nullif(btrim(coalesce(cbi.segment_key,'')), '') like 'ts:%' then 'TOTAL'
+            when seg_map.seg_date is not null then seg_map.seg_date
+            else 'TOTAL'
+          end
+        when cbi.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
+        when cbi.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA') then
+          case
+            when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%') then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
+            when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional' then 'TOTAL'
+            when cbi.source_ref is not null and btrim(cbi.source_ref) <> '' then upper(btrim(cbi.source_ref))
+            else 'UNKNOWN'
+          end
+        else 'UNKNOWN'
+      end as key_value,
+      cbi.amount_ex_vat
+    from current_batch_items cbi
+    left join public.timesheets_financials tf_cur
+      on tf_cur.timesheet_id = cbi.timesheet_id
+     and tf_cur.is_current = true
+    left join lateral (
+      select
+        nullif(btrim(coalesce(seg->>'date','')), '') as seg_date
+      from jsonb_array_elements(
+        case
+          when tf_cur.invoice_breakdown_json is not null
+           and jsonb_typeof(tf_cur.invoice_breakdown_json) = 'object'
+           and jsonb_typeof(tf_cur.invoice_breakdown_json->'segments') = 'array'
+          then tf_cur.invoice_breakdown_json->'segments'
+          else '[]'::jsonb
+        end
+      ) seg
+      where seg is not null
+        and jsonb_typeof(seg) = 'object'
+        and nullif(btrim(coalesce(seg->>'segment_id','')), '') =
+            coalesce(
+              nullif(btrim(coalesce(cbi.segment_key,'')), ''),
+              case
+                when cbi.source_ref is not null and btrim(cbi.source_ref) like 'seg:%' then nullif(btrim(substring(cbi.source_ref from 5)), '')
+                else null
+              end
+            )
+      limit 1
+    ) seg_map on true
+  ),
+  current_batch_reserved_sums as (
+    select
+      c.timesheet_id,
+      c.key_type,
+      c.key_value,
+      round(sum(coalesce(c.amount_ex_vat,0)),2) as current_batch_reserved_ex_vat
+    from current_batch_keyed c
+    where c.key_value is not null
+      and btrim(coalesce(c.key_value,'')) <> ''
+      and c.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')
+    group by c.timesheet_id, c.key_type, c.key_value
+  ),
   key_union as (
     select rs.timesheet_id, rs.key_type, rs.key_value
     from reserved_sums rs
@@ -6505,6 +6600,9 @@ end;
     select orw.timesheet_id, orw.key_type, orw.key_value
     from outstanding_rows orw
     where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')
+    union
+    select cbr.timesheet_id, cbr.key_type, cbr.key_value
+    from current_batch_reserved_sums cbr
   ),
   checks as (
     select
@@ -6512,6 +6610,8 @@ end;
       ku.key_type,
       ku.key_value,
       round(coalesce(rs.reserved_ex_vat,0),2) as reserved_total_ex_vat,
+      round(coalesce(cbr.current_batch_reserved_ex_vat,0),2) as current_batch_reserved_ex_vat,
+      round(greatest(coalesce(rs.reserved_ex_vat,0) - coalesce(cbr.current_batch_reserved_ex_vat,0), 0),2) as reserved_before_ex_vat,
       round(
         greatest(
           coalesce(rs.reserved_ex_vat,0) + coalesce(orw.outstanding_ex_vat,0),
@@ -6529,6 +6629,10 @@ end;
       on orw.timesheet_id = ku.timesheet_id
      and orw.key_type = ku.key_type
      and orw.key_value = ku.key_value
+    left join current_batch_reserved_sums cbr
+      on cbr.timesheet_id = ku.timesheet_id
+     and cbr.key_type = ku.key_type
+     and cbr.key_value = ku.key_value
   ),
   overruns as (
     select
@@ -6536,10 +6640,15 @@ end;
       c.key_type,
       c.key_value,
       c.reserved_total_ex_vat,
+      c.current_batch_reserved_ex_vat,
+      c.reserved_before_ex_vat,
       c.payable_possible_ex_vat,
+      round(greatest(c.reserved_total_ex_vat - c.payable_possible_ex_vat, 0),2) as overrun_after_ex_vat,
+      round(greatest(c.reserved_before_ex_vat - c.payable_possible_ex_vat, 0),2) as overrun_before_ex_vat,
       c.tolerance_ex_vat
     from checks c
-    where c.reserved_total_ex_vat > c.payable_possible_ex_vat + c.tolerance_ex_vat
+    where round(greatest(c.reserved_total_ex_vat - c.payable_possible_ex_vat, 0),2)
+            > round(greatest(c.reserved_before_ex_vat - c.payable_possible_ex_vat, 0),2) + c.tolerance_ex_vat
   )
   select
     coalesce(
@@ -6549,7 +6658,11 @@ end;
           'key_type', overruns.key_type,
           'key_value', overruns.key_value,
           'reserved_total_ex_vat', overruns.reserved_total_ex_vat,
+          'current_batch_reserved_ex_vat', overruns.current_batch_reserved_ex_vat,
+          'reserved_before_ex_vat', overruns.reserved_before_ex_vat,
           'payable_possible_ex_vat', overruns.payable_possible_ex_vat,
+          'overrun_before_ex_vat', overruns.overrun_before_ex_vat,
+          'overrun_after_ex_vat', overruns.overrun_after_ex_vat,
           'tolerance_ex_vat', overruns.tolerance_ex_vat
         )
         order by overruns.timesheet_id::text, overruns.key_type, overruns.key_value
@@ -8373,14 +8486,6 @@ exception when others then
   raise;
 end;
 $$;
-
-
-
-
-
-
-
-
 
 
 
