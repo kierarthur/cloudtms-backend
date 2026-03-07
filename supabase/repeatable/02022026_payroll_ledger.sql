@@ -3046,6 +3046,9 @@ umb_map as (
         else 0::numeric
       end as current_additional_pay_ex_vat,
 
+      round(coalesce(e.total_pay_ex_vat,0),2) as total_pay_ex_vat,
+      coalesce(e.additional_units_json, '{}'::jsonb) as current_additional_units_json,
+
       round(coalesce(e.expenses_pay_ex_vat,0),2) as current_expenses_pay_ex_vat,
       round(coalesce(e.travel_pay_ex_vat,0),2) as current_travel_pay_ex_vat,
       round(coalesce(e.accommodation_pay_ex_vat,0),2) as current_accommodation_pay_ex_vat,
@@ -3266,10 +3269,10 @@ umb_map as (
         ) > 0
       ) as is_blocked,
 
-      -- Snooze (segment_id-based; best-effort representative)
-      asn.snooze_until,
-      asn.snooze_reason,
-      asn.snoozed_by_user_id
+      -- Snooze fields are joined in the downstream BLOCKED / DO_NOT_PAY CTEs
+      null::uuid as snooze_id,
+      null::date as snooze_until_date,
+      null::text as note
     from ts_baseline b
     join agg a
       on a.timesheet_id = b.timesheet_id
@@ -3277,8 +3280,25 @@ umb_map as (
     left join reserved_segment_sums rss
       on rss.timesheet_id = b.timesheet_id
      and rss.segment_stable_key = a.segment_stable_key
-    left join active_snoozes asn
-      on asn.segment_id = coalesce(a.cur_segment_id, a.bas_segment_id)
+  ),
+  blocked_items_all as (
+    select
+      ss.candidate_id,
+      ss.timesheet_id,
+      ss.segment_id,
+      ss.ref_num,
+      ss.require_reference_to_pay,
+      ss.delta_pay_ex_vat as blocked_delta_ex,
+      sn.snooze_id,
+      sn.snooze_until_date,
+      sn.note
+    from segment_status ss
+    left join active_snoozes sn
+      on sn.candidate_id = ss.candidate_id
+     and sn.timesheet_id is not distinct from ss.timesheet_id
+     and sn.segment_id is not distinct from ss.segment_id
+     and sn.snooze_kind = 'BLOCKED'
+    where ss.is_blocked = true
   ),
 blocked_items as (
     select
@@ -3311,8 +3331,8 @@ blocked_items as (
       ss.candidate_id,
       ss.timesheet_id,
       ss.segment_id,
-      ss.cur_ref_num as ref_num,
-      ss.raw_delta_ex as raw_delta_ex,
+      ss.ref_num as ref_num,
+      ss.delta_pay_ex_vat as raw_delta_ex,
       sn.snooze_id,
       sn.snooze_until_date,
       sn.note
