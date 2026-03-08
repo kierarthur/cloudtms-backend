@@ -75,6 +75,8 @@ begin
 end;
 $$;
 
+
+
 create or replace function public.document_templates_upsert(
   p_template_id uuid,
   p_entity_type text,
@@ -98,6 +100,11 @@ declare
   v_row public.document_templates%rowtype;
   v_selected text[] := coalesce(p_selected_field_keys, '{}'::text[]);
   v_content jsonb := coalesce(p_template_content_json, '{}'::jsonb);
+  v_output_type_norm text := upper(btrim(coalesce(p_output_type, '')));
+  v_whatsapp_provider text;
+  v_whatsapp_template_name text;
+  v_whatsapp_param_name text;
+  v_whatsapp_message_text text;
 begin
   if p_entity_type is null or length(btrim(p_entity_type)) = 0 then
     raise exception 'entity_type required';
@@ -115,6 +122,78 @@ begin
     raise exception 'actor_user_id required';
   end if;
 
+  if p_template_content_json is not null and jsonb_typeof(p_template_content_json) <> 'object' then
+    raise exception 'template_content_json must be object';
+  end if;
+
+  if v_output_type_norm = 'WHATSAPP' then
+    v_whatsapp_provider := coalesce(
+      nullif(btrim(coalesce(v_content->'provider_contract'->>'provider','')), ''),
+      nullif(btrim(coalesce(v_content->'provider_contract'->>'provider_key','')), ''),
+      nullif(btrim(coalesce(v_content->'wati'->>'provider','')), ''),
+      nullif(btrim(coalesce(v_content->'whatsapp'->>'provider','')), ''),
+      nullif(btrim(coalesce(v_content->>'provider','')), ''),
+      nullif(btrim(coalesce(v_content->>'provider_key','')), '')
+    );
+
+    if v_whatsapp_provider is not null and upper(v_whatsapp_provider) <> 'WATI' then
+      raise exception 'whatsapp template_content_json provider must be WATI';
+    end if;
+
+    v_whatsapp_template_name := coalesce(
+      nullif(btrim(coalesce(v_content->'provider_contract'->>'template_name','')), ''),
+      nullif(btrim(coalesce(v_content->'provider_contract'->>'templateName','')), ''),
+      nullif(btrim(coalesce(v_content->'wati'->>'template_name','')), ''),
+      nullif(btrim(coalesce(v_content->'wati'->>'templateName','')), ''),
+      nullif(btrim(coalesce(v_content->'whatsapp'->>'template_name','')), ''),
+      nullif(btrim(coalesce(v_content->'whatsapp'->>'templateName','')), ''),
+      nullif(btrim(coalesce(v_content->'provider'->>'template_name','')), ''),
+      nullif(btrim(coalesce(v_content->'provider'->>'templateName','')), ''),
+      nullif(btrim(coalesce(v_content->>'wati_template_name','')), ''),
+      nullif(btrim(coalesce(v_content->>'watiTemplateName','')), ''),
+      nullif(btrim(coalesce(v_content->>'template_name','')), ''),
+      nullif(btrim(coalesce(v_content->>'templateName','')), '')
+    );
+
+    if v_whatsapp_template_name is null then
+      raise exception 'whatsapp template_content_json missing WATI template_name';
+    end if;
+
+    v_whatsapp_param_name := coalesce(
+      nullif(btrim(coalesce(v_content->'provider_contract'->>'param_name','')), ''),
+      nullif(btrim(coalesce(v_content->'provider_contract'->>'paramName','')), ''),
+      nullif(btrim(coalesce(v_content->'wati'->>'param_name','')), ''),
+      nullif(btrim(coalesce(v_content->'wati'->>'paramName','')), ''),
+      nullif(btrim(coalesce(v_content->'whatsapp'->>'param_name','')), ''),
+      nullif(btrim(coalesce(v_content->'whatsapp'->>'paramName','')), ''),
+      nullif(btrim(coalesce(v_content->'provider'->>'param_name','')), ''),
+      nullif(btrim(coalesce(v_content->'provider'->>'paramName','')), ''),
+      nullif(btrim(coalesce(v_content->>'wati_param_name','')), ''),
+      nullif(btrim(coalesce(v_content->>'watiParamName','')), ''),
+      nullif(btrim(coalesce(v_content->>'param_name','')), ''),
+      nullif(btrim(coalesce(v_content->>'paramName','')), '')
+    );
+
+    if v_whatsapp_param_name is null then
+      raise exception 'whatsapp template_content_json missing WATI param_name';
+    end if;
+
+    v_whatsapp_message_text := nullif(btrim(coalesce(v_content->>'message_text','')), '');
+
+    if v_whatsapp_message_text is null then
+      raise exception 'whatsapp template_content_json missing message_text';
+    end if;
+
+    v_content := v_content || jsonb_build_object(
+      'provider_contract',
+      jsonb_build_object(
+        'provider', 'WATI',
+        'template_name', v_whatsapp_template_name,
+        'param_name', v_whatsapp_param_name
+      )
+    );
+  end if;
+
   if p_template_id is null then
     insert into public.document_templates(
       entity_type,
@@ -130,7 +209,7 @@ begin
     )
     values (
       btrim(p_entity_type),
-      btrim(p_output_type),
+      v_output_type_norm,
       btrim(p_filename),
       p_description,
       p_email_type,
@@ -154,7 +233,7 @@ begin
     update public.document_templates dt
     set
       entity_type = btrim(p_entity_type),
-      output_type = btrim(p_output_type),
+      output_type = v_output_type_norm,
       filename = btrim(p_filename),
       description = p_description,
       email_type = p_email_type,
@@ -188,6 +267,8 @@ begin
   );
 end;
 $$;
+
+
 
 create or replace function public.document_templates_delete(
   p_template_id uuid,
@@ -1129,565 +1210,10 @@ begin
 end;
 $$;
 
-create or replace function public.mailshot_enqueue(
-  p_prepare_json jsonb,
-  p_final_edits_json jsonb,
-  p_delivery_timing_json jsonb,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now timestamptz := now();
 
-  v_context_kind text;
-  v_entity_type text;
-  v_output_type text;
 
-  v_template_id uuid;
-  v_to_field_key text;
 
-  v_rows jsonb;
-  v_row jsonb;
 
-  v_run_id uuid;
-
-  v_queued int := 0;
-  v_skipped int := 0;
-  v_failed int := 0;
-
-  v_skip_list jsonb := '[]'::jsonb;
-
-  v_subject_tpl_override text;
-  v_body_text_tpl_override text;
-  v_body_html_tpl_override text;
-  v_message_tpl_override text;
-
-  v_cc_override text;
-  v_bcc_override text;
-  v_reply_to_override text;
-  v_importance_override text;
-  v_email_type_override text;
-
-  v_attachments jsonb;
-
-  v_to text;
-  v_recipient_kind text;
-  v_recipient_id uuid;
-  v_context_id uuid;
-
-  v_field_values jsonb;
-  v_kv record;
-
-  v_rendered_subject text;
-  v_rendered_body_text text;
-  v_rendered_body_html text;
-  v_rendered_message text;
-
-  v_ref text;
-
-  v_sms_max int := 1000;
-  v_voice_max int := 1200;
-  v_whatsapp_max int := 600;
-
-  v_cfg jsonb;
-  v_cfg_wati jsonb;
-  v_cfg_clicksend jsonb;
-  v_cfg_scheduling jsonb;
-
-  v_provider_key text;
-
-  v_sanitised boolean := false;
-  v_truncated boolean := false;
-  v_original_len int := 0;
-
-  v_row_subject_tpl text;
-  v_row_body_text_tpl text;
-  v_row_body_html_tpl text;
-  v_row_message_tpl text;
-  v_row_cc text;
-  v_row_bcc text;
-  v_row_reply_to text;
-  v_row_importance text;
-  v_row_email_type text;
-
-  v_delivery_timing_json jsonb := '{}'::jsonb;
-  v_delivery_mode text := 'NOW';
-  v_requested_timezone text := null;
-  v_requested_local_text text := null;
-  v_relative_minutes int := null;
-
-  v_scheduled_for_utc timestamptz := null;
-  v_next_attempt_at_utc timestamptz := null;
-
-  v_max_future_days int := 365;
-  v_allow_past_grace_minutes int := 15;
-  v_scheduled_text text;
-begin
-  if p_actor_user_id is null then
-    raise exception 'actor_user_id required';
-  end if;
-
-  if p_prepare_json is null or jsonb_typeof(p_prepare_json) <> 'object' then
-    raise exception 'prepare_json object required';
-  end if;
-
-  if p_final_edits_json is not null and jsonb_typeof(p_final_edits_json) <> 'object' then
-    raise exception 'final_edits_json object required';
-  end if;
-
-  if p_delivery_timing_json is not null and jsonb_typeof(p_delivery_timing_json) <> 'object' then
-    raise exception 'delivery_timing_json object required';
-  end if;
-
-  v_context_kind := lower(coalesce(p_prepare_json->>'context_kind',''));
-  v_entity_type := lower(coalesce(p_prepare_json->>'entity_type',''));
-  v_output_type := upper(coalesce(p_prepare_json->>'output_type',''));
-
-  if v_context_kind = '' or v_entity_type = '' or v_output_type = '' then
-    raise exception 'prepare_json missing context_kind/entity_type/output_type';
-  end if;
-
-  v_rows := p_prepare_json->'rows';
-  if v_rows is null or jsonb_typeof(v_rows) <> 'array' then
-    raise exception 'prepare_json.rows must be array';
-  end if;
-
-  v_to_field_key := nullif(btrim(coalesce(p_prepare_json->>'to_field_key','')), '');
-
-  v_template_id := null;
-  if nullif(coalesce(p_prepare_json->>'document_template_id',''),'') is not null then
-    v_template_id := (p_prepare_json->>'document_template_id')::uuid;
-  end if;
-
-  select sd.comms_adaptors_json
-  into v_cfg
-  from public.settings_defaults sd
-  where sd.id = 1
-  limit 1;
-
-  if v_cfg is not null and jsonb_typeof(v_cfg) = 'object' then
-    v_cfg_wati := v_cfg->'wati';
-    v_cfg_clicksend := v_cfg->'clicksend';
-    v_cfg_scheduling := v_cfg->'scheduling';
-
-    if v_cfg_wati is not null and jsonb_typeof(v_cfg_wati) = 'object' then
-      v_whatsapp_max := coalesce(nullif((v_cfg_wati->>'whatsapp_max_chars')::int, 0), v_whatsapp_max);
-    end if;
-
-    if v_cfg_clicksend is not null and jsonb_typeof(v_cfg_clicksend) = 'object' then
-      v_sms_max := coalesce(nullif((v_cfg_clicksend->>'sms_max_chars')::int, 0), v_sms_max);
-      v_voice_max := coalesce(nullif((v_cfg_clicksend->>'voice_max_chars')::int, 0), v_voice_max);
-    end if;
-
-    if v_cfg_scheduling is not null and jsonb_typeof(v_cfg_scheduling) = 'object' then
-      v_max_future_days := coalesce(nullif((v_cfg_scheduling->>'max_future_days')::int, 0), v_max_future_days);
-      v_allow_past_grace_minutes := coalesce(nullif((v_cfg_scheduling->>'allow_past_grace_minutes')::int, 0), v_allow_past_grace_minutes);
-    end if;
-  end if;
-
-  if p_delivery_timing_json is null or p_delivery_timing_json = '{}'::jsonb then
-    v_delivery_mode := 'NOW';
-  else
-    v_delivery_mode := upper(btrim(coalesce(p_delivery_timing_json->>'mode','NOW')));
-    if v_delivery_mode = '' then
-      v_delivery_mode := 'NOW';
-    end if;
-  end if;
-
-  if v_delivery_mode not in ('NOW','AT_TIME') then
-    raise exception 'delivery_timing_json.mode must be NOW or AT_TIME';
-  end if;
-
-  v_requested_timezone := nullif(btrim(coalesce(p_delivery_timing_json->>'requested_timezone','')), '');
-  v_requested_local_text := nullif(btrim(coalesce(p_delivery_timing_json->>'requested_local_text','')), '');
-
-  if nullif(coalesce(p_delivery_timing_json->>'relative_minutes',''),'') is not null then
-    v_relative_minutes := (p_delivery_timing_json->>'relative_minutes')::int;
-  else
-    v_relative_minutes := null;
-  end if;
-
-  if v_delivery_mode = 'AT_TIME' then
-    v_scheduled_text := nullif(btrim(coalesce(p_delivery_timing_json->>'scheduled_for_utc','')), '');
-    if v_scheduled_text is null then
-      raise exception 'delivery_timing_json.scheduled_for_utc required when mode=AT_TIME';
-    end if;
-
-    begin
-      v_scheduled_for_utc := v_scheduled_text::timestamptz;
-    exception
-      when others then
-        raise exception 'delivery_timing_json.scheduled_for_utc invalid';
-    end;
-
-    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_future_days)) then
-      raise exception 'delivery_timing_json.scheduled_for_utc exceeds max_future_days';
-    end if;
-
-    if v_scheduled_for_utc < (v_now - make_interval(mins => v_allow_past_grace_minutes)) then
-      raise exception 'delivery_timing_json.scheduled_for_utc too far in past';
-    end if;
-
-    if v_scheduled_for_utc <= v_now then
-      v_next_attempt_at_utc := v_now;
-    else
-      v_next_attempt_at_utc := v_scheduled_for_utc;
-    end if;
-  else
-    v_scheduled_for_utc := null;
-    v_next_attempt_at_utc := null;
-  end if;
-
-  v_delivery_timing_json := jsonb_build_object(
-    'mode', v_delivery_mode,
-    'scheduled_for_utc', case when v_scheduled_for_utc is null then null else to_jsonb(v_scheduled_for_utc) end,
-    'requested_timezone', to_jsonb(v_requested_timezone),
-    'requested_local_text', to_jsonb(v_requested_local_text),
-    'relative_minutes', to_jsonb(v_relative_minutes)
-  );
-
-  v_subject_tpl_override := nullif(coalesce(p_final_edits_json->>'subject',''), '');
-  v_body_text_tpl_override := nullif(coalesce(p_final_edits_json->>'body_text',''), '');
-  v_body_html_tpl_override := nullif(coalesce(p_final_edits_json->>'body_html',''), '');
-  v_message_tpl_override := nullif(coalesce(p_final_edits_json->>'message_text',''), '');
-
-  v_cc_override := nullif(coalesce(p_final_edits_json->>'cc',''), '');
-  v_bcc_override := nullif(coalesce(p_final_edits_json->>'bcc',''), '');
-  v_reply_to_override := nullif(coalesce(p_final_edits_json->>'reply_to',''), '');
-  v_importance_override := nullif(coalesce(p_final_edits_json->>'importance',''), '');
-  v_email_type_override := nullif(coalesce(p_final_edits_json->>'email_type',''), '');
-
-  v_attachments := coalesce(p_final_edits_json->'attachments', '[]'::jsonb);
-
-  insert into public.mailshot_runs(
-    context_kind,
-    output_type,
-    document_template_id,
-    created_by,
-    created_at_utc,
-    selection_json,
-    result_json,
-    delivery_timing_json
-  )
-  values (
-    v_context_kind,
-    v_output_type,
-    v_template_id,
-    p_actor_user_id,
-    v_now,
-    p_prepare_json,
-    '{}'::jsonb,
-    v_delivery_timing_json
-  )
-  returning id into v_run_id;
-
-  for v_row in
-    select jbe.value
-    from jsonb_array_elements(v_rows) as jbe(value)
-  loop
-    if coalesce((v_row->>'eligible')::boolean, false) = false then
-      v_skipped := v_skipped + 1;
-      v_skip_list := v_skip_list || jsonb_build_array(
-        jsonb_build_object(
-          'context_id', v_row->>'context_id',
-          'recipient_kind', v_row->>'recipient_kind',
-          'recipient_id', v_row->>'recipient_id',
-          'reason', coalesce(v_row->>'skip_reason', 'NOT_ELIGIBLE')
-        )
-      );
-      continue;
-    end if;
-
-    v_to := nullif(btrim(coalesce(v_row->>'to','')), '');
-
-    if v_to is null then
-      v_skipped := v_skipped + 1;
-      v_skip_list := v_skip_list || jsonb_build_array(
-        jsonb_build_object(
-          'context_id', v_row->>'context_id',
-          'recipient_kind', v_row->>'recipient_kind',
-          'recipient_id', v_row->>'recipient_id',
-          'reason', 'MISSING_TO'
-        )
-      );
-      continue;
-    end if;
-
-    v_recipient_kind := nullif(btrim(coalesce(v_row->>'recipient_kind','')), '');
-
-    v_recipient_id := null;
-    if nullif(coalesce(v_row->>'recipient_id',''),'') is not null then
-      v_recipient_id := (v_row->>'recipient_id')::uuid;
-    end if;
-
-    v_context_id := null;
-    if nullif(coalesce(v_row->>'context_id',''),'') is not null then
-      v_context_id := (v_row->>'context_id')::uuid;
-    end if;
-
-    v_field_values := coalesce(v_row->'field_values', '{}'::jsonb);
-
-    v_row_subject_tpl := coalesce(
-      v_subject_tpl_override,
-      nullif(coalesce(v_row->'template_content_json'->>'subject',''), '')
-    );
-
-    v_row_body_text_tpl := coalesce(
-      v_body_text_tpl_override,
-      nullif(coalesce(v_row->'template_content_json'->>'body_text',''), '')
-    );
-
-    v_row_body_html_tpl := coalesce(
-      v_body_html_tpl_override,
-      nullif(coalesce(v_row->'template_content_json'->>'body_html',''), '')
-    );
-
-    v_row_message_tpl := coalesce(
-      v_message_tpl_override,
-      nullif(coalesce(v_row->'template_content_json'->>'message_text',''), '')
-    );
-
-    v_row_cc := coalesce(
-      v_cc_override,
-      nullif(coalesce(v_row->'template_content_json'->>'cc',''), '')
-    );
-
-    v_row_bcc := coalesce(
-      v_bcc_override,
-      nullif(coalesce(v_row->'template_content_json'->>'bcc',''), '')
-    );
-
-    v_row_reply_to := coalesce(
-      v_reply_to_override,
-      nullif(coalesce(v_row->'template_content_json'->>'reply_to',''), '')
-    );
-
-    v_row_importance := coalesce(
-      v_importance_override,
-      nullif(coalesce(v_row->'template_content_json'->>'importance',''), ''),
-      'Normal'
-    );
-
-    v_row_email_type := coalesce(
-      v_email_type_override,
-      nullif(coalesce(v_row->'template_content_json'->>'email_type',''), ''),
-      nullif(btrim(coalesce(v_row->>'email_type','')), ''),
-      'plain'
-    );
-
-    v_rendered_subject := coalesce(v_row_subject_tpl, '');
-    v_rendered_body_text := coalesce(v_row_body_text_tpl, '');
-    v_rendered_body_html := coalesce(v_row_body_html_tpl, '');
-    v_rendered_message := coalesce(v_row_message_tpl, '');
-
-    for v_kv in
-      select
-        jet.key as k,
-        coalesce(jet.value, '') as v
-      from jsonb_each_text(v_field_values) as jet(key, value)
-    loop
-      v_rendered_subject := replace(v_rendered_subject, '{{' || v_kv.k || '}}', v_kv.v);
-      v_rendered_body_text := replace(v_rendered_body_text, '{{' || v_kv.k || '}}', v_kv.v);
-      v_rendered_body_html := replace(v_rendered_body_html, '{{' || v_kv.k || '}}', v_kv.v);
-      v_rendered_message := replace(v_rendered_message, '{{' || v_kv.k || '}}', v_kv.v);
-    end loop;
-
-    if v_output_type = 'EMAIL' then
-      v_ref := 'mailshot:' || v_run_id::text || ':' || coalesce(v_context_id::text, '') || ':' || md5(coalesce(v_to, ''));
-
-      insert into public.mail_outbox(
-        type,
-        "to",
-        cc,
-        bcc,
-        reply_to,
-        importance,
-        email_type,
-        subject,
-        body_text,
-        body_html,
-        attachments,
-        status,
-        reference,
-        created_at_utc,
-        created_by,
-        recipient_kind,
-        recipient_id,
-        context_kind,
-        context_id,
-        mailshot_run_id,
-        document_template_id,
-        scheduled_for_utc,
-        next_attempt_at_utc
-      )
-      values (
-        'MAILSHOT_EMAIL'::text,
-        v_to,
-        v_row_cc,
-        v_row_bcc,
-        v_row_reply_to,
-        v_row_importance,
-        v_row_email_type,
-        v_rendered_subject,
-        nullif(v_rendered_body_text, ''),
-        nullif(v_rendered_body_html, ''),
-        v_attachments,
-        'QUEUED'::public.mail_status_enum,
-        v_ref,
-        v_now,
-        p_actor_user_id,
-        v_recipient_kind,
-        v_recipient_id,
-        v_context_kind,
-        v_context_id,
-        v_run_id,
-        v_template_id,
-        v_scheduled_for_utc,
-        v_next_attempt_at_utc
-      );
-
-      v_queued := v_queued + 1;
-
-    elsif v_output_type in ('WHATSAPP','SMS','VOICE') then
-      v_original_len := char_length(v_rendered_message);
-      v_sanitised := false;
-      v_truncated := false;
-
-      if v_output_type = 'WHATSAPP' then
-        v_rendered_message := regexp_replace(v_rendered_message, E'[\\r\\n\\t]+', ' ', 'g');
-        v_rendered_message := regexp_replace(v_rendered_message, '[^A-Za-z ,]+', '', 'g');
-        v_rendered_message := regexp_replace(v_rendered_message, E'\\s+', ' ', 'g');
-        v_rendered_message := btrim(v_rendered_message);
-
-        if char_length(v_rendered_message) <> v_original_len then
-          v_sanitised := true;
-        end if;
-
-        if char_length(v_rendered_message) > v_whatsapp_max then
-          v_rendered_message := left(v_rendered_message, v_whatsapp_max);
-          v_truncated := true;
-        end if;
-      elsif v_output_type = 'SMS' then
-        if char_length(v_rendered_message) > v_sms_max then
-          v_rendered_message := left(v_rendered_message, v_sms_max);
-          v_truncated := true;
-        end if;
-      else
-        if char_length(v_rendered_message) > v_voice_max then
-          v_rendered_message := left(v_rendered_message, v_voice_max);
-          v_truncated := true;
-        end if;
-      end if;
-
-      if nullif(v_rendered_message, '') is null then
-        v_skipped := v_skipped + 1;
-        v_skip_list := v_skip_list || jsonb_build_array(
-          jsonb_build_object(
-            'context_id', v_row->>'context_id',
-            'recipient_kind', v_row->>'recipient_kind',
-            'recipient_id', v_row->>'recipient_id',
-            'reason', 'EMPTY_MESSAGE_AFTER_SANITIZE'
-          )
-        );
-        continue;
-      end if;
-
-      v_provider_key := 'AUTO';
-
-      insert into public.comms_outbox(
-        channel,
-        status,
-        to_address,
-        message_text,
-        provider_key,
-        provider_message_id,
-        provider_payload_json,
-        provider_response_json,
-        last_error,
-        created_at_utc,
-        sent_at,
-        delivered_at,
-        read_at,
-        failed_at,
-        created_by,
-        recipient_kind,
-        recipient_id,
-        context_kind,
-        context_id,
-        mailshot_run_id,
-        document_template_id,
-        scheduled_for_utc,
-        next_attempt_at_utc
-      )
-      values (
-        v_output_type,
-        'QUEUED',
-        v_to,
-        v_rendered_message,
-        v_provider_key,
-        null,
-        jsonb_build_object(
-          'original_len', v_original_len,
-          'was_sanitised', v_sanitised,
-          'was_truncated', v_truncated
-        ),
-        '{}'::jsonb,
-        null,
-        v_now,
-        null,
-        null,
-        null,
-        null,
-        p_actor_user_id,
-        v_recipient_kind,
-        v_recipient_id,
-        v_context_kind,
-        v_context_id,
-        v_run_id,
-        v_template_id,
-        v_scheduled_for_utc,
-        v_next_attempt_at_utc
-      );
-
-      v_queued := v_queued + 1;
-    else
-      v_skipped := v_skipped + 1;
-      v_skip_list := v_skip_list || jsonb_build_array(
-        jsonb_build_object(
-          'context_id', v_row->>'context_id',
-          'recipient_kind', v_row->>'recipient_kind',
-          'recipient_id', v_row->>'recipient_id',
-          'reason', 'UNSUPPORTED_OUTPUT_TYPE'
-        )
-      );
-    end if;
-  end loop;
-
-  update public.mailshot_runs as mr
-  set result_json = jsonb_build_object(
-    'queued', v_queued,
-    'skipped', v_skipped,
-    'failed', v_failed,
-    'skips', v_skip_list,
-    'delivery_timing', v_delivery_timing_json
-  )
-  where mr.id = v_run_id;
-
-  return jsonb_build_object(
-    'ok', true,
-    'mailshot_run_id', v_run_id::text,
-    'queued', v_queued,
-    'skipped', v_skipped,
-    'failed', v_failed,
-    'skips', v_skip_list,
-    'delivery_timing', v_delivery_timing_json
-  );
-end;
-$$;
 
 create or replace function public.mailshot_export(
   p_prepare_json jsonb,
@@ -3163,6 +2689,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.outbox_unified_retry(
   p_channel text,
   p_id uuid,
@@ -3338,7 +2865,6 @@ begin
   set status = 'QUEUED',
       provider_key = 'AUTO',
       provider_message_id = null,
-      provider_payload_json = '{}'::jsonb,
       provider_response_json = '{}'::jsonb,
       last_error = null,
       sent_at = null,
@@ -3371,6 +2897,8 @@ begin
   );
 end;
 $$;
+
+
 
 create or replace function public.outbox_unified_reschedule(
   p_channel text,
@@ -3552,7 +3080,6 @@ begin
   set status = 'QUEUED',
       provider_key = 'AUTO',
       provider_message_id = null,
-      provider_payload_json = '{}'::jsonb,
       provider_response_json = '{}'::jsonb,
       last_error = null,
       sent_at = null,
@@ -3587,7 +3114,640 @@ begin
 end;
 $$;
 
+create or replace function public.mailshot_enqueue(
+  p_prepare_json jsonb,
+  p_final_edits_json jsonb,
+  p_delivery_timing_json jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now timestamptz := now();
 
+  v_context_kind text;
+  v_entity_type text;
+  v_output_type text;
+
+  v_template_id uuid;
+  v_to_field_key text;
+
+  v_rows jsonb;
+  v_row jsonb;
+
+  v_run_id uuid;
+
+  v_queued int := 0;
+  v_skipped int := 0;
+  v_failed int := 0;
+
+  v_skip_list jsonb := '[]'::jsonb;
+
+  v_subject_tpl_override text;
+  v_body_text_tpl_override text;
+  v_body_html_tpl_override text;
+  v_message_tpl_override text;
+
+  v_cc_override text;
+  v_bcc_override text;
+  v_reply_to_override text;
+  v_importance_override text;
+  v_email_type_override text;
+
+  v_attachments jsonb;
+
+  v_to text;
+  v_recipient_kind text;
+  v_recipient_id uuid;
+  v_context_id uuid;
+
+  v_field_values jsonb;
+  v_kv record;
+
+  v_rendered_subject text;
+  v_rendered_body_text text;
+  v_rendered_body_html text;
+  v_rendered_message text;
+
+  v_ref text;
+
+  v_sms_max int := 1000;
+  v_voice_max int := 1200;
+  v_whatsapp_max int := 600;
+
+  v_cfg jsonb;
+  v_cfg_wati jsonb;
+  v_cfg_clicksend jsonb;
+  v_cfg_scheduling jsonb;
+
+  v_provider_key text;
+
+  v_sanitised boolean := false;
+  v_truncated boolean := false;
+  v_original_len int := 0;
+
+  v_row_subject_tpl text;
+  v_row_body_text_tpl text;
+  v_row_body_html_tpl text;
+  v_row_message_tpl text;
+  v_row_cc text;
+  v_row_bcc text;
+  v_row_reply_to text;
+  v_row_importance text;
+  v_row_email_type text;
+  v_row_template_content jsonb := '{}'::jsonb;
+  v_wati_template_name text;
+  v_wati_param_name text;
+
+  v_delivery_timing_json jsonb := '{}'::jsonb;
+  v_delivery_mode text := 'NOW';
+  v_requested_timezone text := null;
+  v_requested_local_text text := null;
+  v_relative_minutes int := null;
+
+  v_scheduled_for_utc timestamptz := null;
+  v_next_attempt_at_utc timestamptz := null;
+
+  v_max_future_days int := 365;
+  v_allow_past_grace_minutes int := 15;
+  v_scheduled_text text;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if p_prepare_json is null or jsonb_typeof(p_prepare_json) <> 'object' then
+    raise exception 'prepare_json object required';
+  end if;
+
+  if p_final_edits_json is not null and jsonb_typeof(p_final_edits_json) <> 'object' then
+    raise exception 'final_edits_json object required';
+  end if;
+
+  if p_delivery_timing_json is not null and jsonb_typeof(p_delivery_timing_json) <> 'object' then
+    raise exception 'delivery_timing_json object required';
+  end if;
+
+  v_context_kind := lower(coalesce(p_prepare_json->>'context_kind',''));
+  v_entity_type := lower(coalesce(p_prepare_json->>'entity_type',''));
+  v_output_type := upper(coalesce(p_prepare_json->>'output_type',''));
+
+  if v_context_kind = '' or v_entity_type = '' or v_output_type = '' then
+    raise exception 'prepare_json missing context_kind/entity_type/output_type';
+  end if;
+
+  v_rows := p_prepare_json->'rows';
+  if v_rows is null or jsonb_typeof(v_rows) <> 'array' then
+    raise exception 'prepare_json.rows must be array';
+  end if;
+
+  v_to_field_key := nullif(btrim(coalesce(p_prepare_json->>'to_field_key','')), '');
+
+  v_template_id := null;
+  if nullif(coalesce(p_prepare_json->>'document_template_id',''),'') is not null then
+    v_template_id := (p_prepare_json->>'document_template_id')::uuid;
+  end if;
+
+  select sd.comms_adaptors_json
+  into v_cfg
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_cfg is not null and jsonb_typeof(v_cfg) = 'object' then
+    v_cfg_wati := v_cfg->'wati';
+    v_cfg_clicksend := v_cfg->'clicksend';
+    v_cfg_scheduling := v_cfg->'scheduling';
+
+    if v_cfg_wati is not null and jsonb_typeof(v_cfg_wati) = 'object' then
+      v_whatsapp_max := coalesce(nullif((v_cfg_wati->>'whatsapp_max_chars')::int, 0), v_whatsapp_max);
+    end if;
+
+    if v_cfg_clicksend is not null and jsonb_typeof(v_cfg_clicksend) = 'object' then
+      v_sms_max := coalesce(nullif((v_cfg_clicksend->>'sms_max_chars')::int, 0), v_sms_max);
+      v_voice_max := coalesce(nullif((v_cfg_clicksend->>'voice_max_chars')::int, 0), v_voice_max);
+    end if;
+
+    if v_cfg_scheduling is not null and jsonb_typeof(v_cfg_scheduling) = 'object' then
+      v_max_future_days := coalesce(nullif((v_cfg_scheduling->>'max_future_days')::int, 0), v_max_future_days);
+      v_allow_past_grace_minutes := coalesce(nullif((v_cfg_scheduling->>'allow_past_grace_minutes')::int, 0), v_allow_past_grace_minutes);
+    end if;
+  end if;
+
+  if p_delivery_timing_json is null or p_delivery_timing_json = '{}'::jsonb then
+    v_delivery_mode := 'NOW';
+  else
+    v_delivery_mode := upper(btrim(coalesce(p_delivery_timing_json->>'mode','NOW')));
+    if v_delivery_mode = '' then
+      v_delivery_mode := 'NOW';
+    end if;
+  end if;
+
+  if v_delivery_mode not in ('NOW','AT_TIME') then
+    raise exception 'delivery_timing_json.mode must be NOW or AT_TIME';
+  end if;
+
+  v_requested_timezone := nullif(btrim(coalesce(p_delivery_timing_json->>'requested_timezone','')), '');
+  v_requested_local_text := nullif(btrim(coalesce(p_delivery_timing_json->>'requested_local_text','')), '');
+
+  if nullif(coalesce(p_delivery_timing_json->>'relative_minutes',''),'') is not null then
+    v_relative_minutes := (p_delivery_timing_json->>'relative_minutes')::int;
+  else
+    v_relative_minutes := null;
+  end if;
+
+  if v_delivery_mode = 'AT_TIME' then
+    v_scheduled_text := nullif(btrim(coalesce(p_delivery_timing_json->>'scheduled_for_utc','')), '');
+    if v_scheduled_text is null then
+      raise exception 'delivery_timing_json.scheduled_for_utc required when mode=AT_TIME';
+    end if;
+
+    begin
+      v_scheduled_for_utc := v_scheduled_text::timestamptz;
+    exception
+      when others then
+        raise exception 'delivery_timing_json.scheduled_for_utc invalid';
+    end;
+
+    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_future_days)) then
+      raise exception 'delivery_timing_json.scheduled_for_utc exceeds max_future_days';
+    end if;
+
+    if v_scheduled_for_utc < (v_now - make_interval(mins => v_allow_past_grace_minutes)) then
+      raise exception 'delivery_timing_json.scheduled_for_utc too far in past';
+    end if;
+
+    if v_scheduled_for_utc <= v_now then
+      v_next_attempt_at_utc := v_now;
+    else
+      v_next_attempt_at_utc := v_scheduled_for_utc;
+    end if;
+  else
+    v_scheduled_for_utc := null;
+    v_next_attempt_at_utc := null;
+  end if;
+
+  v_delivery_timing_json := jsonb_build_object(
+    'mode', v_delivery_mode,
+    'scheduled_for_utc', case when v_scheduled_for_utc is null then null else to_jsonb(v_scheduled_for_utc) end,
+    'requested_timezone', to_jsonb(v_requested_timezone),
+    'requested_local_text', to_jsonb(v_requested_local_text),
+    'relative_minutes', to_jsonb(v_relative_minutes)
+  );
+
+  v_subject_tpl_override := nullif(coalesce(p_final_edits_json->>'subject',''), '');
+  v_body_text_tpl_override := nullif(coalesce(p_final_edits_json->>'body_text',''), '');
+  v_body_html_tpl_override := nullif(coalesce(p_final_edits_json->>'body_html',''), '');
+  v_message_tpl_override := nullif(coalesce(p_final_edits_json->>'message_text',''), '');
+
+  v_cc_override := nullif(coalesce(p_final_edits_json->>'cc',''), '');
+  v_bcc_override := nullif(coalesce(p_final_edits_json->>'bcc',''), '');
+  v_reply_to_override := nullif(coalesce(p_final_edits_json->>'reply_to',''), '');
+  v_importance_override := nullif(coalesce(p_final_edits_json->>'importance',''), '');
+  v_email_type_override := nullif(coalesce(p_final_edits_json->>'email_type',''), '');
+
+  v_attachments := coalesce(p_final_edits_json->'attachments', '[]'::jsonb);
+
+  insert into public.mailshot_runs(
+    context_kind,
+    output_type,
+    document_template_id,
+    created_by,
+    created_at_utc,
+    selection_json,
+    result_json,
+    delivery_timing_json
+  )
+  values (
+    v_context_kind,
+    v_output_type,
+    v_template_id,
+    p_actor_user_id,
+    v_now,
+    p_prepare_json,
+    '{}'::jsonb,
+    v_delivery_timing_json
+  )
+  returning id into v_run_id;
+
+  for v_row in
+    select jbe.value
+    from jsonb_array_elements(v_rows) as jbe(value)
+  loop
+    if coalesce((v_row->>'eligible')::boolean, false) = false then
+      v_skipped := v_skipped + 1;
+      v_skip_list := v_skip_list || jsonb_build_array(
+        jsonb_build_object(
+          'context_id', v_row->>'context_id',
+          'recipient_kind', v_row->>'recipient_kind',
+          'recipient_id', v_row->>'recipient_id',
+          'reason', coalesce(v_row->>'skip_reason', 'NOT_ELIGIBLE')
+        )
+      );
+      continue;
+    end if;
+
+    v_to := nullif(btrim(coalesce(v_row->>'to','')), '');
+
+    if v_to is null then
+      v_skipped := v_skipped + 1;
+      v_skip_list := v_skip_list || jsonb_build_array(
+        jsonb_build_object(
+          'context_id', v_row->>'context_id',
+          'recipient_kind', v_row->>'recipient_kind',
+          'recipient_id', v_row->>'recipient_id',
+          'reason', 'MISSING_TO'
+        )
+      );
+      continue;
+    end if;
+
+    v_recipient_kind := nullif(btrim(coalesce(v_row->>'recipient_kind','')), '');
+
+    v_recipient_id := null;
+    if nullif(coalesce(v_row->>'recipient_id',''),'') is not null then
+      v_recipient_id := (v_row->>'recipient_id')::uuid;
+    end if;
+
+    v_context_id := null;
+    if nullif(coalesce(v_row->>'context_id',''),'') is not null then
+      v_context_id := (v_row->>'context_id')::uuid;
+    end if;
+
+    v_field_values := coalesce(v_row->'field_values', '{}'::jsonb);
+    v_row_template_content := coalesce(v_row->'template_content_json', '{}'::jsonb);
+
+    v_row_subject_tpl := coalesce(
+      v_subject_tpl_override,
+      nullif(coalesce(v_row_template_content->>'subject',''), '')
+    );
+
+    v_row_body_text_tpl := coalesce(
+      v_body_text_tpl_override,
+      nullif(coalesce(v_row_template_content->>'body_text',''), '')
+    );
+
+    v_row_body_html_tpl := coalesce(
+      v_body_html_tpl_override,
+      nullif(coalesce(v_row_template_content->>'body_html',''), '')
+    );
+
+    v_row_message_tpl := coalesce(
+      v_message_tpl_override,
+      nullif(coalesce(v_row_template_content->>'message_text',''), '')
+    );
+
+    v_row_cc := coalesce(
+      v_cc_override,
+      nullif(coalesce(v_row_template_content->>'cc',''), '')
+    );
+
+    v_row_bcc := coalesce(
+      v_bcc_override,
+      nullif(coalesce(v_row_template_content->>'bcc',''), '')
+    );
+
+    v_row_reply_to := coalesce(
+      v_reply_to_override,
+      nullif(coalesce(v_row_template_content->>'reply_to',''), '')
+    );
+
+    v_row_importance := coalesce(
+      v_importance_override,
+      nullif(coalesce(v_row_template_content->>'importance',''), ''),
+      'Normal'
+    );
+
+    v_row_email_type := coalesce(
+      v_email_type_override,
+      nullif(coalesce(v_row_template_content->>'email_type',''), ''),
+      nullif(btrim(coalesce(v_row->>'email_type','')), ''),
+      'plain'
+    );
+
+    v_rendered_subject := coalesce(v_row_subject_tpl, '');
+    v_rendered_body_text := coalesce(v_row_body_text_tpl, '');
+    v_rendered_body_html := coalesce(v_row_body_html_tpl, '');
+    v_rendered_message := coalesce(v_row_message_tpl, '');
+
+    for v_kv in
+      select
+        jet.key as k,
+        coalesce(jet.value, '') as v
+      from jsonb_each_text(v_field_values) as jet(key, value)
+    loop
+      v_rendered_subject := replace(v_rendered_subject, '{{' || v_kv.k || '}}', v_kv.v);
+      v_rendered_body_text := replace(v_rendered_body_text, '{{' || v_kv.k || '}}', v_kv.v);
+      v_rendered_body_html := replace(v_rendered_body_html, '{{' || v_kv.k || '}}', v_kv.v);
+      v_rendered_message := replace(v_rendered_message, '{{' || v_kv.k || '}}', v_kv.v);
+    end loop;
+
+    if v_output_type = 'EMAIL' then
+      v_ref := 'mailshot:' || v_run_id::text || ':' || coalesce(v_context_id::text, '') || ':' || md5(coalesce(v_to, ''));
+
+      insert into public.mail_outbox(
+        type,
+        "to",
+        cc,
+        bcc,
+        reply_to,
+        importance,
+        email_type,
+        subject,
+        body_text,
+        body_html,
+        attachments,
+        status,
+        reference,
+        created_at_utc,
+        created_by,
+        recipient_kind,
+        recipient_id,
+        context_kind,
+        context_id,
+        mailshot_run_id,
+        document_template_id,
+        scheduled_for_utc,
+        next_attempt_at_utc
+      )
+      values (
+        'MAILSHOT_EMAIL'::text,
+        v_to,
+        v_row_cc,
+        v_row_bcc,
+        v_row_reply_to,
+        v_row_importance,
+        v_row_email_type,
+        v_rendered_subject,
+        nullif(v_rendered_body_text, ''),
+        nullif(v_rendered_body_html, ''),
+        v_attachments,
+        'QUEUED'::public.mail_status_enum,
+        v_ref,
+        v_now,
+        p_actor_user_id,
+        v_recipient_kind,
+        v_recipient_id,
+        v_context_kind,
+        v_context_id,
+        v_run_id,
+        v_template_id,
+        v_scheduled_for_utc,
+        v_next_attempt_at_utc
+      );
+
+      v_queued := v_queued + 1;
+
+    elsif v_output_type in ('WHATSAPP','SMS','VOICE') then
+      v_original_len := char_length(v_rendered_message);
+      v_sanitised := false;
+      v_truncated := false;
+      v_wati_template_name := null;
+      v_wati_param_name := null;
+
+      if v_output_type = 'WHATSAPP' then
+        v_wati_template_name := coalesce(
+          nullif(btrim(coalesce(v_row_template_content->'provider_contract'->>'template_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'provider_contract'->>'templateName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'wati'->>'template_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'wati'->>'templateName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'whatsapp'->>'template_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'whatsapp'->>'templateName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'provider'->>'template_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'provider'->>'templateName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->>'wati_template_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->>'watiTemplateName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->>'template_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->>'templateName','')), '')
+        );
+
+        v_wati_param_name := coalesce(
+          nullif(btrim(coalesce(v_row_template_content->'provider_contract'->>'param_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'provider_contract'->>'paramName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'wati'->>'param_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'wati'->>'paramName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'whatsapp'->>'param_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'whatsapp'->>'paramName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'provider'->>'param_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->'provider'->>'paramName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->>'wati_param_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->>'watiParamName','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->>'param_name','')), ''),
+          nullif(btrim(coalesce(v_row_template_content->>'paramName','')), '')
+        );
+
+        if v_wati_template_name is null then
+          v_skipped := v_skipped + 1;
+          v_skip_list := v_skip_list || jsonb_build_array(
+            jsonb_build_object(
+              'context_id', v_row->>'context_id',
+              'recipient_kind', v_row->>'recipient_kind',
+              'recipient_id', v_row->>'recipient_id',
+              'reason', 'WATI_TEMPLATE_NAME_MISSING'
+            )
+          );
+          continue;
+        end if;
+
+        if v_wati_param_name is null then
+          v_skipped := v_skipped + 1;
+          v_skip_list := v_skip_list || jsonb_build_array(
+            jsonb_build_object(
+              'context_id', v_row->>'context_id',
+              'recipient_kind', v_row->>'recipient_kind',
+              'recipient_id', v_row->>'recipient_id',
+              'reason', 'WATI_PARAM_NAME_MISSING'
+            )
+          );
+          continue;
+        end if;
+
+        v_rendered_message := regexp_replace(v_rendered_message, E'[\\r\\n\\t]+', ' ', 'g');
+        v_rendered_message := regexp_replace(v_rendered_message, '[^A-Za-z ,]+', '', 'g');
+        v_rendered_message := regexp_replace(v_rendered_message, E'\\s+', ' ', 'g');
+        v_rendered_message := btrim(v_rendered_message);
+
+        if char_length(v_rendered_message) <> v_original_len then
+          v_sanitised := true;
+        end if;
+
+        if char_length(v_rendered_message) > v_whatsapp_max then
+          v_rendered_message := left(v_rendered_message, v_whatsapp_max);
+          v_truncated := true;
+        end if;
+      elsif v_output_type = 'SMS' then
+        if char_length(v_rendered_message) > v_sms_max then
+          v_rendered_message := left(v_rendered_message, v_sms_max);
+          v_truncated := true;
+        end if;
+      else
+        if char_length(v_rendered_message) > v_voice_max then
+          v_rendered_message := left(v_rendered_message, v_voice_max);
+          v_truncated := true;
+        end if;
+      end if;
+
+      if nullif(v_rendered_message, '') is null then
+        v_skipped := v_skipped + 1;
+        v_skip_list := v_skip_list || jsonb_build_array(
+          jsonb_build_object(
+            'context_id', v_row->>'context_id',
+            'recipient_kind', v_row->>'recipient_kind',
+            'recipient_id', v_row->>'recipient_id',
+            'reason', 'EMPTY_MESSAGE_AFTER_SANITIZE'
+          )
+        );
+        continue;
+      end if;
+
+      v_provider_key := 'AUTO';
+
+      insert into public.comms_outbox(
+        channel,
+        status,
+        to_address,
+        message_text,
+        provider_key,
+        provider_message_id,
+        provider_payload_json,
+        provider_response_json,
+        last_error,
+        created_at_utc,
+        sent_at,
+        delivered_at,
+        read_at,
+        failed_at,
+        created_by,
+        recipient_kind,
+        recipient_id,
+        context_kind,
+        context_id,
+        mailshot_run_id,
+        document_template_id,
+        scheduled_for_utc,
+        next_attempt_at_utc
+      )
+      values (
+        v_output_type,
+        'QUEUED',
+        v_to,
+        v_rendered_message,
+        v_provider_key,
+        null,
+        jsonb_build_object(
+          'original_len', v_original_len,
+          'was_sanitised', v_sanitised,
+          'was_truncated', v_truncated
+        ) ||
+        case
+          when v_output_type = 'WHATSAPP' then
+            jsonb_build_object(
+              'provider_contract',
+              jsonb_build_object(
+                'provider', 'WATI',
+                'template_name', v_wati_template_name,
+                'param_name', v_wati_param_name
+              )
+            )
+          else
+            '{}'::jsonb
+        end,
+        '{}'::jsonb,
+        null,
+        v_now,
+        null,
+        null,
+        null,
+        null,
+        p_actor_user_id,
+        v_recipient_kind,
+        v_recipient_id,
+        v_context_kind,
+        v_context_id,
+        v_run_id,
+        v_template_id,
+        v_scheduled_for_utc,
+        v_next_attempt_at_utc
+      );
+
+      v_queued := v_queued + 1;
+    else
+      v_skipped := v_skipped + 1;
+      v_skip_list := v_skip_list || jsonb_build_array(
+        jsonb_build_object(
+          'context_id', v_row->>'context_id',
+          'recipient_kind', v_row->>'recipient_kind',
+          'recipient_id', v_row->>'recipient_id',
+          'reason', 'UNSUPPORTED_OUTPUT_TYPE'
+        )
+      );
+    end if;
+  end loop;
+
+  update public.mailshot_runs as mr
+  set result_json = jsonb_build_object(
+    'queued', v_queued,
+    'skipped', v_skipped,
+    'failed', v_failed,
+    'skips', v_skip_list,
+    'delivery_timing', v_delivery_timing_json
+  )
+  where mr.id = v_run_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'mailshot_run_id', v_run_id::text,
+    'queued', v_queued,
+    'skipped', v_skipped,
+    'failed', v_failed,
+    'skips', v_skip_list,
+    'delivery_timing', v_delivery_timing_json
+  );
+end;
+$$;
 
 
 
