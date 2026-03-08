@@ -6348,7 +6348,13 @@ end;
             else 'TS_TOTAL'
           end
         when cbi.item_type = 'MILEAGE_DELTA' then 'EXPENSE_CODE'
-        when cbi.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA') then
+        when cbi.item_type = 'ADJUSTMENT_DELTA' then
+          case
+            when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%' then 'TS_TOTAL'
+            when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%' or btrim(cbi.source_ref) = 'additional') then 'ADDITIONAL_CODE'
+            else 'EXPENSE_CODE'
+          end
+        when cbi.item_type = 'EXPENSE_DELTA' then
           case
             when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%' or btrim(cbi.source_ref) = 'additional') then 'ADDITIONAL_CODE'
             else 'EXPENSE_CODE'
@@ -6363,7 +6369,15 @@ end;
             else 'TOTAL'
           end
         when cbi.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
-        when cbi.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA') then
+        when cbi.item_type = 'ADJUSTMENT_DELTA' then
+          case
+            when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%' then 'TOTAL'
+            when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%') then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
+            when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional' then 'TOTAL'
+            when cbi.source_ref is not null and btrim(cbi.source_ref) <> '' then upper(btrim(cbi.source_ref))
+            else 'UNKNOWN'
+          end
+        when cbi.item_type = 'EXPENSE_DELTA' then
           case
             when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%') then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
             when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional' then 'TOTAL'
