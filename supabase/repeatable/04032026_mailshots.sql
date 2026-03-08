@@ -1129,11 +1129,10 @@ begin
 end;
 $$;
 
-
-
 create or replace function public.mailshot_enqueue(
   p_prepare_json jsonb,
   p_final_edits_json jsonb,
+  p_delivery_timing_json jsonb,
   p_actor_user_id uuid
 )
 returns jsonb
@@ -1162,16 +1161,16 @@ declare
 
   v_skip_list jsonb := '[]'::jsonb;
 
-  v_subject_tpl text;
-  v_body_text_tpl text;
-  v_body_html_tpl text;
-  v_message_tpl text;
+  v_subject_tpl_override text;
+  v_body_text_tpl_override text;
+  v_body_html_tpl_override text;
+  v_message_tpl_override text;
 
-  v_cc text;
-  v_bcc text;
-  v_reply_to text;
-  v_importance text;
-  v_email_type text;
+  v_cc_override text;
+  v_bcc_override text;
+  v_reply_to_override text;
+  v_importance_override text;
+  v_email_type_override text;
 
   v_attachments jsonb;
 
@@ -1197,12 +1196,36 @@ declare
   v_cfg jsonb;
   v_cfg_wati jsonb;
   v_cfg_clicksend jsonb;
+  v_cfg_scheduling jsonb;
 
   v_provider_key text;
 
   v_sanitised boolean := false;
   v_truncated boolean := false;
   v_original_len int := 0;
+
+  v_row_subject_tpl text;
+  v_row_body_text_tpl text;
+  v_row_body_html_tpl text;
+  v_row_message_tpl text;
+  v_row_cc text;
+  v_row_bcc text;
+  v_row_reply_to text;
+  v_row_importance text;
+  v_row_email_type text;
+
+  v_delivery_timing_json jsonb := '{}'::jsonb;
+  v_delivery_mode text := 'NOW';
+  v_requested_timezone text := null;
+  v_requested_local_text text := null;
+  v_relative_minutes int := null;
+
+  v_scheduled_for_utc timestamptz := null;
+  v_next_attempt_at_utc timestamptz := null;
+
+  v_max_future_days int := 365;
+  v_allow_past_grace_minutes int := 15;
+  v_scheduled_text text;
 begin
   if p_actor_user_id is null then
     raise exception 'actor_user_id required';
@@ -1210,6 +1233,14 @@ begin
 
   if p_prepare_json is null or jsonb_typeof(p_prepare_json) <> 'object' then
     raise exception 'prepare_json object required';
+  end if;
+
+  if p_final_edits_json is not null and jsonb_typeof(p_final_edits_json) <> 'object' then
+    raise exception 'final_edits_json object required';
+  end if;
+
+  if p_delivery_timing_json is not null and jsonb_typeof(p_delivery_timing_json) <> 'object' then
+    raise exception 'delivery_timing_json object required';
   end if;
 
   v_context_kind := lower(coalesce(p_prepare_json->>'context_kind',''));
@@ -1232,8 +1263,8 @@ begin
     v_template_id := (p_prepare_json->>'document_template_id')::uuid;
   end if;
 
-  -- Load limits from settings_defaults.comms_adaptors_json if present
-  select sd.comms_adaptors_json into v_cfg
+  select sd.comms_adaptors_json
+  into v_cfg
   from public.settings_defaults sd
   where sd.id = 1
   limit 1;
@@ -1241,32 +1272,97 @@ begin
   if v_cfg is not null and jsonb_typeof(v_cfg) = 'object' then
     v_cfg_wati := v_cfg->'wati';
     v_cfg_clicksend := v_cfg->'clicksend';
+    v_cfg_scheduling := v_cfg->'scheduling';
 
     if v_cfg_wati is not null and jsonb_typeof(v_cfg_wati) = 'object' then
-      v_whatsapp_max := coalesce(nullif((v_cfg_wati->>'whatsapp_max_chars')::int,0), v_whatsapp_max);
+      v_whatsapp_max := coalesce(nullif((v_cfg_wati->>'whatsapp_max_chars')::int, 0), v_whatsapp_max);
     end if;
 
     if v_cfg_clicksend is not null and jsonb_typeof(v_cfg_clicksend) = 'object' then
-      v_sms_max := coalesce(nullif((v_cfg_clicksend->>'sms_max_chars')::int,0), v_sms_max);
-      v_voice_max := coalesce(nullif((v_cfg_clicksend->>'voice_max_chars')::int,0), v_voice_max);
+      v_sms_max := coalesce(nullif((v_cfg_clicksend->>'sms_max_chars')::int, 0), v_sms_max);
+      v_voice_max := coalesce(nullif((v_cfg_clicksend->>'voice_max_chars')::int, 0), v_voice_max);
+    end if;
+
+    if v_cfg_scheduling is not null and jsonb_typeof(v_cfg_scheduling) = 'object' then
+      v_max_future_days := coalesce(nullif((v_cfg_scheduling->>'max_future_days')::int, 0), v_max_future_days);
+      v_allow_past_grace_minutes := coalesce(nullif((v_cfg_scheduling->>'allow_past_grace_minutes')::int, 0), v_allow_past_grace_minutes);
     end if;
   end if;
 
-  -- Determine template text sources: final_edits_json overrides template_content_json within prepare rows
-  v_subject_tpl := nullif(coalesce(p_final_edits_json->>'subject',''), '');
-  v_body_text_tpl := nullif(coalesce(p_final_edits_json->>'body_text',''), '');
-  v_body_html_tpl := nullif(coalesce(p_final_edits_json->>'body_html',''), '');
-  v_message_tpl := nullif(coalesce(p_final_edits_json->>'message_text',''), '');
+  if p_delivery_timing_json is null or p_delivery_timing_json = '{}'::jsonb then
+    v_delivery_mode := 'NOW';
+  else
+    v_delivery_mode := upper(btrim(coalesce(p_delivery_timing_json->>'mode','NOW')));
+    if v_delivery_mode = '' then
+      v_delivery_mode := 'NOW';
+    end if;
+  end if;
 
-  v_cc := nullif(coalesce(p_final_edits_json->>'cc',''), '');
-  v_bcc := nullif(coalesce(p_final_edits_json->>'bcc',''), '');
-  v_reply_to := nullif(coalesce(p_final_edits_json->>'reply_to',''), '');
-  v_importance := nullif(coalesce(p_final_edits_json->>'importance',''), '');
-  v_email_type := nullif(coalesce(p_final_edits_json->>'email_type',''), '');
+  if v_delivery_mode not in ('NOW','AT_TIME') then
+    raise exception 'delivery_timing_json.mode must be NOW or AT_TIME';
+  end if;
+
+  v_requested_timezone := nullif(btrim(coalesce(p_delivery_timing_json->>'requested_timezone','')), '');
+  v_requested_local_text := nullif(btrim(coalesce(p_delivery_timing_json->>'requested_local_text','')), '');
+
+  if nullif(coalesce(p_delivery_timing_json->>'relative_minutes',''),'') is not null then
+    v_relative_minutes := (p_delivery_timing_json->>'relative_minutes')::int;
+  else
+    v_relative_minutes := null;
+  end if;
+
+  if v_delivery_mode = 'AT_TIME' then
+    v_scheduled_text := nullif(btrim(coalesce(p_delivery_timing_json->>'scheduled_for_utc','')), '');
+    if v_scheduled_text is null then
+      raise exception 'delivery_timing_json.scheduled_for_utc required when mode=AT_TIME';
+    end if;
+
+    begin
+      v_scheduled_for_utc := v_scheduled_text::timestamptz;
+    exception
+      when others then
+        raise exception 'delivery_timing_json.scheduled_for_utc invalid';
+    end;
+
+    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_future_days)) then
+      raise exception 'delivery_timing_json.scheduled_for_utc exceeds max_future_days';
+    end if;
+
+    if v_scheduled_for_utc < (v_now - make_interval(mins => v_allow_past_grace_minutes)) then
+      raise exception 'delivery_timing_json.scheduled_for_utc too far in past';
+    end if;
+
+    if v_scheduled_for_utc <= v_now then
+      v_next_attempt_at_utc := v_now;
+    else
+      v_next_attempt_at_utc := v_scheduled_for_utc;
+    end if;
+  else
+    v_scheduled_for_utc := null;
+    v_next_attempt_at_utc := null;
+  end if;
+
+  v_delivery_timing_json := jsonb_build_object(
+    'mode', v_delivery_mode,
+    'scheduled_for_utc', case when v_scheduled_for_utc is null then null else to_jsonb(v_scheduled_for_utc) end,
+    'requested_timezone', to_jsonb(v_requested_timezone),
+    'requested_local_text', to_jsonb(v_requested_local_text),
+    'relative_minutes', to_jsonb(v_relative_minutes)
+  );
+
+  v_subject_tpl_override := nullif(coalesce(p_final_edits_json->>'subject',''), '');
+  v_body_text_tpl_override := nullif(coalesce(p_final_edits_json->>'body_text',''), '');
+  v_body_html_tpl_override := nullif(coalesce(p_final_edits_json->>'body_html',''), '');
+  v_message_tpl_override := nullif(coalesce(p_final_edits_json->>'message_text',''), '');
+
+  v_cc_override := nullif(coalesce(p_final_edits_json->>'cc',''), '');
+  v_bcc_override := nullif(coalesce(p_final_edits_json->>'bcc',''), '');
+  v_reply_to_override := nullif(coalesce(p_final_edits_json->>'reply_to',''), '');
+  v_importance_override := nullif(coalesce(p_final_edits_json->>'importance',''), '');
+  v_email_type_override := nullif(coalesce(p_final_edits_json->>'email_type',''), '');
 
   v_attachments := coalesce(p_final_edits_json->'attachments', '[]'::jsonb);
 
-  -- Create run
   insert into public.mailshot_runs(
     context_kind,
     output_type,
@@ -1274,7 +1370,8 @@ begin
     created_by,
     created_at_utc,
     selection_json,
-    result_json
+    result_json,
+    delivery_timing_json
   )
   values (
     v_context_kind,
@@ -1283,30 +1380,45 @@ begin
     p_actor_user_id,
     v_now,
     p_prepare_json,
-    '{}'::jsonb
+    '{}'::jsonb,
+    v_delivery_timing_json
   )
   returning id into v_run_id;
 
-  -- Enqueue per eligible row
   for v_row in
-    select value
-    from jsonb_array_elements(v_rows)
+    select jbe.value
+    from jsonb_array_elements(v_rows) as jbe(value)
   loop
-    if coalesce((v_row->>'eligible')::boolean,false) = false then
+    if coalesce((v_row->>'eligible')::boolean, false) = false then
       v_skipped := v_skipped + 1;
       v_skip_list := v_skip_list || jsonb_build_array(
         jsonb_build_object(
           'context_id', v_row->>'context_id',
           'recipient_kind', v_row->>'recipient_kind',
           'recipient_id', v_row->>'recipient_id',
-          'reason', coalesce(v_row->>'skip_reason','NOT_ELIGIBLE')
+          'reason', coalesce(v_row->>'skip_reason', 'NOT_ELIGIBLE')
         )
       );
       continue;
     end if;
 
     v_to := nullif(btrim(coalesce(v_row->>'to','')), '');
+
+    if v_to is null then
+      v_skipped := v_skipped + 1;
+      v_skip_list := v_skip_list || jsonb_build_array(
+        jsonb_build_object(
+          'context_id', v_row->>'context_id',
+          'recipient_kind', v_row->>'recipient_kind',
+          'recipient_id', v_row->>'recipient_id',
+          'reason', 'MISSING_TO'
+        )
+      );
+      continue;
+    end if;
+
     v_recipient_kind := nullif(btrim(coalesce(v_row->>'recipient_kind','')), '');
+
     v_recipient_id := null;
     if nullif(coalesce(v_row->>'recipient_id',''),'') is not null then
       v_recipient_id := (v_row->>'recipient_id')::uuid;
@@ -1317,64 +1429,66 @@ begin
       v_context_id := (v_row->>'context_id')::uuid;
     end if;
 
-    v_field_values := coalesce(v_row->'field_values','{}'::jsonb);
+    v_field_values := coalesce(v_row->'field_values', '{}'::jsonb);
 
-    -- Derive base template content if final edits missing
-    if v_subject_tpl is null then
-      v_subject_tpl := nullif(coalesce((v_row->'template_content_json'->>'subject'),''), '');
-    end if;
+    v_row_subject_tpl := coalesce(
+      v_subject_tpl_override,
+      nullif(coalesce(v_row->'template_content_json'->>'subject',''), '')
+    );
 
-    if v_body_text_tpl is null then
-      v_body_text_tpl := nullif(coalesce((v_row->'template_content_json'->>'body_text'),''), '');
-    end if;
+    v_row_body_text_tpl := coalesce(
+      v_body_text_tpl_override,
+      nullif(coalesce(v_row->'template_content_json'->>'body_text',''), '')
+    );
 
-    if v_body_html_tpl is null then
-      v_body_html_tpl := nullif(coalesce((v_row->'template_content_json'->>'body_html'),''), '');
-    end if;
+    v_row_body_html_tpl := coalesce(
+      v_body_html_tpl_override,
+      nullif(coalesce(v_row->'template_content_json'->>'body_html',''), '')
+    );
 
-    if v_message_tpl is null then
-      v_message_tpl := nullif(coalesce((v_row->'template_content_json'->>'message_text'),''), '');
-    end if;
+    v_row_message_tpl := coalesce(
+      v_message_tpl_override,
+      nullif(coalesce(v_row->'template_content_json'->>'message_text',''), '')
+    );
 
-    if v_importance is null then
-      v_importance := nullif(coalesce((v_row->'template_content_json'->>'importance'),''), '');
-    end if;
+    v_row_cc := coalesce(
+      v_cc_override,
+      nullif(coalesce(v_row->'template_content_json'->>'cc',''), '')
+    );
 
-    if v_reply_to is null then
-      v_reply_to := nullif(coalesce((v_row->'template_content_json'->>'reply_to'),''), '');
-    end if;
+    v_row_bcc := coalesce(
+      v_bcc_override,
+      nullif(coalesce(v_row->'template_content_json'->>'bcc',''), '')
+    );
 
-    if v_cc is null then
-      v_cc := nullif(coalesce((v_row->'template_content_json'->>'cc'),''), '');
-    end if;
+    v_row_reply_to := coalesce(
+      v_reply_to_override,
+      nullif(coalesce(v_row->'template_content_json'->>'reply_to',''), '')
+    );
 
-    if v_bcc is null then
-      v_bcc := nullif(coalesce((v_row->'template_content_json'->>'bcc'),''), '');
-    end if;
+    v_row_importance := coalesce(
+      v_importance_override,
+      nullif(coalesce(v_row->'template_content_json'->>'importance',''), ''),
+      'Normal'
+    );
 
-    if v_email_type is null then
-      v_email_type := nullif(coalesce((v_row->'template_content_json'->>'email_type'),''), '');
-    end if;
+    v_row_email_type := coalesce(
+      v_email_type_override,
+      nullif(coalesce(v_row->'template_content_json'->>'email_type',''), ''),
+      nullif(btrim(coalesce(v_row->>'email_type','')), ''),
+      'plain'
+    );
 
-    if v_email_type is null then
-      v_email_type := coalesce(nullif(btrim(coalesce(v_row->>'email_type','')),''), 'plain');
-    end if;
-
-    if v_importance is null then
-      v_importance := 'Normal';
-    end if;
-
-    -- Render per recipient by token replacement {{field_key}}
-    v_rendered_subject := coalesce(v_subject_tpl, '');
-    v_rendered_body_text := coalesce(v_body_text_tpl, '');
-    v_rendered_body_html := coalesce(v_body_html_tpl, '');
-    v_rendered_message := coalesce(v_message_tpl, '');
+    v_rendered_subject := coalesce(v_row_subject_tpl, '');
+    v_rendered_body_text := coalesce(v_row_body_text_tpl, '');
+    v_rendered_body_html := coalesce(v_row_body_html_tpl, '');
+    v_rendered_message := coalesce(v_row_message_tpl, '');
 
     for v_kv in
       select
-        e.key as k,
-        coalesce(e.value, '') as v
-      from jsonb_each_text(v_field_values) e
+        jet.key as k,
+        coalesce(jet.value, '') as v
+      from jsonb_each_text(v_field_values) as jet(key, value)
     loop
       v_rendered_subject := replace(v_rendered_subject, '{{' || v_kv.k || '}}', v_kv.v);
       v_rendered_body_text := replace(v_rendered_body_text, '{{' || v_kv.k || '}}', v_kv.v);
@@ -1383,7 +1497,7 @@ begin
     end loop;
 
     if v_output_type = 'EMAIL' then
-      v_ref := 'mailshot:' || v_run_id::text || ':' || coalesce(v_context_id::text,'') || ':' || md5(coalesce(v_to,''));
+      v_ref := 'mailshot:' || v_run_id::text || ':' || coalesce(v_context_id::text, '') || ':' || md5(coalesce(v_to, ''));
 
       insert into public.mail_outbox(
         type,
@@ -1406,19 +1520,21 @@ begin
         context_kind,
         context_id,
         mailshot_run_id,
-        document_template_id
+        document_template_id,
+        scheduled_for_utc,
+        next_attempt_at_utc
       )
       values (
         'MAILSHOT_EMAIL'::text,
         v_to,
-        v_cc,
-        v_bcc,
-        v_reply_to,
-        v_importance,
-        v_email_type,
+        v_row_cc,
+        v_row_bcc,
+        v_row_reply_to,
+        v_row_importance,
+        v_row_email_type,
         v_rendered_subject,
-        nullif(v_rendered_body_text,''),
-        nullif(v_rendered_body_html,''),
+        nullif(v_rendered_body_text, ''),
+        nullif(v_rendered_body_html, ''),
         v_attachments,
         'QUEUED'::public.mail_status_enum,
         v_ref,
@@ -1429,7 +1545,9 @@ begin
         v_context_kind,
         v_context_id,
         v_run_id,
-        v_template_id
+        v_template_id,
+        v_scheduled_for_utc,
+        v_next_attempt_at_utc
       );
 
       v_queued := v_queued + 1;
@@ -1440,13 +1558,12 @@ begin
       v_truncated := false;
 
       if v_output_type = 'WHATSAPP' then
-        -- Allowed chars: A-Z a-z space comma only; no newlines; truncate to configured max
         v_rendered_message := regexp_replace(v_rendered_message, E'[\\r\\n\\t]+', ' ', 'g');
         v_rendered_message := regexp_replace(v_rendered_message, '[^A-Za-z ,]+', '', 'g');
         v_rendered_message := regexp_replace(v_rendered_message, E'\\s+', ' ', 'g');
         v_rendered_message := btrim(v_rendered_message);
 
-        if v_rendered_message is distinct from coalesce(v_message_tpl,'') then
+        if char_length(v_rendered_message) <> v_original_len then
           v_sanitised := true;
         end if;
 
@@ -1454,21 +1571,31 @@ begin
           v_rendered_message := left(v_rendered_message, v_whatsapp_max);
           v_truncated := true;
         end if;
+      elsif v_output_type = 'SMS' then
+        if char_length(v_rendered_message) > v_sms_max then
+          v_rendered_message := left(v_rendered_message, v_sms_max);
+          v_truncated := true;
+        end if;
       else
-        if v_output_type = 'SMS' then
-          if char_length(v_rendered_message) > v_sms_max then
-            v_rendered_message := left(v_rendered_message, v_sms_max);
-            v_truncated := true;
-          end if;
-        else
-          if char_length(v_rendered_message) > v_voice_max then
-            v_rendered_message := left(v_rendered_message, v_voice_max);
-            v_truncated := true;
-          end if;
+        if char_length(v_rendered_message) > v_voice_max then
+          v_rendered_message := left(v_rendered_message, v_voice_max);
+          v_truncated := true;
         end if;
       end if;
 
-      -- ✅ Adaptor-at-drain-time core rule: never hardcode provider here.
+      if nullif(v_rendered_message, '') is null then
+        v_skipped := v_skipped + 1;
+        v_skip_list := v_skip_list || jsonb_build_array(
+          jsonb_build_object(
+            'context_id', v_row->>'context_id',
+            'recipient_kind', v_row->>'recipient_kind',
+            'recipient_id', v_row->>'recipient_id',
+            'reason', 'EMPTY_MESSAGE_AFTER_SANITIZE'
+          )
+        );
+        continue;
+      end if;
+
       v_provider_key := 'AUTO';
 
       insert into public.comms_outbox(
@@ -1492,7 +1619,9 @@ begin
         context_kind,
         context_id,
         mailshot_run_id,
-        document_template_id
+        document_template_id,
+        scheduled_for_utc,
+        next_attempt_at_utc
       )
       values (
         v_output_type,
@@ -1519,7 +1648,9 @@ begin
         v_context_kind,
         v_context_id,
         v_run_id,
-        v_template_id
+        v_template_id,
+        v_scheduled_for_utc,
+        v_next_attempt_at_utc
       );
 
       v_queued := v_queued + 1;
@@ -1536,14 +1667,15 @@ begin
     end if;
   end loop;
 
-  update public.mailshot_runs r
+  update public.mailshot_runs as mr
   set result_json = jsonb_build_object(
     'queued', v_queued,
     'skipped', v_skipped,
     'failed', v_failed,
-    'skips', v_skip_list
+    'skips', v_skip_list,
+    'delivery_timing', v_delivery_timing_json
   )
-  where r.id = v_run_id;
+  where mr.id = v_run_id;
 
   return jsonb_build_object(
     'ok', true,
@@ -1551,7 +1683,8 @@ begin
     'queued', v_queued,
     'skipped', v_skipped,
     'failed', v_failed,
-    'skips', v_skip_list
+    'skips', v_skip_list,
+    'delivery_timing', v_delivery_timing_json
   );
 end;
 $$;
@@ -1722,12 +1855,16 @@ end;
 $$;
 
 
+
 create or replace function public.outbox_unified_list(
   p_status text,
   p_channel text,
   p_search text,
+  p_queue_state text,
   p_limit int,
-  p_offset int
+  p_offset int,
+  p_sort_by text default 'created_at_utc',
+  p_sort_dir text default 'desc'
 )
 returns jsonb
 language plpgsql
@@ -1739,9 +1876,15 @@ declare
   v_status text := nullif(upper(btrim(coalesce(p_status,''))), '');
   v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
   v_search text := nullif(btrim(coalesce(p_search,'')), '');
+  v_queue_state text := nullif(upper(btrim(coalesce(p_queue_state,''))), '');
 
   v_limit int := coalesce(p_limit, 50);
   v_offset int := coalesce(p_offset, 0);
+
+  v_sort_by text := lower(btrim(coalesce(p_sort_by, 'created_at_utc')));
+  v_sort_dir text := lower(btrim(coalesce(p_sort_dir, 'desc')));
+
+  v_now timestamptz := now();
 
   v_total bigint := 0;
   v_items jsonb := '[]'::jsonb;
@@ -1750,7 +1893,19 @@ begin
   if v_limit > 500 then v_limit := 500; end if;
   if v_offset < 0 then v_offset := 0; end if;
 
-  with filtered as (
+  if v_sort_by not in ('created_at_utc', 'scheduled_for_utc', 'effective_ready_at_utc', 'status', 'channel') then
+    v_sort_by := 'created_at_utc';
+  end if;
+
+  if v_sort_dir not in ('asc', 'desc') then
+    v_sort_dir := 'desc';
+  end if;
+
+  if v_queue_state is not null and v_queue_state not in ('SCHEDULED', 'QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED') then
+    v_queue_state := null;
+  end if;
+
+  with base_rows as (
     select
       u.channel,
       u.outbox_id,
@@ -1774,32 +1929,124 @@ begin
       u.context_kind,
       u.context_id,
       u.mailshot_run_id,
-      u.document_template_id
-    from public.v_outbox_unified u
+      u.document_template_id,
+      u.scheduled_for_utc,
+      u.next_attempt_at_utc,
+      coalesce(u.next_attempt_at_utc, u.scheduled_for_utc, u.created_at_utc) as effective_ready_at_utc,
+      case
+        when u.read_at is not null then 'READ'
+        when u.delivered_at is not null then 'DELIVERED'
+        when u.sent_at is not null then 'SENT'
+        when upper(coalesce(u.status,'')) = 'FAILED' or u.failed_at is not null then 'FAILED'
+        when upper(coalesce(u.status,'')) = 'QUEUED'
+             and coalesce(u.next_attempt_at_utc, u.scheduled_for_utc, u.created_at_utc) > v_now then 'SCHEDULED'
+        when upper(coalesce(u.status,'')) = 'QUEUED' then 'QUEUED'
+        else upper(coalesce(u.status,''))
+      end as queue_state,
+      (u.scheduled_for_utc is not null) as is_scheduled
+    from public.v_outbox_unified as u
+  ),
+  filtered as (
+    select
+      b.channel,
+      b.outbox_id,
+      b.outbox_type,
+      b.status,
+      b.delivery_status,
+      b.created_at_utc,
+      b.sent_at,
+      b.delivered_at,
+      b.read_at,
+      b.failed_at,
+      b.to_address,
+      b.subject,
+      b.body_text,
+      b.reference,
+      b.provider_message_id,
+      b.last_error,
+      b.created_by,
+      b.recipient_kind,
+      b.recipient_id,
+      b.context_kind,
+      b.context_id,
+      b.mailshot_run_id,
+      b.document_template_id,
+      b.scheduled_for_utc,
+      b.next_attempt_at_utc,
+      b.effective_ready_at_utc,
+      b.queue_state,
+      b.is_scheduled
+    from base_rows as b
     where
-      (v_status is null or upper(coalesce(u.status,'')) = v_status)
-      and (v_channel is null or upper(coalesce(u.channel,'')) = v_channel)
+      (v_status is null or upper(coalesce(b.status,'')) = v_status)
+      and (v_channel is null or upper(coalesce(b.channel,'')) = v_channel)
+      and (v_queue_state is null or b.queue_state = v_queue_state)
       and (
         v_search is null
-        or coalesce(u.to_address,'') ilike ('%' || v_search || '%')
-        or coalesce(u.subject,'') ilike ('%' || v_search || '%')
-        or coalesce(u.body_text,'') ilike ('%' || v_search || '%')
-        or coalesce(u.reference,'') ilike ('%' || v_search || '%')
-        or coalesce(u.last_error,'') ilike ('%' || v_search || '%')
+        or coalesce(b.to_address,'') ilike ('%' || v_search || '%')
+        or coalesce(b.subject,'') ilike ('%' || v_search || '%')
+        or coalesce(b.body_text,'') ilike ('%' || v_search || '%')
+        or coalesce(b.reference,'') ilike ('%' || v_search || '%')
+        or coalesce(b.last_error,'') ilike ('%' || v_search || '%')
       )
   ),
   counted as (
     select count(*)::bigint as total_count
-    from filtered
+    from filtered as f
   ),
   paged as (
-    select *
-    from filtered
-    order by created_at_utc desc, outbox_id::text desc
+    select
+      f.channel,
+      f.outbox_id,
+      f.outbox_type,
+      f.status,
+      f.delivery_status,
+      f.created_at_utc,
+      f.sent_at,
+      f.delivered_at,
+      f.read_at,
+      f.failed_at,
+      f.to_address,
+      f.subject,
+      f.body_text,
+      f.reference,
+      f.provider_message_id,
+      f.last_error,
+      f.created_by,
+      f.recipient_kind,
+      f.recipient_id,
+      f.context_kind,
+      f.context_id,
+      f.mailshot_run_id,
+      f.document_template_id,
+      f.scheduled_for_utc,
+      f.next_attempt_at_utc,
+      f.effective_ready_at_utc,
+      f.queue_state,
+      f.is_scheduled
+    from filtered as f
+    order by
+      case when v_sort_by = 'created_at_utc' and v_sort_dir = 'asc' then f.created_at_utc end asc nulls last,
+      case when v_sort_by = 'created_at_utc' and v_sort_dir = 'desc' then f.created_at_utc end desc nulls last,
+
+      case when v_sort_by = 'scheduled_for_utc' and v_sort_dir = 'asc' then f.scheduled_for_utc end asc nulls last,
+      case when v_sort_by = 'scheduled_for_utc' and v_sort_dir = 'desc' then f.scheduled_for_utc end desc nulls last,
+
+      case when v_sort_by = 'effective_ready_at_utc' and v_sort_dir = 'asc' then f.effective_ready_at_utc end asc nulls last,
+      case when v_sort_by = 'effective_ready_at_utc' and v_sort_dir = 'desc' then f.effective_ready_at_utc end desc nulls last,
+
+      case when v_sort_by = 'status' and v_sort_dir = 'asc' then f.queue_state end asc nulls last,
+      case when v_sort_by = 'status' and v_sort_dir = 'desc' then f.queue_state end desc nulls last,
+
+      case when v_sort_by = 'channel' and v_sort_dir = 'asc' then f.channel end asc nulls last,
+      case when v_sort_by = 'channel' and v_sort_dir = 'desc' then f.channel end desc nulls last,
+
+      f.created_at_utc desc,
+      f.outbox_id::text desc
     limit v_limit offset v_offset
   )
   select
-    (select total_count from counted),
+    (select c.total_count from counted as c),
     coalesce(
       jsonb_agg(
         jsonb_build_object(
@@ -1829,21 +2076,48 @@ begin
           'context_kind', p.context_kind,
           'context_id', case when p.context_id is null then null else p.context_id::text end,
           'mailshot_run_id', case when p.mailshot_run_id is null then null else p.mailshot_run_id::text end,
-          'document_template_id', case when p.document_template_id is null then null else p.document_template_id::text end
+          'document_template_id', case when p.document_template_id is null then null else p.document_template_id::text end,
+          'scheduled_for_utc', case when p.scheduled_for_utc is null then null else p.scheduled_for_utc::text end,
+          'next_attempt_at_utc', case when p.next_attempt_at_utc is null then null else p.next_attempt_at_utc::text end,
+          'effective_ready_at_utc', case when p.effective_ready_at_utc is null then null else p.effective_ready_at_utc::text end,
+          'queue_state', p.queue_state,
+          'is_scheduled', p.is_scheduled
         )
-        order by p.created_at_utc desc, p.outbox_id::text desc
+        order by
+          case when v_sort_by = 'created_at_utc' and v_sort_dir = 'asc' then p.created_at_utc end asc nulls last,
+          case when v_sort_by = 'created_at_utc' and v_sort_dir = 'desc' then p.created_at_utc end desc nulls last,
+
+          case when v_sort_by = 'scheduled_for_utc' and v_sort_dir = 'asc' then p.scheduled_for_utc end asc nulls last,
+          case when v_sort_by = 'scheduled_for_utc' and v_sort_dir = 'desc' then p.scheduled_for_utc end desc nulls last,
+
+          case when v_sort_by = 'effective_ready_at_utc' and v_sort_dir = 'asc' then p.effective_ready_at_utc end asc nulls last,
+          case when v_sort_by = 'effective_ready_at_utc' and v_sort_dir = 'desc' then p.effective_ready_at_utc end desc nulls last,
+
+          case when v_sort_by = 'status' and v_sort_dir = 'asc' then p.queue_state end asc nulls last,
+          case when v_sort_by = 'status' and v_sort_dir = 'desc' then p.queue_state end desc nulls last,
+
+          case when v_sort_by = 'channel' and v_sort_dir = 'asc' then p.channel end asc nulls last,
+          case when v_sort_by = 'channel' and v_sort_dir = 'desc' then p.channel end desc nulls last,
+
+          p.created_at_utc desc,
+          p.outbox_id::text desc
       ),
       '[]'::jsonb
     )
   into v_total, v_items
-  from paged p;
+  from paged as p;
 
   return jsonb_build_object(
     'ok', true,
     'filters', jsonb_build_object(
       'status', v_status,
       'channel', v_channel,
-      'search', v_search
+      'search', v_search,
+      'queue_state', v_queue_state
+    ),
+    'sort', jsonb_build_object(
+      'sort_by', v_sort_by,
+      'sort_dir', v_sort_dir
     ),
     'limit', v_limit,
     'offset', v_offset,
@@ -1865,6 +2139,7 @@ set search_path = public
 as $$
 declare
   v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
+  v_now timestamptz := now();
   v_row record;
 begin
   if v_channel is null then
@@ -1905,9 +2180,23 @@ begin
     u.context_kind,
     u.context_id,
     u.mailshot_run_id,
-    u.document_template_id
+    u.document_template_id,
+    u.scheduled_for_utc,
+    u.next_attempt_at_utc,
+    coalesce(u.next_attempt_at_utc, u.scheduled_for_utc, u.created_at_utc) as effective_ready_at_utc,
+    case
+      when u.read_at is not null then 'READ'
+      when u.delivered_at is not null then 'DELIVERED'
+      when u.sent_at is not null then 'SENT'
+      when upper(coalesce(u.status,'')) = 'FAILED' or u.failed_at is not null then 'FAILED'
+      when upper(coalesce(u.status,'')) = 'QUEUED'
+           and coalesce(u.next_attempt_at_utc, u.scheduled_for_utc, u.created_at_utc) > v_now then 'SCHEDULED'
+      when upper(coalesce(u.status,'')) = 'QUEUED' then 'QUEUED'
+      else upper(coalesce(u.status,''))
+    end as queue_state,
+    (u.scheduled_for_utc is not null) as is_scheduled
   into v_row
-  from public.v_outbox_unified u
+  from public.v_outbox_unified as u
   where upper(coalesce(u.channel,'')) = v_channel
     and u.outbox_id = p_id;
 
@@ -1947,12 +2236,16 @@ begin
       'context_kind', v_row.context_kind,
       'context_id', case when v_row.context_id is null then null else v_row.context_id::text end,
       'mailshot_run_id', case when v_row.mailshot_run_id is null then null else v_row.mailshot_run_id::text end,
-      'document_template_id', case when v_row.document_template_id is null then null else v_row.document_template_id::text end
+      'document_template_id', case when v_row.document_template_id is null then null else v_row.document_template_id::text end,
+      'scheduled_for_utc', case when v_row.scheduled_for_utc is null then null else v_row.scheduled_for_utc::text end,
+      'next_attempt_at_utc', case when v_row.next_attempt_at_utc is null then null else v_row.next_attempt_at_utc::text end,
+      'effective_ready_at_utc', case when v_row.effective_ready_at_utc is null then null else v_row.effective_ready_at_utc::text end,
+      'queue_state', v_row.queue_state,
+      'is_scheduled', v_row.is_scheduled
     )
   );
 end;
 $$;
-
 
 create or replace function public.comms_by_recipient(
   p_recipient_kind text,
@@ -1970,6 +2263,7 @@ declare
   v_kind text := nullif(lower(btrim(coalesce(p_recipient_kind,''))), '');
   v_limit int := coalesce(p_limit, 50);
   v_offset int := coalesce(p_offset, 0);
+  v_now timestamptz := now();
 
   v_total bigint := 0;
   v_items jsonb := '[]'::jsonb;
@@ -1986,7 +2280,7 @@ begin
   if v_limit > 500 then v_limit := 500; end if;
   if v_offset < 0 then v_offset := 0; end if;
 
-  with filtered as (
+  with base_rows as (
     select
       u.channel,
       u.outbox_id,
@@ -2010,23 +2304,65 @@ begin
       u.context_kind,
       u.context_id,
       u.mailshot_run_id,
-      u.document_template_id
-    from public.v_outbox_unified u
+      u.document_template_id,
+      u.scheduled_for_utc,
+      u.next_attempt_at_utc,
+      coalesce(u.next_attempt_at_utc, u.scheduled_for_utc, u.created_at_utc) as effective_ready_at_utc,
+      case
+        when u.read_at is not null then 'READ'
+        when u.delivered_at is not null then 'DELIVERED'
+        when u.sent_at is not null then 'SENT'
+        when upper(coalesce(u.status,'')) = 'FAILED' or u.failed_at is not null then 'FAILED'
+        when upper(coalesce(u.status,'')) = 'QUEUED'
+             and coalesce(u.next_attempt_at_utc, u.scheduled_for_utc, u.created_at_utc) > v_now then 'SCHEDULED'
+        when upper(coalesce(u.status,'')) = 'QUEUED' then 'QUEUED'
+        else upper(coalesce(u.status,''))
+      end as queue_state,
+      (u.scheduled_for_utc is not null) as is_scheduled
+    from public.v_outbox_unified as u
     where lower(coalesce(u.recipient_kind,'')) = v_kind
       and u.recipient_id = p_recipient_id
   ),
   counted as (
     select count(*)::bigint as total_count
-    from filtered
+    from base_rows as b
   ),
   paged as (
-    select *
-    from filtered
-    order by created_at_utc desc, outbox_id::text desc
+    select
+      b.channel,
+      b.outbox_id,
+      b.outbox_type,
+      b.status,
+      b.delivery_status,
+      b.created_at_utc,
+      b.sent_at,
+      b.delivered_at,
+      b.read_at,
+      b.failed_at,
+      b.to_address,
+      b.subject,
+      b.body_text,
+      b.reference,
+      b.provider_message_id,
+      b.last_error,
+      b.created_by,
+      b.recipient_kind,
+      b.recipient_id,
+      b.context_kind,
+      b.context_id,
+      b.mailshot_run_id,
+      b.document_template_id,
+      b.scheduled_for_utc,
+      b.next_attempt_at_utc,
+      b.effective_ready_at_utc,
+      b.queue_state,
+      b.is_scheduled
+    from base_rows as b
+    order by b.created_at_utc desc, b.outbox_id::text desc
     limit v_limit offset v_offset
   )
   select
-    (select total_count from counted),
+    (select c.total_count from counted as c),
     coalesce(
       jsonb_agg(
         jsonb_build_object(
@@ -2056,14 +2392,19 @@ begin
           'context_kind', p.context_kind,
           'context_id', case when p.context_id is null then null else p.context_id::text end,
           'mailshot_run_id', case when p.mailshot_run_id is null then null else p.mailshot_run_id::text end,
-          'document_template_id', case when p.document_template_id is null then null else p.document_template_id::text end
+          'document_template_id', case when p.document_template_id is null then null else p.document_template_id::text end,
+          'scheduled_for_utc', case when p.scheduled_for_utc is null then null else p.scheduled_for_utc::text end,
+          'next_attempt_at_utc', case when p.next_attempt_at_utc is null then null else p.next_attempt_at_utc::text end,
+          'effective_ready_at_utc', case when p.effective_ready_at_utc is null then null else p.effective_ready_at_utc::text end,
+          'queue_state', p.queue_state,
+          'is_scheduled', p.is_scheduled
         )
         order by p.created_at_utc desc, p.outbox_id::text desc
       ),
       '[]'::jsonb
     )
   into v_total, v_items
-  from paged p;
+  from paged as p;
 
   return jsonb_build_object(
     'ok', true,
@@ -2079,9 +2420,1172 @@ $$;
 
 
 
+create or replace function public.outbox_unified_delete(
+  p_channel text,
+  p_id uuid,
+  p_actor_user_id uuid,
+  p_reason text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
+  v_reason text := nullif(btrim(coalesce(p_reason,'')), '');
+  v_now timestamptz := now();
+
+  v_mail_row public.mail_outbox%rowtype;
+  v_comms_row public.comms_outbox%rowtype;
+
+  v_row_channel text;
+  v_row_id_text text;
+  v_row_status text;
+  v_row_to text;
+  v_row_mailshot_run_id_text text;
+  v_row_recipient_kind text;
+  v_row_recipient_id_text text;
+  v_row_context_kind text;
+  v_row_context_id_text text;
+
+  v_block_reason text := null;
+  v_deleted boolean := false;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if v_channel is null then
+    raise exception 'channel required';
+  end if;
+
+  if p_id is null then
+    raise exception 'id required';
+  end if;
+
+  if v_channel not in ('EMAIL','WHATSAPP','SMS','VOICE') then
+    raise exception 'unsupported channel %', v_channel;
+  end if;
+
+  if v_channel = 'EMAIL' then
+    select mo.*
+    into v_mail_row
+    from public.mail_outbox as mo
+    where mo.id = p_id
+    for update;
+
+    if not found then
+      return jsonb_build_object(
+        'ok', true,
+        'deleted', false,
+        'reason', 'NOT_FOUND',
+        'row', jsonb_build_object(
+          'channel', v_channel,
+          'outbox_id', p_id::text
+        )
+      );
+    end if;
+
+    v_row_channel := 'EMAIL';
+    v_row_id_text := v_mail_row.id::text;
+    v_row_status := v_mail_row.status::text;
+    v_row_to := v_mail_row."to";
+    v_row_mailshot_run_id_text := case when v_mail_row.mailshot_run_id is null then null else v_mail_row.mailshot_run_id::text end;
+    v_row_recipient_kind := v_mail_row.recipient_kind;
+    v_row_recipient_id_text := case when v_mail_row.recipient_id is null then null else v_mail_row.recipient_id::text end;
+    v_row_context_kind := v_mail_row.context_kind;
+    v_row_context_id_text := case when v_mail_row.context_id is null then null else v_mail_row.context_id::text end;
+
+    if v_mail_row.read_at is not null then
+      v_block_reason := 'ALREADY_READ';
+    elsif v_mail_row.delivered_at is not null then
+      v_block_reason := 'ALREADY_DELIVERED';
+    elsif v_mail_row.sent_at is not null then
+      v_block_reason := 'ALREADY_SENT';
+    elsif upper(coalesce(v_mail_row.status::text,'')) not in ('QUEUED','FAILED') then
+      v_block_reason := 'INVALID_STATUS';
+    end if;
+
+    if v_block_reason is null then
+      perform public._audit_insert(
+        'outbox',
+        v_mail_row.id::text,
+        'OUTBOX_DELETE',
+        jsonb_build_object(
+          'channel', 'EMAIL',
+          'outbox_id', v_mail_row.id::text,
+          'status', v_mail_row.status::text,
+          'to_address', v_mail_row."to",
+          'mailshot_run_id', case when v_mail_row.mailshot_run_id is null then null else v_mail_row.mailshot_run_id::text end,
+          'recipient_kind', v_mail_row.recipient_kind,
+          'recipient_id', case when v_mail_row.recipient_id is null then null else v_mail_row.recipient_id::text end,
+          'context_kind', v_mail_row.context_kind,
+          'context_id', case when v_mail_row.context_id is null then null else v_mail_row.context_id::text end
+        ),
+        null,
+        v_reason,
+        p_actor_user_id
+      );
+
+      delete from public.mail_outbox as mo
+      where mo.id = v_mail_row.id;
+
+      v_deleted := true;
+    end if;
+
+  else
+    select co.*
+    into v_comms_row
+    from public.comms_outbox as co
+    where co.id = p_id
+    for update;
+
+    if not found then
+      return jsonb_build_object(
+        'ok', true,
+        'deleted', false,
+        'reason', 'NOT_FOUND',
+        'row', jsonb_build_object(
+          'channel', v_channel,
+          'outbox_id', p_id::text
+        )
+      );
+    end if;
+
+    if upper(coalesce(v_comms_row.channel,'')) <> v_channel then
+      return jsonb_build_object(
+        'ok', true,
+        'deleted', false,
+        'reason', 'CHANNEL_MISMATCH',
+        'row', jsonb_build_object(
+          'channel', v_comms_row.channel,
+          'outbox_id', v_comms_row.id::text
+        )
+      );
+    end if;
+
+    v_row_channel := v_comms_row.channel;
+    v_row_id_text := v_comms_row.id::text;
+    v_row_status := v_comms_row.status;
+    v_row_to := v_comms_row.to_address;
+    v_row_mailshot_run_id_text := case when v_comms_row.mailshot_run_id is null then null else v_comms_row.mailshot_run_id::text end;
+    v_row_recipient_kind := v_comms_row.recipient_kind;
+    v_row_recipient_id_text := case when v_comms_row.recipient_id is null then null else v_comms_row.recipient_id::text end;
+    v_row_context_kind := v_comms_row.context_kind;
+    v_row_context_id_text := case when v_comms_row.context_id is null then null else v_comms_row.context_id::text end;
+
+    if v_comms_row.read_at is not null then
+      v_block_reason := 'ALREADY_READ';
+    elsif v_comms_row.delivered_at is not null then
+      v_block_reason := 'ALREADY_DELIVERED';
+    elsif v_comms_row.sent_at is not null then
+      v_block_reason := 'ALREADY_SENT';
+    elsif upper(coalesce(v_comms_row.status,'')) not in ('QUEUED','FAILED') then
+      v_block_reason := 'INVALID_STATUS';
+    end if;
+
+    if v_block_reason is null then
+      perform public._audit_insert(
+        'outbox',
+        v_comms_row.id::text,
+        'OUTBOX_DELETE',
+        jsonb_build_object(
+          'channel', v_comms_row.channel,
+          'outbox_id', v_comms_row.id::text,
+          'status', v_comms_row.status,
+          'to_address', v_comms_row.to_address,
+          'mailshot_run_id', case when v_comms_row.mailshot_run_id is null then null else v_comms_row.mailshot_run_id::text end,
+          'recipient_kind', v_comms_row.recipient_kind,
+          'recipient_id', case when v_comms_row.recipient_id is null then null else v_comms_row.recipient_id::text end,
+          'context_kind', v_comms_row.context_kind,
+          'context_id', case when v_comms_row.context_id is null then null else v_comms_row.context_id::text end
+        ),
+        null,
+        v_reason,
+        p_actor_user_id
+      );
+
+      delete from public.comms_outbox as co
+      where co.id = v_comms_row.id;
+
+      v_deleted := true;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'deleted', v_deleted,
+    'deleted_at_utc', case when v_deleted then v_now::text else null end,
+    'reason', case when v_deleted then null else v_block_reason end,
+    'row', jsonb_build_object(
+      'channel', v_row_channel,
+      'outbox_id', v_row_id_text,
+      'status', v_row_status,
+      'to_address', v_row_to,
+      'mailshot_run_id', v_row_mailshot_run_id_text,
+      'recipient_kind', v_row_recipient_kind,
+      'recipient_id', v_row_recipient_id_text,
+      'context_kind', v_row_context_kind,
+      'context_id', v_row_context_id_text
+    )
+  );
+end;
+$$;
 
 
+create or replace function public.outbox_unified_delete_many(
+  p_items jsonb,
+  p_actor_user_id uuid,
+  p_reason text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reason text := nullif(btrim(coalesce(p_reason,'')), '');
+  v_item jsonb;
+  v_channel text;
+  v_id_text text;
+  v_id uuid;
 
+  v_result jsonb;
+  v_results jsonb := '[]'::jsonb;
+
+  v_requested int := 0;
+  v_deleted int := 0;
+  v_blocked_already_sent int := 0;
+  v_blocked_invalid_status int := 0;
+  v_not_found int := 0;
+  v_other_blocked int := 0;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if p_items is null or jsonb_typeof(p_items) <> 'array' then
+    raise exception 'items array required';
+  end if;
+
+  for v_item in
+    select jbe.value
+    from jsonb_array_elements(p_items) as jbe(value)
+  loop
+    v_requested := v_requested + 1;
+
+    v_channel := nullif(upper(btrim(coalesce(v_item->>'channel',''))), '');
+    v_id_text := nullif(btrim(coalesce(v_item->>'id','')), '');
+
+    if v_channel is null or v_id_text is null then
+      v_results := v_results || jsonb_build_array(
+        jsonb_build_object(
+          'ok', true,
+          'deleted', false,
+          'reason', 'INVALID_ITEM',
+          'row', jsonb_build_object(
+            'channel', v_channel,
+            'outbox_id', v_id_text
+          )
+        )
+      );
+      v_other_blocked := v_other_blocked + 1;
+      continue;
+    end if;
+
+    begin
+      v_id := v_id_text::uuid;
+    exception
+      when others then
+        v_results := v_results || jsonb_build_array(
+          jsonb_build_object(
+            'ok', true,
+            'deleted', false,
+            'reason', 'INVALID_ID',
+            'row', jsonb_build_object(
+              'channel', v_channel,
+              'outbox_id', v_id_text
+            )
+          )
+        );
+        v_other_blocked := v_other_blocked + 1;
+        continue;
+    end;
+
+    v_result := public.outbox_unified_delete(
+      v_channel,
+      v_id,
+      p_actor_user_id,
+      v_reason
+    );
+
+    v_results := v_results || jsonb_build_array(v_result);
+
+    if coalesce((v_result->>'deleted')::boolean, false) = true then
+      v_deleted := v_deleted + 1;
+    else
+      case upper(coalesce(v_result->>'reason',''))
+        when 'NOT_FOUND' then
+          v_not_found := v_not_found + 1;
+        when 'ALREADY_SENT', 'ALREADY_DELIVERED', 'ALREADY_READ' then
+          v_blocked_already_sent := v_blocked_already_sent + 1;
+        when 'INVALID_STATUS' then
+          v_blocked_invalid_status := v_blocked_invalid_status + 1;
+        else
+          v_other_blocked := v_other_blocked + 1;
+      end case;
+    end if;
+  end loop;
+
+  perform public._audit_insert(
+    'outbox_batch',
+    null,
+    'OUTBOX_DELETE_MANY',
+    jsonb_build_object(
+      'requested', v_requested
+    ),
+    jsonb_build_object(
+      'requested', v_requested,
+      'deleted', v_deleted,
+      'blocked_already_sent', v_blocked_already_sent,
+      'blocked_invalid_status', v_blocked_invalid_status,
+      'not_found', v_not_found,
+      'other_blocked', v_other_blocked
+    ),
+    v_reason,
+    p_actor_user_id
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'requested', v_requested,
+    'deleted', v_deleted,
+    'blocked_already_sent', v_blocked_already_sent,
+    'blocked_invalid_status', v_blocked_invalid_status,
+    'not_found', v_not_found,
+    'other_blocked', v_other_blocked,
+    'results', v_results
+  );
+end;
+$$;
+
+create or replace function public.mailshot_run_cancel_pending(
+  p_mailshot_run_id uuid,
+  p_actor_user_id uuid,
+  p_reason text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reason text := nullif(btrim(coalesce(p_reason,'')), '');
+  v_run public.mailshot_runs%rowtype;
+
+  v_total_rows int := 0;
+  v_deleted_pending int := 0;
+  v_skipped_already_sent int := 0;
+
+  v_deleted_mail_ids jsonb := '[]'::jsonb;
+  v_deleted_comms_ids jsonb := '[]'::jsonb;
+
+  v_mail_row public.mail_outbox%rowtype;
+  v_comms_row public.comms_outbox%rowtype;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if p_mailshot_run_id is null then
+    raise exception 'mailshot_run_id required';
+  end if;
+
+  select mr.*
+  into v_run
+  from public.mailshot_runs as mr
+  where mr.id = p_mailshot_run_id
+  for update;
+
+  if not found then
+    raise exception 'mailshot_run not found';
+  end if;
+
+  for v_mail_row in
+    select mo.*
+    from public.mail_outbox as mo
+    where mo.mailshot_run_id = p_mailshot_run_id
+    order by mo.created_at_utc asc, mo.id::text asc
+    for update
+  loop
+    v_total_rows := v_total_rows + 1;
+
+    if v_mail_row.read_at is not null
+       or v_mail_row.delivered_at is not null
+       or v_mail_row.sent_at is not null then
+      v_skipped_already_sent := v_skipped_already_sent + 1;
+      continue;
+    end if;
+
+    if upper(coalesce(v_mail_row.status::text,'')) not in ('QUEUED','FAILED') then
+      v_skipped_already_sent := v_skipped_already_sent + 1;
+      continue;
+    end if;
+
+    perform public._audit_insert(
+      'outbox',
+      v_mail_row.id::text,
+      'MAILSHOT_RUN_CANCEL_PENDING_DELETE',
+      jsonb_build_object(
+        'channel', 'EMAIL',
+        'outbox_id', v_mail_row.id::text,
+        'mailshot_run_id', p_mailshot_run_id::text,
+        'status', v_mail_row.status::text,
+        'to_address', v_mail_row."to"
+      ),
+      null,
+      v_reason,
+      p_actor_user_id
+    );
+
+    delete from public.mail_outbox as mo
+    where mo.id = v_mail_row.id;
+
+    v_deleted_pending := v_deleted_pending + 1;
+    v_deleted_mail_ids := v_deleted_mail_ids || jsonb_build_array(v_mail_row.id::text);
+  end loop;
+
+  for v_comms_row in
+    select co.*
+    from public.comms_outbox as co
+    where co.mailshot_run_id = p_mailshot_run_id
+    order by co.created_at_utc asc, co.id::text asc
+    for update
+  loop
+    v_total_rows := v_total_rows + 1;
+
+    if v_comms_row.read_at is not null
+       or v_comms_row.delivered_at is not null
+       or v_comms_row.sent_at is not null then
+      v_skipped_already_sent := v_skipped_already_sent + 1;
+      continue;
+    end if;
+
+    if upper(coalesce(v_comms_row.status,'')) not in ('QUEUED','FAILED') then
+      v_skipped_already_sent := v_skipped_already_sent + 1;
+      continue;
+    end if;
+
+    perform public._audit_insert(
+      'outbox',
+      v_comms_row.id::text,
+      'MAILSHOT_RUN_CANCEL_PENDING_DELETE',
+      jsonb_build_object(
+        'channel', v_comms_row.channel,
+        'outbox_id', v_comms_row.id::text,
+        'mailshot_run_id', p_mailshot_run_id::text,
+        'status', v_comms_row.status,
+        'to_address', v_comms_row.to_address
+      ),
+      null,
+      v_reason,
+      p_actor_user_id
+    );
+
+    delete from public.comms_outbox as co
+    where co.id = v_comms_row.id;
+
+    v_deleted_pending := v_deleted_pending + 1;
+    v_deleted_comms_ids := v_deleted_comms_ids || jsonb_build_array(v_comms_row.id::text);
+  end loop;
+
+  perform public._audit_insert(
+    'mailshot_run',
+    p_mailshot_run_id::text,
+    'MAILSHOT_RUN_CANCEL_PENDING',
+    jsonb_build_object(
+      'mailshot_run_id', p_mailshot_run_id::text,
+      'total_rows', v_total_rows
+    ),
+    jsonb_build_object(
+      'mailshot_run_id', p_mailshot_run_id::text,
+      'total_rows', v_total_rows,
+      'deleted_pending', v_deleted_pending,
+      'skipped_already_sent', v_skipped_already_sent,
+      'deleted_mail_outbox_ids', v_deleted_mail_ids,
+      'deleted_comms_outbox_ids', v_deleted_comms_ids
+    ),
+    v_reason,
+    p_actor_user_id
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'mailshot_run_id', p_mailshot_run_id::text,
+    'total_rows', v_total_rows,
+    'deleted_pending', v_deleted_pending,
+    'skipped_already_sent', v_skipped_already_sent,
+    'deleted_mail_outbox_ids', v_deleted_mail_ids,
+    'deleted_comms_outbox_ids', v_deleted_comms_ids
+  );
+end;
+$$;
+
+create or replace function public.mailshot_run_delete_if_unsent(
+  p_mailshot_run_id uuid,
+  p_actor_user_id uuid,
+  p_reason text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reason text := nullif(btrim(coalesce(p_reason,'')), '');
+  v_run public.mailshot_runs%rowtype;
+
+  v_total_rows int := 0;
+  v_mail_row_count int := 0;
+  v_comms_row_count int := 0;
+
+  v_blocking_mail_sent int := 0;
+  v_blocking_mail_delivered int := 0;
+  v_blocking_mail_read int := 0;
+
+  v_blocking_comms_sent int := 0;
+  v_blocking_comms_delivered int := 0;
+  v_blocking_comms_read int := 0;
+
+  v_blocking_total int := 0;
+
+  v_deleted_mail_ids jsonb := '[]'::jsonb;
+  v_deleted_comms_ids jsonb := '[]'::jsonb;
+
+  v_mail_row public.mail_outbox%rowtype;
+  v_comms_row public.comms_outbox%rowtype;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if p_mailshot_run_id is null then
+    raise exception 'mailshot_run_id required';
+  end if;
+
+  select mr.*
+  into v_run
+  from public.mailshot_runs as mr
+  where mr.id = p_mailshot_run_id
+  for update;
+
+  if not found then
+    raise exception 'mailshot_run not found';
+  end if;
+
+  select count(*)::int
+  into v_mail_row_count
+  from public.mail_outbox as mo
+  where mo.mailshot_run_id = p_mailshot_run_id;
+
+  select count(*)::int
+  into v_comms_row_count
+  from public.comms_outbox as co
+  where co.mailshot_run_id = p_mailshot_run_id;
+
+  v_total_rows := coalesce(v_mail_row_count, 0) + coalesce(v_comms_row_count, 0);
+
+  select count(*)::int
+  into v_blocking_mail_sent
+  from public.mail_outbox as mo
+  where mo.mailshot_run_id = p_mailshot_run_id
+    and mo.sent_at is not null;
+
+  select count(*)::int
+  into v_blocking_mail_delivered
+  from public.mail_outbox as mo
+  where mo.mailshot_run_id = p_mailshot_run_id
+    and mo.delivered_at is not null;
+
+  select count(*)::int
+  into v_blocking_mail_read
+  from public.mail_outbox as mo
+  where mo.mailshot_run_id = p_mailshot_run_id
+    and mo.read_at is not null;
+
+  select count(*)::int
+  into v_blocking_comms_sent
+  from public.comms_outbox as co
+  where co.mailshot_run_id = p_mailshot_run_id
+    and co.sent_at is not null;
+
+  select count(*)::int
+  into v_blocking_comms_delivered
+  from public.comms_outbox as co
+  where co.mailshot_run_id = p_mailshot_run_id
+    and co.delivered_at is not null;
+
+  select count(*)::int
+  into v_blocking_comms_read
+  from public.comms_outbox as co
+  where co.mailshot_run_id = p_mailshot_run_id
+    and co.read_at is not null;
+
+  v_blocking_total :=
+      coalesce(v_blocking_mail_sent, 0)
+    + coalesce(v_blocking_mail_delivered, 0)
+    + coalesce(v_blocking_mail_read, 0)
+    + coalesce(v_blocking_comms_sent, 0)
+    + coalesce(v_blocking_comms_delivered, 0)
+    + coalesce(v_blocking_comms_read, 0);
+
+  if v_blocking_total > 0 then
+    return jsonb_build_object(
+      'ok', true,
+      'deleted', false,
+      'reason', 'RUN_ALREADY_PARTIALLY_SENT',
+      'mailshot_run_id', p_mailshot_run_id::text,
+      'counts', jsonb_build_object(
+        'total_rows', v_total_rows,
+        'mail_rows', v_mail_row_count,
+        'comms_rows', v_comms_row_count,
+        'blocking_mail_sent', v_blocking_mail_sent,
+        'blocking_mail_delivered', v_blocking_mail_delivered,
+        'blocking_mail_read', v_blocking_mail_read,
+        'blocking_comms_sent', v_blocking_comms_sent,
+        'blocking_comms_delivered', v_blocking_comms_delivered,
+        'blocking_comms_read', v_blocking_comms_read,
+        'blocking_total', v_blocking_total
+      )
+    );
+  end if;
+
+  for v_mail_row in
+    select mo.*
+    from public.mail_outbox as mo
+    where mo.mailshot_run_id = p_mailshot_run_id
+    order by mo.created_at_utc asc, mo.id::text asc
+    for update
+  loop
+    perform public._audit_insert(
+      'outbox',
+      v_mail_row.id::text,
+      'MAILSHOT_RUN_DELETE_IF_UNSENT_CHILD_DELETE',
+      jsonb_build_object(
+        'channel', 'EMAIL',
+        'outbox_id', v_mail_row.id::text,
+        'status', v_mail_row.status::text,
+        'to_address', v_mail_row."to",
+        'mailshot_run_id', p_mailshot_run_id::text
+      ),
+      null,
+      v_reason,
+      p_actor_user_id
+    );
+
+    delete from public.mail_outbox as mo
+    where mo.id = v_mail_row.id;
+
+    v_deleted_mail_ids := v_deleted_mail_ids || jsonb_build_array(v_mail_row.id::text);
+  end loop;
+
+  for v_comms_row in
+    select co.*
+    from public.comms_outbox as co
+    where co.mailshot_run_id = p_mailshot_run_id
+    order by co.created_at_utc asc, co.id::text asc
+    for update
+  loop
+    perform public._audit_insert(
+      'outbox',
+      v_comms_row.id::text,
+      'MAILSHOT_RUN_DELETE_IF_UNSENT_CHILD_DELETE',
+      jsonb_build_object(
+        'channel', v_comms_row.channel,
+        'outbox_id', v_comms_row.id::text,
+        'status', v_comms_row.status,
+        'to_address', v_comms_row.to_address,
+        'mailshot_run_id', p_mailshot_run_id::text
+      ),
+      null,
+      v_reason,
+      p_actor_user_id
+    );
+
+    delete from public.comms_outbox as co
+    where co.id = v_comms_row.id;
+
+    v_deleted_comms_ids := v_deleted_comms_ids || jsonb_build_array(v_comms_row.id::text);
+  end loop;
+
+  perform public._audit_insert(
+    'mailshot_run',
+    p_mailshot_run_id::text,
+    'MAILSHOT_RUN_DELETE_IF_UNSENT',
+    jsonb_build_object(
+      'mailshot_run_id', p_mailshot_run_id::text,
+      'context_kind', v_run.context_kind,
+      'output_type', v_run.output_type,
+      'document_template_id', case when v_run.document_template_id is null then null else v_run.document_template_id::text end,
+      'created_by', case when v_run.created_by is null then null else v_run.created_by::text end,
+      'created_at_utc', v_run.created_at_utc::text,
+      'delivery_timing_json', v_run.delivery_timing_json
+    ),
+    jsonb_build_object(
+      'deleted', true,
+      'deleted_mail_outbox_ids', v_deleted_mail_ids,
+      'deleted_comms_outbox_ids', v_deleted_comms_ids,
+      'mail_row_count', v_mail_row_count,
+      'comms_row_count', v_comms_row_count,
+      'total_rows', v_total_rows
+    ),
+    v_reason,
+    p_actor_user_id
+  );
+
+  delete from public.mailshot_runs as mr
+  where mr.id = p_mailshot_run_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'deleted', true,
+    'mailshot_run_id', p_mailshot_run_id::text,
+    'counts', jsonb_build_object(
+      'total_rows', v_total_rows,
+      'mail_rows', v_mail_row_count,
+      'comms_rows', v_comms_row_count,
+      'blocking_total', 0
+    ),
+    'deleted_mail_outbox_ids', v_deleted_mail_ids,
+    'deleted_comms_outbox_ids', v_deleted_comms_ids
+  );
+end;
+$$;
+
+create or replace function public.outbox_unified_retry(
+  p_channel text,
+  p_id uuid,
+  p_actor_user_id uuid,
+  p_retry_at_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
+  v_retry_at_utc timestamptz := coalesce(p_retry_at_utc, now());
+  v_reason text := 'RETRY';
+
+  v_mail_row public.mail_outbox%rowtype;
+  v_comms_row public.comms_outbox%rowtype;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if v_channel is null then
+    raise exception 'channel required';
+  end if;
+
+  if p_id is null then
+    raise exception 'id required';
+  end if;
+
+  if v_channel not in ('EMAIL','WHATSAPP','SMS','VOICE') then
+    raise exception 'unsupported channel %', v_channel;
+  end if;
+
+  if v_channel = 'EMAIL' then
+    select mo.*
+    into v_mail_row
+    from public.mail_outbox as mo
+    where mo.id = p_id
+    for update;
+
+    if not found then
+      raise exception 'outbox row not found';
+    end if;
+
+    if v_mail_row.read_at is not null
+       or v_mail_row.delivered_at is not null
+       or v_mail_row.sent_at is not null then
+      raise exception 'outbox row is not retryable because it has already been sent';
+    end if;
+
+    if upper(coalesce(v_mail_row.status::text,'')) not in ('QUEUED','FAILED') then
+      raise exception 'outbox row status is not retryable';
+    end if;
+
+    perform public._audit_insert(
+      'outbox',
+      v_mail_row.id::text,
+      'OUTBOX_RETRY',
+      jsonb_build_object(
+        'channel', 'EMAIL',
+        'outbox_id', v_mail_row.id::text,
+        'status', v_mail_row.status::text,
+        'next_attempt_at_utc', case when v_mail_row.next_attempt_at_utc is null then null else v_mail_row.next_attempt_at_utc::text end,
+        'scheduled_for_utc', case when v_mail_row.scheduled_for_utc is null then null else v_mail_row.scheduled_for_utc::text end,
+        'provider_message_id', v_mail_row.provider_message_id,
+        'provider_status', v_mail_row.provider_status,
+        'last_error', v_mail_row.last_error
+      ),
+      jsonb_build_object(
+        'channel', 'EMAIL',
+        'outbox_id', v_mail_row.id::text,
+        'status', 'QUEUED',
+        'next_attempt_at_utc', v_retry_at_utc::text,
+        'scheduled_for_utc', case when v_mail_row.scheduled_for_utc is null then null else v_mail_row.scheduled_for_utc::text end,
+        'provider_message_id', null,
+        'provider_status', null,
+        'last_error', null
+      ),
+      v_reason,
+      p_actor_user_id
+    );
+
+    update public.mail_outbox as mo
+    set status = 'QUEUED'::public.mail_status_enum,
+        sent_at = null,
+        delivered_at = null,
+        read_at = null,
+        failed_at = null,
+        last_error = null,
+        provider_message_id = null,
+        provider_status = null,
+        next_attempt_at_utc = v_retry_at_utc
+    where mo.id = v_mail_row.id;
+
+    select mo.*
+    into v_mail_row
+    from public.mail_outbox as mo
+    where mo.id = p_id;
+
+    return jsonb_build_object(
+      'ok', true,
+      'row', jsonb_build_object(
+        'channel', 'EMAIL',
+        'outbox_id', v_mail_row.id::text,
+        'status', v_mail_row.status::text,
+        'to_address', v_mail_row."to",
+        'mailshot_run_id', case when v_mail_row.mailshot_run_id is null then null else v_mail_row.mailshot_run_id::text end,
+        'recipient_kind', v_mail_row.recipient_kind,
+        'recipient_id', case when v_mail_row.recipient_id is null then null else v_mail_row.recipient_id::text end,
+        'context_kind', v_mail_row.context_kind,
+        'context_id', case when v_mail_row.context_id is null then null else v_mail_row.context_id::text end,
+        'scheduled_for_utc', case when v_mail_row.scheduled_for_utc is null then null else v_mail_row.scheduled_for_utc::text end,
+        'next_attempt_at_utc', case when v_mail_row.next_attempt_at_utc is null then null else v_mail_row.next_attempt_at_utc::text end
+      )
+    );
+  end if;
+
+  select co.*
+  into v_comms_row
+  from public.comms_outbox as co
+  where co.id = p_id
+  for update;
+
+  if not found then
+    raise exception 'outbox row not found';
+  end if;
+
+  if upper(coalesce(v_comms_row.channel,'')) <> v_channel then
+    raise exception 'channel mismatch';
+  end if;
+
+  if v_comms_row.read_at is not null
+     or v_comms_row.delivered_at is not null
+     or v_comms_row.sent_at is not null then
+    raise exception 'outbox row is not retryable because it has already been sent';
+  end if;
+
+  if upper(coalesce(v_comms_row.status,'')) not in ('QUEUED','FAILED') then
+    raise exception 'outbox row status is not retryable';
+  end if;
+
+  perform public._audit_insert(
+    'outbox',
+    v_comms_row.id::text,
+    'OUTBOX_RETRY',
+    jsonb_build_object(
+      'channel', v_comms_row.channel,
+      'outbox_id', v_comms_row.id::text,
+      'status', v_comms_row.status,
+      'next_attempt_at_utc', case when v_comms_row.next_attempt_at_utc is null then null else v_comms_row.next_attempt_at_utc::text end,
+      'scheduled_for_utc', case when v_comms_row.scheduled_for_utc is null then null else v_comms_row.scheduled_for_utc::text end,
+      'provider_key', v_comms_row.provider_key,
+      'provider_message_id', v_comms_row.provider_message_id,
+      'last_error', v_comms_row.last_error
+    ),
+    jsonb_build_object(
+      'channel', v_comms_row.channel,
+      'outbox_id', v_comms_row.id::text,
+      'status', 'QUEUED',
+      'next_attempt_at_utc', v_retry_at_utc::text,
+      'scheduled_for_utc', case when v_comms_row.scheduled_for_utc is null then null else v_comms_row.scheduled_for_utc::text end,
+      'provider_key', 'AUTO',
+      'provider_message_id', null,
+      'last_error', null
+    ),
+    v_reason,
+    p_actor_user_id
+  );
+
+  update public.comms_outbox as co
+  set status = 'QUEUED',
+      provider_key = 'AUTO',
+      provider_message_id = null,
+      provider_payload_json = '{}'::jsonb,
+      provider_response_json = '{}'::jsonb,
+      last_error = null,
+      sent_at = null,
+      delivered_at = null,
+      read_at = null,
+      failed_at = null,
+      next_attempt_at_utc = v_retry_at_utc
+  where co.id = v_comms_row.id;
+
+  select co.*
+  into v_comms_row
+  from public.comms_outbox as co
+  where co.id = p_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'row', jsonb_build_object(
+      'channel', v_comms_row.channel,
+      'outbox_id', v_comms_row.id::text,
+      'status', v_comms_row.status,
+      'to_address', v_comms_row.to_address,
+      'mailshot_run_id', case when v_comms_row.mailshot_run_id is null then null else v_comms_row.mailshot_run_id::text end,
+      'recipient_kind', v_comms_row.recipient_kind,
+      'recipient_id', case when v_comms_row.recipient_id is null then null else v_comms_row.recipient_id::text end,
+      'context_kind', v_comms_row.context_kind,
+      'context_id', case when v_comms_row.context_id is null then null else v_comms_row.context_id::text end,
+      'scheduled_for_utc', case when v_comms_row.scheduled_for_utc is null then null else v_comms_row.scheduled_for_utc::text end,
+      'next_attempt_at_utc', case when v_comms_row.next_attempt_at_utc is null then null else v_comms_row.next_attempt_at_utc::text end
+    )
+  );
+end;
+$$;
+
+create or replace function public.outbox_unified_reschedule(
+  p_channel text,
+  p_id uuid,
+  p_actor_user_id uuid,
+  p_scheduled_for_utc timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
+  v_target_utc timestamptz := p_scheduled_for_utc;
+  v_reason text := 'RESCHEDULE';
+
+  v_mail_row public.mail_outbox%rowtype;
+  v_comms_row public.comms_outbox%rowtype;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if v_channel is null then
+    raise exception 'channel required';
+  end if;
+
+  if p_id is null then
+    raise exception 'id required';
+  end if;
+
+  if v_target_utc is null then
+    raise exception 'scheduled_for_utc required';
+  end if;
+
+  if v_channel not in ('EMAIL','WHATSAPP','SMS','VOICE') then
+    raise exception 'unsupported channel %', v_channel;
+  end if;
+
+  if v_channel = 'EMAIL' then
+    select mo.*
+    into v_mail_row
+    from public.mail_outbox as mo
+    where mo.id = p_id
+    for update;
+
+    if not found then
+      raise exception 'outbox row not found';
+    end if;
+
+    if v_mail_row.read_at is not null
+       or v_mail_row.delivered_at is not null
+       or v_mail_row.sent_at is not null then
+      raise exception 'outbox row is not reschedulable because it has already been sent';
+    end if;
+
+    if upper(coalesce(v_mail_row.status::text,'')) not in ('QUEUED','FAILED') then
+      raise exception 'outbox row status is not reschedulable';
+    end if;
+
+    perform public._audit_insert(
+      'outbox',
+      v_mail_row.id::text,
+      'OUTBOX_RESCHEDULE',
+      jsonb_build_object(
+        'channel', 'EMAIL',
+        'outbox_id', v_mail_row.id::text,
+        'status', v_mail_row.status::text,
+        'scheduled_for_utc', case when v_mail_row.scheduled_for_utc is null then null else v_mail_row.scheduled_for_utc::text end,
+        'next_attempt_at_utc', case when v_mail_row.next_attempt_at_utc is null then null else v_mail_row.next_attempt_at_utc::text end,
+        'provider_message_id', v_mail_row.provider_message_id,
+        'provider_status', v_mail_row.provider_status,
+        'last_error', v_mail_row.last_error
+      ),
+      jsonb_build_object(
+        'channel', 'EMAIL',
+        'outbox_id', v_mail_row.id::text,
+        'status', 'QUEUED',
+        'scheduled_for_utc', v_target_utc::text,
+        'next_attempt_at_utc', v_target_utc::text,
+        'provider_message_id', null,
+        'provider_status', null,
+        'last_error', null
+      ),
+      v_reason,
+      p_actor_user_id
+    );
+
+    update public.mail_outbox as mo
+    set status = 'QUEUED'::public.mail_status_enum,
+        sent_at = null,
+        delivered_at = null,
+        read_at = null,
+        failed_at = null,
+        last_error = null,
+        provider_message_id = null,
+        provider_status = null,
+        scheduled_for_utc = v_target_utc,
+        next_attempt_at_utc = v_target_utc
+    where mo.id = v_mail_row.id;
+
+    select mo.*
+    into v_mail_row
+    from public.mail_outbox as mo
+    where mo.id = p_id;
+
+    return jsonb_build_object(
+      'ok', true,
+      'row', jsonb_build_object(
+        'channel', 'EMAIL',
+        'outbox_id', v_mail_row.id::text,
+        'status', v_mail_row.status::text,
+        'to_address', v_mail_row."to",
+        'mailshot_run_id', case when v_mail_row.mailshot_run_id is null then null else v_mail_row.mailshot_run_id::text end,
+        'recipient_kind', v_mail_row.recipient_kind,
+        'recipient_id', case when v_mail_row.recipient_id is null then null else v_mail_row.recipient_id::text end,
+        'context_kind', v_mail_row.context_kind,
+        'context_id', case when v_mail_row.context_id is null then null else v_mail_row.context_id::text end,
+        'scheduled_for_utc', case when v_mail_row.scheduled_for_utc is null then null else v_mail_row.scheduled_for_utc::text end,
+        'next_attempt_at_utc', case when v_mail_row.next_attempt_at_utc is null then null else v_mail_row.next_attempt_at_utc::text end
+      )
+    );
+  end if;
+
+  select co.*
+  into v_comms_row
+  from public.comms_outbox as co
+  where co.id = p_id
+  for update;
+
+  if not found then
+    raise exception 'outbox row not found';
+  end if;
+
+  if upper(coalesce(v_comms_row.channel,'')) <> v_channel then
+    raise exception 'channel mismatch';
+  end if;
+
+  if v_comms_row.read_at is not null
+     or v_comms_row.delivered_at is not null
+     or v_comms_row.sent_at is not null then
+    raise exception 'outbox row is not reschedulable because it has already been sent';
+  end if;
+
+  if upper(coalesce(v_comms_row.status,'')) not in ('QUEUED','FAILED') then
+    raise exception 'outbox row status is not reschedulable';
+  end if;
+
+  perform public._audit_insert(
+    'outbox',
+    v_comms_row.id::text,
+    'OUTBOX_RESCHEDULE',
+    jsonb_build_object(
+      'channel', v_comms_row.channel,
+      'outbox_id', v_comms_row.id::text,
+      'status', v_comms_row.status,
+      'scheduled_for_utc', case when v_comms_row.scheduled_for_utc is null then null else v_comms_row.scheduled_for_utc::text end,
+      'next_attempt_at_utc', case when v_comms_row.next_attempt_at_utc is null then null else v_comms_row.next_attempt_at_utc::text end,
+      'provider_key', v_comms_row.provider_key,
+      'provider_message_id', v_comms_row.provider_message_id,
+      'last_error', v_comms_row.last_error
+    ),
+    jsonb_build_object(
+      'channel', v_comms_row.channel,
+      'outbox_id', v_comms_row.id::text,
+      'status', 'QUEUED',
+      'scheduled_for_utc', v_target_utc::text,
+      'next_attempt_at_utc', v_target_utc::text,
+      'provider_key', 'AUTO',
+      'provider_message_id', null,
+      'last_error', null
+    ),
+    v_reason,
+    p_actor_user_id
+  );
+
+  update public.comms_outbox as co
+  set status = 'QUEUED',
+      provider_key = 'AUTO',
+      provider_message_id = null,
+      provider_payload_json = '{}'::jsonb,
+      provider_response_json = '{}'::jsonb,
+      last_error = null,
+      sent_at = null,
+      delivered_at = null,
+      read_at = null,
+      failed_at = null,
+      scheduled_for_utc = v_target_utc,
+      next_attempt_at_utc = v_target_utc
+  where co.id = v_comms_row.id;
+
+  select co.*
+  into v_comms_row
+  from public.comms_outbox as co
+  where co.id = p_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'row', jsonb_build_object(
+      'channel', v_comms_row.channel,
+      'outbox_id', v_comms_row.id::text,
+      'status', v_comms_row.status,
+      'to_address', v_comms_row.to_address,
+      'mailshot_run_id', case when v_comms_row.mailshot_run_id is null then null else v_comms_row.mailshot_run_id::text end,
+      'recipient_kind', v_comms_row.recipient_kind,
+      'recipient_id', case when v_comms_row.recipient_id is null then null else v_comms_row.recipient_id::text end,
+      'context_kind', v_comms_row.context_kind,
+      'context_id', case when v_comms_row.context_id is null then null else v_comms_row.context_id::text end,
+      'scheduled_for_utc', case when v_comms_row.scheduled_for_utc is null then null else v_comms_row.scheduled_for_utc::text end,
+      'next_attempt_at_utc', case when v_comms_row.next_attempt_at_utc is null then null else v_comms_row.next_attempt_at_utc::text end
+    )
+  );
+end;
+$$;
 
 
 
