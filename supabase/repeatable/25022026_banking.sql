@@ -413,7 +413,7 @@ seg_date_final as (
     case when sdm.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sdm.seg_date_raw else null end as seg_date
   from seg_date_map sdm
 ),
-reserved_components as (
+reserved_keyed as (
   select
     ai.timesheet_id,
     case
@@ -421,7 +421,15 @@ reserved_components as (
         then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
       when ai.item_type = 'MILEAGE_DELTA'
         then 'EXPENSE_CODE'
-      when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+      when ai.item_type = 'ADJUSTMENT_DELTA'
+        then case
+          when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
+            then 'TS_TOTAL'
+          when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%' or btrim(ai.source_ref) = 'additional')
+            then 'ADDITIONAL_CODE'
+          else 'EXPENSE_CODE'
+        end
+      when ai.item_type = 'EXPENSE_DELTA'
         then case
           when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%' or btrim(ai.source_ref) = 'additional')
             then 'ADDITIONAL_CODE'
@@ -434,7 +442,19 @@ reserved_components as (
         then coalesce(sdf.seg_date, 'TOTAL')
       when ai.item_type = 'MILEAGE_DELTA'
         then 'MILEAGE'
-      when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+      when ai.item_type = 'ADJUSTMENT_DELTA'
+        then case
+          when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
+            then 'TOTAL'
+          when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
+            then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
+          when ai.source_ref is not null and btrim(ai.source_ref) = 'additional'
+            then 'TOTAL'
+          when ai.source_ref is not null and btrim(ai.source_ref) <> ''
+            then upper(btrim(ai.source_ref))
+          else 'UNKNOWN'
+        end
+      when ai.item_type = 'EXPENSE_DELTA'
         then case
           when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
             then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
@@ -446,8 +466,8 @@ reserved_components as (
         end
       else 'UNKNOWN'
     end as key_value,
-    round(sum(coalesce(ai.amount_ex_vat,0)),2) as amount_ex_vat,
-    round(sum(coalesce(ai.amount_inc_vat,0)),2) as amount_inc_vat
+    ai.amount_ex_vat,
+    ai.amount_inc_vat
   from active_items ai
   left join seg_date_final sdf
     on sdf.pay_batch_id = ai.pay_batch_id
@@ -461,38 +481,19 @@ reserved_components as (
      end
    )
   where ai.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+),
+reserved_components as (
+  select
+    rk.timesheet_id,
+    rk.key_type,
+    rk.key_value,
+    round(sum(coalesce(rk.amount_ex_vat,0)),2) as amount_ex_vat,
+    round(sum(coalesce(rk.amount_inc_vat,0)),2) as amount_inc_vat
+  from reserved_keyed rk
   group by
-    ai.timesheet_id,
-    case
-      when ai.item_type = 'SEGMENT_DELTA'
-        then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
-      when ai.item_type = 'MILEAGE_DELTA'
-        then 'EXPENSE_CODE'
-      when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
-        then case
-          when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%' or btrim(ai.source_ref) = 'additional')
-            then 'ADDITIONAL_CODE'
-          else 'EXPENSE_CODE'
-        end
-      else 'EXPENSE_CODE'
-    end,
-    case
-      when ai.item_type = 'SEGMENT_DELTA'
-        then coalesce(sdf.seg_date, 'TOTAL')
-      when ai.item_type = 'MILEAGE_DELTA'
-        then 'MILEAGE'
-      when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
-        then case
-          when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
-            then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
-          when ai.source_ref is not null and btrim(ai.source_ref) = 'additional'
-            then 'TOTAL'
-          when ai.source_ref is not null and btrim(ai.source_ref) <> ''
-            then upper(btrim(ai.source_ref))
-          else 'UNKNOWN'
-        end
-      else 'UNKNOWN'
-    end
+    rk.timesheet_id,
+    rk.key_type,
+    rk.key_value
 )
 select
   rc.timesheet_id,
