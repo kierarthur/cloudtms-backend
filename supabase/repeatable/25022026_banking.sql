@@ -7599,6 +7599,8 @@ begin
 end;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -7622,6 +7624,8 @@ declare
 
   v_ts_changed_ct int := 0;
   v_key_diff_ct int := 0;
+  v_overpay_diff_ct int := 0;
+  v_loan_diff_ct int := 0;
   v_ded_diff_ct int := 0;
   v_paye_net_diff_ct int := 0;
 
@@ -7954,7 +7958,19 @@ begin
                end
         when ti.item_type = 'MILEAGE_DELTA'
           then 'EXPENSE_CODE'
-        when ti.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        when ti.item_type = 'ADJUSTMENT_DELTA'
+          then case
+                 when ti.source_ref is not null and btrim(ti.source_ref) like 'preview_seg:%'
+                   then 'TS_TOTAL'
+                 when ti.source_ref is not null and (
+                   btrim(ti.source_ref) like 'additional:%'
+                   or btrim(ti.source_ref) like 'add:%'
+                   or btrim(ti.source_ref) = 'additional'
+                 )
+                 then 'ADDITIONAL_CODE'
+                 else 'EXPENSE_CODE'
+               end
+        when ti.item_type = 'EXPENSE_DELTA'
           then case
                  when ti.source_ref is not null and (
                    btrim(ti.source_ref) like 'additional:%'
@@ -7971,7 +7987,19 @@ begin
           then coalesce(sdf.seg_date, 'TOTAL')
         when ti.item_type = 'MILEAGE_DELTA'
           then 'MILEAGE'
-        when ti.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        when ti.item_type = 'ADJUSTMENT_DELTA'
+          then case
+                 when ti.source_ref is not null and btrim(ti.source_ref) like 'preview_seg:%'
+                   then 'TOTAL'
+                 when ti.source_ref is not null and (btrim(ti.source_ref) like 'additional:%' or btrim(ti.source_ref) like 'add:%')
+                   then upper(nullif(btrim(split_part(ti.source_ref,':',2)), ''))
+                 when ti.source_ref is not null and btrim(ti.source_ref) = 'additional'
+                   then 'TOTAL'
+                 when ti.source_ref is not null and btrim(ti.source_ref) <> ''
+                   then upper(btrim(ti.source_ref))
+                 else 'UNKNOWN'
+               end
+        when ti.item_type = 'EXPENSE_DELTA'
           then case
                  when ti.source_ref is not null and (btrim(ti.source_ref) like 'additional:%' or btrim(ti.source_ref) like 'add:%')
                    then upper(nullif(btrim(split_part(ti.source_ref,':',2)), ''))
@@ -8003,7 +8031,19 @@ begin
           then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
         when ti.item_type = 'MILEAGE_DELTA'
           then 'EXPENSE_CODE'
-        when ti.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        when ti.item_type = 'ADJUSTMENT_DELTA'
+          then case
+                 when ti.source_ref is not null and btrim(ti.source_ref) like 'preview_seg:%'
+                   then 'TS_TOTAL'
+                 when ti.source_ref is not null and (
+                   btrim(ti.source_ref) like 'additional:%'
+                   or btrim(ti.source_ref) like 'add:%'
+                   or btrim(ti.source_ref) = 'additional'
+                 )
+                 then 'ADDITIONAL_CODE'
+                 else 'EXPENSE_CODE'
+               end
+        when ti.item_type = 'EXPENSE_DELTA'
           then case
                  when ti.source_ref is not null and (
                    btrim(ti.source_ref) like 'additional:%'
@@ -8020,7 +8060,19 @@ begin
           then coalesce(sdf.seg_date, 'TOTAL')
         when ti.item_type = 'MILEAGE_DELTA'
           then 'MILEAGE'
-        when ti.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        when ti.item_type = 'ADJUSTMENT_DELTA'
+          then case
+                 when ti.source_ref is not null and btrim(ti.source_ref) like 'preview_seg:%'
+                   then 'TOTAL'
+                 when ti.source_ref is not null and (btrim(ti.source_ref) like 'additional:%' or btrim(ti.source_ref) like 'add:%')
+                   then upper(nullif(btrim(split_part(ti.source_ref,':',2)), ''))
+                 when ti.source_ref is not null and btrim(ti.source_ref) = 'additional'
+                   then 'TOTAL'
+                 when ti.source_ref is not null and btrim(ti.source_ref) <> ''
+                   then upper(btrim(ti.source_ref))
+                 else 'UNKNOWN'
+               end
+        when ti.item_type = 'EXPENSE_DELTA'
           then case
                  when ti.source_ref is not null and (btrim(ti.source_ref) like 'additional:%' or btrim(ti.source_ref) like 'add:%')
                    then upper(nullif(btrim(split_part(ti.source_ref,':',2)), ''))
@@ -8135,7 +8187,19 @@ begin
           then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
         when ai.item_type = 'MILEAGE_DELTA'
           then 'EXPENSE_CODE'
-        when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        when ai.item_type = 'ADJUSTMENT_DELTA'
+          then case
+                 when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
+                   then 'TS_TOTAL'
+                 when ai.source_ref is not null and (
+                   btrim(ai.source_ref) like 'additional:%'
+                   or btrim(ai.source_ref) like 'add:%'
+                   or btrim(ai.source_ref) = 'additional'
+                 )
+                 then 'ADDITIONAL_CODE'
+                 else 'EXPENSE_CODE'
+               end
+        when ai.item_type = 'EXPENSE_DELTA'
           then case
                  when ai.source_ref is not null and (
                    btrim(ai.source_ref) like 'additional:%'
@@ -8152,7 +8216,19 @@ begin
           then coalesce(sdf.seg_date, 'TOTAL')
         when ai.item_type = 'MILEAGE_DELTA'
           then 'MILEAGE'
-        when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        when ai.item_type = 'ADJUSTMENT_DELTA'
+          then case
+                 when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
+                   then 'TOTAL'
+                 when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
+                   then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
+                 when ai.source_ref is not null and btrim(ai.source_ref) = 'additional'
+                   then 'TOTAL'
+                 when ai.source_ref is not null and btrim(ai.source_ref) <> ''
+                   then upper(btrim(ai.source_ref))
+                 else 'UNKNOWN'
+               end
+        when ai.item_type = 'EXPENSE_DELTA'
           then case
                  when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
                    then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
@@ -8185,7 +8261,19 @@ begin
           then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
         when ai.item_type = 'MILEAGE_DELTA'
           then 'EXPENSE_CODE'
-        when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        when ai.item_type = 'ADJUSTMENT_DELTA'
+          then case
+                 when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
+                   then 'TS_TOTAL'
+                 when ai.source_ref is not null and (
+                   btrim(ai.source_ref) like 'additional:%'
+                   or btrim(ai.source_ref) like 'add:%'
+                   or btrim(ai.source_ref) = 'additional'
+                 )
+                 then 'ADDITIONAL_CODE'
+                 else 'EXPENSE_CODE'
+               end
+        when ai.item_type = 'EXPENSE_DELTA'
           then case
                  when ai.source_ref is not null and (
                    btrim(ai.source_ref) like 'additional:%'
@@ -8202,7 +8290,19 @@ begin
           then coalesce(sdf.seg_date, 'TOTAL')
         when ai.item_type = 'MILEAGE_DELTA'
           then 'MILEAGE'
-        when ai.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
+        when ai.item_type = 'ADJUSTMENT_DELTA'
+          then case
+                 when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
+                   then 'TOTAL'
+                 when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
+                   then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
+                 when ai.source_ref is not null and btrim(ai.source_ref) = 'additional'
+                   then 'TOTAL'
+                 when ai.source_ref is not null and btrim(ai.source_ref) <> ''
+                   then upper(btrim(ai.source_ref))
+                 else 'UNKNOWN'
+               end
+        when ai.item_type = 'EXPENSE_DELTA'
           then case
                  when ai.source_ref is not null and (btrim(ai.source_ref) like 'additional:%' or btrim(ai.source_ref) like 'add:%')
                    then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
@@ -8257,27 +8357,31 @@ begin
     where round(coalesce(j.expected_ex_vat,0),2) <> round(coalesce(j.actual_ex_vat,0),2)
   )
   select
-    count(*)::int,
+    (select count(*)::int from key_diffs),
     coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'timesheet_id', kd.timesheet_id::text,
-          'key_type', kd.key_type,
-          'key_value', kd.key_value,
-          'expected', kd.expected_ex_vat,
-          'actual', kd.actual_ex_vat
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'timesheet_id', kd.timesheet_id::text,
+            'key_type', kd.key_type,
+            'key_value', kd.key_value,
+            'expected', kd.expected_ex_vat,
+            'actual', kd.actual_ex_vat
+          )
+          order by kd.timesheet_id::text, kd.key_type, kd.key_value
         )
-        order by kd.timesheet_id::text, kd.key_type, kd.key_value
+        from (
+          select *
+          from key_diffs
+          order by timesheet_id::text, key_type, key_value
+          limit v_diff_limit
+        ) kd
       ),
       '[]'::jsonb
     )
   into
     v_key_diff_ct,
-    v_diffs
-  from (
-    select * from key_diffs
-    limit v_diff_limit
-  ) kd;
+    v_diffs;
 
   if v_key_diff_ct > 0 then
     v_is_stale := true;
@@ -8345,16 +8449,43 @@ begin
         )::numeric(12,2) as earnings_before_loan_ex
       from cand_scope cs
     ),
+    preview_negative_overpay_keys as (
+      select distinct
+        pbc.candidate_id as candidate_id,
+        pbi.timesheet_id as linked_timesheet_id,
+        coalesce(
+          tps.last_settled_signature,
+          md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
+        ) as baseline_signature
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc
+        on pbc.id = pbi.pay_batch_candidate_id
+      left join public.timesheet_pay_state tps
+        on tps.timesheet_id = pbi.timesheet_id
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbi.is_voided = false
+        and pbi.item_type = 'ADJUSTMENT_DELTA'
+        and pbi.timesheet_id is not null
+        and pbi.source_ref is not null
+        and btrim(coalesce(pbi.source_ref,'')) like 'preview_seg:%'
+    ),
     overpay_advances as (
       select
         pa.id as advance_id,
         pa.candidate_id,
+        pa.linked_timesheet_id,
+        pa.baseline_signature,
         pa.outstanding_amount::numeric(12,2) as outstanding_amount,
         pa.created_at
       from public.pay_advances pa
+      left join preview_negative_overpay_keys pnok
+        on pnok.candidate_id = pa.candidate_id
+       and pnok.linked_timesheet_id = pa.linked_timesheet_id
+       and pnok.baseline_signature = pa.baseline_signature
       where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
         and pa.status = 'ACTIVE'::public.pay_advance_status_enum
         and pa.outstanding_amount > 0
+        and pnok.candidate_id is null
     ),
     cand_overpay as (
       select
@@ -8429,29 +8560,33 @@ begin
       where round(coalesce(eo.take_ex,0),2) <> round(coalesce(ao.taken_ex,0),2)
     )
     select
-      count(*)::int,
+      (select count(*)::int from overpay_diffs),
       coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'timesheet_id', null,
-            'key_type', 'OVERPAYMENT_RECOVERY',
-            'key_value', od.advance_id::text,
-            'expected', od.expected_ex,
-            'actual', od.actual_ex
+        (
+          select jsonb_agg(
+            jsonb_build_object(
+              'timesheet_id', null,
+              'key_type', 'OVERPAYMENT_RECOVERY',
+              'key_value', od.advance_id::text,
+              'expected', od.expected_ex,
+              'actual', od.actual_ex
+            )
+            order by od.advance_id::text
           )
-          order by od.advance_id::text
+          from (
+            select *
+            from overpay_diffs
+            order by advance_id::text
+            limit v_diff_limit
+          ) od
         ),
         '[]'::jsonb
       )
     into
-      v_ded_diff_ct,
-      v_diffs
-    from (
-      select * from overpay_diffs
-      limit v_diff_limit
-    ) od;
+      v_overpay_diff_ct,
+      v_diffs;
 
-    if v_ded_diff_ct > 0 then
+    if v_overpay_diff_ct > 0 then
       v_is_stale := true;
       v_reasons := array_append(v_reasons, 'DEDUCTION_CHANGED');
     end if;
@@ -8686,32 +8821,38 @@ begin
       where round(coalesce(el.take_ex,0),2) <> round(coalesce(al.taken_ex,0),2)
     )
     select
-      count(*)::int,
+      (select count(*)::int from loan_diffs),
       coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'timesheet_id', null,
-            'key_type', 'LOAN_REPAYMENT',
-            'key_value', ld.loan_id::text,
-            'expected', ld.expected_ex,
-            'actual', ld.actual_ex
+        (
+          select jsonb_agg(
+            jsonb_build_object(
+              'timesheet_id', null,
+              'key_type', 'LOAN_REPAYMENT',
+              'key_value', ld.loan_id::text,
+              'expected', ld.expected_ex,
+              'actual', ld.actual_ex
+            )
+            order by ld.loan_id::text
           )
-          order by ld.loan_id::text
+          from (
+            select *
+            from loan_diffs
+            order by loan_id::text
+            limit v_diff_limit
+          ) ld
         ),
         '[]'::jsonb
       )
     into
-      v_ded_diff_ct,
-      v_diffs
-    from (
-      select * from loan_diffs
-      limit v_diff_limit
-    ) ld;
+      v_loan_diff_ct,
+      v_diffs;
 
-    if v_ded_diff_ct > 0 then
+    if v_loan_diff_ct > 0 then
       v_is_stale := true;
       v_reasons := array_append(v_reasons, 'DEDUCTION_CHANGED');
     end if;
+
+    v_ded_diff_ct := coalesce(v_overpay_diff_ct, 0) + coalesce(v_loan_diff_ct, 0);
   end if;
 
   ---------------------------------------------------------------------------
@@ -8770,27 +8911,31 @@ begin
              and round(ni.net_amount,2) <> round(c.net_bank_amount_ex + c.overpayment_recovery_taken_ex + c.loan_repayment_taken_ex, 2))
     )
     select
-      count(*)::int,
+      (select count(*)::int from net_diffs),
       coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'timesheet_id', null,
-            'key_type', 'PAYE_NET',
-            'key_value', ('candidate:' || nd.candidate_id::text),
-            'expected', nd.expected_net,
-            'actual', nd.actual_net
+        (
+          select jsonb_agg(
+            jsonb_build_object(
+              'timesheet_id', null,
+              'key_type', 'PAYE_NET',
+              'key_value', ('candidate:' || nd.candidate_id::text),
+              'expected', nd.expected_net,
+              'actual', nd.actual_net
+            )
+            order by nd.candidate_id::text
           )
-          order by nd.candidate_id::text
+          from (
+            select *
+            from net_diffs
+            order by candidate_id::text
+            limit v_diff_limit
+          ) nd
         ),
         '[]'::jsonb
       )
     into
       v_paye_net_diff_ct,
-      v_diffs
-    from (
-      select * from net_diffs
-      limit v_diff_limit
-    ) nd;
+      v_diffs;
 
     if v_paye_net_diff_ct > 0 then
       v_is_stale := true;
@@ -8978,251 +9123,495 @@ begin
     union all
     -- reservation/key diffs
     select
-      (kd->>'timesheet_id') as timesheet_id,
-      (kd->>'key_type') as key_type,
-      (kd->>'key_value') as key_value,
-      (kd->>'expected') as expected,
-      (kd->>'actual') as actual,
+      x.timesheet_id::text as timesheet_id,
+      x.key_type as key_type,
+      x.key_value as key_value,
+      x.expected::text as expected,
+      x.actual::text as actual,
       2 as ord
-    from jsonb_array_elements(
-      coalesce(
-        (
-          select coalesce(
-            jsonb_agg(
-              jsonb_build_object(
-                'timesheet_id', x.timesheet_id::text,
-                'key_type', x.key_type,
-                'key_value', x.key_value,
-                'expected', x.expected,
-                'actual', x.actual
-              )
-              order by x.timesheet_id::text, x.key_type, x.key_value
-            ),
-            '[]'::jsonb
+    from (
+      with
+      inp2 as (
+        select coalesce(
+          (select array_agg(distinct x) from unnest(coalesce(v_ts_ids, array[]::uuid[])) as t(x) where x is not null),
+          array[]::uuid[]
+        ) as ts_ids
+      ),
+      this_items_raw2 as (
+        select
+          pbi3.id as pay_batch_item_id,
+          pbi3.timesheet_id,
+          pbi3.item_type,
+          pbi3.segment_key,
+          pbi3.source_ref,
+          coalesce(pbi3.amount_ex_vat, pbi3.amount_inc_vat, 0)::numeric as amount_ex_vat,
+          coalesce(pbi3.amount_inc_vat, pbi3.amount_ex_vat, 0)::numeric as amount_inc_vat
+        from public.pay_batch_items pbi3
+        join public.pay_batch_candidates pbc3
+          on pbc3.id = pbi3.pay_batch_candidate_id
+        where pbc3.pay_batch_id = p_pay_batch_id
+          and pbi3.timesheet_id is not null
+          and pbi3.is_voided = false
+          and pbi3.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+      ),
+      this_snap2 as (
+        select
+          pbs2.timesheet_id,
+          pbs2.target_snapshot_json
+        from public.pay_batch_timesheet_snapshots pbs2
+        where pbs2.pay_batch_id = p_pay_batch_id
+      ),
+      this_seg_lookup2 as (
+        select
+          ti2.timesheet_id,
+          coalesce(
+            nullif(btrim(coalesce(ti2.segment_key,'')), ''),
+            case
+              when ti2.source_ref is not null and btrim(ti2.source_ref) like 'seg:%'
+                then nullif(btrim(split_part(ti2.source_ref,':',2)), '')
+              else null
+            end
+          ) as seg_id
+        from this_items_raw2 ti2
+        where ti2.item_type = 'SEGMENT_DELTA'
+      ),
+      this_seg_date_map2 as (
+        select
+          sl2.timesheet_id,
+          sl2.seg_id,
+          nullif(btrim(coalesce(seg2->>'date','')), '') as seg_date_raw
+        from this_seg_lookup2 sl2
+        join this_snap2 sc2
+          on sc2.timesheet_id = sl2.timesheet_id
+        join lateral jsonb_array_elements(coalesce(sc2.target_snapshot_json->'segments','[]'::jsonb)) as seg2 on true
+        where sl2.seg_id is not null
+          and seg2 is not null
+          and jsonb_typeof(seg2) = 'object'
+          and nullif(btrim(coalesce(seg2->>'segment_id','')), '') = sl2.seg_id
+      ),
+      this_seg_date_final2 as (
+        select
+          sdm2.timesheet_id,
+          sdm2.seg_id,
+          case when sdm2.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sdm2.seg_date_raw else null end as seg_date
+        from this_seg_date_map2 sdm2
+      ),
+      this_components2 as (
+        select
+          ti2.timesheet_id,
+          case
+            when ti2.item_type = 'SEGMENT_DELTA'
+              then case when sdf2.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+            when ti2.item_type = 'MILEAGE_DELTA'
+              then 'EXPENSE_CODE'
+            when ti2.item_type = 'ADJUSTMENT_DELTA'
+              then case
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) like 'preview_seg:%'
+                       then 'TS_TOTAL'
+                     when ti2.source_ref is not null and (
+                       btrim(ti2.source_ref) like 'additional:%'
+                       or btrim(ti2.source_ref) like 'add:%'
+                       or btrim(ti2.source_ref) = 'additional'
+                     )
+                       then 'ADDITIONAL_CODE'
+                     else 'EXPENSE_CODE'
+                   end
+            when ti2.item_type = 'EXPENSE_DELTA'
+              then case
+                     when ti2.source_ref is not null and (
+                       btrim(ti2.source_ref) like 'additional:%'
+                       or btrim(ti2.source_ref) like 'add:%'
+                       or btrim(ti2.source_ref) = 'additional'
+                     )
+                       then 'ADDITIONAL_CODE'
+                     else 'EXPENSE_CODE'
+                   end
+            else 'EXPENSE_CODE'
+          end as key_type,
+          case
+            when ti2.item_type = 'SEGMENT_DELTA'
+              then coalesce(sdf2.seg_date, 'TOTAL')
+            when ti2.item_type = 'MILEAGE_DELTA'
+              then 'MILEAGE'
+            when ti2.item_type = 'ADJUSTMENT_DELTA'
+              then case
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) like 'preview_seg:%'
+                       then 'TOTAL'
+                     when ti2.source_ref is not null and (btrim(ti2.source_ref) like 'additional:%' or btrim(ti2.source_ref) like 'add:%')
+                       then upper(nullif(btrim(split_part(ti2.source_ref,':',2)), ''))
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) = 'additional'
+                       then 'TOTAL'
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) <> ''
+                       then upper(btrim(ti2.source_ref))
+                     else 'UNKNOWN'
+                   end
+            when ti2.item_type = 'EXPENSE_DELTA'
+              then case
+                     when ti2.source_ref is not null and (btrim(ti2.source_ref) like 'additional:%' or btrim(ti2.source_ref) like 'add:%')
+                       then upper(nullif(btrim(split_part(ti2.source_ref,':',2)), ''))
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) = 'additional'
+                       then 'TOTAL'
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) <> ''
+                       then upper(btrim(ti2.source_ref))
+                     else 'UNKNOWN'
+                   end
+            else 'UNKNOWN'
+          end as key_value,
+          round(sum(coalesce(ti2.amount_ex_vat,0)),2) as amount_ex_vat,
+          round(sum(coalesce(ti2.amount_inc_vat,0)),2) as amount_inc_vat
+        from this_items_raw2 ti2
+        left join this_seg_date_final2 sdf2
+          on sdf2.timesheet_id = ti2.timesheet_id
+         and sdf2.seg_id = coalesce(
+           nullif(btrim(coalesce(ti2.segment_key,'')), ''),
+           case
+             when ti2.source_ref is not null and btrim(ti2.source_ref) like 'seg:%'
+               then nullif(btrim(split_part(ti2.source_ref,':',2)), '')
+             else null
+           end
+         )
+        group by
+          ti2.timesheet_id,
+          case
+            when ti2.item_type = 'SEGMENT_DELTA'
+              then case when sdf2.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+            when ti2.item_type = 'MILEAGE_DELTA'
+              then 'EXPENSE_CODE'
+            when ti2.item_type = 'ADJUSTMENT_DELTA'
+              then case
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) like 'preview_seg:%'
+                       then 'TS_TOTAL'
+                     when ti2.source_ref is not null and (
+                       btrim(ti2.source_ref) like 'additional:%'
+                       or btrim(ti2.source_ref) like 'add:%'
+                       or btrim(ti2.source_ref) = 'additional'
+                     )
+                       then 'ADDITIONAL_CODE'
+                     else 'EXPENSE_CODE'
+                   end
+            when ti2.item_type = 'EXPENSE_DELTA'
+              then case
+                     when ti2.source_ref is not null and (
+                       btrim(ti2.source_ref) like 'additional:%'
+                       or btrim(ti2.source_ref) like 'add:%'
+                       or btrim(ti2.source_ref) = 'additional'
+                     )
+                       then 'ADDITIONAL_CODE'
+                     else 'EXPENSE_CODE'
+                   end
+            else 'EXPENSE_CODE'
+          end,
+          case
+            when ti2.item_type = 'SEGMENT_DELTA'
+              then coalesce(sdf2.seg_date, 'TOTAL')
+            when ti2.item_type = 'MILEAGE_DELTA'
+              then 'MILEAGE'
+            when ti2.item_type = 'ADJUSTMENT_DELTA'
+              then case
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) like 'preview_seg:%'
+                       then 'TOTAL'
+                     when ti2.source_ref is not null and (btrim(ti2.source_ref) like 'additional:%' or btrim(ti2.source_ref) like 'add:%')
+                       then upper(nullif(btrim(split_part(ti2.source_ref,':',2)), ''))
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) = 'additional'
+                       then 'TOTAL'
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) <> ''
+                       then upper(btrim(ti2.source_ref))
+                     else 'UNKNOWN'
+                   end
+            when ti2.item_type = 'EXPENSE_DELTA'
+              then case
+                     when ti2.source_ref is not null and (btrim(ti2.source_ref) like 'additional:%' or btrim(ti2.source_ref) like 'add:%')
+                       then upper(nullif(btrim(split_part(ti2.source_ref,':',2)), ''))
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) = 'additional'
+                       then 'TOTAL'
+                     when ti2.source_ref is not null and btrim(ti2.source_ref) <> ''
+                       then upper(btrim(ti2.source_ref))
+                     else 'UNKNOWN'
+                   end
+            else 'UNKNOWN'
+          end
+      ),
+      other_active_items2 as (
+        select
+          pb_r.id as pay_batch_id,
+          pbi4.timesheet_id,
+          pbi4.item_type,
+          pbi4.segment_key,
+          pbi4.source_ref,
+          coalesce(pbi4.amount_ex_vat, pbi4.amount_inc_vat, 0)::numeric as amount_ex_vat,
+          coalesce(pbi4.amount_inc_vat, pbi4.amount_ex_vat, 0)::numeric as amount_inc_vat
+        from inp2 i2
+        join public.pay_batch_items pbi4
+          on pbi4.timesheet_id = any(i2.ts_ids)
+        join public.pay_batch_candidates pbc4
+          on pbc4.id = pbi4.pay_batch_candidate_id
+        join public.pay_batches pb_r
+          on pb_r.id = pbc4.pay_batch_id
+        where pbi4.timesheet_id is not null
+          and pb_r.id <> p_pay_batch_id
+          and pbi4.is_voided = false
+          and pbi4.pay_channel in ('PAYE','UMBRELLA')
+          and upper(coalesce(pb_r.status,'')) in (
+            'DRAFT',
+            'DRAFT_CREATED',
+            'READY',
+            'WAITING_BANK_CONFIRM',
+            'PARTIAL',
+            'FAILED',
+            'BLOCKED_FUNDS',
+            'SCHEDULED',
+            'EXECUTING',
+            'AWAITING_AUTHORISATION',
+            'AUTHORISED_FOR_PAYMENT'
           )
-          from (
-            with
-            inp2 as (
-              select coalesce(
-                (select array_agg(distinct x) from unnest(coalesce(v_ts_ids, array[]::uuid[])) as t(x) where x is not null),
-                array[]::uuid[]
-              ) as ts_ids
-            ),
-            tc2 as (
-              select
-                pbi3.timesheet_id,
-                pbi3.item_type,
-                pbi3.segment_key,
-                pbi3.source_ref,
-                coalesce(pbi3.amount_ex_vat, pbi3.amount_inc_vat, 0)::numeric as amount_ex_vat
-              from public.pay_batch_items pbi3
-              join public.pay_batch_candidates pbc3
-                on pbc3.id = pbi3.pay_batch_candidate_id
-              where pbc3.pay_batch_id = p_pay_batch_id
-                and pbi3.timesheet_id is not null
-                and pbi3.is_voided = false
-                and pbi3.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
-            ),
-            snap2 as (
-              select
-                pbs2.timesheet_id,
-                pbs2.target_snapshot_json
-              from public.pay_batch_timesheet_snapshots pbs2
-              where pbs2.pay_batch_id = p_pay_batch_id
-            ),
-            sl2 as (
-              select
-                t.timesheet_id,
-                coalesce(
-                  nullif(btrim(coalesce(t.segment_key,'')), ''),
-                  case
-                    when t.source_ref is not null and btrim(t.source_ref) like 'seg:%'
-                      then nullif(btrim(split_part(t.source_ref,':',2)), '')
-                    else null
-                  end
-                ) as seg_id
-              from tc2 t
-              where t.item_type = 'SEGMENT_DELTA'
-            ),
-            sdm2 as (
-              select
-                sl.timesheet_id,
-                sl.seg_id,
-                nullif(btrim(coalesce(seg->>'date','')), '') as seg_date_raw
-              from sl2 sl
-              join snap2 sc
-                on sc.timesheet_id = sl.timesheet_id
-              join lateral jsonb_array_elements(coalesce(sc.target_snapshot_json->'segments','[]'::jsonb)) as seg on true
-              where sl.seg_id is not null
-                and seg is not null
-                and jsonb_typeof(seg)='object'
-                and nullif(btrim(coalesce(seg->>'segment_id','')), '') = sl.seg_id
-            ),
-            sdf2 as (
-              select
-                sdm.timesheet_id,
-                sdm.seg_id,
-                case when sdm.seg_date_raw ~ '^\\d{4}-\\d{2}-\\d{2}$' then sdm.seg_date_raw else null end as seg_date
-              from sdm2 sdm
-            ),
-            comp2 as (
-              select
-                t.timesheet_id,
-                case
-                  when t.item_type = 'SEGMENT_DELTA'
-                    then case when sf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
-                  when t.item_type = 'MILEAGE_DELTA'
-                    then 'EXPENSE_CODE'
-                  when t.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
-                    then case
-                           when t.source_ref is not null and (
-                             btrim(t.source_ref) like 'additional:%'
-                             or btrim(t.source_ref) like 'add:%'
-                             or btrim(t.source_ref) = 'additional'
-                           )
-                           then 'ADDITIONAL_CODE'
-                           else 'EXPENSE_CODE'
-                         end
-                  else 'EXPENSE_CODE'
-                end as key_type,
-                case
-                  when t.item_type = 'SEGMENT_DELTA'
-                    then coalesce(sf.seg_date, 'TOTAL')
-                  when t.item_type = 'MILEAGE_DELTA'
-                    then 'MILEAGE'
-                  when t.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
-                    then case
-                           when t.source_ref is not null and (btrim(t.source_ref) like 'additional:%' or btrim(t.source_ref) like 'add:%')
-                             then upper(nullif(btrim(split_part(t.source_ref,':',2)), ''))
-                           when t.source_ref is not null and btrim(t.source_ref) = 'additional'
-                             then 'TOTAL'
-                           when t.source_ref is not null and btrim(t.source_ref) <> ''
-                             then upper(btrim(t.source_ref))
-                           else 'UNKNOWN'
-                         end
-                  else 'UNKNOWN'
-                end as key_value,
-                round(sum(coalesce(t.amount_ex_vat,0)),2) as actual,
-                round(
-                  coalesce(oc.truth_ex_vat,0)
-                  - coalesce(oc.baseline_ex_vat,0)
-                  - coalesce(ro.amount_ex_vat,0),
-                  2
-                ) as expected
-              from tc2 t
-              left join sdf2 sf
-                on sf.timesheet_id = t.timesheet_id
-               and sf.seg_id = coalesce(
-                 nullif(btrim(coalesce(t.segment_key,'')), ''),
-                 case
-                   when t.source_ref is not null and btrim(t.source_ref) like 'seg:%'
-                     then nullif(btrim(split_part(t.source_ref,':',2)), '')
-                   else null
-                 end
-               )
-              left join public._pay_outstanding_components((select ts_ids from inp2)) oc
-                on oc.timesheet_id = t.timesheet_id
-               and oc.key_type = (
-                 case
-                   when t.item_type = 'SEGMENT_DELTA'
-                     then case when sf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
-                   when t.item_type = 'MILEAGE_DELTA'
-                     then 'EXPENSE_CODE'
-                   when t.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
-                     then case
-                            when t.source_ref is not null and (
-                              btrim(t.source_ref) like 'additional:%'
-                              or btrim(t.source_ref) like 'add:%'
-                              or btrim(t.source_ref) = 'additional'
-                            )
-                            then 'ADDITIONAL_CODE'
-                            else 'EXPENSE_CODE'
-                          end
-                   else 'EXPENSE_CODE'
-                 end
-               )
-               and oc.key_value = (
-                 case
-                   when t.item_type = 'SEGMENT_DELTA'
-                     then coalesce(sf.seg_date, 'TOTAL')
-                   when t.item_type = 'MILEAGE_DELTA'
-                     then 'MILEAGE'
-                   when t.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
-                     then case
-                            when t.source_ref is not null and (btrim(t.source_ref) like 'additional:%' or btrim(t.source_ref) like 'add:%')
-                              then upper(nullif(btrim(split_part(t.source_ref,':',2)), ''))
-                            when t.source_ref is not null and btrim(t.source_ref) = 'additional'
-                              then 'TOTAL'
-                            when t.source_ref is not null and btrim(t.source_ref) <> ''
-                              then upper(btrim(t.source_ref))
-                            else 'UNKNOWN'
-                          end
-                   else 'UNKNOWN'
-                 end
-               )
-              left join (
-                select
-                  r.timesheet_id,
-                  r.key_type,
-                  r.key_value,
-                  r.amount_ex_vat
-                from (
-                  select * from (select null::uuid as timesheet_id, null::text as key_type, null::text as key_value, 0::numeric as amount_ex_vat) z where false
-                ) r
-              ) ro
-                on false
-              group by
-                t.timesheet_id,
-                case
-                  when t.item_type = 'SEGMENT_DELTA' then case when sf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
-                  when t.item_type = 'MILEAGE_DELTA' then 'EXPENSE_CODE'
-                  when t.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
-                    then case
-                           when t.source_ref is not null and (
-                             btrim(t.source_ref) like 'additional:%'
-                             or btrim(t.source_ref) like 'add:%'
-                             or btrim(t.source_ref) = 'additional'
-                           )
-                           then 'ADDITIONAL_CODE'
-                           else 'EXPENSE_CODE'
-                         end
-                  else 'EXPENSE_CODE'
-                end,
-                case
-                  when t.item_type = 'SEGMENT_DELTA' then coalesce(sf.seg_date, 'TOTAL')
-                  when t.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
-                  when t.item_type in ('EXPENSE_DELTA','ADJUSTMENT_DELTA')
-                    then case
-                           when t.source_ref is not null and (btrim(t.source_ref) like 'additional:%' or btrim(t.source_ref) like 'add:%')
-                             then upper(nullif(btrim(split_part(t.source_ref,':',2)), ''))
-                           when t.source_ref is not null and btrim(t.source_ref) = 'additional'
-                             then 'TOTAL'
-                           when t.source_ref is not null and btrim(t.source_ref) <> ''
-                             then upper(btrim(t.source_ref))
-                           else 'UNKNOWN'
-                         end
-                  else 'UNKNOWN'
-                end,
-                round(
-                  coalesce(oc.truth_ex_vat,0)
-                  - coalesce(oc.baseline_ex_vat,0)
-                  - coalesce(ro.amount_ex_vat,0),
-                  2
-                )
-            )
-            select
-              c2.timesheet_id,
-              c2.key_type,
-              c2.key_value,
-              c2.expected,
-              c2.actual
-            from comp2 c2
-            where round(coalesce(c2.expected,0),2) <> round(coalesce(c2.actual,0),2)
-          ) x
-        ),
-        '[]'::jsonb
+          and pbi4.item_type not in (
+            'DEBT_CREATED',
+            'LOAN_REPAYMENT',
+            'OVERPAYMENT_RECOVERY',
+            'LOAN_PAYOUT'
+          )
+          and pbi4.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+      ),
+      snap_choice2 as (
+        select
+          ai2.pay_batch_id,
+          ai2.timesheet_id,
+          (
+            select pbs3.target_snapshot_json
+            from public.pay_batch_timesheet_snapshots pbs3
+            where pbs3.pay_batch_id = ai2.pay_batch_id
+              and pbs3.timesheet_id = ai2.timesheet_id
+            order by pbs3.created_at_utc desc, pbs3.id desc
+            limit 1
+          ) as target_snapshot_json
+        from (select distinct pay_batch_id, timesheet_id from other_active_items2) ai2
+      ),
+      seg_lookup2 as (
+        select
+          ai2.pay_batch_id,
+          ai2.timesheet_id,
+          coalesce(
+            nullif(btrim(coalesce(ai2.segment_key,'')), ''),
+            case
+              when ai2.source_ref is not null and btrim(ai2.source_ref) like 'seg:%'
+                then nullif(btrim(split_part(ai2.source_ref,':',2)), '')
+              else null
+            end
+          ) as seg_id
+        from other_active_items2 ai2
+        where ai2.item_type = 'SEGMENT_DELTA'
+      ),
+      seg_date_map2 as (
+        select
+          sl3.pay_batch_id,
+          sl3.timesheet_id,
+          sl3.seg_id,
+          nullif(btrim(coalesce(seg3->>'date','')), '') as seg_date_raw
+        from seg_lookup2 sl3
+        join snap_choice2 sc3
+          on sc3.pay_batch_id = sl3.pay_batch_id
+         and sc3.timesheet_id = sl3.timesheet_id
+        join lateral jsonb_array_elements(coalesce(sc3.target_snapshot_json->'segments','[]'::jsonb)) as seg3 on true
+        where sl3.seg_id is not null
+          and seg3 is not null
+          and jsonb_typeof(seg3) = 'object'
+          and nullif(btrim(coalesce(seg3->>'segment_id','')), '') = sl3.seg_id
+      ),
+      seg_date_final2 as (
+        select
+          sdm3.pay_batch_id,
+          sdm3.timesheet_id,
+          sdm3.seg_id,
+          case when sdm3.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sdm3.seg_date_raw else null end as seg_date
+        from seg_date_map2 sdm3
+      ),
+      reserved_other2 as (
+        select
+          ai2.timesheet_id,
+          case
+            when ai2.item_type = 'SEGMENT_DELTA'
+              then case when sdf3.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+            when ai2.item_type = 'MILEAGE_DELTA'
+              then 'EXPENSE_CODE'
+            when ai2.item_type = 'ADJUSTMENT_DELTA'
+              then case
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) like 'preview_seg:%'
+                       then 'TS_TOTAL'
+                     when ai2.source_ref is not null and (
+                       btrim(ai2.source_ref) like 'additional:%'
+                       or btrim(ai2.source_ref) like 'add:%'
+                       or btrim(ai2.source_ref) = 'additional'
+                     )
+                       then 'ADDITIONAL_CODE'
+                     else 'EXPENSE_CODE'
+                   end
+            when ai2.item_type = 'EXPENSE_DELTA'
+              then case
+                     when ai2.source_ref is not null and (
+                       btrim(ai2.source_ref) like 'additional:%'
+                       or btrim(ai2.source_ref) like 'add:%'
+                       or btrim(ai2.source_ref) = 'additional'
+                     )
+                       then 'ADDITIONAL_CODE'
+                     else 'EXPENSE_CODE'
+                   end
+            else 'EXPENSE_CODE'
+          end as key_type,
+          case
+            when ai2.item_type = 'SEGMENT_DELTA'
+              then coalesce(sdf3.seg_date, 'TOTAL')
+            when ai2.item_type = 'MILEAGE_DELTA'
+              then 'MILEAGE'
+            when ai2.item_type = 'ADJUSTMENT_DELTA'
+              then case
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) like 'preview_seg:%'
+                       then 'TOTAL'
+                     when ai2.source_ref is not null and (btrim(ai2.source_ref) like 'additional:%' or btrim(ai2.source_ref) like 'add:%')
+                       then upper(nullif(btrim(split_part(ai2.source_ref,':',2)), ''))
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) = 'additional'
+                       then 'TOTAL'
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) <> ''
+                       then upper(btrim(ai2.source_ref))
+                     else 'UNKNOWN'
+                   end
+            when ai2.item_type = 'EXPENSE_DELTA'
+              then case
+                     when ai2.source_ref is not null and (btrim(ai2.source_ref) like 'additional:%' or btrim(ai2.source_ref) like 'add:%')
+                       then upper(nullif(btrim(split_part(ai2.source_ref,':',2)), ''))
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) = 'additional'
+                       then 'TOTAL'
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) <> ''
+                       then upper(btrim(ai2.source_ref))
+                     else 'UNKNOWN'
+                   end
+            else 'UNKNOWN'
+          end as key_value,
+          round(sum(coalesce(ai2.amount_ex_vat,0)),2) as amount_ex_vat,
+          round(sum(coalesce(ai2.amount_inc_vat,0)),2) as amount_inc_vat
+        from other_active_items2 ai2
+        left join seg_date_final2 sdf3
+          on sdf3.pay_batch_id = ai2.pay_batch_id
+         and sdf3.timesheet_id = ai2.timesheet_id
+         and sdf3.seg_id = coalesce(
+           nullif(btrim(coalesce(ai2.segment_key,'')), ''),
+           case
+             when ai2.source_ref is not null and btrim(ai2.source_ref) like 'seg:%'
+               then nullif(btrim(split_part(ai2.source_ref,':',2)), '')
+             else null
+           end
+         )
+        group by
+          ai2.timesheet_id,
+          case
+            when ai2.item_type = 'SEGMENT_DELTA'
+              then case when sdf3.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+            when ai2.item_type = 'MILEAGE_DELTA'
+              then 'EXPENSE_CODE'
+            when ai2.item_type = 'ADJUSTMENT_DELTA'
+              then case
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) like 'preview_seg:%'
+                       then 'TS_TOTAL'
+                     when ai2.source_ref is not null and (
+                       btrim(ai2.source_ref) like 'additional:%'
+                       or btrim(ai2.source_ref) like 'add:%'
+                       or btrim(ai2.source_ref) = 'additional'
+                     )
+                       then 'ADDITIONAL_CODE'
+                     else 'EXPENSE_CODE'
+                   end
+            when ai2.item_type = 'EXPENSE_DELTA'
+              then case
+                     when ai2.source_ref is not null and (
+                       btrim(ai2.source_ref) like 'additional:%'
+                       or btrim(ai2.source_ref) like 'add:%'
+                       or btrim(ai2.source_ref) = 'additional'
+                     )
+                       then 'ADDITIONAL_CODE'
+                     else 'EXPENSE_CODE'
+                   end
+            else 'EXPENSE_CODE'
+          end,
+          case
+            when ai2.item_type = 'SEGMENT_DELTA'
+              then coalesce(sdf3.seg_date, 'TOTAL')
+            when ai2.item_type = 'MILEAGE_DELTA'
+              then 'MILEAGE'
+            when ai2.item_type = 'ADJUSTMENT_DELTA'
+              then case
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) like 'preview_seg:%'
+                       then 'TOTAL'
+                     when ai2.source_ref is not null and (btrim(ai2.source_ref) like 'additional:%' or btrim(ai2.source_ref) like 'add:%')
+                       then upper(nullif(btrim(split_part(ai2.source_ref,':',2)), ''))
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) = 'additional'
+                       then 'TOTAL'
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) <> ''
+                       then upper(btrim(ai2.source_ref))
+                     else 'UNKNOWN'
+                   end
+            when ai2.item_type = 'EXPENSE_DELTA'
+              then case
+                     when ai2.source_ref is not null and (btrim(ai2.source_ref) like 'additional:%' or btrim(ai2.source_ref) like 'add:%')
+                       then upper(nullif(btrim(split_part(ai2.source_ref,':',2)), ''))
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) = 'additional'
+                       then 'TOTAL'
+                     when ai2.source_ref is not null and btrim(ai2.source_ref) <> ''
+                       then upper(btrim(ai2.source_ref))
+                     else 'UNKNOWN'
+                   end
+            else 'UNKNOWN'
+          end
+      ),
+      tb2 as (
+        select
+          oc2.timesheet_id,
+          oc2.key_type,
+          oc2.key_value,
+          round(coalesce(oc2.truth_ex_vat,0),2) as truth_ex_vat,
+          round(coalesce(oc2.baseline_ex_vat,0),2) as baseline_ex_vat
+        from public._pay_outstanding_components((select ts_ids from inp2)) oc2
+      ),
+      joined2 as (
+        select
+          tc2.timesheet_id,
+          tc2.key_type,
+          tc2.key_value,
+          round(coalesce(tc2.amount_ex_vat,0),2) as actual_ex_vat,
+          round(
+            coalesce(tb2.truth_ex_vat,0)
+            - coalesce(tb2.baseline_ex_vat,0)
+            - coalesce(ro2.amount_ex_vat,0),
+            2
+          ) as expected_ex_vat
+        from this_components2 tc2
+        left join tb2
+          on tb2.timesheet_id = tc2.timesheet_id
+         and tb2.key_type = tc2.key_type
+         and tb2.key_value = tc2.key_value
+        left join reserved_other2 ro2
+          on ro2.timesheet_id = tc2.timesheet_id
+         and ro2.key_type = tc2.key_type
+         and ro2.key_value = tc2.key_value
+      ),
+      key_diffs2 as (
+        select
+          j2.timesheet_id,
+          j2.key_type,
+          j2.key_value,
+          j2.expected_ex_vat,
+          j2.actual_ex_vat
+        from joined2 j2
+        where round(coalesce(j2.expected_ex_vat,0),2) <> round(coalesce(j2.actual_ex_vat,0),2)
       )
-    ) as kd
+      select
+        kd2.timesheet_id,
+        kd2.key_type,
+        kd2.key_value,
+        kd2.expected_ex_vat as expected,
+        kd2.actual_ex_vat as actual
+      from key_diffs2 kd2
+      order by kd2.timesheet_id::text, kd2.key_type, kd2.key_value
+      limit v_diff_limit
+    ) x
     union all
     -- DEDUCTION diffs: ADVANCE key (advance:<uuid>) for OVERPAYMENT_RECOVERY and LOAN_REPAYMENT
     select
@@ -9254,9 +9643,13 @@ begin
           select
             pbc.id as pay_batch_candidate_id,
             pbc.candidate_id,
-            coalesce(pbc.awaiting_net_amount,false) as awaiting_net_amount,
+            v_scope as pay_channel,
+            case when v_scope = 'UMBRELLA' then c_sc.umbrella_id else null end as umbrella_id,
+            pbc.awaiting_net_amount,
             pni.net_amount as paye_net_amount
           from public.pay_batch_candidates pbc
+          join public.candidates c_sc
+            on c_sc.id = pbc.candidate_id
           left join public.pay_batch_paye_net_inputs pni
             on pni.pay_batch_candidate_id = pbc.id
           where pbc.pay_batch_id = p_pay_batch_id
@@ -9265,23 +9658,69 @@ begin
           select
             cs.pay_batch_candidate_id,
             cs.candidate_id,
+            cs.pay_channel,
+            cs.umbrella_id,
             cs.awaiting_net_amount,
-            greatest(coalesce(cs.paye_net_amount,0),0)::numeric(12,2) as earnings_before_loan_ex
+            greatest(
+              coalesce(
+                case
+                  when cs.pay_channel = 'PAYE' then cs.paye_net_amount
+                  else (
+                    select coalesce(sum(pbi2.amount_ex_vat), 0)
+                    from public.pay_batch_items pbi2
+                    where pbi2.pay_batch_candidate_id = cs.pay_batch_candidate_id
+                      and pbi2.is_voided = false
+                      and pbi2.amount_ex_vat > 0
+                      and pbi2.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+                  )
+                end,
+                0
+              ),
+              0
+            )::numeric(12,2) as earnings_before_loan_ex
           from cand_scope cs
+        ),
+        preview_negative_overpay_keys as (
+          select distinct
+            pbc.candidate_id as candidate_id,
+            pbi.timesheet_id as linked_timesheet_id,
+            coalesce(
+              tps.last_settled_signature,
+              md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
+            ) as baseline_signature
+          from public.pay_batch_items pbi
+          join public.pay_batch_candidates pbc
+            on pbc.id = pbi.pay_batch_candidate_id
+          left join public.timesheet_pay_state tps
+            on tps.timesheet_id = pbi.timesheet_id
+          where pbc.pay_batch_id = p_pay_batch_id
+            and pbi.is_voided = false
+            and pbi.item_type = 'ADJUSTMENT_DELTA'
+            and pbi.timesheet_id is not null
+            and pbi.source_ref is not null
+            and btrim(coalesce(pbi.source_ref,'')) like 'preview_seg:%'
         ),
         overpay_advances as (
           select
             pa.id as advance_id,
             pa.candidate_id,
+            pa.linked_timesheet_id,
+            pa.baseline_signature,
             pa.outstanding_amount::numeric(12,2) as outstanding_amount,
             pa.created_at
           from public.pay_advances pa
+          left join preview_negative_overpay_keys pnok
+            on pnok.candidate_id = pa.candidate_id
+           and pnok.linked_timesheet_id = pa.linked_timesheet_id
+           and pnok.baseline_signature = pa.baseline_signature
           where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
             and pa.status = 'ACTIVE'::public.pay_advance_status_enum
             and pa.outstanding_amount > 0
+            and pnok.candidate_id is null
         ),
         cand_overpay as (
           select
+            ce.pay_batch_candidate_id,
             ce.candidate_id,
             ce.earnings_before_loan_ex,
             round(coalesce(sum(oa.outstanding_amount), 0), 2)::numeric(12,2) as overpayment_outstanding_ex
@@ -9289,10 +9728,11 @@ begin
           left join overpay_advances oa
             on oa.candidate_id = ce.candidate_id
           where ce.awaiting_net_amount = false
-          group by ce.candidate_id, ce.earnings_before_loan_ex
+          group by ce.pay_batch_candidate_id, ce.candidate_id, ce.earnings_before_loan_ex
         ),
         cand_recovery as (
           select
+            co.pay_batch_candidate_id,
             co.candidate_id,
             round(least(co.overpayment_outstanding_ex, co.earnings_before_loan_ex), 2)::numeric(12,2) as recovery_total_ex
           from cand_overpay co
@@ -9641,6 +10081,8 @@ begin
       to_jsonb(jsonb_build_object(
         'ts_changed', v_ts_changed_ct,
         'key_diffs', v_key_diff_ct,
+        'overpayment_diffs', v_overpay_diff_ct,
+        'loan_diffs', v_loan_diff_ct,
         'ded_diffs', v_ded_diff_ct,
         'paye_net_diffs', v_paye_net_diff_ct
       ))::text as expected,
@@ -9670,6 +10112,8 @@ begin
         'counts', jsonb_build_object(
           'timesheet_changed', v_ts_changed_ct,
           'stable_key_diffs', v_key_diff_ct,
+          'overpayment_diffs', v_overpay_diff_ct,
+          'loan_diffs', v_loan_diff_ct,
           'deduction_diffs', v_ded_diff_ct,
           'paye_net_diffs', v_paye_net_diff_ct
         )
@@ -9688,6 +10132,12 @@ begin
   );
 end;
 $function$;
+
+
+
+
+
+
 
 
 create or replace function public.pay_batch_export_csv_rows(
