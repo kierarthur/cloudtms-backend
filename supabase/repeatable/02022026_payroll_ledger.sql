@@ -4580,15 +4580,6 @@ $function$;
 
 
 
-
-
-
-
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -6258,7 +6249,10 @@ end;
       tf.candidate_id as candidate_id,
       out_raw.timesheet_id as timesheet_id,
       round(
-        sum(abs(out_raw.outstanding_ex_vat)) filter (where out_raw.outstanding_ex_vat < 0),
+        coalesce(
+          sum(abs(out_raw.outstanding_ex_vat)) filter (where out_raw.outstanding_ex_vat < 0),
+          0
+        ),
         2
       ) as owed_ex
     from out_raw
@@ -6328,10 +6322,10 @@ end;
   )
   update public.pay_advances pa
   set
-    outstanding_amount = ows.owed_ex,
-    original_amount = greatest(pa.original_amount, ows.owed_ex),
+    outstanding_amount = coalesce(ows.owed_ex, 0),
+    original_amount = greatest(coalesce(pa.original_amount, 0), coalesce(ows.owed_ex, 0)),
     status = case
-      when ows.owed_ex > 0 then 'ACTIVE'::public.pay_advance_status_enum
+      when coalesce(ows.owed_ex, 0) > 0 then 'ACTIVE'::public.pay_advance_status_enum
       else 'PAID_OFF'::public.pay_advance_status_enum
     end,
     reason = 'OVERPAYMENT'::public.pay_advance_reason_enum,
@@ -6524,7 +6518,7 @@ end;
       case
         when cbi.item_type = 'SEGMENT_DELTA' then
           case
-            when nullif(btrim(coalesce(cbi.segment_key,'')), '') like 'ts:%' then 'TS_TOTAL'
+            when nullif(btrim(coalesce(cbi.segment_key,'')), '') = ('ts:' || cbi.timesheet_id::text) then 'TS_TOTAL'
             when seg_map.seg_date is not null then 'TS_DAY'
             else 'TS_TOTAL'
           end
@@ -6539,7 +6533,7 @@ end;
       case
         when cbi.item_type = 'SEGMENT_DELTA' then
           case
-            when nullif(btrim(coalesce(cbi.segment_key,'')), '') like 'ts:%' then 'TOTAL'
+            when nullif(btrim(coalesce(cbi.segment_key,'')), '') = ('ts:' || cbi.timesheet_id::text) then 'TOTAL'
             when seg_map.seg_date is not null then seg_map.seg_date
             else 'TOTAL'
           end
@@ -6734,7 +6728,19 @@ end;
   end if;
 
   v_stage := 'STAGE_16A_APPLY_OVERPAYMENT_RECOVERY';
-  perform public._debug_log(v_stage, jsonb_build_object('batch_id', v_batch_id));
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:' || v_stage,
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
 
   -- Phase 2C: PAYE deferral marker (draft-side only)
   update public.pay_batch_candidates pbc
@@ -6929,7 +6935,19 @@ end;
   get diagnostics v_rows_upd_candidates_overpayment_recovery_taken = row_count;
 
   v_stage := 'STAGE_16B_APPLY_LOAN_REPAYMENTS_FINAL_SPEC';
-  perform public._debug_log(v_stage, jsonb_build_object('batch_id', v_batch_id));
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:' || v_stage,
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
 
   -- Phase 2B: Insert LOAN_REPAYMENT deduction items (weekly due cap + WTD floor, oldest-first)
   insert into public.pay_batch_items (
@@ -7193,7 +7211,19 @@ end;
 
 
   v_stage := 'STAGE_18_POPULATE_CANDIDATE_SUMMARIES';
-  perform public._debug_log(v_stage, jsonb_build_object('batch_id', v_batch_id));
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:' || v_stage,
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
 
   with
   sums as (
@@ -7304,11 +7334,11 @@ end;
       else greatest(coalesce(sums.net_inc, 0), 0)::numeric(12,2)
     end,
 
-    mismatch_settlement_choice = coalesce(pbc.mismatch_settlement_choice, 'WITHHOLD'),
+    mismatch_settlement_choice = nullif(btrim(coalesce(pbc.mismatch_settlement_choice, '')), ''),
     updated_at = v_now_utc
   from sums
   left join paye_net pn
-    on pn.pay_batch_candidate_id = pbc.id
+    on pn.pay_batch_candidate_id = sums.pay_batch_candidate_id
   where pbc.id = sums.pay_batch_candidate_id
     and pbc.pay_batch_id = v_batch_id;
 
@@ -8511,6 +8541,17 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+
+
+
+
+
+
+
+
 
 
 
