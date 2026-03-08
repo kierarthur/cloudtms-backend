@@ -4580,6 +4580,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -8557,7 +8559,6 @@ $$;
 
 
 
-
 commit;
 
 begin;
@@ -8605,6 +8606,8 @@ begin;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
+
+
 
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
@@ -9305,28 +9308,49 @@ begin
      and ntbj.source_ref is not distinct from ng.source_ref
      and ntbj.repayment_week_start is not distinct from ng.repayment_week_start
   ),
+  ts_lines_agg as (
+    select
+      ts.pay_batch_candidate_id,
+      ts.candidate_id,
+      coalesce(
+        jsonb_agg(
+          ts.ts_line
+          order by (ts.ts_line->>'week_ending_date')::date desc nulls last, ts.ts_line->>'timesheet_id'
+        ),
+        '[]'::jsonb
+      ) as ts_lines
+    from ts_lines ts
+    group by ts.pay_batch_candidate_id, ts.candidate_id
+  ),
+  non_ts_lines_agg as (
+    select
+      nt.pay_batch_candidate_id,
+      nt.candidate_id,
+      coalesce(
+        jsonb_agg(
+          nt.non_ts_line
+          order by nt.non_ts_line->>'item_type', nt.non_ts_line->>'source_ref'
+        ),
+        '[]'::jsonb
+      ) as non_ts_lines
+    from non_ts_lines nt
+    group by nt.pay_batch_candidate_id, nt.candidate_id
+  ),
   cand_lines as (
     select
       p.pay_batch_candidate_id,
       p.candidate_id,
       p.candidate_display_name,
       p.candidate_tms_ref,
-      coalesce(
-        jsonb_agg(ts.ts_line order by (ts.ts_line->>'week_ending_date')::date desc nulls last, ts.ts_line->>'timesheet_id')
-          filter (where ts.ts_line is not null),
-        '[]'::jsonb
-      ) as ts_lines,
-      coalesce(
-        jsonb_agg(nt.non_ts_line order by nt.non_ts_line->>'item_type', nt.non_ts_line->>'source_ref')
-          filter (where nt.non_ts_line is not null),
-        '[]'::jsonb
-      ) as non_ts_lines
+      coalesce(tsa.ts_lines, '[]'::jsonb) as ts_lines,
+      coalesce(nta.non_ts_lines, '[]'::jsonb) as non_ts_lines
     from pbci p
-    left join ts_lines ts
-      on ts.pay_batch_candidate_id = p.pay_batch_candidate_id
-    left join non_ts_lines nt
-      on nt.pay_batch_candidate_id = p.pay_batch_candidate_id
-    group by p.pay_batch_candidate_id, p.candidate_id, p.candidate_display_name, p.candidate_tms_ref
+    left join ts_lines_agg tsa
+      on tsa.pay_batch_candidate_id = p.pay_batch_candidate_id
+     and tsa.candidate_id = p.candidate_id
+    left join non_ts_lines_agg nta
+      on nta.pay_batch_candidate_id = p.pay_batch_candidate_id
+     and nta.candidate_id = p.candidate_id
   )
   select coalesce(
     jsonb_agg(
@@ -9404,6 +9428,11 @@ begin
   );
 end;
 $$;
+
+
+
+
+
 
 
 -- =========================================================
