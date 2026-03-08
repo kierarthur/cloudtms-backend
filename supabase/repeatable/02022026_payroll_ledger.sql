@@ -2863,6 +2863,27 @@ begin
       and btrim(coalesce(rskm.segment_stable_key,'')) <> ''
     group by rskm.timesheet_id, rskm.segment_stable_key
   ),
+  reserved_preview_segment_ords as (
+    select
+      rbi.timesheet_id,
+      case
+        when coalesce(split_part(coalesce(rbi.source_ref,''), ':', 3), '') ~ '^\d+$'
+          then split_part(rbi.source_ref, ':', 3)::int
+        else null
+      end as preview_seg_ord,
+      round(sum(rbi.amount_ex_vat),2) as reserved_amount_ex_vat
+    from reserved_batch_items rbi
+    where rbi.item_type = 'ADJUSTMENT_DELTA'
+      and rbi.source_ref is not null
+      and btrim(coalesce(rbi.source_ref,'')) like 'preview_seg:%'
+    group by
+      rbi.timesheet_id,
+      case
+        when coalesce(split_part(coalesce(rbi.source_ref,''), ':', 3), '') ~ '^\d+$'
+          then split_part(rbi.source_ref, ':', 3)::int
+        else null
+      end
+  ),
   reserved_additional_by_code as (
     select
       rbi.timesheet_id,
@@ -3207,6 +3228,29 @@ umb_map as (
       a.work_date as work_date,
       a.ref_num as ref_num,
 
+      -- Preview-base delta before active-batch reservation subtraction.
+      -- This preserves the original row ordering/ordinality that draft rows were created from.
+      round(
+        case
+          when (
+            b.require_reference_to_pay = true
+            and coalesce(b.is_forced_advance,false) = false
+            and a.cur_excluded = false
+            and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
+            and (
+              coalesce(a.cur_payable_ex_vat,0)
+              - coalesce(a.bas_payable_ex_vat,0)
+            ) > 0
+          )
+          then 0
+          else (
+            coalesce(a.cur_payable_ex_vat,0)
+            - coalesce(a.bas_payable_ex_vat,0)
+          )
+        end,
+        2
+      ) as preview_base_eff_delta_ex,
+
       -- Raw outstanding delta (Truth - Baseline - Reserved)
       round(
         coalesce(a.cur_payable_ex_vat,0)
@@ -3388,22 +3432,56 @@ blocked_items as (
       b.cand_bank_hash,
       b.umb_bank_hash,
 
-      -- SEGMENTS (stable-key outstanding): include stable key so UI can group even if segment_id drifted
+      -- SEGMENTS (stable-key outstanding): include stable key so UI can group even if segment_id drifted.
+      -- Ordinality must be based on the original preview rows (before active-batch reservation subtraction),
+      -- otherwise preview_seg:<timesheet_id>:<ord> draft rows will not line up with the rows they reserved.
       coalesce((
+        with ss_rows as (
+          select
+            ss.segment_id,
+            ss.segment_key,
+            ss.segment_stable_key,
+            ss.work_date,
+            ss.ref_num,
+            ss.preview_base_eff_delta_ex,
+            ss.eff_delta_ex,
+            row_number() over (
+              partition by ss.timesheet_id
+              order by ss.segment_stable_key nulls last, ss.segment_id nulls last
+            ) as seg_ord
+          from segment_status ss
+          where ss.timesheet_id = b.timesheet_id
+            and ss.preview_base_eff_delta_ex <> 0
+        ),
+        ss_effective as (
+          select
+            ssr.segment_id,
+            ssr.segment_key,
+            ssr.segment_stable_key,
+            ssr.work_date,
+            ssr.ref_num,
+            round(
+              ssr.eff_delta_ex - coalesce(rpso.reserved_amount_ex_vat,0),
+              2
+            ) as eff_delta_ex_after_reserved
+          from ss_rows ssr
+          left join reserved_preview_segment_ords rpso
+            on rpso.timesheet_id = b.timesheet_id
+           and rpso.preview_seg_ord = ssr.seg_ord
+        )
         select jsonb_agg(
           jsonb_build_object(
-            'segment_id', ss.segment_id,
-            'segment_key', ss.segment_key,
-            'segment_stable_key', ss.segment_stable_key,
-            'work_date', ss.work_date,
-            'ref_num', ss.ref_num,
-            'delta_pay_ex_vat', ss.eff_delta_ex
+            'segment_id', sse.segment_id,
+            'segment_key', sse.segment_key,
+            'segment_stable_key', sse.segment_stable_key,
+            'work_date', sse.work_date,
+            'ref_num', sse.ref_num,
+            'delta_pay_ex_vat', sse.eff_delta_ex_after_reserved
           )
-          order by ss.segment_stable_key nulls last, ss.segment_id nulls last
+          order by sse.segment_stable_key nulls last, sse.segment_id nulls last
         )
-        from segment_status ss
-        where ss.timesheet_id = b.timesheet_id
-          and ss.eff_delta_ex <> 0
+        from ss_effective sse
+        where sse.eff_delta_ex_after_reserved <> 0
       ), '[]'::jsonb) as segment_deltas_json,
 
       -- ADDITIONAL (total): outstanding = current - baseline - reserved
@@ -3640,7 +3718,7 @@ blocked_items as (
           union
           select distinct adj_id from bas
         ),
-        rows as (
+        rows_base as (
           select
             i.adj_id,
             round(
@@ -3656,6 +3734,56 @@ blocked_items as (
               2
             ) as delta_amt
           from ids i
+        ),
+        preview_reserved_total as (
+          select
+            round(
+              coalesce(sum(abs(rpso.reserved_amount_ex_vat)),0),
+              2
+            ) as reserved_abs
+          from reserved_preview_segment_ords rpso
+          where rpso.timesheet_id = b.timesheet_id
+            and coalesce(rpso.reserved_amount_ex_vat,0) < 0
+        ),
+        rows_negative as (
+          select
+            rb.adj_id,
+            rb.delta_amt,
+            row_number() over (order by rb.adj_id::text) as neg_ord,
+            coalesce(
+              sum(abs(rb.delta_amt)) over (
+                order by rb.adj_id::text
+                rows between unbounded preceding and 1 preceding
+              ),
+              0
+            ) as prev_neg_abs
+          from rows_base rb
+          where rb.delta_amt < 0
+        ),
+        rows_negative_applied as (
+          select
+            rn.adj_id,
+            round(
+              rn.delta_amt
+              + greatest(
+                  least(
+                    coalesce(prt.reserved_abs,0) - rn.prev_neg_abs,
+                    abs(rn.delta_amt)
+                  ),
+                  0
+                ),
+              2
+            ) as delta_amt
+          from rows_negative rn
+          cross join preview_reserved_total prt
+        ),
+        rows as (
+          select
+            rb.adj_id,
+            coalesce(rna.delta_amt, rb.delta_amt) as delta_amt
+          from rows_base rb
+          left join rows_negative_applied rna
+            on rna.adj_id = rb.adj_id
         )
         select coalesce(
           jsonb_agg(
@@ -4575,7 +4703,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
 
 
 
