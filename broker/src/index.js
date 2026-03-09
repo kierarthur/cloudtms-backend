@@ -48413,6 +48413,408 @@ async function limitOrLinkAttachments(env, { payload }) {
   const newPayload = { ...payload, attachments: kept, htmlBody, body };
   return { payload: newPayload, trimmed: true };
 }
+async function handleMailshotEnqueue(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const prepareJson = body.prepare_json ?? body.prepareJson ?? null;
+  const finalEditsJson = body.final_edits_json ?? body.finalEditsJson ?? {};
+  const deliveryTimingJson = body.delivery_timing_json ?? body.deliveryTimingJson ?? { mode: 'NOW' };
+
+  if (!prepareJson || typeof prepareJson !== 'object' || Array.isArray(prepareJson)) {
+    return withCORS(env, req, badRequest('prepare_json object required'));
+  }
+  if (finalEditsJson == null || typeof finalEditsJson !== 'object' || Array.isArray(finalEditsJson)) {
+    return withCORS(env, req, badRequest('final_edits_json must be an object'));
+  }
+  if (deliveryTimingJson == null || typeof deliveryTimingJson !== 'object' || Array.isArray(deliveryTimingJson)) {
+    return withCORS(env, req, badRequest('delivery_timing_json must be an object'));
+  }
+
+  const normalizeDeliveryTimingJson = async (raw) => {
+    const timingRaw = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : { mode: 'NOW' };
+
+    let mode = String(timingRaw.mode || 'NOW').trim().toUpperCase();
+    if (mode === 'RELATIVE_DELAY') mode = 'AFTER_DELAY';
+
+    if (!['NOW', 'AT_TIME', 'AFTER_DELAY'].includes(mode)) {
+      throw new Error('delivery_timing_json.mode must be NOW, AT_TIME or AFTER_DELAY');
+    }
+
+    let scheduledForUtc = null;
+    let nextAttemptAtUtc = null;
+    let requestedTimezone = null;
+    let requestedLocalText = null;
+    let relativeMinutes = null;
+
+    if (timingRaw.requested_timezone != null) {
+      requestedTimezone = String(timingRaw.requested_timezone || '').trim() || null;
+    }
+    if (timingRaw.requested_local_text != null) {
+      requestedLocalText = String(timingRaw.requested_local_text || '').trim() || null;
+    }
+    if (timingRaw.relative_minutes != null && timingRaw.relative_minutes !== '') {
+      const n = Number(timingRaw.relative_minutes);
+      if (!Number.isFinite(n)) throw new Error('delivery_timing_json.relative_minutes must be numeric');
+      relativeMinutes = Math.trunc(n);
+    }
+
+    let maxFutureDays = 365;
+    let allowPastGraceMinutes = 15;
+    try {
+      const s = await loadSettingsDefaults(env);
+      const cj = s && s.comms_adaptors_json && typeof s.comms_adaptors_json === 'object' && !Array.isArray(s.comms_adaptors_json)
+        ? s.comms_adaptors_json
+        : null;
+      const scheduling = cj && cj.scheduling && typeof cj.scheduling === 'object' && !Array.isArray(cj.scheduling)
+        ? cj.scheduling
+        : null;
+      if (scheduling) {
+        const mfd = Number(scheduling.max_future_days);
+        const apg = Number(scheduling.allow_past_grace_minutes);
+        if (Number.isFinite(mfd) && Math.trunc(mfd) > 0) maxFutureDays = Math.trunc(mfd);
+        if (Number.isFinite(apg) && Math.trunc(apg) > 0) allowPastGraceMinutes = Math.trunc(apg);
+      }
+    } catch {}
+
+    const nowMs = Date.now();
+    const maxFutureMs = nowMs + (maxFutureDays * 24 * 60 * 60 * 1000);
+    const minPastMs = nowMs - (allowPastGraceMinutes * 60 * 1000);
+
+    if (mode === 'AT_TIME') {
+      const rawScheduled = String(timingRaw.scheduled_for_utc || '').trim();
+      if (!rawScheduled) throw new Error('delivery_timing_json.scheduled_for_utc required when mode=AT_TIME');
+
+      const dt = new Date(rawScheduled);
+      if (Number.isNaN(dt.getTime())) throw new Error('delivery_timing_json.scheduled_for_utc invalid');
+
+      const scheduledMs = dt.getTime();
+      if (scheduledMs > maxFutureMs) throw new Error('delivery_timing_json.scheduled_for_utc exceeds max_future_days');
+      if (scheduledMs < minPastMs) throw new Error('delivery_timing_json.scheduled_for_utc too far in past');
+
+      scheduledForUtc = dt.toISOString();
+      nextAttemptAtUtc = scheduledMs <= nowMs ? new Date(nowMs).toISOString() : scheduledForUtc;
+    } else if (mode === 'AFTER_DELAY') {
+      let scheduledMs = null;
+      const rawScheduled = String(timingRaw.scheduled_for_utc || '').trim();
+
+      if (rawScheduled) {
+        const dt = new Date(rawScheduled);
+        if (Number.isNaN(dt.getTime())) throw new Error('delivery_timing_json.scheduled_for_utc invalid');
+        scheduledMs = dt.getTime();
+      } else {
+        if (relativeMinutes == null) throw new Error('delivery_timing_json.relative_minutes required when mode=AFTER_DELAY');
+        scheduledMs = nowMs + (relativeMinutes * 60 * 1000);
+      }
+
+      if (scheduledMs > maxFutureMs) throw new Error('delivery_timing_json.scheduled_for_utc exceeds max_future_days');
+      if (scheduledMs < minPastMs) throw new Error('delivery_timing_json.scheduled_for_utc too far in past');
+
+      scheduledForUtc = new Date(scheduledMs).toISOString();
+      nextAttemptAtUtc = scheduledMs <= nowMs ? new Date(nowMs).toISOString() : scheduledForUtc;
+    }
+
+    return {
+      mode,
+      scheduled_for_utc: scheduledForUtc,
+      next_attempt_at_utc: nextAttemptAtUtc,
+      requested_timezone: requestedTimezone,
+      requested_local_text: requestedLocalText,
+      relative_minutes: relativeMinutes
+    };
+  };
+
+  let normalizedTiming;
+  try {
+    normalizedTiming = await normalizeDeliveryTimingJson(deliveryTimingJson);
+  } catch (e) {
+    return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid delivery timing')));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_enqueue', {
+      p_prepare_json: prepareJson,
+      p_final_edits_json: finalEditsJson,
+      p_delivery_timing_json: normalizedTiming,
+      p_actor_user_id: user.id
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_enqueue')) payload = payload.mailshot_enqueue;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'MAILSHOT_ENQUEUE_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function drainEmailOutboxOnce(env, { limit, types } = {}) {
+  const enc = encodeURIComponent;
+
+  const take = Math.max(
+    1,
+    Math.min(Number(limit) || Number(env.EMAIL_DRAIN_LIMIT_DEFAULT) || DEFAULT_DRAIN_LIMIT, 100)
+  );
+  const typeFilter = Array.isArray(types) && types.length ? types : null;
+
+  let sent = 0;
+  let failed = 0;
+  let deferred = 0;
+  const errors = [];
+
+  const nowIsoUtc = () => new Date().toISOString();
+  const nowPlusMinutesIso = (mins) => {
+    const ms = Date.now() + Math.max(1, Number(mins) || 5) * 60 * 1000;
+    return new Date(ms).toISOString();
+  };
+
+  const getEmailOutboxReadyBatch = async (takeCount, selectedTypes) => {
+    const readyIso = nowIsoUtc();
+
+    let url =
+      `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=*` +
+      `&status=eq.QUEUED` +
+      `&or=(` +
+        `and(next_attempt_at_utc.not.is.null,next_attempt_at_utc.lte.${enc(readyIso)}),` +
+        `and(next_attempt_at_utc.is.null,scheduled_for_utc.not.is.null,scheduled_for_utc.lte.${enc(readyIso)}),` +
+        `and(next_attempt_at_utc.is.null,scheduled_for_utc.is.null)` +
+      `)` +
+      `&order=next_attempt_at_utc.asc.nullslast` +
+      `&order=scheduled_for_utc.asc.nullslast` +
+      `&order=created_at_utc.asc` +
+      `&limit=${takeCount}`;
+
+    if (selectedTypes) {
+      const t = selectedTypes.map((tp) => `"${enc(tp)}"`).join(",");
+      url += `&type=in.(${t})`;
+    }
+
+    const { rows } = await sbFetch(env, url, false);
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  const picked = await getEmailOutboxReadyBatch(take, typeFilter);
+  if (picked.length === 0) {
+    return { picked: 0, sent: 0, failed: 0, deferred: 0, errors: [] };
+  }
+
+  const BATCH_MAX = 25;
+  const jobs = [];
+  const jobRowIds = [];
+
+  for (const row of picked) {
+    if (jobs.length >= BATCH_MAX) break;
+
+    try {
+      const payload = await buildEmailPayloadFromOutboxRow(env, row);
+      jobs.push(payload);
+      jobRowIds.push(row.id);
+    } catch (e) {
+      const msg = String(e?.message || e);
+
+      if (msg.startsWith("PDF_NOT_READY:")) {
+        try {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
+            method: "PATCH",
+            headers: sbHeaders(env),
+            body: JSON.stringify({
+              status: "QUEUED",
+              last_error: msg,
+              next_attempt_at_utc: nowPlusMinutesIso(10),
+            }),
+          });
+        } catch {}
+        deferred += 1;
+        errors.push({ id: row.id, error: msg, deferred: true });
+        await recordEmailAudit(env, null, "EMAIL_DEFERRED", {
+          outbox_id: row.id,
+          reason: msg,
+          type: row.type,
+        });
+        continue;
+      }
+
+      try {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
+          method: "PATCH",
+          headers: sbHeaders(env),
+          body: JSON.stringify({
+            status: "FAILED",
+            failed_at: nowIso(),
+            last_error: msg,
+            provider_status: "FAILED"
+          }),
+        });
+      } catch {}
+      failed += 1;
+      errors.push({ id: row.id, error: msg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: row.id, error: msg, type: row.type });
+    }
+  }
+
+  if (jobs.length === 0) {
+    return { picked: picked.length, sent, failed, deferred, errors };
+  }
+
+  const batchPayload = { items: jobs };
+  const res = await postToPowerAutomate(env, batchPayload);
+
+  if (!res.ok) {
+    const errMsg = String(res.body || `HTTP ${res.status}`);
+    for (const rowId of jobRowIds) {
+      try {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+          method: "PATCH",
+          headers: sbHeaders(env),
+          body: JSON.stringify({
+            status: "FAILED",
+            failed_at: nowIso(),
+            last_error: errMsg,
+            provider_status: "FAILED"
+          }),
+        });
+      } catch {}
+      failed += 1;
+      errors.push({ id: rowId, error: errMsg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
+    }
+    return { picked: picked.length, sent, failed, deferred, errors };
+  }
+
+  let results = null;
+  try {
+    const j = typeof res.body === "string" ? JSON.parse(res.body) : res.body;
+    results = Array.isArray(j?.results) ? j.results : null;
+  } catch {
+    results = null;
+  }
+
+  if (!Array.isArray(results) || results.length === 0) {
+    const errMsg = "Provider returned no per-item results (cannot reconcile)";
+    for (const rowId of jobRowIds) {
+      try {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+          method: "PATCH",
+          headers: sbHeaders(env),
+          body: JSON.stringify({
+            status: "FAILED",
+            failed_at: nowIso(),
+            last_error: errMsg,
+            provider_status: "FAILED"
+          }),
+        });
+      } catch {}
+      failed += 1;
+      errors.push({ id: rowId, error: errMsg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
+    }
+    return { picked: picked.length, sent, failed, deferred, errors };
+  }
+
+  const byOutboxId = new Map();
+  for (const r of results) {
+    const oid = r?.meta?.outbox_id || r?.meta?.outboxId || r?.meta?.id || null;
+    if (oid) byOutboxId.set(String(oid), r);
+  }
+
+  for (let i = 0; i < jobRowIds.length; i++) {
+    const rowId = jobRowIds[i];
+    const r = byOutboxId.get(String(rowId)) || results[i] || null;
+
+    const status = String(r?.status || "").toUpperCase();
+    const isSuccess = status === "SUCCESS";
+    const isFailed = status === "FAILED" || status === "FAIL" || status === "ERROR";
+
+    if (isSuccess) {
+      const providerMessageId = r?.provider_message_id || r?.providerMessageId || res.provider_message_id || null;
+
+      const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+        method: "PATCH",
+        headers: sbHeaders(env),
+        body: JSON.stringify({
+          status: "SENT",
+          sent_at: nowIso(),
+          provider_message_id: providerMessageId || null,
+          provider_status: "ACCEPTED",
+          delivered_at: null,
+          read_at: null,
+          last_error: null,
+          failed_at: null,
+        }),
+      });
+
+      if (!upd.ok) {
+        const errTxt = await upd.text();
+        throw new Error(`Sent but failed to update status: ${errTxt}`);
+      }
+
+      sent += 1;
+      await recordEmailAudit(env, null, "EMAIL_SENT", {
+        outbox_id: rowId,
+        provider_message_id: providerMessageId,
+        type: r?.meta?.type || "BATCH",
+      });
+      continue;
+    }
+
+    if (isFailed) {
+      const errMsg = String(r?.error || r?.body || r?.message || "Provider failed");
+      const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+        method: "PATCH",
+        headers: sbHeaders(env),
+        body: JSON.stringify({
+          status: "FAILED",
+          failed_at: nowIso(),
+          last_error: errMsg,
+          provider_status: "FAILED"
+        }),
+      });
+
+      if (!upd.ok) {
+        const errTxt = await upd.text();
+        throw new Error(`Provider fail and update fail: ${errTxt}`);
+      }
+
+      failed += 1;
+      errors.push({ id: rowId, error: errMsg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", {
+        outbox_id: rowId,
+        error: errMsg,
+        type: r?.meta?.type || "BATCH",
+      });
+      continue;
+    }
+
+    {
+      const errMsg = String(r?.error || r?.body || r?.message || "Unknown provider status");
+      try {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+          method: "PATCH",
+          headers: sbHeaders(env),
+          body: JSON.stringify({
+            status: "FAILED",
+            failed_at: nowIso(),
+            last_error: errMsg,
+            provider_status: "FAILED"
+          }),
+        });
+      } catch {}
+      failed += 1;
+      errors.push({ id: rowId, error: errMsg });
+      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
+    }
+  }
+
+  return { picked: picked.length, sent, failed, deferred, errors };
+}
 
 async function drainCommsOutboxOnce(env, { limit } = {}) {
   const enc = encodeURIComponent;
@@ -48430,7 +48832,6 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
 
   const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
 
-  // Load DB-driven comms config (cached by loadSettingsDefaults)
   let cfgAll = {};
   try {
     const s = await loadSettingsDefaults(env);
@@ -48440,17 +48841,30 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
     cfgAll = {};
   }
 
-  // New schema (preferred): cfgAll.channels + cfgAll.adaptors
   const channelsCfg = isPlainObject(cfgAll.channels) ? cfgAll.channels : {};
   const adaptorsCfg = isPlainObject(cfgAll.adaptors) ? cfgAll.adaptors : {};
 
-  // Backward-compat fallback: cfgAll.wati / cfgAll.clicksend
-  const watiCfg = isPlainObject(adaptorsCfg.wati)
+  const watiCfgRaw = isPlainObject(adaptorsCfg.wati)
     ? adaptorsCfg.wati
     : (isPlainObject(cfgAll.wati) ? cfgAll.wati : {});
-  const csCfg = isPlainObject(adaptorsCfg.clicksend)
+  const csCfgRaw = isPlainObject(adaptorsCfg.clicksend)
     ? adaptorsCfg.clicksend
     : (isPlainObject(cfgAll.clicksend) ? cfgAll.clicksend : {});
+
+  const watiCfg = {
+    base_url: watiCfgRaw.base_url,
+    bulk_send_limit: watiCfgRaw.bulk_send_limit,
+  };
+
+  const csCfg = {
+    base_url: csCfgRaw.base_url,
+    sms_max_chars: csCfgRaw.sms_max_chars,
+    voice_max_chars: csCfgRaw.voice_max_chars,
+    bulk_send_limit: csCfgRaw.bulk_send_limit,
+    voice: csCfgRaw.voice,
+    country: csCfgRaw.country,
+    lang: csCfgRaw.lang,
+  };
 
   const drainLimitsCfg = isPlainObject(cfgAll.drain_limits) ? cfgAll.drain_limits : {};
   const defaultDrainLimits = { WHATSAPP: 200, SMS: 200, VOICE: 50 };
@@ -48460,15 +48874,12 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
     VOICE: clampInt(drainLimitsCfg.VOICE, 1, 20000, defaultDrainLimits.VOICE),
   };
 
-  // Provider selection MUST be at drain time via channels[] mapping.
-  // Defaults keep system usable if channels mapping is missing.
   const channelToAdaptor = {
     WHATSAPP: String(channelsCfg.WHATSAPP || 'wati').trim().toLowerCase(),
     SMS: String(channelsCfg.SMS || 'clicksend').trim().toLowerCase(),
     VOICE: String(channelsCfg.VOICE || 'clicksend').trim().toLowerCase(),
   };
 
-  // Per-adaptor batch limits (fallback to drain_limits)
   const watiBatchMax = clampInt(watiCfg.bulk_send_limit, 1, 20000, drainLimits.WHATSAPP);
   const csBatchMax = clampInt(csCfg.bulk_send_limit, 1, 20000, Math.max(drainLimits.SMS, drainLimits.VOICE));
 
@@ -48493,13 +48904,21 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
     return take;
   };
 
-  const fetchQueued = async (channel, take) => {
+  const getCommsOutboxReadyBatch = async (channel, take) => {
     if (!take || take <= 0) return [];
+    const readyIso = nowIso();
     const url =
       `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
       `?select=*` +
       `&status=eq.QUEUED` +
       `&channel=eq.${enc(String(channel || '').toUpperCase())}` +
+      `&or=(` +
+        `and(next_attempt_at_utc.not.is.null,next_attempt_at_utc.lte.${enc(readyIso)}),` +
+        `and(next_attempt_at_utc.is.null,scheduled_for_utc.not.is.null,scheduled_for_utc.lte.${enc(readyIso)}),` +
+        `and(next_attempt_at_utc.is.null,scheduled_for_utc.is.null)` +
+      `)` +
+      `&order=next_attempt_at_utc.asc.nullslast` +
+      `&order=scheduled_for_utc.asc.nullslast` +
       `&order=created_at_utc.asc` +
       `&limit=${take}`;
     const { rows } = await sbFetch(env, url, false);
@@ -48532,17 +48951,15 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
     now_utc: null
   };
 
-  // Pull queued rows per channel (provider chosen later)
-  const pickedWhatsapp = await fetchQueued('WHATSAPP', alloc('WHATSAPP'));
-  const pickedSms = await fetchQueued('SMS', alloc('SMS'));
-  const pickedVoice = await fetchQueued('VOICE', alloc('VOICE'));
+  const pickedWhatsapp = await getCommsOutboxReadyBatch('WHATSAPP', alloc('WHATSAPP'));
+  const pickedSms = await getCommsOutboxReadyBatch('SMS', alloc('SMS'));
+  const pickedVoice = await getCommsOutboxReadyBatch('VOICE', alloc('VOICE'));
 
   report.by_channel.WHATSAPP.picked = pickedWhatsapp.length;
   report.by_channel.SMS.picked = pickedSms.length;
   report.by_channel.VOICE.picked = pickedVoice.length;
   report.picked = pickedWhatsapp.length + pickedSms.length + pickedVoice.length;
 
-  // Route by adaptor mapping (core rule)
   if (pickedWhatsapp.length) {
     const ad = channelToAdaptor.WHATSAPP;
     if (ad === 'wati') {
@@ -48610,6 +49027,9 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   return report;
 }
 
+
+
+
 async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
   const enc = encodeURIComponent;
 
@@ -48626,13 +49046,13 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     return y;
   };
 
-  const sanitizeWhatsappText = (s, maxChars) => {
-    let t = String(s || '');
-    t = t.replace(/[\r\n\t]+/g, ' ');
-    t = t.replace(/[^A-Za-z ,]+/g, '');
-    t = t.replace(/\s+/g, ' ').trim();
-    if (t.length > maxChars) t = t.slice(0, maxChars);
-    return t;
+  const firstNonBlank = (...vals) => {
+    for (const v of vals) {
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (s) return s;
+    }
+    return '';
   };
 
   const toWatiWhatsAppNumber = (raw) => {
@@ -48643,6 +49063,46 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     // UK convenience: 07xxxxxxxxx -> 44xxxxxxxxxx
     if (s.length === 11 && s.startsWith('07')) s = '44' + s.slice(1);
     return s;
+  };
+
+  const getRowWatiContract = (row) => {
+    const providerPayload = isPlainObject(row && row.provider_payload_json) ? row.provider_payload_json : {};
+    const providerContract = isPlainObject(providerPayload.provider_contract) ? providerPayload.provider_contract : {};
+    const wati = isPlainObject(providerPayload.wati) ? providerPayload.wati : {};
+    const whatsapp = isPlainObject(providerPayload.whatsapp) ? providerPayload.whatsapp : {};
+    const provider = firstNonBlank(
+      providerContract.provider,
+      providerContract.provider_key,
+      providerPayload.provider,
+      providerPayload.provider_key,
+      wati.provider,
+      whatsapp.provider
+    );
+    const templateName = firstNonBlank(
+      providerContract.template_name,
+      providerContract.templateName,
+      wati.template_name,
+      wati.templateName,
+      whatsapp.template_name,
+      whatsapp.templateName,
+      providerPayload.template_name,
+      providerPayload.templateName,
+      providerPayload.wati_template_name,
+      providerPayload.watiTemplateName
+    );
+    const paramName = firstNonBlank(
+      providerContract.param_name,
+      providerContract.paramName,
+      wati.param_name,
+      wati.paramName,
+      whatsapp.param_name,
+      whatsapp.paramName,
+      providerPayload.param_name,
+      providerPayload.paramName,
+      providerPayload.wati_param_name,
+      providerPayload.watiParamName
+    );
+    return { provider, templateName, paramName };
   };
 
   const patchSuccess = async (id, providerMessageId, respJson) => {
@@ -48678,16 +49138,25 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
   const cfg = isPlainObject(watiCfg) ? watiCfg : {};
 
   const baseUrlRaw = (cfg.base_url != null) ? String(cfg.base_url).trim() : '';
-  const bearerRaw = (cfg.bearer_token != null) ? String(cfg.bearer_token).trim() : '';
-  const templateName = (cfg.template_name != null) ? String(cfg.template_name).trim() : '';
-  const paramName = (cfg.param_name != null) ? String(cfg.param_name).trim() : '';
-  const maxChars = clampInt(cfg.whatsapp_max_chars, 1, 2000, 600);
+  let bearerRaw = (env && env.WATI_API_TOKEN != null) ? String(env.WATI_API_TOKEN).trim() : '';
+  if (/^Bearer\s+/i.test(bearerRaw)) bearerRaw = bearerRaw.replace(/^Bearer\s+/i, '').trim();
   const batchMax = clampInt(cfg.bulk_send_limit, 1, 20000, 200);
 
   const report = { sent: 0, failed: 0, errors: [] };
 
-  if (!baseUrlRaw || !bearerRaw || !templateName || !paramName) {
+  if (!baseUrlRaw) {
     const msg = 'WATI_CONFIG_MISSING';
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      if (!r || !r.id) continue;
+      await patchFailure(r.id, msg, { error: msg });
+      report.failed += 1;
+      report.errors.push({ id: r.id, error: msg });
+    }
+    return report;
+  }
+
+  if (!bearerRaw) {
+    const msg = 'WATI_API_TOKEN_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
       await patchFailure(r.id, msg, { error: msg });
@@ -48700,10 +49169,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
   const baseUrl = baseUrlRaw.replace(/\/+$/, '');
   const url = `${baseUrl}/api/v2/sendTemplateMessages`;
 
-  const slice = (Array.isArray(rows) ? rows : []).slice(0, batchMax);
-
-  const receivers = [];
-  const rowIds = [];
+  const slice = Array.isArray(rows) ? rows : [];
+  const groups = new Map();
 
   for (const r of slice) {
     const id = r && r.id ? String(r.id) : '';
@@ -48713,7 +49180,11 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     if (!id) continue;
 
     const waNum = toWatiWhatsAppNumber(toRaw);
-    const msg = sanitizeWhatsappText(bodyRaw, maxChars);
+    const msg = String(bodyRaw || '').trim();
+    const contract = getRowWatiContract(r);
+    const provider = String(contract.provider || '').trim().toUpperCase();
+    const templateName = String(contract.templateName || '').trim();
+    const paramName = String(contract.paramName || '').trim();
 
     if (!waNum) {
       await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
@@ -48721,109 +49192,160 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
       report.errors.push({ id, error: 'MISSING_TO' });
       continue;
     }
+
     if (!msg) {
-      await patchFailure(id, 'EMPTY_MESSAGE_AFTER_SANITIZE', { error: 'EMPTY_MESSAGE_AFTER_SANITIZE' });
+      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
       report.failed += 1;
-      report.errors.push({ id, error: 'EMPTY_MESSAGE_AFTER_SANITIZE' });
+      report.errors.push({ id, error: 'EMPTY_MESSAGE' });
       continue;
     }
 
-    receivers.push({
-      whatsappNumber: waNum,
-      customParams: [
-        { name: paramName, value: msg }
-      ]
-    });
-
-    rowIds.push(id);
-  }
-
-  if (receivers.length === 0) return report;
-
-  const payload = {
-    template_name: templateName,
-    broadcast_name: `CloudTMS_${Date.now()}`,
-    receivers
-  };
-
-  let respText = '';
-  let respJson = null;
-  let httpOk = false;
-  let httpStatus = 0;
-
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${bearerRaw}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    httpOk = !!res.ok;
-    httpStatus = res.status;
-
-    respText = await res.text().catch(() => '');
-    try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
-  } catch (e) {
-    const errMsg = String(e?.message || e || 'WATI_REQUEST_FAILED');
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { error: errMsg });
+    if (provider && provider !== 'WATI') {
+      await patchFailure(id, 'INVALID_WATI_PROVIDER_CONTRACT', { error: 'INVALID_WATI_PROVIDER_CONTRACT', provider_contract: contract });
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
-    }
-    return report;
-  }
-
-  if (!httpOk) {
-    const errMsg = `WATI_HTTP_${httpStatus}`;
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { http_status: httpStatus, body: respText || null });
-      report.failed += 1;
-      report.errors.push({ id, error: errMsg });
-    }
-    return report;
-  }
-
-  const topResult = !!(respJson && typeof respJson === 'object' && respJson.result === true);
-  const receiversResp = (respJson && typeof respJson === 'object' && Array.isArray(respJson.receivers)) ? respJson.receivers : [];
-
-  if (!topResult || receiversResp.length === 0) {
-    const errMsg = topResult ? 'WATI_NO_RECEIVER_RESULTS' : (respJson && respJson.error ? String(respJson.error) : 'WATI_RESULT_FALSE');
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
-      report.failed += 1;
-      report.errors.push({ id, error: errMsg });
-    }
-    return report;
-  }
-
-  // Map by index (request order)
-  for (let i = 0; i < rowIds.length; i++) {
-    const id = rowIds[i];
-    const rr = receiversResp[i] || null;
-
-    const localMessageId = rr && rr.localMessageId ? String(rr.localMessageId) : null;
-    const isValid = (rr && Object.prototype.hasOwnProperty.call(rr, 'isValidWhatsAppNumber')) ? (rr.isValidWhatsAppNumber === true) : true;
-    const errs = rr && Array.isArray(rr.errors) ? rr.errors : [];
-    const errStr = errs.length ? errs.map(x => String(x)).join('; ').slice(0, 500) : null;
-
-    if (!isValid || errStr) {
-      const msg = errStr || 'WATI_INVALID_WHATSAPP_NUMBER';
-      await patchFailure(id, msg, { wati: rr, full: respJson });
-      report.failed += 1;
-      report.errors.push({ id, error: msg });
+      report.errors.push({ id, error: 'INVALID_WATI_PROVIDER_CONTRACT' });
       continue;
     }
 
-    await patchSuccess(id, localMessageId, { wati: rr, full: respJson });
-    report.sent += 1;
+    if (!templateName) {
+      await patchFailure(id, 'WATI_TEMPLATE_NAME_MISSING', { error: 'WATI_TEMPLATE_NAME_MISSING', provider_contract: contract });
+      report.failed += 1;
+      report.errors.push({ id, error: 'WATI_TEMPLATE_NAME_MISSING' });
+      continue;
+    }
+
+    if (!paramName) {
+      await patchFailure(id, 'WATI_PARAM_NAME_MISSING', { error: 'WATI_PARAM_NAME_MISSING', provider_contract: contract });
+      report.failed += 1;
+      report.errors.push({ id, error: 'WATI_PARAM_NAME_MISSING' });
+      continue;
+    }
+
+    const groupKey = `${templateName}\u0000${paramName}`;
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        templateName,
+        paramName,
+        items: []
+      });
+    }
+
+    groups.get(groupKey).items.push({
+      id,
+      waNum,
+      msg
+    });
+  }
+
+  for (const group of groups.values()) {
+    const templateName = group.templateName;
+    const paramName = group.paramName;
+    const items = Array.isArray(group.items) ? group.items : [];
+
+    for (let start = 0; start < items.length; start += batchMax) {
+      const chunk = items.slice(start, start + batchMax);
+
+      if (!chunk.length) continue;
+
+      const payload = {
+        template_name: templateName,
+        broadcast_name: `CloudTMS_${Date.now()}`,
+        receivers: chunk.map((item) => ({
+          whatsappNumber: item.waNum,
+          customParams: [
+            { name: paramName, value: item.msg }
+          ]
+        }))
+      };
+
+      let respText = '';
+      let respJson = null;
+      let httpOk = false;
+      let httpStatus = 0;
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${bearerRaw}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        httpOk = !!res.ok;
+        httpStatus = res.status;
+
+        respText = await res.text().catch(() => '');
+        try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
+      } catch (e) {
+        const errMsg = String(e?.message || e || 'WATI_REQUEST_FAILED');
+        for (const item of chunk) {
+          await patchFailure(item.id, errMsg, { error: errMsg });
+          report.failed += 1;
+          report.errors.push({ id: item.id, error: errMsg });
+        }
+        continue;
+      }
+
+      if (!httpOk) {
+        const errMsg = `WATI_HTTP_${httpStatus}`;
+        for (const item of chunk) {
+          await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null });
+          report.failed += 1;
+          report.errors.push({ id: item.id, error: errMsg });
+        }
+        continue;
+      }
+
+      const topResult = !!(respJson && typeof respJson === 'object' && respJson.result === true);
+      const receiversResp = (respJson && typeof respJson === 'object' && Array.isArray(respJson.receivers)) ? respJson.receivers : [];
+
+      if (!topResult || receiversResp.length === 0) {
+        const errMsg = topResult ? 'WATI_NO_RECEIVER_RESULTS' : (respJson && respJson.error ? String(respJson.error) : 'WATI_RESULT_FALSE');
+        for (const item of chunk) {
+          await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+          report.failed += 1;
+          report.errors.push({ id: item.id, error: errMsg });
+        }
+        continue;
+      }
+
+      for (let i = 0; i < chunk.length; i++) {
+        const item = chunk[i];
+        const rr = receiversResp[i] || null;
+
+        if (!(rr && typeof rr === 'object')) {
+          const msg = 'WATI_MISSING_RECEIVER_RESULT';
+          await patchFailure(item.id, msg, { full: respJson });
+          report.failed += 1;
+          report.errors.push({ id: item.id, error: msg });
+          continue;
+        }
+
+        const localMessageId = rr && (rr.localMessageId || rr.localMessageID || rr.local_message_id) ? String(rr.localMessageId || rr.localMessageID || rr.local_message_id) : null;
+        const isValid = Object.prototype.hasOwnProperty.call(rr, 'isValidWhatsAppNumber')
+          ? (rr.isValidWhatsAppNumber === true)
+          : true;
+        const errs = rr && Array.isArray(rr.errors) ? rr.errors : [];
+        const errStr = errs.length ? errs.map(x => String(x)).join('; ').slice(0, 500) : null;
+
+        if (!isValid || errStr) {
+          const msg = errStr || 'WATI_INVALID_WHATSAPP_NUMBER';
+          await patchFailure(item.id, msg, { wati: rr, full: respJson });
+          report.failed += 1;
+          report.errors.push({ id: item.id, error: msg });
+          continue;
+        }
+
+        await patchSuccess(item.id, localMessageId, { wati: rr, full: respJson });
+        report.sent += 1;
+      }
+    }
   }
 
   return report;
 }
-
 
 
 async function sendViaClicksendSmsBulk(env, csCfg, rows) {
@@ -48890,8 +49412,8 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
 
   const cfg = isPlainObject(csCfg) ? csCfg : {};
 
-  const username = (cfg.username != null) ? String(cfg.username).trim() : '';
-  const apiKey = (cfg.api_key != null) ? String(cfg.api_key).trim() : '';
+  const username = (env && env.CLICKSEND_API_USERNAME != null) ? String(env.CLICKSEND_API_USERNAME).trim() : '';
+  const apiKey = (env && env.CLICKSEND_API_KEY != null) ? String(env.CLICKSEND_API_KEY).trim() : '';
   const baseUrl = ((cfg.base_url != null) ? String(cfg.base_url).trim() : 'https://rest.clicksend.com').replace(/\/+$/, '');
   const smsMax = clampInt(cfg.sms_max_chars, 1, 5000, 1000);
   const batchMax = clampInt(cfg.bulk_send_limit, 1, 20000, 200);
@@ -48899,7 +49421,10 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
   const report = { sent: 0, failed: 0, errors: [] };
 
   if (!username || !apiKey) {
-    const msg = 'CLICKSEND_CONFIG_MISSING';
+    const missingEnv = [];
+    if (!username) missingEnv.push('CLICKSEND_API_USERNAME');
+    if (!apiKey) missingEnv.push('CLICKSEND_API_KEY');
+    const msg = (missingEnv.length === 1) ? `${missingEnv[0]}_MISSING` : 'CLICKSEND_API_CREDENTIALS_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
       await patchFailure(r.id, msg, { error: msg });
@@ -49099,8 +49624,8 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
 
   const cfg = isPlainObject(csCfg) ? csCfg : {};
 
-  const username = (cfg.username != null) ? String(cfg.username).trim() : '';
-  const apiKey = (cfg.api_key != null) ? String(cfg.api_key).trim() : '';
+  const username = (env && env.CLICKSEND_API_USERNAME != null) ? String(env.CLICKSEND_API_USERNAME).trim() : '';
+  const apiKey = (env && env.CLICKSEND_API_KEY != null) ? String(env.CLICKSEND_API_KEY).trim() : '';
   const baseUrl = ((cfg.base_url != null) ? String(cfg.base_url).trim() : 'https://rest.clicksend.com').replace(/\/+$/, '');
   const voiceMax = clampInt(cfg.voice_max_chars, 1, 10000, 1200);
   const batchMax = clampInt(cfg.bulk_send_limit, 1, 20000, 50);
@@ -49112,7 +49637,10 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
   const report = { sent: 0, failed: 0, errors: [] };
 
   if (!username || !apiKey) {
-    const msg = 'CLICKSEND_CONFIG_MISSING';
+    const missingEnv = [];
+    if (!username) missingEnv.push('CLICKSEND_API_USERNAME');
+    if (!apiKey) missingEnv.push('CLICKSEND_API_KEY');
+    const msg = (missingEnv.length === 1) ? `${missingEnv[0]}_MISSING` : 'CLICKSEND_API_CREDENTIALS_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
       await patchFailure(r.id, msg, { error: msg });
@@ -49333,42 +49861,6 @@ async function handleMailshotPrepare(env, req) {
   }
 }
 
-async function handleMailshotEnqueue(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
-
-  const prepareJson = body.prepare_json ?? body.prepareJson ?? null;
-  const finalEditsJson = body.final_edits_json ?? body.finalEditsJson ?? {};
-
-  if (!prepareJson || typeof prepareJson !== 'object' || Array.isArray(prepareJson)) {
-    return withCORS(env, req, badRequest('prepare_json object required'));
-  }
-  if (finalEditsJson == null || typeof finalEditsJson !== 'object' || Array.isArray(finalEditsJson)) {
-    return withCORS(env, req, badRequest('final_edits_json must be an object'));
-  }
-
-  try {
-    let payload = await sbRpc(env, 'mailshot_enqueue', {
-      p_prepare_json: prepareJson,
-      p_final_edits_json: finalEditsJson,
-      p_actor_user_id: user.id
-    });
-
-    try {
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_enqueue')) payload = payload.mailshot_enqueue;
-    } catch {}
-
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
-  } catch (e) {
-    const msg = String(e?.message || e || 'MAILSHOT_ENQUEUE_FAILED');
-    return withCORS(env, req, serverError(msg));
-  }
-}
 
 async function handleMailshotExport(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -49413,6 +49905,1051 @@ async function handleMailshotExport(env, req) {
   }
 }
 
+
+async function handleOutboxUnifiedRetry(env, req, channel, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const ch = String(channel || '').trim().toUpperCase();
+  const oid = String(id || '').trim();
+
+  if (!ch) return withCORS(env, req, badRequest('channel is required'));
+  if (!oid) return withCORS(env, req, badRequest('id is required'));
+  if (!uuidRe.test(oid)) return withCORS(env, req, badRequest('invalid_id'));
+
+  const allowed = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE']);
+  if (!allowed.has(ch)) return withCORS(env, req, badRequest('invalid_channel'));
+
+  const normalizeRetryAtUtc = async (raw) => {
+    let maxFutureDays = 365;
+    let allowPastGraceMinutes = 15;
+
+    try {
+      const s = await loadSettingsDefaults(env);
+      const cfg = s && s.comms_adaptors_json && typeof s.comms_adaptors_json === 'object' && !Array.isArray(s.comms_adaptors_json)
+        ? s.comms_adaptors_json
+        : null;
+      const scheduling = cfg && cfg.scheduling && typeof cfg.scheduling === 'object' && !Array.isArray(cfg.scheduling)
+        ? cfg.scheduling
+        : null;
+
+      if (scheduling) {
+        const mfd = Number(scheduling.max_future_days);
+        const apg = Number(scheduling.allow_past_grace_minutes);
+        if (Number.isFinite(mfd) && Math.trunc(mfd) > 0) maxFutureDays = Math.trunc(mfd);
+        if (Number.isFinite(apg) && Math.trunc(apg) >= 0) allowPastGraceMinutes = Math.trunc(apg);
+      }
+    } catch {}
+
+    const nowMs = Date.now();
+    const maxFutureMs = nowMs + (maxFutureDays * 24 * 60 * 60 * 1000);
+    const minPastMs = nowMs - (allowPastGraceMinutes * 60 * 1000);
+
+    if (raw == null || String(raw).trim() === '') {
+      return new Date(nowMs).toISOString();
+    }
+
+    const dt = new Date(String(raw).trim());
+    if (Number.isNaN(dt.getTime())) {
+      throw new Error('invalid_retry_at_utc');
+    }
+
+    const retryMs = dt.getTime();
+
+    if (retryMs > maxFutureMs) {
+      throw new Error('retry_at_utc exceeds max_future_days');
+    }
+    if (retryMs < minPastMs) {
+      throw new Error('retry_at_utc too far in past');
+    }
+
+    return retryMs <= nowMs ? new Date(nowMs).toISOString() : dt.toISOString();
+  };
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  let retryAtUtc = null;
+  try {
+    const rawRetryAtUtc =
+      body && typeof body === 'object' && !Array.isArray(body)
+        ? (body.retry_at_utc != null ? body.retry_at_utc : body.retryAtUtc)
+        : null;
+    retryAtUtc = await normalizeRetryAtUtc(rawRetryAtUtc);
+  } catch (e) {
+    return withCORS(env, req, badRequest(String(e?.message || e || 'invalid_retry_at_utc')));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'outbox_unified_retry', {
+      p_channel: ch,
+      p_id: oid,
+      p_actor_user_id: user.id,
+      p_retry_at_utc: retryAtUtc
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'outbox_unified_retry')) payload = payload.outbox_unified_retry;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'OUTBOX_RETRY_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleOutboxUnifiedReschedule(env, req, channel, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const ch = String(channel || '').trim().toUpperCase();
+  const oid = String(id || '').trim();
+
+  if (!ch) return withCORS(env, req, badRequest('channel is required'));
+  if (!oid) return withCORS(env, req, badRequest('id is required'));
+  if (!uuidRe.test(oid)) return withCORS(env, req, badRequest('invalid_id'));
+
+  const allowed = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE']);
+  if (!allowed.has(ch)) return withCORS(env, req, badRequest('invalid_channel'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const normalizeScheduledForUtc = async (raw) => {
+    let maxFutureDays = 365;
+    let allowPastGraceMinutes = 15;
+
+    try {
+      const s = await loadSettingsDefaults(env);
+      const cfg = s && s.comms_adaptors_json && typeof s.comms_adaptors_json === 'object' && !Array.isArray(s.comms_adaptors_json)
+        ? s.comms_adaptors_json
+        : null;
+      const scheduling = cfg && cfg.scheduling && typeof cfg.scheduling === 'object' && !Array.isArray(cfg.scheduling)
+        ? cfg.scheduling
+        : null;
+
+      if (scheduling) {
+        const mfd = Number(scheduling.max_future_days);
+        const apg = Number(scheduling.allow_past_grace_minutes);
+        if (Number.isFinite(mfd) && Math.trunc(mfd) > 0) maxFutureDays = Math.trunc(mfd);
+        if (Number.isFinite(apg) && Math.trunc(apg) >= 0) allowPastGraceMinutes = Math.trunc(apg);
+      }
+    } catch {}
+
+    const rawText = raw == null ? '' : String(raw).trim();
+    if (!rawText) {
+      throw new Error('scheduled_for_utc is required');
+    }
+
+    const dt = new Date(rawText);
+    if (Number.isNaN(dt.getTime())) {
+      throw new Error('invalid_scheduled_for_utc');
+    }
+
+    const nowMs = Date.now();
+    const scheduledMs = dt.getTime();
+    const maxFutureMs = nowMs + (maxFutureDays * 24 * 60 * 60 * 1000);
+    const minPastMs = nowMs - (allowPastGraceMinutes * 60 * 1000);
+
+    if (scheduledMs > maxFutureMs) {
+      throw new Error('scheduled_for_utc exceeds max_future_days');
+    }
+    if (scheduledMs < minPastMs) {
+      throw new Error('scheduled_for_utc too far in past');
+    }
+
+    return scheduledMs <= nowMs ? new Date(nowMs).toISOString() : dt.toISOString();
+  };
+
+  let scheduledForUtc = null;
+  try {
+    const rawScheduled =
+      body.scheduled_for_utc != null ? body.scheduled_for_utc :
+      body.scheduledForUtc != null ? body.scheduledForUtc :
+      null;
+
+    scheduledForUtc = await normalizeScheduledForUtc(rawScheduled);
+  } catch (e) {
+    return withCORS(env, req, badRequest(String(e?.message || e || 'invalid_scheduled_for_utc')));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'outbox_unified_reschedule', {
+      p_channel: ch,
+      p_id: oid,
+      p_actor_user_id: user.id,
+      p_scheduled_for_utc: scheduledForUtc
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'outbox_unified_reschedule')) payload = payload.outbox_unified_reschedule;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'OUTBOX_RESCHEDULE_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleWebhookWati(env, req) {
+  const enc = encodeURIComponent;
+
+  const nowIso = () => new Date().toISOString();
+
+  const qsSecret = String(new URL(req.url).searchParams.get('secret') || '').trim();
+  const expectedSecret = String(env.WATI_WEBHOOK_SECRET || '').trim();
+  if (!expectedSecret || !qsSecret || qsSecret !== expectedSecret) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+
+  const readJsonSafely = async (request) => {
+    try {
+      return await request.clone().json();
+    } catch {
+      return null;
+    }
+  };
+
+  const readTextSafely = async (request) => {
+    try {
+      return await request.clone().text();
+    } catch {
+      return '';
+    }
+  };
+
+  const bodyJson = await readJsonSafely(req);
+  const rawText = await readTextSafely(req);
+
+  const flattenPayloads = (input) => {
+    if (input == null) return [];
+    if (Array.isArray(input)) return input.filter(Boolean);
+    if (typeof input !== 'object') return [];
+    if (Array.isArray(input.data)) return input.data.filter(Boolean);
+    if (Array.isArray(input.results)) return input.results.filter(Boolean);
+    if (Array.isArray(input.events)) return input.events.filter(Boolean);
+    if (input.payload && typeof input.payload === 'object') return flattenPayloads(input.payload);
+    return [input];
+  };
+
+  const candidatePayloads = flattenPayloads(bodyJson);
+  if (candidatePayloads.length === 0 && rawText) {
+    try {
+      const parsed = JSON.parse(rawText);
+      candidatePayloads.push(...flattenPayloads(parsed));
+    } catch {}
+  }
+
+  const normalizeStatus = (eventName, statusString) => {
+    const ev = String(eventName || '').trim().toUpperCase();
+    const st = String(statusString || '').trim().toUpperCase();
+
+    if (ev.includes('FAILED') || st.includes('FAILED') || st.includes('FAIL') || st.includes('ERROR')) return 'FAILED';
+    if (ev.includes('READ') || st.includes('READ')) return 'READ';
+    if (ev.includes('DELIVERED') || st.includes('DELIVERED')) return 'DELIVERED';
+    if (ev.includes('SENT') || st.includes('SENT') || st.includes('ACCEPTED') || st.includes('QUEUED') || st.includes('SUBMITTED')) return 'SENT';
+    return null;
+  };
+
+  const firstNonEmpty = (...vals) => {
+    for (const v of vals) {
+      if (v != null && String(v).trim() !== '') return String(v).trim();
+    }
+    return '';
+  };
+
+  const successRankFromRow = (row) => {
+    if (row && row.read_at) return 3;
+    if (row && row.delivered_at) return 2;
+    if (row && row.sent_at) return 1;
+    return 0;
+  };
+
+  const successRankFromStatus = (status) => {
+    if (status === 'READ') return 3;
+    if (status === 'DELIVERED') return 2;
+    if (status === 'SENT') return 1;
+    return 0;
+  };
+
+  const results = [];
+  let updated = 0;
+  let ignored = 0;
+
+  if (candidatePayloads.length === 0) {
+    return withCORS(env, req, ok({
+      ok: true,
+      updated: 0,
+      ignored: 1,
+      results: [
+        {
+          ok: false,
+          reason: 'INVALID_OR_IRRELEVANT_PAYLOAD'
+        }
+      ]
+    }));
+  }
+
+  for (const payload of candidatePayloads) {
+    const eventName = firstNonEmpty(
+      payload.eventType,
+      payload.event_type,
+      payload.event,
+      payload.type,
+      payload.webhookEvent,
+      payload.webhook_event
+    );
+
+    const statusString = firstNonEmpty(
+      payload.statusString,
+      payload.status_string,
+      payload.status,
+      payload.messageStatus,
+      payload.message_status
+    );
+
+    const localMessageId = firstNonEmpty(
+      payload.localMessageId,
+      payload.localmessageId,
+      payload.local_message_id,
+      payload.localMessageID,
+      payload.localmessageid,
+      payload?.data?.localMessageId,
+      payload?.data?.localmessageId
+    );
+
+    const mappedStatus = normalizeStatus(eventName, statusString);
+    if (!localMessageId || !mappedStatus) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: !localMessageId ? 'MISSING_LOCAL_MESSAGE_ID' : 'UNMAPPED_STATUS',
+        localMessageId: localMessageId || null,
+        eventName: eventName || null,
+        statusString: statusString || null
+      });
+      continue;
+    }
+
+    let row = null;
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
+          `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error` +
+          `&channel=eq.WHATSAPP` +
+          `&provider_message_id=eq.${enc(localMessageId)}` +
+          `&limit=1`,
+        false
+      );
+      row = Array.isArray(rows) && rows.length ? rows[0] : null;
+    } catch {
+      row = null;
+    }
+
+    if (!row) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'ROW_NOT_FOUND',
+        localMessageId,
+        mappedStatus
+      });
+      continue;
+    }
+
+    const providerKey = String(row.provider_key || '').trim().toUpperCase();
+    const rowChannel = String(row.channel || '').trim().toUpperCase();
+    if (rowChannel !== 'WHATSAPP' || (providerKey && providerKey !== 'AUTO' && providerKey !== 'WATI')) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'ROW_NOT_OURS',
+        outbox_id: row.id,
+        localMessageId,
+        mappedStatus
+      });
+      continue;
+    }
+
+    const currentSuccessRank = successRankFromRow(row);
+    const incomingSuccessRank = successRankFromStatus(mappedStatus);
+
+    if (mappedStatus === 'FAILED' && currentSuccessRank > 0) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'REGRESSIVE_STATUS_IGNORED',
+        outbox_id: row.id,
+        localMessageId,
+        mappedStatus,
+        current_status: row.status || null
+      });
+      continue;
+    }
+
+    if (incomingSuccessRank > 0 && incomingSuccessRank < currentSuccessRank) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'REGRESSIVE_STATUS_IGNORED',
+        outbox_id: row.id,
+        localMessageId,
+        mappedStatus,
+        current_status: row.status || null
+      });
+      continue;
+    }
+
+    const patch = {
+      provider_key: 'WATI',
+      provider_message_id: localMessageId,
+      provider_response_json: payload
+    };
+
+    if (mappedStatus === 'FAILED') {
+      patch.status = 'FAILED';
+      patch.failed_at = row.failed_at || nowIso();
+      patch.last_error = firstNonEmpty(
+        payload.error,
+        payload.errorMessage,
+        payload.error_message,
+        payload.reason,
+        statusString,
+        eventName
+      ) || 'WATI_FAILED';
+    } else if (mappedStatus === 'READ') {
+      patch.status = 'READ';
+      patch.sent_at = row.sent_at || nowIso();
+      patch.delivered_at = row.delivered_at || nowIso();
+      patch.read_at = row.read_at || nowIso();
+      patch.failed_at = null;
+      patch.last_error = null;
+    } else if (mappedStatus === 'DELIVERED') {
+      patch.status = currentSuccessRank >= 3 ? 'READ' : 'DELIVERED';
+      patch.sent_at = row.sent_at || nowIso();
+      patch.delivered_at = row.delivered_at || nowIso();
+      patch.failed_at = null;
+      patch.last_error = null;
+    } else if (mappedStatus === 'SENT') {
+      patch.status = currentSuccessRank >= 3 ? 'READ' : (currentSuccessRank >= 2 ? 'DELIVERED' : 'SENT');
+      patch.sent_at = row.sent_at || nowIso();
+      patch.failed_at = null;
+      patch.last_error = null;
+    }
+
+    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(row.id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify(patch)
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => '');
+      results.push({
+        ok: false,
+        reason: 'PATCH_FAILED',
+        localMessageId,
+        mappedStatus,
+        error: txt || null
+      });
+      continue;
+    }
+
+    updated += 1;
+    results.push({
+      ok: true,
+      outbox_id: row.id,
+      localMessageId,
+      mappedStatus,
+      applied_status: patch.status
+    });
+  }
+
+  return withCORS(env, req, ok({
+    ok: true,
+    updated,
+    ignored,
+    results
+  }));
+}
+
+
+async function handleWebhookClicksend(env, req) {
+  const enc = encodeURIComponent;
+
+  const nowIso = () => new Date().toISOString();
+
+  const urlObj = new URL(req.url);
+  const qsSecret = String(urlObj.searchParams.get('secret') || '').trim();
+  const expectedSecret = String(env.CLICKSEND_WEBHOOK_SECRET || '').trim();
+  if (!expectedSecret || !qsSecret || qsSecret !== expectedSecret) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+
+  const readJsonSafely = async (request) => {
+    try {
+      return await request.clone().json();
+    } catch {
+      return null;
+    }
+  };
+
+  const readFormSafely = async (request) => {
+    try {
+      const fd = await request.clone().formData();
+      const out = {};
+      for (const [k, v] of fd.entries()) out[k] = typeof v === 'string' ? v : String(v);
+      return out;
+    } catch {
+      return null;
+    }
+  };
+
+  const bodyJson = await readJsonSafely(req);
+  const bodyForm = await readFormSafely(req);
+
+  const queryObj = {};
+  for (const [k, v] of urlObj.searchParams.entries()) {
+    if (k !== 'secret') queryObj[k] = v;
+  }
+
+  const flattenPayloads = (input) => {
+    if (input == null) return [];
+    if (Array.isArray(input)) return input.filter(Boolean);
+    if (typeof input !== 'object') return [];
+    if (Array.isArray(input.data)) return input.data.filter(Boolean);
+    if (Array.isArray(input.results)) return input.results.filter(Boolean);
+    if (Array.isArray(input.messages)) return input.messages.filter(Boolean);
+    if (Array.isArray(input.receipts)) return input.receipts.filter(Boolean);
+    return [input];
+  };
+
+  const candidatePayloads = [];
+  candidatePayloads.push(...flattenPayloads(bodyJson));
+  if (bodyForm && typeof bodyForm === 'object') candidatePayloads.push(bodyForm);
+  if (Object.keys(queryObj).length) candidatePayloads.push(queryObj);
+
+  const firstNonEmpty = (...vals) => {
+    for (const v of vals) {
+      if (v != null && String(v).trim() !== '') return String(v).trim();
+    }
+    return '';
+  };
+
+  const mapStatus = (statusText, statusCode) => {
+    const st = String(statusText || '').trim().toUpperCase();
+    const sc = String(statusCode || '').trim();
+
+    if (st.includes('READ')) return 'READ';
+    if (st.includes('DELIVERED') || st === 'DELIVRD' || st === 'DELIVERD') return 'DELIVERED';
+    if (st.includes('SENT') || st.includes('SUCCESS') || st.includes('QUEUED') || st.includes('ACCEPT')) return 'SENT';
+    if (st.includes('FAILED') || st.includes('FAIL') || st.includes('ERROR') || st.includes('UNDELIVERABLE')) return 'FAILED';
+
+    if (sc === '200' || sc === '201' || sc === '202') return 'SENT';
+    if (sc === '400' || sc === '401' || sc === '403' || sc === '404' || sc === '500') return 'FAILED';
+
+    return null;
+  };
+
+  const successRankFromRow = (row) => {
+    if (row && row.read_at) return 3;
+    if (row && row.delivered_at) return 2;
+    if (row && row.sent_at) return 1;
+    return 0;
+  };
+
+  const successRankFromStatus = (status) => {
+    if (status === 'READ') return 3;
+    if (status === 'DELIVERED') return 2;
+    if (status === 'SENT') return 1;
+    return 0;
+  };
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const results = [];
+  let updated = 0;
+  let ignored = 0;
+
+  if (candidatePayloads.length === 0) {
+    return withCORS(env, req, ok({
+      ok: true,
+      updated: 0,
+      ignored: 1,
+      results: [
+        {
+          ok: false,
+          reason: 'INVALID_OR_IRRELEVANT_PAYLOAD'
+        }
+      ]
+    }));
+  }
+
+  for (const payload of candidatePayloads) {
+    const customString = firstNonEmpty(
+      payload.custom_string,
+      payload.customString,
+      payload.customstring
+    );
+
+    const messageId = firstNonEmpty(
+      payload.message_id,
+      payload.messageId,
+      payload.messageid,
+      payload.id
+    );
+
+    const statusText = firstNonEmpty(
+      payload.status_text,
+      payload.statusText,
+      payload.status,
+      payload.message_status,
+      payload.delivery_status
+    );
+
+    const statusCode = firstNonEmpty(
+      payload.status_code,
+      payload.statusCode,
+      payload.code,
+      payload.error_code
+    );
+
+    const mappedStatus = mapStatus(statusText, statusCode);
+
+    if (!customString && !messageId) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'MISSING_IDENTIFIERS',
+        status_text: statusText || null,
+        status_code: statusCode || null
+      });
+      continue;
+    }
+
+    if (!mappedStatus) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'UNMAPPED_STATUS',
+        custom_string: customString || null,
+        message_id: messageId || null,
+        status_text: statusText || null,
+        status_code: statusCode || null
+      });
+      continue;
+    }
+
+    let row = null;
+    let rowSource = null;
+    let rowLookupAmbiguous = false;
+
+    if (customString && uuidRe.test(customString)) {
+      try {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
+            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error` +
+            `&id=eq.${enc(customString)}` +
+            `&limit=1`,
+          false
+        );
+        row = Array.isArray(rows) && rows.length ? rows[0] : null;
+        if (row) rowSource = 'CUSTOM_STRING';
+      } catch {
+        row = null;
+        rowSource = null;
+      }
+    }
+
+    if (!row && messageId) {
+      try {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
+            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error` +
+            `&provider_message_id=eq.${enc(messageId)}` +
+            `&channel=in.(SMS,VOICE)` +
+            `&or=(provider_key.eq.AUTO,provider_key.eq.CLICKSEND,provider_key.is.null)` +
+            `&limit=2`,
+          false
+        );
+
+        if (Array.isArray(rows) && rows.length === 1) {
+          row = rows[0];
+          rowSource = 'PROVIDER_MESSAGE_ID';
+        } else if (Array.isArray(rows) && rows.length > 1) {
+          rowLookupAmbiguous = true;
+        }
+      } catch {
+        row = null;
+        rowSource = null;
+      }
+    }
+
+    if (rowLookupAmbiguous) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'AMBIGUOUS_PROVIDER_MESSAGE_ID',
+        custom_string: customString || null,
+        message_id: messageId || null,
+        mappedStatus
+      });
+      continue;
+    }
+
+    if (!row) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'ROW_NOT_FOUND',
+        custom_string: customString || null,
+        message_id: messageId || null,
+        mappedStatus
+      });
+      continue;
+    }
+
+    const providerKey = String(row.provider_key || '').trim().toUpperCase();
+    const rowChannel = String(row.channel || '').trim().toUpperCase();
+    if ((rowChannel !== 'SMS' && rowChannel !== 'VOICE') || (providerKey && providerKey !== 'AUTO' && providerKey !== 'CLICKSEND')) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'ROW_NOT_OURS',
+        outbox_id: row.id,
+        custom_string: customString || null,
+        message_id: messageId || null,
+        mappedStatus
+      });
+      continue;
+    }
+
+    const currentSuccessRank = successRankFromRow(row);
+    const incomingSuccessRank = successRankFromStatus(mappedStatus);
+
+    if (mappedStatus === 'FAILED' && currentSuccessRank > 0) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'REGRESSIVE_STATUS_IGNORED',
+        outbox_id: row.id,
+        custom_string: customString || null,
+        message_id: messageId || null,
+        mappedStatus,
+        current_status: row.status || null
+      });
+      continue;
+    }
+
+    if (incomingSuccessRank > 0 && incomingSuccessRank < currentSuccessRank) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'REGRESSIVE_STATUS_IGNORED',
+        outbox_id: row.id,
+        custom_string: customString || null,
+        message_id: messageId || null,
+        mappedStatus,
+        current_status: row.status || null
+      });
+      continue;
+    }
+
+    const patch = {
+      provider_key: 'CLICKSEND',
+      provider_response_json: payload
+    };
+
+    if (messageId) patch.provider_message_id = messageId;
+
+    if (mappedStatus === 'FAILED') {
+      patch.status = 'FAILED';
+      patch.failed_at = row.failed_at || nowIso();
+      patch.last_error = firstNonEmpty(
+        payload.error,
+        payload.error_text,
+        payload.errorText,
+        statusText,
+        statusCode
+      ) || 'CLICKSEND_FAILED';
+    } else if (mappedStatus === 'READ') {
+      patch.status = 'READ';
+      patch.sent_at = row.sent_at || nowIso();
+      patch.delivered_at = row.delivered_at || nowIso();
+      patch.read_at = row.read_at || nowIso();
+      patch.failed_at = null;
+      patch.last_error = null;
+    } else if (mappedStatus === 'DELIVERED') {
+      patch.status = currentSuccessRank >= 3 ? 'READ' : 'DELIVERED';
+      patch.sent_at = row.sent_at || nowIso();
+      patch.delivered_at = row.delivered_at || nowIso();
+      patch.failed_at = null;
+      patch.last_error = null;
+    } else if (mappedStatus === 'SENT') {
+      patch.status = currentSuccessRank >= 3 ? 'READ' : (currentSuccessRank >= 2 ? 'DELIVERED' : 'SENT');
+      patch.sent_at = row.sent_at || nowIso();
+      patch.failed_at = null;
+      patch.last_error = null;
+    }
+
+    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(row.id)}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify(patch)
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => '');
+      results.push({
+        ok: false,
+        reason: 'PATCH_FAILED',
+        custom_string: customString || null,
+        message_id: messageId || null,
+        mappedStatus,
+        error: txt || null
+      });
+      continue;
+    }
+
+    updated += 1;
+    results.push({
+      ok: true,
+      outbox_id: row.id,
+      custom_string: customString || null,
+      message_id: messageId || null,
+      mappedStatus,
+      applied_status: patch.status,
+      lookup_source: rowSource
+    });
+  }
+
+  return withCORS(env, req, ok({
+    ok: true,
+    updated,
+    ignored,
+    results
+  }));
+}
+
+
+
+
+async function handleOutboxUnifiedDelete(env, req, channel, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const ch = String(channel || '').trim().toUpperCase();
+  const oid = String(id || '').trim();
+
+  if (!ch) return withCORS(env, req, badRequest('channel is required'));
+  if (!oid) return withCORS(env, req, badRequest('id is required'));
+  if (!uuidRe.test(oid)) return withCORS(env, req, badRequest('invalid_id'));
+
+  const allowed = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE']);
+  if (!allowed.has(ch)) return withCORS(env, req, badRequest('invalid_channel'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const reason =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body.reason ?? body.delete_reason ?? null)
+      : null;
+
+  if (reason != null && typeof reason !== 'string') {
+    return withCORS(env, req, badRequest('reason must be a string'));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'outbox_unified_delete', {
+      p_channel: ch,
+      p_id: oid,
+      p_actor_user_id: user.id,
+      p_reason: (reason && String(reason).trim()) ? String(reason).trim() : null
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'outbox_unified_delete')) payload = payload.outbox_unified_delete;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'OUTBOX_DELETE_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleOutboxUnifiedDeleteMany(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const items = Array.isArray(body.items) ? body.items : (Array.isArray(body.rows) ? body.rows : null);
+  const reason = body.reason ?? body.delete_reason ?? null;
+
+  if (!Array.isArray(items)) {
+    return withCORS(env, req, badRequest('items array required'));
+  }
+
+  if (reason != null && typeof reason !== 'string') {
+    return withCORS(env, req, badRequest('reason must be a string'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const allowed = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE']);
+
+  const normalizedItems = [];
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return withCORS(env, req, badRequest('each item must be an object'));
+    }
+
+    const ch = String(item.channel || '').trim().toUpperCase();
+    const oid = String(item.id || item.outbox_id || '').trim();
+
+    if (!ch) return withCORS(env, req, badRequest('each item.channel is required'));
+    if (!oid) return withCORS(env, req, badRequest('each item.id is required'));
+    if (!allowed.has(ch)) return withCORS(env, req, badRequest('invalid_channel'));
+    if (!uuidRe.test(oid)) return withCORS(env, req, badRequest('invalid_id'));
+
+    normalizedItems.push({
+      channel: ch,
+      id: oid
+    });
+  }
+
+  try {
+    let payload = await sbRpc(env, 'outbox_unified_delete_many', {
+      p_items: normalizedItems,
+      p_actor_user_id: user.id,
+      p_reason: (reason && String(reason).trim()) ? String(reason).trim() : null
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'outbox_unified_delete_many')) payload = payload.outbox_unified_delete_many;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'OUTBOX_DELETE_MANY_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleMailshotRunCancelPending(env, req, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const runId = String(id || '').trim();
+
+  if (!runId) return withCORS(env, req, badRequest('id is required'));
+  if (!uuidRe.test(runId)) return withCORS(env, req, badRequest('invalid_id'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const reason =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body.reason ?? body.cancel_reason ?? null)
+      : null;
+
+  if (reason != null && typeof reason !== 'string') {
+    return withCORS(env, req, badRequest('reason must be a string'));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_run_cancel_pending', {
+      p_mailshot_run_id: runId,
+      p_actor_user_id: user.id,
+      p_reason: (reason && String(reason).trim()) ? String(reason).trim() : null
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_run_cancel_pending')) payload = payload.mailshot_run_cancel_pending;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'MAILSHOT_RUN_CANCEL_PENDING_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleMailshotRunDeleteIfUnsent(env, req, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const runId = String(id || '').trim();
+
+  if (!runId) return withCORS(env, req, badRequest('id is required'));
+  if (!uuidRe.test(runId)) return withCORS(env, req, badRequest('invalid_id'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const reason =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body.reason ?? body.delete_reason ?? null)
+      : null;
+
+  if (reason != null && typeof reason !== 'string') {
+    return withCORS(env, req, badRequest('reason must be a string'));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_run_delete_if_unsent', {
+      p_mailshot_run_id: runId,
+      p_actor_user_id: user.id,
+      p_reason: (reason && String(reason).trim()) ? String(reason).trim() : null
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_run_delete_if_unsent')) payload = payload.mailshot_run_delete_if_unsent;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'MAILSHOT_RUN_DELETE_IF_UNSENT_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+
+
+
+
+
 async function handleOutboxUnifiedList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -49423,6 +50960,9 @@ async function handleOutboxUnifiedList(env, req) {
     const statusRaw = String(url.searchParams.get('status') || '').trim();
     const channelRaw = String(url.searchParams.get('channel') || '').trim();
     const searchRaw = String(url.searchParams.get('search') || '').trim();
+    const queueStateRaw = String(url.searchParams.get('queue_state') || '').trim();
+    const sortByRaw = String(url.searchParams.get('sort_by') || '').trim();
+    const sortDirRaw = String(url.searchParams.get('sort_dir') || '').trim();
 
     const limitRaw = url.searchParams.get('limit');
     const offsetRaw = url.searchParams.get('offset');
@@ -49430,6 +50970,9 @@ async function handleOutboxUnifiedList(env, req) {
     const status = statusRaw ? statusRaw.toUpperCase() : null;
     const channel = channelRaw ? channelRaw.toUpperCase() : null;
     const search = searchRaw ? searchRaw : null;
+    const queueState = queueStateRaw ? queueStateRaw.toUpperCase() : null;
+    const sortBy = sortByRaw ? sortByRaw : 'created_at_utc';
+    const sortDir = sortDirRaw ? sortDirRaw.toLowerCase() : 'desc';
 
     const toInt = (v, dflt) => {
       const n = Number(v);
@@ -49443,22 +50986,38 @@ async function handleOutboxUnifiedList(env, req) {
     if (limit > 500) limit = 500;
     if (offset < 0) offset = 0;
 
-    // Allowlist for channel if provided
     if (channel != null) {
       const allowed = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE']);
       if (!allowed.has(channel)) return withCORS(env, req, badRequest('invalid_channel'));
     }
 
-    // status is passed through (DB function handles filtering); keep basic sanity
     const statusOk = (status == null) || /^[A-Z_]+$/.test(status);
     if (!statusOk) return withCORS(env, req, badRequest('invalid_status'));
+
+    const allowedQueueState = new Set(['SCHEDULED', 'QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED']);
+    if (queueState != null && !allowedQueueState.has(queueState)) {
+      return withCORS(env, req, badRequest('invalid_queue_state'));
+    }
+
+    const allowedSortBy = new Set(['created_at_utc', 'scheduled_for_utc', 'effective_ready_at_utc', 'status', 'channel']);
+    if (!allowedSortBy.has(sortBy)) {
+      return withCORS(env, req, badRequest('invalid_sort_by'));
+    }
+
+    const allowedSortDir = new Set(['asc', 'desc']);
+    if (!allowedSortDir.has(sortDir)) {
+      return withCORS(env, req, badRequest('invalid_sort_dir'));
+    }
 
     let payload = await sbRpc(env, 'outbox_unified_list', {
       p_status: status,
       p_channel: channel,
       p_search: search,
+      p_queue_state: queueState,
       p_limit: limit,
-      p_offset: offset
+      p_offset: offset,
+      p_sort_by: sortBy,
+      p_sort_dir: sortDir
     });
 
     try {
@@ -49472,6 +51031,8 @@ async function handleOutboxUnifiedList(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
+
+
 
 async function handleOutboxUnifiedGet(env, req, channel, id) {
   const user = await requireUser(env, req, ['admin']);
@@ -49587,234 +51148,7 @@ async function signDownloadUrlForR2Key(env, r2Key, { ttlSecs }) {
 // ------------------------------
 // Queue drain logic
 // ------------------------------
-async function drainEmailOutboxOnce(env, { limit, types } = {}) {
-  const take = Math.max(
-    1,
-    Math.min(Number(limit) || Number(env.EMAIL_DRAIN_LIMIT_DEFAULT) || DEFAULT_DRAIN_LIMIT, 100)
-  );
-  const typeFilter = Array.isArray(types) && types.length ? types : null;
 
-  let url =
-    `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=*` +
-    `&status=eq.QUEUED` +
-    `&order=created_at_utc.asc` +
-    `&limit=${take}`;
-  if (typeFilter) {
-    const t = typeFilter.map((t) => `"${enc(t)}"`).join(",");
-    url += `&type=in.(${t})`;
-  }
-
-  const { rows } = await sbFetch(env, url, false);
-  const picked = rows || [];
-  if (picked.length === 0) {
-    return { picked: 0, sent: 0, failed: 0, deferred: 0, errors: [] };
-  }
-
-  let sent = 0;
-  let failed = 0;
-  let deferred = 0;
-  const errors = [];
-
-  const nowPlusMinutesIso = (mins) => {
-    const ms = Date.now() + Math.max(1, Number(mins) || 5) * 60 * 1000;
-    return new Date(ms).toISOString();
-  };
-
-  // Build up to 25 provider jobs for the batch Flow (skip deferred PDF_NOT_READY rows).
-  const BATCH_MAX = 25;
-  const jobs = [];
-  const jobRowIds = [];
-
-  for (const row of picked) {
-    if (jobs.length >= BATCH_MAX) break;
-
-    try {
-      const payload = await buildEmailPayloadFromOutboxRow(env, row);
-      jobs.push(payload);
-      jobRowIds.push(row.id);
-    } catch (e) {
-      const msg = String(e?.message || e);
-
-      // ✅ RETRYABLE DEFERRAL: PDFs not ready yet
-      if (msg.startsWith("PDF_NOT_READY:")) {
-        try {
-          await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-            method: "PATCH",
-            headers: sbHeaders(env),
-            body: JSON.stringify({
-              // keep QUEUED so it retries later
-              status: "QUEUED",
-              last_error: msg,
-              // push it back in the queue to avoid hot-looping
-              created_at_utc: nowPlusMinutesIso(10),
-            }),
-          });
-        } catch {}
-        deferred += 1;
-        errors.push({ id: row.id, error: msg, deferred: true });
-        await recordEmailAudit(env, null, "EMAIL_DEFERRED", {
-          outbox_id: row.id,
-          reason: msg,
-          type: row.type,
-        });
-        continue;
-      }
-
-      // defensive failure (non-retryable)
-      try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-          method: "PATCH",
-          headers: sbHeaders(env),
-          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: msg, provider_status: "FAILED" }),
-        });
-      } catch {}
-      failed += 1;
-      errors.push({ id: row.id, error: msg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: row.id, error: msg, type: row.type });
-    }
-  }
-
-  if (jobs.length === 0) {
-    return { picked: picked.length, sent, failed, deferred, errors };
-  }
-
-  // Single provider call for up to 25 emails.
-  const batchPayload = { items: jobs };
-  const res = await postToPowerAutomate(env, batchPayload);
-
-  if (!res.ok) {
-    // Provider-level failure: mark all jobs as FAILED.
-    const errMsg = String(res.body || `HTTP ${res.status}`);
-    for (const rowId of jobRowIds) {
-      try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: "PATCH",
-          headers: sbHeaders(env),
-          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg, provider_status: "FAILED" }),
-        });
-      } catch {}
-      failed += 1;
-      errors.push({ id: rowId, error: errMsg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
-    }
-    return { picked: picked.length, sent, failed, deferred, errors };
-  }
-
-  // Parse per-item results from the batch Flow response.
-  let results = null;
-  try {
-    const j = typeof res.body === "string" ? JSON.parse(res.body) : res.body;
-    results = Array.isArray(j?.results) ? j.results : null;
-  } catch {
-    results = null;
-  }
-
-  // If results missing, conservatively mark all as FAILED (cannot reconcile).
-  if (!Array.isArray(results) || results.length === 0) {
-    const errMsg = "Provider returned no per-item results (cannot reconcile)";
-    for (const rowId of jobRowIds) {
-      try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: "PATCH",
-          headers: sbHeaders(env),
-          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg, provider_status: "FAILED" }),
-        });
-      } catch {}
-      failed += 1;
-      errors.push({ id: rowId, error: errMsg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
-    }
-    return { picked: picked.length, sent, failed, deferred, errors };
-  }
-
-  // Build lookup: meta.outbox_id -> result. Fall back to index order if meta missing.
-  const byOutboxId = new Map();
-  for (const r of results) {
-    const oid = r?.meta?.outbox_id || r?.meta?.outboxId || r?.meta?.id || null;
-    if (oid) byOutboxId.set(String(oid), r);
-  }
-
-  for (let i = 0; i < jobRowIds.length; i++) {
-    const rowId = jobRowIds[i];
-    const r = byOutboxId.get(String(rowId)) || results[i] || null;
-
-    const status = String(r?.status || "").toUpperCase();
-    const isSuccess = status === "SUCCESS";
-    const isFailed = status === "FAILED" || status === "FAIL" || status === "ERROR";
-
-    if (isSuccess) {
-      const providerMessageId = r?.provider_message_id || r?.providerMessageId || res.provider_message_id || null;
-
-      const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-        method: "PATCH",
-        headers: sbHeaders(env),
-        body: JSON.stringify({
-          status: "SENT",
-          sent_at: nowIso(),
-          provider_message_id: providerMessageId || null,
-          provider_status: "ACCEPTED",
-          delivered_at: null,
-          read_at: null,
-          last_error: null,
-          failed_at: null,
-        }),
-      });
-
-      if (!upd.ok) {
-        const errTxt = await upd.text();
-        throw new Error(`Sent but failed to update status: ${errTxt}`);
-      }
-
-      sent += 1;
-      await recordEmailAudit(env, null, "EMAIL_SENT", {
-        outbox_id: rowId,
-        provider_message_id: providerMessageId,
-        type: r?.meta?.type || "BATCH",
-      });
-      continue;
-    }
-
-    if (isFailed) {
-      const errMsg = String(r?.error || r?.body || r?.message || "Provider failed");
-      const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-        method: "PATCH",
-        headers: sbHeaders(env),
-        body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg, provider_status: "FAILED" }),
-      });
-
-      if (!upd.ok) {
-        const errTxt = await upd.text();
-        throw new Error(`Provider fail and update fail: ${errTxt}`);
-      }
-
-      failed += 1;
-      errors.push({ id: rowId, error: errMsg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", {
-        outbox_id: rowId,
-        error: errMsg,
-        type: r?.meta?.type || "BATCH",
-      });
-      continue;
-    }
-
-    // Unknown status -> treat as failure
-    {
-      const errMsg = String(r?.error || r?.body || r?.message || "Unknown provider status");
-      try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: "PATCH",
-          headers: sbHeaders(env),
-          body: JSON.stringify({ status: "FAILED", failed_at: nowIso(), last_error: errMsg, provider_status: "FAILED" }),
-        });
-      } catch {}
-      failed += 1;
-      errors.push({ id: rowId, error: errMsg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
-    }
-  }
-
-  return { picked: picked.length, sent, failed, deferred, errors };
-}
 // ------------------------------
 // HTTP handlers – Outbox ops
 // ------------------------------
@@ -49832,6 +51166,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
+
 async function handleEmailSend(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -49841,7 +51178,6 @@ async function handleEmailSend(env, req) {
 
   const normalized = normalizeEmailPayload(body);
 
-  // Default importance to Normal if not supplied
   const importance =
     normalized.importance && String(normalized.importance).trim()
       ? String(normalized.importance).trim()
@@ -49850,8 +51186,108 @@ async function handleEmailSend(env, req) {
   const err = validateEmailPayload({ ...normalized, importance });
   if (err) return withCORS(env, req, badRequest(err));
 
-  // If caller asks to queue instead of immediate send
+  const normalizeDeliveryTimingJson = async (raw) => {
+    const timingRaw = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : { mode: 'NOW' };
+
+    let mode = String(timingRaw.mode || 'NOW').trim().toUpperCase();
+    if (mode === 'RELATIVE_DELAY') mode = 'AFTER_DELAY';
+
+    if (!['NOW', 'AT_TIME', 'AFTER_DELAY'].includes(mode)) {
+      throw new Error('delivery_timing_json.mode must be NOW, AT_TIME or AFTER_DELAY');
+    }
+
+    let scheduledForUtc = null;
+    let nextAttemptAtUtc = null;
+    let requestedTimezone = null;
+    let requestedLocalText = null;
+    let relativeMinutes = null;
+
+    if (timingRaw.requested_timezone != null) {
+      requestedTimezone = String(timingRaw.requested_timezone || '').trim() || null;
+    }
+    if (timingRaw.requested_local_text != null) {
+      requestedLocalText = String(timingRaw.requested_local_text || '').trim() || null;
+    }
+    if (timingRaw.relative_minutes != null && timingRaw.relative_minutes !== '') {
+      const n = Number(timingRaw.relative_minutes);
+      if (!Number.isFinite(n)) throw new Error('delivery_timing_json.relative_minutes must be numeric');
+      relativeMinutes = Math.trunc(n);
+    }
+
+    let maxFutureDays = 365;
+    let allowPastGraceMinutes = 15;
+    try {
+      const s = await loadSettingsDefaults(env);
+      const cj = s && s.comms_adaptors_json && typeof s.comms_adaptors_json === 'object' && !Array.isArray(s.comms_adaptors_json)
+        ? s.comms_adaptors_json
+        : null;
+      const scheduling = cj && cj.scheduling && typeof cj.scheduling === 'object' && !Array.isArray(cj.scheduling)
+        ? cj.scheduling
+        : null;
+      if (scheduling) {
+        const mfd = Number(scheduling.max_future_days);
+        const apg = Number(scheduling.allow_past_grace_minutes);
+        if (Number.isFinite(mfd) && Math.trunc(mfd) > 0) maxFutureDays = Math.trunc(mfd);
+        if (Number.isFinite(apg) && Math.trunc(apg) > 0) allowPastGraceMinutes = Math.trunc(apg);
+      }
+    } catch {}
+
+    const nowMs = Date.now();
+    const maxFutureMs = nowMs + (maxFutureDays * 24 * 60 * 60 * 1000);
+    const minPastMs = nowMs - (allowPastGraceMinutes * 60 * 1000);
+
+    if (mode === 'AT_TIME') {
+      const rawScheduled = String(timingRaw.scheduled_for_utc || '').trim();
+      if (!rawScheduled) throw new Error('delivery_timing_json.scheduled_for_utc required when mode=AT_TIME');
+
+      const dt = new Date(rawScheduled);
+      if (Number.isNaN(dt.getTime())) throw new Error('delivery_timing_json.scheduled_for_utc invalid');
+
+      const scheduledMs = dt.getTime();
+
+      if (scheduledMs > maxFutureMs) throw new Error('delivery_timing_json.scheduled_for_utc exceeds max_future_days');
+      if (scheduledMs < minPastMs) throw new Error('delivery_timing_json.scheduled_for_utc too far in past');
+
+      scheduledForUtc = dt.toISOString();
+      nextAttemptAtUtc = scheduledMs <= nowMs ? new Date(nowMs).toISOString() : scheduledForUtc;
+    } else if (mode === 'AFTER_DELAY') {
+      let scheduledMs = null;
+      const rawScheduled = String(timingRaw.scheduled_for_utc || '').trim();
+
+      if (rawScheduled) {
+        const dt = new Date(rawScheduled);
+        if (Number.isNaN(dt.getTime())) throw new Error('delivery_timing_json.scheduled_for_utc invalid');
+        scheduledMs = dt.getTime();
+      } else {
+        if (relativeMinutes == null) throw new Error('delivery_timing_json.relative_minutes required when mode=AFTER_DELAY');
+        scheduledMs = nowMs + (relativeMinutes * 60 * 1000);
+      }
+
+      if (scheduledMs > maxFutureMs) throw new Error('delivery_timing_json.scheduled_for_utc exceeds max_future_days');
+      if (scheduledMs < minPastMs) throw new Error('delivery_timing_json.scheduled_for_utc too far in past');
+
+      scheduledForUtc = new Date(scheduledMs).toISOString();
+      nextAttemptAtUtc = scheduledMs <= nowMs ? new Date(nowMs).toISOString() : scheduledForUtc;
+    }
+
+    return {
+      mode,
+      scheduled_for_utc: scheduledForUtc,
+      next_attempt_at_utc: nextAttemptAtUtc,
+      requested_timezone: requestedTimezone,
+      requested_local_text: requestedLocalText,
+      relative_minutes: relativeMinutes
+    };
+  };
+
   if (body?.queue === true) {
+    let normalizedTiming;
+    try {
+      normalizedTiming = await normalizeDeliveryTimingJson(body?.delivery_timing_json ?? body?.deliveryTimingJson ?? { mode: 'NOW' });
+    } catch (e) {
+      return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid delivery timing')));
+    }
+
     const htmlBodyStr = (normalized.htmlBody && String(normalized.htmlBody).trim()) ? String(normalized.htmlBody) : '';
     const emailType = htmlBodyStr ? 'html' : 'plain';
 
@@ -49872,14 +51308,14 @@ async function handleEmailSend(env, req) {
         status: 'QUEUED',
         reference: body?.reference || null,
         created_by: user?.id || null,
-
-        // ✅ NEW: comms log metadata (optional for this endpoint; required for mailshots)
         recipient_kind: body?.recipient_kind || null,
         recipient_id: body?.recipient_id || null,
         context_kind: body?.context_kind || null,
         context_id: body?.context_id || null,
         mailshot_run_id: body?.mailshot_run_id || null,
-        document_template_id: body?.document_template_id || null
+        document_template_id: body?.document_template_id || null,
+        scheduled_for_utc: normalizedTiming.scheduled_for_utc,
+        next_attempt_at_utc: normalizedTiming.next_attempt_at_utc
       })
     });
     if (!insert.ok) {
@@ -49889,11 +51325,20 @@ async function handleEmailSend(env, req) {
     const row = Array.isArray(rows) ? rows[0] : rows;
 
     await recordEmailAudit(env, user, 'EMAIL_QUEUED', { outbox_id: row?.id, type: body?.type || 'BROADCAST' });
-    return withCORS(env, req, ok({ queued: true, id: row?.id }));
+    return withCORS(env, req, ok({
+      queued: true,
+      id: row?.id,
+      delivery_timing: {
+        mode: normalizedTiming.mode,
+        scheduled_for_utc: normalizedTiming.scheduled_for_utc,
+        next_attempt_at_utc: normalizedTiming.next_attempt_at_utc,
+        requested_timezone: normalizedTiming.requested_timezone,
+        requested_local_text: normalizedTiming.requested_local_text,
+        relative_minutes: normalizedTiming.relative_minutes
+      }
+    }));
   }
 
-  // Immediate send via provider
-  // Resolve any R2 attachments
   const resolved = [];
   for (const a of (normalized.attachments || [])) {
     if (a.contentBase64 && a.name) { resolved.push(a); }
@@ -49903,10 +51348,8 @@ async function handleEmailSend(env, req) {
     }
   }
 
-  // Option A chosen for the outbox drain path; ad-hoc send still applies payload limiting/linking here.
   const outgoing = await limitOrLinkAttachments(env, { payload: { ...normalized, importance, attachments: resolved } });
 
-  // Convert to the batch Flow "item" shape (attachmentsV2 required).
   const attachmentsV2 = [];
   for (const a of (outgoing.payload.attachments || [])) {
     if (a && a.contentBase64 && a.name) {
@@ -49933,7 +51376,6 @@ async function handleEmailSend(env, req) {
     return withCORS(env, req, serverError(`Provider rejected: ${resp.status} ${resp.body || ''}`));
   }
 
-  // If provider returned per-item results, enforce SUCCESS for the single item.
   try {
     const j = typeof resp.body === 'string' ? JSON.parse(resp.body) : resp.body;
     const r0 = Array.isArray(j?.results) ? j.results[0] : null;
@@ -49946,6 +51388,8 @@ async function handleEmailSend(env, req) {
   await recordEmailAudit(env, user, 'EMAIL_SENT', { ad_hoc: true, provider_message_id: resp.provider_message_id });
   return withCORS(env, req, ok({ sent: true, provider_message_id: resp.provider_message_id }));
 }
+
+
 
 async function handleOutboxRetry(env, req, outboxId) {
   const user = await requireUser(env, req, ['admin']);
@@ -88632,6 +90076,42 @@ if (req.method === 'POST' && p === '/api/tspdf/queue/drain') {
         if (outbox && req.method === 'GET')                                   return handleGetOutboxItem(env, req, outbox.mail_id);
       }
 
+{
+  const m = matchPath(p, '/api/outbox/:channel/:id/retry');
+  if (m && req.method === 'POST') return handleOutboxUnifiedRetry(env, req, m.channel, m.id);
+}
+{
+  const m = matchPath(p, '/api/outbox/:channel/:id/reschedule');
+  if (m && req.method === 'POST') return handleOutboxUnifiedReschedule(env, req, m.channel, m.id);
+}
+if (req.method === 'POST' && p === '/api/webhook/wati') {
+  return handleWebhookWati(env, req);
+}
+if (req.method === 'POST' && p === '/api/webhook/clicksend') {
+  return handleWebhookClicksend(env, req);
+}
+
+
+if (req.method === 'DELETE' && p === '/api/outbox/delete-many') {
+  return withCORS(env, req, badRequest('method_not_allowed'));
+}
+if (req.method === 'POST' && p === '/api/outbox/delete-many') {
+  return handleOutboxUnifiedDeleteMany(env, req);
+}
+{
+  const m = matchPath(p, '/api/outbox/:channel/:id');
+  if (m && req.method === 'GET') return handleOutboxUnifiedGet(env, req, m.channel, m.id);
+  if (m && req.method === 'DELETE') return handleOutboxUnifiedDelete(env, req, m.channel, m.id);
+}
+{
+  const m = matchPath(p, '/api/mailshots/:id/cancel-pending');
+  if (m && req.method === 'POST') return handleMailshotRunCancelPending(env, req, m.id);
+}
+{
+  const m = matchPath(p, '/api/mailshots/:id/delete-if-unsent');
+  if (m && req.method === 'POST') return handleMailshotRunDeleteIfUnsent(env, req, m.id);
+}
+
       if (req.method === 'POST' && p === '/api/email/outbox/drain')          return handleOutboxDrain(env, req);
       {
         const outRetry = matchPath(p, '/api/email/outbox/:id/retry');
@@ -89217,24 +90697,18 @@ async scheduled(event, env, ctx) {
 
   const emailBatchLimit = parseInt(env.EMAIL_DRAIN_LIMIT_DEFAULT || '10', 10);
 
-  // TS PDF worker controls (existing ENV defaults; may be overridden by DB config)
   let tsPdfMaxBatches = parseInt(env.TSPDF_MAX_BATCHES || '5', 10);
   let tsPdfBatchSize  = parseInt(env.TSPDF_BATCH_SIZE  || '5', 10);
   let tsPdfEnqLimit   = parseInt(env.TSPDF_ENQUEUE_LIMIT || '500', 10);
 
-  // Invoice SQL worker controls (existing ENV defaults; may be overridden by DB config)
   let invMaxBatches   = parseInt(env.INVOICE_MAX_BATCHES || '10', 10);
   let invBatchSize    = parseInt(env.INVOICE_BATCH_SIZE  || '10', 10);
   const invEnqueueFirst = String(env.INVOICE_ENQUEUE_FIRST || 'true').toLowerCase() !== 'false';
 
-  // Actor for audit (optional; SQL audit will fall back to "CloudTMS server" if null)
   const invActorUserId  = (env.INVOICE_ACTOR_USER_ID && String(env.INVOICE_ACTOR_USER_ID).trim())
     ? String(env.INVOICE_ACTOR_USER_ID).trim()
     : null;
 
-  // Two crons in wrangler.toml:
-  // - "*/5 * * * *" => full pipeline
-  // - "* * * * *"   => invpdf drain only (keeps BR usage smooth on free plan)
   const cronExpr = (event && typeof event.cron === 'string') ? event.cron : '';
   const isInvpdfMinuteCron = (cronExpr === '* * * * *');
 
@@ -89254,7 +90728,6 @@ async scheduled(event, env, ctx) {
     return y;
   };
 
-  // Determine invpdf limits from settings_defaults.import_config_json.invpdf_effective
   const getInvpdfLimits = async () => {
     let invpdf = null;
     try {
@@ -89268,9 +90741,6 @@ async scheduled(event, env, ctx) {
 
     const mode = String(invpdf?.mode || 'free').trim().toLowerCase() === 'paid' ? 'paid' : 'free';
 
-    // Support BOTH:
-    // - new shape: invpdf_effective.dequeue_limit / enqueue_sweep_limit
-    // - legacy shape: dequeue_limit_free/paid, enqueue_limit_free/paid
     const dequeueLimit = (() => {
       const kNew = invpdf?.dequeue_limit;
       const kLegacy = (mode === 'paid') ? invpdf?.dequeue_limit_paid : invpdf?.dequeue_limit_free;
@@ -89287,7 +90757,6 @@ async scheduled(event, env, ctx) {
       return v;
     })();
 
-    // Optional: if not present, keep existing defaults
     const maxBatchesInvpdf = (() => {
       const kNew = invpdf?.max_batches;
       const kLegacy = (mode === 'paid') ? invpdf?.max_batches_paid : invpdf?.max_batches_free;
@@ -89367,14 +90836,12 @@ async scheduled(event, env, ctx) {
   };
 
   ctx.waitUntil((async () => {
-    // ✅ NEW: Banking cron tick runs every minute (and also on the 5-minute cron)
     try {
       await bankingCronTick(env);
     } catch (e) {
       console.warn('[scheduled] Banking cron tick failed:', e?.message || e);
     }
 
-    // Minute cron: invpdf drain only (keeps BR capacity stable on free plan)
     if (isInvpdfMinuteCron) {
       try {
         await drainInvpdfOnce();
@@ -89384,7 +90851,6 @@ async scheduled(event, env, ctx) {
       return;
     }
 
-    // Load DB-driven throttles once (cached by loadSettingsDefaults)
     let settings = null;
     try {
       settings = await loadSettingsDefaults(env);
@@ -89400,19 +90866,17 @@ async scheduled(event, env, ctx) {
       ? settings.importConfig.tspdf_effective
       : null;
 
-    // Apply DB-configured limits (with safe clamps + env fallback)
     if (tspdfCfg) {
       tsPdfMaxBatches = _clampInt(tspdfCfg.max_batches, 1, 20, tsPdfMaxBatches);
-      tsPdfBatchSize  = _clampInt(tspdfCfg.dequeue_limit, 1, 200, tsPdfBatchSize);   // DB dequeue RPC clamps at 200
-      tsPdfEnqLimit   = _clampInt(tspdfCfg.enqueue_limit, 1, 2000, tsPdfEnqLimit);   // enqueue RPC clamps at 2000
+      tsPdfBatchSize  = _clampInt(tspdfCfg.dequeue_limit, 1, 200, tsPdfBatchSize);
+      tsPdfEnqLimit   = _clampInt(tspdfCfg.enqueue_limit, 1, 2000, tsPdfEnqLimit);
     }
 
     if (invCfg) {
       invMaxBatches = _clampInt(invCfg.worker?.max_batches, 1, 50, invMaxBatches);
-      invBatchSize  = _clampInt(invCfg.worker?.dequeue_limit, 1, 500, invBatchSize); // DB dequeue RPC clamps at 500
+      invBatchSize  = _clampInt(invCfg.worker?.dequeue_limit, 1, 500, invBatchSize);
     }
 
-    // 5-minute cron: full pipeline
     try {
       for (let i = 0; i < maxBatches; i++) {
         const res = await runTsfinWorkerOnce(env, { limit: batchSize });
@@ -89422,8 +90886,6 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] TSFIN worker failed:', e?.message || e);
     }
 
-    // TS PDF worker drain (after TSFIN, before invoices)
-    // Uses DB-configured tspdf limits and updated tspdf_enqueue_ready_for_invoice logic (incl refs-sig mismatch + force_regen).
     try {
       for (let i = 0; i < tsPdfMaxBatches; i++) {
         const res = await runTsPdfWorkerOnce(env, {
@@ -89437,8 +90899,6 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] TS PDF worker failed:', e?.message || e);
     }
 
-    // Invoice enqueue (canonical): derive candidate groups then enqueue via invoice_outbox_enqueue_by_week (auto-invoice only).
-    // NOTE: Cron never allow-early, so allow_early is always false here.
     const enqueueAutoInvoiceGroupsOnce = async () => {
       const groupLimit = _clampInt(invCfg?.autoinvoice?.enqueue_group_limit, 1, 5000, 50);
 
@@ -89478,7 +90938,6 @@ async scheduled(event, env, ctx) {
             p_auto_invoice_only: true
           });
         } catch (e) {
-          // Skip-on-error: one bad group must not kill the whole cron tick.
           console.warn('[scheduled] invoice_outbox_enqueue_by_week failed:', {
             client_id: clientId,
             invoice_week_start: weekStart,
@@ -89488,7 +90947,6 @@ async scheduled(event, env, ctx) {
       }
     };
 
-    // Invoice SQL-first drain (minimal Supabase subrequests)
     try {
       if (invEnqueueFirst) {
         try {
@@ -89517,24 +90975,22 @@ async scheduled(event, env, ctx) {
       console.warn('[scheduled] Invoice SQL worker failed:', e?.message || e);
     }
 
-    // Invoice PDF queue drain (before email drain to reduce PDF_NOT_READY churn)
     try {
       await drainInvpdfOnce();
     } catch (e) {
       console.warn('[scheduled] Invoice PDF worker failed:', e?.message || e);
     }
 
-    // Email outbox drain (runs after invpdf drain)
     try {
-      await drainEmailOutboxOnce(env, { limit: emailBatchLimit });
+      const emailDrainRes = await drainEmailOutboxOnce(env, { limit: emailBatchLimit });
+      if (emailDrainRes && typeof emailDrainRes === 'object') {
+        console.log('[scheduled] Email drain result:', emailDrainRes);
+      }
     } catch (e) {
       console.warn('[scheduled] Email drain failed:', e?.message || e);
     }
 
-    // ✅ NEW: Comms outbox drain (after email drain)
     try {
-      // Prefer DB-driven limits from settings_defaults.comms_adaptors_json.drain_limits.
-      // Fallback to env.COMMS_DRAIN_LIMIT_DEFAULT if provided; else no global cap (per-channel limits still apply inside drain).
       let commsLimitFromDb = null;
       try {
         const cj = (settings && settings.comms_adaptors_json && typeof settings.comms_adaptors_json === 'object' && !Array.isArray(settings.comms_adaptors_json))
@@ -89565,7 +91021,10 @@ async scheduled(event, env, ctx) {
 
       const commsLimit = (commsLimitFromDb != null) ? commsLimitFromDb : commsLimitFromEnv;
 
-      await drainCommsOutboxOnce(env, (commsLimit != null ? { limit: commsLimit } : {}));
+      const commsDrainRes = await drainCommsOutboxOnce(env, (commsLimit != null ? { limit: commsLimit } : {}));
+      if (commsDrainRes && typeof commsDrainRes === 'object') {
+        console.log('[scheduled] Comms drain result:', commsDrainRes);
+      }
     } catch (e) {
       console.warn('[scheduled] Comms drain failed:', e?.message || e);
     }
