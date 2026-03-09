@@ -10197,6 +10197,7 @@ $$;
 
 
 
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -10970,13 +10971,19 @@ begin
     update public.pay_batch_items pbi_u
     set pay_bank_transfer_id = pbt_u.id
     from public.pay_batch_candidates pbc_u
-    left join public.v_timesheets_summary_base vts_u
-      on vts_u.timesheet_id = pbi_u.timesheet_id
     join public.pay_bank_transfers pbt_u
       on pbt_u.pay_batch_id = p_pay_batch_id
      and pbt_u.pay_channel = 'UMBRELLA'
      and pbt_u.candidate_id = pbc_u.candidate_id
-     and pbt_u.week_ending_bucket = coalesce(vts_u.week_ending_date, v_pay_week_end)
+     and pbt_u.week_ending_bucket = coalesce(
+           (
+             select vts_u.week_ending_date
+             from public.v_timesheets_summary_base vts_u
+             where vts_u.timesheet_id = pbi_u.timesheet_id
+             limit 1
+           ),
+           v_pay_week_end
+         )
     where pbi_u.pay_batch_candidate_id = pbc_u.id
       and pbc_u.pay_batch_id = p_pay_batch_id
       and pbi_u.pay_channel = 'UMBRELLA'
