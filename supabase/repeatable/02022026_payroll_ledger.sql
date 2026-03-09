@@ -2622,7 +2622,7 @@ declare
   v_pay_eligibility_months_back int := 6;
   v_pay_eligibility_weeks_ahead int := 2;
 
-  -- ✅ Computed eligibility window
+  -- ✅ Computed eligibility windowA
   v_eligibility_from_date date;
   v_eligibility_to_date date;
 
@@ -2941,6 +2941,10 @@ eligible_tsfin as (
       -- Baseline snapshot (settled)
       tps.last_settled_snapshot_json,
       tps.last_settled_signature,
+      coalesce(
+        tps.last_settled_signature,
+        md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
+      ) as effective_last_settled_signature,
 
       ts.authorised_at_server,
       tf.pay_on_hold,
@@ -2988,6 +2992,20 @@ eligible_tsfin as (
       -- ✅ Optional filters (default ALL/ALL when NULL)
       and (p_candidate_id is null or tf.candidate_id = p_candidate_id)
       and (p_client_id is null or tf.client_id = p_client_id)
+  ),
+  debted_overpayment_cases as (
+    select
+      pa.candidate_id,
+      pa.linked_timesheet_id as timesheet_id,
+      pa.baseline_signature
+    from public.pay_advances pa
+    where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+      and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum)
+      and pa.linked_timesheet_id is not null
+    group by
+      pa.candidate_id,
+      pa.linked_timesheet_id,
+      pa.baseline_signature
   ),
 umb_map as (
     select
@@ -3090,10 +3108,16 @@ umb_map as (
         '[]'::jsonb
       ) as current_adjustments_json,
 
-      e.last_settled_snapshot_json
+      e.last_settled_snapshot_json,
+      e.effective_last_settled_signature as baseline_signature,
+      (doc.timesheet_id is not null) as has_active_overpayment_case
     from eligible_tsfin e
     left join umb_map um
       on um.umbrella_id = e.cand_umbrella_id
+    left join debted_overpayment_cases doc
+      on doc.candidate_id = e.candidate_id
+     and doc.timesheet_id = e.timesheet_id
+     and coalesce(doc.baseline_signature, '') = coalesce(e.effective_last_settled_signature, '')
   ),
   ts_baseline as (
     select
@@ -3117,6 +3141,8 @@ umb_map as (
       t.umb_bank_hash,
 
       coalesce(t.last_settled_snapshot_json, '{}'::jsonb) as base_json,
+      t.baseline_signature,
+      coalesce(t.has_active_overpayment_case,false) as has_active_overpayment_case,
 
       coalesce(t.current_segments_json, '[]'::jsonb) as current_segments_json,
       coalesce(t.current_adjustments_json, '[]'::jsonb) as current_adjustments_json,
@@ -3228,24 +3254,41 @@ umb_map as (
       a.work_date as work_date,
       a.ref_num as ref_num,
 
+      round(
+        coalesce(a.cur_payable_ex_vat,0)
+        - coalesce(a.bas_payable_ex_vat,0),
+        2
+      ) as raw_delta_before_reservation_ex,
+
       -- Preview-base delta before active-batch reservation subtraction.
       -- This preserves the original row ordering/ordinality that draft rows were created from.
       round(
         case
           when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(a.cur_payable_ex_vat,0)
+              - coalesce(a.bas_payable_ex_vat,0),
+              2
+            ) < 0
+          )
+          then 0
+          when (
             b.require_reference_to_pay = true
             and coalesce(b.is_forced_advance,false) = false
             and a.cur_excluded = false
             and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
-            and (
+            and round(
               coalesce(a.cur_payable_ex_vat,0)
-              - coalesce(a.bas_payable_ex_vat,0)
+              - coalesce(a.bas_payable_ex_vat,0),
+              2
             ) > 0
           )
           then 0
-          else (
+          else round(
             coalesce(a.cur_payable_ex_vat,0)
-            - coalesce(a.bas_payable_ex_vat,0)
+            - coalesce(a.bas_payable_ex_vat,0),
+            2
           )
         end,
         2
@@ -3253,9 +3296,24 @@ umb_map as (
 
       -- Raw outstanding delta (Truth - Baseline - Reserved)
       round(
-        coalesce(a.cur_payable_ex_vat,0)
-        - coalesce(a.bas_payable_ex_vat,0)
-        - coalesce(rss.reserved_amount_ex_vat,0),
+        case
+          when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(a.cur_payable_ex_vat,0)
+              - coalesce(a.bas_payable_ex_vat,0)
+              - coalesce(rss.reserved_amount_ex_vat,0),
+              2
+            ) < 0
+          )
+          then 0
+          else round(
+            coalesce(a.cur_payable_ex_vat,0)
+            - coalesce(a.bas_payable_ex_vat,0)
+            - coalesce(rss.reserved_amount_ex_vat,0),
+            2
+          )
+        end,
         2
       ) as delta_pay_ex_vat,
 
@@ -3263,21 +3321,33 @@ umb_map as (
       round(
         case
           when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(a.cur_payable_ex_vat,0)
+              - coalesce(a.bas_payable_ex_vat,0)
+              - coalesce(rss.reserved_amount_ex_vat,0),
+              2
+            ) < 0
+          )
+          then 0
+          when (
             b.require_reference_to_pay = true
             and coalesce(b.is_forced_advance,false) = false
             and a.cur_excluded = false
             and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
-            and (
+            and round(
               coalesce(a.cur_payable_ex_vat,0)
               - coalesce(a.bas_payable_ex_vat,0)
-              - coalesce(rss.reserved_amount_ex_vat,0)
+              - coalesce(rss.reserved_amount_ex_vat,0),
+              2
             ) > 0
           )
           then 0
-          else (
+          else round(
             coalesce(a.cur_payable_ex_vat,0)
             - coalesce(a.bas_payable_ex_vat,0)
-            - coalesce(rss.reserved_amount_ex_vat,0)
+            - coalesce(rss.reserved_amount_ex_vat,0),
+            2
           )
         end,
         2
@@ -3486,15 +3556,36 @@ blocked_items as (
 
       -- ADDITIONAL (total): outstanding = current - baseline - reserved
       round(
-        coalesce(b.current_additional_pay_ex_vat,0)
-        - coalesce(nullif(b.base_json->>'additional_pay_ex_vat','')::numeric,0)
-        - coalesce((
-            select r.reserved_amount_ex_vat
-            from reserved_by_source_ref r
-            where r.timesheet_id = b.timesheet_id
-              and r.source_ref = 'additional'
-            limit 1
-          ), 0),
+        case
+          when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(b.current_additional_pay_ex_vat,0)
+              - coalesce(nullif(b.base_json->>'additional_pay_ex_vat','')::numeric,0)
+              - coalesce((
+                  select r.reserved_amount_ex_vat
+                  from reserved_by_source_ref r
+                  where r.timesheet_id = b.timesheet_id
+                    and r.source_ref = 'additional'
+                  limit 1
+                ), 0),
+              2
+            ) < 0
+          )
+          then 0
+          else round(
+            coalesce(b.current_additional_pay_ex_vat,0)
+            - coalesce(nullif(b.base_json->>'additional_pay_ex_vat','')::numeric,0)
+            - coalesce((
+                select r.reserved_amount_ex_vat
+                from reserved_by_source_ref r
+                where r.timesheet_id = b.timesheet_id
+                  and r.source_ref = 'additional'
+                limit 1
+              ), 0),
+            2
+          )
+        end,
         2
       ) as delta_additional_pay_ex_vat,
 
@@ -3609,12 +3700,24 @@ blocked_items as (
         rows as (
           select
             i.code,
-            round(
-              coalesce((select sum(ca.amount_ex_vat) from cur_all ca where ca.code = i.code),0)
-              - coalesce((select sum(ba.amount_ex_vat) from bas_all ba where ba.code = i.code),0)
-              - coalesce((select rab.reserved_amount_ex_vat from reserved_additional_by_code rab where rab.timesheet_id = b.timesheet_id and rab.code = i.code limit 1),0),
-              2
-            ) as delta_amount_ex_vat
+            case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and round(
+                  coalesce((select sum(ca.amount_ex_vat) from cur_all ca where ca.code = i.code),0)
+                  - coalesce((select sum(ba.amount_ex_vat) from bas_all ba where ba.code = i.code),0)
+                  - coalesce((select rab.reserved_amount_ex_vat from reserved_additional_by_code rab where rab.timesheet_id = b.timesheet_id and rab.code = i.code limit 1),0),
+                  2
+                ) < 0
+              )
+              then 0::numeric
+              else round(
+                coalesce((select sum(ca.amount_ex_vat) from cur_all ca where ca.code = i.code),0)
+                - coalesce((select sum(ba.amount_ex_vat) from bas_all ba where ba.code = i.code),0)
+                - coalesce((select rab.reserved_amount_ex_vat from reserved_additional_by_code rab where rab.timesheet_id = b.timesheet_id and rab.code = i.code limit 1),0),
+                2
+              )
+            end as delta_amount_ex_vat
           from ids i
         )
         select coalesce(
@@ -3632,67 +3735,172 @@ blocked_items as (
 
       -- EXPENSES/TRAVEL/etc (outstanding = current - baseline - reserved)
       round(
-        coalesce(b.current_expenses_pay_ex_vat,0)
-        - coalesce(nullif(b.base_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0)
-        - coalesce((
-            select r.reserved_amount_ex_vat
-            from reserved_by_source_ref r
-            where r.timesheet_id = b.timesheet_id
-              and r.source_ref = 'expenses'
-            limit 1
-          ), 0),
+        case
+          when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(b.current_expenses_pay_ex_vat,0)
+              - coalesce(nullif(b.base_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0)
+              - coalesce((
+                  select r.reserved_amount_ex_vat
+                  from reserved_by_source_ref r
+                  where r.timesheet_id = b.timesheet_id
+                    and r.source_ref = 'expenses'
+                  limit 1
+                ), 0),
+              2
+            ) < 0
+          )
+          then 0
+          else round(
+            coalesce(b.current_expenses_pay_ex_vat,0)
+            - coalesce(nullif(b.base_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0)
+            - coalesce((
+                select r.reserved_amount_ex_vat
+                from reserved_by_source_ref r
+                where r.timesheet_id = b.timesheet_id
+                  and r.source_ref = 'expenses'
+                limit 1
+              ), 0),
+            2
+          )
+        end,
         2
       ) as delta_expenses_pay_ex_vat,
 
       round(
-        coalesce(b.current_travel_pay_ex_vat,0)
-        - coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0)
-        - coalesce((
-            select r.reserved_amount_ex_vat
-            from reserved_by_source_ref r
-            where r.timesheet_id = b.timesheet_id
-              and r.source_ref = 'travel'
-            limit 1
-          ), 0),
+        case
+          when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(b.current_travel_pay_ex_vat,0)
+              - coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0)
+              - coalesce((
+                  select r.reserved_amount_ex_vat
+                  from reserved_by_source_ref r
+                  where r.timesheet_id = b.timesheet_id
+                    and r.source_ref = 'travel'
+                  limit 1
+                ), 0),
+              2
+            ) < 0
+          )
+          then 0
+          else round(
+            coalesce(b.current_travel_pay_ex_vat,0)
+            - coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0)
+            - coalesce((
+                select r.reserved_amount_ex_vat
+                from reserved_by_source_ref r
+                where r.timesheet_id = b.timesheet_id
+                  and r.source_ref = 'travel'
+                limit 1
+              ), 0),
+            2
+          )
+        end,
         2
       ) as delta_travel_pay_ex_vat,
 
       round(
-        coalesce(b.current_accommodation_pay_ex_vat,0)
-        - coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0)
-        - coalesce((
-            select r.reserved_amount_ex_vat
-            from reserved_by_source_ref r
-            where r.timesheet_id = b.timesheet_id
-              and r.source_ref = 'accommodation'
-            limit 1
-          ), 0),
+        case
+          when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(b.current_accommodation_pay_ex_vat,0)
+              - coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0)
+              - coalesce((
+                  select r.reserved_amount_ex_vat
+                  from reserved_by_source_ref r
+                  where r.timesheet_id = b.timesheet_id
+                    and r.source_ref = 'accommodation'
+                  limit 1
+                ), 0),
+              2
+            ) < 0
+          )
+          then 0
+          else round(
+            coalesce(b.current_accommodation_pay_ex_vat,0)
+            - coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0)
+            - coalesce((
+                select r.reserved_amount_ex_vat
+                from reserved_by_source_ref r
+                where r.timesheet_id = b.timesheet_id
+                  and r.source_ref = 'accommodation'
+                limit 1
+              ), 0),
+            2
+          )
+        end,
         2
       ) as delta_accommodation_pay_ex_vat,
 
       round(
-        coalesce(b.current_other_pay_ex_vat,0)
-        - coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0)
-        - coalesce((
-            select r.reserved_amount_ex_vat
-            from reserved_by_source_ref r
-            where r.timesheet_id = b.timesheet_id
-              and r.source_ref = 'other'
-            limit 1
-          ), 0),
+        case
+          when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(b.current_other_pay_ex_vat,0)
+              - coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0)
+              - coalesce((
+                  select r.reserved_amount_ex_vat
+                  from reserved_by_source_ref r
+                  where r.timesheet_id = b.timesheet_id
+                    and r.source_ref = 'other'
+                  limit 1
+                ), 0),
+              2
+            ) < 0
+          )
+          then 0
+          else round(
+            coalesce(b.current_other_pay_ex_vat,0)
+            - coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0)
+            - coalesce((
+                select r.reserved_amount_ex_vat
+                from reserved_by_source_ref r
+                where r.timesheet_id = b.timesheet_id
+                  and r.source_ref = 'other'
+                limit 1
+              ), 0),
+            2
+          )
+        end,
         2
       ) as delta_other_pay_ex_vat,
 
       round(
-        coalesce(b.current_mileage_pay_ex_vat,0)
-        - coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0)
-        - coalesce((
-            select r.reserved_amount_ex_vat
-            from reserved_by_source_ref r
-            where r.timesheet_id = b.timesheet_id
-              and r.source_ref = 'mileage'
-            limit 1
-          ), 0),
+        case
+          when (
+            coalesce(b.has_active_overpayment_case,false) = true
+            and round(
+              coalesce(b.current_mileage_pay_ex_vat,0)
+              - coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0)
+              - coalesce((
+                  select r.reserved_amount_ex_vat
+                  from reserved_by_source_ref r
+                  where r.timesheet_id = b.timesheet_id
+                    and r.source_ref = 'mileage'
+                  limit 1
+                ), 0),
+              2
+            ) < 0
+          )
+          then 0
+          else round(
+            coalesce(b.current_mileage_pay_ex_vat,0)
+            - coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0)
+            - coalesce((
+                select r.reserved_amount_ex_vat
+                from reserved_by_source_ref r
+                where r.timesheet_id = b.timesheet_id
+                  and r.source_ref = 'mileage'
+                limit 1
+              ), 0),
+            2
+          )
+        end,
         2
       ) as delta_mileage_pay_ex_vat,
 
@@ -3780,7 +3988,14 @@ blocked_items as (
         rows as (
           select
             rb.adj_id,
-            coalesce(rna.delta_amt, rb.delta_amt) as delta_amt
+            case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and coalesce(rna.delta_amt, rb.delta_amt) < 0
+              )
+              then 0::numeric
+              else coalesce(rna.delta_amt, rb.delta_amt)
+            end as delta_amt
           from rows_base rb
           left join rows_negative_applied rna
             on rna.adj_id = rb.adj_id
@@ -3798,7 +4013,7 @@ blocked_items as (
         from rows r
       ), '[]'::jsonb) as adjustment_deltas_json,
 
-      -- Reservation integrity (preview-only signal): reserved > (truth - baseline)
+      -- Reservation integrity (preview-only signal): reserved > remaining previewable truth
       (
         coalesce((
           select rtb.reserved_total_ex_vat
@@ -3808,46 +4023,147 @@ blocked_items as (
         ), 0)
         >
         (
-          -- Raw (unreserved) delta across ALL components
-          (
-            coalesce(b.total_pay_ex_vat,0)
-            - coalesce(nullif(b.base_json->>'total_pay_ex_vat','')::numeric,0)
-          )
-          + (
-            coalesce(b.current_additional_pay_ex_vat,0)
-            - coalesce(nullif(b.base_json->>'additional_pay_ex_vat','')::numeric,0)
-          )
-          + (
-            coalesce(b.current_expenses_pay_ex_vat,0)
-            - coalesce(nullif(b.base_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0)
-          )
-          + (
-            coalesce(b.current_travel_pay_ex_vat,0)
-            - coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0)
-          )
-          + (
-            coalesce(b.current_accommodation_pay_ex_vat,0)
-            - coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0)
-          )
-          + (
-            coalesce(b.current_other_pay_ex_vat,0)
-            - coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0)
-          )
-          + (
-            coalesce(b.current_mileage_pay_ex_vat,0)
-            - coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0)
-          )
-          + (
-            coalesce((
-              select round(sum(coalesce(a.delta_pay_ex_vat,0)),2)
-              from adj a
-              where a.timesheet_id = b.timesheet_id
-            ),0)
-            - coalesce((
-              select round(sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)),2)
-              from jsonb_array_elements(coalesce(b.base_json->'adjustments','[]'::jsonb)) x
-            ),0)
-          )
+          coalesce((
+            select round(
+              sum(
+                case
+                  when coalesce(ss.raw_delta_before_reservation_ex,0) < 0
+                       and coalesce(b.has_active_overpayment_case,false) = true
+                    then 0
+                  else coalesce(ss.raw_delta_before_reservation_ex,0)
+                end
+              ),
+              2
+            )
+            from segment_status ss
+            where ss.timesheet_id = b.timesheet_id
+          ), 0)
+          + case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and round(
+                  coalesce(b.current_additional_pay_ex_vat,0)
+                  - coalesce(nullif(b.base_json->>'additional_pay_ex_vat','')::numeric,0),
+                  2
+                ) < 0
+              )
+              then 0
+              else round(
+                coalesce(b.current_additional_pay_ex_vat,0)
+                - coalesce(nullif(b.base_json->>'additional_pay_ex_vat','')::numeric,0),
+                2
+              )
+            end
+          + case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and round(
+                  coalesce(b.current_expenses_pay_ex_vat,0)
+                  - coalesce(nullif(b.base_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0),
+                  2
+                ) < 0
+              )
+              then 0
+              else round(
+                coalesce(b.current_expenses_pay_ex_vat,0)
+                - coalesce(nullif(b.base_json #>> '{expenses,expenses_pay_ex_vat}','')::numeric,0),
+                2
+              )
+            end
+          + case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and round(
+                  coalesce(b.current_travel_pay_ex_vat,0)
+                  - coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0),
+                  2
+                ) < 0
+              )
+              then 0
+              else round(
+                coalesce(b.current_travel_pay_ex_vat,0)
+                - coalesce(nullif(b.base_json #>> '{expenses,travel_pay_ex_vat}','')::numeric,0),
+                2
+              )
+            end
+          + case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and round(
+                  coalesce(b.current_accommodation_pay_ex_vat,0)
+                  - coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0),
+                  2
+                ) < 0
+              )
+              then 0
+              else round(
+                coalesce(b.current_accommodation_pay_ex_vat,0)
+                - coalesce(nullif(b.base_json #>> '{expenses,accommodation_pay_ex_vat}','')::numeric,0),
+                2
+              )
+            end
+          + case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and round(
+                  coalesce(b.current_other_pay_ex_vat,0)
+                  - coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0),
+                  2
+                ) < 0
+              )
+              then 0
+              else round(
+                coalesce(b.current_other_pay_ex_vat,0)
+                - coalesce(nullif(b.base_json #>> '{expenses,other_pay_ex_vat}','')::numeric,0),
+                2
+              )
+            end
+          + case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and round(
+                  coalesce(b.current_mileage_pay_ex_vat,0)
+                  - coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0),
+                  2
+                ) < 0
+              )
+              then 0
+              else round(
+                coalesce(b.current_mileage_pay_ex_vat,0)
+                - coalesce(nullif(b.base_json #>> '{expenses,mileage_pay_ex_vat}','')::numeric,0),
+                2
+              )
+            end
+          + case
+              when (
+                coalesce(b.has_active_overpayment_case,false) = true
+                and round(
+                  coalesce((
+                    select round(sum(coalesce(a.delta_pay_ex_vat,0)),2)
+                    from adj a
+                    where a.timesheet_id = b.timesheet_id
+                  ),0)
+                  - coalesce((
+                    select round(sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)),2)
+                    from jsonb_array_elements(coalesce(b.base_json->'adjustments','[]'::jsonb)) x
+                  ),0),
+                  2
+                ) < 0
+              )
+              then 0
+              else round(
+                coalesce((
+                  select round(sum(coalesce(a.delta_pay_ex_vat,0)),2)
+                  from adj a
+                  where a.timesheet_id = b.timesheet_id
+                ),0)
+                - coalesce((
+                  select round(sum(coalesce(nullif(x->>'delta_pay_ex_vat','')::numeric,0)),2)
+                  from jsonb_array_elements(coalesce(b.base_json->'adjustments','[]'::jsonb)) x
+                ),0),
+                2
+              )
+            end
         ) + 0.01
       ) as reservation_overrun_detected
     from ts_baseline b
@@ -4709,6 +5025,264 @@ $function$;
 
 
 
+CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
+  p_pay_date date,
+  p_week_ending_cutoff date,
+  p_actor_user_id uuid,
+  p_pay_channel_scope text,
+  p_candidate_ids uuid[],
+  p_mismatch_choices jsonb default '{}'::jsonb,
+  p_client_filter_single uuid default null,
+  p_force_include_timesheet_ids uuid[] default null,
+  p_exclude_timesheet_ids uuid[] default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_scope text := upper(btrim(coalesce(p_pay_channel_scope, '')));
+  v_negative_count int := 0;
+  v_cases_inserted int := 0;
+  v_cases_touched int := 0;
+  v_negative_json jsonb := '[]'::jsonb;
+begin
+  if p_pay_date is null then
+    raise exception 'pay_date is required';
+  end if;
+
+  if p_week_ending_cutoff is null then
+    raise exception 'week_ending_cutoff is required';
+  end if;
+
+  if v_scope not in ('PAYE', 'UMBRELLA') then
+    raise exception 'Invalid pay_channel_scope (expected PAYE or UMBRELLA)';
+  end if;
+
+  create temporary table if not exists pg_temp.tmp_preview_negative_timesheets (
+    candidate_id uuid not null,
+    timesheet_id uuid not null,
+    owed_ex numeric(12,2) not null,
+    baseline_signature text null
+  ) on commit drop;
+
+  truncate table pg_temp.tmp_preview_negative_timesheets;
+
+  insert into pg_temp.tmp_preview_negative_timesheets (
+    candidate_id,
+    timesheet_id,
+    owed_ex,
+    baseline_signature
+  )
+  with preview as (
+    select public.pay_preview(
+      p_pay_date,
+      p_week_ending_cutoff,
+      p_actor_user_id,
+      null,
+      null,
+      p_force_include_timesheet_ids
+    ) as j
+  ),
+  all_candidates as (
+    select c as cand
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'paye_candidates', '[]'::jsonb)) as c
+    union all
+    select c as cand
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'non_paye_payees', '[]'::jsonb)) as c
+  ),
+  candidate_rows as (
+    select
+      s.candidate_id,
+      s.cand_pay_method,
+      s.itemisation
+    from (
+      select
+        nullif(btrim(coalesce(cand->>'candidate_id', '')), '')::uuid as candidate_id,
+        upper(btrim(coalesce(cand->>'current_pay_method', ''))) as cand_pay_method,
+        coalesce(nullif(cand->>'is_ready_for_draft', '')::boolean, false) as is_ready_for_draft,
+        coalesce(cand->'blockers', '[]'::jsonb) as blockers,
+        coalesce(cand->'itemisation', '[]'::jsonb) as itemisation
+      from all_candidates
+      where nullif(btrim(coalesce(cand->>'candidate_id', '')), '') is not null
+    ) s
+    where s.candidate_id = any(coalesce(p_candidate_ids, array[]::uuid[]))
+      and s.is_ready_for_draft = true
+      and jsonb_array_length(s.blockers) = 0
+  ),
+  item_rows as (
+    select
+      cr.candidate_id,
+      cr.cand_pay_method,
+      itm as item_json,
+      nullif(btrim(coalesce(itm->>'timesheet_id', '')), '')::uuid as timesheet_id,
+      nullif(btrim(coalesce(itm->>'client_id', '')), '')::uuid as client_id,
+      upper(btrim(coalesce(itm->>'source_pay_method', ''))) as source_pay_method
+    from candidate_rows cr
+    cross join lateral jsonb_array_elements(coalesce(cr.itemisation, '[]'::jsonb)) as itm
+  ),
+  filtered_rows as (
+    select
+      ir.candidate_id,
+      ir.timesheet_id,
+      ir.item_json,
+      case
+        when ir.source_pay_method = ir.cand_pay_method then ir.cand_pay_method
+        else upper(coalesce(nullif(coalesce(p_mismatch_choices, '{}'::jsonb)->>ir.candidate_id::text, ''), ''))
+      end as pay_channel
+    from item_rows ir
+    where ir.timesheet_id is not null
+      and not (ir.timesheet_id = any(coalesce(p_exclude_timesheet_ids, array[]::uuid[])))
+      and (p_client_filter_single is null or ir.client_id = p_client_filter_single)
+  ),
+  negative_component_rows as (
+    select
+      fr.candidate_id,
+      fr.timesheet_id,
+      abs(round(coalesce(nullif(seg.seg_json->>'delta_pay_ex_vat', '')::numeric, 0), 2))::numeric(12,2) as owed_ex
+    from filtered_rows fr
+    cross join lateral jsonb_array_elements(coalesce(fr.item_json->'segment_deltas', '[]'::jsonb)) as seg(seg_json)
+    where fr.pay_channel = v_scope
+      and round(coalesce(nullif(seg.seg_json->>'delta_pay_ex_vat', '')::numeric, 0), 2) < 0
+
+    union all
+
+    select
+      fr.candidate_id,
+      fr.timesheet_id,
+      abs(round(coalesce(nullif(adj.adj_json->>'delta_pay_ex_vat', '')::numeric, 0), 2))::numeric(12,2) as owed_ex
+    from filtered_rows fr
+    cross join lateral jsonb_array_elements(coalesce(fr.item_json->'adjustment_deltas', '[]'::jsonb)) as adj(adj_json)
+    where fr.pay_channel = v_scope
+      and round(coalesce(nullif(adj.adj_json->>'delta_pay_ex_vat', '')::numeric, 0), 2) < 0
+
+    union all
+
+    select
+      fr.candidate_id,
+      fr.timesheet_id,
+      abs(x.delta_ex)::numeric(12,2) as owed_ex
+    from filtered_rows fr
+    cross join lateral (
+      values
+        (round(coalesce(nullif(fr.item_json->>'delta_additional_pay_ex_vat', '')::numeric, 0), 2)),
+        (round(coalesce(nullif(fr.item_json->>'delta_expenses_pay_ex_vat', '')::numeric, 0), 2)),
+        (round(coalesce(nullif(fr.item_json->>'delta_travel_pay_ex_vat', '')::numeric, 0), 2)),
+        (round(coalesce(nullif(fr.item_json->>'delta_accommodation_pay_ex_vat', '')::numeric, 0), 2)),
+        (round(coalesce(nullif(fr.item_json->>'delta_other_pay_ex_vat', '')::numeric, 0), 2)),
+        (round(coalesce(nullif(fr.item_json->>'delta_mileage_pay_ex_vat', '')::numeric, 0), 2))
+    ) as x(delta_ex)
+    where fr.pay_channel = v_scope
+      and x.delta_ex < 0
+  ),
+  negative_rows as (
+    select
+      ncr.candidate_id,
+      ncr.timesheet_id,
+      round(sum(ncr.owed_ex), 2)::numeric(12,2) as owed_ex
+    from negative_component_rows ncr
+    group by
+      ncr.candidate_id,
+      ncr.timesheet_id
+    having round(sum(ncr.owed_ex), 2) > 0
+  )
+  select
+    nr.candidate_id,
+    nr.timesheet_id,
+    nr.owed_ex,
+    coalesce(
+      tps.last_settled_signature,
+      md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
+    ) as baseline_signature
+  from negative_rows nr
+  left join public.timesheet_pay_state tps
+    on tps.timesheet_id = nr.timesheet_id;
+
+  get diagnostics v_negative_count = row_count;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'candidate_id', tpnt.candidate_id::text,
+          'timesheet_id', tpnt.timesheet_id::text,
+          'owed_ex', tpnt.owed_ex,
+          'baseline_signature', tpnt.baseline_signature
+        )
+        order by tpnt.candidate_id::text, tpnt.timesheet_id::text
+      ),
+      '[]'::jsonb
+    )
+  into v_negative_json
+  from pg_temp.tmp_preview_negative_timesheets tpnt;
+
+  if v_negative_count > 0 then
+    with ins as (
+      insert into public.pay_advances (
+        candidate_id,
+        advance_kind,
+        reason,
+        linked_timesheet_id,
+        baseline_signature,
+        original_amount,
+        outstanding_amount,
+        status
+      )
+      select
+        tpnt.candidate_id,
+        'OVERPAYMENT'::public.pay_advance_kind_enum,
+        'OVERPAYMENT'::public.pay_advance_reason_enum,
+        tpnt.timesheet_id,
+        tpnt.baseline_signature,
+        tpnt.owed_ex,
+        tpnt.owed_ex,
+        'ACTIVE'::public.pay_advance_status_enum
+      from pg_temp.tmp_preview_negative_timesheets tpnt
+      where tpnt.owed_ex > 0
+      on conflict do nothing
+      returning 1
+    )
+    select count(*)::int
+    into v_cases_inserted
+    from ins;
+
+    update public.pay_advances pa
+    set
+      outstanding_amount = tpnt.owed_ex,
+      original_amount = greatest(coalesce(pa.original_amount, 0), tpnt.owed_ex),
+      status = case
+        when tpnt.owed_ex > 0 then 'ACTIVE'::public.pay_advance_status_enum
+        else 'PAID_OFF'::public.pay_advance_status_enum
+      end,
+      reason = 'OVERPAYMENT'::public.pay_advance_reason_enum,
+      updated_at = now()
+    from pg_temp.tmp_preview_negative_timesheets tpnt
+    where pa.candidate_id = tpnt.candidate_id
+      and pa.linked_timesheet_id = tpnt.timesheet_id
+      and pa.baseline_signature is not distinct from tpnt.baseline_signature
+      and pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+      and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum);
+
+    get diagnostics v_cases_touched = row_count;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_channel_scope', v_scope,
+    'negative_preview_timesheets_count', v_negative_count,
+    'negative_preview_timesheets', v_negative_json,
+    'cases_inserted', v_cases_inserted,
+    'cases_touched', v_cases_touched
+  );
+end;
+$$;
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -4818,6 +5392,8 @@ declare
 v_exclude_timesheet_ids uuid[] := array[]::uuid[];
 v_exclude_ts_raw text;
 v_exclude_ts_uuid uuid;
+v_overpayment_sync jsonb := '{}'::jsonb;
+v_negative_preview_timesheets_count int := 0;
 begin
   v_stage := 'STAGE_00_INPUTS';
 
@@ -5605,152 +6181,40 @@ end;
     );
   exception when others then null; end;
 
-  v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
+  v_stage := 'STAGE_12_SYNC_OVERPAYMENTS_FROM_PREVIEW';
+
+  select public.pay_sync_overpayments_from_preview(
+    p_pay_date,
+    p_week_ending_cutoff,
+    p_actor_user_id,
+    v_scope,
+    v_candidate_ids,
+    v_mismatch_choices,
+    v_client_filter_single,
+    p_force_include_timesheet_ids,
+    v_exclude_timesheet_ids
+  )
+  into v_overpayment_sync;
+
+  v_negative_preview_timesheets_count := coalesce(nullif(v_overpayment_sync->>'negative_preview_timesheets_count', '')::int, 0);
 
   begin
-    execute 'drop table if exists pg_temp.tmp_preview_negative_timesheets';
-  exception when others then
-    null;
-  end;
-
-  create temporary table pg_temp.tmp_preview_negative_timesheets (
-    candidate_id uuid not null,
-    timesheet_id uuid not null,
-    owed_ex numeric(12,2) not null,
-    baseline_signature text null
-  ) on commit drop;
-
-  insert into pg_temp.tmp_preview_negative_timesheets (
-    candidate_id,
-    timesheet_id,
-    owed_ex,
-    baseline_signature
-  )
-  with preview as (
-    select public.pay_preview(
-      p_pay_date,
-      p_week_ending_cutoff,
+    perform public._imp_debug_audit(
       p_actor_user_id,
-      null,
-      null,
-      p_force_include_timesheet_ids
-    ) as j
-  ),
-  all_candidates as (
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'paye_candidates', '[]'::jsonb)) as c
-    union all
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'non_paye_payees', '[]'::jsonb)) as c
-  ),
-  candidate_rows as (
-    select *
-    from (
-      select
-        nullif(btrim(coalesce(cand->>'candidate_id','')), '')::uuid as candidate_id,
-        upper(btrim(coalesce(cand->>'current_pay_method',''))) as cand_pay_method,
-        coalesce(nullif(cand->>'is_ready_for_draft','')::boolean, false) as is_ready_for_draft,
-        coalesce(cand->'blockers', '[]'::jsonb) as blockers,
-        coalesce(cand->'itemisation', '[]'::jsonb) as itemisation
-      from all_candidates
-      where nullif(btrim(coalesce(cand->>'candidate_id','')), '') is not null
-    ) s
-    where s.candidate_id = any(v_candidate_ids)
-      and s.is_ready_for_draft = true
-      and jsonb_array_length(s.blockers) = 0
-  ),
-  item_rows as (
-    select *
-    from (
-      select
-        cr.candidate_id,
-        cr.cand_pay_method,
-        itm as item_json,
-        nullif(btrim(coalesce(itm->>'timesheet_id','')), '')::uuid as timesheet_id,
-        nullif(btrim(coalesce(itm->>'client_id','')), '')::uuid as client_id,
-        upper(btrim(coalesce(itm->>'source_pay_method',''))) as source_pay_method
-      from candidate_rows cr
-      cross join lateral jsonb_array_elements(coalesce(cr.itemisation, '[]'::jsonb)) as itm
-    ) s
-    where s.timesheet_id is not null
-      and not (s.timesheet_id = any(v_exclude_timesheet_ids))
-      and (v_client_filter_single is null or s.client_id = v_client_filter_single)
-  ),
-  routed_rows as (
-    select
-      ir.candidate_id,
-      ir.timesheet_id,
-      ir.item_json,
-      case
-        when ir.source_pay_method = ir.cand_pay_method then ir.cand_pay_method
-        else upper(coalesce(nullif(v_mismatch_choices->>ir.candidate_id::text, ''), ''))
-      end as pay_channel
-    from item_rows ir
-  ),
-  negative_component_rows as (
-    select
-      rr.candidate_id,
-      rr.timesheet_id,
-      abs(round(coalesce(nullif(seg.seg_json->>'delta_pay_ex_vat','')::numeric, 0), 2))::numeric(12,2) as owed_ex
-    from routed_rows rr
-    cross join lateral jsonb_array_elements(coalesce(rr.item_json->'segment_deltas', '[]'::jsonb)) as seg(seg_json)
-    where rr.pay_channel = v_scope
-      and round(coalesce(nullif(seg.seg_json->>'delta_pay_ex_vat','')::numeric, 0), 2) < 0
+      'PAY_CREATE_DRAFT_BATCH:STAGE_12_SYNC_OVERPAYMENTS_FROM_PREVIEW',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'scope', v_scope,
+        'sync_result', v_overpayment_sync
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
 
-    union all
-
-    select
-      rr.candidate_id,
-      rr.timesheet_id,
-      abs(round(coalesce(nullif(adj.adj_json->>'delta_pay_ex_vat','')::numeric, 0), 2))::numeric(12,2) as owed_ex
-    from routed_rows rr
-    cross join lateral jsonb_array_elements(coalesce(rr.item_json->'adjustment_deltas', '[]'::jsonb)) as adj(adj_json)
-    where rr.pay_channel = v_scope
-      and round(coalesce(nullif(adj.adj_json->>'delta_pay_ex_vat','')::numeric, 0), 2) < 0
-
-    union all
-
-    select
-      rr.candidate_id,
-      rr.timesheet_id,
-      abs(x.delta_ex)::numeric(12,2) as owed_ex
-    from routed_rows rr
-    cross join lateral (
-      values
-        (round(coalesce(nullif(rr.item_json->>'delta_additional_pay_ex_vat','')::numeric, 0), 2)),
-        (round(coalesce(nullif(rr.item_json->>'delta_expenses_pay_ex_vat','')::numeric, 0), 2)),
-        (round(coalesce(nullif(rr.item_json->>'delta_travel_pay_ex_vat','')::numeric, 0), 2)),
-        (round(coalesce(nullif(rr.item_json->>'delta_accommodation_pay_ex_vat','')::numeric, 0), 2)),
-        (round(coalesce(nullif(rr.item_json->>'delta_other_pay_ex_vat','')::numeric, 0), 2)),
-        (round(coalesce(nullif(rr.item_json->>'delta_mileage_pay_ex_vat','')::numeric, 0), 2))
-    ) as x(delta_ex)
-    where rr.pay_channel = v_scope
-      and x.delta_ex < 0
-  ),
-  negative_rows as (
-    select
-      ncr.candidate_id,
-      ncr.timesheet_id,
-      round(sum(ncr.owed_ex), 2)::numeric(12,2) as owed_ex
-    from negative_component_rows ncr
-    group by
-      ncr.candidate_id,
-      ncr.timesheet_id
-    having round(sum(ncr.owed_ex), 2) > 0
-  )
-  select
-    nr.candidate_id,
-    nr.timesheet_id,
-    nr.owed_ex,
-    coalesce(
-      tps.last_settled_signature,
-      md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
-    ) as baseline_signature
-  from negative_rows nr
-  left join public.timesheet_pay_state tps
-    on tps.timesheet_id = nr.timesheet_id;
+  v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
 
   -- Build pay_batch_items from pay_preview itemisation so the draft matches preview.
   insert into public.pay_batch_items(
@@ -6136,57 +6600,10 @@ end;
 
   -- ---------------------------------------------------------------------------
   -- STAGE_12B_UPSERT_OVERPAYMENTS
-  -- Create/update OVERPAYMENT balances from preview component negatives
-  -- (negative segment/adjustment/expense deltas), even when the net timesheet
-  -- payment remains positive after offsetting positives. These balances must
-  -- not be recovered again in the same draft if the current preview already
-  -- represents the same negative movement.
+  -- Overpayment sync now lives in public.pay_sync_overpayments_from_preview(...)
+  -- and has already populated pg_temp.tmp_preview_negative_timesheets + pay_advances.
   -- ---------------------------------------------------------------------------
   v_stage := 'STAGE_12B_UPSERT_OVERPAYMENTS';
-
-  with ins as (
-    insert into public.pay_advances (
-      candidate_id,
-      advance_kind,
-      reason,
-      linked_timesheet_id,
-      baseline_signature,
-      original_amount,
-      outstanding_amount,
-      status
-    )
-    select
-      t.candidate_id,
-      'OVERPAYMENT'::public.pay_advance_kind_enum,
-      'OVERPAYMENT'::public.pay_advance_reason_enum,
-      t.timesheet_id,
-      t.baseline_signature,
-      t.owed_ex,
-      t.owed_ex,
-      'ACTIVE'::public.pay_advance_status_enum
-    from pg_temp.tmp_preview_negative_timesheets t
-    where t.owed_ex > 0
-    on conflict do nothing
-    returning 1
-  )
-  update public.pay_advances pa
-  set
-    outstanding_amount = t.owed_ex,
-    original_amount = greatest(coalesce(pa.original_amount, 0), t.owed_ex),
-    status = case
-      when t.owed_ex > 0 then 'ACTIVE'::public.pay_advance_status_enum
-      else 'PAID_OFF'::public.pay_advance_status_enum
-    end,
-    reason = 'OVERPAYMENT'::public.pay_advance_reason_enum,
-    updated_at = now()
-  from pg_temp.tmp_preview_negative_timesheets t
-  where pa.candidate_id = t.candidate_id
-    and pa.linked_timesheet_id = t.timesheet_id
-    and pa.baseline_signature = t.baseline_signature
-    and pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
-    and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum);
-
-  GET DIAGNOSTICS v_rows = ROW_COUNT;
 
   begin
     perform public._imp_debug_audit(
@@ -6195,22 +6612,8 @@ end;
       jsonb_build_object(
         'stage', v_stage,
         'pay_batch_id', v_batch_id::text,
-        'overpayment_cases_touched', v_rows,
-        'negative_preview_timesheets', (
-          select coalesce(
-            jsonb_agg(
-              jsonb_build_object(
-                'candidate_id', t.candidate_id::text,
-                'timesheet_id', t.timesheet_id::text,
-                'owed_ex', t.owed_ex,
-                'baseline_signature', t.baseline_signature
-              )
-              order by t.candidate_id::text, t.timesheet_id::text
-            ),
-            '[]'::jsonb
-          )
-          from pg_temp.tmp_preview_negative_timesheets t
-        )
+        'sync_result', v_overpayment_sync,
+        'negative_preview_timesheets', coalesce(v_overpayment_sync->'negative_preview_timesheets', '[]'::jsonb)
       ),
       'pay_batches',
       v_batch_id::text,
@@ -6258,6 +6661,43 @@ end;
     where pbc_any.pay_batch_id = v_batch_id
     limit 1
   ) then
+    if v_negative_preview_timesheets_count > 0 then
+      begin
+        perform public._imp_debug_audit(
+          p_actor_user_id,
+          'PAY_CREATE_DRAFT_BATCH:STAGE_14_SYNC_ONLY_NO_PAYABLE_ITEMS',
+          jsonb_build_object(
+            'stage', v_stage,
+            'pay_batch_id', v_batch_id::text,
+            'scope', v_scope,
+            'sync_result', v_overpayment_sync,
+            'action', 'DELETE_EMPTY_BATCH_AND_RETURN_SYNC_ONLY'
+          ),
+          'pay_batches',
+          v_batch_id::text,
+          null, null, null, null, null
+        );
+      exception when others then null; end;
+
+      delete from public.pay_batches pb_del
+      where pb_del.id = v_batch_id;
+
+      return jsonb_build_object(
+        'ok', true,
+        'pay_batch_id', null,
+        'pay_date', p_pay_date::text,
+        'pay_week_start', v_week_start::text,
+        'week_ending_cutoff_date', p_week_ending_cutoff::text,
+        'pay_channel_scope', v_scope,
+        'banking_system_snapshot', v_settings.banking_system,
+        'external_paye_system_snapshot', v_settings.external_paye_system,
+        'rail_provider_snapshot', v_settings.rail_provider_default,
+        'rail_env_snapshot', v_settings.rail_env_default,
+        'overpayment_sync_only', true,
+        'overpayment_sync', v_overpayment_sync
+      );
+    end if;
+
     begin
       perform public._imp_debug_audit(
         p_actor_user_id,
@@ -6708,14 +7148,21 @@ end;
       pa.outstanding_amount::numeric(12,2) as outstanding_amount,
       pa.created_at
     from public.pay_advances pa
-    left join pg_temp.tmp_preview_negative_timesheets tpnt
-      on tpnt.candidate_id = pa.candidate_id
-     and tpnt.timesheet_id = pa.linked_timesheet_id
-     and coalesce(tpnt.baseline_signature, '') = coalesce(pa.baseline_signature, '')
     where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
       and pa.status = 'ACTIVE'::public.pay_advance_status_enum
       and pa.outstanding_amount > 0
-      and tpnt.timesheet_id is null
+      and not exists (
+        select 1
+        from public.pay_batch_items pbi_existing
+        join public.pay_batch_candidates pbc_existing
+          on pbc_existing.id = pbi_existing.pay_batch_candidate_id
+        where pbc_existing.pay_batch_id = v_batch_id
+          and pbc_existing.candidate_id = pa.candidate_id
+          and pbi_existing.item_type = 'OVERPAYMENT_RECOVERY'
+          and pbi_existing.is_voided = false
+          and pbi_existing.source_ref = ('advance:' || pa.id::text)
+        limit 1
+      )
   ),
   cand_overpay as (
     select
@@ -8423,6 +8870,8 @@ exception when others then
   raise;
 end;
 $$;
+
+
 
 
 
