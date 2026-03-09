@@ -807,8 +807,6 @@ left join overpay_rec o
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -826,11 +824,20 @@ security definer
 set search_path = public
 as $$
 declare
-  v_umbrella_res jsonb;
-  v_paye_res jsonb;
+  v_umbrella_res jsonb := '{}'::jsonb;
+  v_paye_res jsonb := '{}'::jsonb;
 
   v_umbrella_pay_batch_id uuid;
   v_paye_pay_batch_id uuid;
+
+  v_umbrella_overpayment_sync_only boolean := false;
+  v_paye_overpayment_sync_only boolean := false;
+
+  v_umbrella_overpayment_sync jsonb := '{}'::jsonb;
+  v_paye_overpayment_sync jsonb := '{}'::jsonb;
+
+  v_umbrella_status text := 'NOT_RUN';
+  v_paye_status text := 'NOT_RUN';
 
   v_err text;
 
@@ -845,6 +852,8 @@ declare
   v_cand_pay_method text;
   v_cand_umbrella_id uuid;
   v_route_scope text;
+
+  v_any_scope_relevant boolean := false;
 begin
   if p_pay_date is null then
     raise exception 'pay_date is required';
@@ -991,6 +1000,7 @@ begin
     end;
 
     if v_route_scope = 'UMBRELLA' then
+      v_umbrella_status := 'RUNNING';
       begin
         v_umbrella_res := public.pay_create_draft_batch(
           p_pay_date,
@@ -1006,18 +1016,35 @@ begin
         );
 
         v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
+        v_umbrella_overpayment_sync_only := coalesce(nullif(v_umbrella_res->>'overpayment_sync_only','')::boolean, false);
+        v_umbrella_overpayment_sync := coalesce(v_umbrella_res->'overpayment_sync', '{}'::jsonb);
+
+        if v_umbrella_pay_batch_id is not null then
+          v_umbrella_status := 'BATCH_CREATED';
+        elsif v_umbrella_overpayment_sync_only then
+          v_umbrella_status := 'DEBT_SYNCED_NO_BATCH';
+        else
+          v_umbrella_status := 'NOTHING_RELEVANT';
+        end if;
+
         v_paye_pay_batch_id := null;
+        v_paye_status := 'NOT_RUN';
       exception
         when others then
           v_err := coalesce(SQLERRM, '');
           if position('Nothing to pay' in v_err) = 1 then
             v_umbrella_pay_batch_id := null;
+            v_umbrella_overpayment_sync_only := false;
+            v_umbrella_overpayment_sync := '{}'::jsonb;
+            v_umbrella_status := 'NOTHING_RELEVANT';
             v_paye_pay_batch_id := null;
+            v_paye_status := 'NOT_RUN';
           else
             raise;
           end if;
       end;
     else
+      v_paye_status := 'RUNNING';
       begin
         v_paye_res := public.pay_create_draft_batch(
           p_pay_date,
@@ -1033,13 +1060,29 @@ begin
         );
 
         v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
+        v_paye_overpayment_sync_only := coalesce(nullif(v_paye_res->>'overpayment_sync_only','')::boolean, false);
+        v_paye_overpayment_sync := coalesce(v_paye_res->'overpayment_sync', '{}'::jsonb);
+
+        if v_paye_pay_batch_id is not null then
+          v_paye_status := 'BATCH_CREATED';
+        elsif v_paye_overpayment_sync_only then
+          v_paye_status := 'DEBT_SYNCED_NO_BATCH';
+        else
+          v_paye_status := 'NOTHING_RELEVANT';
+        end if;
+
         v_umbrella_pay_batch_id := null;
+        v_umbrella_status := 'NOT_RUN';
       exception
         when others then
           v_err := coalesce(SQLERRM, '');
           if position('Nothing to pay' in v_err) = 1 then
             v_umbrella_pay_batch_id := null;
+            v_umbrella_status := 'NOT_RUN';
             v_paye_pay_batch_id := null;
+            v_paye_overpayment_sync_only := false;
+            v_paye_overpayment_sync := '{}'::jsonb;
+            v_paye_status := 'NOTHING_RELEVANT';
           else
             raise;
           end if;
@@ -1052,8 +1095,14 @@ begin
         'PAY_CREATE_DRAFT_BATCHES_SPLIT:TS_ADV_RESULT',
         jsonb_build_object(
           'route_scope', v_route_scope,
+          'umbrella_status', v_umbrella_status,
           'umbrella_pay_batch_id', coalesce(v_umbrella_pay_batch_id::text, null),
-          'paye_pay_batch_id', coalesce(v_paye_pay_batch_id::text, null)
+          'umbrella_overpayment_sync_only', v_umbrella_overpayment_sync_only,
+          'umbrella_overpayment_sync', v_umbrella_overpayment_sync,
+          'paye_status', v_paye_status,
+          'paye_pay_batch_id', coalesce(v_paye_pay_batch_id::text, null),
+          'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
+          'paye_overpayment_sync', v_paye_overpayment_sync
         ),
         'pay_create_draft_batches_split',
         'pay_date:'||p_pay_date::text,
@@ -1069,7 +1118,7 @@ begin
     end;
 
   else
-    -- Create UMBRELLA draft (READY umbrella items only; enforced by pay_create_draft_batch scope logic)
+    v_umbrella_status := 'RUNNING';
     begin
       v_umbrella_res := public.pay_create_draft_batch(
         p_pay_date,
@@ -1085,18 +1134,30 @@ begin
       );
 
       v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
+      v_umbrella_overpayment_sync_only := coalesce(nullif(v_umbrella_res->>'overpayment_sync_only','')::boolean, false);
+      v_umbrella_overpayment_sync := coalesce(v_umbrella_res->'overpayment_sync', '{}'::jsonb);
+
+      if v_umbrella_pay_batch_id is not null then
+        v_umbrella_status := 'BATCH_CREATED';
+      elsif v_umbrella_overpayment_sync_only then
+        v_umbrella_status := 'DEBT_SYNCED_NO_BATCH';
+      else
+        v_umbrella_status := 'NOTHING_RELEVANT';
+      end if;
     exception
       when others then
         v_err := coalesce(SQLERRM, '');
-        -- Treat "Nothing to pay ..." as non-fatal: allow PAYE draft to still be created.
         if position('Nothing to pay' in v_err) = 1 then
           v_umbrella_pay_batch_id := null;
+          v_umbrella_overpayment_sync_only := false;
+          v_umbrella_overpayment_sync := '{}'::jsonb;
+          v_umbrella_status := 'NOTHING_RELEVANT';
         else
           raise;
         end if;
     end;
 
-    -- Create PAYE draft (worksheet batch; net can be set later; pay_create_draft_batch does not require net)
+    v_paye_status := 'RUNNING';
     begin
       v_paye_res := public.pay_create_draft_batch(
         p_pay_date,
@@ -1112,26 +1173,64 @@ begin
       );
 
       v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
+      v_paye_overpayment_sync_only := coalesce(nullif(v_paye_res->>'overpayment_sync_only','')::boolean, false);
+      v_paye_overpayment_sync := coalesce(v_paye_res->'overpayment_sync', '{}'::jsonb);
+
+      if v_paye_pay_batch_id is not null then
+        v_paye_status := 'BATCH_CREATED';
+      elsif v_paye_overpayment_sync_only then
+        v_paye_status := 'DEBT_SYNCED_NO_BATCH';
+      else
+        v_paye_status := 'NOTHING_RELEVANT';
+      end if;
     exception
       when others then
         v_err := coalesce(SQLERRM, '');
-        -- Treat "Nothing to pay ..." as non-fatal: allow UMBRELLA draft to still be created.
         if position('Nothing to pay' in v_err) = 1 then
           v_paye_pay_batch_id := null;
+          v_paye_overpayment_sync_only := false;
+          v_paye_overpayment_sync := '{}'::jsonb;
+          v_paye_status := 'NOTHING_RELEVANT';
         else
           raise;
         end if;
     end;
   end if;
 
-  if v_umbrella_pay_batch_id is null and v_paye_pay_batch_id is null then
+  v_any_scope_relevant :=
+       v_umbrella_pay_batch_id is not null
+    or v_paye_pay_batch_id is not null
+    or v_umbrella_overpayment_sync_only
+    or v_paye_overpayment_sync_only;
+
+  if not v_any_scope_relevant then
     raise exception 'Nothing to pay (no payable items for UMBRELLA or PAYE after readiness blockers)';
   end if;
 
   return jsonb_build_object(
     'ok', true,
     'umbrella_pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
-    'paye_pay_batch_id', case when v_paye_pay_batch_id is null then null else v_paye_pay_batch_id::text end
+    'paye_pay_batch_id', case when v_paye_pay_batch_id is null then null else v_paye_pay_batch_id::text end,
+    'umbrella_status', v_umbrella_status,
+    'paye_status', v_paye_status,
+    'umbrella_overpayment_sync_only', v_umbrella_overpayment_sync_only,
+    'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
+    'umbrella_overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
+    'paye_overpayment_sync', case when v_paye_overpayment_sync_only then v_paye_overpayment_sync else null end,
+    'scope_results', jsonb_build_object(
+      'UMBRELLA', jsonb_build_object(
+        'status', v_umbrella_status,
+        'pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
+        'overpayment_sync_only', v_umbrella_overpayment_sync_only,
+        'overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end
+      ),
+      'PAYE', jsonb_build_object(
+        'status', v_paye_status,
+        'pay_batch_id', case when v_paye_pay_batch_id is null then null else v_paye_pay_batch_id::text end,
+        'overpayment_sync_only', v_paye_overpayment_sync_only,
+        'overpayment_sync', case when v_paye_overpayment_sync_only then v_paye_overpayment_sync else null end
+      )
+    )
   );
 end;
 $$;
