@@ -2714,6 +2714,7 @@ end;
 $$;
 
 
+
 create or replace function public.outbox_unified_retry(
   p_channel text,
   p_id uuid,
@@ -2728,10 +2729,17 @@ as $$
 declare
   v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
   v_retry_at_utc timestamptz := coalesce(p_retry_at_utc, now());
+  v_effective_retry_at_utc timestamptz;
   v_reason text := 'RETRY';
 
   v_mail_row public.mail_outbox%rowtype;
   v_comms_row public.comms_outbox%rowtype;
+
+  v_cfg jsonb;
+  v_cfg_scheduling jsonb;
+  v_now timestamptz := now();
+  v_max_future_days int := 365;
+  v_allow_past_grace_minutes int := 15;
 begin
   if p_actor_user_id is null then
     raise exception 'actor_user_id required';
@@ -2747,6 +2755,35 @@ begin
 
   if v_channel not in ('EMAIL','WHATSAPP','SMS','VOICE') then
     raise exception 'unsupported channel %', v_channel;
+  end if;
+
+  select sd.comms_adaptors_json
+  into v_cfg
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_cfg is not null and jsonb_typeof(v_cfg) = 'object' then
+    v_cfg_scheduling := v_cfg->'scheduling';
+
+    if v_cfg_scheduling is not null and jsonb_typeof(v_cfg_scheduling) = 'object' then
+      v_max_future_days := coalesce(nullif((v_cfg_scheduling->>'max_future_days')::int, 0), v_max_future_days);
+      v_allow_past_grace_minutes := coalesce((v_cfg_scheduling->>'allow_past_grace_minutes')::int, v_allow_past_grace_minutes);
+    end if;
+  end if;
+
+  if v_retry_at_utc > (v_now + make_interval(days => v_max_future_days)) then
+    raise exception 'retry_at_utc exceeds max_future_days';
+  end if;
+
+  if v_retry_at_utc < (v_now - make_interval(mins => v_allow_past_grace_minutes)) then
+    raise exception 'retry_at_utc too far in past';
+  end if;
+
+  if v_retry_at_utc <= v_now then
+    v_effective_retry_at_utc := v_now;
+  else
+    v_effective_retry_at_utc := v_retry_at_utc;
   end if;
 
   if v_channel = 'EMAIL' then
@@ -2788,7 +2825,7 @@ begin
         'channel', 'EMAIL',
         'outbox_id', v_mail_row.id::text,
         'status', 'QUEUED',
-        'next_attempt_at_utc', v_retry_at_utc::text,
+        'next_attempt_at_utc', v_effective_retry_at_utc::text,
         'scheduled_for_utc', case when v_mail_row.scheduled_for_utc is null then null else v_mail_row.scheduled_for_utc::text end,
         'provider_message_id', null,
         'provider_status', null,
@@ -2807,7 +2844,7 @@ begin
         last_error = null,
         provider_message_id = null,
         provider_status = null,
-        next_attempt_at_utc = v_retry_at_utc
+        next_attempt_at_utc = v_effective_retry_at_utc
     where mo.id = v_mail_row.id;
 
     select mo.*
@@ -2875,7 +2912,7 @@ begin
       'channel', v_comms_row.channel,
       'outbox_id', v_comms_row.id::text,
       'status', 'QUEUED',
-      'next_attempt_at_utc', v_retry_at_utc::text,
+      'next_attempt_at_utc', v_effective_retry_at_utc::text,
       'scheduled_for_utc', case when v_comms_row.scheduled_for_utc is null then null else v_comms_row.scheduled_for_utc::text end,
       'provider_key', 'AUTO',
       'provider_message_id', null,
@@ -2895,7 +2932,7 @@ begin
       delivered_at = null,
       read_at = null,
       failed_at = null,
-      next_attempt_at_utc = v_retry_at_utc
+      next_attempt_at_utc = v_effective_retry_at_utc
   where co.id = v_comms_row.id;
 
   select co.*
@@ -2922,8 +2959,6 @@ begin
 end;
 $$;
 
-
-
 create or replace function public.outbox_unified_reschedule(
   p_channel text,
   p_id uuid,
@@ -2938,10 +2973,17 @@ as $$
 declare
   v_channel text := nullif(upper(btrim(coalesce(p_channel,''))), '');
   v_target_utc timestamptz := p_scheduled_for_utc;
+  v_effective_target_utc timestamptz;
   v_reason text := 'RESCHEDULE';
 
   v_mail_row public.mail_outbox%rowtype;
   v_comms_row public.comms_outbox%rowtype;
+
+  v_cfg jsonb;
+  v_cfg_scheduling jsonb;
+  v_now timestamptz := now();
+  v_max_future_days int := 365;
+  v_allow_past_grace_minutes int := 15;
 begin
   if p_actor_user_id is null then
     raise exception 'actor_user_id required';
@@ -2961,6 +3003,35 @@ begin
 
   if v_channel not in ('EMAIL','WHATSAPP','SMS','VOICE') then
     raise exception 'unsupported channel %', v_channel;
+  end if;
+
+  select sd.comms_adaptors_json
+  into v_cfg
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_cfg is not null and jsonb_typeof(v_cfg) = 'object' then
+    v_cfg_scheduling := v_cfg->'scheduling';
+
+    if v_cfg_scheduling is not null and jsonb_typeof(v_cfg_scheduling) = 'object' then
+      v_max_future_days := coalesce(nullif((v_cfg_scheduling->>'max_future_days')::int, 0), v_max_future_days);
+      v_allow_past_grace_minutes := coalesce((v_cfg_scheduling->>'allow_past_grace_minutes')::int, v_allow_past_grace_minutes);
+    end if;
+  end if;
+
+  if v_target_utc > (v_now + make_interval(days => v_max_future_days)) then
+    raise exception 'scheduled_for_utc exceeds max_future_days';
+  end if;
+
+  if v_target_utc < (v_now - make_interval(mins => v_allow_past_grace_minutes)) then
+    raise exception 'scheduled_for_utc too far in past';
+  end if;
+
+  if v_target_utc <= v_now then
+    v_effective_target_utc := v_now;
+  else
+    v_effective_target_utc := v_target_utc;
   end if;
 
   if v_channel = 'EMAIL' then
@@ -3002,8 +3073,8 @@ begin
         'channel', 'EMAIL',
         'outbox_id', v_mail_row.id::text,
         'status', 'QUEUED',
-        'scheduled_for_utc', v_target_utc::text,
-        'next_attempt_at_utc', v_target_utc::text,
+        'scheduled_for_utc', v_effective_target_utc::text,
+        'next_attempt_at_utc', v_effective_target_utc::text,
         'provider_message_id', null,
         'provider_status', null,
         'last_error', null
@@ -3021,8 +3092,8 @@ begin
         last_error = null,
         provider_message_id = null,
         provider_status = null,
-        scheduled_for_utc = v_target_utc,
-        next_attempt_at_utc = v_target_utc
+        scheduled_for_utc = v_effective_target_utc,
+        next_attempt_at_utc = v_effective_target_utc
     where mo.id = v_mail_row.id;
 
     select mo.*
@@ -3090,8 +3161,8 @@ begin
       'channel', v_comms_row.channel,
       'outbox_id', v_comms_row.id::text,
       'status', 'QUEUED',
-      'scheduled_for_utc', v_target_utc::text,
-      'next_attempt_at_utc', v_target_utc::text,
+      'scheduled_for_utc', v_effective_target_utc::text,
+      'next_attempt_at_utc', v_effective_target_utc::text,
       'provider_key', 'AUTO',
       'provider_message_id', null,
       'last_error', null
@@ -3110,8 +3181,8 @@ begin
       delivered_at = null,
       read_at = null,
       failed_at = null,
-      scheduled_for_utc = v_target_utc,
-      next_attempt_at_utc = v_target_utc
+      scheduled_for_utc = v_effective_target_utc,
+      next_attempt_at_utc = v_effective_target_utc
   where co.id = v_comms_row.id;
 
   select co.*
@@ -3137,6 +3208,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 create or replace function public.mailshot_enqueue(
