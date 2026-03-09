@@ -9131,7 +9131,17 @@ begin
         'paye_net_amount', ni.net_amount,
         'paye_net_source', ni.source,
         'paye_net_imported_at_utc', ni.imported_at_utc,
-        'paye_net_file_name', ni.file_name
+        'paye_net_file_name', ni.file_name,
+
+        -- ✅ NEW: explicit deductions summary for child modal / UI
+        'deductions_summary', jsonb_build_object(
+          'gross_positive', pbc.gross_preview,
+          'overpayment_recovery', pbc.overpayment_recovery_taken,
+          'loan_repayment', pbc.loan_repayment_taken,
+          'final_payable', pbc.net_bank_amount,
+          'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(pbc.awaiting_net_amount,false) end,
+          'paye_net_amount', ni.net_amount
+        )
       )
       order by pbc.candidate_display_name nulls last, pbc.candidate_tms_ref nulls last, pbc.candidate_id
     ),
@@ -9234,6 +9244,8 @@ begin
       pbc.candidate_tms_ref,
       pbc.candidate_display_name,
       pbc.paye_state,
+      pbc.gross_preview,
+      pbc.awaiting_net_amount,
       pbc.net_bank_amount,
       pbc.overpayment_recovery_taken,
       pbc.loan_repayment_taken
@@ -9331,6 +9343,14 @@ begin
         'overpayment_recovery_taken', c.overpayment_recovery_taken,
         'loan_repayment_taken', c.loan_repayment_taken,
         'final_net_paid', c.net_bank_amount,
+        'deductions_summary', jsonb_build_object(
+          'gross_positive', c.gross_preview,
+          'overpayment_recovery', c.overpayment_recovery_taken,
+          'loan_repayment', c.loan_repayment_taken,
+          'final_payable', c.net_bank_amount,
+          'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(c.awaiting_net_amount, false) end,
+          'paye_net_amount', n.net_amount
+        ),
         'paye_total_ex_vat', s.paye_total_ex_vat,
         'umbrella_total_inc_vat', s.umbrella_total_inc_vat,
         'payment_amount',
@@ -9752,6 +9772,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 
