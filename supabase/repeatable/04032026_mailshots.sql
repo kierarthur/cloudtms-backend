@@ -3114,6 +3114,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.mailshot_enqueue(
   p_prepare_json jsonb,
   p_final_edits_json jsonb,
@@ -3286,8 +3287,12 @@ begin
     end if;
   end if;
 
-  if v_delivery_mode not in ('NOW','AT_TIME') then
-    raise exception 'delivery_timing_json.mode must be NOW or AT_TIME';
+  if v_delivery_mode = 'RELATIVE_DELAY' then
+    v_delivery_mode := 'AFTER_DELAY';
+  end if;
+
+  if v_delivery_mode not in ('NOW','AT_TIME','AFTER_DELAY') then
+    raise exception 'delivery_timing_json.mode must be NOW, AT_TIME or AFTER_DELAY';
   end if;
 
   v_requested_timezone := nullif(btrim(coalesce(p_delivery_timing_json->>'requested_timezone','')), '');
@@ -3311,6 +3316,37 @@ begin
       when others then
         raise exception 'delivery_timing_json.scheduled_for_utc invalid';
     end;
+
+    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_future_days)) then
+      raise exception 'delivery_timing_json.scheduled_for_utc exceeds max_future_days';
+    end if;
+
+    if v_scheduled_for_utc < (v_now - make_interval(mins => v_allow_past_grace_minutes)) then
+      raise exception 'delivery_timing_json.scheduled_for_utc too far in past';
+    end if;
+
+    if v_scheduled_for_utc <= v_now then
+      v_next_attempt_at_utc := v_now;
+    else
+      v_next_attempt_at_utc := v_scheduled_for_utc;
+    end if;
+  elsif v_delivery_mode = 'AFTER_DELAY' then
+    v_scheduled_text := nullif(btrim(coalesce(p_delivery_timing_json->>'scheduled_for_utc','')), '');
+
+    if v_scheduled_text is not null then
+      begin
+        v_scheduled_for_utc := v_scheduled_text::timestamptz;
+      exception
+        when others then
+          raise exception 'delivery_timing_json.scheduled_for_utc invalid';
+      end;
+    else
+      if v_relative_minutes is null then
+        raise exception 'delivery_timing_json.relative_minutes required when mode=AFTER_DELAY';
+      end if;
+
+      v_scheduled_for_utc := v_now + make_interval(mins => v_relative_minutes);
+    end if;
 
     if v_scheduled_for_utc > (v_now + make_interval(days => v_max_future_days)) then
       raise exception 'delivery_timing_json.scheduled_for_utc exceeds max_future_days';
