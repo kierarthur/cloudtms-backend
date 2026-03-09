@@ -6136,18 +6136,57 @@ end;
 
   -- ---------------------------------------------------------------------------
   -- STAGE_12B_UPSERT_OVERPAYMENTS
-  -- Draft creation must NOT persist OVERPAYMENT balances from preview-negative
-  -- component rows. Those negative movements are already represented in the
-  -- current draft as ADJUSTMENT_DELTA rows (or netted to zero inside the same
-  -- preview itemisation), so creating pay_advances here would contaminate the
-  -- next preview/draft cycle and double-count the same movement.
-  --
-  -- Keep pg_temp.tmp_preview_negative_timesheets for STAGE_16A exclusion logic,
-  -- but do not insert/update public.pay_advances during draft creation.
+  -- Create/update OVERPAYMENT balances from preview component negatives
+  -- (negative segment/adjustment/expense deltas), even when the net timesheet
+  -- payment remains positive after offsetting positives. These balances must
+  -- not be recovered again in the same draft if the current preview already
+  -- represents the same negative movement.
   -- ---------------------------------------------------------------------------
   v_stage := 'STAGE_12B_UPSERT_OVERPAYMENTS';
 
-  v_rows := 0;
+  with ins as (
+    insert into public.pay_advances (
+      candidate_id,
+      advance_kind,
+      reason,
+      linked_timesheet_id,
+      baseline_signature,
+      original_amount,
+      outstanding_amount,
+      status
+    )
+    select
+      t.candidate_id,
+      'OVERPAYMENT'::public.pay_advance_kind_enum,
+      'OVERPAYMENT'::public.pay_advance_reason_enum,
+      t.timesheet_id,
+      t.baseline_signature,
+      t.owed_ex,
+      t.owed_ex,
+      'ACTIVE'::public.pay_advance_status_enum
+    from pg_temp.tmp_preview_negative_timesheets t
+    where t.owed_ex > 0
+    on conflict do nothing
+    returning 1
+  )
+  update public.pay_advances pa
+  set
+    outstanding_amount = t.owed_ex,
+    original_amount = greatest(coalesce(pa.original_amount, 0), t.owed_ex),
+    status = case
+      when t.owed_ex > 0 then 'ACTIVE'::public.pay_advance_status_enum
+      else 'PAID_OFF'::public.pay_advance_status_enum
+    end,
+    reason = 'OVERPAYMENT'::public.pay_advance_reason_enum,
+    updated_at = now()
+  from pg_temp.tmp_preview_negative_timesheets t
+  where pa.candidate_id = t.candidate_id
+    and pa.linked_timesheet_id = t.timesheet_id
+    and pa.baseline_signature = t.baseline_signature
+    and pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+    and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum);
+
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
 
   begin
     perform public._imp_debug_audit(
@@ -6156,8 +6195,7 @@ end;
       jsonb_build_object(
         'stage', v_stage,
         'pay_batch_id', v_batch_id::text,
-        'overpayment_cases_touched', 0,
-        'persist_pay_advances', false,
+        'overpayment_cases_touched', v_rows,
         'negative_preview_timesheets', (
           select coalesce(
             jsonb_agg(
