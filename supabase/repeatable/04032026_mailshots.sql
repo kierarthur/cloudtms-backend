@@ -2481,7 +2481,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.mailshot_run_delete_if_unsent(
   p_mailshot_run_id uuid,
   p_actor_user_id uuid,
@@ -2547,40 +2546,46 @@ begin
   v_total_rows := coalesce(v_mail_row_count, 0) + coalesce(v_comms_row_count, 0);
 
   select count(*)::int
-  into v_blocking_mail_sent
-  from public.mail_outbox as mo
-  where mo.mailshot_run_id = p_mailshot_run_id
-    and mo.sent_at is not null;
-
-  select count(*)::int
-  into v_blocking_mail_delivered
-  from public.mail_outbox as mo
-  where mo.mailshot_run_id = p_mailshot_run_id
-    and mo.delivered_at is not null;
-
-  select count(*)::int
   into v_blocking_mail_read
   from public.mail_outbox as mo
   where mo.mailshot_run_id = p_mailshot_run_id
     and mo.read_at is not null;
 
   select count(*)::int
-  into v_blocking_comms_sent
-  from public.comms_outbox as co
-  where co.mailshot_run_id = p_mailshot_run_id
-    and co.sent_at is not null;
+  into v_blocking_mail_delivered
+  from public.mail_outbox as mo
+  where mo.mailshot_run_id = p_mailshot_run_id
+    and mo.read_at is null
+    and mo.delivered_at is not null;
 
   select count(*)::int
-  into v_blocking_comms_delivered
-  from public.comms_outbox as co
-  where co.mailshot_run_id = p_mailshot_run_id
-    and co.delivered_at is not null;
+  into v_blocking_mail_sent
+  from public.mail_outbox as mo
+  where mo.mailshot_run_id = p_mailshot_run_id
+    and mo.read_at is null
+    and mo.delivered_at is null
+    and mo.sent_at is not null;
 
   select count(*)::int
   into v_blocking_comms_read
   from public.comms_outbox as co
   where co.mailshot_run_id = p_mailshot_run_id
     and co.read_at is not null;
+
+  select count(*)::int
+  into v_blocking_comms_delivered
+  from public.comms_outbox as co
+  where co.mailshot_run_id = p_mailshot_run_id
+    and co.read_at is null
+    and co.delivered_at is not null;
+
+  select count(*)::int
+  into v_blocking_comms_sent
+  from public.comms_outbox as co
+  where co.mailshot_run_id = p_mailshot_run_id
+    and co.read_at is null
+    and co.delivered_at is null
+    and co.sent_at is not null;
 
   v_blocking_total :=
       coalesce(v_blocking_mail_sent, 0)
@@ -2705,6 +2710,12 @@ begin
       'total_rows', v_total_rows,
       'mail_rows', v_mail_row_count,
       'comms_rows', v_comms_row_count,
+      'blocking_mail_sent', 0,
+      'blocking_mail_delivered', 0,
+      'blocking_mail_read', 0,
+      'blocking_comms_sent', 0,
+      'blocking_comms_delivered', 0,
+      'blocking_comms_read', 0,
       'blocking_total', 0
     ),
     'deleted_mail_outbox_ids', v_deleted_mail_ids,
@@ -2712,8 +2723,6 @@ begin
   );
 end;
 $$;
-
-
 
 create or replace function public.outbox_unified_retry(
   p_channel text,
