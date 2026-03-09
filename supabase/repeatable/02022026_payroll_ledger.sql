@@ -427,7 +427,6 @@ $$;
 -- A4.3 pay_set_paye_net_from_sage(p_pay_batch_id, p_csv_raw, p_actor_user_id, p_source_filename)
 -- =========================================================
 
-
 create or replace function public.pay_set_paye_net_manual(
   p_pay_batch_id uuid,
   p_entries_json jsonb,
