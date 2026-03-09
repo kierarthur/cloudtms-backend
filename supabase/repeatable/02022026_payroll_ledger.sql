@@ -463,6 +463,7 @@ declare
   v_ins_overpay_bd int := 0;
   v_ins_loan_bd int := 0;
   v_upd_candidates int := 0;
+  v_candidate_summaries jsonb := '[]'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -882,6 +883,18 @@ begin
       where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
         and pa.status = 'ACTIVE'::public.pay_advance_status_enum
         and pa.outstanding_amount > 0
+        and not exists (
+          select 1
+          from public.pay_batch_items pbi_existing
+          join public.pay_batch_candidates pbc_existing
+            on pbc_existing.id = pbi_existing.pay_batch_candidate_id
+          where pbc_existing.pay_batch_id = p_pay_batch_id
+            and pbc_existing.candidate_id = pa.candidate_id
+            and pbi_existing.item_type = 'OVERPAYMENT_RECOVERY'
+            and pbi_existing.is_voided = false
+            and pbi_existing.source_ref = ('advance:' || pa.id::text)
+          limit 1
+        )
     ),
     cand_overpay as (
       select
@@ -1316,6 +1329,41 @@ begin
 
   get diagnostics v_upd_candidates = row_count;
 
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'pay_batch_candidate_id', pbc_ret.id::text,
+        'candidate_id', pbc_ret.candidate_id::text,
+        'paye_state', pbc_ret.paye_state,
+        'awaiting_net_amount', pbc_ret.awaiting_net_amount,
+        'paye_net_amount', pni_ret.net_amount,
+        'overpayment_recovery_taken', coalesce(pbc_ret.overpayment_recovery_taken, 0)::numeric(12,2),
+        'loan_repayment_taken', coalesce(pbc_ret.loan_repayment_taken, 0)::numeric(12,2),
+        'net_bank_amount', pbc_ret.net_bank_amount,
+        'deductions_summary', jsonb_build_object(
+          'gross_positive', greatest(coalesce(pni_ret.net_amount, 0), 0)::numeric(12,2),
+          'overpayment_recovery', coalesce(pbc_ret.overpayment_recovery_taken, 0)::numeric(12,2),
+          'loan_repayment', coalesce(pbc_ret.loan_repayment_taken, 0)::numeric(12,2),
+          'final_payable', pbc_ret.net_bank_amount,
+          'awaiting_net_amount', pbc_ret.awaiting_net_amount,
+          'paye_net_amount', pni_ret.net_amount
+        )
+      )
+      order by pbc_ret.candidate_id::text
+    ),
+    '[]'::jsonb
+  )
+  into v_candidate_summaries
+  from public.pay_batch_candidates pbc_ret
+  left join lateral (
+    select pni_ret_inner.net_amount
+    from public.pay_batch_paye_net_inputs pni_ret_inner
+    where pni_ret_inner.pay_batch_candidate_id = pbc_ret.id
+    order by pni_ret_inner.imported_at_utc desc
+    limit 1
+  ) pni_ret on true
+  where pbc_ret.id in (select s.pay_batch_candidate_id from _tmp_paye_scope s);
+
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
@@ -1323,6 +1371,7 @@ begin
     'updated_count', v_updated_count,
     'cleared_count', v_cleared_count,
     'unmatched', '[]'::jsonb,
+    'candidate_summaries', v_candidate_summaries,
     'recompute', jsonb_build_object(
       'deleted_deduction_items', v_deleted_ded_items,
       'deleted_deduction_breakdowns', v_deleted_ded_breakdowns,
@@ -1387,6 +1436,7 @@ declare
   v_ins_overpay_bd int := 0;
   v_ins_loan_bd int := 0;
   v_upd_candidates int := 0;
+  v_candidate_summaries jsonb := '[]'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -1822,6 +1872,18 @@ begin
       where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
         and pa.status = 'ACTIVE'::public.pay_advance_status_enum
         and pa.outstanding_amount > 0
+        and not exists (
+          select 1
+          from public.pay_batch_items pbi_existing
+          join public.pay_batch_candidates pbc_existing
+            on pbc_existing.id = pbi_existing.pay_batch_candidate_id
+          where pbc_existing.pay_batch_id = p_pay_batch_id
+            and pbc_existing.candidate_id = pa.candidate_id
+            and pbi_existing.item_type = 'OVERPAYMENT_RECOVERY'
+            and pbi_existing.is_voided = false
+            and pbi_existing.source_ref = ('advance:' || pa.id::text)
+          limit 1
+        )
     ),
     cand_overpay as (
       select
@@ -2256,6 +2318,41 @@ begin
 
   get diagnostics v_upd_candidates = row_count;
 
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'pay_batch_candidate_id', pbc_ret.id::text,
+        'candidate_id', pbc_ret.candidate_id::text,
+        'paye_state', pbc_ret.paye_state,
+        'awaiting_net_amount', pbc_ret.awaiting_net_amount,
+        'paye_net_amount', pni_ret.net_amount,
+        'overpayment_recovery_taken', coalesce(pbc_ret.overpayment_recovery_taken, 0)::numeric(12,2),
+        'loan_repayment_taken', coalesce(pbc_ret.loan_repayment_taken, 0)::numeric(12,2),
+        'net_bank_amount', pbc_ret.net_bank_amount,
+        'deductions_summary', jsonb_build_object(
+          'gross_positive', greatest(coalesce(pni_ret.net_amount, 0), 0)::numeric(12,2),
+          'overpayment_recovery', coalesce(pbc_ret.overpayment_recovery_taken, 0)::numeric(12,2),
+          'loan_repayment', coalesce(pbc_ret.loan_repayment_taken, 0)::numeric(12,2),
+          'final_payable', pbc_ret.net_bank_amount,
+          'awaiting_net_amount', pbc_ret.awaiting_net_amount,
+          'paye_net_amount', pni_ret.net_amount
+        )
+      )
+      order by pbc_ret.candidate_id::text
+    ),
+    '[]'::jsonb
+  )
+  into v_candidate_summaries
+  from public.pay_batch_candidates pbc_ret
+  left join lateral (
+    select pni_ret_inner.net_amount
+    from public.pay_batch_paye_net_inputs pni_ret_inner
+    where pni_ret_inner.pay_batch_candidate_id = pbc_ret.id
+    order by pni_ret_inner.imported_at_utc desc
+    limit 1
+  ) pni_ret on true
+  where pbc_ret.id in (select s.pay_batch_candidate_id from _tmp_paye_scope s);
+
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
@@ -2265,6 +2362,7 @@ begin
     'missing_net', v_missing_net,
     'unknown', v_unknown,
     'ambiguous', v_ambig,
+    'candidate_summaries', v_candidate_summaries,
     'recompute', jsonb_build_object(
       'deleted_deduction_items', v_deleted_ded_items,
       'deleted_deduction_breakdowns', v_deleted_ded_breakdowns,
@@ -2277,6 +2375,7 @@ begin
   );
 end;
 $$;
+
 
 
 
