@@ -4857,7 +4857,15 @@ begin
               'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
               'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
               'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
-              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2)
+              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2),
+              'deductions_summary', jsonb_build_object(
+                'gross_positive', round(coalesce(pbc_tot.gross_preview,0),2),
+                'overpayment_recovery', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
+                'loan_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'total_deductions', round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'final_payable', round(coalesce(pbc_tot.net_bank_amount,0),2),
+                'has_deductions', (round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2) > 0)
+              )
             )
             from public.pay_batch_candidates pbc_tot
             where pbc_tot.pay_batch_id = p_pay_batch_id
@@ -4868,16 +4876,58 @@ begin
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
-                  'line_kind', pbib_nt.line_kind,
+                  'item_type', pbi_nt.item_type,
+                  'description', pbi_nt.description,
+                  'line_kind', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+                    else pbib_nt.line_kind
+                  end,
+                  'line_label', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+                    when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
+                    when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
+                    else pbib_nt.line_kind
+                  end,
                   'bucket_code', pbib_nt.bucket_code,
                   'unit', pbib_nt.unit_name,
                   'quantity', pbib_nt.units,
                   'rate', pbib_nt.rate,
                   'total_ex_vat', pbib_nt.amount_ex_vat,
                   'total_vat', pbib_nt.amount_vat,
-                  'total_inc_vat', pbib_nt.amount_inc_vat
+                  'total_inc_vat', pbib_nt.amount_inc_vat,
+                  'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
+                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY')),
+                  'deduction_kind', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    else null
+                  end,
+                  'deduction_amount_ex_vat', case
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
+                    else null
+                  end,
+                  'deduction_amount_inc_vat', case
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
+                    else null
+                  end,
+                  'source_ref', pbi_nt.source_ref,
+                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end
                 )
-                order by coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate,0)
+                order by
+                  case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 1
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 2
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 3
+                    else 9
+                  end,
+                  coalesce(pbib_nt.line_kind,''),
+                  coalesce(pbib_nt.unit_name,''),
+                  coalesce(pbib_nt.rate,0)
               ),
               '[]'::jsonb
             )
@@ -5532,7 +5582,15 @@ begin
               'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
               'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
               'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
-              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2)
+              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2),
+              'deductions_summary', jsonb_build_object(
+                'gross_positive', round(coalesce(pbc_tot.gross_preview,0),2),
+                'overpayment_recovery', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
+                'loan_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'total_deductions', round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'final_payable', round(coalesce(pbc_tot.net_bank_amount,0),2),
+                'has_deductions', (round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2) > 0)
+              )
             )
             from public.pay_batch_candidates pbc_tot
             where pbc_tot.pay_batch_id = p_pay_batch_id
@@ -5561,16 +5619,58 @@ begin
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
-                  'line_kind', pbib_nt.line_kind,
+                  'item_type', pbi_nt.item_type,
+                  'description', pbi_nt.description,
+                  'line_kind', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+                    else pbib_nt.line_kind
+                  end,
+                  'line_label', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+                    when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
+                    when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
+                    else pbib_nt.line_kind
+                  end,
                   'bucket_code', pbib_nt.bucket_code,
                   'unit', pbib_nt.unit_name,
                   'quantity', pbib_nt.units,
                   'rate', pbib_nt.rate,
                   'total_ex_vat', pbib_nt.amount_ex_vat,
                   'total_vat', pbib_nt.amount_vat,
-                  'total_inc_vat', pbib_nt.amount_inc_vat
+                  'total_inc_vat', pbib_nt.amount_inc_vat,
+                  'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
+                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY')),
+                  'deduction_kind', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    else null
+                  end,
+                  'deduction_amount_ex_vat', case
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
+                    else null
+                  end,
+                  'deduction_amount_inc_vat', case
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
+                    else null
+                  end,
+                  'source_ref', pbi_nt.source_ref,
+                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end
                 )
-                order by coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate,0)
+                order by
+                  case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 1
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 2
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 3
+                    else 9
+                  end,
+                  coalesce(pbib_nt.line_kind,''),
+                  coalesce(pbib_nt.unit_name,''),
+                  coalesce(pbib_nt.rate,0)
               ),
               '[]'::jsonb
             )
@@ -6164,7 +6264,15 @@ begin
               'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
               'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
               'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
-              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2)
+              'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2),
+              'deductions_summary', jsonb_build_object(
+                'gross_positive', round(coalesce(pbc_tot.gross_preview,0),2),
+                'overpayment_recovery', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
+                'loan_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'total_deductions', round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'final_payable', round(coalesce(pbc_tot.net_bank_amount,0),2),
+                'has_deductions', (round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2) > 0)
+              )
             )
             from public.pay_batch_candidates pbc_tot
             where pbc_tot.pay_batch_id = p_pay_batch_id
@@ -6175,16 +6283,58 @@ begin
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
-                  'line_kind', pbib_nt.line_kind,
+                  'item_type', pbi_nt.item_type,
+                  'description', pbi_nt.description,
+                  'line_kind', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+                    else pbib_nt.line_kind
+                  end,
+                  'line_label', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+                    when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
+                    when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
+                    else pbib_nt.line_kind
+                  end,
                   'bucket_code', pbib_nt.bucket_code,
                   'unit', pbib_nt.unit_name,
                   'quantity', pbib_nt.units,
                   'rate', pbib_nt.rate,
                   'total_ex_vat', pbib_nt.amount_ex_vat,
                   'total_vat', pbib_nt.amount_vat,
-                  'total_inc_vat', pbib_nt.amount_inc_vat
+                  'total_inc_vat', pbib_nt.amount_inc_vat,
+                  'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
+                  'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
+                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY')),
+                  'deduction_kind', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    else null
+                  end,
+                  'deduction_amount_ex_vat', case
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
+                    else null
+                  end,
+                  'deduction_amount_inc_vat', case
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
+                    else null
+                  end,
+                  'source_ref', pbi_nt.source_ref,
+                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end
                 )
-                order by coalesce(pbib_nt.line_kind,''), coalesce(pbib_nt.unit_name,''), coalesce(pbib_nt.rate,0)
+                order by
+                  case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 1
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 2
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 3
+                    else 9
+                  end,
+                  coalesce(pbib_nt.line_kind,''),
+                  coalesce(pbib_nt.unit_name,''),
+                  coalesce(pbib_nt.rate,0)
               ),
               '[]'::jsonb
             )
@@ -8921,6 +9071,7 @@ $function$;
 
 
 
+
 create or replace function public.pay_batch_export_csv_rows(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -8987,7 +9138,6 @@ begin
 
   v_is_cancelled := (v_batch.cancelled_at_utc is not null);
 
-  -- Derived kind from batch items (PAYE/UMBRELLA/MIXED); fixed kind can override display (e.g. LOANS).
   select ch.channels
   into v_channels
   from (
@@ -9014,9 +9164,6 @@ begin
     v_batch_kind := 'LOANS';
   end if;
 
-  -- Freshness interaction:
-  -- - Non-cancelled batches: block export if stale.
-  -- - Cancelled batches: export must still work; include stale summary in metadata.
   v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
   v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
   v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
@@ -9042,9 +9189,10 @@ begin
 
   create temp table if not exists _tmp_pay_export_rows (
     sort_surname text not null,
+    sort_group int not null,
     sort_work_date date null,
     sort_timesheet_id uuid null,
-    sort_line_kind text not null,
+    sort_line_rank int not null,
     sort_bucket_code text null,
     sort_unit_name text null,
     line_kind text not null,
@@ -9055,9 +9203,10 @@ begin
 
   insert into _tmp_pay_export_rows(
     sort_surname,
+    sort_group,
     sort_work_date,
     sort_timesheet_id,
-    sort_line_kind,
+    sort_line_rank,
     sort_bucket_code,
     sort_unit_name,
     line_kind,
@@ -9165,15 +9314,39 @@ begin
         b.candidate_id::text
       ) as sort_surname,
 
-      coalesce(b.seg_work_date, b.week_ending_date) as sort_work_date,
+      case
+        when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 3
+        when b.timesheet_id is null then 2
+        else 1
+      end as sort_group,
+
+      coalesce(b.seg_work_date, b.week_ending_date, b.repayment_week_start) as sort_work_date,
 
       b.timesheet_id as sort_timesheet_id,
 
-      upper(coalesce(b.line_kind,'')) as sort_line_kind,
-      upper(nullif(btrim(coalesce(b.bucket_code,'')),'') ) as sort_bucket_code,
+      case
+        when b.item_type = 'OVERPAYMENT_RECOVERY' then 900
+        when b.item_type = 'LOAN_REPAYMENT' then 910
+        else case upper(coalesce(b.line_kind,''))
+          when 'TS_BUCKET' then 100
+          when 'ADDITIONAL_UNIT' then 200
+          when 'MILEAGE' then 300
+          when 'EXPENSE' then 400
+          when 'ADJUSTMENT' then 500
+          when 'CONVERSION_ADJ' then 600
+          when 'DEBT_CREATED' then 950
+          else 800
+        end
+      end as sort_line_rank,
+
+      upper(nullif(btrim(coalesce(b.bucket_code,'')),'')) as sort_bucket_code,
       nullif(btrim(coalesce(b.unit_name,'')),'') as sort_unit_name,
 
-      upper(coalesce(b.line_kind,'')) as line_kind,
+      case
+        when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+        when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+        else upper(coalesce(b.line_kind,''))
+      end as line_kind,
 
       jsonb_build_object(
         'candidate_id', b.candidate_id::text,
@@ -9192,16 +9365,34 @@ begin
         'timesheet_id', case when b.timesheet_id is null then null else b.timesheet_id::text end,
         'week_ending_date', case when b.week_ending_date is null then null else b.week_ending_date::text end,
         'work_date', case
-          when b.timesheet_id is null then null
           when b.seg_work_date is not null then b.seg_work_date::text
-          else case when b.week_ending_date is null then null else b.week_ending_date::text end
+          when b.week_ending_date is not null then b.week_ending_date::text
+          when b.repayment_week_start is not null then b.repayment_week_start::text
+          else null
         end,
         'reference_number', b.reference_number,
 
         'pay_channel', upper(coalesce(b.pay_channel,'')),
         'item_type', b.item_type,
 
-        'line_kind', b.line_kind,
+        'line_kind', case
+          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+          when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+          else b.line_kind
+        end,
+        'line_label', case
+          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+          when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+          when nullif(btrim(coalesce(b.unit_name,'')), '') is not null then b.unit_name
+          when nullif(btrim(coalesce(b.line_kind,'')), '') is not null then b.line_kind
+          else b.item_type
+        end,
+        'row_group', case
+          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 'DEDUCTION'
+          when b.timesheet_id is null then 'NON_TIMESHEET'
+          else 'TIMESHEET'
+        end,
+        'is_non_timesheet_line', (b.timesheet_id is null),
         'bucket_code', b.bucket_code,
 
         'unit_name', b.unit_name,
@@ -9211,11 +9402,27 @@ begin
         'amount_ex_vat', b.amount_ex_vat,
         'amount_vat', b.amount_vat,
         'amount_inc_vat', b.amount_inc_vat,
+        'signed_amount_ex_vat', b.amount_ex_vat,
+        'signed_amount_inc_vat', b.amount_inc_vat,
+        'amount_sign', case
+          when coalesce(b.amount_ex_vat, 0) < 0 then 'NEGATIVE'
+          when coalesce(b.amount_ex_vat, 0) > 0 then 'POSITIVE'
+          else 'ZERO'
+        end,
 
         'is_overpayment_recovery', (b.item_type = 'OVERPAYMENT_RECOVERY'),
         'is_loan_repayment', (b.item_type = 'LOAN_REPAYMENT'),
+        'deduction_kind', case
+          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+          when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+          else null
+        end,
         'deduction_amount_ex_vat', case
           when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_ex_vat,0)),2)
+          else null
+        end,
+        'deduction_amount_inc_vat', case
+          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_inc_vat,0)),2)
           else null
         end,
 
@@ -9231,9 +9438,10 @@ begin
   )
   select
     r.sort_surname,
+    r.sort_group,
     r.sort_work_date,
     r.sort_timesheet_id,
-    r.sort_line_kind,
+    r.sort_line_rank,
     r.sort_bucket_code,
     r.sort_unit_name,
     r.line_kind,
@@ -9262,9 +9470,10 @@ begin
       per.row_json
       order by
         per.sort_surname asc,
+        per.sort_group asc,
         per.sort_work_date asc nulls last,
         per.sort_timesheet_id asc nulls last,
-        per.sort_line_kind asc,
+        per.sort_line_rank asc,
         per.sort_bucket_code asc nulls last,
         per.sort_unit_name asc nulls last
     ),
@@ -9320,6 +9529,11 @@ begin
   );
 end;
 $$;
+
+
+
+
+
 create or replace function public.pay_loans_grant(
   p_candidate_id uuid,
   p_principal_amount numeric,
