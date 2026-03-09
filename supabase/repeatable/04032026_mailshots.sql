@@ -76,7 +76,6 @@ end;
 $$;
 
 
-
 create or replace function public.document_templates_upsert(
   p_template_id uuid,
   p_entity_type text,
@@ -101,10 +100,14 @@ declare
   v_selected text[] := coalesce(p_selected_field_keys, '{}'::text[]);
   v_content jsonb := coalesce(p_template_content_json, '{}'::jsonb);
   v_output_type_norm text := upper(btrim(coalesce(p_output_type, '')));
+  v_email_type_norm text := nullif(lower(btrim(coalesce(p_email_type, ''))), '');
   v_whatsapp_provider text;
   v_whatsapp_template_name text;
   v_whatsapp_param_name text;
   v_whatsapp_message_text text;
+  v_sms_voice_message_text text;
+  v_word_body_html text;
+  v_word_body_text text;
 begin
   if p_entity_type is null or length(btrim(p_entity_type)) = 0 then
     raise exception 'entity_type required';
@@ -124,6 +127,16 @@ begin
 
   if p_template_content_json is not null and jsonb_typeof(p_template_content_json) <> 'object' then
     raise exception 'template_content_json must be object';
+  end if;
+
+  if v_output_type_norm not in ('EMAIL','WHATSAPP','SMS','VOICE','WORD','EXCEL') then
+    raise exception 'invalid output_type: %', v_output_type_norm;
+  end if;
+
+  if v_output_type_norm = 'EMAIL' then
+    if v_email_type_norm is not null and v_email_type_norm not in ('plain','html') then
+      raise exception 'email_type must be plain or html for EMAIL';
+    end if;
   end if;
 
   if v_output_type_norm = 'WHATSAPP' then
@@ -192,6 +205,19 @@ begin
         'param_name', v_whatsapp_param_name
       )
     );
+  elsif v_output_type_norm in ('SMS','VOICE') then
+    v_sms_voice_message_text := nullif(btrim(coalesce(v_content->>'message_text','')), '');
+
+    if v_sms_voice_message_text is null then
+      raise exception '% template_content_json missing message_text', v_output_type_norm;
+    end if;
+  elsif v_output_type_norm = 'WORD' then
+    v_word_body_html := nullif(btrim(coalesce(v_content->>'body_html','')), '');
+    v_word_body_text := nullif(btrim(coalesce(v_content->>'body_text','')), '');
+
+    if v_word_body_html is null and v_word_body_text is null then
+      raise exception 'word template_content_json requires body_html or body_text';
+    end if;
   end if;
 
   if p_template_id is null then
@@ -212,7 +238,7 @@ begin
       v_output_type_norm,
       btrim(p_filename),
       p_description,
-      p_email_type,
+      v_email_type_norm,
       v_selected,
       v_content,
       p_actor_user_id,
@@ -236,7 +262,7 @@ begin
       output_type = v_output_type_norm,
       filename = btrim(p_filename),
       description = p_description,
-      email_type = p_email_type,
+      email_type = v_email_type_norm,
       selected_field_keys = v_selected,
       template_content_json = v_content,
       updated_at_utc = v_now
@@ -267,8 +293,6 @@ begin
   );
 end;
 $$;
-
-
 
 create or replace function public.document_templates_delete(
   p_template_id uuid,
