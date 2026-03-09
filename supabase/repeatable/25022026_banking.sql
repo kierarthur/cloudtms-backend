@@ -10572,6 +10572,895 @@ begin
 end;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pay_advances_register(
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_search text DEFAULT NULL::text,
+  p_type text DEFAULT NULL::text,
+  p_status text DEFAULT NULL::text,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_outstanding_only boolean DEFAULT true,
+  p_due_this_week_only boolean DEFAULT false,
+  p_amount_min numeric DEFAULT NULL::numeric,
+  p_amount_max numeric DEFAULT NULL::numeric,
+  p_created_from date DEFAULT NULL::date,
+  p_created_to date DEFAULT NULL::date,
+  p_sort_key text DEFAULT 'created_at'::text,
+  p_sort_dir text DEFAULT 'desc'::text,
+  p_limit integer DEFAULT 500,
+  p_offset integer DEFAULT 0,
+  p_as_of_date date DEFAULT NULL::date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
+  v_as_of_date date := coalesce(p_as_of_date, (now() at time zone 'Europe/London')::date);
+  v_week_start date := public._pay_week_start_monday(coalesce(p_as_of_date, (now() at time zone 'Europe/London')::date));
+  v_week_end date := (public._pay_week_start_monday(coalesce(p_as_of_date, (now() at time zone 'Europe/London')::date)) + 6);
+
+  v_search text := nullif(btrim(coalesce(p_search, '')), '');
+  v_type text := upper(btrim(coalesce(p_type, '')));
+  v_status text := upper(btrim(coalesce(p_status, '')));
+  v_sort_key text := lower(btrim(coalesce(p_sort_key, 'created_at')));
+  v_sort_dir text := upper(btrim(coalesce(p_sort_dir, 'DESC')));
+
+  v_limit integer := greatest(1, least(coalesce(p_limit, 500), 10000));
+  v_offset integer := greatest(0, coalesce(p_offset, 0));
+
+  v_total_count integer := 0;
+  v_summary jsonb := '{}'::jsonb;
+  v_rows jsonb := '[]'::jsonb;
+begin
+  if v_sort_dir not in ('ASC', 'DESC') then
+    v_sort_dir := 'DESC';
+  end if;
+
+  if v_sort_key not in (
+    'candidate',
+    'client',
+    'type',
+    'status',
+    'created_at',
+    'original_amount',
+    'recovered_wtd',
+    'remaining_outstanding',
+    'due_this_week',
+    'start_week_start',
+    'next_due_week_start'
+  ) then
+    v_sort_key := 'created_at';
+  end if;
+
+  create temporary table if not exists pg_temp.tmp_pay_advances_patch_stats (
+    advance_id uuid primary key,
+    recovered_wtd numeric(12,2) not null,
+    latest_recovery_pay_batch_id uuid null
+  ) on commit drop;
+
+  create temporary table if not exists pg_temp.tmp_pay_advances_sched_due (
+    advance_id uuid primary key,
+    due_this_week numeric(12,2) not null
+  ) on commit drop;
+
+  create temporary table if not exists pg_temp.tmp_pay_advances_register (
+    record_type text not null,
+    record_subtype text null,
+    advance_id uuid not null,
+    candidate_id uuid not null,
+    candidate_tms_ref text null,
+    candidate_display_name text null,
+    candidate_first_name text null,
+    candidate_last_name text null,
+    client_id uuid null,
+    client_name text null,
+    linked_timesheet_id uuid null,
+    linked_shift_date date null,
+    payout_pay_batch_id uuid null,
+    payout_transfer_id uuid null,
+    latest_recovery_pay_batch_id uuid null,
+    created_at timestamptz null,
+    start_week_start date null,
+    next_due_week_start date null,
+    original_amount numeric(12,2) not null,
+    recovered_total numeric(12,2) not null,
+    recovered_wtd numeric(12,2) not null,
+    remaining_outstanding numeric(12,2) not null,
+    due_this_week numeric(12,2) null,
+    status text null,
+    payout_status text null,
+    baseline_signature text null,
+    reason text null,
+    notes text null,
+    source_booking_id text null,
+    source_week_ending_date date null,
+    source_shift_label_norm text null
+  ) on commit drop;
+
+  truncate table pg_temp.tmp_pay_advances_patch_stats;
+  truncate table pg_temp.tmp_pay_advances_sched_due;
+  truncate table pg_temp.tmp_pay_advances_register;
+
+  insert into pg_temp.tmp_pay_advances_patch_stats (
+    advance_id,
+    recovered_wtd,
+    latest_recovery_pay_batch_id
+  )
+  with patch_rows as (
+    select
+      pap.advance_id,
+      round(
+        greatest(
+          coalesce(pap.old_outstanding_amount, 0) - coalesce(pap.new_outstanding_amount, 0),
+          0
+        ),
+        2
+      )::numeric(12,2) as recovered_amt,
+      pap.pay_batch_id,
+      pb.pay_date,
+      row_number() over (
+        partition by pap.advance_id
+        order by pb.pay_date desc nulls last, pap.id desc
+      ) as rn
+    from public.pay_advance_patches pap
+    left join public.pay_batches pb
+      on pb.id = pap.pay_batch_id
+    where pap.advance_id is not null
+      and (pb.id is null or pb.cancelled_at_utc is null)
+  )
+  select
+    pr.advance_id,
+    round(
+      coalesce(
+        sum(
+          case
+            when pr.pay_date is not null
+             and pr.pay_date >= v_week_start
+             and pr.pay_date <= v_week_end
+              then pr.recovered_amt
+            else 0
+          end
+        ),
+        0
+      ),
+      2
+    )::numeric(12,2) as recovered_wtd,
+    max(case when pr.rn = 1 then pr.pay_batch_id else null end) as latest_recovery_pay_batch_id
+  from patch_rows pr
+  group by pr.advance_id;
+
+  insert into pg_temp.tmp_pay_advances_sched_due (
+    advance_id,
+    due_this_week
+  )
+  select
+    pa.id as advance_id,
+    round(
+      least(
+        coalesce(pa.outstanding_amount, 0),
+        coalesce(
+          abs(
+            sum(
+              case
+                when nullif(btrim(coalesce(sj.elem->>'week_start', '')), '') = v_week_start::text
+                 and coalesce(nullif(sj.elem->>'amount', '')::numeric, 0) < 0
+                  then coalesce(nullif(sj.elem->>'amount', '')::numeric, 0)
+                else 0
+              end
+            )
+          ),
+          0
+        )
+      ),
+      2
+    )::numeric(12,2) as due_this_week
+  from public.pay_advances pa
+  left join lateral jsonb_array_elements(coalesce(pa.schedule_json, '[]'::jsonb)) as sj(elem)
+    on true
+  group by
+    pa.id,
+    pa.outstanding_amount;
+
+  insert into pg_temp.tmp_pay_advances_register (
+    record_type,
+    record_subtype,
+    advance_id,
+    candidate_id,
+    candidate_tms_ref,
+    candidate_display_name,
+    candidate_first_name,
+    candidate_last_name,
+    client_id,
+    client_name,
+    linked_timesheet_id,
+    linked_shift_date,
+    payout_pay_batch_id,
+    payout_transfer_id,
+    latest_recovery_pay_batch_id,
+    created_at,
+    start_week_start,
+    next_due_week_start,
+    original_amount,
+    recovered_total,
+    recovered_wtd,
+    remaining_outstanding,
+    due_this_week,
+    status,
+    payout_status,
+    baseline_signature,
+    reason,
+    notes,
+    source_booking_id,
+    source_week_ending_date,
+    source_shift_label_norm
+  )
+  select
+    'OVERPAYMENT'::text as record_type,
+    pa.reason::text as record_subtype,
+    pa.id as advance_id,
+    pa.candidate_id,
+    c.tms_ref as candidate_tms_ref,
+    c.display_name as candidate_display_name,
+    c.first_name as candidate_first_name,
+    c.last_name as candidate_last_name,
+    cli.id as client_id,
+    cli.name as client_name,
+    pa.linked_timesheet_id,
+    null::date as linked_shift_date,
+    null::uuid as payout_pay_batch_id,
+    null::uuid as payout_transfer_id,
+    paps.latest_recovery_pay_batch_id,
+    pa.created_at,
+    null::date as start_week_start,
+    null::date as next_due_week_start,
+    round(coalesce(pa.original_amount, 0), 2)::numeric(12,2) as original_amount,
+    round(greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2)::numeric(12,2) as recovered_total,
+    round(coalesce(paps.recovered_wtd, 0), 2)::numeric(12,2) as recovered_wtd,
+    round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2) as remaining_outstanding,
+    null::numeric(12,2) as due_this_week,
+    pa.status::text as status,
+    null::text as payout_status,
+    pa.baseline_signature,
+    pa.reason::text as reason,
+    pa.notes,
+    ts.booking_id as source_booking_id,
+    ts.week_ending_date as source_week_ending_date,
+    ts.shift_label_norm as source_shift_label_norm
+  from public.pay_advances pa
+  join public.candidates c
+    on c.id = pa.candidate_id
+  left join public.timesheets ts
+    on ts.timesheet_id = pa.linked_timesheet_id
+  left join public.contracts ct
+    on ct.id = ts.contract_id
+  left join public.clients cli
+    on cli.id = ct.client_id
+  left join pg_temp.tmp_pay_advances_patch_stats paps
+    on paps.advance_id = pa.id
+  where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum;
+
+  insert into pg_temp.tmp_pay_advances_register (
+    record_type,
+    record_subtype,
+    advance_id,
+    candidate_id,
+    candidate_tms_ref,
+    candidate_display_name,
+    candidate_first_name,
+    candidate_last_name,
+    client_id,
+    client_name,
+    linked_timesheet_id,
+    linked_shift_date,
+    payout_pay_batch_id,
+    payout_transfer_id,
+    latest_recovery_pay_batch_id,
+    created_at,
+    start_week_start,
+    next_due_week_start,
+    original_amount,
+    recovered_total,
+    recovered_wtd,
+    remaining_outstanding,
+    due_this_week,
+    status,
+    payout_status,
+    baseline_signature,
+    reason,
+    notes,
+    source_booking_id,
+    source_week_ending_date,
+    source_shift_label_norm
+  )
+  select
+    'LOAN'::text as record_type,
+    pa.reason::text as record_subtype,
+    pa.id as advance_id,
+    pa.candidate_id,
+    c.tms_ref as candidate_tms_ref,
+    c.display_name as candidate_display_name,
+    c.first_name as candidate_first_name,
+    c.last_name as candidate_last_name,
+    cli.id as client_id,
+    cli.name as client_name,
+    null::uuid as linked_timesheet_id,
+    null::date as linked_shift_date,
+    pa.payout_pay_batch_id,
+    pa.payout_transfer_id,
+    paps.latest_recovery_pay_batch_id,
+    pa.created_at,
+    pa.start_week_start,
+    pa.next_due_week_start,
+    round(coalesce(pa.original_amount, 0), 2)::numeric(12,2) as original_amount,
+    round(greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2)::numeric(12,2) as recovered_total,
+    round(coalesce(paps.recovered_wtd, 0), 2)::numeric(12,2) as recovered_wtd,
+    round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2) as remaining_outstanding,
+    case
+      when pa.payout_status is distinct from 'PAID'::public.pay_advance_payout_status_enum then 0::numeric(12,2)
+      when pa.weekly_due is null or pa.weekly_due <= 0 then 0::numeric(12,2)
+      when pa.start_week_start is not null and pa.start_week_start > v_week_start then 0::numeric(12,2)
+      else round(
+        greatest(
+          least(round(coalesce(pa.weekly_due, 0), 2), round(coalesce(pa.outstanding_amount, 0), 2))
+          - coalesce(paps.recovered_wtd, 0),
+          0
+        ),
+        2
+      )::numeric(12,2)
+    end as due_this_week,
+    pa.status::text as status,
+    pa.payout_status::text as payout_status,
+    null::text as baseline_signature,
+    pa.reason::text as reason,
+    pa.notes,
+    null::text as source_booking_id,
+    null::date as source_week_ending_date,
+    null::text as source_shift_label_norm
+  from public.pay_advances pa
+  join public.candidates c
+    on c.id = pa.candidate_id
+  left join public.clients cli
+    on cli.id = pa.client_id
+  left join pg_temp.tmp_pay_advances_patch_stats paps
+    on paps.advance_id = pa.id
+  where pa.advance_kind = 'LOAN'::public.pay_advance_kind_enum;
+
+  insert into pg_temp.tmp_pay_advances_register (
+    record_type,
+    record_subtype,
+    advance_id,
+    candidate_id,
+    candidate_tms_ref,
+    candidate_display_name,
+    candidate_first_name,
+    candidate_last_name,
+    client_id,
+    client_name,
+    linked_timesheet_id,
+    linked_shift_date,
+    payout_pay_batch_id,
+    payout_transfer_id,
+    latest_recovery_pay_batch_id,
+    created_at,
+    start_week_start,
+    next_due_week_start,
+    original_amount,
+    recovered_total,
+    recovered_wtd,
+    remaining_outstanding,
+    due_this_week,
+    status,
+    payout_status,
+    baseline_signature,
+    reason,
+    notes,
+    source_booking_id,
+    source_week_ending_date,
+    source_shift_label_norm
+  )
+  select
+    case
+      when pa.reason = 'MISSING_SHIFT'::public.pay_advance_reason_enum then 'MISSING_SHIFT_ADVANCE'::text
+      else 'ADVANCE'::text
+    end as record_type,
+    pa.reason::text as record_subtype,
+    pa.id as advance_id,
+    pa.candidate_id,
+    c.tms_ref as candidate_tms_ref,
+    c.display_name as candidate_display_name,
+    c.first_name as candidate_first_name,
+    c.last_name as candidate_last_name,
+    cli.id as client_id,
+    cli.name as client_name,
+    null::uuid as linked_timesheet_id,
+    pa.linked_shift_date,
+    pa.payout_pay_batch_id,
+    pa.payout_transfer_id,
+    paps.latest_recovery_pay_batch_id,
+    pa.created_at,
+    pa.start_week_start,
+    pa.next_due_week_start,
+    round(coalesce(pa.original_amount, 0), 2)::numeric(12,2) as original_amount,
+    round(greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2)::numeric(12,2) as recovered_total,
+    round(coalesce(paps.recovered_wtd, 0), 2)::numeric(12,2) as recovered_wtd,
+    round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2) as remaining_outstanding,
+    round(coalesce(psd.due_this_week, 0), 2)::numeric(12,2) as due_this_week,
+    pa.status::text as status,
+    pa.payout_status::text as payout_status,
+    pa.baseline_signature,
+    pa.reason::text as reason,
+    pa.notes,
+    null::text as source_booking_id,
+    null::date as source_week_ending_date,
+    null::text as source_shift_label_norm
+  from public.pay_advances pa
+  join public.candidates c
+    on c.id = pa.candidate_id
+  left join public.clients cli
+    on cli.id = pa.client_id
+  left join pg_temp.tmp_pay_advances_patch_stats paps
+    on paps.advance_id = pa.id
+  left join pg_temp.tmp_pay_advances_sched_due psd
+    on psd.advance_id = pa.id
+  where
+    pa.advance_kind = 'LEGACY_ADVANCE'::public.pay_advance_kind_enum
+    or pa.advance_kind is null
+    or pa.reason in (
+      'MISSING_SHIFT'::public.pay_advance_reason_enum,
+      'MANUAL_ADVANCE'::public.pay_advance_reason_enum,
+      'OVERPAY_NHSP'::public.pay_advance_reason_enum,
+      'OVERPAY_HR'::public.pay_advance_reason_enum
+    );
+
+  if v_search is not null then
+    delete from pg_temp.tmp_pay_advances_register t
+    where not (
+      coalesce(t.candidate_tms_ref, '') ilike '%' || v_search || '%'
+      or coalesce(t.candidate_display_name, '') ilike '%' || v_search || '%'
+      or coalesce(t.candidate_first_name, '') ilike '%' || v_search || '%'
+      or coalesce(t.candidate_last_name, '') ilike '%' || v_search || '%'
+    );
+  end if;
+
+  if v_type <> '' then
+    if v_type = 'ADVANCE' then
+      delete from pg_temp.tmp_pay_advances_register t
+      where t.record_type not in ('ADVANCE', 'MISSING_SHIFT_ADVANCE');
+    else
+      delete from pg_temp.tmp_pay_advances_register t
+      where t.record_type <> v_type;
+    end if;
+  end if;
+
+  if v_status <> '' then
+    delete from pg_temp.tmp_pay_advances_register t
+    where upper(coalesce(t.status, '')) <> v_status;
+  end if;
+
+  if p_client_id is not null then
+    delete from pg_temp.tmp_pay_advances_register t
+    where t.client_id is distinct from p_client_id;
+  end if;
+
+  if coalesce(p_outstanding_only, true) then
+    delete from pg_temp.tmp_pay_advances_register t
+    where coalesce(t.remaining_outstanding, 0) <= 0;
+  end if;
+
+  if coalesce(p_due_this_week_only, false) then
+    delete from pg_temp.tmp_pay_advances_register t
+    where coalesce(t.due_this_week, 0) <= 0;
+  end if;
+
+  if p_amount_min is not null then
+    delete from pg_temp.tmp_pay_advances_register t
+    where coalesce(t.remaining_outstanding, 0) < round(p_amount_min, 2);
+  end if;
+
+  if p_amount_max is not null then
+    delete from pg_temp.tmp_pay_advances_register t
+    where coalesce(t.remaining_outstanding, 0) > round(p_amount_max, 2);
+  end if;
+
+  if p_created_from is not null then
+    delete from pg_temp.tmp_pay_advances_register t
+    where t.created_at is null
+       or (t.created_at at time zone 'Europe/London')::date < p_created_from;
+  end if;
+
+  if p_created_to is not null then
+    delete from pg_temp.tmp_pay_advances_register t
+    where t.created_at is null
+       or (t.created_at at time zone 'Europe/London')::date > p_created_to;
+  end if;
+
+  select count(*)::int
+  into v_total_count
+  from pg_temp.tmp_pay_advances_register t;
+
+  select jsonb_build_object(
+    'row_count', count(*)::int,
+    'week_start', v_week_start::text,
+    'week_end', v_week_end::text,
+    'as_of_date', v_as_of_date::text,
+    'active_overpayments_outstanding', round(coalesce(sum(case when t.record_type = 'OVERPAYMENT' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+    'active_loans_outstanding', round(coalesce(sum(case when t.record_type = 'LOAN' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+    'active_advances_outstanding', round(coalesce(sum(case when t.record_type in ('ADVANCE', 'MISSING_SHIFT_ADVANCE') then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+    'due_this_week_total', round(coalesce(sum(coalesce(t.due_this_week, 0)), 0), 2)::numeric(12,2),
+    'counts_by_type', jsonb_build_object(
+      'OVERPAYMENT', count(*) filter (where t.record_type = 'OVERPAYMENT'),
+      'LOAN', count(*) filter (where t.record_type = 'LOAN'),
+      'ADVANCE', count(*) filter (where t.record_type = 'ADVANCE'),
+      'MISSING_SHIFT_ADVANCE', count(*) filter (where t.record_type = 'MISSING_SHIFT_ADVANCE')
+    ),
+    'totals_by_type', jsonb_build_object(
+      'OVERPAYMENT', round(coalesce(sum(case when t.record_type = 'OVERPAYMENT' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+      'LOAN', round(coalesce(sum(case when t.record_type = 'LOAN' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+      'ADVANCE', round(coalesce(sum(case when t.record_type = 'ADVANCE' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+      'MISSING_SHIFT_ADVANCE', round(coalesce(sum(case when t.record_type = 'MISSING_SHIFT_ADVANCE' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2)
+    )
+  )
+  into v_summary
+  from pg_temp.tmp_pay_advances_register t;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'record_type', p.record_type,
+          'record_subtype', p.record_subtype,
+          'advance_id', p.advance_id::text,
+          'candidate_id', p.candidate_id::text,
+          'candidate_tms_ref', p.candidate_tms_ref,
+          'candidate_display_name', p.candidate_display_name,
+          'candidate_first_name', p.candidate_first_name,
+          'candidate_last_name', p.candidate_last_name,
+          'client_id', case when p.client_id is null then null else p.client_id::text end,
+          'client_name', p.client_name,
+          'linked_timesheet_id', case when p.linked_timesheet_id is null then null else p.linked_timesheet_id::text end,
+          'linked_shift_date', case when p.linked_shift_date is null then null else p.linked_shift_date::text end,
+          'payout_pay_batch_id', case when p.payout_pay_batch_id is null then null else p.payout_pay_batch_id::text end,
+          'payout_transfer_id', case when p.payout_transfer_id is null then null else p.payout_transfer_id::text end,
+          'latest_recovery_pay_batch_id', case when p.latest_recovery_pay_batch_id is null then null else p.latest_recovery_pay_batch_id::text end,
+          'created_at', case when p.created_at is null then null else p.created_at::text end,
+          'start_week_start', case when p.start_week_start is null then null else p.start_week_start::text end,
+          'next_due_week_start', case when p.next_due_week_start is null then null else p.next_due_week_start::text end,
+          'original_amount', p.original_amount,
+          'recovered_total', p.recovered_total,
+          'recovered_wtd', p.recovered_wtd,
+          'remaining_outstanding', p.remaining_outstanding,
+          'due_this_week', p.due_this_week,
+          'status', p.status,
+          'payout_status', p.payout_status,
+          'baseline_signature', p.baseline_signature,
+          'reason', p.reason,
+          'notes', p.notes,
+          'source_booking_id', p.source_booking_id,
+          'source_week_ending_date', case when p.source_week_ending_date is null then null else p.source_week_ending_date::text end,
+          'source_shift_label_norm', p.source_shift_label_norm
+        )
+      ),
+      '[]'::jsonb
+    )
+  into v_rows
+  from (
+    select
+      t.record_type,
+      t.record_subtype,
+      t.advance_id,
+      t.candidate_id,
+      t.candidate_tms_ref,
+      t.candidate_display_name,
+      t.candidate_first_name,
+      t.candidate_last_name,
+      t.client_id,
+      t.client_name,
+      t.linked_timesheet_id,
+      t.linked_shift_date,
+      t.payout_pay_batch_id,
+      t.payout_transfer_id,
+      t.latest_recovery_pay_batch_id,
+      t.created_at,
+      t.start_week_start,
+      t.next_due_week_start,
+      t.original_amount,
+      t.recovered_total,
+      t.recovered_wtd,
+      t.remaining_outstanding,
+      t.due_this_week,
+      t.status,
+      t.payout_status,
+      t.baseline_signature,
+      t.reason,
+      t.notes,
+      t.source_booking_id,
+      t.source_week_ending_date,
+      t.source_shift_label_norm
+    from pg_temp.tmp_pay_advances_register t
+    order by
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'candidate' then lower(coalesce(t.candidate_display_name, t.candidate_tms_ref, '')) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'candidate' then lower(coalesce(t.candidate_display_name, t.candidate_tms_ref, '')) end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'client' then lower(coalesce(t.client_name, '')) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'client' then lower(coalesce(t.client_name, '')) end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'type' then lower(coalesce(t.record_type, '')) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'type' then lower(coalesce(t.record_type, '')) end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'status' then lower(coalesce(t.status, '')) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'status' then lower(coalesce(t.status, '')) end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'created_at' then t.created_at end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'created_at' then t.created_at end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'original_amount' then t.original_amount end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'original_amount' then t.original_amount end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'recovered_wtd' then t.recovered_wtd end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'recovered_wtd' then t.recovered_wtd end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'remaining_outstanding' then t.remaining_outstanding end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'remaining_outstanding' then t.remaining_outstanding end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'due_this_week' then coalesce(t.due_this_week, 0) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'due_this_week' then coalesce(t.due_this_week, 0) end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'start_week_start' then t.start_week_start end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'start_week_start' then t.start_week_start end desc nulls last,
+
+      case when v_sort_dir = 'ASC'  and v_sort_key = 'next_due_week_start' then t.next_due_week_start end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'next_due_week_start' then t.next_due_week_start end desc nulls last,
+
+      t.created_at desc nulls last,
+      t.advance_id asc
+    limit v_limit
+    offset v_offset
+  ) p;
+
+  return jsonb_build_object(
+    'ok', true,
+    'summary', coalesce(v_summary, '{}'::jsonb),
+    'rows', coalesce(v_rows, '[]'::jsonb),
+    'meta', jsonb_build_object(
+      'as_of_date', v_as_of_date::text,
+      'today_uk', v_today_uk::text,
+      'week_start', v_week_start::text,
+      'week_end', v_week_end::text,
+      'total_count', v_total_count,
+      'limit', v_limit,
+      'offset', v_offset,
+      'sort_key', v_sort_key,
+      'sort_dir', v_sort_dir,
+      'applied_filters', jsonb_build_object(
+        'search', v_search,
+        'type', case when v_type = '' then null else v_type end,
+        'status', case when v_status = '' then null else v_status end,
+        'client_id', case when p_client_id is null then null else p_client_id::text end,
+        'outstanding_only', coalesce(p_outstanding_only, true),
+        'due_this_week_only', coalesce(p_due_this_week_only, false),
+        'amount_min', p_amount_min,
+        'amount_max', p_amount_max,
+        'created_from', case when p_created_from is null then null else p_created_from::text end,
+        'created_to', case when p_created_to is null then null else p_created_to::text end
+      )
+    )
+  );
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.pay_advances_register_export_rows(
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_search text DEFAULT NULL::text,
+  p_type text DEFAULT NULL::text,
+  p_status text DEFAULT NULL::text,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_outstanding_only boolean DEFAULT true,
+  p_due_this_week_only boolean DEFAULT false,
+  p_amount_min numeric DEFAULT NULL::numeric,
+  p_amount_max numeric DEFAULT NULL::numeric,
+  p_created_from date DEFAULT NULL::date,
+  p_created_to date DEFAULT NULL::date,
+  p_sort_key text DEFAULT 'created_at'::text,
+  p_sort_dir text DEFAULT 'desc'::text,
+  p_as_of_date date DEFAULT NULL::date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_base jsonb := '{}'::jsonb;
+  v_rows jsonb := '[]'::jsonb;
+begin
+  v_base := public.pay_advances_register(
+    p_actor_user_id => p_actor_user_id,
+    p_search => p_search,
+    p_type => p_type,
+    p_status => p_status,
+    p_client_id => p_client_id,
+    p_outstanding_only => p_outstanding_only,
+    p_due_this_week_only => p_due_this_week_only,
+    p_amount_min => p_amount_min,
+    p_amount_max => p_amount_max,
+    p_created_from => p_created_from,
+    p_created_to => p_created_to,
+    p_sort_key => p_sort_key,
+    p_sort_dir => p_sort_dir,
+    p_limit => 100000,
+    p_offset => 0,
+    p_as_of_date => p_as_of_date
+  );
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'record_type', r.elem->>'record_type',
+          'record_subtype', r.elem->>'record_subtype',
+          'candidate_tms_ref', r.elem->>'candidate_tms_ref',
+          'candidate_display_name', r.elem->>'candidate_display_name',
+          'candidate_first_name', r.elem->>'candidate_first_name',
+          'candidate_last_name', r.elem->>'candidate_last_name',
+          'client_name', r.elem->>'client_name',
+          'status', r.elem->>'status',
+          'payout_status', r.elem->>'payout_status',
+          'source_timesheet_id', r.elem->>'linked_timesheet_id',
+          'source_shift_date', r.elem->>'linked_shift_date',
+          'source_week_ending_date', r.elem->>'source_week_ending_date',
+          'source_booking_id', r.elem->>'source_booking_id',
+          'source_shift_label_norm', r.elem->>'source_shift_label_norm',
+          'created_at', r.elem->>'created_at',
+          'start_week_start', r.elem->>'start_week_start',
+          'next_due_week_start', r.elem->>'next_due_week_start',
+          'original_amount', r.elem->'original_amount',
+          'recovered_total', r.elem->'recovered_total',
+          'recovered_wtd', r.elem->'recovered_wtd',
+          'remaining_outstanding', r.elem->'remaining_outstanding',
+          'due_this_week', r.elem->'due_this_week',
+          'baseline_signature', r.elem->>'baseline_signature',
+          'payout_pay_batch_id', r.elem->>'payout_pay_batch_id',
+          'payout_transfer_id', r.elem->>'payout_transfer_id',
+          'latest_recovery_pay_batch_id', r.elem->>'latest_recovery_pay_batch_id',
+          'advance_id', r.elem->>'advance_id',
+          'candidate_id', r.elem->>'candidate_id',
+          'client_id', r.elem->>'client_id',
+          'notes', r.elem->>'notes'
+        )
+      ),
+      '[]'::jsonb
+    )
+  into v_rows
+  from jsonb_array_elements(coalesce(v_base->'rows', '[]'::jsonb)) as r(elem);
+
+  return jsonb_build_object(
+    'ok', true,
+    'title', 'Advances & Recoveries Register',
+    'generated_at_utc', now()::text,
+    'summary', coalesce(v_base->'summary', '{}'::jsonb),
+    'meta', coalesce(v_base->'meta', '{}'::jsonb),
+    'rows', coalesce(v_rows, '[]'::jsonb)
+  );
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.pay_advances_register_pdf_payload(
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_search text DEFAULT NULL::text,
+  p_type text DEFAULT NULL::text,
+  p_status text DEFAULT NULL::text,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_outstanding_only boolean DEFAULT true,
+  p_due_this_week_only boolean DEFAULT false,
+  p_amount_min numeric DEFAULT NULL::numeric,
+  p_amount_max numeric DEFAULT NULL::numeric,
+  p_created_from date DEFAULT NULL::date,
+  p_created_to date DEFAULT NULL::date,
+  p_sort_key text DEFAULT 'created_at'::text,
+  p_sort_dir text DEFAULT 'desc'::text,
+  p_as_of_date date DEFAULT NULL::date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_base jsonb := '{}'::jsonb;
+  v_rows jsonb := '[]'::jsonb;
+  v_groups jsonb := '[]'::jsonb;
+begin
+  v_base := public.pay_advances_register(
+    p_actor_user_id => p_actor_user_id,
+    p_search => p_search,
+    p_type => p_type,
+    p_status => p_status,
+    p_client_id => p_client_id,
+    p_outstanding_only => p_outstanding_only,
+    p_due_this_week_only => p_due_this_week_only,
+    p_amount_min => p_amount_min,
+    p_amount_max => p_amount_max,
+    p_created_from => p_created_from,
+    p_created_to => p_created_to,
+    p_sort_key => p_sort_key,
+    p_sort_dir => p_sort_dir,
+    p_limit => 100000,
+    p_offset => 0,
+    p_as_of_date => p_as_of_date
+  );
+
+  v_rows := coalesce(v_base->'rows', '[]'::jsonb);
+
+  select
+    jsonb_build_array(
+      jsonb_build_object(
+        'record_type', 'OVERPAYMENT',
+        'title', 'Overpayments',
+        'rows', coalesce(
+          (
+            select jsonb_agg(e.elem)
+            from jsonb_array_elements(v_rows) as e(elem)
+            where e.elem->>'record_type' = 'OVERPAYMENT'
+          ),
+          '[]'::jsonb
+        )
+      ),
+      jsonb_build_object(
+        'record_type', 'LOAN',
+        'title', 'Loans',
+        'rows', coalesce(
+          (
+            select jsonb_agg(e.elem)
+            from jsonb_array_elements(v_rows) as e(elem)
+            where e.elem->>'record_type' = 'LOAN'
+          ),
+          '[]'::jsonb
+        )
+      ),
+      jsonb_build_object(
+        'record_type', 'ADVANCE',
+        'title', 'Advances',
+        'rows', coalesce(
+          (
+            select jsonb_agg(e.elem)
+            from jsonb_array_elements(v_rows) as e(elem)
+            where e.elem->>'record_type' = 'ADVANCE'
+          ),
+          '[]'::jsonb
+        )
+      ),
+      jsonb_build_object(
+        'record_type', 'MISSING_SHIFT_ADVANCE',
+        'title', 'Missing-shift advances',
+        'rows', coalesce(
+          (
+            select jsonb_agg(e.elem)
+            from jsonb_array_elements(v_rows) as e(elem)
+            where e.elem->>'record_type' = 'MISSING_SHIFT_ADVANCE'
+          ),
+          '[]'::jsonb
+        )
+      )
+    )
+  into v_groups;
+
+  return jsonb_build_object(
+    'ok', true,
+    'title', 'Advances & Recoveries Register',
+    'generated_at_utc', now()::text,
+    'applied_filters', coalesce(v_base->'meta'->'applied_filters', '{}'::jsonb),
+    'summary', coalesce(v_base->'summary', '{}'::jsonb),
+    'meta', coalesce(v_base->'meta', '{}'::jsonb),
+    'rows', v_rows,
+    'groups', coalesce(v_groups, '[]'::jsonb)
+  );
+end;
+$function$;
+
+
+
 
 
 
