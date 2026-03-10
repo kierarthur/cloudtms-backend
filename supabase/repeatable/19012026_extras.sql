@@ -5052,3 +5052,155 @@ for each row
 execute function public.contracts_enforce_overrideclientsettings();
 
 commit;
+
+
+CREATE OR REPLACE FUNCTION public.audit_events_list(
+  p_search text DEFAULT NULL,
+  p_action text DEFAULT NULL,
+  p_object_type text DEFAULT NULL,
+  p_actor_display text DEFAULT NULL,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0,
+  p_sort_by text DEFAULT 'ts_utc',
+  p_sort_dir text DEFAULT 'desc'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_search text := NULLIF(btrim(p_search), '');
+  v_action text := NULLIF(btrim(p_action), '');
+  v_object_type text := NULLIF(btrim(p_object_type), '');
+  v_actor_display text := NULLIF(btrim(p_actor_display), '');
+  v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 500);
+  v_offset integer := GREATEST(COALESCE(p_offset, 0), 0);
+  v_sort_by text := lower(COALESCE(NULLIF(btrim(p_sort_by), ''), 'ts_utc'));
+  v_sort_dir text := lower(COALESCE(NULLIF(btrim(p_sort_dir), ''), 'desc'));
+  v_items jsonb := '[]'::jsonb;
+  v_total bigint := 0;
+BEGIN
+  IF v_sort_by NOT IN ('ts_utc', 'action', 'actor_display', 'object_type', 'object_id_text', 'correlation_id') THEN
+    v_sort_by := 'ts_utc';
+  END IF;
+
+  IF v_sort_dir NOT IN ('asc', 'desc') THEN
+    v_sort_dir := 'desc';
+  END IF;
+
+  WITH filtered AS (
+    SELECT
+      ae.id,
+      ae.ts_utc,
+      ae.actor_user_id,
+      ae.actor_display,
+      ae.actor_role_at_time,
+      ae.object_type,
+      ae.object_id_text,
+      ae.action,
+      ae.before_json,
+      ae.after_json,
+      ae.reason,
+      ae.ip,
+      ae.user_agent,
+      ae.correlation_id
+    FROM public.audit_events AS ae
+    WHERE
+      (
+        v_search IS NULL
+        OR concat_ws(
+          ' ',
+          COALESCE(ae.actor_display, ''),
+          COALESCE(ae.actor_role_at_time, ''),
+          COALESCE(ae.object_type, ''),
+          COALESCE(ae.object_id_text, ''),
+          COALESCE(ae.action, ''),
+          COALESCE(ae.reason, ''),
+          COALESCE(ae.correlation_id, '')
+        ) ILIKE ('%' || v_search || '%')
+      )
+      AND (
+        v_action IS NULL
+        OR upper(COALESCE(ae.action, '')) = upper(v_action)
+      )
+      AND (
+        v_object_type IS NULL
+        OR upper(COALESCE(ae.object_type, '')) = upper(v_object_type)
+      )
+      AND (
+        v_actor_display IS NULL
+        OR COALESCE(ae.actor_display, '') ILIKE ('%' || v_actor_display || '%')
+      )
+  ),
+  page_rows AS (
+    SELECT
+      f.id,
+      f.ts_utc,
+      f.actor_user_id,
+      f.actor_display,
+      f.actor_role_at_time,
+      f.object_type,
+      f.object_id_text,
+      f.action,
+      f.before_json,
+      f.after_json,
+      f.reason,
+      f.ip,
+      f.user_agent,
+      f.correlation_id
+    FROM filtered AS f
+    ORDER BY
+      CASE WHEN v_sort_by = 'ts_utc' AND v_sort_dir = 'asc' THEN f.ts_utc END ASC NULLS LAST,
+      CASE WHEN v_sort_by = 'ts_utc' AND v_sort_dir = 'desc' THEN f.ts_utc END DESC NULLS LAST,
+      CASE WHEN v_sort_by = 'action' AND v_sort_dir = 'asc' THEN f.action END ASC NULLS LAST,
+      CASE WHEN v_sort_by = 'action' AND v_sort_dir = 'desc' THEN f.action END DESC NULLS LAST,
+      CASE WHEN v_sort_by = 'actor_display' AND v_sort_dir = 'asc' THEN f.actor_display END ASC NULLS LAST,
+      CASE WHEN v_sort_by = 'actor_display' AND v_sort_dir = 'desc' THEN f.actor_display END DESC NULLS LAST,
+      CASE WHEN v_sort_by = 'object_type' AND v_sort_dir = 'asc' THEN f.object_type END ASC NULLS LAST,
+      CASE WHEN v_sort_by = 'object_type' AND v_sort_dir = 'desc' THEN f.object_type END DESC NULLS LAST,
+      CASE WHEN v_sort_by = 'object_id_text' AND v_sort_dir = 'asc' THEN f.object_id_text END ASC NULLS LAST,
+      CASE WHEN v_sort_by = 'object_id_text' AND v_sort_dir = 'desc' THEN f.object_id_text END DESC NULLS LAST,
+      CASE WHEN v_sort_by = 'correlation_id' AND v_sort_dir = 'asc' THEN f.correlation_id END ASC NULLS LAST,
+      CASE WHEN v_sort_by = 'correlation_id' AND v_sort_dir = 'desc' THEN f.correlation_id END DESC NULLS LAST,
+      f.ts_utc DESC,
+      f.id DESC
+    LIMIT v_limit
+    OFFSET v_offset
+  )
+  SELECT count(*) INTO v_total
+  FROM filtered;
+
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', pr.id,
+        'ts_utc', pr.ts_utc,
+        'actor_user_id', pr.actor_user_id,
+        'actor_display', pr.actor_display,
+        'actor_role_at_time', pr.actor_role_at_time,
+        'object_type', pr.object_type,
+        'object_id_text', pr.object_id_text,
+        'action', pr.action,
+        'before_json', pr.before_json,
+        'after_json', pr.after_json,
+        'reason', pr.reason,
+        'ip', pr.ip,
+        'user_agent', pr.user_agent,
+        'correlation_id', pr.correlation_id
+      )
+    ),
+    '[]'::jsonb
+  )
+  INTO v_items
+  FROM page_rows AS pr;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'items', v_items,
+    'total_count', v_total,
+    'limit', v_limit,
+    'offset', v_offset
+  );
+END;
+$$;
