@@ -25005,32 +25005,58 @@ async function handleMailshotRunGet(env, req, id) {
   }
 }
 
-
 async function handleBankingAdvancesRegisterExportCsv(env, req, user) {
+  const actorUser = (() => {
+    if (user && typeof user === 'object' && user.id) return user;
+    return null;
+  })();
+
+  let resolvedUser = actorUser;
+  if (!resolvedUser) {
+    resolvedUser = await requireUser(env, req, ['admin']);
+    if (!resolvedUser) return withCORS(env, req, unauthorized());
+  }
+
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
 
-  const parseBool = (v, dflt) => {
-    if (v === null || v === undefined || String(v).trim() === '') return dflt;
-    const s = String(v).trim().toLowerCase();
-    if (['1', 'true', 'yes', 'on'].includes(s)) return true;
-    if (['0', 'false', 'no', 'off'].includes(s)) return false;
+  const parseNullableText = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (s) return s;
+    }
+    return null;
+  };
+
+  const parseBool = (raw, dflt) => {
+    const s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!s) return dflt;
+    if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
     return dflt;
   };
 
-  const parseNum = (v) => {
-    if (v === null || v === undefined || String(v).trim() === '') return null;
-    const n = Number(String(v).trim());
-    return Number.isFinite(n) ? n : null;
+  const parseNullableNumeric = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) continue;
+      const n = Number(s);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
   };
 
-  const parseDate = (v) => {
-    const s = String(v || '').trim();
-    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  const parseDateIso = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
   };
 
-  const parseUuid = (v) => {
-    const s = String(v || '').trim();
+  const parseUuid = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
     if (!s) return null;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
   };
@@ -25056,23 +25082,61 @@ async function handleBankingAdvancesRegisterExportCsv(env, req, user) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
-  const search = String(q('search') || '').trim() || null;
-  const type = String(q('type') || '').trim() || null;
-  const status = String(q('status') || '').trim() || null;
-  const clientId = parseUuid(q('client_id'));
-  const outstandingOnly = parseBool(q('outstanding_only'), true);
-  const dueThisWeekOnly = parseBool(q('due_this_week_only'), false);
-  const amountMin = parseNum(q('amount_min'));
-  const amountMax = parseNum(q('amount_max'));
-  const createdFrom = parseDate(q('created_from'));
-  const createdTo = parseDate(q('created_to'));
-  const sortKey = String(q('sort_key') || 'created_at').trim() || 'created_at';
-  const sortDir = String(q('sort_dir') || 'desc').trim() || 'desc';
-  const asOfDate = parseDate(q('as_of_date'));
+  const search = parseNullableText(q('search'), q('q'));
+  const type = parseNullableText(q('type'), q('record_type'), q('recordType'));
+  const status = parseNullableText(q('status'));
+
+  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
+  const clientId = parseUuid(clientIdRaw);
+
+  const outstandingOnly = parseBool(
+    parseNullableText(q('outstanding_only'), q('outstandingOnly')),
+    true
+  );
+
+  const dueThisWeekOnly = parseBool(
+    parseNullableText(q('due_this_week_only'), q('dueThisWeekOnly')),
+    false
+  );
+
+  const amountMin = parseNullableNumeric(q('amount_min'), q('amountMin'));
+  const amountMax = parseNullableNumeric(q('amount_max'), q('amountMax'));
+
+  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'));
+  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'));
+  const asOfDateRaw = parseNullableText(q('as_of_date'), q('asOfDate'));
+
+  const createdFrom = parseDateIso(createdFromRaw);
+  const createdTo = parseDateIso(createdToRaw);
+  const asOfDate = parseDateIso(asOfDateRaw);
+
+  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
+  const sortDirRaw = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase();
+  const sortDir = (sortDirRaw === 'asc') ? 'asc' : 'desc';
+
+  if (clientIdRaw && !clientId) {
+    return withCORS(env, req, badRequest('client_id must be a valid UUID'));
+  }
+
+  if (createdFromRaw && !createdFrom) {
+    return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (createdToRaw && !createdTo) {
+    return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (asOfDateRaw && !asOfDate) {
+    return withCORS(env, req, badRequest('as_of_date must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (amountMin != null && amountMax != null && amountMin > amountMax) {
+    return withCORS(env, req, badRequest('amount_min cannot be greater than amount_max'));
+  }
 
   try {
     const raw0 = await sbRpc(env, 'pay_advances_register_export_rows', {
-      p_actor_user_id: user && user.id ? user.id : null,
+      p_actor_user_id: resolvedUser.id,
       p_search: search,
       p_type: type,
       p_status: status,
@@ -25177,32 +25241,58 @@ async function handleBankingAdvancesRegisterExportCsv(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'ADVANCES_REGISTER_EXPORT_CSV_FAILED')));
   }
 }
-
 async function handleBankingAdvancesRegisterExportPdf(env, req, user) {
+  const actorUser = (() => {
+    if (user && typeof user === 'object' && user.id) return user;
+    return null;
+  })();
+
+  let resolvedUser = actorUser;
+  if (!resolvedUser) {
+    resolvedUser = await requireUser(env, req, ['admin']);
+    if (!resolvedUser) return withCORS(env, req, unauthorized());
+  }
+
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
 
-  const parseBool = (v, dflt) => {
-    if (v === null || v === undefined || String(v).trim() === '') return dflt;
-    const s = String(v).trim().toLowerCase();
-    if (['1', 'true', 'yes', 'on'].includes(s)) return true;
-    if (['0', 'false', 'no', 'off'].includes(s)) return false;
+  const parseNullableText = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (s) return s;
+    }
+    return null;
+  };
+
+  const parseBool = (raw, dflt) => {
+    const s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!s) return dflt;
+    if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
     return dflt;
   };
 
-  const parseNum = (v) => {
-    if (v === null || v === undefined || String(v).trim() === '') return null;
-    const n = Number(String(v).trim());
-    return Number.isFinite(n) ? n : null;
+  const parseNullableNumeric = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) continue;
+      const n = Number(s);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
   };
 
-  const parseDate = (v) => {
-    const s = String(v || '').trim();
-    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  const parseDateIso = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
   };
 
-  const parseUuid = (v) => {
-    const s = String(v || '').trim();
+  const parseUuid = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
     if (!s) return null;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
   };
@@ -25220,19 +25310,57 @@ async function handleBankingAdvancesRegisterExportPdf(env, req, user) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
-  const search = String(q('search') || '').trim() || null;
-  const type = String(q('type') || '').trim() || null;
-  const status = String(q('status') || '').trim() || null;
-  const clientId = parseUuid(q('client_id'));
-  const outstandingOnly = parseBool(q('outstanding_only'), true);
-  const dueThisWeekOnly = parseBool(q('due_this_week_only'), false);
-  const amountMin = parseNum(q('amount_min'));
-  const amountMax = parseNum(q('amount_max'));
-  const createdFrom = parseDate(q('created_from'));
-  const createdTo = parseDate(q('created_to'));
-  const sortKey = String(q('sort_key') || 'created_at').trim() || 'created_at';
-  const sortDir = String(q('sort_dir') || 'desc').trim() || 'desc';
-  const asOfDate = parseDate(q('as_of_date'));
+  const search = parseNullableText(q('search'), q('q'));
+  const type = parseNullableText(q('type'), q('record_type'), q('recordType'));
+  const status = parseNullableText(q('status'));
+
+  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
+  const clientId = parseUuid(clientIdRaw);
+
+  const outstandingOnly = parseBool(
+    parseNullableText(q('outstanding_only'), q('outstandingOnly')),
+    true
+  );
+
+  const dueThisWeekOnly = parseBool(
+    parseNullableText(q('due_this_week_only'), q('dueThisWeekOnly')),
+    false
+  );
+
+  const amountMin = parseNullableNumeric(q('amount_min'), q('amountMin'));
+  const amountMax = parseNullableNumeric(q('amount_max'), q('amountMax'));
+
+  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'));
+  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'));
+  const asOfDateRaw = parseNullableText(q('as_of_date'), q('asOfDate'));
+
+  const createdFrom = parseDateIso(createdFromRaw);
+  const createdTo = parseDateIso(createdToRaw);
+  const asOfDate = parseDateIso(asOfDateRaw);
+
+  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
+  const sortDirRaw = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase();
+  const sortDir = (sortDirRaw === 'asc') ? 'asc' : 'desc';
+
+  if (clientIdRaw && !clientId) {
+    return withCORS(env, req, badRequest('client_id must be a valid UUID'));
+  }
+
+  if (createdFromRaw && !createdFrom) {
+    return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (createdToRaw && !createdTo) {
+    return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (asOfDateRaw && !asOfDate) {
+    return withCORS(env, req, badRequest('as_of_date must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (amountMin != null && amountMax != null && amountMin > amountMax) {
+    return withCORS(env, req, badRequest('amount_min cannot be greater than amount_max'));
+  }
 
   const safeStr = (v) => (v == null ? '' : String(v));
   const asNum = (v) => {
@@ -25289,7 +25417,7 @@ async function handleBankingAdvancesRegisterExportPdf(env, req, user) {
 
   try {
     const raw0 = await sbRpc(env, 'pay_advances_register_pdf_payload', {
-      p_actor_user_id: user && user.id ? user.id : null,
+      p_actor_user_id: resolvedUser.id,
       p_search: search,
       p_type: type,
       p_status: status,
@@ -25480,10 +25608,13 @@ async function handleBankingAdvancesRegisterExportPdf(env, req, user) {
         y -= rowHeight - 2;
 
         const subBits = [];
-        if (r?.record_type === 'OVERPAYMENT' && r?.source_timesheet_id) subBits.push(`TS: ${safeStr(r.source_timesheet_id)}`);
+        if (r?.record_type === 'OVERPAYMENT' && r?.linked_timesheet_id) subBits.push(`TS: ${safeStr(r.linked_timesheet_id)}`);
         if (r?.record_type === 'OVERPAYMENT' && r?.baseline_signature) subBits.push(`Baseline: ${safeStr(r.baseline_signature)}`);
         if (r?.record_type === 'LOAN' && r?.due_this_week != null) subBits.push(`Due this week: ${asMoney(r.due_this_week)}`);
         if ((r?.record_type === 'ADVANCE' || r?.record_type === 'MISSING_SHIFT_ADVANCE') && r?.linked_shift_date) subBits.push(`Shift: ${fmtDateOnly(r.linked_shift_date)}`);
+        if (r?.source_booking_id) subBits.push(`Booking: ${safeStr(r.source_booking_id)}`);
+        if (r?.source_week_ending_date) subBits.push(`Week ending: ${fmtDateOnly(r.source_week_ending_date)}`);
+        if (r?.source_shift_label_norm) subBits.push(`Shift label: ${safeStr(r.source_shift_label_norm)}`);
         if (r?.payout_status) subBits.push(`Payout: ${safeStr(r.payout_status)}`);
         if (r?.created_at) subBits.push(`Created: ${fmtDateOnly(r.created_at)}`);
 
@@ -25526,30 +25657,57 @@ async function handleBankingAdvancesRegisterExportPdf(env, req, user) {
 
 
 async function handleBankingAdvancesRegisterPrint(env, req, user) {
+  const actorUser = (() => {
+    if (user && typeof user === 'object' && user.id) return user;
+    return null;
+  })();
+
+  let resolvedUser = actorUser;
+  if (!resolvedUser) {
+    resolvedUser = await requireUser(env, req, ['admin']);
+    if (!resolvedUser) return withCORS(env, req, unauthorized());
+  }
+
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
 
-  const parseBool = (v, dflt) => {
-    if (v === null || v === undefined || String(v).trim() === '') return dflt;
-    const s = String(v).trim().toLowerCase();
-    if (['1', 'true', 'yes', 'on'].includes(s)) return true;
-    if (['0', 'false', 'no', 'off'].includes(s)) return false;
+  const parseNullableText = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (s) return s;
+    }
+    return null;
+  };
+
+  const parseBool = (raw, dflt) => {
+    const s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!s) return dflt;
+    if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
     return dflt;
   };
 
-  const parseNum = (v) => {
-    if (v === null || v === undefined || String(v).trim() === '') return null;
-    const n = Number(String(v).trim());
-    return Number.isFinite(n) ? n : null;
+  const parseNullableNumeric = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) continue;
+      const n = Number(s);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
   };
 
-  const parseDate = (v) => {
-    const s = String(v || '').trim();
-    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  const parseDateIso = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
   };
 
-  const parseUuid = (v) => {
-    const s = String(v || '').trim();
+  const parseUuid = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
     if (!s) return null;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
   };
@@ -25618,23 +25776,61 @@ async function handleBankingAdvancesRegisterPrint(env, req, user) {
     }).format(d);
   };
 
-  const search = String(q('search') || '').trim() || null;
-  const type = String(q('type') || '').trim() || null;
-  const status = String(q('status') || '').trim() || null;
-  const clientId = parseUuid(q('client_id'));
-  const outstandingOnly = parseBool(q('outstanding_only'), true);
-  const dueThisWeekOnly = parseBool(q('due_this_week_only'), false);
-  const amountMin = parseNum(q('amount_min'));
-  const amountMax = parseNum(q('amount_max'));
-  const createdFrom = parseDate(q('created_from'));
-  const createdTo = parseDate(q('created_to'));
-  const sortKey = String(q('sort_key') || 'created_at').trim() || 'created_at';
-  const sortDir = String(q('sort_dir') || 'desc').trim() || 'desc';
-  const asOfDate = parseDate(q('as_of_date'));
+  const search = parseNullableText(q('search'), q('q'));
+  const type = parseNullableText(q('type'), q('record_type'), q('recordType'));
+  const status = parseNullableText(q('status'));
+
+  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
+  const clientId = parseUuid(clientIdRaw);
+
+  const outstandingOnly = parseBool(
+    parseNullableText(q('outstanding_only'), q('outstandingOnly')),
+    true
+  );
+
+  const dueThisWeekOnly = parseBool(
+    parseNullableText(q('due_this_week_only'), q('dueThisWeekOnly')),
+    false
+  );
+
+  const amountMin = parseNullableNumeric(q('amount_min'), q('amountMin'));
+  const amountMax = parseNullableNumeric(q('amount_max'), q('amountMax'));
+
+  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'));
+  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'));
+  const asOfDateRaw = parseNullableText(q('as_of_date'), q('asOfDate'));
+
+  const createdFrom = parseDateIso(createdFromRaw);
+  const createdTo = parseDateIso(createdToRaw);
+  const asOfDate = parseDateIso(asOfDateRaw);
+
+  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
+  const sortDirRaw = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase();
+  const sortDir = (sortDirRaw === 'asc') ? 'asc' : 'desc';
+
+  if (clientIdRaw && !clientId) {
+    return withCORS(env, req, badRequest('client_id must be a valid UUID'));
+  }
+
+  if (createdFromRaw && !createdFrom) {
+    return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (createdToRaw && !createdTo) {
+    return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (asOfDateRaw && !asOfDate) {
+    return withCORS(env, req, badRequest('as_of_date must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+
+  if (amountMin != null && amountMax != null && amountMin > amountMax) {
+    return withCORS(env, req, badRequest('amount_min cannot be greater than amount_max'));
+  }
 
   try {
     const raw0 = await sbRpc(env, 'pay_advances_register_pdf_payload', {
-      p_actor_user_id: user && user.id ? user.id : null,
+      p_actor_user_id: resolvedUser.id,
       p_search: search,
       p_type: type,
       p_status: status,
@@ -25662,10 +25858,13 @@ async function handleBankingAdvancesRegisterPrint(env, req, user) {
       .map(g => {
         const rowsHtml = g.rows.map(r => {
           const detailBits = [];
-          if (r?.record_type === 'OVERPAYMENT' && r?.source_timesheet_id) detailBits.push(`Timesheet: ${esc(r.source_timesheet_id)}`);
+          if (r?.record_type === 'OVERPAYMENT' && r?.linked_timesheet_id) detailBits.push(`Timesheet: ${esc(r.linked_timesheet_id)}`);
           if (r?.record_type === 'OVERPAYMENT' && r?.baseline_signature) detailBits.push(`Baseline: ${esc(r.baseline_signature)}`);
           if ((r?.record_type === 'ADVANCE' || r?.record_type === 'MISSING_SHIFT_ADVANCE') && r?.linked_shift_date) detailBits.push(`Shift: ${fmtDateOnly(r.linked_shift_date)}`);
           if (r?.record_type === 'LOAN' && r?.due_this_week != null) detailBits.push(`Due this week: ${fmtMoney(r.due_this_week)}`);
+          if (r?.source_booking_id) detailBits.push(`Booking: ${esc(r.source_booking_id)}`);
+          if (r?.source_week_ending_date) detailBits.push(`Week ending: ${fmtDateOnly(r.source_week_ending_date)}`);
+          if (r?.source_shift_label_norm) detailBits.push(`Shift label: ${esc(r.source_shift_label_norm)}`);
           if (r?.payout_status) detailBits.push(`Payout: ${esc(r.payout_status)}`);
           if (r?.created_at) detailBits.push(`Created: ${fmtDateOnly(r.created_at)}`);
 
@@ -25803,6 +26002,7 @@ async function handleBankingAdvancesRegisterPrint(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'ADVANCES_REGISTER_PRINT_FAILED')));
   }
 }
+
 
 function renderMailshotTimingStep() {
   const state = (window.modalCtx && window.modalCtx.mailshotWizard && typeof window.modalCtx.mailshotWizard === 'object')
