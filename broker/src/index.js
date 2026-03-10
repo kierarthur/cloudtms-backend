@@ -29547,6 +29547,17 @@ async function handleTimesheetDelete(env, req, timesheetId) {
 }
 
 async function handleBankingAdvancesRegister(env, req, user) {
+  const actorUser = (() => {
+    if (user && typeof user === 'object' && user.id) return user;
+    return null;
+  })();
+
+  let resolvedUser = actorUser;
+  if (!resolvedUser) {
+    resolvedUser = await requireUser(env, req, ['admin']);
+    if (!resolvedUser) return withCORS(env, req, unauthorized());
+  }
+
   try {
     const u = new URL(req.url);
 
@@ -29716,7 +29727,7 @@ async function handleBankingAdvancesRegister(env, req, user) {
     }
 
     const rpcRes = await sbRpc(env, 'pay_advances_register', {
-      p_actor_user_id: user.id,
+      p_actor_user_id: resolvedUser.id,
       p_search: search,
       p_type: type,
       p_status: status,
@@ -29768,7 +29779,6 @@ async function handleBankingAdvancesRegister(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 
 // ----------------------------------------------------------------------------
 // E) Funnel & Prechecks (read-only views)
