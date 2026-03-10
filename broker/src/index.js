@@ -92450,6 +92450,22 @@ if (req.method === 'GET' && p === '/api/banking/id/ledger') {
     return handleBankingPayPreview(env, req, user);
   }
 
+if (req.method === 'GET' && p === '/api/banking/advances-register') {
+  return handleBankingAdvancesRegister(env, req);
+}
+
+if (req.method === 'GET' && p === '/api/banking/advances-register/export-csv') {
+  return handleBankingAdvancesRegisterExportCsv(env, req, user);
+}
+
+if (req.method === 'GET' && p === '/api/banking/advances-register/export-pdf') {
+  return handleBankingAdvancesRegisterExportPdf(env, req, user);
+}
+
+if (req.method === 'GET' && p === '/api/banking/advances-register/print') {
+  return handleBankingAdvancesRegisterPrint(env, req, user);
+}
+
   // ====================== BANKING (Invoice Discounting) ======================
 
 // GET /api/banking/id/preview
@@ -92528,6 +92544,20 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
     const m = matchPath(p, '/api/banking/pay/batch/:id/export-csv');
     if (m && req.method === 'GET') {
       return handleBankingPayBatchExportCsv(env, req, user, m.id);
+    }
+  }
+
+  {
+    const m = matchPath(p, '/api/banking/pay/batch/:id/export-detail-csv');
+    if (m && req.method === 'GET') {
+      return handleBankingPayBatchExportDetailCsv(env, req, user, m.id);
+    }
+  }
+
+  {
+    const m = matchPath(p, '/api/banking/pay/batch/:id/export-detail-pdf');
+    if (m && req.method === 'GET') {
+      return handleBankingPayBatchExportDetailPdf(env, req, user, m.id);
     }
   }
 
@@ -93081,14 +93111,6 @@ if (req.method === 'POST' && p === '/api/invoices/batch-issue/confirm')       re
         const invCredit = matchPath(p, '/api/invoices/:invoice_id/credit-note');
         if (invCredit && req.method === 'POST')                              return handleCreateCreditNoteTsfin(env, req, invCredit.invoice_id);
       }
-if (req.method === 'GET' && p === '/api/banking/advances-register')
-  return handleBankingAdvancesRegister(env, req);
-
-if (req.method === 'GET' && p === '/api/banking/advances-register/export-csv')
-  return handleBankingAdvancesRegisterExportCsv(env, req);
-
-if (req.method === 'GET' && p === '/api/banking/advances-register/export-pdf')
-  return handleBankingAdvancesRegisterExportPdf(env, req);
       {
         const invPaid = matchPath(p, '/api/invoices/:invoice_id/mark-paid');
         if (invPaid && req.method === 'POST')                                return handleInvoiceMarkPaid(env, req, invPaid.invoice_id);
@@ -93324,7 +93346,7 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
       }
 
           // Contract weeks
-      if (req.method === 'GET' && p === '/api/contract-weeks') return handleContractWeeksList(env, req);
+       if (req.method === 'GET' && p === '/api/contract-weeks') return handleContractWeeksList(env, req);
       {
         const m = matchPath(p, '/api/contract-weeks/:id');
         if (m && req.method === 'PATCH') return handleContractWeekUpdate(env, req, m.id);
@@ -93333,21 +93355,6 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
         const m = matchPath(p, '/api/contract-weeks/:id/additional');
         if (m && req.method === 'POST') return handleContractWeekCreateAdditional(env, req, m.id);
       }
-// ROUTERS (insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
-// alongside the other /api/banking/pay/batch/:id/* routes, after `user` has been resolved.)
-{
-  const m = matchPath(p, '/api/banking/pay/batch/:id/export-detail-csv');
-  if (m && req.method === 'GET') {
-    return handleBankingPayBatchExportDetailCsv(env, req, user, m.id);
-  }
-}
-{
-  const m = matchPath(p, '/api/banking/pay/batch/:id/export-detail-pdf');
-  if (m && req.method === 'GET') {
-    return handleBankingPayBatchExportDetailPdf(env, req, user, m.id);
-  }
-}
-
 
       // Daily: create additional MANUAL adjustment timesheet
 {
@@ -93531,13 +93538,6 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
   if (m && req.method === 'POST') return handleTimesheetSwitchDailyToManual(env, req, m.id);
 }
 
-{
-  const m = matchPath(p, '/api/banking/pay/batch/:id/export-detail-csv');
-  if (m && req.method === 'GET') {
-    return handleBankingPayBatchExportDetailCsv(env, req, user, m.id);
-  }
-}
-
 // NEW: generate DAILY QR printable (now auto-emails too in our updated handler)
 {
   const m = matchPath(p, '/api/timesheets/:id/daily-qr-printable');
@@ -93711,31 +93711,10 @@ if (req.method === 'GET' && p === '/api/comms/by-recipient') {
         if (m && req.method === 'PATCH') return handleManualTimesheetQueueRotate(env, req, m.id);
       }
 
-      // Timesheets summary & details (admin)
+       // Timesheets summary & details (admin)
       if (req.method === 'GET'  && p === '/api/timesheets/summary') {
         return handleTimesheetsSummary(env, req);
       }
-
-{
-  const m = matchPath(p, '/api/banking/advances-register/export-csv');
-  if (m && req.method === 'GET') {
-    return handleBankingAdvancesRegisterExportCsv(env, req, user);
-  }
-}
-
-{
-  const m = matchPath(p, '/api/banking/advances-register/export-pdf');
-  if (m && req.method === 'GET') {
-    return handleBankingAdvancesRegisterExportPdf(env, req, user);
-  }
-}
-
-{
-  const m = matchPath(p, '/api/banking/advances-register/print');
-  if (m && req.method === 'GET') {
-    return handleBankingAdvancesRegisterPrint(env, req, user);
-  }
-}
 
       // NEW: Timesheets resolve preview
       if (req.method === 'POST' && p === '/api/timesheets/resolve-preview') {
