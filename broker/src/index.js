@@ -15701,7 +15701,74 @@ async function handleContractsSkipWeeks(env, req, contractId) {
   return withCORS(env, req, ok({ deleted: deletedCount }));
 }
 
+async function handleAuditEventsList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
 
+  try {
+    const url = new URL(req.url);
+
+    const searchRaw = String(url.searchParams.get('search') || '').trim();
+    const actionRaw = String(url.searchParams.get('action') || '').trim();
+    const objectTypeRaw = String(url.searchParams.get('object_type') || '').trim();
+    const actorDisplayRaw = String(url.searchParams.get('actor_display') || '').trim();
+    const sortByRaw = String(url.searchParams.get('sort_by') || '').trim();
+    const sortDirRaw = String(url.searchParams.get('sort_dir') || '').trim();
+
+    const limitRaw = url.searchParams.get('limit');
+    const offsetRaw = url.searchParams.get('offset');
+
+    const search = searchRaw || null;
+    const action = actionRaw || null;
+    const objectType = objectTypeRaw || null;
+    const actorDisplay = actorDisplayRaw || null;
+    const sortBy = sortByRaw ? sortByRaw : 'ts_utc';
+    const sortDir = sortDirRaw ? sortDirRaw.toLowerCase() : 'desc';
+
+    const toInt = (v, dflt) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.trunc(n) : dflt;
+    };
+
+    let limit = toInt(limitRaw, 50);
+    let offset = toInt(offsetRaw, 0);
+
+    if (limit < 1) limit = 1;
+    if (limit > 500) limit = 500;
+    if (offset < 0) offset = 0;
+
+    const allowedSortBy = new Set(['ts_utc', 'action', 'actor_display', 'object_type', 'object_id_text', 'correlation_id']);
+    if (!allowedSortBy.has(sortBy)) {
+      return withCORS(env, req, badRequest('invalid_sort_by'));
+    }
+
+    const allowedSortDir = new Set(['asc', 'desc']);
+    if (!allowedSortDir.has(sortDir)) {
+      return withCORS(env, req, badRequest('invalid_sort_dir'));
+    }
+
+    let payload = await sbRpc(env, 'audit_events_list', {
+      p_search: search,
+      p_action: action,
+      p_object_type: objectType,
+      p_actor_display: actorDisplay,
+      p_limit: limit,
+      p_offset: offset,
+      p_sort_by: sortBy,
+      p_sort_dir: sortDir
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'audit_events_list')) payload = payload.audit_events_list;
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'AUDIT_EVENTS_LIST_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
 // ----------------------------------------------------------------------------
 // B) CONTRACT WEEKS (list / switching / manual / expenses)
 // ----------------------------------------------------------------------------
@@ -89399,7 +89466,6 @@ async function handleMailshotFieldsSeedFromSchema(env, req) {
 
 
 
-
 async function handleDocumentTemplatesUpsert(env, req, templateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -89426,7 +89492,7 @@ async function handleDocumentTemplatesUpsert(env, req, templateId) {
   if (!filename) return withCORS(env, req, badRequest('filename is required'));
 
   const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
-  const allowedOutput = new Set(['EMAIL', 'WORD', 'EXCEL', 'WHATSAPP', 'SMS', 'VOICE', 'SIGNATURE']);
+  const allowedOutput = new Set(['EMAIL', 'WORD', 'EXCEL', 'WHATSAPP', 'SMS', 'VOICE']);
 
   if (!allowedEntity.has(entityType)) return withCORS(env, req, badRequest('invalid_entity_type'));
   if (!allowedOutput.has(outputType)) return withCORS(env, req, badRequest('invalid_output_type'));
@@ -89499,7 +89565,6 @@ async function handleDocumentTemplatesUpsert(env, req, templateId) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 async function handleDocumentTemplatesDuplicate(env, req, templateId) {
   const user = await requireUser(env, req, ['admin']);
@@ -93562,6 +93627,10 @@ if (req.method === 'POST' && p === '/api/document-templates') {
   if (m && req.method === 'DELETE') {
     return handleDocumentTemplatesDelete(env, req, m.id);
   }
+}
+
+if (req.method === 'GET' && p === '/api/audit-events') {
+  return handleAuditEventsList(env, req);
 }
 {
   const m = matchPath(p, '/api/document-templates/:id/duplicate');
