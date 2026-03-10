@@ -29546,7 +29546,228 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   }));
 }
 
+async function handleBankingAdvancesRegister(env, req, user) {
+  try {
+    const u = new URL(req.url);
 
+    const clampInt = (raw, dflt, lo, hi) => {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return dflt;
+      const v = Math.trunc(n);
+      if (v < lo) return lo;
+      if (v > hi) return hi;
+      return v;
+    };
+
+    const parseNullableText = (...vals) => {
+      for (const v of vals) {
+        const s = String(v == null ? '' : v).trim();
+        if (s) return s;
+      }
+      return null;
+    };
+
+    const parseNullableNumeric = (...vals) => {
+      for (const v of vals) {
+        const s = String(v == null ? '' : v).trim();
+        if (!s) continue;
+        const n = Number(s);
+        if (Number.isFinite(n)) return n;
+      }
+      return null;
+    };
+
+    const parseBool = (raw, dflt) => {
+      const s = String(raw == null ? '' : raw).trim().toLowerCase();
+      if (!s) return dflt;
+      if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
+      if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
+      return dflt;
+    };
+
+    const parseDateIso = (raw) => {
+      const s = String(raw == null ? '' : raw).trim();
+      if (!s) return null;
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+      const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+
+      return null;
+    };
+
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    const search = parseNullableText(
+      u.searchParams.get('search'),
+      u.searchParams.get('q')
+    );
+
+    const type = parseNullableText(
+      u.searchParams.get('type'),
+      u.searchParams.get('record_type'),
+      u.searchParams.get('recordType')
+    );
+
+    const status = parseNullableText(
+      u.searchParams.get('status')
+    );
+
+    const clientIdRaw = parseNullableText(
+      u.searchParams.get('client_id'),
+      u.searchParams.get('clientId')
+    );
+    const clientId = (clientIdRaw && uuidRe.test(clientIdRaw)) ? clientIdRaw : null;
+
+    const outstandingOnly = parseBool(
+      parseNullableText(
+        u.searchParams.get('outstanding_only'),
+        u.searchParams.get('outstandingOnly')
+      ),
+      true
+    );
+
+    const dueThisWeekOnly = parseBool(
+      parseNullableText(
+        u.searchParams.get('due_this_week_only'),
+        u.searchParams.get('dueThisWeekOnly')
+      ),
+      false
+    );
+
+    const amountMin = parseNullableNumeric(
+      u.searchParams.get('amount_min'),
+      u.searchParams.get('amountMin')
+    );
+
+    const amountMax = parseNullableNumeric(
+      u.searchParams.get('amount_max'),
+      u.searchParams.get('amountMax')
+    );
+
+    const createdFrom = parseDateIso(
+      parseNullableText(
+        u.searchParams.get('created_from'),
+        u.searchParams.get('createdFrom')
+      )
+    );
+
+    const createdTo = parseDateIso(
+      parseNullableText(
+        u.searchParams.get('created_to'),
+        u.searchParams.get('createdTo')
+      )
+    );
+
+    const sortKey = parseNullableText(
+      u.searchParams.get('sort_key'),
+      u.searchParams.get('sortKey')
+    ) || 'created_at';
+
+    const sortDir = parseNullableText(
+      u.searchParams.get('sort_dir'),
+      u.searchParams.get('sortDir')
+    ) || 'desc';
+
+    const limit = clampInt(
+      parseNullableText(
+        u.searchParams.get('limit')
+      ),
+      500,
+      1,
+      10000
+    );
+
+    const offset = clampInt(
+      parseNullableText(
+        u.searchParams.get('offset')
+      ),
+      0,
+      0,
+      1000000
+    );
+
+    const asOfDate = parseDateIso(
+      parseNullableText(
+        u.searchParams.get('as_of_date'),
+        u.searchParams.get('asOfDate')
+      )
+    );
+
+    if (clientIdRaw && !clientId) {
+      return withCORS(env, req, badRequest('client_id must be a valid UUID'));
+    }
+
+    if (parseNullableText(u.searchParams.get('created_from'), u.searchParams.get('createdFrom')) && !createdFrom) {
+      return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
+    }
+
+    if (parseNullableText(u.searchParams.get('created_to'), u.searchParams.get('createdTo')) && !createdTo) {
+      return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
+    }
+
+    if (parseNullableText(u.searchParams.get('as_of_date'), u.searchParams.get('asOfDate')) && !asOfDate) {
+      return withCORS(env, req, badRequest('as_of_date must be YYYY-MM-DD or DD/MM/YYYY'));
+    }
+
+    if (amountMin != null && amountMax != null && amountMin > amountMax) {
+      return withCORS(env, req, badRequest('amount_min cannot be greater than amount_max'));
+    }
+
+    const rpcRes = await sbRpc(env, 'pay_advances_register', {
+      p_actor_user_id: user.id,
+      p_search: search,
+      p_type: type,
+      p_status: status,
+      p_client_id: clientId,
+      p_outstanding_only: outstandingOnly,
+      p_due_this_week_only: dueThisWeekOnly,
+      p_amount_min: amountMin,
+      p_amount_max: amountMax,
+      p_created_from: createdFrom,
+      p_created_to: createdTo,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir,
+      p_limit: limit,
+      p_offset: offset,
+      p_as_of_date: asOfDate
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_advances_register')) {
+        payload = payload.pay_advances_register;
+      }
+    } catch {}
+
+    const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const summary = (out.summary && typeof out.summary === 'object' && !Array.isArray(out.summary))
+      ? out.summary
+      : {};
+
+    const rows = Array.isArray(out.rows)
+      ? out.rows
+      : [];
+
+    const meta = (out.meta && typeof out.meta === 'object' && !Array.isArray(out.meta))
+      ? out.meta
+      : {};
+
+    return withCORS(env, req, ok({
+      ok: (typeof out.ok === 'boolean') ? out.ok : true,
+      summary,
+      rows,
+      meta
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
 
 
 // ----------------------------------------------------------------------------
