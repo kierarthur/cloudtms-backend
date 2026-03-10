@@ -8482,6 +8482,9 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   }
 }
 
+
+
+
 async function handleBankingRailAccountsList(env, req, user) {
   try {
     // Resolve provider/env from settings_defaults (default), but allow ?provider= override
@@ -24588,6 +24591,2507 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
   };
 }
 
+async function handleMailshotRunsList(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const enc = encodeURIComponent;
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
+  const pageSize = Math.max(1, Math.min(100, parseInt(q('page_size') || '25', 10)));
+  const offset = (page - 1) * pageSize;
+
+  const orderByRaw = String(q('order_by') || 'created_at_utc').trim().toLowerCase();
+  const orderDirRaw = String(q('order_dir') || 'desc').trim().toLowerCase();
+
+  const allowedSort = new Set(['created_at_utc', 'output_type', 'context_kind']);
+  const orderBy = allowedSort.has(orderByRaw) ? orderByRaw : 'created_at_utc';
+  const orderDir = (orderDirRaw === 'asc') ? 'asc' : 'desc';
+
+  const fetchRestRows = async (path, { countExact = false } = {}) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+      headers: {
+        ...sbHeaders(env),
+        ...(countExact ? { Prefer: 'count=exact' } : {})
+      }
+    });
+
+    const txt = await res.text().catch(() => '');
+    let json = null;
+    try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
+
+    if (!res.ok) {
+      throw new Error(txt || `REST ${res.status}`);
+    }
+
+    let total = null;
+    if (countExact) {
+      const cr = String(res.headers.get('content-range') || '');
+      const m = cr.match(/\/(\d+|\*)$/);
+      if (m && m[1] !== '*') total = parseInt(m[1], 10);
+    }
+
+    return {
+      rows: Array.isArray(json) ? json : [],
+      total
+    };
+  };
+
+  const classifyChildRows = (rows) => {
+    const out = {
+      total_rows: 0,
+      pending_total: 0,
+      failed_total: 0,
+      sent_total: 0,
+      delivered_total: 0,
+      read_total: 0,
+      blocking_total: 0,
+      cancelable_total: 0
+    };
+
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      out.total_rows += 1;
+
+      if (r && r.read_at) {
+        out.read_total += 1;
+        out.blocking_total += 1;
+      } else if (r && r.delivered_at) {
+        out.delivered_total += 1;
+        out.blocking_total += 1;
+      } else if (r && r.sent_at) {
+        out.sent_total += 1;
+        out.blocking_total += 1;
+      } else if (r && r.failed_at) {
+        out.failed_total += 1;
+        out.cancelable_total += 1;
+      } else {
+        out.pending_total += 1;
+        out.cancelable_total += 1;
+      }
+    }
+
+    return out;
+  };
+
+  try {
+    const runsPath =
+      `mailshot_runs` +
+      `?select=id,context_kind,output_type,document_template_id,created_by,created_at_utc,result_json,delivery_timing_json` +
+      `&order=${enc(orderBy)}.${enc(orderDir)}` +
+      `&limit=${pageSize}` +
+      `&offset=${offset}`;
+
+    const runRes = await fetchRestRows(runsPath, { countExact: true });
+    const runRows = Array.isArray(runRes.rows) ? runRes.rows : [];
+    const totalCount = (typeof runRes.total === 'number') ? runRes.total : runRows.length;
+
+    const runIds = runRows.map(r => String(r && r.id ? r.id : '')).filter(Boolean);
+    const templateIds = Array.from(new Set(
+      runRows.map(r => String(r && r.document_template_id ? r.document_template_id : '')).filter(Boolean)
+    ));
+
+    let templateRows = [];
+    if (templateIds.length) {
+      const templatePath =
+        `document_templates` +
+        `?select=id,filename` +
+        `&id=in.(${templateIds.map(enc).join(',')})`;
+      const tplRes = await fetchRestRows(templatePath);
+      templateRows = Array.isArray(tplRes.rows) ? tplRes.rows : [];
+    }
+
+    const templateNameById = new Map(
+      templateRows.map(r => [String(r.id), String(r.filename || '')])
+    );
+
+    let mailChildRows = [];
+    let commsChildRows = [];
+
+    if (runIds.length) {
+      const mailPath =
+        `mail_outbox` +
+        `?select=id,mailshot_run_id,sent_at,delivered_at,read_at,failed_at` +
+        `&mailshot_run_id=in.(${runIds.map(enc).join(',')})`;
+      const commsPath =
+        `comms_outbox` +
+        `?select=id,mailshot_run_id,sent_at,delivered_at,read_at,failed_at` +
+        `&mailshot_run_id=in.(${runIds.map(enc).join(',')})`;
+
+      const [mailRes, commsRes] = await Promise.all([
+        fetchRestRows(mailPath),
+        fetchRestRows(commsPath)
+      ]);
+
+      mailChildRows = Array.isArray(mailRes.rows) ? mailRes.rows : [];
+      commsChildRows = Array.isArray(commsRes.rows) ? commsRes.rows : [];
+    }
+
+    const mailByRun = new Map();
+    const commsByRun = new Map();
+
+    for (const r of mailChildRows) {
+      const k = String(r && r.mailshot_run_id ? r.mailshot_run_id : '');
+      if (!k) continue;
+      if (!mailByRun.has(k)) mailByRun.set(k, []);
+      mailByRun.get(k).push(r);
+    }
+
+    for (const r of commsChildRows) {
+      const k = String(r && r.mailshot_run_id ? r.mailshot_run_id : '');
+      if (!k) continue;
+      if (!commsByRun.has(k)) commsByRun.set(k, []);
+      commsByRun.get(k).push(r);
+    }
+
+    const items = runRows.map((r) => {
+      const runId = String(r && r.id ? r.id : '');
+      const resultJson = (r && r.result_json && typeof r.result_json === 'object' && !Array.isArray(r.result_json))
+        ? r.result_json
+        : {};
+      const deliveryTimingJson = (r && r.delivery_timing_json && typeof r.delivery_timing_json === 'object' && !Array.isArray(r.delivery_timing_json))
+        ? r.delivery_timing_json
+        : {};
+
+      const mailCounts = classifyChildRows(mailByRun.get(runId) || []);
+      const commsCounts = classifyChildRows(commsByRun.get(runId) || []);
+
+      const totalRows = mailCounts.total_rows + commsCounts.total_rows;
+      const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
+      const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
+
+      return {
+        id: runId,
+        mailshot_run_id: runId,
+        context_kind: r.context_kind || null,
+        output_type: r.output_type || null,
+        document_template_id: r.document_template_id || null,
+        template_filename: r.document_template_id ? (templateNameById.get(String(r.document_template_id)) || null) : null,
+        created_by: r.created_by || null,
+        created_at_utc: r.created_at_utc || null,
+        delivery_timing_json: deliveryTimingJson,
+        initial_counts: {
+          queued: Number(resultJson.queued || 0),
+          skipped: Number(resultJson.skipped || 0),
+          failed: Number(resultJson.failed || 0)
+        },
+        live_counts: {
+          total_rows: totalRows,
+          mail_rows: mailCounts.total_rows,
+          comms_rows: commsCounts.total_rows,
+          pending_total: mailCounts.pending_total + commsCounts.pending_total,
+          failed_total: mailCounts.failed_total + commsCounts.failed_total,
+          sent_total: mailCounts.sent_total + commsCounts.sent_total,
+          delivered_total: mailCounts.delivered_total + commsCounts.delivered_total,
+          read_total: mailCounts.read_total + commsCounts.read_total,
+          blocking_total: blockingTotal,
+          cancelable_total: cancelableTotal
+        },
+        can_cancel_pending: cancelableTotal > 0,
+        can_delete_if_unsent: blockingTotal === 0,
+        result_json: resultJson
+      };
+    });
+
+    return withCORS(env, req, ok({
+      ok: true,
+      items,
+      page,
+      page_size: pageSize,
+      total_count: totalCount,
+      has_more: (offset + items.length) < totalCount,
+      order_by: orderBy,
+      order_dir: orderDir
+    }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'MAILSHOT_RUNS_LIST_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+async function handleMailshotRunGet(env, req, id) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const enc = encodeURIComponent;
+  const runId = String(id || '').trim();
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!runId) return withCORS(env, req, badRequest('id is required'));
+  if (!uuidRe.test(runId)) return withCORS(env, req, badRequest('invalid_id'));
+
+  const fetchRestRows = async (path) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { ...sbHeaders(env) }
+    });
+
+    const txt = await res.text().catch(() => '');
+    let json = null;
+    try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
+
+    if (!res.ok) {
+      throw new Error(txt || `REST ${res.status}`);
+    }
+
+    return Array.isArray(json) ? json : [];
+  };
+
+  const classifyChildRows = (rows) => {
+    const out = {
+      total_rows: 0,
+      pending_total: 0,
+      failed_total: 0,
+      sent_total: 0,
+      delivered_total: 0,
+      read_total: 0,
+      blocking_total: 0,
+      cancelable_total: 0
+    };
+
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      out.total_rows += 1;
+
+      if (r && r.read_at) {
+        out.read_total += 1;
+        out.blocking_total += 1;
+      } else if (r && r.delivered_at) {
+        out.delivered_total += 1;
+        out.blocking_total += 1;
+      } else if (r && r.sent_at) {
+        out.sent_total += 1;
+        out.blocking_total += 1;
+      } else if (r && r.failed_at) {
+        out.failed_total += 1;
+        out.cancelable_total += 1;
+      } else {
+        out.pending_total += 1;
+        out.cancelable_total += 1;
+      }
+    }
+
+    return out;
+  };
+
+  try {
+    const runRows = await fetchRestRows(
+      `mailshot_runs` +
+      `?select=id,context_kind,output_type,document_template_id,created_by,created_at_utc,selection_json,result_json,delivery_timing_json` +
+      `&id=eq.${enc(runId)}` +
+      `&limit=1`
+    );
+
+    const runRow = Array.isArray(runRows) && runRows.length ? runRows[0] : null;
+    if (!runRow) {
+      return withCORS(
+        env,
+        req,
+        new Response(JSON.stringify({ error: 'mailshot_run_not_found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      );
+    }
+
+    let templateFilename = null;
+    if (runRow.document_template_id) {
+      const templateRows = await fetchRestRows(
+        `document_templates` +
+        `?select=id,filename` +
+        `&id=eq.${enc(String(runRow.document_template_id))}` +
+        `&limit=1`
+      );
+      if (Array.isArray(templateRows) && templateRows.length) {
+        templateFilename = templateRows[0].filename || null;
+      }
+    }
+
+    const [mailChildRows, commsChildRows] = await Promise.all([
+      fetchRestRows(
+        `mail_outbox` +
+        `?select=id,mailshot_run_id,status,to,sent_at,delivered_at,read_at,failed_at` +
+        `&mailshot_run_id=eq.${enc(runId)}`
+      ),
+      fetchRestRows(
+        `comms_outbox` +
+        `?select=id,mailshot_run_id,channel,status,to_address,sent_at,delivered_at,read_at,failed_at` +
+        `&mailshot_run_id=eq.${enc(runId)}`
+      )
+    ]);
+
+    const mailCounts = classifyChildRows(mailChildRows);
+    const commsCounts = classifyChildRows(commsChildRows);
+
+    const resultJson = (runRow.result_json && typeof runRow.result_json === 'object' && !Array.isArray(runRow.result_json))
+      ? runRow.result_json
+      : {};
+    const deliveryTimingJson = (runRow.delivery_timing_json && typeof runRow.delivery_timing_json === 'object' && !Array.isArray(runRow.delivery_timing_json))
+      ? runRow.delivery_timing_json
+      : {};
+    const selectionJson = (runRow.selection_json && typeof runRow.selection_json === 'object' && !Array.isArray(runRow.selection_json))
+      ? runRow.selection_json
+      : {};
+
+    const totalRows = mailCounts.total_rows + commsCounts.total_rows;
+    const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
+    const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      item: {
+        id: String(runRow.id),
+        mailshot_run_id: String(runRow.id),
+        context_kind: runRow.context_kind || null,
+        output_type: runRow.output_type || null,
+        document_template_id: runRow.document_template_id || null,
+        template_filename: templateFilename,
+        created_by: runRow.created_by || null,
+        created_at_utc: runRow.created_at_utc || null,
+        delivery_timing_json: deliveryTimingJson,
+        selection_json: selectionJson,
+        result_json: resultJson,
+        initial_counts: {
+          queued: Number(resultJson.queued || 0),
+          skipped: Number(resultJson.skipped || 0),
+          failed: Number(resultJson.failed || 0)
+        },
+        live_counts: {
+          total_rows: totalRows,
+          mail_rows: mailCounts.total_rows,
+          comms_rows: commsCounts.total_rows,
+          pending_total: mailCounts.pending_total + commsCounts.pending_total,
+          failed_total: mailCounts.failed_total + commsCounts.failed_total,
+          sent_total: mailCounts.sent_total + commsCounts.sent_total,
+          delivered_total: mailCounts.delivered_total + commsCounts.delivered_total,
+          read_total: mailCounts.read_total + commsCounts.read_total,
+          blocking_total: blockingTotal,
+          cancelable_total: cancelableTotal,
+          blocking_mail_sent: mailCounts.sent_total,
+          blocking_mail_delivered: mailCounts.delivered_total,
+          blocking_mail_read: mailCounts.read_total,
+          blocking_comms_sent: commsCounts.sent_total,
+          blocking_comms_delivered: commsCounts.delivered_total,
+          blocking_comms_read: commsCounts.read_total
+        },
+        can_cancel_pending: cancelableTotal > 0,
+        can_delete_if_unsent: blockingTotal === 0,
+        child_preview: {
+          mail_items: (Array.isArray(mailChildRows) ? mailChildRows : []).slice(0, 25).map(r => ({
+            id: r.id,
+            status: r.status || null,
+            to_address: r.to || null,
+            sent_at: r.sent_at || null,
+            delivered_at: r.delivered_at || null,
+            read_at: r.read_at || null,
+            failed_at: r.failed_at || null
+          })),
+          comms_items: (Array.isArray(commsChildRows) ? commsChildRows : []).slice(0, 25).map(r => ({
+            id: r.id,
+            channel: r.channel || null,
+            status: r.status || null,
+            to_address: r.to_address || null,
+            sent_at: r.sent_at || null,
+            delivered_at: r.delivered_at || null,
+            read_at: r.read_at || null,
+            failed_at: r.failed_at || null
+          }))
+        }
+      }
+    }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'MAILSHOT_RUN_GET_FAILED');
+    return withCORS(env, req, serverError(msg));
+  }
+}
+
+
+async function handleBankingAdvancesRegisterExportCsv(env, req, user) {
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const parseBool = (v, dflt) => {
+    if (v === null || v === undefined || String(v).trim() === '') return dflt;
+    const s = String(v).trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(s)) return true;
+    if (['0', 'false', 'no', 'off'].includes(s)) return false;
+    return dflt;
+  };
+
+  const parseNum = (v) => {
+    if (v === null || v === undefined || String(v).trim() === '') return null;
+    const n = Number(String(v).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const parseDate = (v) => {
+    const s = String(v || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  };
+
+  const parseUuid = (v) => {
+    const s = String(v || '').trim();
+    if (!s) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
+  };
+
+  const csvEscape = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const search = String(q('search') || '').trim() || null;
+  const type = String(q('type') || '').trim() || null;
+  const status = String(q('status') || '').trim() || null;
+  const clientId = parseUuid(q('client_id'));
+  const outstandingOnly = parseBool(q('outstanding_only'), true);
+  const dueThisWeekOnly = parseBool(q('due_this_week_only'), false);
+  const amountMin = parseNum(q('amount_min'));
+  const amountMax = parseNum(q('amount_max'));
+  const createdFrom = parseDate(q('created_from'));
+  const createdTo = parseDate(q('created_to'));
+  const sortKey = String(q('sort_key') || 'created_at').trim() || 'created_at';
+  const sortDir = String(q('sort_dir') || 'desc').trim() || 'desc';
+  const asOfDate = parseDate(q('as_of_date'));
+
+  try {
+    const raw0 = await sbRpc(env, 'pay_advances_register_export_rows', {
+      p_actor_user_id: user && user.id ? user.id : null,
+      p_search: search,
+      p_type: type,
+      p_status: status,
+      p_client_id: clientId,
+      p_outstanding_only: outstandingOnly,
+      p_due_this_week_only: dueThisWeekOnly,
+      p_amount_min: amountMin,
+      p_amount_max: amountMax,
+      p_created_from: createdFrom,
+      p_created_to: createdTo,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir,
+      p_as_of_date: asOfDate
+    });
+
+    const exportObj = unwrapRpc(raw0, 'pay_advances_register_export_rows');
+    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+    const meta = (exportObj && typeof exportObj.meta === 'object' && exportObj.meta) ? exportObj.meta : {};
+    const summary = (exportObj && typeof exportObj.summary === 'object' && exportObj.summary) ? exportObj.summary : {};
+
+    const cols = [
+      'record_type',
+      'record_subtype',
+      'candidate_tms_ref',
+      'candidate_display_name',
+      'candidate_first_name',
+      'candidate_last_name',
+      'client_name',
+      'status',
+      'payout_status',
+      'source_timesheet_id',
+      'source_shift_date',
+      'source_week_ending_date',
+      'source_booking_id',
+      'source_shift_label_norm',
+      'created_at',
+      'start_week_start',
+      'next_due_week_start',
+      'original_amount',
+      'recovered_total',
+      'recovered_wtd',
+      'remaining_outstanding',
+      'due_this_week',
+      'baseline_signature',
+      'payout_pay_batch_id',
+      'payout_transfer_id',
+      'latest_recovery_pay_batch_id',
+      'advance_id',
+      'candidate_id',
+      'client_id',
+      'notes'
+    ];
+
+    const lines = [];
+    lines.push(cols.map(csvEscape).join(','));
+
+    for (const r of rows) {
+      lines.push([
+        r?.record_type ?? '',
+        r?.record_subtype ?? '',
+        r?.candidate_tms_ref ?? '',
+        r?.candidate_display_name ?? '',
+        r?.candidate_first_name ?? '',
+        r?.candidate_last_name ?? '',
+        r?.client_name ?? '',
+        r?.status ?? '',
+        r?.payout_status ?? '',
+        r?.source_timesheet_id ?? '',
+        r?.source_shift_date ?? '',
+        r?.source_week_ending_date ?? '',
+        r?.source_booking_id ?? '',
+        r?.source_shift_label_norm ?? '',
+        r?.created_at ?? '',
+        r?.start_week_start ?? '',
+        r?.next_due_week_start ?? '',
+        r?.original_amount ?? '',
+        r?.recovered_total ?? '',
+        r?.recovered_wtd ?? '',
+        r?.remaining_outstanding ?? '',
+        r?.due_this_week ?? '',
+        r?.baseline_signature ?? '',
+        r?.payout_pay_batch_id ?? '',
+        r?.payout_transfer_id ?? '',
+        r?.latest_recovery_pay_batch_id ?? '',
+        r?.advance_id ?? '',
+        r?.candidate_id ?? '',
+        r?.client_id ?? '',
+        r?.notes ?? ''
+      ].map(csvEscape).join(','));
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'text/csv; charset=utf-8');
+    headers.set('Content-Disposition', `attachment; filename="advances_register_${String(meta?.as_of_date || new Date().toISOString().slice(0, 10))}.csv"`);
+    headers.set('X-Register-Row-Count', String(rows.length || 0));
+    headers.set('X-Register-Week-Start', String(summary?.week_start || ''));
+    headers.set('X-Register-Week-End', String(summary?.week_end || ''));
+
+    const bom = '\ufeff';
+    return withCORS(env, req, new Response(bom + lines.join('\r\n'), { status: 200, headers }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'ADVANCES_REGISTER_EXPORT_CSV_FAILED')));
+  }
+}
+
+async function handleBankingAdvancesRegisterExportPdf(env, req, user) {
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const parseBool = (v, dflt) => {
+    if (v === null || v === undefined || String(v).trim() === '') return dflt;
+    const s = String(v).trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(s)) return true;
+    if (['0', 'false', 'no', 'off'].includes(s)) return false;
+    return dflt;
+  };
+
+  const parseNum = (v) => {
+    if (v === null || v === undefined || String(v).trim() === '') return null;
+    const n = Number(String(v).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const parseDate = (v) => {
+    const s = String(v || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  };
+
+  const parseUuid = (v) => {
+    const s = String(v || '').trim();
+    if (!s) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const search = String(q('search') || '').trim() || null;
+  const type = String(q('type') || '').trim() || null;
+  const status = String(q('status') || '').trim() || null;
+  const clientId = parseUuid(q('client_id'));
+  const outstandingOnly = parseBool(q('outstanding_only'), true);
+  const dueThisWeekOnly = parseBool(q('due_this_week_only'), false);
+  const amountMin = parseNum(q('amount_min'));
+  const amountMax = parseNum(q('amount_max'));
+  const createdFrom = parseDate(q('created_from'));
+  const createdTo = parseDate(q('created_to'));
+  const sortKey = String(q('sort_key') || 'created_at').trim() || 'created_at';
+  const sortDir = String(q('sort_dir') || 'desc').trim() || 'desc';
+  const asOfDate = parseDate(q('as_of_date'));
+
+  const safeStr = (v) => (v == null ? '' : String(v));
+  const asNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const asMoney = (v) => {
+    const n = asNum(v);
+    if (n == null) return '';
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n);
+  };
+  const esc = (s) => String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  const fmtDateTime = (isoLike) => {
+    const s = safeStr(isoLike).trim();
+    if (!s) return '';
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return s;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(d);
+  };
+
+  const fmtDateOnly = (isoLike) => {
+    const s = safeStr(isoLike).trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const [y, m, d] = s.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return s;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+  };
+
+  try {
+    const raw0 = await sbRpc(env, 'pay_advances_register_pdf_payload', {
+      p_actor_user_id: user && user.id ? user.id : null,
+      p_search: search,
+      p_type: type,
+      p_status: status,
+      p_client_id: clientId,
+      p_outstanding_only: outstandingOnly,
+      p_due_this_week_only: dueThisWeekOnly,
+      p_amount_min: amountMin,
+      p_amount_max: amountMax,
+      p_created_from: createdFrom,
+      p_created_to: createdTo,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir,
+      p_as_of_date: asOfDate
+    });
+
+    const payload = unwrapRpc(raw0, 'pay_advances_register_pdf_payload');
+    const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
+    const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
+    const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const pageW = 595.28;
+    const pageH = 841.89;
+    const margin = 36;
+    const lineH = 12;
+    const small = 8.5;
+    const body = 9;
+    const heading = 14;
+    const section = 11.5;
+
+    const newPage = () => pdfDoc.addPage([pageW, pageH]);
+
+    let page = newPage();
+    let y = pageH - margin;
+
+    const drawText = (txt, x, yy, size = body, bold = false, color = rgb(0, 0, 0)) => {
+      const f = bold ? fontBold : font;
+      page.drawText(safeStr(txt), { x, y: yy, size, font: f, color });
+    };
+
+    const ensureSpace = (needed = lineH) => {
+      if (y - needed < margin) {
+        page = newPage();
+        y = pageH - margin;
+      }
+    };
+
+    const wrapText = (text, width, size, bold = false) => {
+      const f = bold ? fontBold : font;
+      const words = safeStr(text).split(/\s+/).filter(Boolean);
+      if (!words.length) return [''];
+      const lines = [];
+      let cur = '';
+      for (const w of words) {
+        const test = cur ? `${cur} ${w}` : w;
+        if (f.widthOfTextAtSize(test, size) <= width) {
+          cur = test;
+        } else {
+          if (cur) lines.push(cur);
+          cur = w;
+        }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    };
+
+    const drawWrapped = (text, x, width, size = body, bold = false) => {
+      const lines = wrapText(text, width, size, bold);
+      for (const ln of lines) {
+        ensureSpace(lineH);
+        drawText(ln, x, y, size, bold);
+        y -= lineH;
+      }
+    };
+
+    drawText('Advances & Recoveries Register', margin, y, heading, true);
+    y -= 18;
+    drawText(`Generated: ${fmtDateTime(payload?.generated_at_utc || new Date().toISOString())}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 12;
+    drawText(`As at: ${fmtDateOnly(meta?.as_of_date || '')}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 16;
+
+    drawText('Applied filters', margin, y, section, true);
+    y -= 14;
+
+    const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
+    const filterLines = [
+      `Search: ${safeStr(appliedFilters.search || '—')}`,
+      `Type: ${safeStr(appliedFilters.type || 'ALL')}`,
+      `Status: ${safeStr(appliedFilters.status || 'ALL')}`,
+      `Client: ${safeStr(appliedFilters.client_id || 'ALL')}`,
+      `Outstanding only: ${appliedFilters.outstanding_only === false ? 'No' : 'Yes'}`,
+      `Due this week only: ${appliedFilters.due_this_week_only === true ? 'Yes' : 'No'}`,
+      `Amount min: ${appliedFilters.amount_min == null ? '—' : asMoney(appliedFilters.amount_min)}`,
+      `Amount max: ${appliedFilters.amount_max == null ? '—' : asMoney(appliedFilters.amount_max)}`,
+      `Created from: ${fmtDateOnly(appliedFilters.created_from || '') || '—'}`,
+      `Created to: ${fmtDateOnly(appliedFilters.created_to || '') || '—'}`
+    ];
+
+    for (const fl of filterLines) {
+      ensureSpace(lineH);
+      drawText(fl, margin, y, small, false);
+      y -= lineH;
+    }
+
+    y -= 6;
+    drawText('Summary', margin, y, section, true);
+    y -= 14;
+
+    const summaryLines = [
+      `Rows: ${safeStr(summary.row_count || rows.length || 0)}`,
+      `Week: ${fmtDateOnly(summary.week_start || '')} to ${fmtDateOnly(summary.week_end || '')}`,
+      `Overpayments outstanding: ${asMoney(summary.active_overpayments_outstanding || 0)}`,
+      `Loans outstanding: ${asMoney(summary.active_loans_outstanding || 0)}`,
+      `Advances outstanding: ${asMoney(summary.active_advances_outstanding || 0)}`,
+      `Due / recoverable this week: ${asMoney(summary.due_this_week_total || 0)}`
+    ];
+
+    for (const sl of summaryLines) {
+      ensureSpace(lineH);
+      drawText(sl, margin, y, small, false);
+      y -= lineH;
+    }
+
+    y -= 8;
+
+    const drawSectionTable = (title, grpRows) => {
+      const list = Array.isArray(grpRows) ? grpRows : [];
+      if (!list.length) return;
+
+      ensureSpace(20);
+      drawText(title, margin, y, section, true);
+      y -= 16;
+
+      const cols = {
+        candidate: { x: margin, w: 140 },
+        client: { x: margin + 145, w: 120 },
+        status: { x: margin + 270, w: 70 },
+        original: { x: margin + 345, w: 60 },
+        recovered: { x: margin + 410, w: 60 },
+        remaining: { x: margin + 475, w: 70 }
+      };
+
+      ensureSpace(14);
+      drawText('Candidate', cols.candidate.x, y, small, true);
+      drawText('Client', cols.client.x, y, small, true);
+      drawText('Status', cols.status.x, y, small, true);
+      drawText('Original', cols.original.x, y, small, true);
+      drawText('Recovered', cols.recovered.x, y, small, true);
+      drawText('Remaining', cols.remaining.x, y, small, true);
+      y -= 12;
+
+      for (const r of list) {
+        const candidateTxt = safeStr(r?.candidate_display_name || '').trim() || `${safeStr(r?.candidate_first_name || '')} ${safeStr(r?.candidate_last_name || '')}`.trim() || safeStr(r?.candidate_tms_ref || '');
+        const clientTxt = safeStr(r?.client_name || '');
+        const statusTxt = safeStr(r?.status || '');
+        const originalTxt = asMoney(r?.original_amount);
+        const recoveredTxt = asMoney(r?.recovered_total);
+        const remainingTxt = asMoney(r?.remaining_outstanding);
+
+        const candidateLines = wrapText(candidateTxt || '—', cols.candidate.w, small, false);
+        const clientLines = wrapText(clientTxt || '—', cols.client.w, small, false);
+        const rowHeight = Math.max(candidateLines.length, clientLines.length, 1) * lineH + 10;
+
+        ensureSpace(rowHeight);
+
+        let rowY = y;
+        for (const ln of candidateLines) {
+          drawText(ln, cols.candidate.x, rowY, small, false);
+          rowY -= lineH;
+        }
+
+        rowY = y;
+        for (const ln of clientLines) {
+          drawText(ln, cols.client.x, rowY, small, false);
+          rowY -= lineH;
+        }
+
+        drawText(statusTxt || '—', cols.status.x, y, small, false);
+        drawText(originalTxt || '—', cols.original.x, y, small, false);
+        drawText(recoveredTxt || '—', cols.recovered.x, y, small, false);
+        drawText(remainingTxt || '—', cols.remaining.x, y, small, true);
+
+        y -= rowHeight - 2;
+
+        const subBits = [];
+        if (r?.record_type === 'OVERPAYMENT' && r?.source_timesheet_id) subBits.push(`TS: ${safeStr(r.source_timesheet_id)}`);
+        if (r?.record_type === 'OVERPAYMENT' && r?.baseline_signature) subBits.push(`Baseline: ${safeStr(r.baseline_signature)}`);
+        if (r?.record_type === 'LOAN' && r?.due_this_week != null) subBits.push(`Due this week: ${asMoney(r.due_this_week)}`);
+        if ((r?.record_type === 'ADVANCE' || r?.record_type === 'MISSING_SHIFT_ADVANCE') && r?.linked_shift_date) subBits.push(`Shift: ${fmtDateOnly(r.linked_shift_date)}`);
+        if (r?.payout_status) subBits.push(`Payout: ${safeStr(r.payout_status)}`);
+        if (r?.created_at) subBits.push(`Created: ${fmtDateOnly(r.created_at)}`);
+
+        if (subBits.length) {
+          ensureSpace(lineH);
+          drawText(subBits.join('   •   '), margin + 10, y, 7.5, false, rgb(0.35, 0.35, 0.35));
+          y -= lineH;
+        }
+
+        y -= 4;
+      }
+    };
+
+    for (const grp of groups) {
+      const title = safeStr(grp?.title || '');
+      const grpRows = Array.isArray(grp?.rows) ? grp.rows : [];
+      if (!grpRows.length) continue;
+      drawSectionTable(title, grpRows);
+    }
+
+    if (!rows.length) {
+      ensureSpace(20);
+      drawWrapped('No records matched the selected filters.', margin, pageW - margin * 2, body, false);
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const filename = `advances_register_${String(meta?.as_of_date || new Date().toISOString().slice(0, 10))}.pdf`;
+
+    return withCORS(env, req, new Response(pdfBytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`
+      }
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'ADVANCES_REGISTER_EXPORT_PDF_FAILED')));
+  }
+}
+
+
+async function handleBankingAdvancesRegisterPrint(env, req, user) {
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const parseBool = (v, dflt) => {
+    if (v === null || v === undefined || String(v).trim() === '') return dflt;
+    const s = String(v).trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(s)) return true;
+    if (['0', 'false', 'no', 'off'].includes(s)) return false;
+    return dflt;
+  };
+
+  const parseNum = (v) => {
+    if (v === null || v === undefined || String(v).trim() === '') return null;
+    const n = Number(String(v).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const parseDate = (v) => {
+    const s = String(v || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  };
+
+  const parseUuid = (v) => {
+    const s = String(v || '').trim();
+    if (!s) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const esc = (s) => String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  const fmtMoney = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '—';
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n);
+  };
+
+  const fmtDateOnly = (isoLike) => {
+    const s = String(isoLike || '').trim();
+    if (!s) return '—';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const [y, m, d] = s.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return esc(s);
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+  };
+
+  const fmtDateTime = (isoLike) => {
+    const s = String(isoLike || '').trim();
+    if (!s) return '—';
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return esc(s);
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(d);
+  };
+
+  const search = String(q('search') || '').trim() || null;
+  const type = String(q('type') || '').trim() || null;
+  const status = String(q('status') || '').trim() || null;
+  const clientId = parseUuid(q('client_id'));
+  const outstandingOnly = parseBool(q('outstanding_only'), true);
+  const dueThisWeekOnly = parseBool(q('due_this_week_only'), false);
+  const amountMin = parseNum(q('amount_min'));
+  const amountMax = parseNum(q('amount_max'));
+  const createdFrom = parseDate(q('created_from'));
+  const createdTo = parseDate(q('created_to'));
+  const sortKey = String(q('sort_key') || 'created_at').trim() || 'created_at';
+  const sortDir = String(q('sort_dir') || 'desc').trim() || 'desc';
+  const asOfDate = parseDate(q('as_of_date'));
+
+  try {
+    const raw0 = await sbRpc(env, 'pay_advances_register_pdf_payload', {
+      p_actor_user_id: user && user.id ? user.id : null,
+      p_search: search,
+      p_type: type,
+      p_status: status,
+      p_client_id: clientId,
+      p_outstanding_only: outstandingOnly,
+      p_due_this_week_only: dueThisWeekOnly,
+      p_amount_min: amountMin,
+      p_amount_max: amountMax,
+      p_created_from: createdFrom,
+      p_created_to: createdTo,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir,
+      p_as_of_date: asOfDate
+    });
+
+    const payload = unwrapRpc(raw0, 'pay_advances_register_pdf_payload');
+    const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
+    const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
+    const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+
+    const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
+
+    const groupHtml = groups
+      .filter(g => Array.isArray(g?.rows) && g.rows.length > 0)
+      .map(g => {
+        const rowsHtml = g.rows.map(r => {
+          const detailBits = [];
+          if (r?.record_type === 'OVERPAYMENT' && r?.source_timesheet_id) detailBits.push(`Timesheet: ${esc(r.source_timesheet_id)}`);
+          if (r?.record_type === 'OVERPAYMENT' && r?.baseline_signature) detailBits.push(`Baseline: ${esc(r.baseline_signature)}`);
+          if ((r?.record_type === 'ADVANCE' || r?.record_type === 'MISSING_SHIFT_ADVANCE') && r?.linked_shift_date) detailBits.push(`Shift: ${fmtDateOnly(r.linked_shift_date)}`);
+          if (r?.record_type === 'LOAN' && r?.due_this_week != null) detailBits.push(`Due this week: ${fmtMoney(r.due_this_week)}`);
+          if (r?.payout_status) detailBits.push(`Payout: ${esc(r.payout_status)}`);
+          if (r?.created_at) detailBits.push(`Created: ${fmtDateOnly(r.created_at)}`);
+
+          return `
+            <tr>
+              <td>${esc(r.candidate_display_name || `${r.candidate_first_name || ''} ${r.candidate_last_name || ''}`.trim() || r.candidate_tms_ref || '')}</td>
+              <td>${esc(r.client_name || '')}</td>
+              <td>${esc(r.status || '')}</td>
+              <td style="text-align:right">${fmtMoney(r.original_amount)}</td>
+              <td style="text-align:right">${fmtMoney(r.recovered_total)}</td>
+              <td style="text-align:right">${fmtMoney(r.remaining_outstanding)}</td>
+            </tr>
+            <tr>
+              <td colspan="6" class="subrow">${detailBits.join(' &nbsp; • &nbsp; ') || '&mdash;'}</td>
+            </tr>
+          `;
+        }).join('');
+
+        return `
+          <section class="group">
+            <h2>${esc(g.title || '')}</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Candidate</th>
+                  <th>Client</th>
+                  <th>Status</th>
+                  <th>Original</th>
+                  <th>Recovered / Repaid</th>
+                  <th>Remaining</th>
+                </tr>
+              </thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </section>
+        `;
+      }).join('');
+
+    const html = `
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Advances & Recoveries Register</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color: #111;
+    margin: 24px;
+  }
+  h1 { margin: 0 0 8px 0; font-size: 24px; }
+  h2 { margin: 22px 0 8px 0; font-size: 18px; }
+  .meta, .filters, .summary {
+    margin: 12px 0 18px 0;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 8px 16px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 20px 0;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 6px 8px;
+    vertical-align: top;
+  }
+  th {
+    background: #f5f5f5;
+    text-align: left;
+  }
+  .subrow {
+    font-size: 12px;
+    color: #444;
+    background: #fafafa;
+  }
+  .money { text-align: right; }
+  @media print {
+    body { margin: 10mm; }
+    .group { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+  <h1>Advances & Recoveries Register</h1>
+
+  <div class="meta">
+    <div><b>Generated:</b> ${esc(fmtDateTime(payload?.generated_at_utc || new Date().toISOString()))}</div>
+    <div><b>As at:</b> ${esc(fmtDateOnly(meta?.as_of_date || ''))}</div>
+    <div><b>Week:</b> ${esc(fmtDateOnly(summary?.week_start || ''))} to ${esc(fmtDateOnly(summary?.week_end || ''))}</div>
+  </div>
+
+  <div class="filters">
+    <h2 style="margin-top:0">Applied filters</h2>
+    <div class="grid">
+      <div><b>Search:</b> ${esc(appliedFilters.search || '—')}</div>
+      <div><b>Type:</b> ${esc(appliedFilters.type || 'ALL')}</div>
+      <div><b>Status:</b> ${esc(appliedFilters.status || 'ALL')}</div>
+      <div><b>Client:</b> ${esc(appliedFilters.client_id || 'ALL')}</div>
+      <div><b>Outstanding only:</b> ${appliedFilters.outstanding_only === false ? 'No' : 'Yes'}</div>
+      <div><b>Due this week only:</b> ${appliedFilters.due_this_week_only === true ? 'Yes' : 'No'}</div>
+      <div><b>Amount min:</b> ${appliedFilters.amount_min == null ? '—' : esc(fmtMoney(appliedFilters.amount_min))}</div>
+      <div><b>Amount max:</b> ${appliedFilters.amount_max == null ? '—' : esc(fmtMoney(appliedFilters.amount_max))}</div>
+      <div><b>Created from:</b> ${esc(fmtDateOnly(appliedFilters.created_from || ''))}</div>
+      <div><b>Created to:</b> ${esc(fmtDateOnly(appliedFilters.created_to || ''))}</div>
+    </div>
+  </div>
+
+  <div class="summary">
+    <h2 style="margin-top:0">Summary</h2>
+    <div class="grid">
+      <div><b>Rows:</b> ${esc(String(summary?.row_count || 0))}</div>
+      <div><b>Overpayments outstanding:</b> ${esc(fmtMoney(summary?.active_overpayments_outstanding || 0))}</div>
+      <div><b>Loans outstanding:</b> ${esc(fmtMoney(summary?.active_loans_outstanding || 0))}</div>
+      <div><b>Advances outstanding:</b> ${esc(fmtMoney(summary?.active_advances_outstanding || 0))}</div>
+      <div><b>Due / recoverable this week:</b> ${esc(fmtMoney(summary?.due_this_week_total || 0))}</div>
+    </div>
+  </div>
+
+  ${groupHtml || '<p>No records matched the selected filters.</p>'}
+</body>
+</html>`;
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'text/html; charset=utf-8');
+    headers.set('Content-Disposition', 'inline; filename="advances_register_print.html"');
+    return withCORS(env, req, new Response(html, { status: 200, headers }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'ADVANCES_REGISTER_PRINT_FAILED')));
+  }
+}
+
+function renderMailshotTimingStep() {
+  const state = (window.modalCtx && window.modalCtx.mailshotWizard && typeof window.modalCtx.mailshotWizard === 'object')
+    ? window.modalCtx.mailshotWizard
+    : null;
+
+  const htmlWrap = (typeof html === 'function') ? html : (s) => String(s ?? '');
+  const safeHtml = (typeof escapeHtml === 'function')
+    ? escapeHtml
+    : (s) => String(s ?? '')
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#39;");
+
+  if (!state) {
+    return htmlWrap(`
+      <div class="card" style="padding:12px;">
+        <div class="mini">Mailshot timing state is not available.</div>
+      </div>
+    `);
+  }
+
+  const timing = (state.delivery_timing && typeof state.delivery_timing === 'object')
+    ? state.delivery_timing
+    : (state.delivery_timing = {
+        mode: 'NOW',
+        scheduled_for_utc: '',
+        next_attempt_at_utc: '',
+        requested_timezone: 'Europe/London',
+        requested_local_text: '',
+        relative_minutes: ''
+      });
+
+  const mode = String(timing.mode || 'NOW').trim().toUpperCase() || 'NOW';
+  const scheduledUtc = String(timing.scheduled_for_utc || '');
+  const relativeMinutes = String(timing.relative_minutes || '');
+  const requestedTimezone = String(timing.requested_timezone || 'Europe/London');
+
+  const toDatetimeLocal = (iso) => {
+    const s = String(iso || '').trim();
+    if (!s) return '';
+    const d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return '';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  };
+
+  const nowIso = new Date().toISOString();
+
+  return htmlWrap(`
+    <div class="card" style="padding:12px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;">Delivery timing</div>
+
+      <div class="row">
+        <label>Mode</label>
+        <div class="controls">
+          <select id="msw_timing_mode" class="input">
+            <option value="NOW" ${mode === 'NOW' ? 'selected' : ''}>Send now</option>
+            <option value="AT_TIME" ${mode === 'AT_TIME' ? 'selected' : ''}>Send at time</option>
+            <option value="AFTER_DELAY" ${mode === 'AFTER_DELAY' ? 'selected' : ''}>Send after delay</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="msw_timing_at_time_wrap" class="row" style="${mode === 'AT_TIME' ? '' : 'display:none;'}">
+        <label>Scheduled date / time</label>
+        <div class="controls" style="display:flex;flex-direction:column;gap:6px;">
+          <input
+            id="msw_timing_scheduled_for_utc"
+            class="input"
+            type="datetime-local"
+            value="${safeHtml(toDatetimeLocal(scheduledUtc))}"
+          />
+          <div class="mini" style="opacity:.75;">
+            Stored using the backend schedule normalizer. Current UI timezone hint: <strong>${safeHtml(requestedTimezone)}</strong>.
+          </div>
+        </div>
+      </div>
+
+      <div id="msw_timing_after_delay_wrap" class="row" style="${mode === 'AFTER_DELAY' ? '' : 'display:none;'}">
+        <label>Delay (minutes)</label>
+        <div class="controls" style="display:flex;flex-direction:column;gap:6px;">
+          <input
+            id="msw_timing_relative_minutes"
+            class="input"
+            type="number"
+            min="1"
+            step="1"
+            value="${safeHtml(relativeMinutes)}"
+            placeholder="e.g. 30"
+          />
+          <div class="mini" style="opacity:.75;">
+            The backend will convert this into a concrete UTC schedule from the current time.
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="grid-column:1/-1;">
+        <label>Backend note</label>
+        <div class="controls">
+          <div class="mini" style="white-space:pre-wrap;opacity:.78;">
+The backend remains the source of truth for schedule validation and normalization.
+This UI collects the timing intent clearly without duplicating every backend rule.
+Current UTC now: ${safeHtml(nowIso)}
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+
+function buildOutboxFiltersFromUi() {
+  const getVal = (id) => {
+    try {
+      const el = document.getElementById(id);
+      return el ? String(el.value ?? '') : '';
+    } catch {
+      return '';
+    }
+  };
+
+  const filters = {};
+  const sort = { key: null, dir: 'asc' };
+
+  const searchText = getVal('outboxSearchText').trim();
+  const channel = getVal('outboxFilterChannel').trim().toUpperCase();
+  const status = getVal('outboxFilterStatus').trim().toUpperCase();
+  const queueState = getVal('outboxFilterQueueState').trim().toUpperCase();
+  const sortKey = getVal('outboxSortKey').trim();
+  const sortDir = getVal('outboxSortDir').trim().toLowerCase();
+
+  if (searchText) filters.q = searchText;
+  if (channel && channel !== 'ALL') filters.channel = channel;
+  if (status && status !== 'ALL') filters.status = status;
+  if (queueState && queueState !== 'ALL') filters.queue_state = queueState;
+
+  if (sortKey && sortKey !== 'none') {
+    sort.key = sortKey;
+    sort.dir = (sortDir === 'desc') ? 'desc' : 'asc';
+  }
+
+  return { filters, sort };
+}
+
+
+function renderOutboxTable(content, rows) {
+  currentRows = Array.isArray(rows) ? rows.map((r) => {
+    const raw = (r && typeof r === 'object') ? r : {};
+    const channel = String(raw.channel || '').trim().toUpperCase();
+    const outboxId = String(raw.outbox_id || raw.id || '').trim();
+    const toAddress = String(raw.to_address || raw.to || '').trim();
+    const subject = String(raw.subject || '').trim();
+    const preview = String(
+      raw.body_preview ||
+      raw.message_preview ||
+      raw.body_text ||
+      raw.message_text ||
+      ''
+    ).trim();
+
+    return {
+      ...raw,
+      id: outboxId,
+      outbox_id: outboxId,
+      channel,
+      to_address: toAddress,
+      subject,
+      preview,
+      status: String(raw.status || '').trim().toUpperCase(),
+      queue_state: String(raw.queue_state || '').trim().toUpperCase(),
+      is_scheduled: !!raw.is_scheduled,
+      created_at_utc: raw.created_at_utc || '',
+      scheduled_for_utc: raw.scheduled_for_utc || '',
+      next_attempt_at_utc: raw.next_attempt_at_utc || '',
+      effective_ready_at_utc: raw.effective_ready_at_utc || '',
+      recipient_kind: raw.recipient_kind || '',
+      recipient_id: raw.recipient_id || '',
+      context_kind: raw.context_kind || '',
+      context_id: raw.context_id || '',
+      mailshot_run_id: raw.mailshot_run_id || '',
+      provider_message_id: raw.provider_message_id || '',
+      last_error: raw.last_error || ''
+    };
+  }) : [];
+
+  currentSelection = null;
+
+  window.__listState = window.__listState || {};
+  const st = (window.__listState.outbox ||= {
+    page: 1,
+    pageSize: 50,
+    total: null,
+    hasMore: false,
+    filters: null,
+    sort: { key: null, dir: 'asc' }
+  });
+  if (!st.sort || typeof st.sort !== 'object') {
+    st.sort = { key: null, dir: 'asc' };
+  }
+
+  window.__selection = window.__selection || {};
+  const sel = (window.__selection.outbox ||= { fingerprint:'', ids:new Set() });
+
+  const getFp = () => (typeof getSummaryFingerprint === 'function') ? getSummaryFingerprint('outbox') : JSON.stringify({ section:'outbox', filters: st.filters || {}, sort: st.sort || {} });
+  const fp = getFp();
+  if (sel.fingerprint !== fp) {
+    sel.fingerprint = fp;
+    sel.ids.clear();
+  }
+
+  const isRowSelected = (id) => sel.ids.has(String(id || ''));
+  const setRowSelected = (id, on) => {
+    const k = String(id || '').trim();
+    if (!k) return;
+    if (on) sel.ids.add(k);
+    else sel.ids.delete(k);
+  };
+
+  const fmtDt = (v) => {
+    try {
+      if (!v) return '';
+      if (typeof fmtUkDateTime === 'function') return fmtUkDateTime(v);
+      const d = new Date(v);
+      if (!Number.isFinite(d.getTime())) return String(v);
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).format(d).replace(',', '');
+    } catch {
+      return String(v || '');
+    }
+  };
+
+  const safeHtml = (typeof escapeHtml === 'function')
+    ? escapeHtml
+    : (s) => String(s ?? '')
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#39;");
+
+  const statusPill = (status) => {
+    const s = String(status || '').trim().toUpperCase();
+    const cls =
+      (s === 'READ' || s === 'DELIVERED') ? 'pill pill-ok' :
+      (s === 'FAILED') ? 'pill pill-bad' :
+      (s === 'SENT') ? 'pill pill-warn' :
+      'pill';
+    return `<span class="${cls}">${safeHtml(s || '—')}</span>`;
+  };
+
+  const queueStatePill = (qs) => {
+    const s = String(qs || '').trim().toUpperCase();
+    const cls =
+      (s === 'READY' || s === 'QUEUED') ? 'pill pill-ok' :
+      (s === 'SCHEDULED') ? 'pill pill-warn' :
+      'pill';
+    return `<span class="${cls}">${safeHtml(s || '—')}</span>`;
+  };
+
+  const updateToolButtons = () => {
+    try {
+      if (typeof window.__refreshOutboxToolsButtons === 'function') {
+        window.__refreshOutboxToolsButtons();
+      }
+    } catch {}
+  };
+
+  const rerenderWithFreshData = async () => {
+    const data = await loadSection();
+    renderSummary(data);
+  };
+
+  content.innerHTML = '';
+
+  const top = document.createElement('div');
+  top.className = 'card';
+  top.style.padding = '12px';
+  top.style.marginBottom = '12px';
+  top.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:700;font-size:14px;">Unified Outbox</div>
+        <div class="mini" style="opacity:.8;">
+          Search, filter, sort, and action queued / scheduled / sent communications.
+        </div>
+      </div>
+      <div class="mini" style="opacity:.75;">
+        Selected: <strong id="outboxSelectedCount">${sel.ids.size}</strong>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:minmax(220px,1.4fr) 160px 160px 160px 180px 120px;gap:10px;align-items:end;margin-top:12px;">
+      <div>
+        <label class="inline mini" style="opacity:.85;">Search</label>
+        <input id="outboxSearchText" class="input" type="text" value="${safeHtml(String((st.filters && (st.filters.q || st.filters.search)) || ''))}" placeholder="Search recipient / subject / preview…" />
+      </div>
+
+      <div>
+        <label class="inline mini" style="opacity:.85;">Channel</label>
+        <select id="outboxFilterChannel" class="input">
+          <option value="ALL">All</option>
+          <option value="EMAIL" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'EMAIL' ? 'selected' : ''}>Email</option>
+          <option value="WHATSAPP" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'WHATSAPP' ? 'selected' : ''}>WhatsApp</option>
+          <option value="SMS" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'SMS' ? 'selected' : ''}>SMS</option>
+          <option value="VOICE" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'VOICE' ? 'selected' : ''}>Voice</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="inline mini" style="opacity:.85;">Status</label>
+        <select id="outboxFilterStatus" class="input">
+          <option value="ALL">All</option>
+          <option value="QUEUED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'QUEUED' ? 'selected' : ''}>Queued</option>
+          <option value="SENT" ${String(st.filters && st.filters.status || '').toUpperCase() === 'SENT' ? 'selected' : ''}>Sent</option>
+          <option value="DELIVERED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'DELIVERED' ? 'selected' : ''}>Delivered</option>
+          <option value="READ" ${String(st.filters && st.filters.status || '').toUpperCase() === 'READ' ? 'selected' : ''}>Read</option>
+          <option value="FAILED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'FAILED' ? 'selected' : ''}>Failed</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="inline mini" style="opacity:.85;">Queue state</label>
+        <select id="outboxFilterQueueState" class="input">
+          <option value="ALL">All</option>
+          <option value="QUEUED" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'QUEUED' ? 'selected' : ''}>Queued</option>
+          <option value="READY" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'READY' ? 'selected' : ''}>Ready</option>
+          <option value="SCHEDULED" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'SCHEDULED' ? 'selected' : ''}>Scheduled</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="inline mini" style="opacity:.85;">Sort by</label>
+        <select id="outboxSortKey" class="input">
+          <option value="created_at_utc" ${String(st.sort && st.sort.key || 'created_at_utc') === 'created_at_utc' ? 'selected' : ''}>Created</option>
+          <option value="scheduled_for_utc" ${String(st.sort && st.sort.key || '') === 'scheduled_for_utc' ? 'selected' : ''}>Scheduled</option>
+          <option value="effective_ready_at_utc" ${String(st.sort && st.sort.key || '') === 'effective_ready_at_utc' ? 'selected' : ''}>Ready at</option>
+          <option value="status" ${String(st.sort && st.sort.key || '') === 'status' ? 'selected' : ''}>Status</option>
+          <option value="channel" ${String(st.sort && st.sort.key || '') === 'channel' ? 'selected' : ''}>Channel</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="inline mini" style="opacity:.85;">Direction</label>
+        <select id="outboxSortDir" class="input">
+          <option value="desc" ${String(st.sort && st.sort.dir || 'desc').toLowerCase() === 'desc' ? 'selected' : ''}>Desc</option>
+          <option value="asc" ${String(st.sort && st.sort.dir || '').toLowerCase() === 'asc' ? 'selected' : ''}>Asc</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-outline" id="outboxApplyFiltersBtn">Apply</button>
+      <button type="button" class="btn btn-outline" id="outboxClearSelectionBtn" ${sel.ids.size ? '' : 'disabled style="opacity:.6"'}>Clear selection</button>
+    </div>
+  `;
+  content.appendChild(top);
+
+  const tableWrap = document.createElement('div');
+  tableWrap.className = 'card';
+  tableWrap.style.padding = '12px';
+  tableWrap.innerHTML = `
+    <div class="picker-table-wrap">
+      <table class="grid" id="outboxGrid">
+        <thead>
+          <tr>
+            <th style="width:40px;"><input type="checkbox" id="outboxSelectAll" /></th>
+            <th>Channel</th>
+            <th>Recipient</th>
+            <th>Content</th>
+            <th>Status</th>
+            <th>Queue</th>
+            <th>Scheduled</th>
+            <th>Ready at</th>
+            <th style="width:190px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            currentRows.length
+              ? currentRows.map((r) => `
+                <tr data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">
+                  <td><input type="checkbox" class="outbox-row-select" data-outbox-id="${safeHtml(r.id)}" ${isRowSelected(r.id) ? 'checked' : ''} /></td>
+                  <td>${safeHtml(r.channel || '—')}</td>
+                  <td>
+                    <div style="font-weight:600;">${safeHtml(r.to_address || '—')}</div>
+                    <div class="mini" style="opacity:.75;">${safeHtml(r.recipient_kind || '')}</div>
+                  </td>
+                  <td>
+                    <div style="font-weight:600;">${safeHtml(r.subject || r.preview || '—')}</div>
+                    <div class="mini" style="opacity:.75;white-space:pre-wrap;">${safeHtml(r.channel === 'EMAIL' ? r.preview : r.preview || r.subject || '')}</div>
+                  </td>
+                  <td>${statusPill(r.status)}</td>
+                  <td>${queueStatePill(r.queue_state)}</td>
+                  <td>${safeHtml(fmtDt(r.scheduled_for_utc) || '—')}</td>
+                  <td>${safeHtml(fmtDt(r.effective_ready_at_utc || r.next_attempt_at_utc) || '—')}</td>
+                  <td>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                      <button type="button" class="btn btn-sm btn-outline" data-act="retry" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Retry</button>
+                      <button type="button" class="btn btn-sm btn-outline" data-act="reschedule" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Reschedule</button>
+                      <button type="button" class="btn btn-sm btn-outline" data-act="delete" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')
+              : `
+                <tr>
+                  <td colspan="9" class="mini" style="opacity:.75;">No Outbox rows found.</td>
+                </tr>
+              `
+          }
+        </tbody>
+      </table>
+    </div>
+  `;
+  content.appendChild(tableWrap);
+
+  const pager = document.createElement('div');
+  pager.className = 'card';
+  pager.style.padding = '12px';
+  const pageNum = Number(st.page || 1);
+  const pageSize = st.pageSize === 'ALL' ? 'ALL' : Number(st.pageSize || 50);
+  const totalKnown = (typeof st.total === 'number');
+  const hasMore = !!st.hasMore;
+
+  let infoText = '';
+  if (pageSize === 'ALL') {
+    infoText = `Showing all ${currentRows.length} rows.`;
+  } else if (totalKnown) {
+    const start = ((pageNum - 1) * pageSize) + 1;
+    const end = Math.min(start + currentRows.length - 1, Number(st.total || 0));
+    infoText = `Showing ${start}–${end} of ${st.total}`;
+  } else {
+    const start = ((pageNum - 1) * pageSize) + 1;
+    const end = start + currentRows.length - 1;
+    infoText = `Showing ${start}–${end}${hasMore ? '+' : ''}`;
+  }
+
+  pager.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" class="btn btn-outline" id="outboxPrevPageBtn" ${pageNum <= 1 ? 'disabled style="opacity:.6"' : ''}>Prev</button>
+        <button type="button" class="btn btn-outline" id="outboxNextPageBtn" ${(!hasMore && totalKnown && (pageNum * Number(pageSize || 50) >= Number(st.total || 0))) || pageSize === 'ALL' ? 'disabled style="opacity:.6"' : ''}>Next</button>
+      </div>
+      <div class="mini" style="opacity:.8;">${safeHtml(infoText)}</div>
+    </div>
+  `;
+  content.appendChild(pager);
+
+  const getRowByBtn = (btn) => {
+    const oid = String(btn.getAttribute('data-outbox-id') || '').trim();
+    const ch = String(btn.getAttribute('data-channel') || '').trim().toUpperCase();
+    return currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
+  };
+
+  const topEl = content.querySelector('.card');
+  const applyBtn = document.getElementById('outboxApplyFiltersBtn');
+  const clearSelBtn = document.getElementById('outboxClearSelectionBtn');
+  const selectAll = document.getElementById('outboxSelectAll');
+  const selectedCountEl = document.getElementById('outboxSelectedCount');
+
+  const updateSelectionUi = () => {
+    const visibleIds = currentRows.map(r => String(r.id || ''));
+    const selectedVisible = visibleIds.filter(id => sel.ids.has(id)).length;
+
+    if (selectAll) {
+      selectAll.checked = (visibleIds.length > 0 && selectedVisible === visibleIds.length);
+      selectAll.indeterminate = (selectedVisible > 0 && selectedVisible < visibleIds.length);
+    }
+
+    if (selectedCountEl) selectedCountEl.textContent = String(sel.ids.size);
+    if (clearSelBtn) {
+      clearSelBtn.disabled = (sel.ids.size === 0);
+      clearSelBtn.style.opacity = (sel.ids.size === 0) ? '0.6' : '';
+    }
+
+    updateToolButtons();
+  };
+
+  if (applyBtn) {
+    applyBtn.onclick = async () => {
+      const built = buildOutboxFiltersFromUi();
+      st.filters = built.filters;
+      st.sort = built.sort;
+      st.page = 1;
+      await rerenderWithFreshData();
+    };
+  }
+
+  if (clearSelBtn) {
+    clearSelBtn.onclick = () => {
+      sel.ids.clear();
+      updateSelectionUi();
+      content.querySelectorAll('.outbox-row-select').forEach((cb) => { cb.checked = false; });
+    };
+  }
+
+  if (selectAll) {
+    selectAll.onclick = (ev) => {
+      ev.stopPropagation();
+      const wantOn = !!selectAll.checked;
+      currentRows.forEach(r => setRowSelected(r.id, wantOn));
+      content.querySelectorAll('.outbox-row-select').forEach((cb) => { cb.checked = wantOn; });
+      updateSelectionUi();
+    };
+  }
+
+  content.querySelectorAll('.outbox-row-select').forEach((cb) => {
+    cb.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const oid = String(cb.getAttribute('data-outbox-id') || '').trim();
+      setRowSelected(oid, !!cb.checked);
+      updateSelectionUi();
+    });
+  });
+
+  const tbody = content.querySelector('#outboxGrid tbody');
+  if (tbody) {
+    tbody.addEventListener('dblclick', async (ev) => {
+      const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-id]') : null;
+      if (!tr) return;
+      const oid = String(tr.getAttribute('data-outbox-id') || '').trim();
+      const ch = String(tr.getAttribute('data-channel') || '').trim().toUpperCase();
+      const row = currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
+      if (!row) return;
+      await openOutboxDetailModal(row);
+    });
+
+    tbody.addEventListener('click', async (ev) => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-act]') : null;
+      if (btn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const row = getRowByBtn(btn);
+        if (!row) return;
+
+        const act = String(btn.getAttribute('data-act') || '').trim();
+        if (act === 'retry') {
+          await handleOutboxRetryAction(row, {
+            onDone: async () => { await rerenderWithFreshData(); }
+          });
+          return;
+        }
+        if (act === 'reschedule') {
+          await handleOutboxRescheduleAction(row, {
+            onDone: async () => { await rerenderWithFreshData(); }
+          });
+          return;
+        }
+        if (act === 'delete') {
+          await handleOutboxDeleteAction(row, {
+            onDone: async () => { await rerenderWithFreshData(); }
+          });
+          return;
+        }
+      }
+
+      const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-id]') : null;
+      if (!tr) return;
+      tbody.querySelectorAll('tr.selected').forEach(n => n.classList.remove('selected'));
+      tr.classList.add('selected');
+
+      const oid = String(tr.getAttribute('data-outbox-id') || '').trim();
+      const ch = String(tr.getAttribute('data-channel') || '').trim().toUpperCase();
+      currentSelection = currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
+    });
+  }
+
+  const prevBtn = document.getElementById('outboxPrevPageBtn');
+  if (prevBtn) {
+    prevBtn.onclick = async () => {
+      if (Number(st.page || 1) <= 1) return;
+      st.page = Math.max(1, Number(st.page || 1) - 1);
+      await rerenderWithFreshData();
+    };
+  }
+
+  const nextBtn = document.getElementById('outboxNextPageBtn');
+  if (nextBtn) {
+    nextBtn.onclick = async () => {
+      st.page = Number(st.page || 1) + 1;
+      await rerenderWithFreshData();
+    };
+  }
+
+  const searchEl = document.getElementById('outboxSearchText');
+  if (searchEl) {
+    searchEl.addEventListener('keydown', async (ev) => {
+      if (ev.key !== 'Enter') return;
+      const built = buildOutboxFiltersFromUi();
+      st.filters = built.filters;
+      st.sort = built.sort;
+      st.page = 1;
+      await rerenderWithFreshData();
+    });
+  }
+
+  updateSelectionUi();
+}
+async function openOutboxDetailModal(rowOrRef) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+  const safeHtml = (typeof escapeHtml === 'function')
+    ? escapeHtml
+    : (s) => String(s ?? '')
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#39;");
+
+  const resolveRef = () => {
+    if (rowOrRef && typeof rowOrRef === 'object') {
+      return {
+        channel: trimStr(rowOrRef.channel || '').toUpperCase(),
+        id: trimStr(rowOrRef.outbox_id || rowOrRef.id || '')
+      };
+    }
+    return { channel: '', id: '' };
+  };
+
+  const ref = resolveRef();
+  if (!ref.channel || !ref.id) throw new Error('Outbox reference is required');
+
+  window.modalCtx = window.modalCtx || {};
+  modalCtx = window.modalCtx;
+  modalCtx.outboxDetailState = {
+    channel: ref.channel,
+    id: ref.id,
+    loading: true,
+    error: '',
+    item: null
+  };
+
+  const fmtDt = (v) => {
+    try {
+      if (!v) return '—';
+      if (typeof fmtUkDateTime === 'function') return fmtUkDateTime(v);
+      const d = new Date(v);
+      if (!Number.isFinite(d.getTime())) return String(v);
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).format(d).replace(',', '');
+    } catch {
+      return String(v || '—');
+    }
+  };
+
+  const rerender = () => {
+    try {
+      const body = document.getElementById('modalBody');
+      if (!body) return;
+      body.innerHTML = render();
+      wire();
+    } catch (e) {
+      console.error('[OUTBOX_DETAIL] rerender failed', e);
+    }
+  };
+
+  const load = async () => {
+    modalCtx.outboxDetailState.loading = true;
+    modalCtx.outboxDetailState.error = '';
+    rerender();
+    try {
+      const res = await apiGetOutboxItem(ref.channel, ref.id);
+      modalCtx.outboxDetailState.item = res && res.item ? res.item : null;
+    } catch (e) {
+      modalCtx.outboxDetailState.error = String(e?.message || e || 'Failed to load Outbox item');
+      modalCtx.outboxDetailState.item = null;
+    } finally {
+      modalCtx.outboxDetailState.loading = false;
+      rerender();
+    }
+  };
+
+  const renderAttachments = (atts) => {
+    const arr = Array.isArray(atts)
+      ? atts
+      : (atts && typeof atts === 'object' ? [atts] : []);
+    if (!arr.length) return `<div class="mini" style="opacity:.75;">No attachments.</div>`;
+    return `
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${arr.map((a) => {
+          const name = String(a && (a.name || a.Name || a.filename) ? (a.name || a.Name || a.filename) : 'Attachment');
+          const url = String(a && (a.url || a.download_url || a.href) ? (a.url || a.download_url || a.href) : '').trim();
+          return `
+            <div class="mini" style="display:flex;justify-content:space-between;gap:10px;">
+              <span>${safeHtml(name)}</span>
+              ${url ? `<a href="${safeHtml(url)}" target="_blank" rel="noopener">Open</a>` : `<span style="opacity:.65;">No link</span>`}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  };
+
+  const render = () => {
+    const st = modalCtx.outboxDetailState || {};
+    if (st.loading) {
+      return `
+        <div class="card" style="padding:12px;">
+          <div class="mini">Loading Outbox item…</div>
+        </div>
+      `;
+    }
+    if (st.error) {
+      return `
+        <div class="card" style="padding:12px;">
+          <div style="font-weight:700;color:rgba(255,160,160,0.98);margin-bottom:8px;">Failed to load</div>
+          <div class="mini">${safeHtml(st.error)}</div>
+          <div style="margin-top:12px;">
+            <button type="button" class="btn btn-outline" data-outbox-detail-act="reload">Retry</button>
+          </div>
+        </div>
+      `;
+    }
+
+    const item = st.item || {};
+    const channel = String(item.channel || ref.channel).toUpperCase();
+    const attachmentsHtml = channel === 'EMAIL'
+      ? renderAttachments(item.content && item.content.attachments)
+      : '';
+
+    return `
+      <div id="outboxDetailRoot">
+        <div class="card" style="padding:12px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:700;font-size:14px;">Outbox detail</div>
+              <div class="mini" style="opacity:.8;">${safeHtml(channel)} • ${safeHtml(String(item.outbox_id || ref.id))}</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline" data-outbox-detail-act="retry">Retry</button>
+              <button type="button" class="btn btn-outline" data-outbox-detail-act="reschedule">Reschedule</button>
+              <button type="button" class="btn btn-outline" data-outbox-detail-act="delete">Delete</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:12px;margin-top:12px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Identity</div>
+          <div class="row"><label>Channel</label><div class="controls"><span class="mini">${safeHtml(channel)}</span></div></div>
+          <div class="row"><label>Outbox id</label><div class="controls"><span class="mono">${safeHtml(String(item.outbox_id || ref.id))}</span></div></div>
+          <div class="row"><label>Recipient</label><div class="controls"><span class="mini">${safeHtml(String(item.to_address || '—'))}</span></div></div>
+          <div class="row"><label>Mailshot run</label><div class="controls"><span class="mono">${safeHtml(String(item.identity && item.identity.mailshot_run_id ? item.identity.mailshot_run_id : '—'))}</span></div></div>
+          <div class="row"><label>Template</label><div class="controls"><span class="mono">${safeHtml(String(item.identity && item.identity.document_template_id ? item.identity.document_template_id : '—'))}</span></div></div>
+          <div class="row"><label>Context</label><div class="controls"><span class="mini">${safeHtml(String(item.identity && item.identity.context_kind ? item.identity.context_kind : '—'))} • ${safeHtml(String(item.identity && item.identity.context_id ? item.identity.context_id : '—'))}</span></div></div>
+        </div>
+
+        <div class="card" style="padding:12px;margin-top:12px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Content</div>
+          ${channel === 'EMAIL' ? `
+            <div class="row"><label>Subject</label><div class="controls"><span class="mini">${safeHtml(String(item.content && item.content.subject ? item.content.subject : '—'))}</span></div></div>
+            <div class="row"><label>CC</label><div class="controls"><span class="mini">${safeHtml(String(item.content && item.content.cc ? item.content.cc : '—'))}</span></div></div>
+            <div class="row"><label>BCC</label><div class="controls"><span class="mini">${safeHtml(String(item.content && item.content.bcc ? item.content.bcc : '—'))}</span></div></div>
+            <div class="row"><label>Reply-to</label><div class="controls"><span class="mini">${safeHtml(String(item.content && item.content.reply_to ? item.content.reply_to : '—'))}</span></div></div>
+            <div class="row"><label>Importance</label><div class="controls"><span class="mini">${safeHtml(String(item.content && item.content.importance ? item.content.importance : '—'))}</span></div></div>
+            <div class="row"><label>Email type</label><div class="controls"><span class="mini">${safeHtml(String(item.content && item.content.email_type ? item.content.email_type : '—'))}</span></div></div>
+            <div class="row" style="grid-column:1/-1;"><label>HTML body</label><div class="controls"><div class="card" style="padding:10px;max-height:260px;overflow:auto;">${String(item.content && item.content.body_html ? item.content.body_html : '<span class="mini">No HTML body.</span>')}</div></div></div>
+            <div class="row" style="grid-column:1/-1;"><label>Plain body</label><div class="controls"><textarea class="input" readonly style="min-height:120px;">${safeHtml(String(item.content && item.content.body_text ? item.content.body_text : ''))}</textarea></div></div>
+          ` : `
+            <div class="row" style="grid-column:1/-1;"><label>Message text</label><div class="controls"><textarea class="input" readonly style="min-height:180px;">${safeHtml(String(item.content && item.content.message_text ? item.content.message_text : ''))}</textarea></div></div>
+          `}
+        </div>
+
+        ${channel === 'EMAIL' ? `
+          <div class="card" style="padding:12px;margin-top:12px;">
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Attachments</div>
+            ${attachmentsHtml}
+          </div>
+        ` : ``}
+
+        <div class="card" style="padding:12px;margin-top:12px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Scheduling</div>
+          <div class="row"><label>Status</label><div class="controls"><span class="mini">${safeHtml(String(item.status || '—'))}</span></div></div>
+          <div class="row"><label>Queue state</label><div class="controls"><span class="mini">${safeHtml(String(item.schedule && item.schedule.queue_state ? item.schedule.queue_state : '—'))}</span></div></div>
+          <div class="row"><label>Scheduled for</label><div class="controls"><span class="mini">${safeHtml(fmtDt(item.schedule && item.schedule.scheduled_for_utc))}</span></div></div>
+          <div class="row"><label>Next attempt</label><div class="controls"><span class="mini">${safeHtml(fmtDt(item.schedule && item.schedule.next_attempt_at_utc))}</span></div></div>
+          <div class="row"><label>Ready at</label><div class="controls"><span class="mini">${safeHtml(fmtDt(item.schedule && item.schedule.effective_ready_at_utc))}</span></div></div>
+          <div class="row"><label>Is scheduled</label><div class="controls"><span class="mini">${item.schedule && item.schedule.is_scheduled ? 'Yes' : 'No'}</span></div></div>
+        </div>
+
+        <div class="card" style="padding:12px;margin-top:12px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Delivery / provider state</div>
+          <div class="row"><label>Created</label><div class="controls"><span class="mini">${safeHtml(fmtDt(item.created_at_utc))}</span></div></div>
+          <div class="row"><label>Sent</label><div class="controls"><span class="mini">${safeHtml(fmtDt(item.sent_at))}</span></div></div>
+          <div class="row"><label>Delivered</label><div class="controls"><span class="mini">${safeHtml(fmtDt(item.delivered_at))}</span></div></div>
+          <div class="row"><label>Read</label><div class="controls"><span class="mini">${safeHtml(fmtDt(item.read_at))}</span></div></div>
+          <div class="row"><label>Failed</label><div class="controls"><span class="mini">${safeHtml(fmtDt(item.failed_at))}</span></div></div>
+          <div class="row"><label>Provider message id</label><div class="controls"><span class="mono">${safeHtml(String(item.provider && item.provider.provider_message_id ? item.provider.provider_message_id : '—'))}</span></div></div>
+          <div class="row" style="grid-column:1/-1;"><label>Last error</label><div class="controls"><textarea class="input" readonly style="min-height:100px;">${safeHtml(String(item.provider && item.provider.last_error ? item.provider.last_error : ''))}</textarea></div></div>
+        </div>
+      </div>
+    `;
+  };
+
+  const wire = () => {
+    const body = document.getElementById('modalBody');
+    if (!body) return;
+
+    if (body.__outboxDetailWired) return;
+    body.__outboxDetailWired = true;
+
+    body.addEventListener('click', async (ev) => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest('[data-outbox-detail-act]') : null;
+      if (!btn) return;
+
+      const act = String(btn.getAttribute('data-outbox-detail-act') || '').trim();
+      if (!act) return;
+
+      if (act === 'reload') {
+        ev.preventDefault();
+        await load();
+        return;
+      }
+
+      const item = modalCtx.outboxDetailState && modalCtx.outboxDetailState.item
+        ? modalCtx.outboxDetailState.item
+        : null;
+      if (!item) return;
+
+      if (act === 'retry') {
+        ev.preventDefault();
+        await handleOutboxRetryAction(item, {
+          onDone: async () => { await load(); }
+        });
+        return;
+      }
+
+      if (act === 'reschedule') {
+        ev.preventDefault();
+        await handleOutboxRescheduleAction(item, {
+          onDone: async () => { await load(); }
+        });
+        return;
+      }
+
+      if (act === 'delete') {
+        ev.preventDefault();
+        await handleOutboxDeleteAction(item, {
+          closeOnDelete: true,
+          onDone: async () => {
+            if (String(currentSection || '').trim().toLowerCase() === 'outbox') {
+              const data = await loadSection();
+              renderSummary(data);
+            }
+            try {
+              if (typeof closeModal === 'function') closeModal();
+            } catch {}
+          }
+        });
+      }
+    }, true);
+  };
+
+  showModal(
+    'Outbox detail',
+    [{ key:'main', label:'Detail' }],
+    () => render(),
+    null,
+    false,
+    null,
+    {
+      kind: 'import-summary-outbox-detail',
+      noParentGate: true,
+      showSave: false,
+      showApply: false
+    }
+  );
+
+  wire();
+  await load();
+}
+
+async function handleOutboxRetryAction(rowOrItem, opts = {}) {
+  const row = (rowOrItem && typeof rowOrItem === 'object') ? rowOrItem : {};
+  const channel = String(row.channel || '').trim().toUpperCase();
+  const outboxId = String(row.outbox_id || row.id || '').trim();
+
+  if (!channel) throw new Error('channel is required');
+  if (!outboxId) throw new Error('outbox id is required');
+
+  const askForTime = !!opts.ask_for_time;
+  let retryAtUtc = null;
+
+  if (askForTime && typeof openUiPromptModal === 'function') {
+    const promptRes = await openUiPromptModal({
+      title: 'Retry Outbox item',
+      message: 'Enter an optional retry-at UTC timestamp in ISO format. Leave blank to retry now.',
+      placeholder: '2026-03-09T12:30:00.000Z',
+      value: '',
+      required: false,
+      confirm_label: 'Retry',
+      cancel_label: 'Cancel',
+      confirm_class: 'btn btn-primary',
+      cancel_class: 'btn btn-outline',
+      rows: 3
+    });
+
+    if (!promptRes || !promptRes.confirmed) return { ok: false, cancelled: true };
+    retryAtUtc = String(promptRes.value || '').trim() || null;
+  } else {
+    let confirmed = true;
+    if (typeof openUiConfirmModal === 'function') {
+      const confirmRes = await openUiConfirmModal({
+        title: 'Retry Outbox item?',
+        message: 'This will queue the selected Outbox row for retry.',
+        confirm_label: 'Retry now',
+        cancel_label: 'Cancel',
+        confirm_class: 'btn btn-primary',
+        cancel_class: 'btn btn-outline'
+      });
+      confirmed = !!(confirmRes && confirmRes.confirmed === true);
+    }
+    if (!confirmed) return { ok: false, cancelled: true };
+  }
+
+  try {
+    const res = await apiRetryOutboxItem(channel, outboxId, retryAtUtc ? { retry_at_utc: retryAtUtc } : {});
+    if (typeof opts.onDone === 'function') {
+      await opts.onDone(res);
+    } else if (String(currentSection || '').trim().toLowerCase() === 'outbox') {
+      const data = await loadSection();
+      renderSummary(data);
+    }
+    return res;
+  } catch (e) {
+    if (typeof openUiConfirmModal === 'function') {
+      await openUiConfirmModal({
+        title: 'Retry Outbox item',
+        message: String(e?.message || e || 'Retry failed'),
+        confirm_label: 'OK',
+        hide_cancel: true,
+        confirm_class: 'btn btn-primary'
+      });
+    }
+    throw e;
+  }
+}
+async function handleOutboxRescheduleAction(rowOrItem, opts = {}) {
+  const row = (rowOrItem && typeof rowOrItem === 'object') ? rowOrItem : {};
+  const channel = String(row.channel || '').trim().toUpperCase();
+  const outboxId = String(row.outbox_id || row.id || '').trim();
+
+  if (!channel) throw new Error('channel is required');
+  if (!outboxId) throw new Error('outbox id is required');
+
+  if (typeof openUiPromptModal !== 'function') {
+    throw new Error('openUiPromptModal is required for reschedule');
+  }
+
+  const initialValue = String(
+    row.scheduled_for_utc ||
+    (row.schedule && row.schedule.scheduled_for_utc) ||
+    ''
+  ).trim();
+
+  const promptRes = await openUiPromptModal({
+    title: 'Reschedule Outbox item',
+    message: 'Enter the new scheduled UTC timestamp in ISO format.',
+    placeholder: '2026-03-09T12:30:00.000Z',
+    value: initialValue,
+    required: true,
+    min_length: 5,
+    confirm_label: 'Reschedule',
+    cancel_label: 'Cancel',
+    confirm_class: 'btn btn-primary',
+    cancel_class: 'btn btn-outline',
+    rows: 3
+  });
+
+  if (!promptRes || !promptRes.confirmed) {
+    return { ok: false, cancelled: true };
+  }
+
+  const scheduledForUtc = String(promptRes.value || '').trim();
+  if (!scheduledForUtc) {
+    return { ok: false, cancelled: true };
+  }
+
+  try {
+    const res = await apiRescheduleOutboxItem(channel, outboxId, scheduledForUtc);
+    if (typeof opts.onDone === 'function') {
+      await opts.onDone(res);
+    } else if (String(currentSection || '').trim().toLowerCase() === 'outbox') {
+      const data = await loadSection();
+      renderSummary(data);
+    }
+    return res;
+  } catch (e) {
+    if (typeof openUiConfirmModal === 'function') {
+      await openUiConfirmModal({
+        title: 'Reschedule Outbox item',
+        message: String(e?.message || e || 'Reschedule failed'),
+        confirm_label: 'OK',
+        hide_cancel: true,
+        confirm_class: 'btn btn-primary'
+      });
+    }
+    throw e;
+  }
+}
+
+
+async function handleOutboxDeleteAction(rowOrItem, opts = {}) {
+  const row = (rowOrItem && typeof rowOrItem === 'object') ? rowOrItem : {};
+  const channel = String(row.channel || '').trim().toUpperCase();
+  const outboxId = String(row.outbox_id || row.id || '').trim();
+
+  if (!channel) throw new Error('channel is required');
+  if (!outboxId) throw new Error('outbox id is required');
+
+  let confirmed = true;
+  if (typeof openUiConfirmModal === 'function') {
+    const confirmRes = await openUiConfirmModal({
+      title: 'Delete Outbox item?',
+      message: 'This will attempt to delete the selected Outbox row. Rows that are already sent, delivered, or read will be blocked by the backend.',
+      confirm_label: 'Delete',
+      cancel_label: 'Cancel',
+      confirm_class: 'btn btn-warn',
+      cancel_class: 'btn btn-outline'
+    });
+    confirmed = !!(confirmRes && confirmRes.confirmed === true);
+  }
+
+  if (!confirmed) return { ok: false, cancelled: true };
+
+  try {
+    const res = await apiDeleteOutboxItem(channel, outboxId);
+
+    try {
+      window.__selection = window.__selection || {};
+      const sel = window.__selection.outbox;
+      if (sel && sel.ids instanceof Set) {
+        sel.ids.delete(outboxId);
+      }
+    } catch {}
+
+    if (typeof opts.onDone === 'function') {
+      await opts.onDone(res);
+    } else if (String(currentSection || '').trim().toLowerCase() === 'outbox') {
+      const data = await loadSection();
+      renderSummary(data);
+    }
+
+    if (opts.closeOnDelete) {
+      try {
+        if (typeof closeModal === 'function') closeModal();
+      } catch {}
+    }
+
+    return res;
+  } catch (e) {
+    if (typeof openUiConfirmModal === 'function') {
+      await openUiConfirmModal({
+        title: 'Delete Outbox item',
+        message: String(e?.message || e || 'Delete failed'),
+        confirm_label: 'OK',
+        hide_cancel: true,
+        confirm_class: 'btn btn-primary'
+      });
+    }
+    throw e;
+  }
+}
+
+
+
+
+
+async function submitSendMailshotWizard() {
+  const state = (window.modalCtx && window.modalCtx.mailshotWizard && typeof window.modalCtx.mailshotWizard === 'object')
+    ? window.modalCtx.mailshotWizard
+    : null;
+
+  if (!state) throw new Error('Mailshot wizard state is not available');
+
+  const rerender = (typeof window.__mailshotWizardRerender === 'function')
+    ? window.__mailshotWizardRerender
+    : null;
+
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const htmlToText = (html) => {
+    try {
+      const div = document.createElement('div');
+      div.innerHTML = String(html || '');
+      return String(div.textContent || div.innerText || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\r/g, '')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    } catch {
+      return String(html || '').trim();
+    }
+  };
+
+  const syncStateFromDom = () => {
+    try {
+      const subjectEl = document.getElementById('msw_subject');
+      if (subjectEl) state.edited_content.subject = String(subjectEl.value ?? '');
+
+      const ccEl = document.getElementById('msw_cc');
+      if (ccEl) state.edited_content.cc = String(ccEl.value ?? '');
+
+      const bccEl = document.getElementById('msw_bcc');
+      if (bccEl) state.edited_content.bcc = String(bccEl.value ?? '');
+
+      const replyEl = document.getElementById('msw_reply_to');
+      if (replyEl) state.edited_content.reply_to = String(replyEl.value ?? '');
+
+      const impEl = document.getElementById('msw_importance');
+      if (impEl) state.edited_content.importance = String(impEl.value || 'Normal');
+
+      const emailTypeEl = document.getElementById('msw_email_type');
+      if (emailTypeEl) state.edited_content.email_type = String(emailTypeEl.value || 'html').toLowerCase();
+
+      const bodyTextEl = document.getElementById('msw_body_text');
+      if (bodyTextEl) state.edited_content.body_text = String(bodyTextEl.value ?? '');
+
+      const bodyHtmlEl = document.getElementById('msw_body_html');
+      if (bodyHtmlEl) {
+        state.edited_content.body_html = String(bodyHtmlEl.value ?? '');
+        if (!trimStr(state.edited_content.body_text)) {
+          state.edited_content.body_text = htmlToText(state.edited_content.body_html);
+        }
+      }
+
+      const messageEl = document.getElementById('msw_message_text');
+      if (messageEl) state.edited_content.message_text = String(messageEl.value ?? '');
+
+      const timingModeEl = document.getElementById('msw_timing_mode');
+      if (timingModeEl) state.delivery_timing.mode = trimStr(timingModeEl.value || 'NOW').toUpperCase();
+
+      const timingAtEl = document.getElementById('msw_timing_scheduled_for_utc');
+      if (timingAtEl) {
+        const raw = String(timingAtEl.value ?? '').trim();
+        state.delivery_timing.scheduled_for_utc = raw ? new Date(raw).toISOString() : '';
+      }
+
+      const timingDelayEl = document.getElementById('msw_timing_relative_minutes');
+      if (timingDelayEl) state.delivery_timing.relative_minutes = String(timingDelayEl.value ?? '');
+
+      state.final_action = (state.output_type === 'WORD' || state.output_type === 'EXCEL' || state.output_type === 'CSV')
+        ? 'export'
+        : 'enqueue';
+    } catch {}
+  };
+
+  const buildFinalEditsJson = () => {
+    const serialized = serializeTemplateEditorContent({
+      output_type: state.output_type,
+      email_type: state.edited_content.email_type,
+      selected_field_keys: state.edited_content.selected_field_keys,
+      subject: state.edited_content.subject,
+      body_html: state.edited_content.body_html,
+      body_text: state.edited_content.body_text,
+      message_text: state.edited_content.message_text,
+      cc: state.edited_content.cc,
+      bcc: state.edited_content.bcc,
+      reply_to: state.edited_content.reply_to,
+      importance: state.edited_content.importance,
+      editor: {
+        output_type: state.output_type,
+        email_type: state.edited_content.email_type,
+        subject: state.edited_content.subject,
+        body_html: state.edited_content.body_html,
+        body_text: state.edited_content.body_text,
+        message_text: state.edited_content.message_text,
+        cc: state.edited_content.cc,
+        bcc: state.edited_content.bcc,
+        reply_to: state.edited_content.reply_to,
+        importance: state.edited_content.importance,
+        selected_field_keys: state.edited_content.selected_field_keys
+      },
+      hostId: 'msw_rich_editor_host',
+      hiddenInputId: 'msw_body_html'
+    });
+
+    const content = (serialized && serialized.template_content_json && typeof serialized.template_content_json === 'object')
+      ? serialized.template_content_json
+      : {};
+
+    const out = {};
+
+    if (state.output_type === 'EMAIL') {
+      out.subject = String(content.subject || '');
+      out.body_html = String(content.body_html || '');
+      out.body_text = String(content.body_text || '');
+      out.cc = String(content.cc || '');
+      out.bcc = String(content.bcc || '');
+      out.reply_to = String(content.reply_to || '');
+      out.importance = String(content.importance || 'Normal');
+      out.email_type = String(content.email_type || 'html').toLowerCase();
+    } else if (state.output_type === 'WORD') {
+      out.body_html = String(content.body_html || '');
+      out.body_text = String(content.body_text || '');
+    } else if (state.output_type === 'WHATSAPP' || state.output_type === 'SMS' || state.output_type === 'VOICE') {
+      out.message_text = String(content.message_text || '');
+    } else if (state.output_type === 'EXCEL' || state.output_type === 'CSV') {
+      out.body_text = String(content.body_text || '');
+    }
+
+    return out;
+  };
+
+  syncStateFromDom();
+
+  if (!state.prepared || typeof state.prepared !== 'object') {
+    throw new Error('Prepared mailshot data is not available');
+  }
+
+  state.submitting = true;
+  state.submit_result = null;
+  if (rerender) rerender();
+
+  try {
+    if (state.final_action === 'export') {
+      const exportRes = await apiMailshotExport({
+        prepare_json: state.prepared,
+        final_edits_json: buildFinalEditsJson(),
+        output_type: state.output_type
+      });
+
+      state.submit_result = {
+        ok: !!(exportRes && exportRes.ok === true),
+        kind: 'export',
+        output_type: exportRes && exportRes.output_type ? exportRes.output_type : state.output_type,
+        filename: exportRes && exportRes.filename ? exportRes.filename : null,
+        mime_type: exportRes && exportRes.mime_type ? exportRes.mime_type : null,
+        download_url: exportRes && exportRes.download_url ? exportRes.download_url : null,
+        raw: exportRes || null
+      };
+    } else {
+      const enqueueRes = await apiMailshotEnqueue({
+        prepare_json: state.prepared,
+        final_edits_json: buildFinalEditsJson(),
+        delivery_timing_json: state.delivery_timing
+      });
+
+      state.submit_result = {
+        ok: !!(enqueueRes && enqueueRes.ok === true),
+        kind: 'enqueue',
+        mailshot_run_id: enqueueRes && enqueueRes.mailshot_run_id ? enqueueRes.mailshot_run_id : null,
+        queued: Number(enqueueRes && enqueueRes.queued != null ? enqueueRes.queued : 0),
+        skipped: Number(enqueueRes && enqueueRes.skipped != null ? enqueueRes.skipped : 0),
+        failed: Number(enqueueRes && enqueueRes.failed != null ? enqueueRes.failed : 0),
+        delivery_timing: enqueueRes && enqueueRes.delivery_timing ? enqueueRes.delivery_timing : state.delivery_timing,
+        open_run_action: true,
+        open_outbox_action: true,
+        raw: enqueueRes || null
+      };
+    }
+  } catch (e) {
+    state.submit_result = {
+      ok: false,
+      kind: state.final_action,
+      error: String(e?.message || e || 'Mailshot action failed')
+    };
+  } finally {
+    state.submitting = false;
+    if (rerender) rerender();
+  }
+
+  return state.submit_result;
+}
+
+
 async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -24880,7 +27384,8 @@ async function handleUsersList(env, req) {
     'last_login_at_utc',
     'email_settings',
     'payment_authoriser',
-    'payment_golden_key'
+    'payment_golden_key',
+    'email_signature_html'
   ].join(','));
 
   params.set('order', 'created_at.desc');
@@ -24911,6 +27416,71 @@ async function handleUsersList(env, req) {
   const rows = await res.json().catch(() => []);
   return ok({ ok: true, users: Array.isArray(rows) ? rows : [] });
 }
+
+
+
+
+async function handleUserMySignaturePatch(env, req) {
+  const user = await requireUser(env, req); // any logged-in user
+  if (!user) return unauthorized('Unauthorized');
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return badRequest('invalid_json');
+  }
+
+  const hasSigField =
+    Object.prototype.hasOwnProperty.call(body, 'email_signature_html') ||
+    Object.prototype.hasOwnProperty.call(body, 'signature_html');
+
+  if (!hasSigField) {
+    return badRequest('email_signature_html_required');
+  }
+
+  const rawSig =
+    Object.prototype.hasOwnProperty.call(body, 'email_signature_html')
+      ? body.email_signature_html
+      : body.signature_html;
+
+  if (rawSig !== null && rawSig !== undefined && typeof rawSig !== 'string') {
+    return badRequest('email_signature_html_must_be_string_or_null');
+  }
+
+  const normalizedSig =
+    (rawSig === null || rawSig === undefined || String(rawSig).trim() === '')
+      ? null
+      : String(rawSig);
+
+  const enc = encodeURIComponent;
+  const apiUrl = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${enc(String(user.id))}`;
+
+  const res = await fetch(apiUrl, {
+    method: 'PATCH',
+    headers: { ...sbAuthHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify({
+      email_signature_html: normalizedSig
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    return serverError(`Failed to update email signature (${res.status}) ${errText || ''}`.trim());
+  }
+
+  const rows = await res.json().catch(() => []);
+  const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
+  if (!row) return badRequest('user_not_found');
+
+  return ok({
+    ok: true,
+    user: {
+      id: row.id,
+      email_signature_html: row.email_signature_html ?? null
+    }
+  });
+}
+
 
 async function handleUsersCreate(env, req) {
   const actor = await requireUser(env, req, ['admin']);
@@ -25061,6 +27631,17 @@ async function handleUsersPatch(env, req, userId) {
     }
   }
 
+  if ('email_signature_html' in body) {
+    const rawSig = body.email_signature_html;
+    if (rawSig !== null && rawSig !== undefined && typeof rawSig !== 'string') {
+      return badRequest('invalid_email_signature_html');
+    }
+    patch.email_signature_html =
+      (rawSig === null || rawSig === undefined || String(rawSig).trim() === '')
+        ? null
+        : String(rawSig);
+  }
+
   if (!Object.keys(patch).length) return badRequest('empty_patch');
 
   const apiUrl = `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}?id=eq.${encodeURIComponent(userId)}`;
@@ -25081,7 +27662,6 @@ async function handleUsersPatch(env, req, userId) {
 
   return ok({ ok: true, user: u });
 }
-
 
 
 async function handleUsersResetPassword(env, req, userId) {
@@ -27670,19 +30250,51 @@ async function getClientHolidayPctMap(env, clientIds, asOfYmd = null) {
 }
 
 // /api/me handler — remove admin-only gate
- async function handleMe(env, req) {
+
+async function handleMe(env, req) {
   const user = await requireUser(env, req /* no role gating here */);
   if (!user) return withCORS(env, req, unauthorized());
 
+  let row = null;
+  try {
+    const apiUrl =
+      `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}` +
+      `?id=eq.${encodeURIComponent(String(user.id || ''))}` +
+      `&select=id,email,display_name,role,email_signature_html` +
+      `&limit=1`;
+
+    const res = await fetch(apiUrl, { headers: sbAuthHeaders(env) });
+    if (res.ok) {
+      const rows = await res.json().catch(() => []);
+      row = Array.isArray(rows) && rows[0] ? rows[0] : null;
+    }
+  } catch {
+    row = null;
+  }
+
   const me = {
-    id: user.id,
-    email: user.email || null,
-    display_name: user.display_name || user.name || user.email || null,
-    roles: Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : [])
+    id: (row && row.id) ? row.id : user.id,
+    email: (row && Object.prototype.hasOwnProperty.call(row, 'email')) ? (row.email || null) : (user.email || null),
+    display_name:
+      (row && row.display_name) ||
+      user.display_name ||
+      user.name ||
+      user.email ||
+      null,
+    roles: Array.isArray(user.roles)
+      ? user.roles
+      : ((row && row.role) ? [row.role] : (user.role ? [user.role] : [])),
+    email_signature_html:
+      (row && Object.prototype.hasOwnProperty.call(row, 'email_signature_html'))
+        ? (row.email_signature_html ?? null)
+        : null
   };
 
   return withCORS(env, req, ok({ user: me }));
 }
+
+
+
 
 async function handleInvoiceSaveEdits(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
@@ -89204,7 +91816,9 @@ if (req.method === 'POST' && p === '/auth/reauth/verify') {
         return withCORS(env, req, await handleUserGridPrefsPatch(env, req));
       }
 
-
+if (req.method === 'PATCH' && p === '/api/users/me/signature') {
+  return withCORS(env, req, await handleUserMySignaturePatch(env, req));
+}
       // ====================== BANKING (rail-generic) ======================
 if (p.startsWith('/api/banking/')) {
   const user = await requireUser(env, req, ['admin']);
@@ -89971,7 +92585,14 @@ if (req.method === 'POST' && p === '/api/invoices/batch-issue/confirm')       re
         const invCredit = matchPath(p, '/api/invoices/:invoice_id/credit-note');
         if (invCredit && req.method === 'POST')                              return handleCreateCreditNoteTsfin(env, req, invCredit.invoice_id);
       }
+if (req.method === 'GET' && p === '/api/banking/advances-register')
+  return handleBankingAdvancesRegister(env, req);
 
+if (req.method === 'GET' && p === '/api/banking/advances-register/export-csv')
+  return handleBankingAdvancesRegisterExportCsv(env, req);
+
+if (req.method === 'GET' && p === '/api/banking/advances-register/export-pdf')
+  return handleBankingAdvancesRegisterExportPdf(env, req);
       {
         const invPaid = matchPath(p, '/api/invoices/:invoice_id/mark-paid');
         if (invPaid && req.method === 'POST')                                return handleInvoiceMarkPaid(env, req, invPaid.invoice_id);
@@ -90111,7 +92732,13 @@ if (req.method === 'POST' && p === '/api/outbox/delete-many') {
   const m = matchPath(p, '/api/mailshots/:id/delete-if-unsent');
   if (m && req.method === 'POST') return handleMailshotRunDeleteIfUnsent(env, req, m.id);
 }
-
+if (req.method === 'GET' && p === '/api/mailshots') {
+  return handleMailshotRunsList(env, req);
+}
+{
+  const m = matchPath(p, '/api/mailshots/:id');
+  if (m && req.method === 'GET') return handleMailshotRunGet(env, req, m.id);
+}
       if (req.method === 'POST' && p === '/api/email/outbox/drain')          return handleOutboxDrain(env, req);
       {
         const outRetry = matchPath(p, '/api/email/outbox/:id/retry');
@@ -90588,6 +93215,27 @@ if (req.method === 'GET' && p === '/api/comms/by-recipient') {
       if (req.method === 'GET'  && p === '/api/timesheets/summary') {
         return handleTimesheetsSummary(env, req);
       }
+
+{
+  const m = matchPath(p, '/api/banking/advances-register/export-csv');
+  if (m && req.method === 'GET') {
+    return handleBankingAdvancesRegisterExportCsv(env, req, user);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/advances-register/export-pdf');
+  if (m && req.method === 'GET') {
+    return handleBankingAdvancesRegisterExportPdf(env, req, user);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/advances-register/print');
+  if (m && req.method === 'GET') {
+    return handleBankingAdvancesRegisterPrint(env, req, user);
+  }
+}
 
       // NEW: Timesheets resolve preview
       if (req.method === 'POST' && p === '/api/timesheets/resolve-preview') {
