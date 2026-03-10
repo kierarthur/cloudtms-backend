@@ -10727,7 +10727,7 @@ begin
       ),
       2
     )::numeric(12,2) as recovered_wtd,
-    max(case when pr.rn = 1 then pr.pay_batch_id else null end) as latest_recovery_pay_batch_id
+    max(case when pr.rn = 1 then pr.pay_batch_id::text else null end)::uuid as latest_recovery_pay_batch_id
   from patch_rows pr
   group by pr.advance_id;
 
@@ -11249,6 +11249,7 @@ begin
   );
 end;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_advances_register_export_rows(
   p_actor_user_id uuid DEFAULT NULL::uuid,
