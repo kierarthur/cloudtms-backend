@@ -51638,6 +51638,82 @@ async function handleMailshotEnqueue(env, req) {
     };
   };
 
+  const normalizeArrayLike = (value, fieldName) => {
+    let out = value;
+    if (out == null) return [];
+    if (typeof out === 'string') {
+      try {
+        out = JSON.parse(out);
+      } catch {
+        throw new Error(`${fieldName} must be an array`);
+      }
+    }
+    if (!Array.isArray(out)) {
+      throw new Error(`${fieldName} must be an array`);
+    }
+    return out;
+  };
+
+  const normalizeDirectAttachment = (attachment) => {
+    if (!attachment || typeof attachment !== 'object' || Array.isArray(attachment)) return null;
+
+    const filename = attachment.filename != null
+      ? String(attachment.filename || '').trim()
+      : (attachment.name != null ? String(attachment.name || '').trim() : '');
+
+    const contentType = attachment.content_type != null
+      ? String(attachment.content_type || '').trim()
+      : (attachment.contentType != null ? String(attachment.contentType || '').trim() : '');
+
+    if (attachment.invoice_id != null && String(attachment.invoice_id || '').trim()) {
+      return {
+        invoice_id: String(attachment.invoice_id || '').trim(),
+        filename: filename || null,
+        content_type: contentType || null
+      };
+    }
+
+    if (attachment.r2_key != null && String(attachment.r2_key || '').trim()) {
+      return {
+        r2_key: String(attachment.r2_key || '').trim(),
+        filename: filename || null,
+        content_type: contentType || null
+      };
+    }
+
+    if (attachment.contentBase64 && (filename || (attachment.name && String(attachment.name).trim()))) {
+      return {
+        contentBase64: String(attachment.contentBase64 || ''),
+        name: filename || String(attachment.name || '').trim(),
+        content_type: contentType || null
+      };
+    }
+
+    return null;
+  };
+
+  const dedupeAttachments = (attachments) => {
+    const seen = new Set();
+    const out = [];
+
+    for (const a of (attachments || [])) {
+      if (!a || typeof a !== 'object' || Array.isArray(a)) continue;
+
+      const signature = JSON.stringify({
+        invoice_id: a.invoice_id || null,
+        r2_key: a.r2_key || null,
+        filename: a.filename || a.name || null,
+        contentBase64: a.contentBase64 ? true : false
+      });
+
+      if (seen.has(signature)) continue;
+      seen.add(signature);
+      out.push(a);
+    }
+
+    return out;
+  };
+
   let normalizedTiming;
   try {
     normalizedTiming = await normalizeDeliveryTimingJson(deliveryTimingJson);
@@ -51645,10 +51721,163 @@ async function handleMailshotEnqueue(env, req) {
     return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid delivery timing')));
   }
 
+  let normalizedFinalEditsJson;
+  try {
+    normalizedFinalEditsJson = { ...finalEditsJson };
+    const globalAttachmentsRaw = normalizeArrayLike(normalizedFinalEditsJson.attachments ?? [], 'final_edits_json.attachments');
+    const globalAttachmentsNormalized = [];
+
+    for (const attachment of globalAttachmentsRaw) {
+      const normalized = normalizeDirectAttachment(attachment);
+      if (!normalized) continue;
+      globalAttachmentsNormalized.push(normalized);
+    }
+
+    normalizedFinalEditsJson.attachments = dedupeAttachments(globalAttachmentsNormalized);
+  } catch (e) {
+    return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid final edits attachments')));
+  }
+
+  const normalizedPrepareJson = { ...prepareJson };
+  normalizedPrepareJson.rows = Array.isArray(prepareJson.rows) ? [...prepareJson.rows] : [];
+
+  const prepareOutputType = String(normalizedPrepareJson.output_type || '').trim().toUpperCase();
+  const prepareEntityType = String(normalizedPrepareJson.entity_type || '').trim().toLowerCase();
+
+  if (prepareOutputType === 'EMAIL' && normalizedPrepareJson.rows.length > 0) {
+    const timesheetPdfKeyCache = new Map();
+
+    const resolveTimesheetPdfKey = async (timesheetId) => {
+      const tsId = String(timesheetId || '').trim();
+      if (!tsId) throw new Error('Missing timesheet attachment context_id');
+
+      if (timesheetPdfKeyCache.has(tsId)) return timesheetPdfKeyCache.get(tsId);
+
+      const pdfKeyRaw = await ensureTimesheetPdf(env, tsId, { force_regen: false });
+      const pdfKey = String(pdfKeyRaw || '').trim();
+
+      if (!pdfKey) {
+        throw new Error(`Failed to resolve authoritative timesheet PDF for ${tsId}`);
+      }
+
+      timesheetPdfKeyCache.set(tsId, pdfKey);
+      return pdfKey;
+    };
+
+    const normalizeRowAttachmentInstructions = async (row) => {
+      const rawRow = (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
+      const entityType = String(rawRow.entity_type || prepareEntityType || '').trim().toLowerCase();
+      const rowContextId = String(rawRow.context_id || '').trim();
+
+      const rawInstructions = rawRow.attachment_instructions ?? rawRow.attachments ?? [];
+      const instructions = normalizeArrayLike(rawInstructions, 'prepare_json.rows[].attachment_instructions');
+
+      const normalized = [];
+
+      for (const instruction of instructions) {
+        const direct = normalizeDirectAttachment(instruction);
+        if (direct) {
+          normalized.push(direct);
+          continue;
+        }
+
+        if (!instruction || typeof instruction !== 'object' || Array.isArray(instruction)) continue;
+
+        const kind = String(
+          instruction.kind ??
+          instruction.attachment_kind ??
+          instruction.type ??
+          instruction.instruction ??
+          instruction.code ??
+          ''
+        ).trim().toUpperCase();
+
+        const attachmentContextId = String(
+          instruction.context_id ??
+          instruction.contextId ??
+          rowContextId ??
+          ''
+        ).trim();
+
+        const filename = instruction.filename != null
+          ? String(instruction.filename || '').trim()
+          : (instruction.name != null ? String(instruction.name || '').trim() : '');
+
+        const contentType = instruction.content_type != null
+          ? String(instruction.content_type || '').trim()
+          : (instruction.contentType != null ? String(instruction.contentType || '').trim() : 'application/pdf');
+
+        const isRootPdfKind =
+          kind === 'ROOT_DOCUMENT_PDF' ||
+          kind === 'AUTHORITATIVE_ROOT_PDF' ||
+          kind === 'ROOT_PDF';
+
+        const isTimesheetPdfKind =
+          kind === 'AUTHORITATIVE_TIMESHEET_PDF' ||
+          kind === 'TIMESHEET_PDF' ||
+          (isRootPdfKind && entityType === 'timesheet');
+
+        const isInvoicePdfKind =
+          kind === 'AUTHORITATIVE_INVOICE_PDF' ||
+          kind === 'INVOICE_PDF' ||
+          (isRootPdfKind && entityType === 'invoice');
+
+        if (isTimesheetPdfKind) {
+          if (!attachmentContextId || !uuidRe.test(attachmentContextId)) {
+            throw new Error('Invalid context_id for authoritative timesheet PDF attachment');
+          }
+
+          const pdfKey = await resolveTimesheetPdfKey(attachmentContextId);
+
+          normalized.push({
+            r2_key: pdfKey,
+            filename: filename || `Timesheet_${attachmentContextId}.pdf`,
+            content_type: contentType || 'application/pdf'
+          });
+          continue;
+        }
+
+        if (isInvoicePdfKind) {
+          if (!attachmentContextId || !uuidRe.test(attachmentContextId)) {
+            throw new Error('Invalid context_id for authoritative invoice PDF attachment');
+          }
+
+          normalized.push({
+            invoice_id: attachmentContextId,
+            filename: filename || `Invoice_${attachmentContextId}.pdf`,
+            content_type: contentType || 'application/pdf'
+          });
+          continue;
+        }
+      }
+
+      return dedupeAttachments(normalized);
+    };
+
+    try {
+      const rebuiltRows = [];
+
+      for (const row of normalizedPrepareJson.rows) {
+        const rawRow = (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
+        const rowAttachments = await normalizeRowAttachmentInstructions(rawRow);
+
+        rebuiltRows.push({
+          ...rawRow,
+          attachment_instructions: rowAttachments,
+          attachments: rowAttachments
+        });
+      }
+
+      normalizedPrepareJson.rows = rebuiltRows;
+    } catch (e) {
+      return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid prepare attachment instructions')));
+    }
+  }
+
   try {
     let payload = await sbRpc(env, 'mailshot_enqueue', {
-      p_prepare_json: prepareJson,
-      p_final_edits_json: finalEditsJson,
+      p_prepare_json: normalizedPrepareJson,
+      p_final_edits_json: normalizedFinalEditsJson,
       p_delivery_timing_json: normalizedTiming,
       p_actor_user_id: user.id
     });
@@ -51664,7 +51893,6 @@ async function handleMailshotEnqueue(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const enc = encodeURIComponent;
@@ -52912,7 +53140,7 @@ async function handleMailshotPrepare(env, req) {
 
   const contextKindRaw = String(body.context_kind || body.contextKind || '').trim();
   const outputTypeRaw = String(body.output_type || body.outputType || '').trim();
-  const templateIdRaw = (body.document_template_id ?? body.documentTemplateId);
+  const templateIdRaw = (body.document_template_id ?? body.documentTemplateId ?? body.template_id ?? body.templateId);
 
   const contextKind = contextKindRaw.toLowerCase();
   const outputType = outputTypeRaw.toUpperCase();
@@ -52936,12 +53164,22 @@ async function handleMailshotPrepare(env, req) {
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const ctxIdsClean = Array.from(new Set(
-    contextIds
-      .map((x) => (x == null ? '' : String(x).trim()))
-      .filter((x) => x && uuidRe.test(x))
-  ));
-  if (ctxIdsClean.length === 0) return withCORS(env, req, badRequest('context_ids must be UUIDs'));
+
+  const contextIdsTrimmed = contextIds
+    .map((x) => (x == null ? '' : String(x).trim()))
+    .filter(Boolean);
+
+  if (contextIdsTrimmed.length === 0) {
+    return withCORS(env, req, badRequest('context_ids[] required'));
+  }
+
+  const invalidContextIds = contextIdsTrimmed.filter((x) => !uuidRe.test(x));
+  if (invalidContextIds.length > 0) {
+    return withCORS(env, req, badRequest('context_ids must all be UUIDs'));
+  }
+
+  const ctxIdsClean = Array.from(new Set(contextIdsTrimmed));
+  if (ctxIdsClean.length === 0) return withCORS(env, req, badRequest('context_ids[] required'));
 
   let templateId = null;
   if (templateIdRaw != null && String(templateIdRaw).trim()) {
@@ -52964,13 +53202,90 @@ async function handleMailshotPrepare(env, req) {
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_prepare')) payload = payload.mailshot_prepare;
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+    if (!(payload && typeof payload === 'object')) {
+      return withCORS(env, req, ok({ ok: true, result: payload }));
+    }
+
+    const normalized = { ...payload };
+
+    normalized.context_kind = normalized.context_kind != null ? String(normalized.context_kind).trim().toLowerCase() : contextKind;
+    normalized.output_type = normalized.output_type != null ? String(normalized.output_type).trim().toUpperCase() : outputType;
+    normalized.document_template_id = normalized.document_template_id == null ? templateId : String(normalized.document_template_id);
+
+    normalized.selected_field_keys = Array.isArray(normalized.selected_field_keys)
+      ? normalized.selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+      : [];
+
+    normalized.accepted_selected_field_keys = Array.isArray(normalized.accepted_selected_field_keys)
+      ? normalized.accepted_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+      : normalized.selected_field_keys;
+
+    normalized.rejected_selected_field_keys = Array.isArray(normalized.rejected_selected_field_keys)
+      ? normalized.rejected_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+      : [];
+
+    normalized.rejected_selected_field_details = Array.isArray(normalized.rejected_selected_field_details)
+      ? normalized.rejected_selected_field_details
+      : [];
+
+    normalized.warnings = Array.isArray(normalized.warnings)
+      ? normalized.warnings.map((x) => String(x == null ? '' : x)).filter((x) => x.length > 0)
+      : [];
+
+    const topLevelAttachmentInstructions = Array.isArray(normalized.attachment_instructions)
+      ? normalized.attachment_instructions
+      : (Array.isArray(normalized.attachments) ? normalized.attachments : []);
+
+    normalized.attachment_instructions = topLevelAttachmentInstructions;
+    normalized.attachments = Array.isArray(normalized.attachments)
+      ? normalized.attachments
+      : topLevelAttachmentInstructions;
+
+    normalized.rows = Array.isArray(normalized.rows) ? normalized.rows : [];
+
+    normalized.rows = normalized.rows.map((row) => {
+      const rawRow = (row && typeof row === 'object') ? row : {};
+
+      const rowAttachmentInstructions = Array.isArray(rawRow.attachment_instructions)
+        ? rawRow.attachment_instructions
+        : (Array.isArray(rawRow.attachments) ? rawRow.attachments : []);
+
+      return {
+        ...rawRow,
+        context_id: rawRow.context_id == null ? null : String(rawRow.context_id),
+        context_kind: rawRow.context_kind != null ? String(rawRow.context_kind).trim().toLowerCase() : normalized.context_kind,
+        entity_type: rawRow.entity_type == null ? null : String(rawRow.entity_type).trim().toLowerCase(),
+        output_type: rawRow.output_type != null ? String(rawRow.output_type).trim().toUpperCase() : normalized.output_type,
+        document_template_id: rawRow.document_template_id == null ? normalized.document_template_id : String(rawRow.document_template_id),
+        to_field_key: rawRow.to_field_key == null ? null : String(rawRow.to_field_key),
+        to: rawRow.to == null ? null : String(rawRow.to),
+        recipient_kind: rawRow.recipient_kind == null ? null : String(rawRow.recipient_kind).trim().toLowerCase(),
+        recipient_id: rawRow.recipient_id == null ? null : String(rawRow.recipient_id),
+        eligible: rawRow.eligible == null ? false : !!rawRow.eligible,
+        skip_reason: rawRow.skip_reason == null ? null : String(rawRow.skip_reason),
+        field_values: rawRow.field_values && typeof rawRow.field_values === 'object' && !Array.isArray(rawRow.field_values)
+          ? rawRow.field_values
+          : {},
+        template_content_json: rawRow.template_content_json && typeof rawRow.template_content_json === 'object' && !Array.isArray(rawRow.template_content_json)
+          ? rawRow.template_content_json
+          : {},
+        email_type: rawRow.email_type == null ? null : String(rawRow.email_type).trim().toLowerCase(),
+        warning_messages: Array.isArray(rawRow.warning_messages)
+          ? rawRow.warning_messages.map((x) => String(x == null ? '' : x)).filter((x) => x.length > 0)
+          : [],
+        attachment_instructions: rowAttachmentInstructions,
+        attachments: Array.isArray(rawRow.attachments)
+          ? rawRow.attachments
+          : rowAttachmentInstructions
+      };
+    });
+
+    return withCORS(env, req, ok(normalized));
   } catch (e) {
     const msg = String(e?.message || e || 'MAILSHOT_PREPARE_FAILED');
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 async function handleMailshotExport(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -89237,8 +89552,6 @@ async function handleDocumentTemplatesGet(env, req, templateId) {
 }
 
 
-
-
 async function handleMailshotFieldsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -89255,9 +89568,9 @@ async function handleMailshotFieldsList(env, req) {
       includeDisabledRaw === 'true' ||
       includeDisabledRaw === '1' ||
       includeDisabledRaw === 'yes' ||
-      includeDisabledRaw === 'y';
+      includeDisabledRaw === 'y' ||
+      includeDisabledRaw === 'on';
 
-    // Optional allowlist for entity_type (null means global listing)
     if (entityType != null) {
       const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
       if (!allowedEntity.has(entityType)) {
@@ -89265,14 +89578,89 @@ async function handleMailshotFieldsList(env, req) {
       }
     }
 
-    const rpcRes = await sbRpc(env, 'mailshot_fields_list', {
+    const rpcRes = await sbRpc(env, 'mailshot_fields_catalog_list', {
       p_entity_type: entityType,
       p_include_disabled: includeDisabled
     });
 
-    const items = Array.isArray(rpcRes) ? rpcRes : [];
+    const rows = Array.isArray(rpcRes) ? rpcRes : [];
 
-    return withCORS(env, req, ok({ ok: true, items }));
+    const items = rows.map((row) => {
+      const raw = (row && typeof row === 'object') ? row : {};
+
+      const fieldId = raw.field_id != null ? String(raw.field_id) : null;
+      const fieldKey = raw.field_key != null ? String(raw.field_key) : '';
+      const sourceFamily = raw.source_family != null ? String(raw.source_family) : '';
+      const labelDefault = raw.label_default != null ? String(raw.label_default) : '';
+      const labelOverride = raw.label_override == null ? null : String(raw.label_override);
+      const labelEffective =
+        raw.label_effective != null
+          ? String(raw.label_effective)
+          : (labelOverride != null && labelOverride !== '' ? labelOverride : labelDefault);
+
+      const enabledGlobal = raw.enabled_global != null ? !!raw.enabled_global : true;
+      const enabledLocal = raw.enabled_local == null ? null : !!raw.enabled_local;
+      const enabledEffective =
+        raw.enabled_effective != null
+          ? !!raw.enabled_effective
+          : (enabledLocal == null ? enabledGlobal : (enabledGlobal && enabledLocal));
+
+      const allowedEntityTypes = Array.isArray(raw.allowed_entity_types)
+        ? raw.allowed_entity_types.map((v) => String(v == null ? '' : v).trim().toLowerCase()).filter(Boolean)
+        : [];
+
+      const isResolvableForRoot =
+        raw.is_resolvable_for_root == null
+          ? null
+          : !!raw.is_resolvable_for_root;
+
+      const stale = !!raw.stale;
+      const resolverSpecJson =
+        raw.resolver_spec_json && typeof raw.resolver_spec_json === 'object' && !Array.isArray(raw.resolver_spec_json)
+          ? raw.resolver_spec_json
+          : {};
+
+      const itemEntityType =
+        raw.entity_type != null
+          ? String(raw.entity_type).trim().toLowerCase()
+          : entityType;
+
+      return {
+        field_id: fieldId,
+        id: fieldId,
+        field_key: fieldKey,
+        source_family: sourceFamily,
+        entity_type: itemEntityType,
+        label_default: labelDefault,
+        label_override: labelOverride,
+        label_effective: labelEffective,
+        enabled_global: enabledGlobal,
+        enabled_local: enabledLocal,
+        enabled_effective: enabledEffective,
+        allowed_entity_types: allowedEntityTypes,
+        is_resolvable_for_root: isResolvableForRoot,
+        stale,
+        resolver_spec_json: resolverSpecJson,
+
+        global_label: labelDefault,
+        override_label: labelOverride,
+        effective_label: labelEffective,
+        global_enabled: enabledGlobal,
+        override_enabled: enabledLocal,
+        effective_enabled: enabledEffective,
+        label: labelDefault,
+        enabled: enabledGlobal,
+
+        raw
+      };
+    });
+
+    return withCORS(env, req, ok({
+      ok: true,
+      entity_type: entityType,
+      include_disabled: includeDisabled,
+      items
+    }));
   } catch (e) {
     const msg = String(e?.message || e || 'Failed to list mailshot fields');
     return withCORS(env, req, serverError(msg));
@@ -89287,12 +89675,11 @@ async function handleMailshotFieldsUpsertGlobal(env, req) {
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
 
-  const fieldIdRaw = (body.field_id ?? body.fieldId);
+  const fieldIdRaw = (body.field_id ?? body.fieldId ?? body.id);
   const fieldKeyRaw = (body.field_key ?? body.fieldKey);
-  const labelDefaultRaw = (body.label_default ?? body.labelDefault);
-  const enabledGlobalRaw = (body.enabled_global ?? body.enabledGlobal);
-  const allowedEntityTypesRaw = (body.allowed_entity_types ?? body.allowedEntityTypes);
-  const resolverSpecRaw = (body.resolver_spec_json ?? body.resolverSpecJson ?? body.resolver_spec ?? body.resolverSpec);
+  const entityTypeRaw = (body.entity_type ?? body.entityType);
+  const labelDefaultRaw = (body.label_default ?? body.labelDefault ?? body.label ?? body.global_label ?? body.globalLabel);
+  const enabledGlobalRaw = (body.enabled_global ?? body.enabledGlobal ?? body.enabled ?? body.global_enabled ?? body.globalEnabled);
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -89300,48 +89687,31 @@ async function handleMailshotFieldsUpsertGlobal(env, req) {
   if (fieldId && !uuidRe.test(fieldId)) return withCORS(env, req, badRequest('invalid_field_id'));
 
   const fieldKey = (fieldKeyRaw == null) ? '' : String(fieldKeyRaw).trim();
-  const labelDefault = (labelDefaultRaw == null) ? '' : String(labelDefaultRaw).trim();
+  if (fieldKey && fieldKey.indexOf('.') === -1) {
+    return withCORS(env, req, badRequest('field_key must be namespaced'));
+  }
 
-  const parseBool = (v, dflt) => {
-    if (v === true) return true;
-    if (v === false) return false;
-    if (v == null) return dflt;
+  const entityType = (entityTypeRaw == null) ? '' : String(entityTypeRaw).trim().toLowerCase();
+  if (entityType) {
+    const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
+    if (!allowedEntity.has(entityType)) return withCORS(env, req, badRequest('invalid_entity_type'));
+  }
+
+  const labelDefault = (labelDefaultRaw == null) ? null : (String(labelDefaultRaw).trim() || null);
+
+  const parseOptionalBool = (v) => {
+    if (v == null) return { ok: true, value: null };
+    if (typeof v === 'boolean') return { ok: true, value: v };
     const s = String(v).trim().toLowerCase();
-    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
-    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
-    return dflt;
+    if (!s) return { ok: true, value: null };
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return { ok: true, value: true };
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return { ok: true, value: false };
+    return { ok: false, value: null };
   };
 
-  const enabledGlobal = parseBool(enabledGlobalRaw, true);
-
-  let allowedEntityTypes = allowedEntityTypesRaw;
-  if (allowedEntityTypes == null) allowedEntityTypes = [];
-  if (typeof allowedEntityTypes === 'string') {
-    try { allowedEntityTypes = JSON.parse(allowedEntityTypes); } catch { allowedEntityTypes = null; }
-  }
-  if (!Array.isArray(allowedEntityTypes)) {
-    return withCORS(env, req, badRequest('allowed_entity_types must be an array (or JSON string array)'));
-  }
-  allowedEntityTypes = allowedEntityTypes
-    .map((x) => (x == null ? '' : String(x).trim().toLowerCase()))
-    .filter(Boolean);
-
-  // Optional allowlist for allowed_entity_types
-  {
-    const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
-    for (const et of allowedEntityTypes) {
-      if (!allowedEntity.has(et)) return withCORS(env, req, badRequest('invalid_allowed_entity_type'));
-    }
-  }
-
-  let resolverSpec = resolverSpecRaw;
-  if (resolverSpec == null) resolverSpec = {};
-  if (typeof resolverSpec === 'string') {
-    try { resolverSpec = JSON.parse(resolverSpec); } catch { resolverSpec = null; }
-  }
-  if (!(resolverSpec && typeof resolverSpec === 'object' && !Array.isArray(resolverSpec))) {
-    return withCORS(env, req, badRequest('resolver_spec_json must be an object (or JSON string object)'));
-  }
+  const enabledParsed = parseOptionalBool(enabledGlobalRaw);
+  if (!enabledParsed.ok) return withCORS(env, req, badRequest('invalid_enabled_global'));
+  const enabledGlobal = enabledParsed.value;
 
   if (!fieldId && !fieldKey) {
     return withCORS(env, req, badRequest('field_id or field_key is required'));
@@ -89351,14 +89721,13 @@ async function handleMailshotFieldsUpsertGlobal(env, req) {
     let payload = await sbRpc(env, 'mailshot_fields_upsert_global', {
       p_field_id: fieldId || null,
       p_field_key: fieldKey || null,
-      p_label_default: labelDefault || null,
+      p_label_default: labelDefault,
       p_enabled_global: enabledGlobal,
-      p_allowed_entity_types: allowedEntityTypes,
-      p_resolver_spec_json: resolverSpec,
+      p_allowed_entity_types: null,
+      p_resolver_spec_json: null,
       p_actor_user_id: user.id
     });
 
-    // Normalize possible wrappers
     try {
       if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_fields_upsert_global')) {
@@ -89366,7 +89735,40 @@ async function handleMailshotFieldsUpsertGlobal(env, req) {
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+    const rawField =
+      (payload && payload.field && typeof payload.field === 'object') ? payload.field :
+      (payload && typeof payload === 'object') ? payload :
+      null;
+
+    if (!rawField || typeof rawField !== 'object') {
+      return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+    }
+
+    const item = {
+      field_id: rawField.id != null ? String(rawField.id) : (fieldId || null),
+      id: rawField.id != null ? String(rawField.id) : (fieldId || null),
+      field_key: rawField.field_key != null ? String(rawField.field_key) : fieldKey,
+      entity_type: entityType || null,
+      label_default: rawField.label_default != null ? String(rawField.label_default) : (labelDefault || ''),
+      label: rawField.label_default != null ? String(rawField.label_default) : (labelDefault || ''),
+      global_label: rawField.label_default != null ? String(rawField.label_default) : (labelDefault || ''),
+      enabled_global: rawField.enabled_global != null ? !!rawField.enabled_global : (enabledGlobal == null ? true : !!enabledGlobal),
+      enabled: rawField.enabled_global != null ? !!rawField.enabled_global : (enabledGlobal == null ? true : !!enabledGlobal),
+      global_enabled: rawField.enabled_global != null ? !!rawField.enabled_global : (enabledGlobal == null ? true : !!enabledGlobal),
+      allowed_entity_types: Array.isArray(rawField.allowed_entity_types) ? rawField.allowed_entity_types : [],
+      resolver_spec_json: rawField.resolver_spec_json && typeof rawField.resolver_spec_json === 'object' && !Array.isArray(rawField.resolver_spec_json)
+        ? rawField.resolver_spec_json
+        : {},
+      created_at_utc: rawField.created_at_utc != null ? String(rawField.created_at_utc) : null,
+      updated_at_utc: rawField.updated_at_utc != null ? String(rawField.updated_at_utc) : null,
+      raw: rawField
+    };
+
+    return withCORS(env, req, ok({
+      ok: true,
+      field: item,
+      item
+    }));
   } catch (e) {
     const msg = String(e?.message || e || 'Failed to upsert mailshot field');
     return withCORS(env, req, serverError(msg));
@@ -89384,14 +89786,26 @@ async function handleMailshotFieldsUpsertOverride(env, req) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-  const fieldIdRaw = (body.field_id ?? body.fieldId);
+  const fieldIdRaw = (body.field_id ?? body.fieldId ?? body.id);
+  const fieldKeyRaw = (body.field_key ?? body.fieldKey);
   const entityTypeRaw = (body.entity_type ?? body.entityType);
-  const labelOverrideRaw = (body.label_override ?? body.labelOverride);
-  const enabledLocalRaw = (body.enabled_local ?? body.enabledLocal);
+  const labelOverrideRaw = (body.label_override ?? body.labelOverride ?? body.override_label ?? body.overrideLabel);
+  const enabledLocalRaw = (body.enabled_local ?? body.enabledLocal ?? body.override_enabled ?? body.overrideEnabled ?? body.enabled_override ?? body.enabledOverride);
 
-  const fieldId = (fieldIdRaw == null) ? '' : String(fieldIdRaw).trim();
-  if (!fieldId) return withCORS(env, req, badRequest('field_id is required'));
-  if (!uuidRe.test(fieldId)) return withCORS(env, req, badRequest('invalid_field_id'));
+  let fieldId = (fieldIdRaw == null) ? '' : String(fieldIdRaw).trim();
+  const fieldKey = (fieldKeyRaw == null) ? '' : String(fieldKeyRaw).trim();
+
+  if (!fieldId && !fieldKey) {
+    return withCORS(env, req, badRequest('field_id or field_key is required'));
+  }
+
+  if (fieldId && !uuidRe.test(fieldId)) {
+    return withCORS(env, req, badRequest('invalid_field_id'));
+  }
+
+  if (fieldKey && fieldKey.indexOf('.') === -1) {
+    return withCORS(env, req, badRequest('field_key must be namespaced'));
+  }
 
   const entityType = (entityTypeRaw == null) ? '' : String(entityTypeRaw).trim().toLowerCase();
   if (!entityType) return withCORS(env, req, badRequest('entity_type is required'));
@@ -89401,18 +89815,46 @@ async function handleMailshotFieldsUpsertOverride(env, req) {
 
   const labelOverride = (labelOverrideRaw == null) ? null : (String(labelOverrideRaw).trim() || null);
 
-  const parseBool = (v, dflt) => {
-    if (v === true) return true;
-    if (v === false) return false;
-    if (v == null) return dflt;
+  const parseOptionalBool = (v) => {
+    if (v == null) return { ok: true, value: null };
+    if (typeof v === 'boolean') return { ok: true, value: v };
     const s = String(v).trim().toLowerCase();
-    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
-    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
-    return dflt;
+    if (!s) return { ok: true, value: null };
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return { ok: true, value: true };
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return { ok: true, value: false };
+    return { ok: false, value: null };
   };
 
-  // Override always needs an explicit boolean; default true if omitted.
-  const enabledLocal = parseBool(enabledLocalRaw, true);
+  const enabledParsed = parseOptionalBool(enabledLocalRaw);
+  if (!enabledParsed.ok) return withCORS(env, req, badRequest('invalid_enabled_local'));
+  const enabledLocal = enabledParsed.value;
+
+  let resolvedFieldKey = fieldKey;
+
+  if (!fieldId) {
+    const enc = encodeURIComponent;
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/mailshot_fields` +
+          `?field_key=eq.${enc(fieldKey)}` +
+          `&select=id,field_key` +
+          `&limit=1`
+      );
+
+      const row = (rows && rows[0]) || null;
+      if (!row || !row.id) {
+        return withCORS(env, req, badRequest('field_key not found'));
+      }
+
+      fieldId = String(row.id).trim();
+      resolvedFieldKey = row.field_key != null ? String(row.field_key) : fieldKey;
+    } catch (e) {
+      const msg = String(e?.message || e || 'Failed to resolve field_key');
+      return withCORS(env, req, serverError(msg));
+    }
+  }
 
   try {
     let payload = await sbRpc(env, 'mailshot_fields_upsert_override', {
@@ -89423,7 +89865,6 @@ async function handleMailshotFieldsUpsertOverride(env, req) {
       p_actor_user_id: user.id
     });
 
-    // Normalize possible wrappers
     try {
       if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_fields_upsert_override')) {
@@ -89431,13 +89872,132 @@ async function handleMailshotFieldsUpsertOverride(env, req) {
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+    const rawOverride =
+      (payload && payload.override && typeof payload.override === 'object') ? payload.override :
+      (payload && typeof payload === 'object') ? payload :
+      null;
+
+    if (!rawOverride || typeof rawOverride !== 'object') {
+      return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+    }
+
+    const item = {
+      id: rawOverride.id != null ? String(rawOverride.id) : null,
+      override_id: rawOverride.id != null ? String(rawOverride.id) : null,
+      field_id: rawOverride.field_id != null ? String(rawOverride.field_id) : fieldId,
+      field_key: resolvedFieldKey || null,
+      entity_type: rawOverride.entity_type != null ? String(rawOverride.entity_type).toLowerCase() : entityType,
+      label_override: rawOverride.label_override == null ? labelOverride : String(rawOverride.label_override),
+      override_label: rawOverride.label_override == null ? labelOverride : String(rawOverride.label_override),
+      enabled_local: rawOverride.enabled_local != null ? !!rawOverride.enabled_local : enabledLocal,
+      override_enabled: rawOverride.enabled_local != null ? !!rawOverride.enabled_local : enabledLocal,
+      raw: rawOverride
+    };
+
+    return withCORS(env, req, ok({
+      ok: true,
+      override: item,
+      item
+    }));
   } catch (e) {
     const msg = String(e?.message || e || 'Failed to upsert mailshot field override');
     return withCORS(env, req, serverError(msg));
   }
 }
 
+async function handleMailshotFieldsBulkApply(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
+
+  const fieldIdsRaw = (body.field_ids ?? body.fieldIds ?? body.ids);
+  const actionRaw = (body.action ?? body.bulk_action ?? body.bulkAction);
+  const entityTypeRaw = (body.entity_type ?? body.entityType);
+
+  let fieldIds = fieldIdsRaw;
+  if (fieldIds == null) fieldIds = [];
+  if (typeof fieldIds === 'string') {
+    try {
+      fieldIds = JSON.parse(fieldIds);
+    } catch {
+      return withCORS(env, req, badRequest('field_ids must be an array (or JSON string array)'));
+    }
+  }
+  if (!Array.isArray(fieldIds)) {
+    return withCORS(env, req, badRequest('field_ids must be an array'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const cleanFieldIds = [];
+  for (const value of fieldIds) {
+    const id = String(value == null ? '' : value).trim();
+    if (!id) continue;
+    if (!uuidRe.test(id)) return withCORS(env, req, badRequest('invalid_field_id'));
+    cleanFieldIds.push(id);
+  }
+
+  if (!cleanFieldIds.length) {
+    return withCORS(env, req, badRequest('field_ids is required'));
+  }
+
+  const action = String(actionRaw == null ? '' : actionRaw).trim().toUpperCase();
+  if (!action) return withCORS(env, req, badRequest('action is required'));
+
+  const allowedActions = new Set([
+    'GLOBAL_ENABLE',
+    'GLOBAL_DISABLE',
+    'ADD_VISIBLE_IN_ENTITY',
+    'REMOVE_VISIBLE_IN_ENTITY',
+    'OVERRIDE_ENABLE',
+    'OVERRIDE_DISABLE',
+    'CLEAR_OVERRIDE'
+  ]);
+  if (!allowedActions.has(action)) {
+    return withCORS(env, req, badRequest('invalid_action'));
+  }
+
+  const entityType = entityTypeRaw == null ? null : (String(entityTypeRaw).trim().toLowerCase() || null);
+  const allowedEntity = new Set(['client', 'candidate', 'contract', 'timesheet', 'invoice', 'umbrella']);
+  if (entityType != null && !allowedEntity.has(entityType)) {
+    return withCORS(env, req, badRequest('invalid_entity_type'));
+  }
+
+  const requiresEntity = new Set([
+    'ADD_VISIBLE_IN_ENTITY',
+    'REMOVE_VISIBLE_IN_ENTITY',
+    'OVERRIDE_ENABLE',
+    'OVERRIDE_DISABLE',
+    'CLEAR_OVERRIDE'
+  ]);
+  if (requiresEntity.has(action) && !entityType) {
+    return withCORS(env, req, badRequest('entity_type is required'));
+  }
+
+  try {
+    let payload = await sbRpc(env, 'mailshot_fields_bulk_apply', {
+      p_field_ids: cleanFieldIds,
+      p_action: action,
+      p_entity_type: entityType,
+      p_actor_user_id: user.id
+    });
+
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_fields_bulk_apply')) {
+        payload = payload.mailshot_fields_bulk_apply;
+      }
+    } catch {}
+
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to apply bulk mailshot field action');
+    return withCORS(env, req, serverError(msg));
+  }
+}
 
 async function handleMailshotFieldsSeedFromSchema(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -89448,21 +90008,28 @@ async function handleMailshotFieldsSeedFromSchema(env, req) {
       p_actor_user_id: user.id
     });
 
-    // Normalize possible wrappers
     try {
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') {
+        payload = payload[0];
+      }
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_fields_seed_from_schema')) {
         payload = payload.mailshot_fields_seed_from_schema;
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : { ok: true, result: payload }));
+    const normalized = (payload && typeof payload === 'object' && !Array.isArray(payload))
+      ? { ...payload }
+      : { ok: true, result: payload };
+
+    normalized.operation = 'refresh_catalogue_from_approved_views';
+    normalized.message = 'Catalogue refreshed from approved views';
+
+    return withCORS(env, req, ok(normalized));
   } catch (e) {
-    const msg = String(e?.message || e || 'Failed to seed mailshot fields');
+    const msg = String(e?.message || e || 'Failed to refresh catalogue from approved views');
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 
 
@@ -93654,6 +94221,9 @@ if (req.method === 'POST' && p === '/api/mailshot-fields/override') {
 }
 if (req.method === 'POST' && p === '/api/mailshot-fields/seed') {
   return handleMailshotFieldsSeedFromSchema(env, req);
+}
+if (req.method === 'POST' && p === '/api/mailshot-fields/bulk') {
+  return handleMailshotFieldsBulkApply(env, req);
 }
 
 // ROUTER ADDITIONS — insert inside the existing fetch(req, env) router,
