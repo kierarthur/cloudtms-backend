@@ -11461,7 +11461,214 @@ end;
 $function$;
 
 
+CREATE OR REPLACE FUNCTION public.pay_paye_guardrails(
+  p_pay_date date,
+  p_ignore_pay_batch_id uuid DEFAULT NULL::uuid,
+  p_actor_user_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_pay_date date := p_pay_date;
+  v_week_start date;
+  v_week_end date;
 
+  v_existing_draft_batch_id uuid := null;
+  v_existing_draft_status text := null;
+  v_existing_draft_pay_date date := null;
+  v_existing_draft_authoritative_payment_date date := null;
+  v_existing_draft_created_at_utc timestamptz := null;
+
+  v_has_existing_paye_draft boolean := false;
+  v_has_same_week_non_draft_paye_batch boolean := false;
+  v_override_required boolean := false;
+  v_create_paye_blocked boolean := false;
+
+  v_same_week_batches jsonb := '[]'::jsonb;
+
+  v_blocking_copy jsonb := '{}'::jsonb;
+  v_override_copy jsonb := '{}'::jsonb;
+  v_active_copy jsonb := '{}'::jsonb;
+
+  v_result jsonb := '{}'::jsonb;
+begin
+  if v_pay_date is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYE_GUARDRAILS',
+      'code', 'PAY_DATE_REQUIRED',
+      'message', 'pay_paye_guardrails: pay_date is required'
+    )::text;
+  end if;
+
+  v_week_start := date_trunc('week', v_pay_date::timestamp)::date;
+  v_week_end := v_week_start + 6;
+
+  with paye_batches as (
+    select distinct
+      pb.id,
+      upper(coalesce(pb.status, '')) as status_upper,
+      pb.status,
+      pb.pay_date,
+      pb.authoritative_payment_date,
+      pb.created_at_utc,
+      pb.batch_kind_fixed
+    from public.pay_batches pb
+    join public.pay_batch_candidates pbc
+      on pbc.pay_batch_id = pb.id
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    where upper(coalesce(pbi.pay_channel, '')) = 'PAYE'
+      and upper(coalesce(pb.batch_kind_fixed, '')) <> 'LOANS'
+      and (p_ignore_pay_batch_id is null or pb.id <> p_ignore_pay_batch_id)
+  ),
+  existing_draft as (
+    select
+      b.id,
+      b.status,
+      b.pay_date,
+      b.authoritative_payment_date,
+      b.created_at_utc
+    from paye_batches b
+    where b.status_upper in ('DRAFT', 'DRAFT_CREATED')
+    order by b.created_at_utc asc, b.id asc
+    limit 1
+  ),
+  same_week_non_draft as (
+    select
+      b.id,
+      b.status,
+      b.pay_date,
+      b.authoritative_payment_date,
+      b.created_at_utc
+    from paye_batches b
+    where b.status_upper not in ('DRAFT', 'DRAFT_CREATED', 'CANCELLED')
+      and coalesce(b.authoritative_payment_date, b.pay_date) between v_week_start and v_week_end
+    order by coalesce(b.authoritative_payment_date, b.pay_date) asc, b.created_at_utc asc, b.id asc
+  )
+  select
+    ed.id,
+    ed.status,
+    ed.pay_date,
+    ed.authoritative_payment_date,
+    ed.created_at_utc,
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'pay_batch_id', sw.id::text,
+            'status', sw.status,
+            'pay_date', case when sw.pay_date is null then null else sw.pay_date::text end,
+            'authoritative_payment_date', case when sw.authoritative_payment_date is null then null else sw.authoritative_payment_date::text end,
+            'created_at_utc', sw.created_at_utc
+          )
+          order by coalesce(sw.authoritative_payment_date, sw.pay_date), sw.created_at_utc, sw.id
+        )
+        from same_week_non_draft sw
+      ),
+      '[]'::jsonb
+    )
+  into
+    v_existing_draft_batch_id,
+    v_existing_draft_status,
+    v_existing_draft_pay_date,
+    v_existing_draft_authoritative_payment_date,
+    v_existing_draft_created_at_utc,
+    v_same_week_batches
+  from existing_draft ed
+  right join (select 1 as keep_row) k
+    on true;
+
+  v_has_existing_paye_draft := v_existing_draft_batch_id is not null;
+  v_has_same_week_non_draft_paye_batch := jsonb_array_length(coalesce(v_same_week_batches, '[]'::jsonb)) > 0;
+
+  v_create_paye_blocked := v_has_existing_paye_draft;
+  v_override_required := (not v_has_existing_paye_draft) and v_has_same_week_non_draft_paye_batch;
+
+  v_blocking_copy := jsonb_build_object(
+    'severity', 'BLOCK',
+    'code', 'PAYE_DRAFT_ALREADY_EXISTS',
+    'title', 'Existing PAYE draft already exists',
+    'message', 'A PAYE draft batch already exists. Cancel or delete the existing PAYE draft before creating another PAYE draft.',
+    'action_hint', 'CANCEL_EXISTING_PAYE_DRAFT_FIRST',
+    'frontend_can_continue', false
+  );
+
+  v_override_copy := jsonb_build_object(
+    'severity', 'WARNING',
+    'code', 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
+    'title', 'A PAYE batch already exists for this payroll week',
+    'message', 'A non-draft PAYE batch already exists in this Monday-based payroll week. Creating another PAYE batch for the same week is override-only. Replacement or cancellation is usually the correct path. Continue only after password reauthentication, 2FA, and explicit confirmation.',
+    'action_hint', 'REAUTH_THEN_2FA_THEN_EXPLICIT_CONTINUE',
+    'frontend_can_continue', true
+  );
+
+  if v_create_paye_blocked then
+    v_active_copy := v_blocking_copy;
+  elsif v_override_required then
+    v_active_copy := v_override_copy;
+  else
+    v_active_copy := jsonb_build_object(
+      'severity', 'INFO',
+      'code', 'PAYE_GUARDRAILS_CLEAR',
+      'title', 'PAYE guardrails clear',
+      'message', 'No existing PAYE draft was found and no same-week PAYE override is required.',
+      'action_hint', 'NONE',
+      'frontend_can_continue', true
+    );
+  end if;
+
+  v_result := jsonb_build_object(
+    'ok', true,
+    'pay_date', v_pay_date::text,
+    'pay_week_start', v_week_start::text,
+    'pay_week_end', v_week_end::text,
+    'has_existing_paye_draft', v_has_existing_paye_draft,
+    'existing_paye_draft', case
+      when v_existing_draft_batch_id is null then null
+      else jsonb_build_object(
+        'pay_batch_id', v_existing_draft_batch_id::text,
+        'status', v_existing_draft_status,
+        'pay_date', case when v_existing_draft_pay_date is null then null else v_existing_draft_pay_date::text end,
+        'authoritative_payment_date', case when v_existing_draft_authoritative_payment_date is null then null else v_existing_draft_authoritative_payment_date::text end,
+        'created_at_utc', v_existing_draft_created_at_utc
+      )
+    end,
+    'has_same_week_non_draft_paye_batch', v_has_same_week_non_draft_paye_batch,
+    'same_week_non_draft_paye_batches', coalesce(v_same_week_batches, '[]'::jsonb),
+    'override_required', v_override_required,
+    'create_paye_blocked', v_create_paye_blocked,
+    'ui', jsonb_build_object(
+      'active', v_active_copy,
+      'existing_draft_block', v_blocking_copy,
+      'same_week_override', v_override_copy
+    )
+  );
+
+  begin
+    if p_actor_user_id is not null then
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_PAYE_GUARDRAILS',
+        v_result,
+        'pay_batches',
+        'pay_date:' || v_pay_date::text,
+        null,
+        null,
+        null,
+        null,
+        null
+      );
+    end if;
+  exception when others then
+    null;
+  end;
+
+  return v_result;
+end;
+$function$;
 
 
 
