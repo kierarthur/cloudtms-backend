@@ -1033,29 +1033,77 @@ async function loadSettingsDefaults(env) {
 }
 
 async function postToPowerAutomate(env, payload, channel = 'finance') {
-  const ch = (String(channel || 'finance').trim().toLowerCase() === 'system') ? 'system' : 'finance';
+  const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
+  const parseSettingsObject = (raw) => {
+    if (isPlainObject(raw)) return raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        return isPlainObject(parsed) ? parsed : {};
+      } catch {}
+    }
+    return {};
+  };
 
-  // Primary source (cached via loadSettingsDefaults):
-  // - finance: settings_defaults.finance_email_settings.webhook_url
-  // - system:  settings_defaults.system_emails.webhook_url
+  let ch = 'finance';
+  let senderUserId = null;
+  let explicitCfg = null;
+
+  if (isPlainObject(channel)) {
+    const rawKind = String(channel.kind || channel.channel || channel.route || 'finance').trim().toLowerCase();
+    ch = (rawKind === 'system') ? 'system' : (rawKind === 'mailshot' ? 'mailshot' : 'finance');
+    senderUserId = channel.user_id ?? channel.userId ?? channel.created_by ?? channel.createdBy ?? null;
+    explicitCfg = parseSettingsObject(channel.email_settings ?? channel.emailSettings ?? null);
+  } else {
+    const rawChannel = String(channel || 'finance').trim().toLowerCase();
+    ch = (rawChannel === 'system') ? 'system' : (rawChannel === 'mailshot' ? 'mailshot' : 'finance');
+  }
+
   let url = null;
   let extraHeaders = null;
 
-  try {
-    const s = await loadSettingsDefaults(env);
+  if (ch === 'mailshot') {
+    let cfg = explicitCfg && Object.keys(explicitCfg).length ? explicitCfg : null;
 
-    const cfg = (ch === 'system') ? s?.system_emails : s?.finance_email_settings;
+    if (!cfg) {
+      const senderUserIdText = (senderUserId == null) ? '' : String(senderUserId).trim();
+      if (senderUserIdText) {
+        try {
+          const { rows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/${AUTH.USERS_TABLE}` +
+              `?id=eq.${encodeURIComponent(senderUserIdText)}` +
+              `&select=id,email_settings` +
+              `&limit=1`,
+            false
+          );
+
+          const userRow = Array.isArray(rows) && rows[0] ? rows[0] : null;
+          cfg = parseSettingsObject(userRow && userRow.email_settings);
+        } catch {}
+      }
+    }
+
     if (cfg && typeof cfg === 'object') {
       const u = (typeof cfg.webhook_url === 'string') ? cfg.webhook_url.trim() : '';
       if (u) url = u;
-
-      // optional: allow a headers object
-      if (cfg.headers && typeof cfg.headers === 'object') extraHeaders = cfg.headers;
+      if (cfg.headers && typeof cfg.headers === 'object' && !Array.isArray(cfg.headers)) extraHeaders = cfg.headers;
     }
-  } catch {}
+  } else {
+    try {
+      const s = await loadSettingsDefaults(env);
 
-  // Fallback: env
-  if (!url) {
+      const cfg = (ch === 'system') ? s?.system_emails : s?.finance_email_settings;
+      if (cfg && typeof cfg === 'object') {
+        const u = (typeof cfg.webhook_url === 'string') ? cfg.webhook_url.trim() : '';
+        if (u) url = u;
+
+        if (cfg.headers && typeof cfg.headers === 'object') extraHeaders = cfg.headers;
+      }
+    } catch {}
+  }
+
+  if (!url && ch !== 'mailshot') {
     if (ch === 'system' && isNonEmptyString(env.POWER_AUTOMATE_SYSTEM_EMAIL_WEBHOOK_URL)) {
       url = env.POWER_AUTOMATE_SYSTEM_EMAIL_WEBHOOK_URL;
     } else {
@@ -1067,9 +1115,18 @@ async function postToPowerAutomate(env, payload, channel = 'finance') {
     const which =
       (ch === 'system')
         ? 'settings_defaults.system_emails.webhook_url or env.POWER_AUTOMATE_SYSTEM_EMAIL_WEBHOOK_URL'
-        : 'settings_defaults.finance_email_settings.webhook_url or env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL';
+        : (ch === 'mailshot')
+            ? 'tms_users.email_settings.webhook_url for the mailshot created_by user'
+            : 'settings_defaults.finance_email_settings.webhook_url or env.POWER_AUTOMATE_EMAIL_WEBHOOK_URL';
 
-    return { ok: false, status: 0, body: `Power Automate webhook URL not configured (${which})` };
+    return {
+      ok: false,
+      status: 0,
+      body: `Power Automate webhook URL not configured (${which})`,
+      provider_message_id: undefined,
+      resolved_channel: ch,
+      sender_user_id: senderUserId == null ? null : String(senderUserId).trim()
+    };
   }
 
   const headers = { 'Content-Type': 'application/json' };
@@ -1079,7 +1136,6 @@ async function postToPowerAutomate(env, payload, channel = 'finance') {
     }
   }
 
-  // ✅ Batch Flow expects { items: [...] }. For single payloads, wrap into one-item batch.
   const outgoing = (payload && typeof payload === 'object' && Array.isArray(payload.items))
     ? payload
     : { items: [payload] };
@@ -1107,8 +1163,16 @@ async function postToPowerAutomate(env, payload, channel = 'finance') {
       undefined;
   } catch {}
 
-  return { ok, status: res.status, body, provider_message_id };
+  return {
+    ok,
+    status: res.status,
+    body,
+    provider_message_id,
+    resolved_channel: ch,
+    sender_user_id: senderUserId == null ? null : String(senderUserId).trim()
+  };
 }
+
 
 async function handleAuthLogin(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
@@ -51347,8 +51411,18 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
     body_text: outboxRow.body_text,
     // IMPORTANT: outboxRow.attachments may be jsonb OR a JSON-string-in-text
     attachments: outboxRow.attachments,
-    // Only include metadata if your Flow schema allows it (Apps Script only adds if provided).
-    // metadata: ...
+    metadata: {
+      outbox_id: outboxRow.id || null,
+      type: outboxRow.type || null,
+      reference: outboxRow.reference || null,
+      sender_user_id: outboxRow.created_by || null,
+      recipient_kind: outboxRow.recipient_kind || null,
+      recipient_id: outboxRow.recipient_id || null,
+      context_kind: outboxRow.context_kind || null,
+      context_id: outboxRow.context_id || null,
+      mailshot_run_id: outboxRow.mailshot_run_id || null,
+      document_template_id: outboxRow.document_template_id || null
+    }
   });
 
   const err = validateEmailPayload(base);
@@ -51461,9 +51535,17 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
     attachmentsV2: attachmentsV2Clean,
     // ✅ meta is echoed back by the batch Flow so we can map results to outbox rows
     meta: {
-      outbox_id: outboxRow.id,
+      outbox_id: outboxRow.id || null,
       type: outboxRow.type || null,
-      reference: outboxRow.reference || null
+      reference: outboxRow.reference || null,
+      sender_user_id: outboxRow.created_by || null,
+      recipient_kind: outboxRow.recipient_kind || null,
+      recipient_id: outboxRow.recipient_id || null,
+      context_kind: outboxRow.context_kind || null,
+      context_id: outboxRow.context_id || null,
+      mailshot_run_id: outboxRow.mailshot_run_id || null,
+      document_template_id: outboxRow.document_template_id || null,
+      ...(base.metadata && typeof base.metadata === 'object' ? base.metadata : {})
     }
   };
 
@@ -51475,10 +51557,9 @@ async function buildEmailPayloadFromOutboxRow(env, outboxRow) {
   // ✅ Importance: default Normal if not supplied
   payload.importance = String(base.importance || 'Normal');
 
-  if (base.metadata && typeof base.metadata === 'object') payload.metadata = base.metadata;
-
   return payload;
 }
+
 async function limitOrLinkAttachments(env, { payload }) {
   const limitBytes = Number(env.EMAIL_MAX_PAYLOAD_BYTES) || EMAIL_MAX_PAYLOAD_BYTES;
   let currentBytes = estimatePayloadSizeBytes(payload);
@@ -51945,26 +52026,186 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   }
 
   const BATCH_MAX = 25;
-  const jobs = [];
-  const jobRowIds = [];
+  const routeBuckets = new Map();
+  let queuedJobCount = 0;
+
+  const addJobToBucket = (bucketKey, bucketChannel, rowId, payload) => {
+    if (!routeBuckets.has(bucketKey)) {
+      routeBuckets.set(bucketKey, {
+        channel: bucketChannel,
+        jobs: [],
+        rowIds: []
+      });
+    }
+    const bucket = routeBuckets.get(bucketKey);
+    bucket.jobs.push(payload);
+    bucket.rowIds.push(rowId);
+  };
+
+  const patchRowFailed = async (rowId, msg) => {
+    try {
+      await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+        method: 'PATCH',
+        headers: sbHeaders(env),
+        body: JSON.stringify({
+          status: 'FAILED',
+          failed_at: nowIsoUtc(),
+          last_error: String(msg || 'FAILED'),
+          provider_status: 'FAILED'
+        }),
+      });
+    } catch {}
+  };
+
+  const reconcileBatchResult = async (res, rowIds) => {
+    if (!res.ok) {
+      const errMsg = String(res.body || `HTTP ${res.status}`);
+      for (const rowId of rowIds) {
+        await patchRowFailed(rowId, errMsg);
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+      }
+      return;
+    }
+
+    let results = null;
+    try {
+      const j = typeof res.body === 'string' ? JSON.parse(res.body) : res.body;
+      results = Array.isArray(j?.results) ? j.results : null;
+    } catch {
+      results = null;
+    }
+
+    if (!Array.isArray(results) || results.length === 0) {
+      const errMsg = 'Provider returned no per-item results (cannot reconcile)';
+      for (const rowId of rowIds) {
+        await patchRowFailed(rowId, errMsg);
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+      }
+      return;
+    }
+
+    const byOutboxId = new Map();
+    for (const r of results) {
+      const oid = r?.meta?.outbox_id || r?.meta?.outboxId || r?.meta?.id || null;
+      if (oid) byOutboxId.set(String(oid), r);
+    }
+
+    for (let i = 0; i < rowIds.length; i++) {
+      const rowId = rowIds[i];
+      const r = byOutboxId.get(String(rowId)) || results[i] || null;
+
+      const status = String(r?.status || '').toUpperCase();
+      const isSuccess = status === 'SUCCESS';
+      const isFailed = status === 'FAILED' || status === 'FAIL' || status === 'ERROR';
+
+      if (isSuccess) {
+        const providerMessageId = r?.provider_message_id || r?.providerMessageId || res.provider_message_id || null;
+
+        const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+          method: 'PATCH',
+          headers: sbHeaders(env),
+          body: JSON.stringify({
+            status: 'SENT',
+            sent_at: nowIsoUtc(),
+            provider_message_id: providerMessageId || null,
+            provider_status: 'ACCEPTED',
+            delivered_at: null,
+            read_at: null,
+            last_error: null,
+            failed_at: null,
+          }),
+        });
+
+        if (!upd.ok) {
+          const errTxt = await upd.text();
+          throw new Error(`Sent but failed to update status: ${errTxt}`);
+        }
+
+        sent += 1;
+        await recordEmailAudit(env, null, 'EMAIL_SENT', {
+          outbox_id: rowId,
+          provider_message_id: providerMessageId,
+          type: r?.meta?.type || 'BATCH',
+        });
+        continue;
+      }
+
+      if (isFailed) {
+        const errMsg = String(r?.error || r?.body || r?.message || 'Provider failed');
+        const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
+          method: 'PATCH',
+          headers: sbHeaders(env),
+          body: JSON.stringify({
+            status: 'FAILED',
+            failed_at: nowIsoUtc(),
+            last_error: errMsg,
+            provider_status: 'FAILED'
+          }),
+        });
+
+        if (!upd.ok) {
+          const errTxt = await upd.text();
+          throw new Error(`Provider fail and update fail: ${errTxt}`);
+        }
+
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: r?.meta?.type || 'BATCH',
+        });
+        continue;
+      }
+
+      {
+        const errMsg = String(r?.error || r?.body || r?.message || 'Unknown provider status');
+        await patchRowFailed(rowId, errMsg);
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+      }
+    }
+  };
 
   for (const row of picked) {
-    if (jobs.length >= BATCH_MAX) break;
+    if (queuedJobCount >= BATCH_MAX) break;
 
     try {
       const payload = await buildEmailPayloadFromOutboxRow(env, row);
-      jobs.push(payload);
-      jobRowIds.push(row.id);
+      const rowType = String(row && row.type ? row.type : '').trim().toUpperCase();
+      const senderUserId = (row && row.created_by != null) ? String(row.created_by).trim() : '';
+
+      if (rowType === 'MAILSHOT_EMAIL') {
+        if (!senderUserId) {
+          const msg = 'MAILSHOT_SENDER_USER_MISSING';
+          await patchRowFailed(row.id, msg);
+          failed += 1;
+          errors.push({ id: row.id, error: msg });
+          await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
+          continue;
+        }
+
+        addJobToBucket(`mailshot:${senderUserId}`, { kind: 'mailshot', user_id: senderUserId }, row.id, payload);
+      } else {
+        addJobToBucket('finance', 'finance', row.id, payload);
+      }
+
+      queuedJobCount += 1;
     } catch (e) {
       const msg = String(e?.message || e);
 
-      if (msg.startsWith("PDF_NOT_READY:")) {
+      if (msg.startsWith('PDF_NOT_READY:')) {
         try {
           await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-            method: "PATCH",
+            method: 'PATCH',
             headers: sbHeaders(env),
             body: JSON.stringify({
-              status: "QUEUED",
+              status: 'QUEUED',
               last_error: msg,
               next_attempt_at_utc: nowPlusMinutesIso(10),
             }),
@@ -51972,7 +52213,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         } catch {}
         deferred += 1;
         errors.push({ id: row.id, error: msg, deferred: true });
-        await recordEmailAudit(env, null, "EMAIL_DEFERRED", {
+        await recordEmailAudit(env, null, 'EMAIL_DEFERRED', {
           outbox_id: row.id,
           reason: msg,
           type: row.type,
@@ -51980,175 +52221,21 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         continue;
       }
 
-      try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-          method: "PATCH",
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: "FAILED",
-            failed_at: nowIso(),
-            last_error: msg,
-            provider_status: "FAILED"
-          }),
-        });
-      } catch {}
+      await patchRowFailed(row.id, msg);
       failed += 1;
       errors.push({ id: row.id, error: msg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: row.id, error: msg, type: row.type });
+      await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
     }
   }
 
-  if (jobs.length === 0) {
+  if (routeBuckets.size === 0) {
     return { picked: picked.length, sent, failed, deferred, errors };
   }
 
-  const batchPayload = { items: jobs };
-  const res = await postToPowerAutomate(env, batchPayload);
-
-  if (!res.ok) {
-    const errMsg = String(res.body || `HTTP ${res.status}`);
-    for (const rowId of jobRowIds) {
-      try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: "PATCH",
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: "FAILED",
-            failed_at: nowIso(),
-            last_error: errMsg,
-            provider_status: "FAILED"
-          }),
-        });
-      } catch {}
-      failed += 1;
-      errors.push({ id: rowId, error: errMsg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
-    }
-    return { picked: picked.length, sent, failed, deferred, errors };
-  }
-
-  let results = null;
-  try {
-    const j = typeof res.body === "string" ? JSON.parse(res.body) : res.body;
-    results = Array.isArray(j?.results) ? j.results : null;
-  } catch {
-    results = null;
-  }
-
-  if (!Array.isArray(results) || results.length === 0) {
-    const errMsg = "Provider returned no per-item results (cannot reconcile)";
-    for (const rowId of jobRowIds) {
-      try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: "PATCH",
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: "FAILED",
-            failed_at: nowIso(),
-            last_error: errMsg,
-            provider_status: "FAILED"
-          }),
-        });
-      } catch {}
-      failed += 1;
-      errors.push({ id: rowId, error: errMsg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
-    }
-    return { picked: picked.length, sent, failed, deferred, errors };
-  }
-
-  const byOutboxId = new Map();
-  for (const r of results) {
-    const oid = r?.meta?.outbox_id || r?.meta?.outboxId || r?.meta?.id || null;
-    if (oid) byOutboxId.set(String(oid), r);
-  }
-
-  for (let i = 0; i < jobRowIds.length; i++) {
-    const rowId = jobRowIds[i];
-    const r = byOutboxId.get(String(rowId)) || results[i] || null;
-
-    const status = String(r?.status || "").toUpperCase();
-    const isSuccess = status === "SUCCESS";
-    const isFailed = status === "FAILED" || status === "FAIL" || status === "ERROR";
-
-    if (isSuccess) {
-      const providerMessageId = r?.provider_message_id || r?.providerMessageId || res.provider_message_id || null;
-
-      const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-        method: "PATCH",
-        headers: sbHeaders(env),
-        body: JSON.stringify({
-          status: "SENT",
-          sent_at: nowIso(),
-          provider_message_id: providerMessageId || null,
-          provider_status: "ACCEPTED",
-          delivered_at: null,
-          read_at: null,
-          last_error: null,
-          failed_at: null,
-        }),
-      });
-
-      if (!upd.ok) {
-        const errTxt = await upd.text();
-        throw new Error(`Sent but failed to update status: ${errTxt}`);
-      }
-
-      sent += 1;
-      await recordEmailAudit(env, null, "EMAIL_SENT", {
-        outbox_id: rowId,
-        provider_message_id: providerMessageId,
-        type: r?.meta?.type || "BATCH",
-      });
-      continue;
-    }
-
-    if (isFailed) {
-      const errMsg = String(r?.error || r?.body || r?.message || "Provider failed");
-      const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-        method: "PATCH",
-        headers: sbHeaders(env),
-        body: JSON.stringify({
-          status: "FAILED",
-          failed_at: nowIso(),
-          last_error: errMsg,
-          provider_status: "FAILED"
-        }),
-      });
-
-      if (!upd.ok) {
-        const errTxt = await upd.text();
-        throw new Error(`Provider fail and update fail: ${errTxt}`);
-      }
-
-      failed += 1;
-      errors.push({ id: rowId, error: errMsg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", {
-        outbox_id: rowId,
-        error: errMsg,
-        type: r?.meta?.type || "BATCH",
-      });
-      continue;
-    }
-
-    {
-      const errMsg = String(r?.error || r?.body || r?.message || "Unknown provider status");
-      try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: "PATCH",
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: "FAILED",
-            failed_at: nowIso(),
-            last_error: errMsg,
-            provider_status: "FAILED"
-          }),
-        });
-      } catch {}
-      failed += 1;
-      errors.push({ id: rowId, error: errMsg });
-      await recordEmailAudit(env, null, "EMAIL_FAILED", { outbox_id: rowId, error: errMsg, type: "BATCH" });
-    }
+  for (const bucket of routeBuckets.values()) {
+    const batchPayload = { items: bucket.jobs };
+    const res = await postToPowerAutomate(env, batchPayload, bucket.channel);
+    await reconcileBatchResult(res, bucket.rowIds);
   }
 
   return { picked: picked.length, sent, failed, deferred, errors };
