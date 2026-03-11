@@ -75,6 +75,222 @@ begin
 end;
 $$;
 
+create or replace function public.mailshot_fields_upsert_global(
+  p_field_id uuid,
+  p_field_key text,
+  p_label_default text,
+  p_enabled_global boolean,
+  p_allowed_entity_types text[],
+  p_resolver_spec_json jsonb,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  v_now timestamptz := now();
+  v_field public.mailshot_fields%rowtype;
+
+  v_key text := nullif(btrim(coalesce(p_field_key, '')), '');
+  v_label_input text := nullif(btrim(coalesce(p_label_default, '')), '');
+  v_label_final text;
+  v_enabled_final boolean;
+
+  v_prefix text;
+  v_suffix text;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if p_field_id is null and v_key is null then
+    raise exception 'field_id or field_key required';
+  end if;
+
+  if v_key is not null and position('.' in v_key) = 0 then
+    raise exception 'field_key must be namespaced like candidate.email (got: %)', v_key;
+  end if;
+
+  if p_field_id is not null then
+    select mf.*
+      into v_field
+    from public.mailshot_fields as mf
+    where mf.id = p_field_id;
+
+    if not found then
+      raise exception 'mailshot_field not found: %', p_field_id;
+    end if;
+
+    if v_key is not null and v_field.field_key <> v_key then
+      raise exception 'field_id and field_key refer to different mailshot_fields';
+    end if;
+  else
+    select mf.*
+      into v_field
+    from public.mailshot_fields as mf
+    where mf.field_key = v_key;
+
+    if not found then
+      raise exception 'mailshot_field not found for field_key: %', v_key;
+    end if;
+  end if;
+
+  if v_label_input is null then
+    v_label_final := v_field.label_default;
+  else
+    v_label_final := v_label_input;
+  end if;
+
+  if v_label_final is null or v_label_final = '' then
+    v_prefix := split_part(v_field.field_key, '.', 1);
+    v_suffix := split_part(v_field.field_key, '.', 2);
+    v_label_final :=
+      initcap(replace(v_prefix, '_', ' ')) || ' — ' ||
+      initcap(replace(v_suffix, '_', ' '));
+  end if;
+
+  v_enabled_final := coalesce(p_enabled_global, v_field.enabled_global);
+
+  update public.mailshot_fields as mf
+  set
+    label_default = v_label_final,
+    enabled_global = v_enabled_final,
+    updated_at_utc = v_now
+  where mf.id = v_field.id
+  returning mf.* into v_field;
+
+  return jsonb_build_object(
+    'ok', true,
+    'field', jsonb_build_object(
+      'id', v_field.id::text,
+      'field_key', v_field.field_key,
+      'label_default', v_field.label_default,
+      'enabled_global', v_field.enabled_global,
+      'allowed_entity_types', to_jsonb(v_field.allowed_entity_types),
+      'resolver_spec_json', v_field.resolver_spec_json,
+      'created_at_utc', v_field.created_at_utc::text,
+      'updated_at_utc', v_field.updated_at_utc::text
+    )
+  );
+end;
+$function$;
+create or replace function public.mailshot_fields_upsert_override(
+  p_field_id uuid,
+  p_entity_type text,
+  p_label_override text,
+  p_enabled_local boolean,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  v_entity text := nullif(lower(btrim(coalesce(p_entity_type, ''))), '');
+  v_label text := nullif(btrim(coalesce(p_label_override, '')), '');
+
+  v_field public.mailshot_fields%rowtype;
+  v_row public.mailshot_field_overrides%rowtype;
+  v_source_family text;
+  v_enabled_final boolean;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if p_field_id is null then
+    raise exception 'field_id required';
+  end if;
+
+  if v_entity is null then
+    raise exception 'entity_type required';
+  end if;
+
+  perform 1
+  from public.v_mailshot_resolution_graph as rg
+  where rg.root_entity_type = v_entity
+  limit 1;
+
+  if not found then
+    raise exception 'invalid entity_type: %', v_entity;
+  end if;
+
+  select mf.*
+    into v_field
+  from public.mailshot_fields as mf
+  where mf.id = p_field_id;
+
+  if not found then
+    raise exception 'mailshot_field not found: %', p_field_id;
+  end if;
+
+  v_source_family := coalesce(
+    nullif(v_field.resolver_spec_json ->> 'source_family', ''),
+    split_part(v_field.field_key, '.', 1)
+  );
+
+  perform 1
+  from public.v_mailshot_resolution_graph as rg
+  where rg.root_entity_type = v_entity
+    and rg.source_family = v_source_family
+  limit 1;
+
+  if not found then
+    raise exception 'field source family % is not resolvable for entity_type %', v_source_family, v_entity;
+  end if;
+
+  if not (v_entity = any(coalesce(v_field.allowed_entity_types, '{}'::text[]))) then
+    raise exception 'field % is not currently visible for entity_type %', v_field.field_key, v_entity;
+  end if;
+
+  select mfo.*
+    into v_row
+  from public.mailshot_field_overrides as mfo
+  where mfo.field_id = p_field_id
+    and mfo.entity_type = v_entity;
+
+  if found then
+    v_enabled_final := coalesce(p_enabled_local, v_row.enabled_local);
+
+    update public.mailshot_field_overrides as mfo
+    set
+      label_override = v_label,
+      enabled_local = v_enabled_final
+    where mfo.id = v_row.id
+    returning mfo.* into v_row;
+  else
+    v_enabled_final := coalesce(p_enabled_local, true);
+
+    insert into public.mailshot_field_overrides(
+      field_id,
+      entity_type,
+      label_override,
+      enabled_local
+    )
+    values (
+      p_field_id,
+      v_entity,
+      v_label,
+      v_enabled_final
+    )
+    returning * into v_row;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'override', jsonb_build_object(
+      'id', v_row.id::text,
+      'field_id', v_row.field_id::text,
+      'entity_type', v_row.entity_type,
+      'label_override', v_row.label_override,
+      'enabled_local', v_row.enabled_local
+    )
+  );
+end;
+$function$;
 
 create or replace function public.document_templates_upsert(
   p_template_id uuid,
@@ -91,16 +307,27 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $function$
 declare
   v_now timestamptz := now();
   v_id uuid;
   v_existing public.document_templates%rowtype;
   v_row public.document_templates%rowtype;
-  v_selected text[] := coalesce(p_selected_field_keys, '{}'::text[]);
-  v_content jsonb := coalesce(p_template_content_json, '{}'::jsonb);
+
+  v_entity_type_norm text := nullif(lower(btrim(coalesce(p_entity_type, ''))), '');
   v_output_type_norm text := upper(btrim(coalesce(p_output_type, '')));
+  v_filename_norm text := nullif(btrim(coalesce(p_filename, '')), '');
   v_email_type_norm text := nullif(lower(btrim(coalesce(p_email_type, ''))), '');
+
+  v_selected_raw text[] := coalesce(p_selected_field_keys, '{}'::text[]);
+  v_selected_accepted text[] := '{}'::text[];
+  v_selected_rejected text[] := '{}'::text[];
+
+  v_content jsonb := coalesce(p_template_content_json, '{}'::jsonb);
+  v_attachment_cfg jsonb := '{}'::jsonb;
+  v_attach_timesheet_pdf boolean := false;
+  v_attach_invoice_pdf boolean := false;
+
   v_whatsapp_provider text;
   v_whatsapp_template_name text;
   v_whatsapp_param_name text;
@@ -108,16 +335,27 @@ declare
   v_sms_voice_message_text text;
   v_word_body_html text;
   v_word_body_text text;
+
+  v_rejected_details jsonb := '[]'::jsonb;
+  v_warnings jsonb := '[]'::jsonb;
+
+  v_rejected_total int := 0;
+  v_reason_field_not_found int := 0;
+  v_reason_disabled_globally int := 0;
+  v_reason_not_allowed_for_entity int := 0;
+  v_reason_not_resolvable_for_entity int := 0;
+  v_reason_stale int := 0;
+  v_duplicate_count int := 0;
 begin
-  if p_entity_type is null or length(btrim(p_entity_type)) = 0 then
+  if v_entity_type_norm is null then
     raise exception 'entity_type required';
   end if;
 
-  if p_output_type is null or length(btrim(p_output_type)) = 0 then
+  if v_output_type_norm is null or v_output_type_norm = '' then
     raise exception 'output_type required';
   end if;
 
-  if p_filename is null or length(btrim(p_filename)) = 0 then
+  if v_filename_norm is null then
     raise exception 'filename required';
   end if;
 
@@ -129,6 +367,15 @@ begin
     raise exception 'template_content_json must be object';
   end if;
 
+  perform 1
+  from public.v_mailshot_resolution_graph as rg
+  where rg.root_entity_type = v_entity_type_norm
+  limit 1;
+
+  if not found then
+    raise exception 'invalid entity_type: %', v_entity_type_norm;
+  end if;
+
   if v_output_type_norm not in ('EMAIL','WHATSAPP','SMS','VOICE','WORD','EXCEL') then
     raise exception 'invalid output_type: %', v_output_type_norm;
   end if;
@@ -137,6 +384,62 @@ begin
     if v_email_type_norm is not null and v_email_type_norm not in ('plain','html') then
       raise exception 'email_type must be plain or html for EMAIL';
     end if;
+  else
+    v_email_type_norm := null;
+  end if;
+
+  if v_content ? 'mailshot_attachments' then
+    if jsonb_typeof(v_content->'mailshot_attachments') <> 'object' then
+      raise exception 'mailshot_attachments must be object';
+    end if;
+    v_attachment_cfg := coalesce(v_content->'mailshot_attachments', '{}'::jsonb);
+  else
+    v_attachment_cfg := '{}'::jsonb;
+  end if;
+
+  if v_attachment_cfg ? 'attach_authoritative_timesheet_pdf'
+     and jsonb_typeof(v_attachment_cfg->'attach_authoritative_timesheet_pdf') <> 'boolean' then
+    raise exception 'mailshot_attachments.attach_authoritative_timesheet_pdf must be boolean';
+  end if;
+
+  if v_attachment_cfg ? 'attach_authoritative_invoice_pdf'
+     and jsonb_typeof(v_attachment_cfg->'attach_authoritative_invoice_pdf') <> 'boolean' then
+    raise exception 'mailshot_attachments.attach_authoritative_invoice_pdf must be boolean';
+  end if;
+
+  v_attach_timesheet_pdf := coalesce((v_attachment_cfg->>'attach_authoritative_timesheet_pdf')::boolean, false);
+  v_attach_invoice_pdf := coalesce((v_attachment_cfg->>'attach_authoritative_invoice_pdf')::boolean, false);
+
+  if v_output_type_norm <> 'EMAIL' then
+    if v_attach_timesheet_pdf or v_attach_invoice_pdf then
+      raise exception 'mailshot attachments are only supported for EMAIL templates';
+    end if;
+
+    v_content := v_content - 'mailshot_attachments';
+  else
+    if v_entity_type_norm = 'timesheet' then
+      if v_attach_invoice_pdf then
+        raise exception 'invoice PDF attachment preset is not valid for timesheet EMAIL templates';
+      end if;
+    elsif v_entity_type_norm = 'invoice' then
+      if v_attach_timesheet_pdf then
+        raise exception 'timesheet PDF attachment preset is not valid for invoice EMAIL templates';
+      end if;
+    else
+      if v_attach_timesheet_pdf or v_attach_invoice_pdf then
+        raise exception 'root-document PDF attachment presets are only valid for timesheet or invoice EMAIL templates';
+      end if;
+    end if;
+
+    v_content := (v_content - 'mailshot_attachments') || jsonb_build_object(
+      'mailshot_attachments',
+      jsonb_build_object(
+        'attach_authoritative_timesheet_pdf',
+        case when v_entity_type_norm = 'timesheet' then v_attach_timesheet_pdf else false end,
+        'attach_authoritative_invoice_pdf',
+        case when v_entity_type_norm = 'invoice' then v_attach_invoice_pdf else false end
+      )
+    );
   end if;
 
   if v_output_type_norm = 'WHATSAPP' then
@@ -220,6 +523,178 @@ begin
     end if;
   end if;
 
+  drop table if exists tmp_document_template_selected_input;
+  create temporary table tmp_document_template_selected_input(
+    ord integer not null,
+    field_key text not null
+  ) on commit drop;
+
+  insert into tmp_document_template_selected_input(
+    ord,
+    field_key
+  )
+  select
+    u.ord::integer,
+    btrim(u.field_key)
+  from unnest(v_selected_raw) with ordinality as u(field_key, ord)
+  where nullif(btrim(coalesce(u.field_key, '')), '') is not null;
+
+  drop table if exists tmp_document_template_selected_distinct;
+  create temporary table tmp_document_template_selected_distinct(
+    ord integer not null,
+    field_key text not null,
+    primary key (field_key)
+  ) on commit drop;
+
+  insert into tmp_document_template_selected_distinct(
+    ord,
+    field_key
+  )
+  select
+    min(tdtsi.ord) as ord,
+    tdtsi.field_key
+  from tmp_document_template_selected_input as tdtsi
+  group by tdtsi.field_key;
+
+  select greatest(
+           coalesce((select count(*) from tmp_document_template_selected_input), 0)
+           -
+           coalesce((select count(*) from tmp_document_template_selected_distinct), 0),
+           0
+         )
+    into v_duplicate_count;
+
+  drop table if exists tmp_document_template_selection_review;
+  create temporary table tmp_document_template_selection_review(
+    ord integer not null,
+    field_key text not null,
+    reject_reason text
+  ) on commit drop;
+
+  insert into tmp_document_template_selection_review(
+    ord,
+    field_key,
+    reject_reason
+  )
+  select
+    tdsd.ord,
+    tdsd.field_key,
+    case
+      when mf.id is null then 'field_not_found'
+      when lower(coalesce(mf.resolver_spec_json ->> 'stale', 'false')) = 'true' then 'stale'
+      when mf.enabled_global is distinct from true then 'disabled_globally'
+      when not (v_entity_type_norm = any(coalesce(mf.allowed_entity_types, '{}'::text[]))) then 'not_allowed_for_entity'
+      when not exists (
+        select 1
+        from public.v_mailshot_resolution_graph as rg
+        where rg.root_entity_type = v_entity_type_norm
+          and rg.source_family = coalesce(
+            nullif(mf.resolver_spec_json ->> 'source_family', ''),
+            split_part(mf.field_key, '.', 1)
+          )
+      ) then 'not_resolvable_for_entity'
+      else null
+    end as reject_reason
+  from tmp_document_template_selected_distinct as tdsd
+  left join public.mailshot_fields as mf
+    on mf.field_key = tdsd.field_key;
+
+  select coalesce(
+           array_agg(tdsr.field_key order by tdsr.ord),
+           '{}'::text[]
+         )
+    into v_selected_accepted
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason is null;
+
+  select coalesce(
+           array_agg(tdsr.field_key order by tdsr.ord),
+           '{}'::text[]
+         )
+    into v_selected_rejected
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason is not null;
+
+  select count(*) into v_rejected_total
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason is not null;
+
+  select count(*) into v_reason_field_not_found
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason = 'field_not_found';
+
+  select count(*) into v_reason_disabled_globally
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason = 'disabled_globally';
+
+  select count(*) into v_reason_not_allowed_for_entity
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason = 'not_allowed_for_entity';
+
+  select count(*) into v_reason_not_resolvable_for_entity
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason = 'not_resolvable_for_entity';
+
+  select count(*) into v_reason_stale
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason = 'stale';
+
+  select coalesce(
+           jsonb_agg(
+             jsonb_build_object(
+               'field_key', tdsr.field_key,
+               'reason', tdsr.reject_reason
+             )
+             order by tdsr.ord
+           ),
+           '[]'::jsonb
+         )
+    into v_rejected_details
+  from tmp_document_template_selection_review as tdsr
+  where tdsr.reject_reason is not null;
+
+  if v_rejected_total > 0 then
+    v_warnings := v_warnings || jsonb_build_array(
+      'Some selected fields were rejected because they are not eligible for this entity, are stale, or are disabled.'
+    );
+  end if;
+
+  if v_reason_field_not_found > 0 then
+    v_warnings := v_warnings || jsonb_build_array(
+      format('%s selected field(s) were rejected because they do not exist in mailshot_fields.', v_reason_field_not_found)
+    );
+  end if;
+
+  if v_reason_disabled_globally > 0 then
+    v_warnings := v_warnings || jsonb_build_array(
+      format('%s selected field(s) were rejected because they are globally disabled.', v_reason_disabled_globally)
+    );
+  end if;
+
+  if v_reason_not_allowed_for_entity > 0 then
+    v_warnings := v_warnings || jsonb_build_array(
+      format('%s selected field(s) were rejected because they are not visible for entity_type %s.', v_reason_not_allowed_for_entity, v_entity_type_norm)
+    );
+  end if;
+
+  if v_reason_not_resolvable_for_entity > 0 then
+    v_warnings := v_warnings || jsonb_build_array(
+      format('%s selected field(s) were rejected because they are not resolvable for entity_type %s.', v_reason_not_resolvable_for_entity, v_entity_type_norm)
+    );
+  end if;
+
+  if v_reason_stale > 0 then
+    v_warnings := v_warnings || jsonb_build_array(
+      format('%s selected field(s) were rejected because they are marked stale.', v_reason_stale)
+    );
+  end if;
+
+  if v_duplicate_count > 0 then
+    v_warnings := v_warnings || jsonb_build_array(
+      format('%s duplicate selected field entrie(s) were removed while preserving first occurrence order.', v_duplicate_count)
+    );
+  end if;
+
   if p_template_id is null then
     insert into public.document_templates(
       entity_type,
@@ -234,12 +709,12 @@ begin
       updated_at_utc
     )
     values (
-      btrim(p_entity_type),
+      v_entity_type_norm,
       v_output_type_norm,
-      btrim(p_filename),
+      v_filename_norm,
       p_description,
       v_email_type_norm,
-      v_selected,
+      v_selected_accepted,
       v_content,
       p_actor_user_id,
       v_now,
@@ -249,21 +724,21 @@ begin
   else
     select dt.*
       into v_existing
-    from public.document_templates dt
+    from public.document_templates as dt
     where dt.id = p_template_id;
 
     if not found then
       raise exception 'document_template not found: %', p_template_id;
     end if;
 
-    update public.document_templates dt
+    update public.document_templates as dt
     set
-      entity_type = btrim(p_entity_type),
+      entity_type = v_entity_type_norm,
       output_type = v_output_type_norm,
-      filename = btrim(p_filename),
+      filename = v_filename_norm,
       description = p_description,
       email_type = v_email_type_norm,
-      selected_field_keys = v_selected,
+      selected_field_keys = v_selected_accepted,
       template_content_json = v_content,
       updated_at_utc = v_now
     where dt.id = p_template_id
@@ -272,11 +747,15 @@ begin
 
   select dt.*
     into v_row
-  from public.document_templates dt
+  from public.document_templates as dt
   where dt.id = v_id;
 
   return jsonb_build_object(
     'ok', true,
+    'accepted_selected_field_keys', to_jsonb(v_selected_accepted),
+    'rejected_selected_field_keys', to_jsonb(v_selected_rejected),
+    'rejected_selected_field_details', v_rejected_details,
+    'warnings', v_warnings,
     'template', jsonb_build_object(
       'id', v_row.id::text,
       'entity_type', v_row.entity_type,
@@ -292,7 +771,519 @@ begin
     )
   );
 end;
-$$;
+$function$;
+
+
+
+
+
+
+
+create or replace function public.mailshot_fields_bulk_apply(
+  p_field_ids uuid[],
+  p_action text,
+  p_entity_type text,
+  p_actor_user_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  v_now timestamptz := now();
+
+  v_action text := upper(btrim(coalesce(p_action, '')));
+  v_entity_type text := nullif(lower(btrim(coalesce(p_entity_type, ''))), '');
+
+  v_requested_count int := 0;
+  v_existing_count int := 0;
+  v_eligible_count int := 0;
+  v_applied_count int := 0;
+  v_not_found_count int := 0;
+  v_invalid_for_entity_count int := 0;
+  v_noop_count int := 0;
+
+  v_applied_field_ids jsonb := '[]'::jsonb;
+  v_not_found_field_ids jsonb := '[]'::jsonb;
+  v_invalid_for_entity_field_ids jsonb := '[]'::jsonb;
+
+  v_requires_entity boolean := false;
+begin
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id required';
+  end if;
+
+  if p_field_ids is null or coalesce(array_length(p_field_ids, 1), 0) = 0 then
+    raise exception 'field_ids[] required';
+  end if;
+
+  if v_action is null or v_action = '' then
+    raise exception 'action required';
+  end if;
+
+  if v_action not in (
+    'GLOBAL_ENABLE',
+    'GLOBAL_DISABLE',
+    'ADD_VISIBLE_IN_ENTITY',
+    'REMOVE_VISIBLE_IN_ENTITY',
+    'OVERRIDE_ENABLE',
+    'OVERRIDE_DISABLE',
+    'CLEAR_OVERRIDE'
+  ) then
+    raise exception 'invalid action: %', v_action;
+  end if;
+
+  v_requires_entity := v_action in (
+    'ADD_VISIBLE_IN_ENTITY',
+    'REMOVE_VISIBLE_IN_ENTITY',
+    'OVERRIDE_ENABLE',
+    'OVERRIDE_DISABLE',
+    'CLEAR_OVERRIDE'
+  );
+
+  if v_requires_entity and v_entity_type is null then
+    raise exception 'entity_type required for action %', v_action;
+  end if;
+
+  if v_entity_type is not null then
+    perform 1
+    from public.v_mailshot_resolution_graph as rg
+    where rg.root_entity_type = v_entity_type
+    limit 1;
+
+    if not found then
+      raise exception 'invalid entity_type: %', v_entity_type;
+    end if;
+  end if;
+
+  drop table if exists tmp_mailshot_bulk_ids;
+  create temporary table tmp_mailshot_bulk_ids(
+    field_id uuid primary key
+  ) on commit drop;
+
+  insert into tmp_mailshot_bulk_ids(field_id)
+  select distinct
+    u.field_id
+  from unnest(p_field_ids) as u(field_id)
+  where u.field_id is not null;
+
+  select count(*) into v_requested_count
+  from tmp_mailshot_bulk_ids as tbi;
+
+  if v_requested_count = 0 then
+    raise exception 'field_ids[] required';
+  end if;
+
+  drop table if exists tmp_mailshot_bulk_targets;
+  create temporary table tmp_mailshot_bulk_targets(
+    field_id uuid primary key,
+    field_exists boolean not null,
+    source_family text,
+    allowed_entity_types text[],
+    valid_for_entity boolean,
+    skip_reason text
+  ) on commit drop;
+
+  insert into tmp_mailshot_bulk_targets(
+    field_id,
+    field_exists,
+    source_family,
+    allowed_entity_types,
+    valid_for_entity,
+    skip_reason
+  )
+  select
+    tbi.field_id,
+    (mf.id is not null) as field_exists,
+    case
+      when mf.id is null then null
+      else coalesce(
+        nullif(mf.resolver_spec_json ->> 'source_family', ''),
+        split_part(mf.field_key, '.', 1)
+      )
+    end as source_family,
+    mf.allowed_entity_types,
+    case
+      when v_entity_type is null then null
+      when mf.id is null then false
+      else exists (
+        select 1
+        from public.v_mailshot_resolution_graph as rg
+        where rg.root_entity_type = v_entity_type
+          and rg.source_family = coalesce(
+            nullif(mf.resolver_spec_json ->> 'source_family', ''),
+            split_part(mf.field_key, '.', 1)
+          )
+      )
+    end as valid_for_entity,
+    case
+      when mf.id is null then 'field_not_found'
+      when v_entity_type is not null
+       and not exists (
+         select 1
+         from public.v_mailshot_resolution_graph as rg
+         where rg.root_entity_type = v_entity_type
+           and rg.source_family = coalesce(
+             nullif(mf.resolver_spec_json ->> 'source_family', ''),
+             split_part(mf.field_key, '.', 1)
+           )
+       ) then 'not_resolvable_for_entity'
+      else null
+    end as skip_reason
+  from tmp_mailshot_bulk_ids as tbi
+  left join public.mailshot_fields as mf
+    on mf.id = tbi.field_id;
+
+  select count(*) into v_existing_count
+  from tmp_mailshot_bulk_targets as tbt
+  where tbt.field_exists = true;
+
+  select count(*) into v_not_found_count
+  from tmp_mailshot_bulk_targets as tbt
+  where tbt.skip_reason = 'field_not_found';
+
+  select count(*) into v_invalid_for_entity_count
+  from tmp_mailshot_bulk_targets as tbt
+  where tbt.skip_reason = 'not_resolvable_for_entity';
+
+  select coalesce(
+           jsonb_agg((tbt.field_id)::text order by (tbt.field_id)::text),
+           '[]'::jsonb
+         )
+    into v_not_found_field_ids
+  from tmp_mailshot_bulk_targets as tbt
+  where tbt.skip_reason = 'field_not_found';
+
+  select coalesce(
+           jsonb_agg((tbt.field_id)::text order by (tbt.field_id)::text),
+           '[]'::jsonb
+         )
+    into v_invalid_for_entity_field_ids
+  from tmp_mailshot_bulk_targets as tbt
+  where tbt.skip_reason = 'not_resolvable_for_entity';
+
+  if v_requires_entity then
+    select count(*) into v_eligible_count
+    from tmp_mailshot_bulk_targets as tbt
+    where tbt.field_exists = true
+      and tbt.valid_for_entity = true;
+  else
+    select count(*) into v_eligible_count
+    from tmp_mailshot_bulk_targets as tbt
+    where tbt.field_exists = true;
+  end if;
+
+  drop table if exists tmp_mailshot_bulk_applied_ids;
+  create temporary table tmp_mailshot_bulk_applied_ids(
+    field_id uuid primary key
+  ) on commit drop;
+
+  if v_action = 'GLOBAL_ENABLE' then
+    with upd as (
+      update public.mailshot_fields as mf
+      set
+        enabled_global = true,
+        updated_at_utc = v_now
+      where mf.id in (
+        select tbt.field_id
+        from tmp_mailshot_bulk_targets as tbt
+        where tbt.field_exists = true
+      )
+        and mf.enabled_global is distinct from true
+      returning mf.id
+    )
+    insert into tmp_mailshot_bulk_applied_ids(field_id)
+    select
+      upd.id
+    from upd;
+
+  elsif v_action = 'GLOBAL_DISABLE' then
+    with upd as (
+      update public.mailshot_fields as mf
+      set
+        enabled_global = false,
+        updated_at_utc = v_now
+      where mf.id in (
+        select tbt.field_id
+        from tmp_mailshot_bulk_targets as tbt
+        where tbt.field_exists = true
+      )
+        and mf.enabled_global is distinct from false
+      returning mf.id
+    )
+    insert into tmp_mailshot_bulk_applied_ids(field_id)
+    select
+      upd.id
+    from upd;
+
+  elsif v_action = 'ADD_VISIBLE_IN_ENTITY' then
+    with upd as (
+      update public.mailshot_fields as mf
+      set
+        allowed_entity_types = array(
+          select distinct
+            u.entity_type_value
+          from unnest(coalesce(mf.allowed_entity_types, '{}'::text[]) || array[v_entity_type]::text[]) as u(entity_type_value)
+          order by u.entity_type_value
+        ),
+        updated_at_utc = v_now
+      where mf.id in (
+        select tbt.field_id
+        from tmp_mailshot_bulk_targets as tbt
+        where tbt.field_exists = true
+          and tbt.valid_for_entity = true
+      )
+        and not (v_entity_type = any(coalesce(mf.allowed_entity_types, '{}'::text[])))
+      returning mf.id
+    )
+    insert into tmp_mailshot_bulk_applied_ids(field_id)
+    select
+      upd.id
+    from upd;
+
+  elsif v_action = 'REMOVE_VISIBLE_IN_ENTITY' then
+    with upd as (
+      update public.mailshot_fields as mf
+      set
+        allowed_entity_types = array_remove(coalesce(mf.allowed_entity_types, '{}'::text[]), v_entity_type),
+        updated_at_utc = v_now
+      where mf.id in (
+        select tbt.field_id
+        from tmp_mailshot_bulk_targets as tbt
+        where tbt.field_exists = true
+          and tbt.valid_for_entity = true
+      )
+        and v_entity_type = any(coalesce(mf.allowed_entity_types, '{}'::text[]))
+      returning mf.id
+    )
+    insert into tmp_mailshot_bulk_applied_ids(field_id)
+    select
+      upd.id
+    from upd;
+
+  elsif v_action = 'OVERRIDE_ENABLE' then
+    with upserted as (
+      insert into public.mailshot_field_overrides(
+        field_id,
+        entity_type,
+        label_override,
+        enabled_local
+      )
+      select
+        tbt.field_id,
+        v_entity_type,
+        null,
+        true
+      from tmp_mailshot_bulk_targets as tbt
+      where tbt.field_exists = true
+        and tbt.valid_for_entity = true
+      on conflict (field_id, entity_type)
+      do update
+      set enabled_local = excluded.enabled_local
+      where public.mailshot_field_overrides.enabled_local is distinct from excluded.enabled_local
+      returning field_id
+    )
+    insert into tmp_mailshot_bulk_applied_ids(field_id)
+    select
+      upserted.field_id
+    from upserted;
+
+  elsif v_action = 'OVERRIDE_DISABLE' then
+    with upserted as (
+      insert into public.mailshot_field_overrides(
+        field_id,
+        entity_type,
+        label_override,
+        enabled_local
+      )
+      select
+        tbt.field_id,
+        v_entity_type,
+        null,
+        false
+      from tmp_mailshot_bulk_targets as tbt
+      where tbt.field_exists = true
+        and tbt.valid_for_entity = true
+      on conflict (field_id, entity_type)
+      do update
+      set enabled_local = excluded.enabled_local
+      where public.mailshot_field_overrides.enabled_local is distinct from excluded.enabled_local
+      returning field_id
+    )
+    insert into tmp_mailshot_bulk_applied_ids(field_id)
+    select
+      upserted.field_id
+    from upserted;
+
+  elsif v_action = 'CLEAR_OVERRIDE' then
+    with deleted_rows as (
+      delete from public.mailshot_field_overrides as mfo
+      where mfo.entity_type = v_entity_type
+        and mfo.field_id in (
+          select tbt.field_id
+          from tmp_mailshot_bulk_targets as tbt
+          where tbt.field_exists = true
+            and tbt.valid_for_entity = true
+        )
+      returning mfo.field_id
+    )
+    insert into tmp_mailshot_bulk_applied_ids(field_id)
+    select
+      deleted_rows.field_id
+    from deleted_rows;
+  end if;
+
+  select count(*) into v_applied_count
+  from tmp_mailshot_bulk_applied_ids as tbai;
+
+  select coalesce(
+           jsonb_agg((tbai.field_id)::text order by (tbai.field_id)::text),
+           '[]'::jsonb
+         )
+    into v_applied_field_ids
+  from tmp_mailshot_bulk_applied_ids as tbai;
+
+  v_noop_count := greatest(v_eligible_count - v_applied_count, 0);
+
+  return jsonb_build_object(
+    'ok', true,
+    'action', v_action,
+    'entity_type', v_entity_type,
+    'requested_count', v_requested_count,
+    'existing_count', v_existing_count,
+    'eligible_count', v_eligible_count,
+    'applied_count', v_applied_count,
+    'noop_count', v_noop_count,
+    'not_found_count', v_not_found_count,
+    'invalid_for_entity_count', v_invalid_for_entity_count,
+    'applied_field_ids', v_applied_field_ids,
+    'not_found_field_ids', v_not_found_field_ids,
+    'invalid_for_entity_field_ids', v_invalid_for_entity_field_ids,
+    'applied_at_utc', v_now::text
+  );
+end;
+$function$;
+create or replace function public.mailshot_fields_catalog_list(
+  p_entity_type text default null,
+  p_include_disabled boolean default false
+)
+returns table(
+  field_id uuid,
+  field_key text,
+  source_family text,
+  label_default text,
+  label_override text,
+  label_effective text,
+  enabled_global boolean,
+  enabled_local boolean,
+  enabled_effective boolean,
+  allowed_entity_types text[],
+  is_resolvable_for_root boolean,
+  stale boolean,
+  resolver_spec_json jsonb,
+  entity_type text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $function$
+with normalized_input as (
+  select
+    nullif(lower(btrim(coalesce(p_entity_type, ''))), '') as entity_type_norm,
+    coalesce(p_include_disabled, false) as include_disabled_norm
+),
+approved_families as (
+  select distinct
+    rg.source_family
+  from public.v_mailshot_resolution_graph as rg
+),
+base_rows as (
+  select
+    mf.id as field_id,
+    mf.field_key,
+    coalesce(
+      nullif(mf.resolver_spec_json ->> 'source_family', ''),
+      split_part(mf.field_key, '.', 1)
+    ) as source_family,
+    coalesce(
+      nullif(mf.resolver_spec_json ->> 'source_column_name', ''),
+      nullif(split_part(mf.field_key, '.', 2), '')
+    ) as source_column_name,
+    mf.label_default,
+    mfo.label_override,
+    mf.enabled_global,
+    case
+      when ni.entity_type_norm is null then null
+      else coalesce(mfo.enabled_local, true)
+    end as enabled_local,
+    mf.allowed_entity_types,
+    case
+      when lower(coalesce(mf.resolver_spec_json ->> 'stale', '')) = 'true' then true
+      when lower(coalesce(mf.resolver_spec_json ->> 'stale', '')) = 'false' then false
+      else false
+    end as stale,
+    mf.resolver_spec_json,
+    ni.entity_type_norm as entity_type
+  from public.mailshot_fields as mf
+  cross join normalized_input as ni
+  left join public.mailshot_field_overrides as mfo
+    on mfo.field_id = mf.id
+   and ni.entity_type_norm is not null
+   and mfo.entity_type = ni.entity_type_norm
+)
+select
+  br.field_id,
+  br.field_key,
+  br.source_family,
+  br.label_default,
+  br.label_override,
+  coalesce(br.label_override, br.label_default) as label_effective,
+  br.enabled_global,
+  br.enabled_local,
+  case
+    when br.entity_type is null then br.enabled_global
+    else (br.enabled_global and coalesce(br.enabled_local, true))
+  end as enabled_effective,
+  br.allowed_entity_types,
+  case
+    when br.entity_type is null then null
+    else exists (
+      select 1
+      from public.v_mailshot_resolution_graph as rg
+      where rg.root_entity_type = br.entity_type
+        and rg.source_family = br.source_family
+    )
+  end as is_resolvable_for_root,
+  br.stale,
+  br.resolver_spec_json,
+  br.entity_type
+from base_rows as br
+where exists (
+    select 1
+    from approved_families as af
+    where af.source_family = br.source_family
+  )
+  and left(coalesce(br.source_column_name, ''), 1) <> '_'
+  and (
+    (select ni.include_disabled_norm from normalized_input as ni)
+    or (
+      case
+        when br.entity_type is null then br.enabled_global
+        else (br.enabled_global and coalesce(br.enabled_local, true))
+      end
+    )
+  )
+order by
+  lower(br.source_family) asc,
+  lower(coalesce(br.label_override, br.label_default)) asc,
+  lower(br.field_key) asc;
+$function$;
+
+
+
+
 
 create or replace function public.document_templates_delete(
   p_template_id uuid,
@@ -497,227 +1488,6 @@ as $$
   order by lower(coalesce(o.label_override, f.label_default)) asc, lower(f.field_key) asc;
 $$;
 
-create or replace function public.mailshot_fields_upsert_global(
-  p_field_id uuid,
-  p_field_key text,
-  p_label_default text,
-  p_enabled_global boolean,
-  p_allowed_entity_types text[],
-  p_resolver_spec_json jsonb,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now timestamptz := now();
-  v_id uuid;
-  v_existing_id uuid;
-  v_field public.mailshot_fields%rowtype;
-
-  v_key text := nullif(btrim(coalesce(p_field_key,'')), '');
-  v_label text := nullif(btrim(coalesce(p_label_default,'')), '');
-  v_enabled boolean := coalesce(p_enabled_global, true);
-  v_allowed text[] := coalesce(p_allowed_entity_types, '{}'::text[]);
-  v_spec jsonb := coalesce(p_resolver_spec_json, '{}'::jsonb);
-
-  v_prefix text;
-  v_suffix text;
-  v_auto_label text;
-begin
-  if p_actor_user_id is null then
-    raise exception 'actor_user_id required';
-  end if;
-
-  if p_field_id is null and v_key is null then
-    raise exception 'field_id or field_key required';
-  end if;
-
-  if v_key is not null then
-    if position('.' in v_key) = 0 then
-      raise exception 'field_key must be namespaced like candidate.email (got: %)', v_key;
-    end if;
-  end if;
-
-  if v_label is null then
-    if v_key is null then
-      v_label := 'Field';
-    else
-      v_prefix := split_part(v_key, '.', 1);
-      v_suffix := split_part(v_key, '.', 2);
-
-      v_auto_label :=
-        initcap(replace(v_prefix, '_', ' ')) || ' — ' ||
-        initcap(replace(v_suffix, '_', ' '));
-
-      v_label := v_auto_label;
-    end if;
-  end if;
-
-  if p_field_id is not null then
-    select f.id into v_existing_id
-    from public.mailshot_fields f
-    where f.id = p_field_id;
-
-    if not found then
-      raise exception 'mailshot_field not found: %', p_field_id;
-    end if;
-
-    update public.mailshot_fields f
-    set
-      field_key = coalesce(v_key, f.field_key),
-      label_default = v_label,
-      enabled_global = v_enabled,
-      allowed_entity_types = v_allowed,
-      resolver_spec_json = v_spec,
-      updated_at_utc = v_now
-    where f.id = p_field_id
-    returning f.id into v_id;
-  else
-    select f.id into v_existing_id
-    from public.mailshot_fields f
-    where f.field_key = v_key;
-
-    if found then
-      update public.mailshot_fields f
-      set
-        label_default = v_label,
-        enabled_global = v_enabled,
-        allowed_entity_types = v_allowed,
-        resolver_spec_json = v_spec,
-        updated_at_utc = v_now
-      where f.id = v_existing_id
-      returning f.id into v_id;
-    else
-      insert into public.mailshot_fields(
-        field_key,
-        label_default,
-        enabled_global,
-        allowed_entity_types,
-        resolver_spec_json,
-        created_at_utc,
-        updated_at_utc
-      )
-      values (
-        v_key,
-        v_label,
-        v_enabled,
-        v_allowed,
-        v_spec,
-        v_now,
-        v_now
-      )
-      returning id into v_id;
-    end if;
-  end if;
-
-  select f.* into v_field
-  from public.mailshot_fields f
-  where f.id = v_id;
-
-  return jsonb_build_object(
-    'ok', true,
-    'field', jsonb_build_object(
-      'id', v_field.id::text,
-      'field_key', v_field.field_key,
-      'label_default', v_field.label_default,
-      'enabled_global', v_field.enabled_global,
-      'allowed_entity_types', to_jsonb(v_field.allowed_entity_types),
-      'resolver_spec_json', v_field.resolver_spec_json,
-      'created_at_utc', v_field.created_at_utc::text,
-      'updated_at_utc', v_field.updated_at_utc::text
-    )
-  );
-end;
-$$;
-
-
-
-create or replace function public.mailshot_fields_upsert_override(
-  p_field_id uuid,
-  p_entity_type text,
-  p_label_override text,
-  p_enabled_local boolean,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now timestamptz := now();
-  v_entity text := nullif(btrim(coalesce(p_entity_type,'')), '');
-  v_label text := nullif(btrim(coalesce(p_label_override,'')), '');
-  v_enabled boolean := coalesce(p_enabled_local, true);
-
-  v_exists uuid;
-  v_row public.mailshot_field_overrides%rowtype;
-begin
-  if p_actor_user_id is null then
-    raise exception 'actor_user_id required';
-  end if;
-
-  if p_field_id is null then
-    raise exception 'field_id required';
-  end if;
-
-  if v_entity is null then
-    raise exception 'entity_type required';
-  end if;
-
-  perform 1
-  from public.mailshot_fields f
-  where f.id = p_field_id;
-
-  if not found then
-    raise exception 'mailshot_field not found: %', p_field_id;
-  end if;
-
-  select o.id
-    into v_exists
-  from public.mailshot_field_overrides o
-  where o.field_id = p_field_id
-    and o.entity_type = v_entity;
-
-  if found then
-    update public.mailshot_field_overrides o
-    set
-      label_override = v_label,
-      enabled_local = v_enabled
-    where o.id = v_exists
-    returning o.* into v_row;
-  else
-    insert into public.mailshot_field_overrides(
-      field_id,
-      entity_type,
-      label_override,
-      enabled_local
-    )
-    values (
-      p_field_id,
-      v_entity,
-      v_label,
-      v_enabled
-    )
-    returning * into v_row;
-  end if;
-
-  return jsonb_build_object(
-    'ok', true,
-    'override', jsonb_build_object(
-      'id', v_row.id::text,
-      'field_id', v_row.field_id::text,
-      'entity_type', v_row.entity_type,
-      'label_override', v_row.label_override,
-      'enabled_local', v_row.enabled_local
-    )
-  );
-end;
-$$;
-
 
 
 create or replace function public.mailshot_fields_seed_from_schema(
@@ -727,58 +1497,152 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $function$
 declare
   v_now timestamptz := now();
+
   v_inserted int := 0;
-  v_skipped int := 0;
-  v_total int := 0;
+  v_updated int := 0;
+  v_marked_stale int := 0;
+
+  v_source_family_count int := 0;
+  v_source_view_count int := 0;
+  v_helper_column_count int := 0;
+  v_discovered_total int := 0;
+
+  v_source_views jsonb := '[]'::jsonb;
 begin
   if p_actor_user_id is null then
     raise exception 'actor_user_id required';
   end if;
 
-  -- Curated starter set (keeps admin effort low; admins can prune/rename via UI)
-  create temporary table tmp_seed_fields(
+  drop table if exists tmp_mailshot_source_families;
+  create temporary table tmp_mailshot_source_families(
+    source_family text not null,
+    source_view_name text not null,
+    allowed_entity_types text[] not null
+  ) on commit drop;
+
+  insert into tmp_mailshot_source_families(
+    source_family,
+    source_view_name,
+    allowed_entity_types
+  )
+  select
+    rg.source_family,
+    rg.source_view_name,
+    array_agg(distinct rg.root_entity_type order by rg.root_entity_type) as allowed_entity_types
+  from public.v_mailshot_resolution_graph as rg
+  group by
+    rg.source_family,
+    rg.source_view_name;
+
+  select count(*) into v_source_family_count
+  from tmp_mailshot_source_families as msf;
+
+  if v_source_family_count = 0 then
+    raise exception 'no source families found in public.v_mailshot_resolution_graph';
+  end if;
+
+  select count(distinct msf.source_view_name) into v_source_view_count
+  from tmp_mailshot_source_families as msf;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'source_family', msf.source_family,
+          'source_view_name', msf.source_view_name,
+          'allowed_entity_types', to_jsonb(msf.allowed_entity_types)
+        )
+        order by msf.source_family, msf.source_view_name
+      ),
+      '[]'::jsonb
+    )
+  into v_source_views
+  from tmp_mailshot_source_families as msf;
+
+  drop table if exists tmp_mailshot_source_columns;
+  create temporary table tmp_mailshot_source_columns(
+    source_family text not null,
+    source_view_name text not null,
+    column_name text not null,
+    allowed_entity_types text[] not null,
+    is_helper boolean not null
+  ) on commit drop;
+
+  insert into tmp_mailshot_source_columns(
+    source_family,
+    source_view_name,
+    column_name,
+    allowed_entity_types,
+    is_helper
+  )
+  select
+    msf.source_family,
+    msf.source_view_name,
+    isc.column_name,
+    msf.allowed_entity_types,
+    left(isc.column_name, 1) = '_' as is_helper
+  from tmp_mailshot_source_families as msf
+  join information_schema.columns as isc
+    on isc.table_schema = 'public'
+   and isc.table_name = msf.source_view_name;
+
+  select count(*) into v_helper_column_count
+  from tmp_mailshot_source_columns as msc
+  where msc.is_helper = true;
+
+  drop table if exists tmp_mailshot_discovered_fields;
+  create temporary table tmp_mailshot_discovered_fields(
     field_key text not null,
     label_default text not null,
     enabled_global boolean not null,
     allowed_entity_types text[] not null,
-    resolver_spec_json jsonb not null
+    resolver_spec_json jsonb not null,
+    source_family text not null,
+    source_view_name text not null,
+    source_column_name text not null
   ) on commit drop;
 
-  insert into tmp_seed_fields(field_key,label_default,enabled_global,allowed_entity_types,resolver_spec_json) values
-    ('candidate.display_name','Candidate — Display name',true, array['candidate','contract','timesheet']::text[], jsonb_build_object('path','candidate.display_name')),
-    ('candidate.first_name','Candidate — First name',true, array['candidate','contract','timesheet']::text[], jsonb_build_object('path','candidate.first_name')),
-    ('candidate.last_name','Candidate — Last name',true, array['candidate','contract','timesheet']::text[], jsonb_build_object('path','candidate.last_name')),
-    ('candidate.email','Candidate — Email',true, array['candidate','contract','timesheet']::text[], jsonb_build_object('path','candidate.email')),
-    ('candidate.phone','Candidate — Phone',true, array['candidate','contract','timesheet']::text[], jsonb_build_object('path','candidate.phone')),
+  insert into tmp_mailshot_discovered_fields(
+    field_key,
+    label_default,
+    enabled_global,
+    allowed_entity_types,
+    resolver_spec_json,
+    source_family,
+    source_view_name,
+    source_column_name
+  )
+  select
+    msc.source_family || '.' || msc.column_name as field_key,
+    initcap(replace(msc.source_family, '_', ' ')) || ' — ' || initcap(replace(msc.column_name, '_', ' ')) as label_default,
+    true as enabled_global,
+    msc.allowed_entity_types,
+    jsonb_build_object(
+      'managed_by', 'approved_view_sync',
+      'source_family', msc.source_family,
+      'source_view_name', msc.source_view_name,
+      'source_column_name', msc.column_name,
+      'path', msc.source_family || '.' || msc.column_name,
+      'stale', false
+    ) as resolver_spec_json,
+    msc.source_family,
+    msc.source_view_name,
+    msc.column_name
+  from tmp_mailshot_source_columns as msc
+  where msc.is_helper = false
+  order by
+    msc.source_family,
+    msc.column_name;
 
-    ('client.name','Client — Name',true, array['client','contract','timesheet','invoice']::text[], jsonb_build_object('path','client.name')),
-    ('client.primary_invoice_email','Client — Primary invoice email',true, array['client','invoice']::text[], jsonb_build_object('path','client.primary_invoice_email')),
-    ('client.contact_email','Client — Contact email',true, array['client','contract','timesheet','invoice']::text[], jsonb_build_object('path','client.contact_email')),
-    ('client.contact_mobile','Client — Contact mobile',true, array['client','contract','timesheet','invoice']::text[], jsonb_build_object('path','client.contact_mobile')),
-    ('client.contact_tel','Client — Contact tel',true, array['client','contract','timesheet','invoice']::text[], jsonb_build_object('path','client.contact_tel')),
+  select count(*) into v_discovered_total
+  from tmp_mailshot_discovered_fields as mdf;
 
-    ('contract.role','Contract — Role',true, array['contract','timesheet']::text[], jsonb_build_object('path','contract.role')),
-    ('contract.band','Contract — Band',true, array['contract','timesheet']::text[], jsonb_build_object('path','contract.band')),
-    ('contract.start_date','Contract — Start date',true, array['contract','timesheet']::text[], jsonb_build_object('path','contract.start_date')),
-    ('contract.end_date','Contract — End date',true, array['contract','timesheet']::text[], jsonb_build_object('path','contract.end_date')),
-
-    ('timesheet.week_ending_date','Timesheet — Week ending',true, array['timesheet']::text[], jsonb_build_object('path','timesheet.week_ending_date')),
-    ('timesheet.booking_id','Timesheet — Booking id',false, array['timesheet']::text[], jsonb_build_object('path','timesheet.booking_id')),
-
-    ('invoice.invoice_no','Invoice — Invoice number',true, array['invoice']::text[], jsonb_build_object('path','invoice.invoice_no')),
-    ('invoice.issued_at_utc','Invoice — Issued at',true, array['invoice']::text[], jsonb_build_object('path','invoice.issued_at_utc')),
-    ('invoice.total_inc_vat','Invoice — Total inc VAT',true, array['invoice']::text[], jsonb_build_object('path','invoice.total_inc_vat')),
-
-    ('umbrella.name','Umbrella — Name',true, array['umbrella']::text[], jsonb_build_object('path','umbrella.name')),
-    ('umbrella.remittance_email','Umbrella — Remittance email',true, array['umbrella']::text[], jsonb_build_object('path','umbrella.remittance_email')),
-
-    ('system.today_ymd','System — Today (UK)',true, array['candidate','client','contract','timesheet','invoice','umbrella']::text[], jsonb_build_object('path','system.today_ymd')),
-    ('system.now_utc','System — Now (UTC)',true, array['candidate','client','contract','timesheet','invoice','umbrella']::text[], jsonb_build_object('path','system.now_utc'));
-
-  select count(*) into v_total from tmp_seed_fields;
+  if v_discovered_total = 0 then
+    raise exception 'no approved mailshot fields discovered from public.v_mailshot_resolution_graph source views';
+  end if;
 
   insert into public.mailshot_fields(
     field_key,
@@ -790,449 +1654,75 @@ begin
     updated_at_utc
   )
   select
-    s.field_key,
-    s.label_default,
-    s.enabled_global,
-    s.allowed_entity_types,
-    s.resolver_spec_json,
+    mdf.field_key,
+    mdf.label_default,
+    mdf.enabled_global,
+    mdf.allowed_entity_types,
+    mdf.resolver_spec_json,
     v_now,
     v_now
-  from tmp_seed_fields s
+  from tmp_mailshot_discovered_fields as mdf
   where not exists (
     select 1
-    from public.mailshot_fields f
-    where f.field_key = s.field_key
+    from public.mailshot_fields as mf
+    where mf.field_key = mdf.field_key
   );
 
   get diagnostics v_inserted = row_count;
-  v_skipped := v_total - v_inserted;
 
-  return jsonb_build_object(
-    'ok', true,
-    'seeded_total', v_total,
-    'inserted', v_inserted,
-    'skipped_existing', v_skipped
-  );
-end;
-$$;
-
-
-create or replace function public.mailshot_prepare(
-  p_context_kind text,
-  p_context_ids uuid[],
-  p_output_type text,
-  p_document_template_id uuid,
-  p_actor_user_id uuid
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now timestamptz := now();
-  v_today_uk date := (now() at time zone 'Europe/London')::date;
-
-  v_context_kind text := lower(btrim(coalesce(p_context_kind,'')));
-  v_entity_type text;
-  v_output_type text := upper(btrim(coalesce(p_output_type,'')));
-
-  v_template public.document_templates%rowtype;
-  v_has_template boolean := false;
-
-  v_selected_keys text[] := '{}'::text[];
-  v_to_field_key text := null;
-  v_email_type text := null;
-
-  v_rows jsonb := '[]'::jsonb;
-
-  v_ctx record;
-  v_ctx_json jsonb;
-  v_field_values jsonb;
-  v_key text;
-  v_path text;
-  v_path_arr text[];
-  v_val text;
-
-  v_to_value text;
-  v_recipient_kind text;
-  v_recipient_id uuid;
-
-  v_opt_ok boolean;
-  v_skip_reason text;
-
-  v_client_settings_json jsonb;
-
-  v_sms_or_voice boolean := false;
-begin
-  if p_actor_user_id is null then
-    raise exception 'actor_user_id required';
-  end if;
-
-  if v_context_kind is null or v_context_kind = '' then
-    raise exception 'context_kind required';
-  end if;
-
-  if p_context_ids is null or coalesce(array_length(p_context_ids,1),0) = 0 then
-    raise exception 'context_ids[] required';
-  end if;
-
-  if v_output_type is null or v_output_type = '' then
-    raise exception 'output_type required';
-  end if;
-
-  if v_output_type not in ('EMAIL','WHATSAPP','SMS','VOICE','WORD','EXCEL') then
-    raise exception 'invalid output_type: %', v_output_type;
-  end if;
-
-  v_sms_or_voice := (v_output_type in ('SMS','VOICE'));
-
-  v_entity_type :=
-    case v_context_kind
-      when 'candidates' then 'candidate'
-      when 'candidate' then 'candidate'
-      when 'clients' then 'client'
-      when 'client' then 'client'
-      when 'contracts' then 'contract'
-      when 'contract' then 'contract'
-      when 'timesheets' then 'timesheet'
-      when 'timesheet' then 'timesheet'
-      when 'invoices' then 'invoice'
-      when 'invoice' then 'invoice'
-      when 'umbrellas' then 'umbrella'
-      when 'umbrella' then 'umbrella'
-      else null
-    end;
-
-  if v_entity_type is null then
-    raise exception 'unsupported context_kind: %', v_context_kind;
-  end if;
-
-  if p_document_template_id is not null then
-    select dt.*
-      into v_template
-    from public.document_templates dt
-    where dt.id = p_document_template_id;
-
-    if not found then
-      raise exception 'document_template not found: %', p_document_template_id;
-    end if;
-
-    v_has_template := true;
-
-    if lower(v_template.entity_type) <> v_entity_type then
-      raise exception 'template entity_type % does not match context entity_type %', v_template.entity_type, v_entity_type;
-    end if;
-
-    if upper(v_template.output_type) <> v_output_type then
-      raise exception 'template output_type % does not match requested %', v_template.output_type, v_output_type;
-    end if;
-
-    v_selected_keys := coalesce(v_template.selected_field_keys, '{}'::text[]);
-    v_email_type := v_template.email_type;
-    v_to_field_key := nullif(btrim(coalesce(v_template.template_content_json->>'to_field_key','')), '');
-  end if;
-
-  if v_to_field_key is null then
-    if v_output_type = 'EMAIL' then
-      v_to_field_key :=
-        case v_entity_type
-          when 'candidate' then 'candidate.email'
-          when 'contract' then 'candidate.email'
-          when 'timesheet' then 'candidate.email'
-          when 'client' then 'client.primary_invoice_email'
-          when 'invoice' then 'client.primary_invoice_email'
-          when 'umbrella' then 'umbrella.remittance_email'
-          else 'candidate.email'
-        end;
-    else
-      v_to_field_key :=
-        case v_entity_type
-          when 'candidate' then 'candidate.phone'
-          when 'contract' then 'candidate.phone'
-          when 'timesheet' then 'candidate.phone'
-          when 'client' then 'client.contact_mobile'
-          when 'invoice' then 'client.contact_mobile'
-          when 'umbrella' then null
-          else 'candidate.phone'
-        end;
-    end if;
-  end if;
-
-  create temporary table tmp_ctx(
-    context_id uuid not null,
-    ctx_json jsonb not null
-  ) on commit drop;
-
-  if v_entity_type = 'candidate' then
-    insert into tmp_ctx(context_id, ctx_json)
-    select
-      c.id,
-      jsonb_build_object(
-        'candidate', to_jsonb(c),
-        'umbrella', case when u.id is null then null else to_jsonb(u) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
-      )
-    from public.candidates c
-    left join public.umbrellas u
-      on u.id = c.umbrella_id
-    where c.id = any(p_context_ids);
-  elsif v_entity_type = 'client' then
-    insert into tmp_ctx(context_id, ctx_json)
-    select
-      cl.id,
-      jsonb_build_object(
-        'client', to_jsonb(cl),
-        'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
-      )
-    from public.clients cl
-    left join lateral (
-      select cs1.*
-      from public.client_settings cs1
-      where cs1.client_id = cl.id
-      order by cs1.effective_from desc
-      limit 1
-    ) cs on true
-    where cl.id = any(p_context_ids);
-  elsif v_entity_type = 'contract' then
-    insert into tmp_ctx(context_id, ctx_json)
-    select
-      ct.id,
-      jsonb_build_object(
-        'contract', to_jsonb(ct),
-        'candidate', case when c.id is null then null else to_jsonb(c) end,
-        'client', case when cl.id is null then null else to_jsonb(cl) end,
-        'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
-        'umbrella', case when u.id is null then null else to_jsonb(u) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
-      )
-    from public.contracts ct
-    left join public.candidates c
-      on c.id = ct.candidate_id
-    left join public.umbrellas u
-      on u.id = c.umbrella_id
-    left join public.clients cl
-      on cl.id = ct.client_id
-    left join lateral (
-      select cs1.*
-      from public.client_settings cs1
-      where cs1.client_id = cl.id
-      order by cs1.effective_from desc
-      limit 1
-    ) cs on true
-    where ct.id = any(p_context_ids);
-  elsif v_entity_type = 'timesheet' then
-    insert into tmp_ctx(context_id, ctx_json)
-    select
-      ts.timesheet_id,
-      jsonb_build_object(
-        'timesheet', to_jsonb(ts),
-        'contract', case when ct.id is null then null else to_jsonb(ct) end,
-        'candidate', case when c.id is null then null else to_jsonb(c) end,
-        'client', case when cl.id is null then null else to_jsonb(cl) end,
-        'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
-        'umbrella', case when u.id is null then null else to_jsonb(u) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
-      )
-    from public.timesheets ts
-    left join public.contracts ct
-      on ct.id = ts.contract_id
-    left join public.candidates c
-      on c.id = ct.candidate_id
-    left join public.umbrellas u
-      on u.id = c.umbrella_id
-    left join public.clients cl
-      on cl.id = ct.client_id
-    left join lateral (
-      select cs1.*
-      from public.client_settings cs1
-      where cs1.client_id = cl.id
-      order by cs1.effective_from desc
-      limit 1
-    ) cs on true
-    where ts.timesheet_id = any(p_context_ids);
-  elsif v_entity_type = 'invoice' then
-    insert into tmp_ctx(context_id, ctx_json)
-    select
-      inv.id,
-      jsonb_build_object(
-        'invoice', to_jsonb(inv),
-        'client', case when cl.id is null then null else to_jsonb(cl) end,
-        'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
-      )
-    from public.invoices inv
-    left join public.clients cl
-      on cl.id = inv.client_id
-    left join lateral (
-      select cs1.*
-      from public.client_settings cs1
-      where cs1.client_id = cl.id
-      order by cs1.effective_from desc
-      limit 1
-    ) cs on true
-    where inv.id = any(p_context_ids);
-  elsif v_entity_type = 'umbrella' then
-    insert into tmp_ctx(context_id, ctx_json)
-    select
-      u.id,
-      jsonb_build_object(
-        'umbrella', to_jsonb(u),
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
-      )
-    from public.umbrellas u
-    where u.id = any(p_context_ids);
-  end if;
-
-  for v_ctx in
-    select t.context_id, t.ctx_json
-    from tmp_ctx t
-    order by t.context_id::text
-  loop
-    v_ctx_json := v_ctx.ctx_json;
-    v_field_values := '{}'::jsonb;
-
-    if v_selected_keys is not null and array_length(v_selected_keys,1) > 0 then
-      foreach v_key in array v_selected_keys
-      loop
-        if v_key is null or length(btrim(v_key)) = 0 then
-          continue;
-        end if;
-
-        select coalesce(nullif(btrim(coalesce(f.resolver_spec_json->>'path','')),''), v_key)
-          into v_path
-        from public.mailshot_fields f
-        where f.field_key = v_key;
-
-        if v_path is null then
-          v_path := v_key;
-        end if;
-
-        v_path_arr := string_to_array(v_path, '.');
-
-        if v_path_arr is null or array_length(v_path_arr,1) = 0 then
-          v_val := null;
-        elsif array_length(v_path_arr,1) = 1 then
-          v_val := v_ctx_json ->> v_path_arr[1];
-        elsif array_length(v_path_arr,1) = 2 then
-          v_val := (v_ctx_json -> v_path_arr[1]) ->> v_path_arr[2];
-        else
-          v_val := v_ctx_json #>> v_path_arr;
-        end if;
-
-        v_field_values := v_field_values || jsonb_build_object(v_key, v_val);
-      end loop;
-    end if;
-
-    -- Resolve TO (always)
-    v_path := v_to_field_key;
-    v_path_arr := string_to_array(v_path, '.');
-
-    if v_path_arr is null or array_length(v_path_arr,1) = 0 then
-      v_to_value := null;
-      v_recipient_kind := null;
-    else
-      v_recipient_kind := lower(v_path_arr[1]);
-      if array_length(v_path_arr,1) = 1 then
-        v_to_value := v_ctx_json ->> v_path_arr[1];
-      elsif array_length(v_path_arr,1) = 2 then
-        v_to_value := (v_ctx_json -> v_path_arr[1]) ->> v_path_arr[2];
-      else
-        v_to_value := v_ctx_json #>> v_path_arr;
-      end if;
-    end if;
-
-    v_to_value := nullif(btrim(coalesce(v_to_value,'')), '');
-
-    -- recipient_id derived from ctx_json
-    v_recipient_id := null;
-    if v_recipient_kind = 'candidate' then
-      v_recipient_id := nullif((v_ctx_json->'candidate'->>'id'),'')::uuid;
-    elsif v_recipient_kind = 'client' then
-      v_recipient_id := nullif((v_ctx_json->'client'->>'id'),'')::uuid;
-    elsif v_recipient_kind = 'umbrella' then
-      v_recipient_id := nullif((v_ctx_json->'umbrella'->>'id'),'')::uuid;
-    end if;
-
-    -- opt-in checks
-    v_opt_ok := true;
-    v_skip_reason := null;
-
-    if v_to_value is null then
-      v_opt_ok := false;
-      v_skip_reason := 'MISSING_RECIPIENT';
-    end if;
-
-    if v_opt_ok = true and v_recipient_kind = 'candidate' then
-      if v_output_type = 'EMAIL' then
-        v_opt_ok := coalesce((v_ctx_json->'candidate'->>'opt_in_email')::boolean, false);
-      elsif v_output_type = 'WHATSAPP' then
-        v_opt_ok := coalesce((v_ctx_json->'candidate'->>'opt_in_whatsapp')::boolean, false);
-      elsif v_sms_or_voice = true then
-        v_opt_ok := coalesce((v_ctx_json->'candidate'->>'opt_in_sms')::boolean, false);
-      else
-        v_opt_ok := true;
-      end if;
-
-      if v_opt_ok = false then
-        v_skip_reason := 'OPTOUT';
-      end if;
-    elsif v_opt_ok = true and v_recipient_kind = 'client' then
-      v_client_settings_json := v_ctx_json->'client_settings';
-
-      if v_client_settings_json is null or jsonb_typeof(v_client_settings_json) <> 'object' then
-        -- if no settings row, default allow for clients
-        v_opt_ok := true;
-      else
-        if v_output_type = 'EMAIL' then
-          v_opt_ok := coalesce((v_client_settings_json->>'opt_in_email')::boolean, true);
-        elsif v_output_type = 'WHATSAPP' then
-          v_opt_ok := coalesce((v_client_settings_json->>'opt_in_whatsapp')::boolean, true);
-        elsif v_sms_or_voice = true then
-          v_opt_ok := coalesce((v_client_settings_json->>'opt_in_sms')::boolean, true);
-        else
-          v_opt_ok := true;
-        end if;
-      end if;
-
-      if v_opt_ok = false then
-        v_skip_reason := 'OPTOUT';
-      end if;
-    end if;
-
-    v_rows := v_rows || jsonb_build_array(
-      jsonb_build_object(
-        'context_id', v_ctx.context_id::text,
-        'context_kind', v_context_kind,
-        'entity_type', v_entity_type,
-        'output_type', v_output_type,
-        'document_template_id', case when p_document_template_id is null then null else p_document_template_id::text end,
-        'to_field_key', v_to_field_key,
-        'to', v_to_value,
-        'recipient_kind', v_recipient_kind,
-        'recipient_id', case when v_recipient_id is null then null else v_recipient_id::text end,
-        'eligible', v_opt_ok,
-        'skip_reason', v_skip_reason,
-        'field_values', v_field_values,
-        'template_content_json', case when v_has_template then v_template.template_content_json else '{}'::jsonb end,
-        'email_type', v_email_type
-      )
+  update public.mailshot_fields as mf
+  set
+    allowed_entity_types = mdf.allowed_entity_types,
+    resolver_spec_json = mdf.resolver_spec_json,
+    updated_at_utc = v_now
+  from tmp_mailshot_discovered_fields as mdf
+  where mf.field_key = mdf.field_key
+    and (
+      mf.allowed_entity_types is distinct from mdf.allowed_entity_types
+      or mf.resolver_spec_json is distinct from mdf.resolver_spec_json
     );
-  end loop;
+
+  get diagnostics v_updated = row_count;
+
+  update public.mailshot_fields as mf
+  set
+    resolver_spec_json = coalesce(mf.resolver_spec_json, '{}'::jsonb) || jsonb_build_object(
+      'managed_by', 'approved_view_sync',
+      'source_family', split_part(mf.field_key, '.', 1),
+      'path', mf.field_key,
+      'stale', true,
+      'stale_detected_at_utc', v_now::text
+    ),
+    updated_at_utc = v_now
+  where split_part(mf.field_key, '.', 1) in (
+      select msf.source_family
+      from tmp_mailshot_source_families as msf
+    )
+    and not exists (
+      select 1
+      from tmp_mailshot_discovered_fields as mdf
+      where mdf.field_key = mf.field_key
+    )
+    and coalesce((mf.resolver_spec_json ->> 'stale')::boolean, false) = false;
+
+  get diagnostics v_marked_stale = row_count;
 
   return jsonb_build_object(
     'ok', true,
-    'context_kind', v_context_kind,
-    'entity_type', v_entity_type,
-    'output_type', v_output_type,
-    'document_template_id', case when p_document_template_id is null then null else p_document_template_id::text end,
-    'selected_field_keys', to_jsonb(v_selected_keys),
-    'to_field_key', v_to_field_key,
-    'rows', v_rows
+    'source_family_count', v_source_family_count,
+    'source_view_count', v_source_view_count,
+    'helper_columns_skipped', v_helper_column_count,
+    'discovered_total', v_discovered_total,
+    'inserted', v_inserted,
+    'updated_existing', v_updated,
+    'marked_stale', v_marked_stale,
+    'source_views', v_source_views
   );
 end;
-$$;
+$function$;
+
+
+
 
 
 
@@ -3220,8 +3710,6 @@ $$;
 
 
 
-
-
 create or replace function public.mailshot_enqueue(
   p_prepare_json jsonb,
   p_final_edits_json jsonb,
@@ -3265,7 +3753,9 @@ declare
   v_importance_override text;
   v_email_type_override text;
 
-  v_attachments jsonb;
+  v_global_attachments jsonb := '[]'::jsonb;
+  v_row_attachments jsonb := '[]'::jsonb;
+  v_effective_attachments jsonb := '[]'::jsonb;
 
   v_to text;
   v_recipient_kind text;
@@ -3455,7 +3945,7 @@ begin
       v_scheduled_for_utc := v_now + make_interval(mins => v_relative_minutes);
     end if;
 
-    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_future_days)) then
+    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_futureDays)) then
       raise exception 'delivery_timing_json.scheduled_for_utc exceeds max_future_days';
     end if;
 
@@ -3492,7 +3982,15 @@ begin
   v_importance_override := nullif(coalesce(p_final_edits_json->>'importance',''), '');
   v_email_type_override := nullif(coalesce(p_final_edits_json->>'email_type',''), '');
 
-  v_attachments := coalesce(p_final_edits_json->'attachments', '[]'::jsonb);
+  if p_final_edits_json is not null and p_final_edits_json ? 'attachments' then
+    if jsonb_typeof(p_final_edits_json->'attachments') <> 'array' then
+      raise exception 'final_edits_json.attachments must be array';
+    end if;
+
+    v_global_attachments := coalesce(p_final_edits_json->'attachments', '[]'::jsonb);
+  else
+    v_global_attachments := '[]'::jsonb;
+  end if;
 
   insert into public.mailshot_runs(
     context_kind,
@@ -3562,6 +4060,16 @@ begin
 
     v_field_values := coalesce(v_row->'field_values', '{}'::jsonb);
     v_row_template_content := coalesce(v_row->'template_content_json', '{}'::jsonb);
+
+    if v_row ? 'attachment_instructions' and jsonb_typeof(v_row->'attachment_instructions') = 'array' then
+      v_row_attachments := coalesce(v_row->'attachment_instructions', '[]'::jsonb);
+    elsif v_row ? 'attachments' and jsonb_typeof(v_row->'attachments') = 'array' then
+      v_row_attachments := coalesce(v_row->'attachments', '[]'::jsonb);
+    else
+      v_row_attachments := '[]'::jsonb;
+    end if;
+
+    v_effective_attachments := coalesce(v_global_attachments, '[]'::jsonb) || coalesce(v_row_attachments, '[]'::jsonb);
 
     v_row_subject_tpl := coalesce(
       v_subject_tpl_override,
@@ -3667,7 +4175,7 @@ begin
         v_rendered_subject,
         nullif(v_rendered_body_text, ''),
         nullif(v_rendered_body_html, ''),
-        v_attachments,
+        v_effective_attachments,
         'QUEUED'::public.mail_status_enum,
         v_ref,
         v_now,
@@ -3891,6 +4399,5 @@ begin
   );
 end;
 $$;
-
 
 
