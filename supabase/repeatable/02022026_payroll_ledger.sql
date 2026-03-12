@@ -169,7 +169,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -182,6 +181,12 @@ set search_path = public
 as $$
 declare
   v_batch record;
+  v_cancelled_at_utc timestamptz := now();
+  v_released_reservation_count int := 0;
+  v_released_reservation_amount numeric := 0;
+  v_cleared_timesheet_override_count int := 0;
+  v_released_finance_case_ids jsonb := '[]'::jsonb;
+  v_reincluded_timesheet_ids jsonb := '[]'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_cancel: pay_batch_id is required';
@@ -192,7 +197,12 @@ begin
 
   select
     pb.id,
-    pb.status
+    pb.status,
+    pb.authoritative_payment_date,
+    pb.authoritative_payment_date_source,
+    pb.scheduled_at_utc,
+    pb.schedule_kind,
+    pb.completed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -202,7 +212,6 @@ begin
     raise exception 'pay_batch_cancel: pay_batch not found';
   end if;
 
-  -- ✅ Updated: allow deleting/cancelling DRAFT and other pre-execution / pre-final statuses
   if upper(coalesce(v_batch.status,'')) not in (
     'DRAFT',
     'DRAFT_CREATED',
@@ -226,14 +235,12 @@ begin
   delete from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id;
 
-  -- If auth tables exist, cancel any active auth request and invalidate tokens.
   if to_regclass('public.pay_batch_auth_requests') is not null then
     execute
       'update public.pay_batch_auth_requests pbar
        set state = ''CANCELLED''
        where pbar.pay_batch_id = $1
-         and pbar.state = ''AWAITING'''
-      using p_pay_batch_id;
+         and pbar.state = ''AWAITING''' using p_pay_batch_id;
 
     if to_regclass('public.pay_batch_auth_tokens') is not null then
       execute
@@ -245,15 +252,98 @@ begin
              from public.pay_batch_auth_requests pbar2
              where pbar2.pay_batch_id = $1
                and pbar2.state in (''AWAITING'',''CANCELLED'')
-           )'
-        using p_pay_batch_id;
+           )' using p_pay_batch_id;
     end if;
   end if;
+
+  with rel as (
+    update public.pay_advance_reservations par
+    set
+      status = 'RELEASED',
+      released_at_utc = coalesce(par.released_at_utc, v_cancelled_at_utc),
+      released_reason = coalesce(nullif(btrim(coalesce(p_reason,'')),''), 'BATCH_CANCELLED'),
+      updated_by_user_id = p_actor_user_id
+    where par.pay_batch_id = p_pay_batch_id
+      and (
+        upper(coalesce(par.status,'')) = 'RESERVED'
+        or (
+          upper(coalesce(par.status,'')) = 'COMMITTED'
+          and par.settled_at_utc is null
+        )
+      )
+    returning par.id, par.finance_case_id, par.reserved_amount
+  )
+  select
+    count(*)::int,
+    round(coalesce(sum(rel.reserved_amount),0),2),
+    coalesce(jsonb_agg(distinct rel.finance_case_id::text), '[]'::jsonb)
+  into
+    v_released_reservation_count,
+    v_released_reservation_amount,
+    v_released_finance_case_ids
+  from rel;
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  select
+    par.finance_case_id,
+    'RESERVATION_RELEASED',
+    v_cancelled_at_utc,
+    p_actor_user_id,
+    p_pay_batch_id,
+    par.id,
+    jsonb_build_object('reservation_status', 'COMMITTED_OR_RESERVED'),
+    jsonb_build_object(
+      'reservation_status', 'RELEASED',
+      'released_at_utc', v_cancelled_at_utc::text,
+      'released_reason', coalesce(nullif(btrim(coalesce(p_reason,'')),''), 'BATCH_CANCELLED')
+    ),
+    'batch_cancel',
+    p_reason
+  from public.pay_advance_reservations par
+  where par.pay_batch_id = p_pay_batch_id
+    and upper(coalesce(par.status,'')) = 'RELEASED'
+    and par.released_at_utc = v_cancelled_at_utc;
+
+  with clr as (
+    update public.timesheet_payment_overrides tpo
+    set
+      consumed_by_pay_batch_id = null,
+      consumed_at_utc = null
+    where tpo.consumed_by_pay_batch_id = p_pay_batch_id
+      and not exists (
+        select 1
+        from public.pay_batch_items pbi
+        join public.pay_batch_candidates pbc
+          on pbc.id = pbi.pay_batch_candidate_id
+        where pbc.pay_batch_id = p_pay_batch_id
+          and pbi.timesheet_id = tpo.timesheet_id
+          and pbc.settled_at_utc is not null
+      )
+    returning tpo.timesheet_id
+  )
+  select
+    count(*)::int,
+    coalesce(jsonb_agg(clr.timesheet_id::text order by clr.timesheet_id::text), '[]'::jsonb)
+  into
+    v_cleared_timesheet_override_count,
+    v_reincluded_timesheet_ids
+  from clr;
 
   update public.pay_batches pb
   set
     status = 'CANCELLED',
-    cancelled_at_utc = now(),
+    cancelled_at_utc = v_cancelled_at_utc,
     cancelled_by_user_id = p_actor_user_id,
     cancel_reason = p_reason,
     schedule_kind = null,
@@ -263,13 +353,57 @@ begin
     funds_warning_hours_json = null
   where pb.id = p_pay_batch_id;
 
+  insert into public.audit_events(
+    actor_user_id,
+    object_type,
+    object_id_text,
+    action,
+    before_json,
+    after_json,
+    reason
+  )
+  values (
+    p_actor_user_id,
+    'pay_batch',
+    p_pay_batch_id::text,
+    'PAY_BATCH_CANCELLED',
+    null,
+    jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', 'CANCELLED',
+      'released_reservation_count', v_released_reservation_count,
+      'released_reservation_amount', v_released_reservation_amount,
+      'released_finance_case_ids', v_released_finance_case_ids,
+      'cleared_timesheet_override_count', v_cleared_timesheet_override_count,
+      'reincluded_timesheet_ids', v_reincluded_timesheet_ids,
+      'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+      'authoritative_payment_date_source', v_batch.authoritative_payment_date_source
+    ),
+    p_reason
+  );
+
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
     'status', (select pb2.status from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
     'cancelled_at_utc', (select pb3.cancelled_at_utc::text from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
     'cancelled_by_user_id', p_actor_user_id::text,
-    'cancel_reason', p_reason
+    'cancel_reason', p_reason,
+    'released_reservations', jsonb_build_object(
+      'count', v_released_reservation_count,
+      'amount', v_released_reservation_amount,
+      'finance_case_ids', v_released_finance_case_ids
+    ),
+    'timesheet_payment_overrides', jsonb_build_object(
+      'cleared_count', v_cleared_timesheet_override_count,
+      'reincluded_timesheet_ids', v_reincluded_timesheet_ids
+    ),
+    'authoritative_payment_date', (select case when pb4.authoritative_payment_date is null then null else pb4.authoritative_payment_date::text end from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
+    'authoritative_payment_date_source', (select pb5.authoritative_payment_date_source from public.pay_batches pb5 where pb5.id = p_pay_batch_id),
+    'worker_communications', jsonb_build_object(
+      'remittance_sent_audit_preserved', true,
+      'commit_stage_audit_preserved', true
+    )
   );
 end;
 $$;
