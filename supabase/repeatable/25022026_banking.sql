@@ -17057,5 +17057,1025 @@ begin
 end;
 $$;
 
+CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_build(
+  p_pay_batch_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_batch_id uuid := p_pay_batch_id;
+  v_batch record;
+  v_jobs jsonb := '[]'::jsonb;
+begin
+  if v_batch_id is null then
+    raise exception 'pay_finance_payout_notice_build: pay_batch_id is required';
+  end if;
+
+  select
+    pb.id,
+    pb.status,
+    pb.batch_kind_fixed,
+    pb.authoritative_payment_date,
+    pb.pay_date,
+    pb.bulk_reference,
+    pb.rail_provider_snapshot,
+    pb.rail_env_snapshot
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = v_batch_id;
+
+  if v_batch.id is null then
+    raise exception 'pay_finance_payout_notice_build: pay batch % not found.', v_batch_id;
+  end if;
+
+  with payout_items as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      pbc.candidate_id,
+      c.display_name,
+      c.first_name,
+      c.last_name,
+      c.email,
+      pbi.id as pay_batch_item_id,
+      pbi.item_type,
+      pbi.description,
+      pbi.amount_ex_vat,
+      pbi.amount_vat,
+      pbi.amount_inc_vat,
+      pbi.finance_case_id,
+      pa.case_type,
+      pa.adjustment_comment,
+      pa.schedule_json,
+      pa.weekly_due,
+      pa.weeks_total,
+      pa.start_week_start,
+      pa.next_due_week_start,
+      pa.outstanding_amount,
+      pa.notes
+    from public.pay_batch_candidates pbc
+    join public.candidates c
+      on c.id = pbc.candidate_id
+    join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    left join public.pay_advances pa
+      on pa.id = pbi.finance_case_id
+    where pbc.pay_batch_id = v_batch_id
+      and coalesce(pbi.is_voided, false) = false
+      and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT')
+  ),
+  items_grouped as (
+    select
+      pi.candidate_id,
+      max(pi.display_name) as display_name,
+      max(pi.first_name) as first_name,
+      max(pi.last_name) as last_name,
+      max(pi.email) as email,
+      jsonb_agg(
+        jsonb_build_object(
+          'pay_batch_item_id', pi.pay_batch_item_id::text,
+          'finance_case_id', case when pi.finance_case_id is null then null else pi.finance_case_id::text end,
+          'case_type', case
+            when pi.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum then 'PAYMENT_ADVANCE'
+            when pi.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum then 'MANUAL_CREDIT_ADJUSTMENT'
+            else null
+          end,
+          'label', case
+            when pi.item_type = 'LOAN_PAYOUT' then 'Payment Advance'
+            when pi.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual Credit Adjustment'
+            else coalesce(nullif(btrim(pi.description), ''), 'Payment')
+          end,
+          'amount', round(coalesce(pi.amount_inc_vat, pi.amount_ex_vat, 0), 2),
+          'amount_ex_vat', round(coalesce(pi.amount_ex_vat, 0), 2),
+          'scheduled_payment_date', coalesce(v_batch.authoritative_payment_date, v_batch.pay_date),
+          'repayment_arrangement', case
+            when pi.item_type = 'LOAN_PAYOUT' then jsonb_build_object(
+              'weekly_due', pi.weekly_due,
+              'weeks_total', pi.weeks_total,
+              'start_week_start', case when pi.start_week_start is null then null else pi.start_week_start::text end,
+              'next_due_week_start', case when pi.next_due_week_start is null then null else pi.next_due_week_start::text end,
+              'schedule_json', coalesce(pi.schedule_json, '[]'::jsonb),
+              'remaining_outstanding_amount', pi.outstanding_amount
+            )
+            else null
+          end,
+          'adjustment_comment', case
+            when pi.item_type = 'MANUAL_CREDIT_PAYOUT' then nullif(btrim(coalesce(pi.adjustment_comment, '')), '')
+            else null
+          end,
+          'notes', nullif(btrim(coalesce(pi.notes, '')), '')
+        )
+        order by pi.pay_batch_item_id
+      ) as items_json,
+      round(sum(round(coalesce(pi.amount_inc_vat, pi.amount_ex_vat, 0), 2)), 2) as total_amount
+    from payout_items pi
+    group by pi.candidate_id
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'candidate_id', ig.candidate_id::text,
+        'recipient_name', coalesce(nullif(btrim(ig.display_name), ''), nullif(btrim(trim(coalesce(ig.first_name, '') || ' ' || coalesce(ig.last_name, ''))), ''), 'Worker'),
+        'recipient_email', ig.email,
+        'scheduled_payment_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+        'subject', case
+          when jsonb_array_length(ig.items_json) = 1 and (ig.items_json->0->>'label') = 'Payment Advance' then 'Payment Advance scheduled'
+          when jsonb_array_length(ig.items_json) = 1 and (ig.items_json->0->>'label') = 'Manual Credit Adjustment' then 'Manual Credit Adjustment scheduled'
+          else 'Payment scheduled'
+        end,
+        'worker_message', case
+          when jsonb_array_length(ig.items_json) = 1 and (ig.items_json->0->>'label') = 'Payment Advance' then 'A Payment Advance has been scheduled.'
+          when jsonb_array_length(ig.items_json) = 1 and (ig.items_json->0->>'label') = 'Manual Credit Adjustment' then 'A Manual Credit Adjustment has been scheduled.'
+          else 'A payment has been scheduled.'
+        end,
+        'total_amount', ig.total_amount,
+        'items', ig.items_json,
+        'batch', jsonb_build_object(
+          'pay_batch_id', v_batch.id::text,
+          'status', v_batch.status,
+          'batch_kind_fixed', v_batch.batch_kind_fixed,
+          'scheduled_payment_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+          'bulk_reference', v_batch.bulk_reference,
+          'rail_provider_snapshot', v_batch.rail_provider_snapshot,
+          'rail_env_snapshot', v_batch.rail_env_snapshot
+        )
+      )
+      order by ig.candidate_id
+    ),
+    '[]'::jsonb
+  )
+  into v_jobs
+  from items_grouped ig
+  where nullif(btrim(coalesce(ig.email, '')), '') is not null;
+
+  return jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', v_batch.id::text,
+    'scheduled_payment_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+    'jobs', coalesce(v_jobs, '[]'::jsonb)
+  );
+end;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.timesheet_payment_override_set(
+  p_timesheet_id uuid,
+  p_actor_user_id uuid,
+  p_reason text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_timesheet_id uuid := p_timesheet_id;
+  v_actor_user_id uuid := p_actor_user_id;
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_now timestamptz := now();
+  v_candidate_id uuid := null;
+  v_existing record;
+  v_batch_status text := null;
+  v_inserted record;
+  v_pay_state jsonb := '{}'::jsonb;
+begin
+  if v_timesheet_id is null then
+    raise exception 'timesheet_payment_override_set: timesheet_id is required';
+  end if;
+
+  if v_actor_user_id is null then
+    raise exception 'timesheet_payment_override_set: actor_user_id is required';
+  end if;
+
+  if v_reason is null then
+    raise exception 'timesheet_payment_override_set: reason is required';
+  end if;
+
+  perform 1
+  from public.timesheets ts
+  where ts.timesheet_id = v_timesheet_id
+    and ts.is_current = true;
+
+  if not found then
+    raise exception 'timesheet_payment_override_set: current timesheet % not found.', v_timesheet_id;
+  end if;
+
+  select tf.candidate_id
+  into v_candidate_id
+  from public.timesheets_financials tf
+  where tf.timesheet_id = v_timesheet_id
+    and tf.is_current = true
+  limit 1;
+
+  if v_candidate_id is null then
+    raise exception 'timesheet_payment_override_set: candidate_id not found for timesheet %.', v_timesheet_id;
+  end if;
+
+  select
+    tpo.id,
+    tpo.timesheet_id,
+    tpo.candidate_id,
+    tpo.override_type,
+    tpo.reason,
+    tpo.created_at_utc,
+    tpo.created_by_user_id,
+    tpo.consumed_by_pay_batch_id,
+    tpo.consumed_at_utc,
+    tpo.cleared_at_utc,
+    tpo.cleared_by_user_id,
+    tpo.clear_reason
+  into v_existing
+  from public.timesheet_payment_overrides tpo
+  where tpo.timesheet_id = v_timesheet_id
+    and tpo.cleared_at_utc is null
+  order by tpo.created_at_utc desc, tpo.id desc
+  limit 1;
+
+  if v_existing.id is not null then
+    if v_existing.consumed_by_pay_batch_id is not null then
+      select upper(coalesce(pb.status, ''))
+      into v_batch_status
+      from public.pay_batches pb
+      where pb.id = v_existing.consumed_by_pay_batch_id
+      limit 1;
+
+      if coalesce(v_batch_status, '') <> 'CANCELLED' then
+        raise exception 'timesheet_payment_override_set: override already consumed by non-cancelled pay batch %.', v_existing.consumed_by_pay_batch_id;
+      end if;
+
+      update public.timesheet_payment_overrides tpo_old
+      set
+        cleared_at_utc = v_now,
+        cleared_by_user_id = v_actor_user_id,
+        clear_reason = coalesce(tpo_old.clear_reason, 'REPLACED_AFTER_CANCELLED_BATCH')
+      where tpo_old.id = v_existing.id;
+    else
+      v_pay_state := public.timesheet_pay_state(
+        p_timesheet_id => v_timesheet_id,
+        p_actor_user_id => v_actor_user_id
+      );
+
+      return jsonb_build_object(
+        'ok', true,
+        'timesheet_id', v_timesheet_id::text,
+        'candidate_id', v_candidate_id::text,
+        'already_exists', true,
+        'override', jsonb_build_object(
+          'id', v_existing.id::text,
+          'override_type', v_existing.override_type,
+          'reason', v_existing.reason,
+          'created_at_utc', v_existing.created_at_utc,
+          'created_by_user_id', case when v_existing.created_by_user_id is null then null else v_existing.created_by_user_id::text end,
+          'consumed_by_pay_batch_id', case when v_existing.consumed_by_pay_batch_id is null then null else v_existing.consumed_by_pay_batch_id::text end,
+          'consumed_at_utc', v_existing.consumed_at_utc
+        ),
+        'pay_state', v_pay_state
+      );
+    end if;
+  end if;
+
+  insert into public.timesheet_payment_overrides(
+    timesheet_id,
+    candidate_id,
+    override_type,
+    reason,
+    created_at_utc,
+    created_by_user_id
+  )
+  values (
+    v_timesheet_id,
+    v_candidate_id,
+    'ADVANCE_THIS_PAYMENT',
+    v_reason,
+    v_now,
+    v_actor_user_id
+  )
+  returning * into v_inserted;
+
+  v_pay_state := public.timesheet_pay_state(
+    p_timesheet_id => v_timesheet_id,
+    p_actor_user_id => v_actor_user_id
+  );
+
+  perform public._audit_insert(
+    'timesheets',
+    v_timesheet_id::text,
+    'TIMESHEET_PAYMENT_OVERRIDE_SET',
+    null,
+    jsonb_build_object(
+      'override_id', v_inserted.id::text,
+      'timesheet_id', v_timesheet_id::text,
+      'candidate_id', v_candidate_id::text,
+      'override_type', 'ADVANCE_THIS_PAYMENT',
+      'reason', v_reason
+    ),
+    'ADVANCE_THIS_PAYMENT',
+    v_actor_user_id
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'timesheet_id', v_timesheet_id::text,
+    'candidate_id', v_candidate_id::text,
+    'already_exists', false,
+    'override', jsonb_build_object(
+      'id', v_inserted.id::text,
+      'override_type', v_inserted.override_type,
+      'reason', v_inserted.reason,
+      'created_at_utc', v_inserted.created_at_utc,
+      'created_by_user_id', case when v_inserted.created_by_user_id is null then null else v_inserted.created_by_user_id::text end,
+      'consumed_by_pay_batch_id', case when v_inserted.consumed_by_pay_batch_id is null then null else v_inserted.consumed_by_pay_batch_id::text end,
+      'consumed_at_utc', v_inserted.consumed_at_utc
+    ),
+    'pay_state', v_pay_state
+  );
+end;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.timesheet_payment_override_clear(
+  p_timesheet_id uuid,
+  p_actor_user_id uuid,
+  p_clear_reason text DEFAULT NULL::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_timesheet_id uuid := p_timesheet_id;
+  v_actor_user_id uuid := p_actor_user_id;
+  v_clear_reason text := nullif(btrim(coalesce(p_clear_reason, '')), '');
+  v_now timestamptz := now();
+  v_existing record;
+  v_batch_status text := null;
+  v_pay_state jsonb := '{}'::jsonb;
+  v_candidate_id uuid := null;
+begin
+  if v_timesheet_id is null then
+    raise exception 'timesheet_payment_override_clear: timesheet_id is required';
+  end if;
+
+  if v_actor_user_id is null then
+    raise exception 'timesheet_payment_override_clear: actor_user_id is required';
+  end if;
+
+  select tf.candidate_id
+  into v_candidate_id
+  from public.timesheets_financials tf
+  where tf.timesheet_id = v_timesheet_id
+    and tf.is_current = true
+  limit 1;
+
+  select
+    tpo.id,
+    tpo.timesheet_id,
+    tpo.candidate_id,
+    tpo.override_type,
+    tpo.reason,
+    tpo.created_at_utc,
+    tpo.created_by_user_id,
+    tpo.consumed_by_pay_batch_id,
+    tpo.consumed_at_utc,
+    tpo.cleared_at_utc,
+    tpo.cleared_by_user_id,
+    tpo.clear_reason
+  into v_existing
+  from public.timesheet_payment_overrides tpo
+  where tpo.timesheet_id = v_timesheet_id
+    and tpo.cleared_at_utc is null
+  order by tpo.created_at_utc desc, tpo.id desc
+  limit 1;
+
+  if v_existing.id is null then
+    v_pay_state := public.timesheet_pay_state(
+      p_timesheet_id => v_timesheet_id,
+      p_actor_user_id => v_actor_user_id
+    );
+
+    return jsonb_build_object(
+      'ok', true,
+      'timesheet_id', v_timesheet_id::text,
+      'candidate_id', case when v_candidate_id is null then null else v_candidate_id::text end,
+      'already_cleared', true,
+      'pay_state', v_pay_state
+    );
+  end if;
+
+  if v_existing.consumed_by_pay_batch_id is not null then
+    select upper(coalesce(pb.status, ''))
+    into v_batch_status
+    from public.pay_batches pb
+    where pb.id = v_existing.consumed_by_pay_batch_id
+    limit 1;
+
+    if coalesce(v_batch_status, '') <> 'CANCELLED' then
+      raise exception 'timesheet_payment_override_clear: override already consumed by non-cancelled pay batch %.', v_existing.consumed_by_pay_batch_id;
+    end if;
+  end if;
+
+  update public.timesheet_payment_overrides tpo
+  set
+    cleared_at_utc = v_now,
+    cleared_by_user_id = v_actor_user_id,
+    clear_reason = coalesce(v_clear_reason, 'CLEARED')
+  where tpo.id = v_existing.id;
+
+  v_pay_state := public.timesheet_pay_state(
+    p_timesheet_id => v_timesheet_id,
+    p_actor_user_id => v_actor_user_id
+  );
+
+  perform public._audit_insert(
+    'timesheets',
+    v_timesheet_id::text,
+    'TIMESHEET_PAYMENT_OVERRIDE_CLEARED',
+    jsonb_build_object(
+      'override_id', v_existing.id::text,
+      'timesheet_id', v_timesheet_id::text,
+      'candidate_id', case when coalesce(v_existing.candidate_id, v_candidate_id) is null then null else coalesce(v_existing.candidate_id, v_candidate_id)::text end,
+      'override_type', v_existing.override_type,
+      'reason', v_existing.reason,
+      'consumed_by_pay_batch_id', case when v_existing.consumed_by_pay_batch_id is null then null else v_existing.consumed_by_pay_batch_id::text end,
+      'consumed_at_utc', v_existing.consumed_at_utc
+    ),
+    jsonb_build_object(
+      'override_id', v_existing.id::text,
+      'timesheet_id', v_timesheet_id::text,
+      'clear_reason', coalesce(v_clear_reason, 'CLEARED')
+    ),
+    coalesce(v_clear_reason, 'CLEARED'),
+    v_actor_user_id
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'timesheet_id', v_timesheet_id::text,
+    'candidate_id', case when coalesce(v_existing.candidate_id, v_candidate_id) is null then null else coalesce(v_existing.candidate_id, v_candidate_id)::text end,
+    'already_cleared', false,
+    'cleared_override_id', v_existing.id::text,
+    'pay_state', v_pay_state
+  );
+end;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.pay_finance_case_audit_feed(
+  p_finance_case_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_finance_case_id uuid := p_finance_case_id;
+  v_case record;
+  v_timeline jsonb := '[]'::jsonb;
+begin
+  if v_finance_case_id is null then
+    raise exception 'pay_finance_case_audit_feed: finance_case_id is required';
+  end if;
+
+  select
+    vfcr.finance_case_id,
+    vfcr.case_type,
+    vfcr.candidate_id,
+    vfcr.candidate_tms_ref,
+    vfcr.candidate_display_name,
+    vfcr.client_id,
+    vfcr.client_name,
+    vfcr.linked_timesheet_id,
+    vfcr.linked_shift_date,
+    vfcr.status,
+    vfcr.payout_status,
+    vfcr.original_amount,
+    vfcr.outstanding_amount,
+    vfcr.weekly_due,
+    vfcr.weeks_total,
+    vfcr.start_week_start,
+    vfcr.next_due_week_start,
+    vfcr.adjustment_comment,
+    vfcr.source_original_paid_amount,
+    vfcr.source_corrected_paid_amount,
+    vfcr.minimum_earnings_threshold,
+    vfcr.take_home_floor_override,
+    vfcr.active_snooze_id,
+    vfcr.active_snooze_kind,
+    vfcr.active_snooze_until_date,
+    vfcr.active_snooze_note,
+    vfcr.latest_remittance_sent_at_utc,
+    vfcr.latest_remittance_trigger_status,
+    vfcr.last_remittance_error,
+    vfcr.latest_recovery_pay_batch_id,
+    vfcr.latest_recovery_pay_date,
+    vfcr.payout_pay_batch_id,
+    vfcr.payout_transfer_id,
+    vfcr.written_off_at_utc,
+    vfcr.write_off_reason,
+    vfcr.cleared_at_utc,
+    vfcr.baseline_signature,
+    vfcr.schedule_json,
+    vfcr.notes,
+    vfcr.created_at,
+    vfcr.updated_at
+  into v_case
+  from public.v_finance_cases_register vfcr
+  where vfcr.finance_case_id = v_finance_case_id;
+
+  if v_case.finance_case_id is null then
+    raise exception 'pay_finance_case_audit_feed: finance case % not found.', v_finance_case_id;
+  end if;
+
+  with booking_ctx as (
+    select ts.booking_id
+    from public.timesheets ts
+    where ts.timesheet_id = v_case.linked_timesheet_id
+    limit 1
+  ),
+  finance_events as (
+    select
+      pfce.event_at_utc as at_utc,
+      'FINANCE_CASE_EVENT'::text as source,
+      pfce.event_type as event_type,
+      initcap(replace(lower(coalesce(pfce.event_type, 'EVENT')), '_', ' ')) as title,
+      pfce.before_json,
+      pfce.after_json,
+      pfce.reason,
+      pfce.note,
+      case when pfce.pay_batch_id is null then null else pfce.pay_batch_id::text end as pay_batch_id_text,
+      case when pfce.reservation_id is null then null else pfce.reservation_id::text end as reservation_id_text,
+      null::text as timesheet_id_text,
+      null::jsonb as meta_json
+    from public.pay_finance_case_events pfce
+    where pfce.finance_case_id = v_finance_case_id
+  ),
+  reservation_events as (
+    select
+      x.at_utc,
+      'RESERVATION'::text as source,
+      x.event_type,
+      x.title,
+      x.before_json,
+      x.after_json,
+      x.reason,
+      x.note,
+      x.pay_batch_id_text,
+      x.reservation_id_text,
+      null::text as timesheet_id_text,
+      x.meta_json
+    from (
+      select
+        par.created_at_utc as at_utc,
+        'RESERVED'::text as event_type,
+        'Finance reservation created'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object(
+          'reserved_amount', par.reserved_amount,
+          'repayment_week_start', case when par.repayment_week_start is null then null else par.repayment_week_start::text end,
+          'status', par.status
+        ) as after_json,
+        null::text as reason,
+        null::text as note,
+        par.pay_batch_id::text as pay_batch_id_text,
+        par.id::text as reservation_id_text,
+        jsonb_build_object('reservation_status', par.status) as meta_json
+      from public.pay_advance_reservations par
+      where par.finance_case_id = v_finance_case_id
+        and par.created_at_utc is not null
+
+      union all
+
+      select
+        par.committed_at_utc as at_utc,
+        'COMMITTED'::text as event_type,
+        'Finance reservation committed'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object('reserved_amount', par.reserved_amount, 'status', 'COMMITTED') as after_json,
+        null::text as reason,
+        null::text as note,
+        par.pay_batch_id::text as pay_batch_id_text,
+        par.id::text as reservation_id_text,
+        jsonb_build_object('reservation_status', 'COMMITTED') as meta_json
+      from public.pay_advance_reservations par
+      where par.finance_case_id = v_finance_case_id
+        and par.committed_at_utc is not null
+
+      union all
+
+      select
+        par.settled_at_utc as at_utc,
+        'SETTLED'::text as event_type,
+        'Finance reservation settled'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object('reserved_amount', par.reserved_amount, 'status', 'SETTLED') as after_json,
+        null::text as reason,
+        null::text as note,
+        par.pay_batch_id::text as pay_batch_id_text,
+        par.id::text as reservation_id_text,
+        jsonb_build_object('reservation_status', 'SETTLED') as meta_json
+      from public.pay_advance_reservations par
+      where par.finance_case_id = v_finance_case_id
+        and par.settled_at_utc is not null
+
+      union all
+
+      select
+        par.released_at_utc as at_utc,
+        'RELEASED'::text as event_type,
+        'Finance reservation released'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object('reserved_amount', par.reserved_amount, 'status', 'RELEASED') as after_json,
+        par.released_reason as reason,
+        null::text as note,
+        par.pay_batch_id::text as pay_batch_id_text,
+        par.id::text as reservation_id_text,
+        jsonb_build_object('reservation_status', 'RELEASED') as meta_json
+      from public.pay_advance_reservations par
+      where par.finance_case_id = v_finance_case_id
+        and par.released_at_utc is not null
+    ) x
+    where x.at_utc is not null
+  ),
+  patch_events as (
+    select
+      pap.patched_at_utc as at_utc,
+      'PATCH'::text as source,
+      'PATCHED'::text as event_type,
+      'Finance case patched'::text as title,
+      jsonb_build_object(
+        'outstanding_amount', pap.old_outstanding_amount,
+        'schedule_json', pap.old_schedule_json,
+        'next_due_week_start', case when pap.old_next_due_week_start is null then null else pap.old_next_due_week_start::text end
+      ) as before_json,
+      jsonb_build_object(
+        'outstanding_amount', pap.new_outstanding_amount,
+        'schedule_json', pap.new_schedule_json,
+        'next_due_week_start', case when pap.new_next_due_week_start is null then null else pap.new_next_due_week_start::text end
+      ) as after_json,
+      null::text as reason,
+      null::text as note,
+      case when pap.pay_batch_id is null then null else pap.pay_batch_id::text end as pay_batch_id_text,
+      null::text as reservation_id_text,
+      null::text as timesheet_id_text,
+      null::jsonb as meta_json
+    from public.pay_advance_patches pap
+    where pap.advance_id = v_finance_case_id
+  ),
+  snooze_events as (
+    select
+      x.at_utc,
+      'SNOOZE'::text as source,
+      x.event_type,
+      x.title,
+      x.before_json,
+      x.after_json,
+      x.reason,
+      x.note,
+      null::text as pay_batch_id_text,
+      null::text as reservation_id_text,
+      case when x.timesheet_id is null then null else x.timesheet_id::text end as timesheet_id_text,
+      x.meta_json
+    from (
+      select
+        pis.created_at_utc as at_utc,
+        'SNOOZE_APPLIED'::text as event_type,
+        'Snooze applied'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object(
+          'snooze_kind', pis.snooze_kind,
+          'snooze_until_date', case when pis.snooze_until_date is null then null else pis.snooze_until_date::text end,
+          'note', pis.note,
+          'source_ref', pis.source_ref
+        ) as after_json,
+        null::text as reason,
+        pis.note as note,
+        pis.timesheet_id,
+        jsonb_build_object('snooze_id', pis.id::text) as meta_json
+      from public.pay_item_snoozes pis
+      where pis.source_ref = ('advance:' || v_finance_case_id::text)
+        and pis.created_at_utc is not null
+
+      union all
+
+      select
+        pis.cleared_at_utc as at_utc,
+        'SNOOZE_CLEARED'::text as event_type,
+        'Snooze cleared'::text as title,
+        jsonb_build_object(
+          'snooze_kind', pis.snooze_kind,
+          'snooze_until_date', case when pis.snooze_until_date is null then null else pis.snooze_until_date::text end,
+          'note', pis.note,
+          'source_ref', pis.source_ref
+        ) as before_json,
+        null::jsonb as after_json,
+        null::text as reason,
+        pis.note as note,
+        pis.timesheet_id,
+        jsonb_build_object('snooze_id', pis.id::text) as meta_json
+      from public.pay_item_snoozes pis
+      where pis.source_ref = ('advance:' || v_finance_case_id::text)
+        and pis.cleared_at_utc is not null
+    ) x
+    where x.at_utc is not null
+  ),
+  generic_audit_events as (
+    select
+      ae.ts_utc as at_utc,
+      'AUDIT'::text as source,
+      ae.action as event_type,
+      initcap(replace(lower(coalesce(ae.action, 'EVENT')), '_', ' ')) as title,
+      ae.before_json,
+      ae.after_json,
+      ae.reason,
+      null::text as note,
+      null::text as pay_batch_id_text,
+      null::text as reservation_id_text,
+      null::text as timesheet_id_text,
+      jsonb_build_object(
+        'object_type', ae.object_type,
+        'object_id_text', ae.object_id_text,
+        'actor_user_id', case when ae.actor_user_id is null then null else ae.actor_user_id::text end,
+        'actor_display', ae.actor_display,
+        'actor_role_at_time', ae.actor_role_at_time,
+        'correlation_id', ae.correlation_id
+      ) as meta_json
+    from public.audit_events ae
+    where (
+      ae.object_type in ('pay_advances','finance_cases')
+      and ae.object_id_text = v_finance_case_id::text
+    )
+    or (
+      v_case.linked_timesheet_id is not null
+      and ae.object_type = 'timesheets'
+      and ae.object_id_text = v_case.linked_timesheet_id::text
+    )
+  ),
+  batch_refs as (
+    select distinct par.pay_batch_id
+    from public.pay_advance_reservations par
+    where par.finance_case_id = v_finance_case_id
+      and par.pay_batch_id is not null
+    union
+    select distinct pap.pay_batch_id
+    from public.pay_advance_patches pap
+    where pap.advance_id = v_finance_case_id
+      and pap.pay_batch_id is not null
+    union
+    select v_case.payout_pay_batch_id
+    where v_case.payout_pay_batch_id is not null
+    union
+    select v_case.latest_recovery_pay_batch_id
+    where v_case.latest_recovery_pay_batch_id is not null
+  ),
+  batch_events as (
+    select
+      x.at_utc,
+      'BATCH'::text as source,
+      x.event_type,
+      x.title,
+      null::jsonb as before_json,
+      x.after_json,
+      x.reason,
+      null::text as note,
+      x.pay_batch_id_text,
+      null::text as reservation_id_text,
+      null::text as timesheet_id_text,
+      x.meta_json
+    from (
+      select
+        pb.created_at_utc as at_utc,
+        'BATCH_CREATED'::text as event_type,
+        'Pay batch created'::text as title,
+        jsonb_build_object(
+          'status', pb.status,
+          'pay_date', case when pb.pay_date is null then null else pb.pay_date::text end,
+          'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
+          'batch_kind_fixed', pb.batch_kind_fixed,
+          'bulk_reference', pb.bulk_reference
+        ) as after_json,
+        null::text as reason,
+        pb.id::text as pay_batch_id_text,
+        null::jsonb as meta_json
+      from batch_refs br
+      join public.pay_batches pb
+        on pb.id = br.pay_batch_id
+      where pb.created_at_utc is not null
+
+      union all
+
+      select
+        pb.scheduled_at_utc as at_utc,
+        'BATCH_SCHEDULED'::text as event_type,
+        'Pay batch scheduled'::text as title,
+        jsonb_build_object(
+          'status', pb.status,
+          'pay_date', case when pb.pay_date is null then null else pb.pay_date::text end,
+          'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
+          'schedule_kind', pb.schedule_kind
+        ) as after_json,
+        null::text as reason,
+        pb.id::text as pay_batch_id_text,
+        null::jsonb as meta_json
+      from batch_refs br
+      join public.pay_batches pb
+        on pb.id = br.pay_batch_id
+      where pb.scheduled_at_utc is not null
+
+      union all
+
+      select
+        pb.completed_at_utc as at_utc,
+        'BATCH_SETTLED'::text as event_type,
+        'Pay batch settled'::text as title,
+        jsonb_build_object(
+          'status', pb.status,
+          'completed_at_utc', pb.completed_at_utc,
+          'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end
+        ) as after_json,
+        null::text as reason,
+        pb.id::text as pay_batch_id_text,
+        null::jsonb as meta_json
+      from batch_refs br
+      join public.pay_batches pb
+        on pb.id = br.pay_batch_id
+      where pb.completed_at_utc is not null
+
+      union all
+
+      select
+        pbar.created_at_utc as at_utc,
+        'AUTH_REQUEST_CREATED'::text as event_type,
+        'Authorisation requested'::text as title,
+        jsonb_build_object(
+          'state', pbar.state,
+          'required_quantity', pbar.required_quantity,
+          'schedule_kind', pbar.schedule_kind,
+          'scheduled_at_utc', pbar.scheduled_at_utc
+        ) as after_json,
+        null::text as reason,
+        pbar.pay_batch_id::text as pay_batch_id_text,
+        jsonb_build_object('auth_request_id', pbar.id::text) as meta_json
+      from batch_refs br
+      join public.pay_batch_auth_requests pbar
+        on pbar.pay_batch_id = br.pay_batch_id
+      where pbar.created_at_utc is not null
+
+      union all
+
+      select
+        pbaa.action_at_utc as at_utc,
+        'AUTH_ACTION'::text as event_type,
+        'Authorisation action'::text as title,
+        jsonb_build_object('action', pbaa.action, 'note', pbaa.note) as after_json,
+        null::text as reason,
+        pbaa.pay_batch_id::text as pay_batch_id_text,
+        jsonb_build_object('auth_request_id', pbaa.auth_request_id::text, 'auth_action_id', pbaa.id::text) as meta_json
+      from batch_refs br
+      join public.pay_batch_auth_actions pbaa
+        on pbaa.pay_batch_id = br.pay_batch_id
+      where pbaa.action_at_utc is not null
+    ) x
+    where x.at_utc is not null
+  ),
+  timesheet_events as (
+    select
+      x.at_utc,
+      'TIMESHEET'::text as source,
+      x.event_type,
+      x.title,
+      x.before_json,
+      x.after_json,
+      x.reason,
+      x.note,
+      null::text as pay_batch_id_text,
+      null::text as reservation_id_text,
+      x.timesheet_id_text,
+      x.meta_json
+    from (
+      select
+        ts.created_at as at_utc,
+        'TIMESHEET_VERSION'::text as event_type,
+        'Timesheet version captured'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object(
+          'timesheet_id', ts.timesheet_id::text,
+          'version', ts.version,
+          'is_current', ts.is_current,
+          'status', ts.status,
+          'reference_number', ts.reference_number,
+          'actual_schedule_json', ts.actual_schedule_json
+        ) as after_json,
+        null::text as reason,
+        null::text as note,
+        ts.timesheet_id::text as timesheet_id_text,
+        jsonb_build_object('booking_id', ts.booking_id, 'version', ts.version) as meta_json
+      from booking_ctx bc
+      join public.timesheets ts
+        on ts.booking_id = bc.booking_id
+      where ts.created_at is not null
+
+      union all
+
+      select
+        pbts.created_at_utc as at_utc,
+        'FROZEN_SNAPSHOT'::text as event_type,
+        'Pay batch timesheet snapshot captured'::text as title,
+        jsonb_build_object('base_snapshot_json', pbts.base_snapshot_json) as before_json,
+        jsonb_build_object('target_snapshot_json', pbts.target_snapshot_json, 'signature', pbts.signature) as after_json,
+        null::text as reason,
+        null::text as note,
+        pbts.timesheet_id::text as timesheet_id_text,
+        jsonb_build_object('pay_batch_id', pbts.pay_batch_id::text, 'pay_channel', pbts.pay_channel) as meta_json
+      from public.pay_batch_timesheet_snapshots pbts
+      where pbts.timesheet_id = v_case.linked_timesheet_id
+        and pbts.created_at_utc is not null
+    ) x
+    where x.at_utc is not null
+  ),
+  all_events as (
+    select * from finance_events
+    union all select * from reservation_events
+    union all select * from patch_events
+    union all select * from snooze_events
+    union all select * from generic_audit_events
+    union all select * from batch_events
+    union all select * from timesheet_events
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'at_utc', ae.at_utc,
+        'source', ae.source,
+        'event_type', ae.event_type,
+        'title', ae.title,
+        'before_json', ae.before_json,
+        'after_json', ae.after_json,
+        'reason', ae.reason,
+        'note', ae.note,
+        'pay_batch_id', ae.pay_batch_id_text,
+        'reservation_id', ae.reservation_id_text,
+        'timesheet_id', ae.timesheet_id_text,
+        'meta', ae.meta_json
+      )
+      order by ae.at_utc asc, ae.source asc, ae.event_type asc
+    ),
+    '[]'::jsonb
+  )
+  into v_timeline
+  from all_events ae;
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case', jsonb_build_object(
+      'finance_case_id', v_case.finance_case_id::text,
+      'case_type', v_case.case_type,
+      'candidate_id', case when v_case.candidate_id is null then null else v_case.candidate_id::text end,
+      'candidate_tms_ref', v_case.candidate_tms_ref,
+      'candidate_display_name', v_case.candidate_display_name,
+      'client_id', case when v_case.client_id is null then null else v_case.client_id::text end,
+      'client_name', v_case.client_name,
+      'linked_timesheet_id', case when v_case.linked_timesheet_id is null then null else v_case.linked_timesheet_id::text end,
+      'linked_shift_date', case when v_case.linked_shift_date is null then null else v_case.linked_shift_date::text end,
+      'status', v_case.status,
+      'payout_status', v_case.payout_status,
+      'original_amount', v_case.original_amount,
+      'outstanding_amount', v_case.outstanding_amount,
+      'weekly_due', v_case.weekly_due,
+      'weeks_total', v_case.weeks_total,
+      'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+      'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+      'adjustment_comment', v_case.adjustment_comment,
+      'source_original_paid_amount', v_case.source_original_paid_amount,
+      'source_corrected_paid_amount', v_case.source_corrected_paid_amount,
+      'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+      'take_home_floor_override', v_case.take_home_floor_override,
+      'latest_remittance_sent_at_utc', v_case.latest_remittance_sent_at_utc,
+      'latest_remittance_trigger_status', v_case.latest_remittance_trigger_status,
+      'last_remittance_error', v_case.last_remittance_error,
+      'latest_recovery_pay_batch_id', case when v_case.latest_recovery_pay_batch_id is null then null else v_case.latest_recovery_pay_batch_id::text end,
+      'latest_recovery_pay_date', case when v_case.latest_recovery_pay_date is null then null else v_case.latest_recovery_pay_date::text end,
+      'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end,
+      'payout_transfer_id', case when v_case.payout_transfer_id is null then null else v_case.payout_transfer_id::text end,
+      'active_snooze_id', case when v_case.active_snooze_id is null then null else v_case.active_snooze_id::text end,
+      'active_snooze_kind', v_case.active_snooze_kind,
+      'active_snooze_until_date', case when v_case.active_snooze_until_date is null then null else v_case.active_snooze_until_date::text end,
+      'active_snooze_note', v_case.active_snooze_note,
+      'written_off_at_utc', v_case.written_off_at_utc,
+      'write_off_reason', v_case.write_off_reason,
+      'cleared_at_utc', v_case.cleared_at_utc,
+      'baseline_signature', v_case.baseline_signature,
+      'schedule_json', v_case.schedule_json,
+      'notes', v_case.notes,
+      'created_at', v_case.created_at,
+      'updated_at', v_case.updated_at
+    ),
+    'timeline', coalesce(v_timeline, '[]'::jsonb)
+  );
+end;
+$function$;
 
 
