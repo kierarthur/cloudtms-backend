@@ -5460,8 +5460,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -5483,6 +5481,9 @@ declare
   v_negative_count int := 0;
   v_cases_inserted int := 0;
   v_cases_touched int := 0;
+  v_cases_amended int := 0;
+  v_cases_reopened int := 0;
+  v_cases_cleared int := 0;
   v_negative_json jsonb := '[]'::jsonb;
 begin
   if p_pay_date is null then
@@ -5497,19 +5498,85 @@ begin
     raise exception 'Invalid pay_channel_scope (expected PAYE or UMBRELLA)';
   end if;
 
+  create temporary table if not exists pg_temp.tmp_preview_candidate_scope (
+    candidate_id uuid not null,
+    timesheet_id uuid not null,
+    client_id uuid null,
+    linked_shift_date date null,
+    corrected_amount_ex numeric(12,2) not null,
+    baseline_signature text null,
+    primary key (candidate_id, timesheet_id)
+  ) on commit drop;
+
   create temporary table if not exists pg_temp.tmp_preview_negative_timesheets (
     candidate_id uuid not null,
     timesheet_id uuid not null,
+    client_id uuid null,
+    linked_shift_date date null,
     owed_ex numeric(12,2) not null,
-    baseline_signature text null
+    baseline_signature text null,
+    source_original_paid_amount numeric(12,2) not null,
+    source_corrected_paid_amount numeric(12,2) not null,
+    primary key (candidate_id, timesheet_id)
   ) on commit drop;
 
-  truncate table pg_temp.tmp_preview_negative_timesheets;
+  create temporary table if not exists pg_temp.tmp_overpayment_created (
+    finance_case_id uuid not null,
+    candidate_id uuid not null,
+    timesheet_id uuid not null,
+    owed_ex numeric(12,2) not null,
+    baseline_signature text null,
+    source_original_paid_amount numeric(12,2) not null,
+    source_corrected_paid_amount numeric(12,2) not null,
+    linked_shift_date date null
+  ) on commit drop;
 
-  insert into pg_temp.tmp_preview_negative_timesheets (
+  create temporary table if not exists pg_temp.tmp_overpayment_updates (
+    finance_case_id uuid not null,
+    candidate_id uuid not null,
+    timesheet_id uuid not null,
+    new_client_id uuid null,
+    old_status text null,
+    old_outstanding_amount numeric(12,2) null,
+    old_original_amount numeric(12,2) null,
+    old_source_original_paid_amount numeric(12,2) null,
+    old_source_corrected_paid_amount numeric(12,2) null,
+    old_linked_shift_date date null,
+    new_outstanding_amount numeric(12,2) not null,
+    new_original_amount numeric(12,2) not null,
+    new_source_original_paid_amount numeric(12,2) not null,
+    new_source_corrected_paid_amount numeric(12,2) not null,
+    new_linked_shift_date date null,
+    baseline_signature text null,
+    event_type text null,
+    primary key (finance_case_id)
+  ) on commit drop;
+
+  create temporary table if not exists pg_temp.tmp_overpayment_cleared (
+    finance_case_id uuid not null,
+    candidate_id uuid not null,
+    timesheet_id uuid not null,
+    old_outstanding_amount numeric(12,2) null,
+    old_original_amount numeric(12,2) null,
+    old_source_original_paid_amount numeric(12,2) null,
+    old_source_corrected_paid_amount numeric(12,2) null,
+    baseline_signature text null,
+    linked_shift_date date null,
+    primary key (finance_case_id)
+  ) on commit drop;
+
+  truncate table pg_temp.tmp_preview_candidate_scope;
+  truncate table pg_temp.tmp_preview_negative_timesheets;
+  truncate table pg_temp.tmp_overpayment_created;
+  truncate table pg_temp.tmp_overpayment_updates;
+  truncate table pg_temp.tmp_overpayment_cleared;
+
+  insert into pg_temp.tmp_preview_candidate_scope (
     candidate_id,
     timesheet_id,
-    owed_ex,
+    client_id,
+    linked_shift_date,
+    corrected_amount_ex,
     baseline_signature
   )
   with preview as (
@@ -5557,7 +5624,8 @@ begin
       itm as item_json,
       nullif(btrim(coalesce(itm->>'timesheet_id', '')), '')::uuid as timesheet_id,
       nullif(btrim(coalesce(itm->>'client_id', '')), '')::uuid as client_id,
-      upper(btrim(coalesce(itm->>'source_pay_method', ''))) as source_pay_method
+      upper(btrim(coalesce(itm->>'source_pay_method', ''))) as source_pay_method,
+      round(coalesce(nullif(itm->>'payment_amount_ex_vat', '')::numeric, nullif(itm->>'payment_amount', '')::numeric, 0), 2)::numeric(12,2) as corrected_amount_ex
     from candidate_rows cr
     cross join lateral jsonb_array_elements(coalesce(cr.itemisation, '[]'::jsonb)) as itm
   ),
@@ -5565,7 +5633,107 @@ begin
     select
       ir.candidate_id,
       ir.timesheet_id,
+      ir.client_id,
+      ir.corrected_amount_ex,
+      case
+        when ir.source_pay_method = ir.cand_pay_method then ir.cand_pay_method
+        else upper(coalesce(nullif(coalesce(p_mismatch_choices, '{}'::jsonb)->>ir.candidate_id::text, ''), ''))
+      end as pay_channel
+    from item_rows ir
+    where ir.timesheet_id is not null
+      and not (ir.timesheet_id = any(coalesce(p_exclude_timesheet_ids, array[]::uuid[])))
+      and (p_client_filter_single is null or ir.client_id = p_client_filter_single)
+  )
+  select
+    fr.candidate_id,
+    fr.timesheet_id,
+    fr.client_id,
+    coalesce(ts.worked_start_iso::date, ts.scheduled_start_iso::date, ts.week_ending_date) as linked_shift_date,
+    fr.corrected_amount_ex,
+    coalesce(
+      tps.last_settled_signature,
+      md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
+    ) as baseline_signature
+  from filtered_rows fr
+  join public.timesheets ts
+    on ts.timesheet_id = fr.timesheet_id
+  left join public.timesheet_pay_state tps
+    on tps.timesheet_id = fr.timesheet_id
+  where fr.pay_channel = v_scope
+  on conflict (candidate_id, timesheet_id) do update
+  set
+    client_id = excluded.client_id,
+    linked_shift_date = excluded.linked_shift_date,
+    corrected_amount_ex = excluded.corrected_amount_ex,
+    baseline_signature = excluded.baseline_signature;
+
+  insert into pg_temp.tmp_preview_negative_timesheets (
+    candidate_id,
+    timesheet_id,
+    client_id,
+    linked_shift_date,
+    owed_ex,
+    baseline_signature,
+    source_original_paid_amount,
+    source_corrected_paid_amount
+  )
+  with preview as (
+    select public.pay_preview(
+      p_pay_date,
+      p_week_ending_cutoff,
+      p_actor_user_id,
+      null,
+      null,
+      p_force_include_timesheet_ids
+    ) as j
+  ),
+  all_candidates as (
+    select c as cand
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'paye_candidates', '[]'::jsonb)) as c
+    union all
+    select c as cand
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'non_paye_payees', '[]'::jsonb)) as c
+  ),
+  candidate_rows as (
+    select
+      s.candidate_id,
+      s.cand_pay_method,
+      s.itemisation
+    from (
+      select
+        nullif(btrim(coalesce(cand->>'candidate_id', '')), '')::uuid as candidate_id,
+        upper(btrim(coalesce(cand->>'current_pay_method', ''))) as cand_pay_method,
+        coalesce(nullif(cand->>'is_ready_for_draft', '')::boolean, false) as is_ready_for_draft,
+        coalesce(cand->'blockers', '[]'::jsonb) as blockers,
+        coalesce(cand->'itemisation', '[]'::jsonb) as itemisation
+      from all_candidates
+      where nullif(btrim(coalesce(cand->>'candidate_id', '')), '') is not null
+    ) s
+    where s.candidate_id = any(coalesce(p_candidate_ids, array[]::uuid[]))
+      and s.is_ready_for_draft = true
+      and jsonb_array_length(s.blockers) = 0
+  ),
+  item_rows as (
+    select
+      cr.candidate_id,
+      cr.cand_pay_method,
+      itm as item_json,
+      nullif(btrim(coalesce(itm->>'timesheet_id', '')), '')::uuid as timesheet_id,
+      nullif(btrim(coalesce(itm->>'client_id', '')), '')::uuid as client_id,
+      upper(btrim(coalesce(itm->>'source_pay_method', ''))) as source_pay_method,
+      round(coalesce(nullif(itm->>'payment_amount_ex_vat', '')::numeric, nullif(itm->>'payment_amount', '')::numeric, 0), 2)::numeric(12,2) as corrected_amount_ex
+    from candidate_rows cr
+    cross join lateral jsonb_array_elements(coalesce(cr.itemisation, '[]'::jsonb)) as itm
+  ),
+  filtered_rows as (
+    select
+      ir.candidate_id,
+      ir.timesheet_id,
+      ir.client_id,
       ir.item_json,
+      ir.corrected_amount_ex,
       case
         when ir.source_pay_method = ir.cand_pay_method then ir.cand_pay_method
         else upper(coalesce(nullif(coalesce(p_mismatch_choices, '{}'::jsonb)->>ir.candidate_id::text, ''), ''))
@@ -5629,14 +5797,24 @@ begin
   select
     nr.candidate_id,
     nr.timesheet_id,
+    tpcs.client_id,
+    tpcs.linked_shift_date,
     nr.owed_ex,
-    coalesce(
-      tps.last_settled_signature,
-      md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
-    ) as baseline_signature
+    tpcs.baseline_signature,
+    round(coalesce(tpcs.corrected_amount_ex, 0) + nr.owed_ex, 2)::numeric(12,2) as source_original_paid_amount,
+    round(coalesce(tpcs.corrected_amount_ex, 0), 2)::numeric(12,2) as source_corrected_paid_amount
   from negative_rows nr
-  left join public.timesheet_pay_state tps
-    on tps.timesheet_id = nr.timesheet_id;
+  join pg_temp.tmp_preview_candidate_scope tpcs
+    on tpcs.candidate_id = nr.candidate_id
+   and tpcs.timesheet_id = nr.timesheet_id
+  on conflict (candidate_id, timesheet_id) do update
+  set
+    client_id = excluded.client_id,
+    linked_shift_date = excluded.linked_shift_date,
+    owed_ex = excluded.owed_ex,
+    baseline_signature = excluded.baseline_signature,
+    source_original_paid_amount = excluded.source_original_paid_amount,
+    source_corrected_paid_amount = excluded.source_corrected_paid_amount;
 
   get diagnostics v_negative_count = row_count;
 
@@ -5646,8 +5824,12 @@ begin
         jsonb_build_object(
           'candidate_id', tpnt.candidate_id::text,
           'timesheet_id', tpnt.timesheet_id::text,
+          'client_id', case when tpnt.client_id is null then null else tpnt.client_id::text end,
+          'linked_shift_date', case when tpnt.linked_shift_date is null then null else tpnt.linked_shift_date::text end,
           'owed_ex', tpnt.owed_ex,
-          'baseline_signature', tpnt.baseline_signature
+          'baseline_signature', tpnt.baseline_signature,
+          'source_original_paid_amount', tpnt.source_original_paid_amount,
+          'source_corrected_paid_amount', tpnt.source_corrected_paid_amount
         )
         order by tpnt.candidate_id::text, tpnt.timesheet_id::text
       ),
@@ -5656,55 +5838,359 @@ begin
   into v_negative_json
   from pg_temp.tmp_preview_negative_timesheets tpnt;
 
-  if v_negative_count > 0 then
-    with ins as (
-      insert into public.pay_advances (
-        candidate_id,
-        advance_kind,
-        reason,
-        linked_timesheet_id,
-        baseline_signature,
-        original_amount,
-        outstanding_amount,
-        status
-      )
-      select
-        tpnt.candidate_id,
-        'OVERPAYMENT'::public.pay_advance_kind_enum,
-        'OVERPAYMENT'::public.pay_advance_reason_enum,
-        tpnt.timesheet_id,
-        tpnt.baseline_signature,
-        tpnt.owed_ex,
-        tpnt.owed_ex,
-        'ACTIVE'::public.pay_advance_status_enum
-      from pg_temp.tmp_preview_negative_timesheets tpnt
-      where tpnt.owed_ex > 0
-      on conflict do nothing
-      returning 1
-    )
-    select count(*)::int
-    into v_cases_inserted
-    from ins;
-
-    update public.pay_advances pa
-    set
-      outstanding_amount = tpnt.owed_ex,
-      original_amount = greatest(coalesce(pa.original_amount, 0), tpnt.owed_ex),
-      status = case
-        when tpnt.owed_ex > 0 then 'ACTIVE'::public.pay_advance_status_enum
-        else 'PAID_OFF'::public.pay_advance_status_enum
-      end,
-      reason = 'OVERPAYMENT'::public.pay_advance_reason_enum,
-      updated_at = now()
+  insert into pg_temp.tmp_overpayment_created (
+    finance_case_id,
+    candidate_id,
+    timesheet_id,
+    owed_ex,
+    baseline_signature,
+    source_original_paid_amount,
+    source_corrected_paid_amount,
+    linked_shift_date
+  )
+  with to_insert as (
+    select
+      tpnt.candidate_id,
+      tpnt.timesheet_id,
+      tpnt.client_id,
+      tpnt.linked_shift_date,
+      tpnt.owed_ex,
+      tpnt.baseline_signature,
+      tpnt.source_original_paid_amount,
+      tpnt.source_corrected_paid_amount
     from pg_temp.tmp_preview_negative_timesheets tpnt
-    where pa.candidate_id = tpnt.candidate_id
-      and pa.linked_timesheet_id = tpnt.timesheet_id
-      and pa.baseline_signature is not distinct from tpnt.baseline_signature
-      and pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
-      and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum);
+    where tpnt.owed_ex > 0
+      and not exists (
+        select 1
+        from public.pay_advances pa
+        where pa.candidate_id = tpnt.candidate_id
+          and pa.linked_timesheet_id = tpnt.timesheet_id
+          and pa.baseline_signature is not distinct from tpnt.baseline_signature
+          and pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+      )
+  ),
+  inserted as (
+    insert into public.pay_advances (
+      candidate_id,
+      client_id,
+      case_type,
+      advance_kind,
+      reason,
+      linked_timesheet_id,
+      linked_shift_date,
+      baseline_signature,
+      source_original_paid_amount,
+      source_corrected_paid_amount,
+      original_amount,
+      outstanding_amount,
+      status,
+      created_by,
+      updated_at,
+      cleared_at_utc,
+      cleared_by_user_id,
+      write_off_reason,
+      written_off_at_utc,
+      written_off_by_user_id
+    )
+    select
+      ti.candidate_id,
+      ti.client_id,
+      'OVERPAYMENT'::public.pay_finance_case_type_enum,
+      'OVERPAYMENT'::public.pay_advance_kind_enum,
+      'OVERPAYMENT'::public.pay_advance_reason_enum,
+      ti.timesheet_id,
+      ti.linked_shift_date,
+      ti.baseline_signature,
+      ti.source_original_paid_amount,
+      ti.source_corrected_paid_amount,
+      ti.owed_ex,
+      ti.owed_ex,
+      'ACTIVE'::public.pay_advance_status_enum,
+      p_actor_user_id,
+      now(),
+      null,
+      null,
+      null,
+      null,
+      null
+    from to_insert ti
+    returning
+      id,
+      candidate_id,
+      linked_timesheet_id,
+      original_amount,
+      baseline_signature,
+      source_original_paid_amount,
+      source_corrected_paid_amount,
+      linked_shift_date
+  )
+  select
+    i.id,
+    i.candidate_id,
+    i.linked_timesheet_id,
+    i.original_amount::numeric(12,2),
+    i.baseline_signature,
+    coalesce(i.source_original_paid_amount, 0)::numeric(12,2),
+    coalesce(i.source_corrected_paid_amount, 0)::numeric(12,2),
+    i.linked_shift_date
+  from inserted i;
 
-    get diagnostics v_cases_touched = row_count;
-  end if;
+  get diagnostics v_cases_inserted = row_count;
+
+  insert into public.pay_finance_case_events (
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  select
+    toc.finance_case_id,
+    'CREATED',
+    now(),
+    p_actor_user_id,
+    null,
+    null,
+    null,
+    jsonb_build_object(
+      'case_type', 'OVERPAYMENT',
+      'candidate_id', toc.candidate_id::text,
+      'linked_timesheet_id', toc.timesheet_id::text,
+      'linked_shift_date', case when toc.linked_shift_date is null then null else toc.linked_shift_date::text end,
+      'baseline_signature', toc.baseline_signature,
+      'original_amount', toc.owed_ex,
+      'outstanding_amount', toc.owed_ex,
+      'source_original_paid_amount', toc.source_original_paid_amount,
+      'source_corrected_paid_amount', toc.source_corrected_paid_amount,
+      'status', 'ACTIVE'
+    ),
+    'OVERPAYMENT_SYNC',
+    'Created overpayment from negative preview/correction sync'
+  from pg_temp.tmp_overpayment_created toc;
+
+  insert into pg_temp.tmp_overpayment_updates (
+    finance_case_id,
+    candidate_id,
+    timesheet_id,
+    new_client_id,
+    old_status,
+    old_outstanding_amount,
+    old_original_amount,
+    old_source_original_paid_amount,
+    old_source_corrected_paid_amount,
+    old_linked_shift_date,
+    new_outstanding_amount,
+    new_original_amount,
+    new_source_original_paid_amount,
+    new_source_corrected_paid_amount,
+    new_linked_shift_date,
+    baseline_signature,
+    event_type
+  )
+  select
+    pa.id,
+    pa.candidate_id,
+    pa.linked_timesheet_id,
+    tpnt.client_id,
+    pa.status::text,
+    round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2),
+    round(coalesce(pa.original_amount, 0), 2)::numeric(12,2),
+    round(coalesce(pa.source_original_paid_amount, 0), 2)::numeric(12,2),
+    round(coalesce(pa.source_corrected_paid_amount, 0), 2)::numeric(12,2),
+    pa.linked_shift_date,
+    greatest(
+      round(tpnt.owed_ex - greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2),
+      0
+    )::numeric(12,2) as new_outstanding_amount,
+    round(tpnt.owed_ex, 2)::numeric(12,2) as new_original_amount,
+    round(tpnt.source_original_paid_amount, 2)::numeric(12,2) as new_source_original_paid_amount,
+    round(tpnt.source_corrected_paid_amount, 2)::numeric(12,2) as new_source_corrected_paid_amount,
+    tpnt.linked_shift_date,
+    tpnt.baseline_signature,
+    case
+      when pa.status = 'PAID_OFF'::public.pay_advance_status_enum
+           and greatest(
+             round(tpnt.owed_ex - greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2),
+             0
+           ) > 0
+      then 'REOPENED'
+      when pa.status is distinct from 'ACTIVE'::public.pay_advance_status_enum
+        or round(coalesce(pa.original_amount, 0), 2) is distinct from round(tpnt.owed_ex, 2)
+        or round(coalesce(pa.outstanding_amount, 0), 2) is distinct from greatest(
+             round(tpnt.owed_ex - greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2),
+             0
+           )::numeric(12,2)
+        or round(coalesce(pa.source_original_paid_amount, 0), 2) is distinct from round(tpnt.source_original_paid_amount, 2)
+        or round(coalesce(pa.source_corrected_paid_amount, 0), 2) is distinct from round(tpnt.source_corrected_paid_amount, 2)
+        or pa.linked_shift_date is distinct from tpnt.linked_shift_date
+        or pa.case_type is distinct from 'OVERPAYMENT'::public.pay_finance_case_type_enum
+      then 'AMENDED'
+      else null
+    end as event_type
+  from public.pay_advances pa
+  join pg_temp.tmp_preview_negative_timesheets tpnt
+    on pa.candidate_id = tpnt.candidate_id
+   and pa.linked_timesheet_id = tpnt.timesheet_id
+   and pa.baseline_signature is not distinct from tpnt.baseline_signature
+  where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+    and pa.id not in (select toc.finance_case_id from pg_temp.tmp_overpayment_created toc);
+
+  update public.pay_advances pa
+  set
+    client_id = toup.new_client_id,
+    case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum,
+    advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum,
+    reason = 'OVERPAYMENT'::public.pay_advance_reason_enum,
+    linked_shift_date = toup.new_linked_shift_date,
+    source_original_paid_amount = toup.new_source_original_paid_amount,
+    source_corrected_paid_amount = toup.new_source_corrected_paid_amount,
+    original_amount = toup.new_original_amount,
+    outstanding_amount = toup.new_outstanding_amount,
+    status = case when toup.new_outstanding_amount > 0 then 'ACTIVE'::public.pay_advance_status_enum else 'PAID_OFF'::public.pay_advance_status_enum end,
+    cleared_at_utc = case when toup.new_outstanding_amount > 0 then null else coalesce(pa.cleared_at_utc, now()) end,
+    cleared_by_user_id = case when toup.new_outstanding_amount > 0 then null else coalesce(pa.cleared_by_user_id, p_actor_user_id) end,
+    updated_at = now()
+  from pg_temp.tmp_overpayment_updates toup
+  where pa.id = toup.finance_case_id;
+
+  get diagnostics v_cases_touched = row_count;
+
+  insert into public.pay_finance_case_events (
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  select
+    toup.finance_case_id,
+    toup.event_type,
+    now(),
+    p_actor_user_id,
+    null,
+    null,
+    jsonb_build_object(
+      'status', toup.old_status,
+      'original_amount', toup.old_original_amount,
+      'outstanding_amount', toup.old_outstanding_amount,
+      'source_original_paid_amount', toup.old_source_original_paid_amount,
+      'source_corrected_paid_amount', toup.old_source_corrected_paid_amount,
+      'linked_shift_date', case when toup.old_linked_shift_date is null then null else toup.old_linked_shift_date::text end
+    ),
+    jsonb_build_object(
+      'status', case when toup.new_outstanding_amount > 0 then 'ACTIVE' else 'PAID_OFF' end,
+      'original_amount', toup.new_original_amount,
+      'outstanding_amount', toup.new_outstanding_amount,
+      'source_original_paid_amount', toup.new_source_original_paid_amount,
+      'source_corrected_paid_amount', toup.new_source_corrected_paid_amount,
+      'linked_shift_date', case when toup.new_linked_shift_date is null then null else toup.new_linked_shift_date::text end,
+      'baseline_signature', toup.baseline_signature
+    ),
+    'OVERPAYMENT_SYNC',
+    case when toup.event_type = 'REOPENED' then 'Reopened overpayment from negative preview/correction sync' else 'Amended overpayment from negative preview/correction sync' end
+  from pg_temp.tmp_overpayment_updates toup
+  where toup.event_type is not null;
+
+  select count(*)::int into v_cases_reopened from pg_temp.tmp_overpayment_updates where event_type = 'REOPENED';
+  select count(*)::int into v_cases_amended from pg_temp.tmp_overpayment_updates where event_type = 'AMENDED';
+
+  insert into pg_temp.tmp_overpayment_cleared (
+    finance_case_id,
+    candidate_id,
+    timesheet_id,
+    old_outstanding_amount,
+    old_original_amount,
+    old_source_original_paid_amount,
+    old_source_corrected_paid_amount,
+    baseline_signature,
+    linked_shift_date
+  )
+  select
+    pa.id,
+    pa.candidate_id,
+    pa.linked_timesheet_id,
+    round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2),
+    round(coalesce(pa.original_amount, 0), 2)::numeric(12,2),
+    round(coalesce(pa.source_original_paid_amount, 0), 2)::numeric(12,2),
+    round(coalesce(pa.source_corrected_paid_amount, 0), 2)::numeric(12,2),
+    pa.baseline_signature,
+    pa.linked_shift_date
+  from public.pay_advances pa
+  join pg_temp.tmp_preview_candidate_scope tpcs
+    on tpcs.candidate_id = pa.candidate_id
+   and tpcs.timesheet_id = pa.linked_timesheet_id
+   and tpcs.baseline_signature is not distinct from pa.baseline_signature
+  left join pg_temp.tmp_preview_negative_timesheets tpnt
+    on tpnt.candidate_id = pa.candidate_id
+   and tpnt.timesheet_id = pa.linked_timesheet_id
+   and tpnt.baseline_signature is not distinct from pa.baseline_signature
+  where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+    and pa.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+    and pa.status = 'ACTIVE'::public.pay_advance_status_enum
+    and tpnt.timesheet_id is null;
+
+  update public.pay_advances pa
+  set
+    status = 'PAID_OFF'::public.pay_advance_status_enum,
+    outstanding_amount = 0,
+    cleared_at_utc = coalesce(pa.cleared_at_utc, now()),
+    cleared_by_user_id = coalesce(pa.cleared_by_user_id, p_actor_user_id),
+    updated_at = now()
+  from pg_temp.tmp_overpayment_cleared toc
+  where pa.id = toc.finance_case_id;
+
+  get diagnostics v_cases_cleared = row_count;
+
+  insert into public.pay_finance_case_events (
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  select
+    toc.finance_case_id,
+    'CLEARED',
+    now(),
+    p_actor_user_id,
+    null,
+    null,
+    jsonb_build_object(
+      'status', 'ACTIVE',
+      'original_amount', toc.old_original_amount,
+      'outstanding_amount', toc.old_outstanding_amount,
+      'source_original_paid_amount', toc.old_source_original_paid_amount,
+      'source_corrected_paid_amount', toc.old_source_corrected_paid_amount,
+      'linked_shift_date', case when toc.linked_shift_date is null then null else toc.linked_shift_date::text end,
+      'baseline_signature', toc.baseline_signature
+    ),
+    jsonb_build_object(
+      'status', 'PAID_OFF',
+      'original_amount', toc.old_original_amount,
+      'outstanding_amount', 0,
+      'source_original_paid_amount', toc.old_source_original_paid_amount,
+      'source_corrected_paid_amount', toc.old_source_corrected_paid_amount,
+      'linked_shift_date', case when toc.linked_shift_date is null then null else toc.linked_shift_date::text end,
+      'baseline_signature', toc.baseline_signature
+    ),
+    'OVERPAYMENT_SYNC',
+    'Cleared overpayment because the preview/correction no longer shows a negative overpayment position'
+  from pg_temp.tmp_overpayment_cleared toc;
 
   return jsonb_build_object(
     'ok', true,
@@ -5712,15 +6198,13 @@ begin
     'negative_preview_timesheets_count', v_negative_count,
     'negative_preview_timesheets', v_negative_json,
     'cases_inserted', v_cases_inserted,
-    'cases_touched', v_cases_touched
+    'cases_touched', v_cases_touched,
+    'cases_amended', v_cases_amended,
+    'cases_reopened', v_cases_reopened,
+    'cases_cleared', v_cases_cleared
   );
 end;
 $$;
-
-
-
-
-
 
 
 
