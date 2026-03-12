@@ -10961,16 +10961,24 @@ async function handleBankingPayCreateDraft(env, req, user) {
     const s = String(raw || '').trim();
     if (!s) return null;
 
-    // YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
-    // DD/MM/YYYY
     const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (m) {
       const dd = m[1], mm = m[2], yyyy = m[3];
       return `${yyyy}-${mm}-${dd}`;
     }
     return null;
+  };
+
+  const parseBool = (raw, dflt = false) => {
+    if (typeof raw === 'boolean') return raw;
+    if (raw == null) return dflt;
+    const s = String(raw).trim().toLowerCase();
+    if (!s) return dflt;
+    if (['1', 'true', 't', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['0', 'false', 'f', 'no', 'n', 'off'].includes(s)) return false;
+    return dflt;
   };
 
   const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
@@ -10981,7 +10989,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
       ? body.preview_decisions_json
       : {};
 
-  // ✅ Accept both legacy + new filter keys (frontend may send either)
   const candRaw = String(
     body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || ''
   ).trim();
@@ -10989,10 +10996,40 @@ async function handleBankingPayCreateDraft(env, req, user) {
     body.client_id || body.clientId || body.client_filter_id || body.clientFilterId || body.client_filter || ''
   ).trim();
 
+  const overrideReasonRaw = String(
+    body.same_week_paye_override_reason ??
+    body.sameWeekPayeOverrideReason ??
+    body.override_reason ??
+    body.overrideReason ??
+    ''
+  ).trim();
+
+  const overrideContinue = parseBool(
+    body.same_week_paye_override_continue ??
+    body.sameWeekPayeOverrideContinue ??
+    body.override_continue ??
+    body.overrideContinue ??
+    body.explicit_continue ??
+    body.explicitContinue ??
+    false,
+    false
+  );
+
+  const reauthToken = String(
+    body.same_week_paye_reauth_token ??
+    body.sameWeekPayeReauthToken ??
+    body.override_reauth_token ??
+    body.overrideReauthToken ??
+    body.reauth_token ??
+    body.reauthToken ??
+    ''
+  ).trim();
+
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   const candidateId = candRaw ? candRaw : null;
   const clientId = clientRaw ? clientRaw : null;
+  const overrideReason = overrideReasonRaw || null;
 
   if (candidateId && !uuidRe.test(candidateId)) {
     return withCORS(env, req, badRequest('candidate_id must be a UUID (or empty)'));
@@ -11001,7 +11038,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
   }
 
-  // ✅ include_set / candidate_ids support (drives preview_decisions_json.candidate_ids)
   const includeSetIn =
     Array.isArray(body.include_set) ? body.include_set
     : Array.isArray(body.includeSet) ? body.includeSet
@@ -11025,7 +11061,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, badRequest(includeSet.error));
   }
 
-  // ✅ IMPORTANT: also embed filters into preview_decisions_json for backward-compatible callers and auditability.
   const previewDecisions =
     (previewDecisionsIn && typeof previewDecisionsIn === 'object' && !Array.isArray(previewDecisionsIn))
       ? { ...previewDecisionsIn }
@@ -11040,11 +11075,71 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
   }
 
+  if (overrideReason && !previewDecisions.same_week_paye_override_reason) {
+    previewDecisions.same_week_paye_override_reason = overrideReason;
+  }
+  if (overrideContinue === true && previewDecisions.same_week_paye_override_continue !== true) {
+    previewDecisions.same_week_paye_override_continue = true;
+  }
+
+  let overrideVerified = false;
+  let overrideVerifiedByUserId = null;
+  let overrideVerifiedAtUtc = null;
+
+  const overrideVerification = {
+    token_present: !!reauthToken,
+    verified: false,
+    verified_by_user_id: null,
+    verified_at_utc: null,
+    token_purpose: null,
+    error: null
+  };
+
+  if (reauthToken) {
+    try {
+      const rt = await verifyToken(sessionSecret(env), reauthToken);
+      if (rt && rt.ok === true) {
+        const rtp = (rt && rt.payload && typeof rt.payload === 'object') ? rt.payload : {};
+        const typ = String(rtp.typ || '').trim();
+        const purpose = String(rtp.purpose || '').trim().toUpperCase();
+        const sub = String(rtp.sub || '').trim();
+
+        if (typ === 'reauth' && (purpose === 'PAYMENT_SCHEDULE' || purpose === 'PAYE_SAME_WEEK_OVERRIDE') && sub === String(user.id || '').trim()) {
+          overrideVerified = true;
+          overrideVerifiedByUserId = String(user.id || '').trim();
+          overrideVerifiedAtUtc = new Date().toISOString();
+
+          overrideVerification.verified = true;
+          overrideVerification.verified_by_user_id = overrideVerifiedByUserId;
+          overrideVerification.verified_at_utc = overrideVerifiedAtUtc;
+          overrideVerification.token_purpose = purpose;
+          overrideVerification.error = null;
+        } else {
+          overrideVerification.verified = false;
+          overrideVerification.token_purpose = purpose || null;
+          overrideVerification.error = 'Invalid reauth_token';
+        }
+      } else {
+        overrideVerification.verified = false;
+        overrideVerification.error = 'Invalid reauth_token';
+      }
+    } catch (e) {
+      overrideVerification.verified = false;
+      overrideVerification.error = String(e?.message || e || 'Invalid reauth_token');
+    }
+  }
+
   const argsWithFilters = {
     p_pay_date: payDate,
     p_week_ending_cutoff: cutoffIso,
     p_actor_user_id: user.id,
-    p_preview_decisions_json: previewDecisions
+    p_preview_decisions_json: previewDecisions,
+    p_override_reason: overrideReason,
+    p_override_mode: 'NONE',
+    p_override_continue: overrideContinue,
+    p_override_verified: overrideVerified,
+    p_override_verified_by_user_id: overrideVerifiedByUserId,
+    p_override_verified_at_utc: overrideVerifiedAtUtc
   };
   if (candidateId) argsWithFilters.p_candidate_id = candidateId;
   if (clientId) argsWithFilters.p_client_id = clientId;
@@ -11053,7 +11148,13 @@ async function handleBankingPayCreateDraft(env, req, user) {
     p_pay_date: payDate,
     p_week_ending_cutoff: cutoffIso,
     p_actor_user_id: user.id,
-    p_preview_decisions_json: previewDecisions
+    p_preview_decisions_json: previewDecisions,
+    p_override_reason: overrideReason,
+    p_override_mode: 'NONE',
+    p_override_continue: overrideContinue,
+    p_override_verified: overrideVerified,
+    p_override_verified_by_user_id: overrideVerifiedByUserId,
+    p_override_verified_at_utc: overrideVerifiedAtUtc
   };
 
   const unwrapPayPreviewRpc = (rpcRes) => {
@@ -11084,7 +11185,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
       const looksLikeUnexpectedParam =
         /unexpected/i.test(msg) || /unknown/i.test(msg) || /parameter/i.test(msg) || /PGRST/i.test(msg);
 
-      // Do NOT silently drop filters in preview. If preview rejects filters, surface it.
       if (looksLikeUnexpectedParam && (candidateId || clientId)) {
         throw new Error(`pay_preview rejected filter parameters (candidate_id/client_id). Original error: ${msg}`);
       }
@@ -11141,10 +11241,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return eligible;
   };
 
-  // ✅ NEW: targeted TSFIN best-effort “make ready” before drafting.
-  // - Determine in-scope timesheets from preview itemisation for eligible candidates.
-  // - If TSFIN outbox rows exist for those timesheets, priority-bump + drain inline (bounded).
-  // - Any timesheets still in outbox after the attempt are excluded from this draft run.
   const collectEligibleTimesheetsForDraft = (preview, decisions, includeCandidateIds) => {
     const dec = (decisions && typeof decisions === 'object') ? decisions : {};
     const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object') ? dec.mismatch_choices : {};
@@ -11243,7 +11339,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
   const priorityBumpOutboxRows = async (rows) => {
     if (!Array.isArray(rows) || rows.length === 0) return 0;
 
-    const byReason = new Map(); // reason -> Set(timesheet_id)
+    const byReason = new Map();
     for (const r of rows) {
       const tid = String(r?.timesheet_id || '').trim();
       const reason = String(r?.reason || '').trim();
@@ -11265,7 +11361,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
         });
         if (Number.isFinite(Number(n))) bumped += Number(n);
       } catch (e) {
-        // Non-blocking: do not throw; best-effort only.
         try {
           console.warn('[handleBankingPayCreateDraft] TSFIN priority bump failed', { reason, err: String(e?.message || e) });
         } catch {}
@@ -11279,12 +11374,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
     const ids = Array.isArray(timesheetIds) ? timesheetIds.filter(Boolean) : [];
     if (!ids.length) return { excludedTimesheetIds: [], outboxRowsFinal: [] };
 
-    // Initial pending discovery
     let outboxRows = [];
     try {
       outboxRows = await fetchOutboxRowsForTimesheets(ids);
     } catch (e) {
-      // If we cannot query outbox, still try one targeted worker pass (non-blocking) and re-check once.
       try {
         await runTsfinWorkerOnce(env, { limit: Math.min(200, ids.length), onlyTimesheetIds: ids });
       } catch {}
@@ -11297,9 +11390,8 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
     if (!outboxRows.length) return { excludedTimesheetIds: [], outboxRowsFinal: [] };
 
-    // Bounded drain loop
     const startMs = Date.now();
-    const maxMs = 4500; // keep UI responsive (non-blocking)
+    const maxMs = 4500;
     const maxLoops = 6;
 
     let lastCount = outboxRows.length;
@@ -11308,35 +11400,29 @@ async function handleBankingPayCreateDraft(env, req, user) {
       if (!outboxRows.length) break;
       if ((Date.now() - startMs) > maxMs) break;
 
-      // Priority-bump so rows are runnable immediately (clears next_attempt_at/backoff)
       await priorityBumpOutboxRows(outboxRows);
 
       const pendingIds = Array.from(new Set(outboxRows.map(r => String(r?.timesheet_id || '').trim()).filter(x => uuidRe.test(x))));
       if (!pendingIds.length) break;
 
-      // Run one TSFIN worker pass targeted to these timesheets
       try {
         await runTsfinWorkerOnce(env, { limit: Math.min(200, pendingIds.length), onlyTimesheetIds: pendingIds });
       } catch (e) {
-        // Non-blocking: if worker errors, stop attempting further; we'll exclude remaining outbox rows.
         try {
           console.warn('[handleBankingPayCreateDraft] TSFIN drain pass failed (non-fatal)', { err: String(e?.message || e) });
         } catch {}
         break;
       }
 
-      // Re-check pending outbox
       try {
         outboxRows = await fetchOutboxRowsForTimesheets(ids);
       } catch {
-        // If re-check fails, stop further attempts; exclude none (best effort already made).
         outboxRows = [];
         break;
       }
 
       const curCount = outboxRows.length;
 
-      // If no progress, don't spin: stop early (bounded)
       if (curCount >= lastCount) {
         break;
       }
@@ -11352,7 +11438,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
   };
 
   try {
-    // Friendly early validation: if nothing is eligible, return a clear 400 before attempting draft creation.
     const preview0 = await callPayPreview();
     const eligibleCount = countEligibleCandidates(preview0, previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
 
@@ -11360,22 +11445,17 @@ async function handleBankingPayCreateDraft(env, req, user) {
       return withCORS(env, req, badRequest('Nothing eligible to draft; resolve Review required items and refresh preview.'));
     }
 
-    // ✅ Determine in-scope timesheets from preview itemisation for eligible candidates.
     const { timesheetIds: inScopeTimesheetIds, timesheetToCandidateId } =
       collectEligibleTimesheetsForDraft(preview0, previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
 
-    // If we could not identify any timesheets from preview, we still proceed (do not block payroll),
-    // but the TSFIN make-ready step will be a no-op.
     const uniqueInScopeIds = Array.isArray(inScopeTimesheetIds)
       ? Array.from(new Set(inScopeTimesheetIds.filter(x => uuidRe.test(String(x || '').trim()))))
       : [];
 
-    // ✅ Best-effort TSFIN make-ready: try to clear outbox for in-scope timesheets.
     const tsfinAttempt = await bestEffortDrainTsfinForTimesheets(uniqueInScopeIds);
     const excludedTimesheetIds = Array.isArray(tsfinAttempt?.excludedTimesheetIds) ? tsfinAttempt.excludedTimesheetIds : [];
     const outboxRowsFinal = Array.isArray(tsfinAttempt?.outboxRowsFinal) ? tsfinAttempt.outboxRowsFinal : [];
 
-    // If everything in-scope is excluded, do not create an empty draft (return explicit 409).
     const excludedSet = new Set(excludedTimesheetIds.map(x => String(x)));
     const remainingInScope = uniqueInScopeIds.filter(tid => !excludedSet.has(String(tid)));
 
@@ -11394,7 +11474,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
       ));
     }
 
-    // ✅ Merge exclusions into preview_decisions_json (server-side)
     if (excludedTimesheetIds.length > 0) {
       const existing = Array.isArray(previewDecisions.exclude_timesheet_ids) ? previewDecisions.exclude_timesheet_ids : [];
       const exSet = new Set();
@@ -11418,7 +11497,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
       const looksLikeUnexpectedParam =
         /unexpected/i.test(msg) || /unknown/i.test(msg) || /parameter/i.test(msg) || /PGRST/i.test(msg);
 
-      // ✅ IMPORTANT: Do NOT silently drop filters. If the RPC rejects filter params, surface it loudly.
       if (looksLikeUnexpectedParam && (candidateId || clientId)) {
         throw new Error(`pay_create_draft_batches_split rejected filter parameters (candidate_id/client_id). This indicates an RPC signature mismatch between environments or wrong param names. Original error: ${msg}`);
       }
@@ -11442,7 +11520,8 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
     const outPayload = (payload && typeof payload === 'object') ? payload : {};
 
-    // ✅ Attach user-friendly exclusions warning payload (Option 2)
+    outPayload.override_verification = overrideVerification;
+
     if (excludedTimesheetIds.length > 0) {
       const rowsByTimesheet = new Map();
       for (const r of outboxRowsFinal || []) {
@@ -11477,6 +11556,322 @@ async function handleBankingPayCreateDraft(env, req, user) {
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
+}
+
+
+async function handleTimesheetAdvancePayment(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const idIn = String(timesheetId || '').trim();
+  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const overrideReason =
+    String(
+      body.override_reason ??
+      body.overrideReason ??
+      body.reason ??
+      body.note ??
+      ''
+    ).trim();
+
+  if (!overrideReason) {
+    return withCORS(env, req, badRequest('override_reason is required'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(idIn)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  let resolved = null;
+  try {
+    resolved = await resolveTimesheetToCurrent(env, idIn);
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
+  }
+
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  if (!resolved.booking_id) {
+    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let ts = null;
+  try {
+    ts = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,contract_id,week_ending_date` +
+        `&limit=1`
+    );
+  } catch (e) {
+    ts = null;
+  }
+
+  if (!ts) {
+    return withCORS(env, req, notFound('Timesheet not found (current row missing)'));
+  }
+
+  const contractId = (ts.contract_id != null && String(ts.contract_id).trim()) ? String(ts.contract_id).trim() : null;
+  const weekEnding = (ts.week_ending_date != null && String(ts.week_ending_date).trim()) ? String(ts.week_ending_date).trim() : null;
+
+  if (!contractId || !uuidRe.test(contractId)) {
+    return withCORS(env, req, badRequest('Timesheet contract_id missing/invalid; cannot advance-payment'));
+  }
+  if (!weekEnding || !/^\d{4}-\d{2}-\d{2}$/.test(weekEnding)) {
+    return withCORS(env, req, badRequest('Timesheet week_ending_date missing/invalid; cannot advance-payment'));
+  }
+
+  let tsfin = null;
+  try {
+    tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
+    );
+  } catch {
+    tsfin = null;
+  }
+
+  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
+  if (!candidateId || !uuidRe.test(candidateId)) {
+    return withCORS(env, req, badRequest('Timesheet candidate_id not available (ts_financials missing); cannot advance-payment'));
+  }
+
+  const fetchActiveAdvanceOverride = async () => {
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_payment_overrides` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&cleared_at_utc=is.null` +
+          `&select=id,timesheet_id,candidate_id,override_type,reason,created_at_utc,created_by_user_id,consumed_by_pay_batch_id,consumed_at_utc,cleared_at_utc,cleared_by_user_id,clear_reason` +
+          `&order=created_at_utc.desc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchPayState = async () => {
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: currentTimesheetId,
+        p_actor_user_id: user.id
+      });
+      return unwrapRpc(ps0, 'timesheet_pay_state');
+    } catch {
+      return null;
+    }
+  };
+
+  let existingOverride = await fetchActiveAdvanceOverride();
+
+  if (existingOverride) {
+    const consumedByPayBatchId =
+      (existingOverride.consumed_by_pay_batch_id != null && String(existingOverride.consumed_by_pay_batch_id).trim())
+        ? String(existingOverride.consumed_by_pay_batch_id).trim()
+        : null;
+    const consumedAtUtc =
+      (existingOverride.consumed_at_utc != null && String(existingOverride.consumed_at_utc).trim())
+        ? String(existingOverride.consumed_at_utc).trim()
+        : null;
+
+    if (consumedByPayBatchId || consumedAtUtc) {
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            error: 'TIMESHEET_ADVANCE_ALREADY_BATCHED',
+            message: 'This timesheet advance has already been batched and cannot be changed here.',
+            timesheet_id: currentTimesheetId,
+            candidate_id: candidateId,
+            pay_batch_id: consumedByPayBatchId || null
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+
+    const payStateExisting = await fetchPayState();
+
+    return withCORS(env, req, ok({
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      candidate_id: candidateId,
+      advance_override_id: String(existingOverride.id || '').trim() || null,
+      already_advanced: true,
+      advanced: true,
+      pay_batch_id: null,
+      batch_kind_fixed: null,
+      warnings: [],
+      preview_summary: null,
+      pay_state: payStateExisting,
+      message: 'This timesheet is already marked to be advanced in the next eligible pay run.'
+    }));
+  }
+
+  let insertedOverride = null;
+
+  try {
+    const insRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_payment_overrides`,
+      {
+        method: 'POST',
+        headers: { ...sbAuthHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify({
+          timesheet_id: currentTimesheetId,
+          candidate_id: candidateId,
+          override_type: 'ADVANCE_THIS_PAYMENT',
+          reason: overrideReason,
+          created_by_user_id: user.id
+        })
+      }
+    );
+
+    if (!insRes.ok) {
+      const txt = await insRes.text().catch(() => '');
+      const parsed = _safeJsonParse(txt);
+
+      existingOverride = await fetchActiveAdvanceOverride();
+      if (existingOverride) {
+        const consumedByPayBatchId =
+          (existingOverride.consumed_by_pay_batch_id != null && String(existingOverride.consumed_by_pay_batch_id).trim())
+            ? String(existingOverride.consumed_by_pay_batch_id).trim()
+            : null;
+        const consumedAtUtc =
+          (existingOverride.consumed_at_utc != null && String(existingOverride.consumed_at_utc).trim())
+            ? String(existingOverride.consumed_at_utc).trim()
+            : null;
+
+        if (consumedByPayBatchId || consumedAtUtc) {
+          return withCORS(
+            env,
+            req,
+            new Response(
+              JSON.stringify({
+                error: 'TIMESHEET_ADVANCE_ALREADY_BATCHED',
+                message: 'This timesheet advance has already been batched and cannot be changed here.',
+                timesheet_id: currentTimesheetId,
+                candidate_id: candidateId,
+                pay_batch_id: consumedByPayBatchId || null
+              }),
+              { status: 409, headers: { 'Content-Type': 'application/json' } }
+            )
+          );
+        }
+
+        const payStateExisting = await fetchPayState();
+
+        return withCORS(env, req, ok({
+          ok: true,
+          timesheet_id: currentTimesheetId,
+          candidate_id: candidateId,
+          advance_override_id: String(existingOverride.id || '').trim() || null,
+          already_advanced: true,
+          advanced: true,
+          pay_batch_id: null,
+          batch_kind_fixed: null,
+          warnings: [],
+          preview_summary: null,
+          pay_state: payStateExisting,
+          message: 'This timesheet is already marked to be advanced in the next eligible pay run.'
+        }));
+      }
+
+      return withCORS(
+        env,
+        req,
+        serverError(
+          (parsed && (parsed.message || parsed.error))
+            ? String(parsed.message || parsed.error)
+            : `Failed to create timesheet advance override (${insRes.status}) ${txt || ''}`.trim()
+        )
+      );
+    }
+
+    const j = await insRes.json().catch(() => []);
+    const row = Array.isArray(j) ? j[0] : j;
+    insertedOverride = (row && typeof row === 'object') ? row : null;
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create timesheet advance override')));
+  }
+
+  const payState = await fetchPayState();
+
+  try {
+    await writeAudit(
+      env,
+      user,
+      'TIMESHEET_ADVANCE_REQUESTED',
+      {
+        mode: 'ADVANCE_OVERRIDE_SET',
+        timesheet_id: currentTimesheetId,
+        candidate_id: candidateId,
+        reason: overrideReason,
+        advance_override_id: insertedOverride && insertedOverride.id ? String(insertedOverride.id) : null
+      },
+      { entity: 'timesheets', subject_id: currentTimesheetId, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    ok: true,
+    timesheet_id: currentTimesheetId,
+    candidate_id: candidateId,
+    advance_override_id: insertedOverride && insertedOverride.id ? String(insertedOverride.id) : null,
+    already_advanced: false,
+    advanced: true,
+    pay_batch_id: null,
+    batch_kind_fixed: null,
+    warnings: [],
+    preview_summary: null,
+    pay_state: payState,
+    message: 'This timesheet has been marked to be advanced in the next eligible pay run.'
+  }));
 }
 
 function collectDraftTimesheetIdsFromPreview(previewJson, previewDecisionsJson) {
