@@ -7810,7 +7810,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -7834,10 +7833,21 @@ declare
 
   v_ts_changed_ct int := 0;
   v_key_diff_ct int := 0;
+  v_finance_reservation_diff_ct int := 0;
+  v_snooze_diff_ct int := 0;
+  v_restructure_diff_ct int := 0;
+  v_writeoff_diff_ct int := 0;
+  v_timesheet_override_diff_ct int := 0;
+  v_paye_guardrail_diff_ct int := 0;
   v_overpay_ded_diff_ct int := 0;
+  v_manual_debt_ded_diff_ct int := 0;
   v_loan_ded_diff_ct int := 0;
   v_ded_diff_ct int := 0;
   v_paye_net_diff_ct int := 0;
+
+  v_batch_created_at_utc timestamptz;
+  v_same_week_paye_override_used boolean := false;
+  v_paye_guardrails jsonb := '{}'::jsonb;
 
   v_diff_limit int := 500;
 begin
@@ -7851,10 +7861,14 @@ begin
 
   select
     pb.pay_date,
-    pb.batch_kind_fixed
+    pb.batch_kind_fixed,
+    pb.created_at_utc,
+    coalesce(pb.same_week_paye_override_used, false)
   into
     v_pay_date,
-    v_batch_kind_fixed
+    v_batch_kind_fixed,
+    v_batch_created_at_utc,
+    v_same_week_paye_override_used
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
   limit 1;
@@ -7965,14 +7979,33 @@ begin
     ord int not null
   ) on commit drop;
 
+  create temporary table if not exists pg_temp.tmp_fresh_expected_manual_debt_alloc (
+    candidate_id uuid not null,
+    finance_case_id uuid not null,
+    take_ex numeric(12,2) not null,
+    ord int not null
+  ) on commit drop;
+
+  create temporary table if not exists pg_temp.tmp_fresh_state_diffs (
+    timesheet_id uuid null,
+    candidate_id uuid null,
+    key_type text not null,
+    key_value text not null,
+    expected_text text null,
+    actual_text text null,
+    ord int not null
+  ) on commit drop;
+
   truncate table pg_temp.tmp_fresh_ts_diffs;
   truncate table pg_temp.tmp_fresh_key_diffs;
   truncate table pg_temp.tmp_fresh_candidate_earnings;
   truncate table pg_temp.tmp_fresh_expected_overpay_alloc;
   truncate table pg_temp.tmp_fresh_candidate_expected_overpay;
   truncate table pg_temp.tmp_fresh_expected_loan_alloc;
+  truncate table pg_temp.tmp_fresh_expected_manual_debt_alloc;
   truncate table pg_temp.tmp_fresh_deduction_diffs;
   truncate table pg_temp.tmp_fresh_paye_net_diffs;
+  truncate table pg_temp.tmp_fresh_state_diffs;
 
   ---------------------------------------------------------------------------
   -- TIMESHEET_CHANGED: compare stored pbts.signature vs recomputed md5(current target_snapshot_json)
@@ -8396,114 +8429,474 @@ begin
     v_reasons := array_append(v_reasons, 'RESERVATION_CHANGED');
   end if;
 
+
   ---------------------------------------------------------------------------
-  -- DEDUCTION_CHANGED: recompute expected OVERPAYMENT_RECOVERY + LOAN_REPAYMENT
-  -- using the same candidate-earnings / oldest-first allocation rules as draft creation.
+  -- STATE_CHANGED: finance reservation rows, snoozes, restructure/write-off,
+  -- timesheet-payment-override changes, and PAYE guardrail changes.
+  ---------------------------------------------------------------------------
+  insert into pg_temp.tmp_fresh_state_diffs (
+    timesheet_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected_text,
+    actual_text,
+    ord
+  )
+  with batch_finance_items as (
+    select
+      pbi.timesheet_id,
+      pbc.candidate_id,
+      pbi.id as pay_batch_item_id,
+      pbi.finance_case_id,
+      pbi.reservation_id,
+      pbi.item_type,
+      pbi.repayment_week_start,
+      round(abs(coalesce(pbi.amount_ex_vat, 0)), 2)::numeric(12,2) as reserved_amount_ex
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.is_voided = false
+      and pbi.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY')
+      and pbi.finance_case_id is not null
+  ),
+  reservation_rows as (
+    select
+      par.id as reservation_id,
+      par.finance_case_id,
+      par.pay_batch_id,
+      par.pay_batch_candidate_id,
+      par.pay_batch_item_id,
+      round(coalesce(par.reserved_amount, 0), 2)::numeric(12,2) as reserved_amount_ex,
+      par.repayment_week_start,
+      upper(coalesce(par.status, '')) as reservation_status
+    from public.pay_advance_reservations par
+    where par.pay_batch_id = p_pay_batch_id
+  )
+  select
+    bfi.timesheet_id,
+    bfi.candidate_id,
+    'FINANCE_RESERVATION' as key_type,
+    bfi.pay_batch_item_id::text as key_value,
+    jsonb_build_object(
+      'finance_case_id', bfi.finance_case_id::text,
+      'reservation_id', case when bfi.reservation_id is null then null else bfi.reservation_id::text end,
+      'reserved_amount_ex', bfi.reserved_amount_ex,
+      'repayment_week_start', case when bfi.repayment_week_start is null then null else bfi.repayment_week_start::text end,
+      'status', 'RESERVED'
+    )::text as expected_text,
+    case
+      when rr.reservation_id is null then null
+      else jsonb_build_object(
+        'reservation_id', rr.reservation_id::text,
+        'finance_case_id', rr.finance_case_id::text,
+        'reserved_amount_ex', rr.reserved_amount_ex,
+        'repayment_week_start', case when rr.repayment_week_start is null then null else rr.repayment_week_start::text end,
+        'status', rr.reservation_status
+      )::text
+    end as actual_text,
+    33 as ord
+  from batch_finance_items bfi
+  left join reservation_rows rr
+    on rr.pay_batch_item_id = bfi.pay_batch_item_id
+  where rr.reservation_id is null
+     or rr.finance_case_id is distinct from bfi.finance_case_id
+     or round(coalesce(rr.reserved_amount_ex, 0), 2) <> round(coalesce(bfi.reserved_amount_ex, 0), 2)
+     or rr.repayment_week_start is distinct from bfi.repayment_week_start
+     or rr.reservation_status <> 'RESERVED'
+     or (bfi.reservation_id is not null and rr.reservation_id is distinct from bfi.reservation_id);
+
+  insert into pg_temp.tmp_fresh_state_diffs (
+    timesheet_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected_text,
+    actual_text,
+    ord
+  )
+  with batch_items as (
+    select
+      pbi.timesheet_id,
+      pbc.candidate_id,
+      pbi.id as pay_batch_item_id,
+      pbi.item_type,
+      pbi.source_ref,
+      pbi.finance_case_id,
+      case
+        when nullif(btrim(coalesce(pbi.segment_key, '')), '') is not null then pbi.segment_key
+        when pbi.source_ref is not null and btrim(pbi.source_ref) like 'seg:%' then substring(btrim(pbi.source_ref) from 5)
+        else null
+      end as seg_identity
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.is_voided = false
+  ),
+  active_snoozes as (
+    select
+      pis.id as snooze_id,
+      pis.candidate_id,
+      pis.timesheet_id,
+      pis.segment_id,
+      pis.source_ref,
+      pis.snooze_until_date,
+      pis.note,
+      pis.updated_at_utc,
+      pis.created_at_utc,
+      upper(coalesce(pis.snooze_kind, '')) as snooze_kind
+    from public.pay_item_snoozes pis
+    where pis.cleared_at_utc is null
+      and (pis.snooze_until_date is null or pis.snooze_until_date >= v_pay_date)
+  ),
+  matched_snoozes as (
+    select distinct
+      bi.timesheet_id,
+      bi.candidate_id,
+      bi.pay_batch_item_id,
+      asn.snooze_id,
+      asn.snooze_kind,
+      asn.snooze_until_date,
+      asn.note
+    from batch_items bi
+    join active_snoozes asn
+      on (
+           bi.finance_case_id is not null
+           and asn.source_ref = coalesce(bi.source_ref, ('advance:' || bi.finance_case_id::text))
+         )
+        or (
+           bi.timesheet_id is not null
+           and asn.timesheet_id = bi.timesheet_id
+           and asn.segment_id is not distinct from bi.seg_identity
+         )
+  )
+  select
+    ms.timesheet_id,
+    ms.candidate_id,
+    'SNOOZE' as key_type,
+    ms.pay_batch_item_id::text as key_value,
+    'NO_ACTIVE_SNOOZE' as expected_text,
+    jsonb_build_object(
+      'snooze_id', ms.snooze_id::text,
+      'snooze_kind', ms.snooze_kind,
+      'snooze_until_date', case when ms.snooze_until_date is null then null else ms.snooze_until_date::text end,
+      'note', ms.note
+    )::text as actual_text,
+    34 as ord
+  from matched_snoozes ms;
+
+  insert into pg_temp.tmp_fresh_state_diffs (
+    timesheet_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected_text,
+    actual_text,
+    ord
+  )
+  with referenced_finance_cases as (
+    select distinct
+      pbc.candidate_id,
+      coalesce(
+        pbi.finance_case_id,
+        case
+          when pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi.source_ref, 'advance:', '')::uuid
+          else null
+        end
+      ) as finance_case_id
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.is_voided = false
+      and (
+        pbi.finance_case_id is not null
+        or pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+      )
+  )
+  select
+    null::uuid as timesheet_id,
+    rfc.candidate_id,
+    'RESTRUCTURE' as key_type,
+    rfc.finance_case_id::text as key_value,
+    'NO_RESTRUCTURE_AFTER_BATCH_CREATED' as expected_text,
+    jsonb_build_object(
+      'finance_case_id', rfc.finance_case_id::text,
+      'event_type', pfce.event_type,
+      'event_at_utc', pfce.event_at_utc
+    )::text as actual_text,
+    35 as ord
+  from referenced_finance_cases rfc
+  join public.pay_finance_case_events pfce
+    on pfce.finance_case_id = rfc.finance_case_id
+  where pfce.event_at_utc >= coalesce(v_batch_created_at_utc, v_now_utc)
+    and upper(coalesce(pfce.event_type, '')) like '%RESTRUCTURE%';
+
+  insert into pg_temp.tmp_fresh_state_diffs (
+    timesheet_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected_text,
+    actual_text,
+    ord
+  )
+  with referenced_finance_cases as (
+    select distinct
+      pbc.candidate_id,
+      coalesce(
+        pbi.finance_case_id,
+        case
+          when pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi.source_ref, 'advance:', '')::uuid
+          else null
+        end
+      ) as finance_case_id
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.is_voided = false
+      and (
+        pbi.finance_case_id is not null
+        or pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+      )
+  )
+  select
+    null::uuid as timesheet_id,
+    rfc.candidate_id,
+    'WRITE_OFF' as key_type,
+    rfc.finance_case_id::text as key_value,
+    'NOT_WRITTEN_OFF' as expected_text,
+    jsonb_build_object(
+      'finance_case_id', pa.id::text,
+      'written_off_at_utc', pa.written_off_at_utc,
+      'status', pa.status::text
+    )::text as actual_text,
+    36 as ord
+  from referenced_finance_cases rfc
+  join public.pay_advances pa
+    on pa.id = rfc.finance_case_id
+  where pa.written_off_at_utc is not null
+    and pa.written_off_at_utc >= coalesce(v_batch_created_at_utc, v_now_utc);
+
+  insert into pg_temp.tmp_fresh_state_diffs (
+    timesheet_id,
+    candidate_id,
+    key_type,
+    key_value,
+    expected_text,
+    actual_text,
+    ord
+  )
+  with batch_ts as (
+    select distinct
+      pbi.timesheet_id,
+      pbc.candidate_id
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.timesheet_id is not null
+  )
+  select
+    bt.timesheet_id,
+    bt.candidate_id,
+    'TIMESHEET_ADVANCE_OVERRIDE' as key_type,
+    bt.timesheet_id::text as key_value,
+    'NO_OVERRIDE_CHANGE_AFTER_BATCH_CREATED' as expected_text,
+    jsonb_build_object(
+      'override_id', tpo.id::text,
+      'override_type', tpo.override_type,
+      'created_at_utc', tpo.created_at_utc,
+      'consumed_at_utc', tpo.consumed_at_utc,
+      'cleared_at_utc', tpo.cleared_at_utc
+    )::text as actual_text,
+    37 as ord
+  from batch_ts bt
+  join public.timesheet_payment_overrides tpo
+    on tpo.timesheet_id = bt.timesheet_id
+  where greatest(
+          coalesce(tpo.created_at_utc, '-infinity'::timestamptz),
+          coalesce(tpo.consumed_at_utc, '-infinity'::timestamptz),
+          coalesce(tpo.cleared_at_utc, '-infinity'::timestamptz)
+        ) >= coalesce(v_batch_created_at_utc, v_now_utc);
+
+  select count(*)::int
+  into v_finance_reservation_diff_ct
+  from pg_temp.tmp_fresh_state_diffs tsd
+  where tsd.key_type = 'FINANCE_RESERVATION';
+
+  if v_finance_reservation_diff_ct > 0 then
+    v_is_stale := true;
+    v_reasons := array_append(v_reasons, 'FINANCE_RESERVATION_CHANGED');
+  end if;
+
+  select count(*)::int
+  into v_snooze_diff_ct
+  from pg_temp.tmp_fresh_state_diffs tsd
+  where tsd.key_type = 'SNOOZE';
+
+  if v_snooze_diff_ct > 0 then
+    v_is_stale := true;
+    v_reasons := array_append(v_reasons, 'SNOOZE_CHANGED');
+  end if;
+
+  select count(*)::int
+  into v_restructure_diff_ct
+  from pg_temp.tmp_fresh_state_diffs tsd
+  where tsd.key_type = 'RESTRUCTURE';
+
+  if v_restructure_diff_ct > 0 then
+    v_is_stale := true;
+    v_reasons := array_append(v_reasons, 'RESTRUCTURE_CHANGED');
+  end if;
+
+  select count(*)::int
+  into v_writeoff_diff_ct
+  from pg_temp.tmp_fresh_state_diffs tsd
+  where tsd.key_type = 'WRITE_OFF';
+
+  if v_writeoff_diff_ct > 0 then
+    v_is_stale := true;
+    v_reasons := array_append(v_reasons, 'WRITE_OFF_CHANGED');
+  end if;
+
+  select count(*)::int
+  into v_timesheet_override_diff_ct
+  from pg_temp.tmp_fresh_state_diffs tsd
+  where tsd.key_type = 'TIMESHEET_ADVANCE_OVERRIDE';
+
+  if v_timesheet_override_diff_ct > 0 then
+    v_is_stale := true;
+    v_reasons := array_append(v_reasons, 'TIMESHEET_PAYMENT_OVERRIDE_CHANGED');
+  end if;
+
+  if v_scope = 'PAYE' and coalesce(v_batch_kind_fixed, '') <> 'LOANS' then
+    v_paye_guardrails := public.pay_paye_guardrails(
+      p_pay_date => v_pay_date,
+      p_ignore_pay_batch_id => p_pay_batch_id,
+      p_actor_user_id => p_actor_user_id
+    );
+
+    if coalesce((v_paye_guardrails->>'create_paye_blocked')::boolean, false) = true
+       or (
+            coalesce((v_paye_guardrails->>'override_required')::boolean, false) = true
+            and coalesce(v_same_week_paye_override_used, false) = false
+          )
+    then
+      insert into pg_temp.tmp_fresh_state_diffs (
+        timesheet_id,
+        candidate_id,
+        key_type,
+        key_value,
+        expected_text,
+        actual_text,
+        ord
+      )
+      values (
+        null,
+        null,
+        'PAYE_GUARDRAILS',
+        p_pay_batch_id::text,
+        jsonb_build_object(
+          'same_week_paye_override_used', coalesce(v_same_week_paye_override_used, false)
+        )::text,
+        v_paye_guardrails::text,
+        38
+      );
+
+      select count(*)::int
+      into v_paye_guardrail_diff_ct
+      from pg_temp.tmp_fresh_state_diffs tsd
+      where tsd.key_type = 'PAYE_GUARDRAILS';
+
+      if v_paye_guardrail_diff_ct > 0 then
+        v_is_stale := true;
+        v_reasons := array_append(v_reasons, 'PAYE_GUARDRAILS_CHANGED');
+      end if;
+    end if;
+  end if;
+
+  ---------------------------------------------------------------------------
+  -- DEDUCTION_CHANGED: recompute expected OVERPAYMENT_RECOVERY,
+  -- MANUAL_DEBT_RECOVERY, and LOAN_REPAYMENT using the current
+  -- canonical finance-case rules.
   ---------------------------------------------------------------------------
   if v_scope in ('PAYE','UMBRELLA') then
-    insert into pg_temp.tmp_fresh_candidate_earnings (
-      pay_batch_candidate_id,
-      candidate_id,
-      awaiting_net_amount,
-      earnings_before_loan_ex
-    )
-    with cand_scope as (
-      select
-        pbc.id as pay_batch_candidate_id,
-        pbc.candidate_id,
-        coalesce(pbc.awaiting_net_amount, false) as awaiting_net_amount,
-        pni.net_amount as paye_net_amount
-      from public.pay_batch_candidates pbc
-      left join public.pay_batch_paye_net_inputs pni
-        on pni.pay_batch_candidate_id = pbc.id
-      where pbc.pay_batch_id = p_pay_batch_id
-    )
-    select
-      cs.pay_batch_candidate_id,
-      cs.candidate_id,
-      cs.awaiting_net_amount,
-      greatest(
-        coalesce(
-          case
-            when v_scope = 'PAYE' then cs.paye_net_amount
-            else (
-              select coalesce(sum(pbi.amount_ex_vat), 0)
-              from public.pay_batch_items pbi
-              where pbi.pay_batch_candidate_id = cs.pay_batch_candidate_id
-                and pbi.is_voided = false
-                and pbi.amount_ex_vat > 0
-                and pbi.item_type in (
-                  'SEGMENT_DELTA',
-                  'EXPENSE_DELTA',
-                  'ADJUSTMENT_DELTA',
-                  'MILEAGE_DELTA'
-                )
-            )
-          end,
-          0
-        ),
-        0
-      )::numeric(12,2) as earnings_before_loan_ex
-    from cand_scope cs;
-
     insert into pg_temp.tmp_fresh_expected_overpay_alloc (
       candidate_id,
       advance_id,
       take_ex,
       ord
     )
-    with overpay_advances as (
+    with cand_scope as (
       select
-        pa.id as advance_id,
+        pbc.id as pay_batch_candidate_id,
+        pbc.candidate_id,
+        v_scope as pay_channel
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = p_pay_batch_id
+    ),
+    cand_earnings as (
+      select
+        cs.pay_batch_candidate_id,
+        cs.candidate_id,
+        cs.pay_channel,
+        greatest(
+          coalesce((
+            select sum(pbi.amount_ex_vat)
+            from public.pay_batch_items pbi
+            where pbi.pay_batch_candidate_id = cs.pay_batch_candidate_id
+              and pbi.is_voided = false
+              and pbi.amount_ex_vat > 0
+              and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+          ), 0),
+          0
+        )::numeric(12,2) as earnings_before_recovery_ex
+      from cand_scope cs
+    ),
+    overpay_cases as (
+      select
+        pa.id as finance_case_id,
         pa.candidate_id,
         pa.outstanding_amount::numeric(12,2) as outstanding_amount,
         pa.created_at
       from public.pay_advances pa
-      where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
+      where pa.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
         and pa.status = 'ACTIVE'::public.pay_advance_status_enum
         and pa.outstanding_amount > 0
     ),
-    cand_overpay as (
+    cand_cap as (
       select
-        ce.pay_batch_candidate_id,
         ce.candidate_id,
-        ce.earnings_before_loan_ex,
-        round(coalesce(sum(oa.outstanding_amount), 0), 2)::numeric(12,2) as overpayment_outstanding_ex
-      from pg_temp.tmp_fresh_candidate_earnings ce
-      left join overpay_advances oa
-        on oa.candidate_id = ce.candidate_id
-      where ce.awaiting_net_amount = false
-      group by
-        ce.pay_batch_candidate_id,
-        ce.candidate_id,
-        ce.earnings_before_loan_ex
-    ),
-    cand_recovery as (
-      select
-        co.candidate_id,
-        round(least(co.overpayment_outstanding_ex, co.earnings_before_loan_ex), 2)::numeric(12,2) as recovery_total_ex
-      from cand_overpay co
-      where round(least(co.overpayment_outstanding_ex, co.earnings_before_loan_ex), 2) > 0
+        round(least(coalesce(sum(oc.outstanding_amount), 0), ce.earnings_before_recovery_ex), 2)::numeric(12,2) as recovery_total_ex
+      from cand_earnings ce
+      left join overpay_cases oc
+        on oc.candidate_id = ce.candidate_id
+      group by ce.candidate_id, ce.earnings_before_recovery_ex
+      having round(least(coalesce(sum(oc.outstanding_amount), 0), ce.earnings_before_recovery_ex), 2) > 0
     ),
     alloc_base as (
       select
-        cr.candidate_id,
-        oa.advance_id,
-        oa.outstanding_amount,
-        oa.created_at,
-        cr.recovery_total_ex,
-        sum(oa.outstanding_amount) over (
-          partition by cr.candidate_id
-          order by oa.created_at, oa.advance_id
+        cc.candidate_id,
+        oc.finance_case_id,
+        oc.outstanding_amount,
+        oc.created_at,
+        cc.recovery_total_ex,
+        sum(oc.outstanding_amount) over (
+          partition by cc.candidate_id
+          order by oc.created_at, oc.finance_case_id
           rows between unbounded preceding and 1 preceding
         )::numeric(12,2) as cum_before_ex
-      from cand_recovery cr
-      join overpay_advances oa
-        on oa.candidate_id = cr.candidate_id
+      from cand_cap cc
+      join overpay_cases oc
+        on oc.candidate_id = cc.candidate_id
     )
     select
       ab.candidate_id,
-      ab.advance_id,
+      ab.finance_case_id as advance_id,
       round(
         least(
           ab.outstanding_amount,
@@ -8540,7 +8933,13 @@ begin
     )
     with actual_overpay as (
       select
-        nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid as advance_id,
+        coalesce(
+          pbi.finance_case_id,
+          case
+            when pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi.source_ref, 'advance:', '')::uuid
+            else null
+          end
+        ) as finance_case_id,
         round(sum(-coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0)),2)::numeric(12,2) as taken_ex
       from public.pay_batch_items pbi
       join public.pay_batch_candidates pbc
@@ -8548,52 +8947,76 @@ begin
       where pbc.pay_batch_id = p_pay_batch_id
         and pbi.is_voided = false
         and pbi.item_type = 'OVERPAYMENT_RECOVERY'
-        and pbi.source_ref is not null
-        and btrim(coalesce(pbi.source_ref,'')) like 'advance:%'
-      group by nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid
+      group by coalesce(
+        pbi.finance_case_id,
+        case
+          when pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi.source_ref, 'advance:', '')::uuid
+          else null
+        end
+      )
     ),
     expected_overpay as (
       select
-        teo.advance_id,
+        teo.advance_id as finance_case_id,
         teo.take_ex
       from pg_temp.tmp_fresh_expected_overpay_alloc teo
     ),
     union_keys as (
-      select eo.advance_id from expected_overpay eo
+      select eo.finance_case_id from expected_overpay eo
       union
-      select ao.advance_id from actual_overpay ao
+      select ao.finance_case_id from actual_overpay ao
     )
     select
       'OVERPAYMENT_RECOVERY' as key_type,
-      uk.advance_id::text as key_value,
+      uk.finance_case_id::text as key_value,
       round(coalesce(eo.take_ex,0),2)::numeric(12,2) as expected_ex,
       round(coalesce(ao.taken_ex,0),2)::numeric(12,2) as actual_ex,
       31 as ord
     from union_keys uk
     left join expected_overpay eo
-      on eo.advance_id = uk.advance_id
+      on eo.finance_case_id = uk.finance_case_id
     left join actual_overpay ao
-      on ao.advance_id = uk.advance_id
-    where round(coalesce(eo.take_ex,0),2) <> round(coalesce(ao.taken_ex,0),2);
+      on ao.finance_case_id = uk.finance_case_id
+    where uk.finance_case_id is not null
+      and round(coalesce(eo.take_ex,0),2) <> round(coalesce(ao.taken_ex,0),2);
 
-    insert into pg_temp.tmp_fresh_expected_loan_alloc (
+    insert into pg_temp.tmp_fresh_expected_manual_debt_alloc (
       candidate_id,
-      loan_id,
+      finance_case_id,
       take_ex,
       ord
     )
-    with cand_limits as (
+    with cand_scope as (
       select
-        ce.pay_batch_candidate_id,
-        ce.candidate_id,
+        pbc.id as pay_batch_candidate_id,
+        pbc.candidate_id,
+        v_scope as pay_channel
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = p_pay_batch_id
+    ),
+    cand_earnings as (
+      select
+        cs.pay_batch_candidate_id,
+        cs.candidate_id,
+        cs.pay_channel,
         greatest(
-          ce.earnings_before_loan_ex - coalesce(teo.expected_overpayment_recovery_ex, 0),
+          coalesce((
+            select sum(pbi.amount_ex_vat)
+            from public.pay_batch_items pbi
+            where pbi.pay_batch_candidate_id = cs.pay_batch_candidate_id
+              and pbi.is_voided = false
+              and pbi.amount_ex_vat > 0
+              and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+          ), 0)
+          - coalesce((
+              select teo.expected_overpayment_recovery_ex
+              from pg_temp.tmp_fresh_candidate_expected_overpay teo
+              where teo.candidate_id = cs.candidate_id
+              limit 1
+            ), 0),
           0
-        )::numeric(12,2) as earnings_after_recovery_ex
-      from pg_temp.tmp_fresh_candidate_earnings ce
-      left join pg_temp.tmp_fresh_candidate_expected_overpay teo
-        on teo.candidate_id = ce.candidate_id
-      where ce.awaiting_net_amount = false
+        )::numeric(12,2) as earnings_after_overpayment_ex
+      from cand_scope cs
     ),
     paid_wtd as (
       select
@@ -8615,111 +9038,124 @@ begin
     ),
     cand_with_floor as (
       select
-        cl.pay_batch_candidate_id,
-        cl.candidate_id,
-        cl.earnings_after_recovery_ex,
+        ce.candidate_id,
+        ce.pay_channel,
+        ce.earnings_after_overpayment_ex,
         coalesce(pw.paid_wtd_before_ex, 0)::numeric(12,2) as paid_wtd_before_ex,
         coalesce(c.min_take_home_wtd, 0)::numeric(12,2) as floor_ex,
         round(
           greatest(
             least(
-              cl.earnings_after_recovery_ex,
-              (coalesce(pw.paid_wtd_before_ex, 0) + cl.earnings_after_recovery_ex) - coalesce(c.min_take_home_wtd, 0)
+              ce.earnings_after_overpayment_ex,
+              (coalesce(pw.paid_wtd_before_ex, 0) + ce.earnings_after_overpayment_ex) - coalesce(c.min_take_home_wtd, 0)
             ),
             0
           ),
           2
-        )::numeric(12,2) as max_loan_repayment_ex
-      from cand_limits cl
+        )::numeric(12,2) as max_manual_debt_recovery_ex
+      from cand_earnings ce
       join public.candidates c
-        on c.id = cl.candidate_id
+        on c.id = ce.candidate_id
       left join paid_wtd pw
-        on pw.candidate_id = cl.candidate_id
-      where cl.earnings_after_recovery_ex > 0
+        on pw.candidate_id = ce.candidate_id
+      where ce.earnings_after_overpayment_ex > 0
     ),
-    loans as (
+    debt_cases as (
       select
-        pa.id as loan_id,
+        pa.id as finance_case_id,
         pa.candidate_id,
         pa.outstanding_amount::numeric(12,2) as outstanding_amount,
         pa.weekly_due::numeric(12,2) as weekly_due,
         pa.start_week_start,
+        pa.next_due_week_start,
         pa.created_at
       from public.pay_advances pa
-      where pa.advance_kind = 'LOAN'::public.pay_advance_kind_enum
-        and pa.payout_status = 'PAID'::public.pay_advance_payout_status_enum
+      where pa.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
         and pa.status = 'ACTIVE'::public.pay_advance_status_enum
         and pa.outstanding_amount > 0
         and pa.weekly_due is not null
         and pa.weekly_due > 0
-        and (pa.start_week_start is null or pa.start_week_start <= v_week_start)
+        and coalesce(pa.next_due_week_start, pa.start_week_start, v_week_start) <= v_week_start
+        and pa.written_off_at_utc is null
     ),
-    loan_repaid_wtd as (
+    debt_repaid_wtd as (
       select
         pbc2.candidate_id,
-        replace(pbi2.source_ref, 'advance:', '')::uuid as loan_id,
+        coalesce(
+          pbi2.finance_case_id,
+          case
+            when pbi2.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi2.source_ref, 'advance:', '')::uuid
+            else null
+          end
+        ) as finance_case_id,
         round(coalesce(sum(-pbi2.amount_ex_vat), 0), 2)::numeric(12,2) as repaid_wtd_ex
       from public.pay_batch_items pbi2
       join public.pay_batch_candidates pbc2
         on pbc2.id = pbi2.pay_batch_candidate_id
       join public.pay_batches pb2
         on pb2.id = pbc2.pay_batch_id
-      where pbi2.item_type = 'LOAN_REPAYMENT'
+      where pbi2.item_type = 'MANUAL_DEBT_RECOVERY'
         and pbi2.is_voided = false
-        and pbi2.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
         and pbi2.repayment_week_start = v_week_start
         and pb2.cancelled_at_utc is null
         and pb2.id <> p_pay_batch_id
         and coalesce(pb2.batch_kind_fixed, '') <> 'LOANS'
       group by
         pbc2.candidate_id,
-        replace(pbi2.source_ref, 'advance:', '')::uuid
+        coalesce(
+          pbi2.finance_case_id,
+          case
+            when pbi2.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi2.source_ref, 'advance:', '')::uuid
+            else null
+          end
+        )
     ),
-    loan_due as (
+    repayment_due as (
       select
         cwf.candidate_id,
-        cwf.max_loan_repayment_ex,
-        l.loan_id,
-        l.outstanding_amount,
-        l.weekly_due,
-        l.start_week_start,
-        l.created_at,
+        cwf.max_manual_debt_recovery_ex,
+        dc.finance_case_id,
+        dc.outstanding_amount,
+        dc.weekly_due,
+        dc.start_week_start,
+        dc.next_due_week_start,
+        dc.created_at,
         greatest(
-          least(l.weekly_due, l.outstanding_amount) - coalesce(lrw.repaid_wtd_ex, 0),
+          least(dc.weekly_due, dc.outstanding_amount) - coalesce(drw.repaid_wtd_ex, 0),
           0
         )::numeric(12,2) as remaining_due_ex
       from cand_with_floor cwf
-      join loans l
-        on l.candidate_id = cwf.candidate_id
-      left join loan_repaid_wtd lrw
-        on lrw.candidate_id = cwf.candidate_id
-       and lrw.loan_id = l.loan_id
-      where cwf.max_loan_repayment_ex > 0
+      join debt_cases dc
+        on dc.candidate_id = cwf.candidate_id
+      left join debt_repaid_wtd drw
+        on drw.candidate_id = cwf.candidate_id
+       and drw.finance_case_id = dc.finance_case_id
+      where cwf.max_manual_debt_recovery_ex > 0
         and greatest(
-          least(l.weekly_due, l.outstanding_amount) - coalesce(lrw.repaid_wtd_ex, 0),
+          least(dc.weekly_due, dc.outstanding_amount) - coalesce(drw.repaid_wtd_ex, 0),
           0
         ) > 0
     ),
     alloc_base as (
       select
-        ld.candidate_id,
-        ld.loan_id,
-        ld.remaining_due_ex,
-        ld.max_loan_repayment_ex,
-        sum(ld.remaining_due_ex) over (
-          partition by ld.candidate_id
-          order by ld.start_week_start nulls first, ld.created_at, ld.loan_id
+        rd.candidate_id,
+        rd.finance_case_id,
+        rd.remaining_due_ex,
+        rd.max_manual_debt_recovery_ex,
+        sum(rd.remaining_due_ex) over (
+          partition by rd.candidate_id
+          order by coalesce(rd.next_due_week_start, rd.start_week_start) nulls first, rd.created_at, rd.finance_case_id
           rows between unbounded preceding and 1 preceding
         )::numeric(12,2) as cum_before_ex
-      from loan_due ld
+      from repayment_due rd
     )
     select
       ab.candidate_id,
-      ab.loan_id,
+      ab.finance_case_id,
       round(
         least(
           ab.remaining_due_ex,
-          greatest(ab.max_loan_repayment_ex - coalesce(ab.cum_before_ex, 0), 0)
+          greatest(ab.max_manual_debt_recovery_ex - coalesce(ab.cum_before_ex, 0), 0)
         ),
         2
       )::numeric(12,2) as take_ex,
@@ -8728,7 +9164,279 @@ begin
     where round(
       least(
         ab.remaining_due_ex,
-        greatest(ab.max_loan_repayment_ex - coalesce(ab.cum_before_ex, 0), 0)
+        greatest(ab.max_manual_debt_recovery_ex - coalesce(ab.cum_before_ex, 0), 0)
+      ),
+      2
+    ) > 0;
+
+    insert into pg_temp.tmp_fresh_deduction_diffs (
+      key_type,
+      key_value,
+      expected_ex,
+      actual_ex,
+      ord
+    )
+    with actual_manual_debt as (
+      select
+        coalesce(
+          pbi.finance_case_id,
+          case
+            when pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi.source_ref, 'advance:', '')::uuid
+            else null
+          end
+        ) as finance_case_id,
+        round(sum(-coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0)),2)::numeric(12,2) as taken_ex
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc
+        on pbc.id = pbi.pay_batch_candidate_id
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbi.is_voided = false
+        and pbi.item_type = 'MANUAL_DEBT_RECOVERY'
+      group by coalesce(
+        pbi.finance_case_id,
+        case
+          when pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi.source_ref, 'advance:', '')::uuid
+          else null
+        end
+      )
+    ),
+    expected_manual_debt as (
+      select
+        tmd.finance_case_id,
+        tmd.take_ex
+      from pg_temp.tmp_fresh_expected_manual_debt_alloc tmd
+    ),
+    union_keys as (
+      select emd.finance_case_id from expected_manual_debt emd
+      union
+      select amd.finance_case_id from actual_manual_debt amd
+    )
+    select
+      'MANUAL_DEBT_RECOVERY' as key_type,
+      uk.finance_case_id::text as key_value,
+      round(coalesce(emd.take_ex,0),2)::numeric(12,2) as expected_ex,
+      round(coalesce(amd.taken_ex,0),2)::numeric(12,2) as actual_ex,
+      32 as ord
+    from union_keys uk
+    left join expected_manual_debt emd
+      on emd.finance_case_id = uk.finance_case_id
+    left join actual_manual_debt amd
+      on amd.finance_case_id = uk.finance_case_id
+    where uk.finance_case_id is not null
+      and round(coalesce(emd.take_ex,0),2) <> round(coalesce(amd.taken_ex,0),2);
+
+    insert into pg_temp.tmp_fresh_expected_loan_alloc (
+      candidate_id,
+      loan_id,
+      take_ex,
+      ord
+    )
+    with cand_scope as (
+      select
+        pbc.id as pay_batch_candidate_id,
+        pbc.candidate_id,
+        v_scope as pay_channel,
+        coalesce(pbc.awaiting_net_amount, false) as awaiting_net_amount,
+        pni.net_amount::numeric(12,2) as paye_net_amount,
+        coalesce((
+          select teo.expected_overpayment_recovery_ex
+          from pg_temp.tmp_fresh_candidate_expected_overpay teo
+          where teo.candidate_id = pbc.candidate_id
+          limit 1
+        ), 0)::numeric(12,2)
+        + coalesce((
+          select round(sum(tmd.take_ex), 2)
+          from pg_temp.tmp_fresh_expected_manual_debt_alloc tmd
+          where tmd.candidate_id = pbc.candidate_id
+        ), 0)::numeric(12,2) as gross_side_recovery_taken_ex
+      from public.pay_batch_candidates pbc
+      left join public.pay_batch_paye_net_inputs pni
+        on pni.pay_batch_candidate_id = pbc.id
+      where pbc.pay_batch_id = p_pay_batch_id
+    ),
+    cand_earnings as (
+      select
+        cs.pay_batch_candidate_id,
+        cs.candidate_id,
+        cs.pay_channel,
+        cs.awaiting_net_amount,
+        greatest(
+          coalesce(
+            case
+              when cs.pay_channel = 'PAYE' then cs.paye_net_amount
+              else (
+                select coalesce(sum(pbi.amount_ex_vat), 0)
+                from public.pay_batch_items pbi
+                where pbi.pay_batch_candidate_id = cs.pay_batch_candidate_id
+                  and pbi.is_voided = false
+                  and pbi.amount_ex_vat > 0
+                  and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+              )
+            end,
+            0
+          )
+          - case when cs.pay_channel = 'PAYE' then 0 else coalesce(cs.gross_side_recovery_taken_ex, 0) end,
+          0
+        )::numeric(12,2) as earnings_before_payment_advance_recovery_ex
+      from cand_scope cs
+    ),
+    cand_limits as (
+      select
+        ce.candidate_id,
+        ce.pay_channel,
+        ce.awaiting_net_amount,
+        ce.earnings_before_payment_advance_recovery_ex
+      from cand_earnings ce
+      where (ce.pay_channel <> 'PAYE' or ce.awaiting_net_amount = false)
+    ),
+    paid_wtd as (
+      select
+        pbc2.candidate_id,
+        round(coalesce(sum(pbi2.amount_ex_vat), 0), 2)::numeric(12,2) as paid_wtd_before_ex
+      from public.pay_batch_candidates pbc2
+      join public.pay_batches pb2
+        on pb2.id = pbc2.pay_batch_id
+      join public.pay_batch_items pbi2
+        on pbi2.pay_batch_candidate_id = pbc2.id
+      where pb2.cancelled_at_utc is null
+        and pb2.id <> p_pay_batch_id
+        and coalesce(pb2.batch_kind_fixed, '') <> 'LOANS'
+        and pb2.pay_date >= v_week_start
+        and pb2.pay_date < (v_week_start + 7)
+        and pbi2.is_voided = false
+        and pbi2.item_type <> 'DEBT_CREATED'
+      group by pbc2.candidate_id
+    ),
+    cand_with_floor as (
+      select
+        cl.candidate_id,
+        cl.pay_channel,
+        cl.earnings_before_payment_advance_recovery_ex,
+        coalesce(pw.paid_wtd_before_ex, 0)::numeric(12,2) as paid_wtd_before_ex,
+        coalesce(c.min_take_home_wtd, 0)::numeric(12,2) as floor_ex,
+        round(
+          greatest(
+            least(
+              cl.earnings_before_payment_advance_recovery_ex,
+              (coalesce(pw.paid_wtd_before_ex, 0) + cl.earnings_before_payment_advance_recovery_ex) - coalesce(c.min_take_home_wtd, 0)
+            ),
+            0
+          ),
+          2
+        )::numeric(12,2) as max_payment_advance_repayment_ex
+      from cand_limits cl
+      join public.candidates c
+        on c.id = cl.candidate_id
+      left join paid_wtd pw
+        on pw.candidate_id = cl.candidate_id
+      where cl.earnings_before_payment_advance_recovery_ex > 0
+    ),
+    payment_advance_cases as (
+      select
+        pa.id as finance_case_id,
+        pa.candidate_id,
+        pa.outstanding_amount::numeric(12,2) as outstanding_amount,
+        pa.weekly_due::numeric(12,2) as weekly_due,
+        pa.start_week_start,
+        pa.next_due_week_start,
+        pa.created_at
+      from public.pay_advances pa
+      where pa.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
+        and pa.payout_status = 'PAID'::public.pay_advance_payout_status_enum
+        and pa.status = 'ACTIVE'::public.pay_advance_status_enum
+        and pa.outstanding_amount > 0
+        and pa.weekly_due is not null
+        and pa.weekly_due > 0
+        and coalesce(pa.next_due_week_start, pa.start_week_start, v_week_start) <= v_week_start
+        and pa.written_off_at_utc is null
+    ),
+    repaid_wtd as (
+      select
+        pbc2.candidate_id,
+        coalesce(
+          pbi2.finance_case_id,
+          case
+            when pbi2.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi2.source_ref, 'advance:', '')::uuid
+            else null
+          end
+        ) as finance_case_id,
+        round(coalesce(sum(-pbi2.amount_ex_vat), 0), 2)::numeric(12,2) as repaid_wtd_ex
+      from public.pay_batch_items pbi2
+      join public.pay_batch_candidates pbc2
+        on pbc2.id = pbi2.pay_batch_candidate_id
+      join public.pay_batches pb2
+        on pb2.id = pbc2.pay_batch_id
+      where pbi2.item_type = 'LOAN_REPAYMENT'
+        and pbi2.is_voided = false
+        and pbi2.repayment_week_start = v_week_start
+        and pb2.cancelled_at_utc is null
+        and pb2.id <> p_pay_batch_id
+        and coalesce(pb2.batch_kind_fixed, '') <> 'LOANS'
+      group by
+        pbc2.candidate_id,
+        coalesce(
+          pbi2.finance_case_id,
+          case
+            when pbi2.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi2.source_ref, 'advance:', '')::uuid
+            else null
+          end
+        )
+    ),
+    repayment_due as (
+      select
+        cwf.candidate_id,
+        cwf.max_payment_advance_repayment_ex,
+        pac.finance_case_id,
+        pac.outstanding_amount,
+        pac.weekly_due,
+        pac.start_week_start,
+        pac.next_due_week_start,
+        pac.created_at,
+        greatest(
+          least(pac.weekly_due, pac.outstanding_amount) - coalesce(rw.repaid_wtd_ex, 0),
+          0
+        )::numeric(12,2) as remaining_due_ex
+      from cand_with_floor cwf
+      join payment_advance_cases pac
+        on pac.candidate_id = cwf.candidate_id
+      left join repaid_wtd rw
+        on rw.candidate_id = cwf.candidate_id
+       and rw.finance_case_id = pac.finance_case_id
+      where cwf.max_payment_advance_repayment_ex > 0
+        and greatest(
+          least(pac.weekly_due, pac.outstanding_amount) - coalesce(rw.repaid_wtd_ex, 0),
+          0
+        ) > 0
+    ),
+    alloc_base as (
+      select
+        rd.candidate_id,
+        rd.finance_case_id,
+        rd.remaining_due_ex,
+        rd.max_payment_advance_repayment_ex,
+        sum(rd.remaining_due_ex) over (
+          partition by rd.candidate_id
+          order by coalesce(rd.next_due_week_start, rd.start_week_start) nulls first, rd.created_at, rd.finance_case_id
+          rows between unbounded preceding and 1 preceding
+        )::numeric(12,2) as cum_before_ex
+      from repayment_due rd
+    )
+    select
+      ab.candidate_id,
+      ab.finance_case_id as loan_id,
+      round(
+        least(
+          ab.remaining_due_ex,
+          greatest(ab.max_payment_advance_repayment_ex - coalesce(ab.cum_before_ex, 0), 0)
+        ),
+        2
+      )::numeric(12,2) as take_ex,
+      33 as ord
+    from alloc_base ab
+    where round(
+      least(
+        ab.remaining_due_ex,
+        greatest(ab.max_payment_advance_repayment_ex - coalesce(ab.cum_before_ex, 0), 0)
       ),
       2
     ) > 0;
@@ -8742,7 +9450,13 @@ begin
     )
     with actual_loans as (
       select
-        replace(pbi.source_ref, 'advance:', '')::uuid as loan_id,
+        coalesce(
+          pbi.finance_case_id,
+          case
+            when pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi.source_ref, 'advance:', '')::uuid
+            else null
+          end
+        ) as finance_case_id,
         round(sum(-coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0)),2)::numeric(12,2) as taken_ex
       from public.pay_batch_items pbi
       join public.pay_batch_candidates pbc
@@ -8750,33 +9464,39 @@ begin
       where pbc.pay_batch_id = p_pay_batch_id
         and pbi.is_voided = false
         and pbi.item_type = 'LOAN_REPAYMENT'
-        and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
         and pbi.repayment_week_start = v_week_start
-      group by replace(pbi.source_ref, 'advance:', '')::uuid
+      group by coalesce(
+        pbi.finance_case_id,
+        case
+          when pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi.source_ref, 'advance:', '')::uuid
+          else null
+        end
+      )
     ),
     expected_loans as (
       select
-        tel.loan_id,
+        tel.loan_id as finance_case_id,
         tel.take_ex
       from pg_temp.tmp_fresh_expected_loan_alloc tel
     ),
     union_keys as (
-      select el.loan_id from expected_loans el
+      select el.finance_case_id from expected_loans el
       union
-      select al.loan_id from actual_loans al
+      select al.finance_case_id from actual_loans al
     )
     select
       'LOAN_REPAYMENT' as key_type,
-      uk.loan_id::text as key_value,
+      uk.finance_case_id::text as key_value,
       round(coalesce(el.take_ex,0),2)::numeric(12,2) as expected_ex,
       round(coalesce(al.taken_ex,0),2)::numeric(12,2) as actual_ex,
-      32 as ord
+      33 as ord
     from union_keys uk
     left join expected_loans el
-      on el.loan_id = uk.loan_id
+      on el.finance_case_id = uk.finance_case_id
     left join actual_loans al
-      on al.loan_id = uk.loan_id
-    where round(coalesce(el.take_ex,0),2) <> round(coalesce(al.taken_ex,0),2);
+      on al.finance_case_id = uk.finance_case_id
+    where uk.finance_case_id is not null
+      and round(coalesce(el.take_ex,0),2) <> round(coalesce(al.taken_ex,0),2);
 
     select count(*)::int
     into v_overpay_ded_diff_ct
@@ -8784,11 +9504,18 @@ begin
     where tdd.key_type = 'OVERPAYMENT_RECOVERY';
 
     select count(*)::int
+    into v_manual_debt_ded_diff_ct
+    from pg_temp.tmp_fresh_deduction_diffs tdd
+    where tdd.key_type = 'MANUAL_DEBT_RECOVERY';
+
+    select count(*)::int
     into v_loan_ded_diff_ct
     from pg_temp.tmp_fresh_deduction_diffs tdd
     where tdd.key_type = 'LOAN_REPAYMENT';
 
-    v_ded_diff_ct := coalesce(v_overpay_ded_diff_ct, 0) + coalesce(v_loan_ded_diff_ct, 0);
+    v_ded_diff_ct := coalesce(v_overpay_ded_diff_ct, 0)
+                     + coalesce(v_manual_debt_ded_diff_ct, 0)
+                     + coalesce(v_loan_ded_diff_ct, 0);
 
     if v_ded_diff_ct > 0 then
       v_is_stale := true;
@@ -8798,6 +9525,7 @@ begin
 
   ---------------------------------------------------------------------------
   -- PAYE_NET_CHANGED: diff[] must include candidate net deltas (and net/awaiting drift)
+  -- Only PAYMENT_ADVANCE repayment remains a net-side deduction.
   ---------------------------------------------------------------------------
   if v_scope = 'PAYE' and coalesce(v_batch_kind_fixed,'') <> 'LOANS' then
     insert into pg_temp.tmp_fresh_paye_net_diffs (
@@ -8815,7 +9543,6 @@ begin
         pbc.candidate_id,
         coalesce(pbc.awaiting_net_amount,false) as awaiting_net_amount,
         round(coalesce(pbc.net_bank_amount,0),2)::numeric(12,2) as net_bank_amount_ex,
-        round(coalesce(pbc.overpayment_recovery_taken,0),2)::numeric(12,2) as overpayment_recovery_taken_ex,
         round(coalesce(pbc.loan_repayment_taken,0),2)::numeric(12,2) as loan_repayment_taken_ex
       from public.pay_batch_candidates pbc
       where pbc.pay_batch_id = p_pay_batch_id
@@ -8828,7 +9555,7 @@ begin
       left join public.pay_batch_paye_net_inputs pni
         on pni.pay_batch_candidate_id = c.pay_batch_candidate_id
     ),
-    ded_present as (
+    net_ded_present as (
       select
         c.pay_batch_candidate_id,
         exists(
@@ -8836,8 +9563,8 @@ begin
           from public.pay_batch_items pbi
           where pbi.pay_batch_candidate_id = c.pay_batch_candidate_id
             and pbi.is_voided = false
-            and pbi.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT')
-        ) as has_deductions
+            and pbi.item_type = 'LOAN_REPAYMENT'
+        ) as has_net_deductions
       from cand c
     )
     select
@@ -8845,18 +9572,18 @@ begin
       'PAYE_NET' as key_type,
       ('candidate:' || c.candidate_id::text) as key_value,
       ni.net_amount::numeric(12,2) as expected_ex,
-      round(c.net_bank_amount_ex + c.overpayment_recovery_taken_ex + c.loan_repayment_taken_ex, 2)::numeric(12,2) as actual_ex,
+      round(c.net_bank_amount_ex + c.loan_repayment_taken_ex, 2)::numeric(12,2) as actual_ex,
       4 as ord
     from cand c
     left join net_inp ni
       on ni.pay_batch_candidate_id = c.pay_batch_candidate_id
-    join ded_present dp
-      on dp.pay_batch_candidate_id = c.pay_batch_candidate_id
+    join net_ded_present ndp
+      on ndp.pay_batch_candidate_id = c.pay_batch_candidate_id
     where c.awaiting_net_amount <> (ni.net_amount is null)
-       or ((ni.net_amount is null) and dp.has_deductions = true)
+       or ((ni.net_amount is null) and ndp.has_net_deductions = true)
        or (
             ni.net_amount is not null
-        and round(ni.net_amount,2) <> round(c.net_bank_amount_ex + c.overpayment_recovery_taken_ex + c.loan_repayment_taken_ex, 2)
+        and round(ni.net_amount,2) <> round(c.net_bank_amount_ex + c.loan_repayment_taken_ex, 2)
        );
 
     select count(*)::int
@@ -8958,6 +9685,27 @@ begin
     union all
 
     select
+      s.ord,
+      coalesce(s.candidate_id::text, coalesce(s.timesheet_id::text, '')) as sort1,
+      s.key_type as sort2,
+      s.key_value as sort3,
+      jsonb_build_object(
+        'timesheet_id', s.timesheet_id::text,
+        'key_type', s.key_type,
+        'key_value', s.key_value,
+        'expected', s.expected_text,
+        'actual', s.actual_text
+      ) as diff_json
+    from (
+      select *
+      from pg_temp.tmp_fresh_state_diffs s0
+      order by coalesce(s0.candidate_id::text, coalesce(s0.timesheet_id::text, '')), s0.key_type, s0.key_value
+      limit v_diff_limit
+    ) s
+
+    union all
+
+    select
       99 as ord,
       '' as sort1,
       'INFO' as sort2,
@@ -8969,8 +9717,15 @@ begin
         'expected', jsonb_build_object(
           'ts_changed', v_ts_changed_ct,
           'key_diffs', v_key_diff_ct,
+          'finance_reservation_diffs', v_finance_reservation_diff_ct,
+          'snooze_diffs', v_snooze_diff_ct,
+          'restructure_diffs', v_restructure_diff_ct,
+          'writeoff_diffs', v_writeoff_diff_ct,
+          'timesheet_override_diffs', v_timesheet_override_diff_ct,
+          'paye_guardrail_diffs', v_paye_guardrail_diff_ct,
           'ded_diffs', v_ded_diff_ct,
           'overpayment_ded_diffs', v_overpay_ded_diff_ct,
+          'manual_debt_ded_diffs', v_manual_debt_ded_diff_ct,
           'loan_ded_diffs', v_loan_ded_diff_ct,
           'paye_net_diffs', v_paye_net_diff_ct
         ),
@@ -9006,8 +9761,15 @@ begin
         'counts', jsonb_build_object(
           'timesheet_changed', v_ts_changed_ct,
           'stable_key_diffs', v_key_diff_ct,
+          'finance_reservation_diffs', v_finance_reservation_diff_ct,
+          'snooze_diffs', v_snooze_diff_ct,
+          'restructure_diffs', v_restructure_diff_ct,
+          'writeoff_diffs', v_writeoff_diff_ct,
+          'timesheet_override_diffs', v_timesheet_override_diff_ct,
+          'paye_guardrail_diffs', v_paye_guardrail_diff_ct,
           'deduction_diffs', v_ded_diff_ct,
           'overpayment_deduction_diffs', v_overpay_ded_diff_ct,
+          'manual_debt_deduction_diffs', v_manual_debt_ded_diff_ct,
           'loan_deduction_diffs', v_loan_ded_diff_ct,
           'paye_net_diffs', v_paye_net_diff_ct
         )
@@ -9026,6 +9788,7 @@ begin
   );
 end;
 $function$;
+
 
 
 
