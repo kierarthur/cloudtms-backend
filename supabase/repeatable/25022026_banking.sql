@@ -1817,6 +1817,8 @@ $function$;
 
 
 
+
+
 create or replace function public.pay_batch_schedule(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -1840,6 +1842,7 @@ declare
   v_sched_at timestamptz;
   v_warn jsonb;
   v_authoritative_payment_date date;
+  v_commit_ts timestamptz := now();
 
   v_need_name_check boolean := false;
   v_requires_payee_map boolean := false;
@@ -2335,7 +2338,7 @@ begin
   update public.pay_advance_reservations par
   set
     status = 'COMMITTED',
-    committed_at_utc = coalesce(par.committed_at_utc, now()),
+    committed_at_utc = coalesce(par.committed_at_utc, v_commit_ts),
     updated_by_user_id = p_actor_user_id
   where par.pay_batch_id = p_pay_batch_id
     and upper(coalesce(par.status,'')) = 'RESERVED';
@@ -2347,6 +2350,39 @@ begin
   from public.pay_advance_reservations par
   where par.pay_batch_id = p_pay_batch_id
     and upper(coalesce(par.status,'')) = 'COMMITTED';
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  select
+    par.finance_case_id,
+    'RESERVATION_COMMITTED',
+    v_commit_ts,
+    p_actor_user_id,
+    p_pay_batch_id,
+    par.id,
+    jsonb_build_object('reservation_status', 'RESERVED'),
+    jsonb_build_object(
+      'reservation_status', 'COMMITTED',
+      'authoritative_payment_date', v_authoritative_payment_date::text,
+      'schedule_kind', v_kind,
+      'scheduled_at_utc', v_sched_at::text
+    ),
+    'schedule_commit',
+    null
+  from public.pay_advance_reservations par
+  where par.pay_batch_id = p_pay_batch_id
+    and upper(coalesce(par.status,'')) = 'COMMITTED'
+    and par.committed_at_utc = v_commit_ts;
 
   begin
     if v_provider <> 'CSV' then
@@ -2481,7 +2517,7 @@ begin
 
   v_worker_communications := jsonb_build_object(
     'automatic_commit_stage', (v_provider <> 'CSV'),
-    'message_kind', case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
+    'message_kind', coalesce(nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''), case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end),
     'trigger_status', v_comm_trigger_status,
     'error', v_comm_error,
     'result', coalesce(v_comm_result, '{}'::jsonb)
@@ -3918,6 +3954,12 @@ end;
 $$;
 
 
+
+
+
+
+
+
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -4843,13 +4885,6 @@ begin
 
       v_comm_error := nullif(btrim(coalesce(v_comm_result->>'error','')), '');
 
-      update public.pay_batch_candidates pbc
-      set
-        remittance_trigger_status = v_comm_trigger_status,
-        last_remittance_error = nullif(btrim(coalesce(v_comm_error,'')), '')
-      where pbc.pay_batch_id = p_pay_batch_id
-        and pbc.remittance_sent_at_utc is null;
-
       insert into public.audit_events(
         actor_user_id,
         object_type,
@@ -4938,7 +4973,7 @@ begin
   v_worker_communications := jsonb_build_object(
     'primary_trigger_stage', 'COMMIT',
     'catchup_attempted_at_settlement', v_catchup_needed,
-    'message_kind', case when upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
+    'message_kind', coalesce(nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''), case when upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end),
     'trigger_status', v_comm_trigger_status,
     'error', v_comm_error,
     'result', coalesce(v_comm_result, '{}'::jsonb)
@@ -5055,11 +5090,6 @@ begin
 end;
 $$;
 
-
-
-
-
-
 create or replace function public.pay_remittance_mark_sent(
   p_pay_batch_id uuid,
   p_scope text,
@@ -5073,27 +5103,350 @@ set search_path = public
 as $$
 declare
   v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
-  v_exists boolean := false;
+  v_batch_exists boolean := false;
+  v_now timestamptz := now();
+  v_results jsonb := case
+    when p_results_json is null then '{}'::jsonb
+    when jsonb_typeof(p_results_json) = 'object' then p_results_json
+    else jsonb_build_object('raw', p_results_json)
+  end;
+  v_message_kind text := upper(btrim(coalesce(v_results->>'message_kind', 'REMITTANCE')));
   v_audit_id uuid;
+
+  v_item jsonb;
+  v_item_payee_kind text;
+  v_item_candidate_id_text text;
+  v_item_umbrella_id_text text;
+  v_item_candidate_id uuid;
+  v_item_umbrella_id uuid;
+  v_item_trigger_status text;
+  v_item_error_text text;
+
+  v_success_count integer := 0;
+  v_failure_count integer := 0;
+  v_no_result_count integer := 0;
+  v_unmatched_queued_count integer := 0;
+  v_unmatched_skipped_count integer := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_remittance_mark_sent: pay_batch_id is required';
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception 'pay_remittance_mark_sent: actor_user_id is required';
   end if;
 
   if v_scope not in ('ALL','PAYE','UMBRELLA') then
     raise exception 'pay_remittance_mark_sent: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
   end if;
 
-  select exists(
+  select exists (
     select 1
     from public.pay_batches pb
     where pb.id = p_pay_batch_id
   )
-  into v_exists;
+  into v_batch_exists;
 
-  if v_exists is false then
+  if v_batch_exists is false then
     raise exception 'pay_remittance_mark_sent: pay batch % not found.', p_pay_batch_id;
   end if;
+
+  create temp table if not exists _tmp_mark_sent_target_candidates (
+    pay_batch_candidate_id uuid primary key,
+    candidate_id uuid not null
+  ) on commit drop;
+
+  truncate table _tmp_mark_sent_target_candidates;
+
+  insert into _tmp_mark_sent_target_candidates(
+    pay_batch_candidate_id,
+    candidate_id
+  )
+  select
+    pbc.id,
+    pbc.candidate_id
+  from public.pay_batch_candidates pbc
+  where pbc.pay_batch_id = p_pay_batch_id
+    and exists (
+      select 1
+      from public.pay_batch_items pbi
+      where pbi.pay_batch_candidate_id = pbc.id
+        and pbi.item_type <> 'DEBT_CREATED'
+        and coalesce(pbi.is_voided, false) = false
+        and (
+          v_scope = 'ALL'
+          or upper(coalesce(pbi.pay_channel, '')) = v_scope
+        )
+    );
+
+  create temp table if not exists _tmp_mark_sent_events (
+    candidate_id uuid not null,
+    outcome text not null,
+    trigger_status text null,
+    error_text text null
+  ) on commit drop;
+
+  truncate table _tmp_mark_sent_events;
+
+  if jsonb_typeof(v_results->'queued') = 'array' then
+    for v_item in
+      select q.value
+      from jsonb_array_elements(v_results->'queued') as q(value)
+    loop
+      v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', '')));
+      v_item_candidate_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'candidate_id',
+            case when v_item_payee_kind = 'CANDIDATE' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_umbrella_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'umbrella_id',
+            case when v_item_payee_kind = 'UMBRELLA' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_candidate_id := null;
+      v_item_umbrella_id := null;
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', 'QUEUED_TO_MAIL_OUTBOX')));
+
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_umbrella_id_text is not null then
+        begin
+          v_item_umbrella_id := v_item_umbrella_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_umbrella_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null then
+        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'SUCCESS',
+          v_item_trigger_status,
+          null
+        from _tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id;
+      elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
+        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        select distinct
+          tc.candidate_id,
+          'SUCCESS',
+          v_item_trigger_status,
+          null
+        from _tmp_mark_sent_target_candidates tc
+        join public.pay_batch_candidates pbc
+          on pbc.id = tc.pay_batch_candidate_id
+        join public.pay_batch_items pbi
+          on pbi.pay_batch_candidate_id = pbc.id
+        where pbc.pay_batch_id = p_pay_batch_id
+          and pbi.item_type <> 'DEBT_CREATED'
+          and coalesce(pbi.is_voided, false) = false
+          and (
+            v_scope = 'ALL'
+            or upper(coalesce(pbi.pay_channel, '')) = v_scope
+          )
+          and pbi.umbrella_id = v_item_umbrella_id;
+      else
+        v_unmatched_queued_count := v_unmatched_queued_count + 1;
+      end if;
+    end loop;
+  end if;
+
+  if jsonb_typeof(v_results->'skipped') = 'array' then
+    for v_item in
+      select s.value
+      from jsonb_array_elements(v_results->'skipped') as s(value)
+    loop
+      v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', '')));
+      v_item_candidate_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'candidate_id',
+            case when v_item_payee_kind = 'CANDIDATE' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_umbrella_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'umbrella_id',
+            case when v_item_payee_kind = 'UMBRELLA' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_candidate_id := null;
+      v_item_umbrella_id := null;
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', v_item->>'reason', 'SEND_SKIPPED')));
+      v_item_error_text := left(coalesce(nullif(btrim(coalesce(v_item->>'error', '')), ''), nullif(btrim(coalesce(v_item->>'reason', '')), ''), 'SEND_SKIPPED'), 1000);
+
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_umbrella_id_text is not null then
+        begin
+          v_item_umbrella_id := v_item_umbrella_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_umbrella_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null then
+        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'FAILURE',
+          v_item_trigger_status,
+          v_item_error_text
+        from _tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id;
+      elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
+        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        select distinct
+          tc.candidate_id,
+          'FAILURE',
+          v_item_trigger_status,
+          v_item_error_text
+        from _tmp_mark_sent_target_candidates tc
+        join public.pay_batch_candidates pbc
+          on pbc.id = tc.pay_batch_candidate_id
+        join public.pay_batch_items pbi
+          on pbi.pay_batch_candidate_id = pbc.id
+        where pbc.pay_batch_id = p_pay_batch_id
+          and pbi.item_type <> 'DEBT_CREATED'
+          and coalesce(pbi.is_voided, false) = false
+          and (
+            v_scope = 'ALL'
+            or upper(coalesce(pbi.pay_channel, '')) = v_scope
+          )
+          and pbi.umbrella_id = v_item_umbrella_id;
+      else
+        v_unmatched_skipped_count := v_unmatched_skipped_count + 1;
+      end if;
+    end loop;
+  end if;
+
+  create temp table if not exists _tmp_mark_sent_agg (
+    pay_batch_candidate_id uuid primary key,
+    candidate_id uuid not null,
+    has_success boolean not null,
+    success_trigger_status text null,
+    failure_trigger_status text null,
+    failure_error text null
+  ) on commit drop;
+
+  truncate table _tmp_mark_sent_agg;
+
+  insert into _tmp_mark_sent_agg(
+    pay_batch_candidate_id,
+    candidate_id,
+    has_success,
+    success_trigger_status,
+    failure_trigger_status,
+    failure_error
+  )
+  select
+    tc.pay_batch_candidate_id,
+    tc.candidate_id,
+    exists (
+      select 1
+      from _tmp_mark_sent_events evs
+      where evs.candidate_id = tc.candidate_id
+        and evs.outcome = 'SUCCESS'
+    ) as has_success,
+    coalesce(
+      (
+        select evs2.trigger_status
+        from _tmp_mark_sent_events evs2
+        where evs2.candidate_id = tc.candidate_id
+          and evs2.outcome = 'SUCCESS'
+          and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+        order by evs2.trigger_status
+        limit 1
+      ),
+      'QUEUED_TO_MAIL_OUTBOX'
+    ) as success_trigger_status,
+    coalesce(
+      (
+        select evf.trigger_status
+        from _tmp_mark_sent_events evf
+        where evf.candidate_id = tc.candidate_id
+          and evf.outcome = 'FAILURE'
+          and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+        order by evf.trigger_status
+        limit 1
+      ),
+      'NO_RESULT_RECORDED'
+    ) as failure_trigger_status,
+    left(
+      coalesce(
+        (
+          select string_agg(err_txt, ' | ')
+          from (
+            select distinct nullif(btrim(coalesce(evf2.error_text, '')), '') as err_txt
+            from _tmp_mark_sent_events evf2
+            where evf2.candidate_id = tc.candidate_id
+              and evf2.outcome = 'FAILURE'
+              and nullif(btrim(coalesce(evf2.error_text, '')), '') is not null
+            order by err_txt
+          ) errs
+        ),
+        'NO_RESULT_RECORDED'
+      ),
+      1000
+    ) as failure_error
+  from _tmp_mark_sent_target_candidates tc;
+
+  update public.pay_batch_candidates pbc
+  set
+    remittance_sent_at_utc = coalesce(pbc.remittance_sent_at_utc, v_now),
+    remittance_sent_by_user_id = coalesce(pbc.remittance_sent_by_user_id, p_actor_user_id),
+    remittance_trigger_status = agg.success_trigger_status,
+    last_remittance_error = null,
+    updated_at = v_now
+  from _tmp_mark_sent_agg agg
+  where pbc.id = agg.pay_batch_candidate_id
+    and agg.has_success = true;
+
+  get diagnostics v_success_count = row_count;
+
+  update public.pay_batch_candidates pbc
+  set
+    remittance_trigger_status = agg.failure_trigger_status,
+    last_remittance_error = agg.failure_error,
+    updated_at = v_now
+  from _tmp_mark_sent_agg agg
+  where pbc.id = agg.pay_batch_candidate_id
+    and agg.has_success = false;
+
+  get diagnostics v_failure_count = row_count;
+
+  select count(*)::int
+  into v_no_result_count
+  from _tmp_mark_sent_agg agg
+  where agg.has_success = false
+    and agg.failure_trigger_status = 'NO_RESULT_RECORDED';
 
   insert into public.audit_events(
     actor_user_id,
@@ -5113,7 +5466,13 @@ begin
     jsonb_build_object(
       'pay_batch_id', p_pay_batch_id::text,
       'scope', v_scope,
-      'results', coalesce(p_results_json, 'null'::jsonb)
+      'message_kind', v_message_kind,
+      'success_count', v_success_count,
+      'failure_count', v_failure_count,
+      'no_result_count', v_no_result_count,
+      'unmatched_queued_count', v_unmatched_queued_count,
+      'unmatched_skipped_count', v_unmatched_skipped_count,
+      'results', coalesce(v_results, '{}'::jsonb)
     ),
     'remittance_mark_sent'
   )
@@ -5123,10 +5482,17 @@ begin
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
     'scope', v_scope,
+    'message_kind', v_message_kind,
+    'success_count', v_success_count,
+    'failure_count', v_failure_count,
+    'no_result_count', v_no_result_count,
+    'unmatched_queued_count', v_unmatched_queued_count,
+    'unmatched_skipped_count', v_unmatched_skipped_count,
     'audit_event_id', v_audit_id::text
   );
 end;
 $$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
  RETURNS jsonb
@@ -18137,5 +18503,791 @@ begin
   );
 end;
 $function$;
+
+CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
+  p_pay_batch_id uuid,
+  p_scope text,
+  p_actor_user_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_scope text := upper(btrim(coalesce(p_scope, 'ALL')));
+  v_batch record;
+  v_build_result jsonb := '{}'::jsonb;
+  v_build_jobs jsonb := '[]'::jsonb;
+  v_filtered_jobs jsonb := '[]'::jsonb;
+  v_candidate_results jsonb := '[]'::jsonb;
+  v_job_results jsonb := '[]'::jsonb;
+
+  v_job jsonb;
+  v_work_job jsonb;
+  v_job_kind text;
+  v_recipient_kind text;
+  v_recipient_email text;
+  v_candidate_id_text text;
+  v_candidate_id uuid;
+  v_umbrella_id_text text;
+  v_umbrella_id uuid;
+  v_pruned_candidates jsonb := '[]'::jsonb;
+  v_candidate_json jsonb;
+  v_pruned_total_amount numeric := 0;
+
+  v_target_candidate_count integer := 0;
+  v_ready_candidate_count integer := 0;
+  v_job_count integer := 0;
+  v_trigger_status text := null;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_remittance_queue_commit_stage: pay_batch_id is required';
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception 'pay_remittance_queue_commit_stage: actor_user_id is required';
+  end if;
+
+  if v_scope not in ('ALL', 'PAYE', 'UMBRELLA') then
+    raise exception 'pay_remittance_queue_commit_stage: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
+  end if;
+
+  select
+    pb.id,
+    pb.status,
+    pb.batch_kind_fixed,
+    pb.pay_date,
+    pb.authoritative_payment_date,
+    pb.authoritative_payment_date_source,
+    pb.bulk_reference
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  limit 1;
+
+  if v_batch.id is null then
+    raise exception 'pay_remittance_queue_commit_stage: pay batch % not found.', p_pay_batch_id;
+  end if;
+
+  if upper(coalesce(v_batch.batch_kind_fixed, '')) = 'LOANS' then
+    raise exception 'pay_remittance_queue_commit_stage: pay batch % is payout-only; use pay_finance_payout_notice_queue_commit_stage.', p_pay_batch_id;
+  end if;
+
+  drop table if exists pg_temp.tmp_commit_stage_target_candidates;
+  create temporary table pg_temp.tmp_commit_stage_target_candidates(
+    pay_batch_candidate_id uuid primary key,
+    candidate_id uuid not null,
+    candidate_display_name text null,
+    candidate_tms_ref text null
+  ) on commit drop;
+
+  insert into pg_temp.tmp_commit_stage_target_candidates(
+    pay_batch_candidate_id,
+    candidate_id,
+    candidate_display_name,
+    candidate_tms_ref
+  )
+  select
+    pbc.id,
+    pbc.candidate_id,
+    pbc.candidate_display_name,
+    pbc.candidate_tms_ref
+  from public.pay_batch_candidates pbc
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.remittance_sent_at_utc is null
+    and exists (
+      select 1
+      from public.pay_batch_items pbi
+      where pbi.pay_batch_candidate_id = pbc.id
+        and coalesce(pbi.is_voided, false) = false
+        and (
+          v_scope = 'ALL'
+          or (v_scope = 'PAYE' and upper(coalesce(pbi.pay_channel, '')) = 'PAYE')
+          or (v_scope = 'UMBRELLA' and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA')
+        )
+    );
+
+  select count(*)::int
+  into v_target_candidate_count
+  from pg_temp.tmp_commit_stage_target_candidates tc;
+
+  if v_target_candidate_count = 0 then
+    return jsonb_build_object(
+      'ok', true,
+      'trigger_status', 'NO_ELIGIBLE_UNSENT_CANDIDATES',
+      'error', null,
+      'message_kind', 'REMITTANCE',
+      'automatic_commit_stage', true,
+      'dispatch_required', false,
+      'pay_batch_id', p_pay_batch_id::text,
+      'scope', v_scope,
+      'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+      'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+      'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
+      'bulk_reference', v_batch.bulk_reference,
+      'candidate_count_targeted', 0,
+      'candidate_count_ready', 0,
+      'candidate_count_without_jobs', 0,
+      'job_count', 0,
+      'candidate_results', '[]'::jsonb,
+      'job_results', '[]'::jsonb,
+      'jobs', '[]'::jsonb
+    );
+  end if;
+
+  begin
+    v_build_result := public.pay_remittance_build(p_pay_batch_id, v_scope);
+  exception when others then
+    return jsonb_build_object(
+      'ok', false,
+      'trigger_status', 'REMITTANCE_BUILD_ERROR',
+      'error', left(coalesce(SQLERRM, 'pay_remittance_build failed'), 1000),
+      'message_kind', 'REMITTANCE',
+      'automatic_commit_stage', true,
+      'dispatch_required', false,
+      'pay_batch_id', p_pay_batch_id::text,
+      'scope', v_scope,
+      'candidate_count_targeted', v_target_candidate_count,
+      'candidate_count_ready', 0,
+      'candidate_count_without_jobs', v_target_candidate_count,
+      'job_count', 0,
+      'candidate_results', '[]'::jsonb,
+      'job_results', '[]'::jsonb,
+      'jobs', '[]'::jsonb
+    );
+  end;
+
+  if coalesce((v_build_result->>'ok')::boolean, false) = false then
+    return jsonb_build_object(
+      'ok', false,
+      'trigger_status', 'REMITTANCE_BUILD_ERROR',
+      'error', left(coalesce(nullif(btrim(coalesce(v_build_result->>'error', '')), ''), 'pay_remittance_build returned not ok'), 1000),
+      'message_kind', 'REMITTANCE',
+      'automatic_commit_stage', true,
+      'dispatch_required', false,
+      'pay_batch_id', p_pay_batch_id::text,
+      'scope', v_scope,
+      'candidate_count_targeted', v_target_candidate_count,
+      'candidate_count_ready', 0,
+      'candidate_count_without_jobs', v_target_candidate_count,
+      'job_count', 0,
+      'candidate_results', '[]'::jsonb,
+      'job_results', '[]'::jsonb,
+      'jobs', '[]'::jsonb
+    );
+  end if;
+
+  v_build_jobs := case
+    when jsonb_typeof(v_build_result->'jobs') = 'array' then coalesce(v_build_result->'jobs', '[]'::jsonb)
+    else '[]'::jsonb
+  end;
+
+  drop table if exists pg_temp.tmp_commit_stage_job_map;
+  create temporary table pg_temp.tmp_commit_stage_job_map(
+    candidate_id uuid not null,
+    job_kind text not null,
+    recipient_kind text null,
+    recipient_email text null,
+    umbrella_id uuid null
+  ) on commit drop;
+
+  for v_job in
+    select j.value
+    from jsonb_array_elements(v_build_jobs) as j(value)
+  loop
+    v_work_job := v_job;
+    v_job_kind := upper(btrim(coalesce(v_job->>'job_kind', '')));
+    v_recipient_kind := nullif(btrim(coalesce(v_job #>> '{recipient,entity_kind}', '')), '');
+    v_recipient_email := coalesce(
+      nullif(btrim(coalesce(v_job #>> '{recipient,email}', '')), ''),
+      nullif(btrim(coalesce(v_job #>> '{recipient,remittance_email}', '')), '')
+    );
+
+    if v_job_kind in ('PAYE_REMITTANCE', 'CANDIDATE_UMBRELLA_COPY_REMITTANCE') then
+      v_candidate_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,candidate_id}', '')), '');
+      v_candidate_id := null;
+
+      if v_candidate_id_text is not null then
+        begin
+          v_candidate_id := v_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_candidate_id := null;
+        end;
+      end if;
+
+      if v_candidate_id is not null
+         and exists (
+           select 1
+           from pg_temp.tmp_commit_stage_target_candidates tc
+           where tc.candidate_id = v_candidate_id
+         ) then
+        v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
+
+        insert into pg_temp.tmp_commit_stage_job_map(
+          candidate_id,
+          job_kind,
+          recipient_kind,
+          recipient_email,
+          umbrella_id
+        )
+        values (
+          v_candidate_id,
+          v_job_kind,
+          v_recipient_kind,
+          v_recipient_email,
+          null
+        );
+      end if;
+
+    elsif v_job_kind = 'UMBRELLA_REMITTANCE' then
+      select coalesce(
+        jsonb_agg(ca.value order by coalesce(ca.value->>'display_name', ''), coalesce(ca.value->>'tms_ref', ''), coalesce(ca.value->>'candidate_id', '')),
+        '[]'::jsonb
+      )
+      into v_pruned_candidates
+      from jsonb_array_elements(coalesce(v_job->'candidates', '[]'::jsonb)) as ca(value)
+      where nullif(btrim(coalesce(ca.value->>'candidate_id', '')), '') is not null
+        and exists (
+          select 1
+          from pg_temp.tmp_commit_stage_target_candidates tc
+          where tc.candidate_id::text = btrim(ca.value->>'candidate_id')
+        );
+
+      if jsonb_array_length(v_pruned_candidates) > 0 then
+        select round(
+                 coalesce(
+                   sum(
+                     coalesce(
+                       nullif(btrim(coalesce(pc.value #>> '{totals,final_paid}', '')), '')::numeric,
+                       0
+                     )
+                   ),
+                   0
+                 ),
+                 2
+               )
+        into v_pruned_total_amount
+        from jsonb_array_elements(v_pruned_candidates) as pc(value);
+
+        v_work_job := jsonb_set(v_work_job, '{candidates}', v_pruned_candidates, true);
+        v_work_job := jsonb_set(v_work_job, '{summary,total_amount}', to_jsonb(coalesce(v_pruned_total_amount, 0)), true);
+
+        v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
+
+        v_umbrella_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,umbrella_id}', '')), '');
+        v_umbrella_id := null;
+
+        if v_umbrella_id_text is not null then
+          begin
+            v_umbrella_id := v_umbrella_id_text::uuid;
+          exception when invalid_text_representation then
+            v_umbrella_id := null;
+          end;
+        end if;
+
+        for v_candidate_json in
+          select pc.value
+          from jsonb_array_elements(v_pruned_candidates) as pc(value)
+        loop
+          v_candidate_id_text := nullif(btrim(coalesce(v_candidate_json->>'candidate_id', '')), '');
+          v_candidate_id := null;
+
+          if v_candidate_id_text is not null then
+            begin
+              v_candidate_id := v_candidate_id_text::uuid;
+            exception when invalid_text_representation then
+              v_candidate_id := null;
+            end;
+          end if;
+
+          if v_candidate_id is not null then
+            insert into pg_temp.tmp_commit_stage_job_map(
+              candidate_id,
+              job_kind,
+              recipient_kind,
+              recipient_email,
+              umbrella_id
+            )
+            values (
+              v_candidate_id,
+              v_job_kind,
+              v_recipient_kind,
+              v_recipient_email,
+              v_umbrella_id
+            );
+          end if;
+        end loop;
+      end if;
+    end if;
+  end loop;
+
+  select count(distinct jm.candidate_id)::int
+  into v_ready_candidate_count
+  from pg_temp.tmp_commit_stage_job_map jm;
+
+  select jsonb_array_length(v_filtered_jobs)
+  into v_job_count;
+
+  if v_job_count > 0 then
+    update public.pay_batch_candidates pbc
+    set
+      remittance_trigger_status = 'REMITTANCE_BUILD_READY',
+      last_remittance_error = null,
+      updated_at = now()
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbc.remittance_sent_at_utc is null
+      and exists (
+        select 1
+        from pg_temp.tmp_commit_stage_job_map jm
+        where jm.candidate_id = pbc.candidate_id
+      );
+
+    v_trigger_status := 'REMITTANCE_BUILD_READY';
+  else
+    v_trigger_status := 'NO_QUEUEABLE_REMITTANCE_JOB';
+  end if;
+
+  select coalesce(
+           jsonb_agg(
+             jsonb_build_object(
+               'pay_batch_candidate_id', tc.pay_batch_candidate_id::text,
+               'candidate_id', tc.candidate_id::text,
+               'candidate_display_name', tc.candidate_display_name,
+               'candidate_tms_ref', tc.candidate_tms_ref,
+               'has_job', exists (
+                 select 1
+                 from pg_temp.tmp_commit_stage_job_map jm
+                 where jm.candidate_id = tc.candidate_id
+               ),
+               'job_kinds', coalesce(
+                 (
+                   select jsonb_agg(to_jsonb(jk.job_kind) order by jk.job_kind)
+                   from (
+                     select distinct jm2.job_kind
+                     from pg_temp.tmp_commit_stage_job_map jm2
+                     where jm2.candidate_id = tc.candidate_id
+                   ) jk
+                 ),
+                 '[]'::jsonb
+               ),
+               'trigger_status',
+                 case
+                   when exists (
+                     select 1
+                     from pg_temp.tmp_commit_stage_job_map jm3
+                     where jm3.candidate_id = tc.candidate_id
+                   )
+                   then 'REMITTANCE_BUILD_READY'
+                   else 'NO_QUEUEABLE_REMITTANCE_JOB'
+                 end
+             )
+             order by tc.candidate_display_name nulls last, tc.candidate_tms_ref nulls last, tc.candidate_id
+           ),
+           '[]'::jsonb
+         )
+  into v_candidate_results
+  from pg_temp.tmp_commit_stage_target_candidates tc;
+
+  select coalesce(
+           jsonb_agg(
+             jsonb_build_object(
+               'job_kind', upper(btrim(coalesce(j.job->>'job_kind', ''))),
+               'recipient_kind', nullif(btrim(coalesce(j.job #>> '{recipient,entity_kind}', '')), ''),
+               'recipient_id',
+                 case
+                   when upper(btrim(coalesce(j.job #>> '{recipient,entity_kind}', ''))) = 'CANDIDATE'
+                     then nullif(btrim(coalesce(j.job #>> '{recipient,candidate_id}', '')), '')
+                   when upper(btrim(coalesce(j.job #>> '{recipient,entity_kind}', ''))) = 'UMBRELLA'
+                     then nullif(btrim(coalesce(j.job #>> '{recipient,umbrella_id}', '')), '')
+                   else null
+                 end,
+               'recipient_email', coalesce(
+                 nullif(btrim(coalesce(j.job #>> '{recipient,email}', '')), ''),
+                 nullif(btrim(coalesce(j.job #>> '{recipient,remittance_email}', '')), '')
+               ),
+               'candidate_ids',
+                 case
+                   when upper(btrim(coalesce(j.job->>'job_kind', ''))) = 'UMBRELLA_REMITTANCE'
+                     then coalesce(
+                       (
+                         select jsonb_agg(to_jsonb(ci.candidate_id_text) order by ci.candidate_id_text)
+                         from (
+                           select nullif(btrim(coalesce(ca.value->>'candidate_id', '')), '') as candidate_id_text
+                           from jsonb_array_elements(coalesce(j.job->'candidates', '[]'::jsonb)) as ca(value)
+                           where nullif(btrim(coalesce(ca.value->>'candidate_id', '')), '') is not null
+                         ) ci
+                       ),
+                       '[]'::jsonb
+                     )
+                   else
+                     case
+                       when nullif(btrim(coalesce(j.job #>> '{recipient,candidate_id}', '')), '') is null
+                         then '[]'::jsonb
+                       else jsonb_build_array(j.job #>> '{recipient,candidate_id}')
+                     end
+                 end,
+               'candidate_count',
+                 case
+                   when upper(btrim(coalesce(j.job->>'job_kind', ''))) = 'UMBRELLA_REMITTANCE'
+                     then jsonb_array_length(coalesce(j.job->'candidates', '[]'::jsonb))
+                   when nullif(btrim(coalesce(j.job #>> '{recipient,candidate_id}', '')), '') is null
+                     then 0
+                   else 1
+                 end
+             )
+             order by j.ord
+           ),
+           '[]'::jsonb
+         )
+  into v_job_results
+  from jsonb_array_elements(v_filtered_jobs) with ordinality as j(job, ord);
+
+  return jsonb_build_object(
+    'ok', true,
+    'trigger_status', v_trigger_status,
+    'error', null,
+    'message_kind', 'REMITTANCE',
+    'automatic_commit_stage', true,
+    'dispatch_required', (v_job_count > 0),
+    'pay_batch_id', p_pay_batch_id::text,
+    'scope', v_scope,
+    'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+    'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+    'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
+    'bulk_reference', v_batch.bulk_reference,
+    'candidate_count_targeted', v_target_candidate_count,
+    'candidate_count_ready', v_ready_candidate_count,
+    'candidate_count_without_jobs', greatest(v_target_candidate_count - v_ready_candidate_count, 0),
+    'job_count', v_job_count,
+    'candidate_results', coalesce(v_candidate_results, '[]'::jsonb),
+    'job_results', coalesce(v_job_results, '[]'::jsonb),
+    'jobs', coalesce(v_filtered_jobs, '[]'::jsonb)
+  );
+end;
+$function$
+
+CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_queue_commit_stage(
+  p_pay_batch_id uuid,
+  p_actor_user_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_batch record;
+  v_build_result jsonb := '{}'::jsonb;
+  v_build_jobs jsonb := '[]'::jsonb;
+  v_filtered_jobs jsonb := '[]'::jsonb;
+  v_candidate_results jsonb := '[]'::jsonb;
+  v_job_results jsonb := '[]'::jsonb;
+
+  v_job jsonb;
+  v_job_kind text;
+  v_recipient_email text;
+  v_candidate_id_text text;
+  v_candidate_id uuid;
+
+  v_target_candidate_count integer := 0;
+  v_ready_candidate_count integer := 0;
+  v_job_count integer := 0;
+  v_trigger_status text := null;
+begin
+  if p_pay_batch_id is null then
+    raise exception 'pay_finance_payout_notice_queue_commit_stage: pay_batch_id is required';
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception 'pay_finance_payout_notice_queue_commit_stage: actor_user_id is required';
+  end if;
+
+  select
+    pb.id,
+    pb.status,
+    pb.batch_kind_fixed,
+    pb.pay_date,
+    pb.authoritative_payment_date,
+    pb.authoritative_payment_date_source,
+    pb.bulk_reference
+  into v_batch
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  limit 1;
+
+  if v_batch.id is null then
+    raise exception 'pay_finance_payout_notice_queue_commit_stage: pay batch % not found.', p_pay_batch_id;
+  end if;
+
+  if upper(coalesce(v_batch.batch_kind_fixed, '')) <> 'LOANS' then
+    raise exception 'pay_finance_payout_notice_queue_commit_stage: pay batch % is not payout-only.', p_pay_batch_id;
+  end if;
+
+  drop table if exists pg_temp.tmp_payout_notice_target_candidates;
+  create temporary table pg_temp.tmp_payout_notice_target_candidates(
+    pay_batch_candidate_id uuid primary key,
+    candidate_id uuid not null,
+    candidate_display_name text null,
+    candidate_tms_ref text null
+  ) on commit drop;
+
+  insert into pg_temp.tmp_payout_notice_target_candidates(
+    pay_batch_candidate_id,
+    candidate_id,
+    candidate_display_name,
+    candidate_tms_ref
+  )
+  select
+    pbc.id,
+    pbc.candidate_id,
+    pbc.candidate_display_name,
+    pbc.candidate_tms_ref
+  from public.pay_batch_candidates pbc
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.remittance_sent_at_utc is null
+    and exists (
+      select 1
+      from public.pay_batch_items pbi
+      where pbi.pay_batch_candidate_id = pbc.id
+        and coalesce(pbi.is_voided, false) = false
+        and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+    );
+
+  select count(*)::int
+  into v_target_candidate_count
+  from pg_temp.tmp_payout_notice_target_candidates tc;
+
+  if v_target_candidate_count = 0 then
+    return jsonb_build_object(
+      'ok', true,
+      'trigger_status', 'NO_ELIGIBLE_UNSENT_CANDIDATES',
+      'error', null,
+      'message_kind', 'PAYOUT_NOTICE',
+      'automatic_commit_stage', true,
+      'dispatch_required', false,
+      'pay_batch_id', p_pay_batch_id::text,
+      'scheduled_payment_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+      'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+      'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
+      'bulk_reference', v_batch.bulk_reference,
+      'candidate_count_targeted', 0,
+      'candidate_count_ready', 0,
+      'candidate_count_without_jobs', 0,
+      'job_count', 0,
+      'candidate_results', '[]'::jsonb,
+      'job_results', '[]'::jsonb,
+      'jobs', '[]'::jsonb
+    );
+  end if;
+
+  begin
+    v_build_result := public.pay_finance_payout_notice_build(p_pay_batch_id);
+  exception when others then
+    return jsonb_build_object(
+      'ok', false,
+      'trigger_status', 'PAYOUT_NOTICE_BUILD_ERROR',
+      'error', left(coalesce(SQLERRM, 'pay_finance_payout_notice_build failed'), 1000),
+      'message_kind', 'PAYOUT_NOTICE',
+      'automatic_commit_stage', true,
+      'dispatch_required', false,
+      'pay_batch_id', p_pay_batch_id::text,
+      'candidate_count_targeted', v_target_candidate_count,
+      'candidate_count_ready', 0,
+      'candidate_count_without_jobs', v_target_candidate_count,
+      'job_count', 0,
+      'candidate_results', '[]'::jsonb,
+      'job_results', '[]'::jsonb,
+      'jobs', '[]'::jsonb
+    );
+  end;
+
+  if coalesce((v_build_result->>'ok')::boolean, false) = false then
+    return jsonb_build_object(
+      'ok', false,
+      'trigger_status', 'PAYOUT_NOTICE_BUILD_ERROR',
+      'error', left(coalesce(nullif(btrim(coalesce(v_build_result->>'error', '')), ''), 'pay_finance_payout_notice_build returned not ok'), 1000),
+      'message_kind', 'PAYOUT_NOTICE',
+      'automatic_commit_stage', true,
+      'dispatch_required', false,
+      'pay_batch_id', p_pay_batch_id::text,
+      'candidate_count_targeted', v_target_candidate_count,
+      'candidate_count_ready', 0,
+      'candidate_count_without_jobs', v_target_candidate_count,
+      'job_count', 0,
+      'candidate_results', '[]'::jsonb,
+      'job_results', '[]'::jsonb,
+      'jobs', '[]'::jsonb
+    );
+  end if;
+
+  v_build_jobs := case
+    when jsonb_typeof(v_build_result->'jobs') = 'array' then coalesce(v_build_result->'jobs', '[]'::jsonb)
+    else '[]'::jsonb
+  end;
+
+  drop table if exists pg_temp.tmp_payout_notice_job_map;
+  create temporary table pg_temp.tmp_payout_notice_job_map(
+    candidate_id uuid not null,
+    job_kind text not null,
+    recipient_email text null
+  ) on commit drop;
+
+  for v_job in
+    select j.value
+    from jsonb_array_elements(v_build_jobs) as j(value)
+  loop
+    v_job_kind := upper(btrim(coalesce(v_job->>'job_kind', '')));
+    v_candidate_id_text := nullif(btrim(coalesce(v_job->>'candidate_id', '')), '');
+    v_candidate_id := null;
+    v_recipient_email := nullif(btrim(coalesce(v_job->>'recipient_email', '')), '');
+
+    if v_candidate_id_text is not null then
+      begin
+        v_candidate_id := v_candidate_id_text::uuid;
+      exception when invalid_text_representation then
+        v_candidate_id := null;
+      end;
+    end if;
+
+    if v_candidate_id is not null
+       and exists (
+         select 1
+         from pg_temp.tmp_payout_notice_target_candidates tc
+         where tc.candidate_id = v_candidate_id
+       ) then
+      v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_job);
+
+      insert into pg_temp.tmp_payout_notice_job_map(
+        candidate_id,
+        job_kind,
+        recipient_email
+      )
+      values (
+        v_candidate_id,
+        v_job_kind,
+        v_recipient_email
+      );
+    end if;
+  end loop;
+
+  select count(distinct jm.candidate_id)::int
+  into v_ready_candidate_count
+  from pg_temp.tmp_payout_notice_job_map jm;
+
+  select jsonb_array_length(v_filtered_jobs)
+  into v_job_count;
+
+  if v_job_count > 0 then
+    update public.pay_batch_candidates pbc
+    set
+      remittance_trigger_status = 'PAYOUT_NOTICE_BUILD_READY',
+      last_remittance_error = null,
+      updated_at = now()
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbc.remittance_sent_at_utc is null
+      and exists (
+        select 1
+        from pg_temp.tmp_payout_notice_job_map jm
+        where jm.candidate_id = pbc.candidate_id
+      );
+
+    v_trigger_status := 'PAYOUT_NOTICE_BUILD_READY';
+  else
+    v_trigger_status := 'NO_QUEUEABLE_PAYOUT_NOTICE_JOB';
+  end if;
+
+  select coalesce(
+           jsonb_agg(
+             jsonb_build_object(
+               'pay_batch_candidate_id', tc.pay_batch_candidate_id::text,
+               'candidate_id', tc.candidate_id::text,
+               'candidate_display_name', tc.candidate_display_name,
+               'candidate_tms_ref', tc.candidate_tms_ref,
+               'has_job', exists (
+                 select 1
+                 from pg_temp.tmp_payout_notice_job_map jm
+                 where jm.candidate_id = tc.candidate_id
+               ),
+               'job_kinds', coalesce(
+                 (
+                   select jsonb_agg(to_jsonb(jk.job_kind) order by jk.job_kind)
+                   from (
+                     select distinct jm2.job_kind
+                     from pg_temp.tmp_payout_notice_job_map jm2
+                     where jm2.candidate_id = tc.candidate_id
+                   ) jk
+                 ),
+                 '[]'::jsonb
+               ),
+               'trigger_status',
+                 case
+                   when exists (
+                     select 1
+                     from pg_temp.tmp_payout_notice_job_map jm3
+                     where jm3.candidate_id = tc.candidate_id
+                   )
+                   then 'PAYOUT_NOTICE_BUILD_READY'
+                   else 'NO_QUEUEABLE_PAYOUT_NOTICE_JOB'
+                 end
+             )
+             order by tc.candidate_display_name nulls last, tc.candidate_tms_ref nulls last, tc.candidate_id
+           ),
+           '[]'::jsonb
+         )
+  into v_candidate_results
+  from pg_temp.tmp_payout_notice_target_candidates tc;
+
+  select coalesce(
+           jsonb_agg(
+             jsonb_build_object(
+               'job_kind', upper(btrim(coalesce(j.job->>'job_kind', ''))),
+               'candidate_id', nullif(btrim(coalesce(j.job->>'candidate_id', '')), ''),
+               'recipient_email', nullif(btrim(coalesce(j.job->>'recipient_email', '')), ''),
+               'scheduled_payment_date', nullif(btrim(coalesce(j.job->>'scheduled_payment_date', '')), ''),
+               'subject', nullif(btrim(coalesce(j.job->>'subject', '')), ''),
+               'label_set', coalesce(
+                 (
+                   select jsonb_agg(to_jsonb(li.label_text) order by li.label_text)
+                   from (
+                     select distinct nullif(btrim(coalesce(it.value->>'label', '')), '') as label_text
+                     from jsonb_array_elements(coalesce(j.job->'items', '[]'::jsonb)) as it(value)
+                     where nullif(btrim(coalesce(it.value->>'label', '')), '') is not null
+                   ) li
+                 ),
+                 '[]'::jsonb
+               )
+             )
+             order by j.ord
+           ),
+           '[]'::jsonb
+         )
+  into v_job_results
+  from jsonb_array_elements(v_filtered_jobs) with ordinality as j(job, ord);
+
+  return jsonb_build_object(
+    'ok', true,
+    'trigger_status', v_trigger_status,
+    'error', null,
+    'message_kind', 'PAYOUT_NOTICE',
+    'automatic_commit_stage', true,
+    'dispatch_required', (v_job_count > 0),
+    'pay_batch_id', p_pay_batch_id::text,
+    'scheduled_payment_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+    'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+    'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
+    'bulk_reference', v_batch.bulk_reference,
+    'candidate_count_targeted', v_target_candidate_count,
+    'candidate_count_ready', v_ready_candidate_count,
+    'candidate_count_without_jobs', greatest(v_target_candidate_count - v_ready_candidate_count, 0),
+    'job_count', v_job_count,
+    'candidate_results', coalesce(v_candidate_results, '[]'::jsonb),
+    'job_results', coalesce(v_job_results, '[]'::jsonb),
+    'jobs', coalesce(v_filtered_jobs, '[]'::jsonb)
+  );
+end;
+$function$
+
+
 
 
