@@ -3758,6 +3758,22 @@ begin
       v_comm_error := nullif(btrim(coalesce(v_comm_result->>'error','')), '');
     end if;
 
+    update public.pay_batch_candidates pbc
+    set
+      remittance_trigger_status = v_comm_trigger_status,
+      last_remittance_error = null
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbc.remittance_sent_at_utc is null
+      and (
+        v_scope = 'ALL'
+        or exists (
+          select 1
+          from public.pay_batch_items pbi2
+          where pbi2.pay_batch_candidate_id = pbc.id
+            and upper(coalesce(pbi2.pay_channel,'')) = v_scope
+        )
+      );
+
     insert into public.audit_events(
       actor_user_id,
       object_type,
@@ -3900,8 +3916,6 @@ begin
     );
 end;
 $$;
-
-
 
 
 create or replace function public.pay_settle_rail(
@@ -12285,8 +12299,6 @@ begin
 end;
 $$;
 
-
-
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
   p_actor_user_id uuid DEFAULT NULL
@@ -12368,6 +12380,11 @@ BEGIN
           THEN pb.id
         ELSE NULL
       END AS consumed_by_batch_id,
+      CASE
+        WHEN pb.id IS NOT NULL AND upper(COALESCE(pb.status::text,'')) <> 'CANCELLED'
+          THEN upper(COALESCE(pb.status::text,''))
+        ELSE NULL
+      END AS consumed_batch_status,
       CASE
         WHEN pb.id IS NOT NULL AND upper(COALESCE(pb.status::text,'')) <> 'CANCELLED'
           THEN false
@@ -12580,7 +12597,9 @@ BEGIN
     SELECT
       COALESCE((SELECT ao.override_id IS NOT NULL FROM active_override ao LIMIT 1), false) AS is_advanced,
       COALESCE((SELECT ao.can_unadvance FROM active_override ao LIMIT 1), false) AS can_unadvance,
-      (SELECT ao.consumed_by_batch_id FROM active_override ao LIMIT 1) AS advanced_consumed_by_batch_id
+      (SELECT ao.consumed_by_batch_id FROM active_override ao LIMIT 1) AS advanced_consumed_by_batch_id,
+      (SELECT ao.consumed_at_utc FROM active_override ao LIMIT 1) AS advanced_consumed_at_utc,
+      (SELECT ao.consumed_batch_status FROM active_override ao LIMIT 1) AS advanced_batch_status
   ),
   snooze_json AS (
     SELECT
@@ -12602,6 +12621,8 @@ BEGIN
       'is_advanced', oj.is_advanced,
       'can_unadvance', oj.can_unadvance,
       'advanced_consumed_by_batch_id', CASE WHEN oj.advanced_consumed_by_batch_id IS NULL THEN NULL ELSE oj.advanced_consumed_by_batch_id::text END,
+      'advanced_consumed_at_utc', oj.advanced_consumed_at_utc,
+      'advanced_batch_status', oj.advanced_batch_status,
       'is_snoozed', sj.is_snoozed,
       'snooze_until_date', CASE WHEN sj.snooze_until_date IS NULL THEN NULL ELSE sj.snooze_until_date::text END,
       'snooze_is_indefinite', sj.snooze_is_indefinite,
@@ -12671,7 +12692,6 @@ BEGIN
   RETURN v_out;
 END;
 $$;
-
 
 
 
