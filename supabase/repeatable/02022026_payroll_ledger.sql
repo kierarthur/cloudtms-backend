@@ -2753,6 +2753,9 @@ declare
 
   -- ✅ NEW: summary section (readiness + candidate counts)
   v_summary jsonb := '{}'::jsonb;
+  v_paye_guardrails jsonb := '{}'::jsonb;
+  v_canonical_preview_lines jsonb := '[]'::jsonb;
+  v_paye_summary_breakdown jsonb := '{}'::jsonb;
 begin
   if p_pay_date is null then
     raise exception 'pay_date is required';
@@ -2840,6 +2843,12 @@ begin
   v_eligibility_from_date := (v_today_uk - (v_pay_eligibility_months_back::text || ' months')::interval)::date;
   v_eligibility_to_date   := (v_today_uk + (v_pay_eligibility_weeks_ahead::text || ' weeks')::interval)::date;
 
+  v_paye_guardrails := public.pay_paye_guardrails(
+    p_pay_date => p_pay_date,
+    p_ignore_pay_batch_id => null::uuid,
+    p_actor_user_id => p_actor_user_id
+  );
+
   with active_snoozes as (
     select
       s.id as snooze_id,
@@ -2857,9 +2866,27 @@ begin
         or s.snooze_until_date >= p_pay_date
       )
   ),
-  force_include as (
+  force_include_requested as (
     select distinct
       unnest(coalesce(p_force_include_timesheet_ids, array[]::uuid[])) as timesheet_id
+  ),
+  force_include_overrides as (
+    select distinct
+      tpo.timesheet_id
+    from public.timesheet_payment_overrides tpo
+    where tpo.cleared_at_utc is null
+      and tpo.consumed_at_utc is null
+      and tpo.consumed_by_pay_batch_id is null
+      and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
+  ),
+  force_include as (
+    select distinct fi.timesheet_id
+    from (
+      select fir.timesheet_id from force_include_requested fir
+      union
+      select fio.timesheet_id from force_include_overrides fio
+    ) fi
+    where fi.timesheet_id is not null
   ),
   reserved_batch_items as (
     -- Items are considered "reserved" if they belong to an ACTIVE (non-cancelled, non-settled) batch.
@@ -3534,6 +3561,7 @@ blocked_items as (
       b.note
     from blocked_items_all b
     where b.snooze_id is not null
+      and b.snooze_until_date is not null
   ),
   do_not_pay_all as (
     select
@@ -3577,6 +3605,7 @@ blocked_items as (
       d.note
     from do_not_pay_all d
     where d.snooze_id is not null
+      and d.snooze_until_date is not null
       and coalesce(d.raw_delta_ex,0) = 0
   ),
   ts_deltas as (
@@ -4849,6 +4878,252 @@ ts_itemised as (
         )::int as review_required_count
       from cand_payee cp
     ) cr
+  ),
+  active_timesheet_payment_snoozes as (
+    select
+      s.candidate_id,
+      s.timesheet_id,
+      s.snooze_id,
+      s.snooze_until_date,
+      s.note
+    from active_snoozes s
+    where s.timesheet_id is not null
+      and s.segment_id is null
+      and s.source_ref is null
+      and s.snooze_kind = 'TIMESHEET_PAYMENT'
+  ),
+  active_timesheet_payment_overrides as (
+    select
+      tpo.timesheet_id,
+      tpo.candidate_id,
+      tpo.id as override_id,
+      tpo.reason as override_reason,
+      tpo.created_at_utc
+    from public.timesheet_payment_overrides tpo
+    where tpo.cleared_at_utc is null
+      and tpo.consumed_at_utc is null
+      and tpo.consumed_by_pay_batch_id is null
+      and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
+  ),
+  finance_case_repaid_wtd as (
+    select
+      nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid as finance_case_id,
+      round(sum(abs(coalesce(pbi.amount_ex_vat,0))),2) as repaid_wtd_ex
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbi.is_voided = false
+      and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+      and pbi.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')
+      and pbi.repayment_week_start = v_week_start
+      and upper(coalesce(pb.status::text,'')) <> 'CANCELLED'
+    group by nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid
+  ),
+  canonical_timesheet_lines as (
+    select
+      ti.candidate_id,
+      ti.timesheet_id,
+      ti.client_id,
+      ti.ts_client_name as client_name,
+      ti.ts_week_ending_date as week_ending_date,
+      ti.ts_pay_method as source_pay_method,
+      cp.cand_pay_method as candidate_pay_method,
+      cp.cand_tms_ref,
+      cp.cand_display_name,
+      cp.payee_entity_kind,
+      cp.payee_entity_id,
+      cp.is_ready_for_draft,
+      ato.override_id,
+      ato.override_reason,
+      ats.snooze_id,
+      ats.snooze_until_date,
+      ats.note as snooze_note,
+      round(coalesce(ti.payment_amount_ex_vat,0),2) as amount_ex_vat,
+      round(coalesce(ti.payment_amount_inc_vat, ti.payment_amount, ti.payment_amount_ex_vat, 0),2) as amount_display
+    from ts_itemised ti
+    join cand_payee cp
+      on cp.candidate_id = ti.candidate_id
+    left join active_timesheet_payment_overrides ato
+      on ato.timesheet_id = ti.timesheet_id
+     and ato.candidate_id = ti.candidate_id
+    left join active_timesheet_payment_snoozes ats
+      on ats.timesheet_id = ti.timesheet_id
+     and ats.candidate_id = ti.candidate_id
+    where round(coalesce(ti.payment_amount_ex_vat,0),2) <> 0
+      and not (ats.snooze_id is not null and ats.snooze_until_date is null)
+  ),
+  finance_case_lines as (
+    select
+      vfcr.candidate_id,
+      vfcr.finance_case_id,
+      vfcr.client_id,
+      vfcr.client_name,
+      cp.cand_pay_method as candidate_pay_method,
+      cp.cand_tms_ref,
+      cp.cand_display_name,
+      cp.payee_entity_kind,
+      cp.payee_entity_id,
+      cp.is_ready_for_draft,
+      vfcr.case_type,
+      vfcr.adjustment_comment,
+      vfcr.linked_timesheet_id,
+      vfcr.linked_shift_date,
+      vfcr.next_due_week_start,
+      vfcr.active_snooze_id,
+      vfcr.active_snooze_kind,
+      vfcr.active_snooze_until_date,
+      vfcr.active_snooze_note,
+      round(
+        greatest(
+          case
+            when vfcr.case_type = 'OVERPAYMENT' then coalesce(vfcr.outstanding_amount,0)
+            when vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT') then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+            else 0
+          end
+          - coalesce(fcrw.repaid_wtd_ex,0)
+          - coalesce(vfcr.active_reserved_amount,0),
+          0
+        ),
+        2
+      ) as due_amount_ex_vat
+    from public.v_finance_cases_register vfcr
+    join cand_payee cp
+      on cp.candidate_id = vfcr.candidate_id
+    left join finance_case_repaid_wtd fcrw
+      on fcrw.finance_case_id = vfcr.finance_case_id
+    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT')
+      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+      and coalesce(vfcr.outstanding_amount,0) > 0
+      and (vfcr.case_type <> 'PAYMENT_ADVANCE' or upper(coalesce(vfcr.payout_status::text,'')) = 'PAID')
+      and (vfcr.case_type = 'OVERPAYMENT' or vfcr.next_due_week_start is null or vfcr.next_due_week_start <= v_week_start)
+      and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
+  ),
+  canonical_preview_lines as (
+    select
+      ctl.candidate_id,
+      jsonb_build_object(
+        'line_id', ctl.timesheet_id::text,
+        'candidate_id', ctl.candidate_id::text,
+        'tms_ref', ctl.cand_tms_ref,
+        'display_name', ctl.cand_display_name,
+        'line_type', 'TIMESHEET_PAYMENT',
+        'finance_case_id', null,
+        'timesheet_id', ctl.timesheet_id::text,
+        'client_id', case when ctl.client_id is null then null else ctl.client_id::text end,
+        'client_name', ctl.client_name,
+        'week_ending_date', case when ctl.week_ending_date is null then null else ctl.week_ending_date::text end,
+        'linked_shift_date', null,
+        'pay_channel', ctl.candidate_pay_method,
+        'paye_treatment', case when ctl.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
+        'route_type', 'NORMAL_PAYMENT',
+        'adjustment_comment', null,
+        'amount_ex_vat', ctl.amount_ex_vat,
+        'amount_display', ctl.amount_display,
+        'is_advanced', (ctl.override_id is not null),
+        'advanced_override_id', case when ctl.override_id is null then null else ctl.override_id::text end,
+        'advanced_reason', ctl.override_reason,
+        'is_excluded_from_allocation', (ctl.snooze_id is not null),
+        'is_ready_for_draft', ctl.is_ready_for_draft,
+        'snooze_identity', jsonb_build_object(
+          'identity_type', 'TIMESHEET',
+          'timesheet_id', ctl.timesheet_id::text,
+          'segment_id', null,
+          'source_ref', null
+        ),
+        'snooze_state', case
+          when ctl.snooze_id is null then jsonb_build_object('state','NONE')
+          else jsonb_build_object(
+            'state', 'DATED_SNOOZED',
+            'snooze_id', ctl.snooze_id::text,
+            'snooze_until_date', ctl.snooze_until_date::text,
+            'note', ctl.snooze_note
+          )
+        end
+      ) as line_json,
+      ctl.candidate_pay_method as pay_channel,
+      case when ctl.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
+      ctl.amount_ex_vat,
+      (ctl.snooze_id is not null) as is_excluded_from_allocation
+    from canonical_timesheet_lines ctl
+
+    union all
+
+    select
+      fcl.candidate_id,
+      jsonb_build_object(
+        'line_id', fcl.finance_case_id::text,
+        'candidate_id', fcl.candidate_id::text,
+        'tms_ref', fcl.cand_tms_ref,
+        'display_name', fcl.cand_display_name,
+        'line_type', case
+          when fcl.case_type = 'PAYMENT_ADVANCE' then 'PAYMENT_ADVANCE_REPAYMENT'
+          when fcl.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
+          when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+          else fcl.case_type
+        end,
+        'finance_case_id', fcl.finance_case_id::text,
+        'timesheet_id', case when fcl.linked_timesheet_id is null then null else fcl.linked_timesheet_id::text end,
+        'client_id', case when fcl.client_id is null then null else fcl.client_id::text end,
+        'client_name', fcl.client_name,
+        'week_ending_date', null,
+        'linked_shift_date', case when fcl.linked_shift_date is null then null else fcl.linked_shift_date::text end,
+        'pay_channel', fcl.candidate_pay_method,
+        'paye_treatment', case
+          when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'PAYMENT_ADVANCE' then 'NET_DEDUCT'
+          when fcl.candidate_pay_method = 'PAYE' and fcl.case_type in ('OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') then 'GROSS_DEDUCT'
+          else 'NONE'
+        end,
+        'route_type', 'NORMAL_PAYMENT',
+        'adjustment_comment', fcl.adjustment_comment,
+        'amount_ex_vat', -fcl.due_amount_ex_vat,
+        'amount_display', -fcl.due_amount_ex_vat,
+        'is_advanced', false,
+        'advanced_override_id', null,
+        'advanced_reason', null,
+        'is_excluded_from_allocation', (fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null),
+        'is_ready_for_draft', fcl.is_ready_for_draft,
+        'snooze_identity', jsonb_build_object(
+          'identity_type', 'FINANCE_CASE',
+          'timesheet_id', null,
+          'segment_id', null,
+          'source_ref', ('advance:' || fcl.finance_case_id::text)
+        ),
+        'snooze_state', case
+          when fcl.active_snooze_id is null then jsonb_build_object('state','NONE')
+          when fcl.active_snooze_until_date is null then jsonb_build_object(
+            'state', 'INDEFINITE_SNOOZED',
+            'snooze_id', fcl.active_snooze_id::text,
+            'snooze_until_date', null,
+            'note', fcl.active_snooze_note
+          )
+          else jsonb_build_object(
+            'state', 'DATED_SNOOZED',
+            'snooze_id', fcl.active_snooze_id::text,
+            'snooze_until_date', fcl.active_snooze_until_date::text,
+            'note', fcl.active_snooze_note
+          )
+        end
+      ) as line_json,
+      fcl.candidate_pay_method as pay_channel,
+      case
+        when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'PAYMENT_ADVANCE' then 'NET_DEDUCT'
+        when fcl.candidate_pay_method = 'PAYE' and fcl.case_type in ('OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') then 'GROSS_DEDUCT'
+        else 'NONE'
+      end as paye_treatment,
+      (-fcl.due_amount_ex_vat) as amount_ex_vat,
+      (fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null) as is_excluded_from_allocation
+    from finance_case_lines fcl
+    where fcl.due_amount_ex_vat > 0
+  ),
+  paye_summary_breakdown_json as (
+    select jsonb_build_object(
+      'gross_side_additions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'GROSS_ADD' and cpl.is_excluded_from_allocation = false then greatest(cpl.amount_ex_vat,0) else 0 end),0),2),
+      'gross_side_deductions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'GROSS_DEDUCT' and cpl.is_excluded_from_allocation = false then abs(cpl.amount_ex_vat) else 0 end),0),2),
+      'net_side_deductions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'NET_DEDUCT' and cpl.is_excluded_from_allocation = false then abs(cpl.amount_ex_vat) else 0 end),0),2)
+    ) as payload
+    from canonical_preview_lines cpl
   )
   select
     coalesce(
@@ -5011,7 +5286,19 @@ ts_itemised as (
             'segment_id', bi.segment_id,
             'ref_num', bi.ref_num,
             'reason', 'MISSING_REF_NUM',
-            'blocked_delta_ex_vat', bi.blocked_delta_ex
+            'blocked_delta_ex_vat', bi.blocked_delta_ex,
+            'line_type', 'BLOCKED_TIMESHEET',
+            'finance_case_id', null,
+            'paye_treatment', null,
+            'route_type', 'NORMAL_PAYMENT',
+            'adjustment_comment', null,
+            'snooze_identity', jsonb_build_object(
+              'identity_type', 'TIMESHEET_SEGMENT',
+              'timesheet_id', bi.timesheet_id::text,
+              'segment_id', bi.segment_id,
+              'source_ref', null
+            ),
+            'snooze_state', jsonb_build_object('state','NONE')
           )
           order by bi.candidate_id, bi.timesheet_id, bi.segment_id
         )
@@ -5027,7 +5314,19 @@ ts_itemised as (
             'timesheet_id', di.timesheet_id::text,
             'segment_id', di.segment_id,
             'ref_num', di.ref_num,
-            'raw_delta_ex_vat', di.raw_delta_ex
+            'raw_delta_ex_vat', di.raw_delta_ex,
+            'line_type', 'DO_NOT_PAY',
+            'finance_case_id', null,
+            'paye_treatment', null,
+            'route_type', 'NORMAL_PAYMENT',
+            'adjustment_comment', null,
+            'snooze_identity', jsonb_build_object(
+              'identity_type', 'TIMESHEET_SEGMENT',
+              'timesheet_id', di.timesheet_id::text,
+              'segment_id', di.segment_id,
+              'source_ref', null
+            ),
+            'snooze_state', jsonb_build_object('state','NONE')
           )
           order by di.candidate_id, di.timesheet_id, di.segment_id
         )
@@ -5046,6 +5345,23 @@ ts_itemised as (
             'segment_id', bs.segment_id,
             'ref_num', bs.ref_num,
             'blocked_delta_ex_vat', bs.blocked_delta_ex,
+            'line_type', 'BLOCKED_TIMESHEET',
+            'finance_case_id', null,
+            'paye_treatment', null,
+            'route_type', 'NORMAL_PAYMENT',
+            'adjustment_comment', null,
+            'snooze_identity', jsonb_build_object(
+              'identity_type', 'TIMESHEET_SEGMENT',
+              'timesheet_id', bs.timesheet_id::text,
+              'segment_id', bs.segment_id,
+              'source_ref', null
+            ),
+            'snooze_state', jsonb_build_object(
+              'state', 'DATED_SNOOZED',
+              'snooze_id', bs.snooze_id::text,
+              'snooze_until_date', case when bs.snooze_until_date is null then null else bs.snooze_until_date::text end,
+              'note', bs.note
+            ),
             'snooze_id', bs.snooze_id::text,
             'snooze_until_date', case when bs.snooze_until_date is null then null else bs.snooze_until_date::text end,
             'note', bs.note
@@ -5059,6 +5375,23 @@ ts_itemised as (
             'segment_id', ds.segment_id,
             'ref_num', ds.ref_num,
             'raw_delta_ex_vat', ds.raw_delta_ex,
+            'line_type', 'DO_NOT_PAY',
+            'finance_case_id', null,
+            'paye_treatment', null,
+            'route_type', 'NORMAL_PAYMENT',
+            'adjustment_comment', null,
+            'snooze_identity', jsonb_build_object(
+              'identity_type', 'TIMESHEET_SEGMENT',
+              'timesheet_id', ds.timesheet_id::text,
+              'segment_id', ds.segment_id,
+              'source_ref', null
+            ),
+            'snooze_state', jsonb_build_object(
+              'state', 'DATED_SNOOZED',
+              'snooze_id', ds.snooze_id::text,
+              'snooze_until_date', case when ds.snooze_until_date is null then null else ds.snooze_until_date::text end,
+              'note', ds.note
+            ),
             'snooze_id', ds.snooze_id::text,
             'snooze_until_date', case when ds.snooze_until_date is null then null else ds.snooze_until_date::text end,
             'note', ds.note
@@ -5069,8 +5402,10 @@ ts_itemised as (
       '[]'::jsonb
     ),
     coalesce((select pj.payees from payees_json pj), '[]'::jsonb),
-    coalesce((select sj.summary from summary_json sj), '{}'::jsonb)
-  into v_paye, v_nonpaye, v_blocked, v_do_not_pay, v_snoozed, v_payees, v_summary;
+    coalesce((select sj.summary from summary_json sj), '{}'::jsonb),
+    coalesce((select jsonb_agg(cpl.line_json order by cpl.candidate_id, cpl.line_json->>'display_name', cpl.line_json->>'line_type', cpl.line_json->>'line_id') from canonical_preview_lines cpl), '[]'::jsonb),
+    coalesce((select psbj.payload from paye_summary_breakdown_json psbj), '{}'::jsonb)
+  into v_paye, v_nonpaye, v_blocked, v_do_not_pay, v_snoozed, v_payees, v_summary, v_canonical_preview_lines, v_paye_summary_breakdown;
 
   return jsonb_build_object(
     'pay_date', p_pay_date::text,
@@ -5107,8 +5442,11 @@ ts_itemised as (
       ),
       'funds_warning_hours_json', v_funds_warning_hours_json
     ),
-    'summary', v_summary,
+    'summary', (v_summary || jsonb_build_object('paye_breakdown', v_paye_summary_breakdown)),
+    'paye_guardrails', v_paye_guardrails,
+    'paye_summary_breakdown', v_paye_summary_breakdown,
     'payees', v_payees,
+    'canonical_preview_lines', v_canonical_preview_lines,
     'paye_candidates', v_paye,
     'non_paye_payees', v_nonpaye,
     'blocked_items', v_blocked,
@@ -5117,6 +5455,7 @@ ts_itemised as (
   );
 end;
 $function$;
+
 
 
 
