@@ -227,7 +227,6 @@ $$;
 -- Totals computed from v_timesheets_summary fields: total_pay_ex_vat, margin_ex_vat.
 -- ============================================================
 
-
 create or replace function public.timesheet_list_totals(p_filters jsonb)
 returns table (
   count_all bigint,
@@ -266,8 +265,12 @@ declare
   v_proc_list text[] := null;
 
   v_status_code text := null;
-
   v_issues_filter text := null;
+
+  v_q text := null;
+  v_q_like text := null;
+  v_ids text[] := null;
+  v_ids_lits text := null;
 
   -- dynamic sql
   v_sql text := null;
@@ -278,36 +281,136 @@ declare
   v_has_qr_generated_at boolean := false;
   v_has_qr_scanned_at boolean := false;
 begin
-  if p_filters is null then p_filters := '{}'::jsonb; end if;
+  if p_filters is null then
+    p_filters := '{}'::jsonb;
+  end if;
 
   -- ids
-  begin if nullif(btrim(coalesce(p_filters->>'client_id','')), '') is not null then v_client_id := (p_filters->>'client_id')::uuid; end if; exception when others then v_client_id := null; end;
-  begin if nullif(btrim(coalesce(p_filters->>'candidate_id','')), '') is not null then v_candidate_id := (p_filters->>'candidate_id')::uuid; end if; exception when others then v_candidate_id := null; end;
+  begin
+    if nullif(btrim(coalesce(p_filters->>'client_id','')), '') is not null then
+      v_client_id := (p_filters->>'client_id')::uuid;
+    end if;
+  exception when others then
+    v_client_id := null;
+  end;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'candidate_id','')), '') is not null then
+      v_candidate_id := (p_filters->>'candidate_id')::uuid;
+    end if;
+  exception when others then
+    v_candidate_id := null;
+  end;
+
+  -- free-text q parity with visible summary list
+  v_q := nullif(
+    btrim(
+      coalesce(
+        p_filters->>'q',
+        p_filters->>'name',
+        ''
+      )
+    ),
+    ''
+  );
+
+  if v_q is not null then
+    v_q_like :=
+      '%' ||
+      replace(
+        replace(
+          replace(v_q, E'\\', E'\\\\'),
+          '%',
+          E'\\%'
+        ),
+        '_',
+        E'\\_'
+      ) ||
+      '%';
+  end if;
+
+  -- ids parity with visible summary list
+  begin
+    if p_filters ? 'ids' then
+      if jsonb_typeof(p_filters->'ids') = 'array' then
+        select array_agg(val)
+        into v_ids
+        from (
+          select distinct nullif(btrim(jv), '') as val
+          from jsonb_array_elements_text(p_filters->'ids') as t(jv)
+        ) s
+        where s.val is not null;
+      elsif nullif(btrim(coalesce(p_filters->>'ids', '')), '') is not null then
+        select array_agg(val)
+        into v_ids
+        from (
+          select distinct nullif(btrim(x), '') as val
+          from unnest(regexp_split_to_array(p_filters->>'ids', '\s*,\s*')) as u(x)
+        ) s
+        where s.val is not null;
+      end if;
+    end if;
+  exception when others then
+    v_ids := null;
+  end;
 
   v_summary_stage := nullif(btrim(coalesce(p_filters->>'summary_stage','')), '');
-  if v_summary_stage is not null and upper(v_summary_stage) = 'ALL' then v_summary_stage := null; end if;
+  if v_summary_stage is not null and upper(v_summary_stage) = 'ALL' then
+    v_summary_stage := null;
+  end if;
 
   v_tools_stage := nullif(btrim(coalesce(p_filters->>'tools_stage','')), '');
-  if v_tools_stage is not null then v_tools_stage := upper(v_tools_stage); end if;
-  if v_tools_stage = 'ALL' then v_tools_stage := null; end if;
+  if v_tools_stage is not null then
+    v_tools_stage := upper(v_tools_stage);
+  end if;
+  if v_tools_stage = 'ALL' then
+    v_tools_stage := null;
+  end if;
 
   v_issues_filter := nullif(btrim(coalesce(p_filters->>'issues_filter','')), '');
-  if v_issues_filter is not null then v_issues_filter := upper(v_issues_filter); end if;
-  if v_issues_filter = 'ALL' then v_issues_filter := null; end if;
+  if v_issues_filter is not null then
+    v_issues_filter := upper(v_issues_filter);
+  end if;
+  if v_issues_filter = 'ALL' then
+    v_issues_filter := null;
+  end if;
 
   v_route_type := nullif(btrim(coalesce(p_filters->>'route_type','')), '');
-  if v_route_type is not null then v_route_type := upper(v_route_type); end if;
-  if v_route_type = 'ALL' then v_route_type := null; end if;
+  if v_route_type is not null then
+    v_route_type := upper(v_route_type);
+  end if;
+  if v_route_type = 'ALL' then
+    v_route_type := null;
+  end if;
 
   v_sheet_scope := nullif(btrim(coalesce(p_filters->>'sheet_scope','')), '');
-  if v_sheet_scope is not null then v_sheet_scope := upper(v_sheet_scope); end if;
-  if v_sheet_scope = 'ALL' then v_sheet_scope := null; end if;
+  if v_sheet_scope is not null then
+    v_sheet_scope := upper(v_sheet_scope);
+  end if;
+  if v_sheet_scope = 'ALL' then
+    v_sheet_scope := null;
+  end if;
 
   v_qr_status := nullif(btrim(coalesce(p_filters->>'qr_status','')), '');
-  if v_qr_status is not null then v_qr_status := upper(v_qr_status); end if;
+  if v_qr_status is not null then
+    v_qr_status := upper(v_qr_status);
+  end if;
 
-  begin if nullif(btrim(coalesce(p_filters->>'week_ending_from','')), '') is not null then v_we_from := (p_filters->>'week_ending_from')::date; end if; exception when others then v_we_from := null; end;
-  begin if nullif(btrim(coalesce(p_filters->>'week_ending_to','')), '') is not null then v_we_to := (p_filters->>'week_ending_to')::date; end if; exception when others then v_we_to := null; end;
+  begin
+    if nullif(btrim(coalesce(p_filters->>'week_ending_from','')), '') is not null then
+      v_we_from := (p_filters->>'week_ending_from')::date;
+    end if;
+  exception when others then
+    v_we_from := null;
+  end;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'week_ending_to','')), '') is not null then
+      v_we_to := (p_filters->>'week_ending_to')::date;
+    end if;
+  exception when others then
+    v_we_to := null;
+  end;
 
   v_is_adjusted := nullif(btrim(coalesce(p_filters->>'is_adjusted','')), '');
   v_is_qr := nullif(btrim(coalesce(p_filters->>'is_qr','')), '');
@@ -317,7 +420,9 @@ begin
   v_client_invoiced := nullif(btrim(coalesce(p_filters->>'client_invoiced','')), '');
 
   v_hr_issue := nullif(btrim(coalesce(p_filters->>'hr_issue','')), '');
-  if v_hr_issue is not null then v_hr_issue := upper(v_hr_issue); end if;
+  if v_hr_issue is not null then
+    v_hr_issue := upper(v_hr_issue);
+  end if;
 
   v_proc_status_raw := nullif(btrim(coalesce(p_filters->>'processing_status','')), '');
   if v_proc_status_raw is not null and upper(v_proc_status_raw) <> 'ALL' then
@@ -327,7 +432,9 @@ begin
   end if;
 
   v_status_code := nullif(btrim(coalesce(p_filters->>'status_code','')), '');
-  if v_status_code is not null then v_status_code := upper(v_status_code); end if;
+  if v_status_code is not null then
+    v_status_code := upper(v_status_code);
+  end if;
 
   -- Determine which QR columns exist on the view (prevents parse-time errors)
   begin
@@ -371,6 +478,31 @@ begin
 
   if v_candidate_id is not null then
     v_sql := v_sql || ' and v.candidate_id = ' || quote_literal(v_candidate_id::text) || '::uuid';
+  end if;
+
+  if v_q is not null then
+    v_sql := v_sql ||
+      ' and (' ||
+      'coalesce(v.candidate_name, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
+      ' or coalesce(v.client_name, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
+      ' or coalesce(v.booking_id, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
+      ' or coalesce(v.occupant_key_norm, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
+      ' or coalesce(v.hospital_norm, '''') ilike ' || quote_literal(v_q_like) || ' escape ''\''' ||
+      ')';
+  end if;
+
+  if v_ids is not null and coalesce(array_length(v_ids, 1), 0) > 0 then
+    select string_agg(quote_literal(x), ',')
+    into v_ids_lits
+    from unnest(v_ids) as x;
+
+    if v_ids_lits is not null and btrim(v_ids_lits) <> '' then
+      v_sql := v_sql || ' and ('
+        || '(v.timesheet_id is not null and v.timesheet_id::text = any(ARRAY[' || v_ids_lits || ']::text[]))'
+        || ' or '
+        || '(v.contract_week_id is not null and v.contract_week_id::text = any(ARRAY[' || v_ids_lits || ']::text[]))'
+        || ')';
+    end if;
   end if;
 
   if v_summary_stage is not null then
@@ -438,17 +570,20 @@ begin
     end if;
   end if;
 
-  -- ✅ Candidate paid: include advanced/paid/partly paid by checking rollup settlement timestamp.
-  -- This avoids double counting and matches the summary sheet behaviour.
+  -- Candidate paid: include advanced/paid/partly paid by checking rollup settlement timestamp.
   if v_candidate_paid is not null then
     if lower(v_candidate_paid) = 'true' then
       v_sql := v_sql || ' and v.pay_paid_at_utc is not null';
+    elsif lower(v_candidate_paid) = 'false' then
+      v_sql := v_sql || ' and v.pay_paid_at_utc is null';
     end if;
   end if;
 
   if v_client_invoiced is not null then
     if lower(v_client_invoiced) = 'true' then
       v_sql := v_sql || ' and v.locked_by_invoice_id is not null';
+    elsif lower(v_client_invoiced) = 'false' then
+      v_sql := v_sql || ' and v.locked_by_invoice_id is null';
     end if;
   end if;
 
@@ -466,7 +601,7 @@ begin
     end if;
   end if;
 
-  -- ✅ Issues filter (token-specific; avoids referencing columns that do not exist)
+  -- Issues filter (token-specific; avoids referencing columns that do not exist)
   if v_issues_filter is not null then
     if v_issues_filter = 'NO_MATCH_ID' then
       v_sql := v_sql || ' and (v.candidate_id is null or v.client_id is null)';
@@ -501,7 +636,6 @@ begin
       end if;
 
       if v_has_qr_generated_at then
-        -- prefer qr_generated_at_utc if present; fall back to qr_generated_at
         if exists (
           select 1
           from information_schema.columns c
@@ -569,17 +703,15 @@ begin
     end if;
   end if;
 
-  v_sql := v_sql || ') select count(*)::bigint as count_all,
-    coalesce(sum(coalesce(e.total_pay_ex_vat,0)),0)::numeric as total_pay_ex_vat_sum,
-    coalesce(sum(coalesce(e.margin_ex_vat,0)),0)::numeric as margin_ex_vat_sum
-  from effective e';
+  v_sql := v_sql || ')
+    select count(*)::bigint as count_all,
+           coalesce(sum(coalesce(e.total_pay_ex_vat,0)),0)::numeric as total_pay_ex_vat_sum,
+           coalesce(sum(coalesce(e.margin_ex_vat,0)),0)::numeric as margin_ex_vat_sum
+    from effective e';
 
   return query execute v_sql;
 end;
 $$;
-
-
-
 
 
 
