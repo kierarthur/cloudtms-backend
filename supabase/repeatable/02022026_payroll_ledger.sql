@@ -2493,87 +2493,157 @@ begin;
 --   - NULL => snooze forever
 --   - date => snoozed until that date (inclusive)
 -- =========================================================
-create or replace function public.pay_snooze_upsert(
+CREATE OR REPLACE FUNCTION public.pay_snooze_upsert(
   p_candidate_id uuid,
   p_timesheet_id uuid,
   p_segment_id text,
   p_source_ref text,
-  p_snooze_kind text default 'DO_NOT_PAY',
-  p_snooze_until_date date default null,
-  p_actor_user_id uuid default null,
-  p_note text default null
+  p_snooze_kind text DEFAULT 'DO_NOT_PAY',
+  p_snooze_until_date date DEFAULT NULL,
+  p_actor_user_id uuid DEFAULT NULL,
+  p_note text DEFAULT NULL
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_kind text := upper(btrim(coalesce(p_snooze_kind, 'DO_NOT_PAY')));
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_kind_input text := upper(btrim(coalesce(p_snooze_kind, 'DO_NOT_PAY')));
+  v_kind text;
   v_segment_id text := nullif(btrim(coalesce(p_segment_id, '')), '');
   v_source_ref text := nullif(btrim(coalesce(p_source_ref, '')), '');
   v_note text := nullif(btrim(coalesce(p_note, '')), '');
 
-  v_existing_id uuid := null;
-  v_updated_count int := 0;
-  v_action text := null;
-begin
-  if p_candidate_id is null then
-    raise exception 'candidate_id is required';
-  end if;
+  v_keeper_id uuid := NULL;
+  v_action text := NULL;
 
-  if v_kind not in ('DO_NOT_PAY','BLOCKED') then
-    raise exception 'invalid snooze_kind (expected DO_NOT_PAY or BLOCKED)';
-  end if;
+  v_before jsonb := NULL;
+  v_after jsonb := NULL;
 
-  -- Enforce identity rules (match table constraint and intended usage)
-  if v_segment_id is not null then
-    if p_timesheet_id is null then
-      raise exception 'timesheet_id is required when segment_id is provided';
-    end if;
-  end if;
+  v_finance_case_id uuid := NULL;
+  v_event_type text := NULL;
+BEGIN
+  IF p_candidate_id IS NULL THEN
+    RAISE EXCEPTION 'candidate_id is required';
+  END IF;
 
-  if v_segment_id is null and v_source_ref is null then
-    raise exception 'either (timesheet_id+segment_id) or source_ref must be provided';
-  end if;
+  v_kind := CASE v_kind_input
+    WHEN 'BLOCKED' THEN 'BLOCKED_TIMESHEET'
+    WHEN 'BLOCKED_TIMESHEET' THEN 'BLOCKED_TIMESHEET'
+    WHEN 'DO_NOT_PAY' THEN 'DO_NOT_PAY'
+    WHEN 'TIMESHEET_PAYMENT' THEN 'TIMESHEET_PAYMENT'
+    WHEN 'OVERPAYMENT_RECOVERY' THEN 'OVERPAYMENT_RECOVERY'
+    WHEN 'PAYMENT_ADVANCE_REPAYMENT' THEN 'PAYMENT_ADVANCE_REPAYMENT'
+    WHEN 'LOAN_REPAYMENT' THEN 'PAYMENT_ADVANCE_REPAYMENT'
+    WHEN 'MANUAL_DEBT_RECOVERY' THEN 'MANUAL_DEBT_RECOVERY'
+    ELSE NULL
+  END;
 
-  -- Disallow nonsensical "snooze until" in the past (keeps UX clean).
-  -- If you want "unsnooze" use pay_snooze_clear.
-  if p_snooze_until_date is not null and p_snooze_until_date < current_date then
-    raise exception 'snooze_until_date must be today or later (or NULL for forever)';
-  end if;
+  IF v_kind IS NULL THEN
+    RAISE EXCEPTION 'invalid snooze_kind';
+  END IF;
 
-  -- Update any ACTIVE snooze rows matching identity (IS NOT DISTINCT FROM makes NULL match NULL)
-  update public.pay_item_snoozes s
-  set
-    snooze_until_date = p_snooze_until_date,
-    note = v_note
-  where s.candidate_id = p_candidate_id
-    and s.cleared_at_utc is null
-    and s.snooze_kind = v_kind
-    and s.timesheet_id is not distinct from p_timesheet_id
-    and s.segment_id is not distinct from v_segment_id
-    and s.source_ref is not distinct from v_source_ref;
+  IF p_snooze_until_date IS NOT NULL AND p_snooze_until_date < current_date THEN
+    RAISE EXCEPTION 'snooze_until_date must be today or later (or NULL for indefinite)';
+  END IF;
 
-  get diagnostics v_updated_count = row_count;
+  IF v_kind IN ('OVERPAYMENT_RECOVERY','PAYMENT_ADVANCE_REPAYMENT','MANUAL_DEBT_RECOVERY') THEN
+    IF v_source_ref IS NULL THEN
+      RAISE EXCEPTION 'source_ref is required for finance-case snoozes';
+    END IF;
+    IF p_timesheet_id IS NOT NULL OR v_segment_id IS NOT NULL THEN
+      RAISE EXCEPTION 'timesheet_id/segment_id must not be supplied for finance-case snoozes';
+    END IF;
+  ELSIF v_kind = 'TIMESHEET_PAYMENT' THEN
+    IF p_timesheet_id IS NULL THEN
+      RAISE EXCEPTION 'timesheet_id is required for TIMESHEET_PAYMENT snoozes';
+    END IF;
+    IF v_segment_id IS NOT NULL THEN
+      RAISE EXCEPTION 'segment_id must be null for TIMESHEET_PAYMENT snoozes';
+    END IF;
+    IF v_source_ref IS NOT NULL THEN
+      RAISE EXCEPTION 'source_ref must be null for TIMESHEET_PAYMENT snoozes';
+    END IF;
+  ELSE
+    IF p_timesheet_id IS NULL THEN
+      RAISE EXCEPTION 'timesheet_id is required for timesheet-line snoozes';
+    END IF;
+    IF v_source_ref IS NOT NULL THEN
+      RAISE EXCEPTION 'source_ref must be null for timesheet-line snoozes';
+    END IF;
+  END IF;
 
-  if v_updated_count > 0 then
-    -- Return the (first) active id after update
-    select s.id
-    into v_existing_id
-    from public.pay_item_snoozes s
-    where s.candidate_id = p_candidate_id
-      and s.cleared_at_utc is null
-      and s.snooze_kind = v_kind
-      and s.timesheet_id is not distinct from p_timesheet_id
-      and s.segment_id is not distinct from v_segment_id
-      and s.source_ref is not distinct from v_source_ref
-    order by s.created_at_utc desc, s.id desc
-    limit 1;
+  IF v_source_ref IS NOT NULL
+     AND v_source_ref LIKE 'advance:%'
+     AND split_part(v_source_ref, ':', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  THEN
+    v_finance_case_id := split_part(v_source_ref, ':', 2)::uuid;
+  END IF;
+
+  SELECT jsonb_build_object(
+           'id', s.id::text,
+           'candidate_id', s.candidate_id::text,
+           'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+           'segment_id', s.segment_id,
+           'source_ref', s.source_ref,
+           'snooze_kind', s.snooze_kind,
+           'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
+           'note', s.note
+         )
+  INTO v_before
+  FROM public.pay_item_snoozes s
+  WHERE s.candidate_id = p_candidate_id
+    AND s.cleared_at_utc IS NULL
+    AND (
+      (v_source_ref IS NOT NULL AND s.source_ref IS NOT DISTINCT FROM v_source_ref)
+      OR
+      (v_source_ref IS NULL AND s.source_ref IS NULL AND s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id AND s.segment_id IS NOT DISTINCT FROM v_segment_id)
+    )
+  ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
+  LIMIT 1;
+
+  SELECT s.id
+  INTO v_keeper_id
+  FROM public.pay_item_snoozes s
+  WHERE s.candidate_id = p_candidate_id
+    AND s.cleared_at_utc IS NULL
+    AND (
+      (v_source_ref IS NOT NULL AND s.source_ref IS NOT DISTINCT FROM v_source_ref)
+      OR
+      (v_source_ref IS NULL AND s.source_ref IS NULL AND s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id AND s.segment_id IS NOT DISTINCT FROM v_segment_id)
+    )
+  ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
+  LIMIT 1;
+
+  UPDATE public.pay_item_snoozes s
+  SET
+    cleared_at_utc = now(),
+    cleared_by_user_id = p_actor_user_id,
+    updated_at_utc = now(),
+    updated_by_user_id = p_actor_user_id
+  WHERE s.candidate_id = p_candidate_id
+    AND s.cleared_at_utc IS NULL
+    AND s.id <> v_keeper_id
+    AND (
+      (v_source_ref IS NOT NULL AND s.source_ref IS NOT DISTINCT FROM v_source_ref)
+      OR
+      (v_source_ref IS NULL AND s.source_ref IS NULL AND s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id AND s.segment_id IS NOT DISTINCT FROM v_segment_id)
+    );
+
+  IF v_keeper_id IS NOT NULL THEN
+    UPDATE public.pay_item_snoozes s
+    SET
+      snooze_kind = v_kind,
+      snooze_until_date = p_snooze_until_date,
+      note = v_note,
+      updated_at_utc = now(),
+      updated_by_user_id = p_actor_user_id
+    WHERE s.id = v_keeper_id;
 
     v_action := 'UPDATED';
-  else
-    insert into public.pay_item_snoozes (
+  ELSE
+    INSERT INTO public.pay_item_snoozes (
       candidate_id,
       timesheet_id,
       segment_id,
@@ -2584,9 +2654,11 @@ begin
       created_by_user_id,
       note,
       cleared_at_utc,
-      cleared_by_user_id
+      cleared_by_user_id,
+      updated_at_utc,
+      updated_by_user_id
     )
-    values (
+    VALUES (
       p_candidate_id,
       p_timesheet_id,
       v_segment_id,
@@ -2596,50 +2668,130 @@ begin
       now(),
       p_actor_user_id,
       v_note,
-      null,
-      null
+      NULL,
+      NULL,
+      now(),
+      p_actor_user_id
     )
-    returning id into v_existing_id;
+    RETURNING id INTO v_keeper_id;
 
     v_action := 'CREATED';
-  end if;
+  END IF;
 
-  return jsonb_build_object(
+  SELECT jsonb_build_object(
+           'id', s.id::text,
+           'candidate_id', s.candidate_id::text,
+           'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+           'segment_id', s.segment_id,
+           'source_ref', s.source_ref,
+           'snooze_kind', s.snooze_kind,
+           'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
+           'note', s.note
+         )
+  INTO v_after
+  FROM public.pay_item_snoozes s
+  WHERE s.id = v_keeper_id;
+
+  v_event_type := CASE v_action
+    WHEN 'CREATED' THEN 'SNOOZE_APPLIED'
+    ELSE 'SNOOZE_UPDATED'
+  END;
+
+  IF v_finance_case_id IS NOT NULL THEN
+    INSERT INTO public.pay_finance_case_events (
+      finance_case_id,
+      event_type,
+      event_at_utc,
+      actor_user_id,
+      before_json,
+      after_json,
+      reason,
+      note
+    )
+    VALUES (
+      v_finance_case_id,
+      v_event_type,
+      now(),
+      p_actor_user_id,
+      v_before,
+      v_after,
+      v_kind,
+      v_note
+    );
+
+    PERFORM public._audit_insert(
+      'finance_case',
+      v_finance_case_id::text,
+      v_event_type,
+      v_before,
+      v_after,
+      v_kind,
+      p_actor_user_id
+    );
+  ELSIF p_timesheet_id IS NOT NULL THEN
+    PERFORM public._audit_insert(
+      'timesheets',
+      p_timesheet_id::text,
+      v_event_type,
+      v_before,
+      v_after,
+      v_kind,
+      p_actor_user_id
+    );
+  ELSE
+    PERFORM public._audit_insert(
+      'pay_item_snoozes',
+      v_keeper_id::text,
+      v_event_type,
+      v_before,
+      v_after,
+      v_kind,
+      p_actor_user_id
+    );
+  END IF;
+
+  RETURN jsonb_build_object(
     'ok', true,
     'action', v_action,
-    'id', v_existing_id::text,
+    'id', v_keeper_id::text,
     'candidate_id', p_candidate_id::text,
-    'timesheet_id', case when p_timesheet_id is null then null else p_timesheet_id::text end,
+    'timesheet_id', CASE WHEN p_timesheet_id IS NULL THEN NULL ELSE p_timesheet_id::text END,
     'segment_id', v_segment_id,
     'source_ref', v_source_ref,
+    'finance_case_id', CASE WHEN v_finance_case_id IS NULL THEN NULL ELSE v_finance_case_id::text END,
     'snooze_kind', v_kind,
-    'snooze_until_date', case when p_snooze_until_date is null then null else p_snooze_until_date::text end,
+    'snooze_until_date', CASE WHEN p_snooze_until_date IS NULL THEN NULL ELSE p_snooze_until_date::text END,
+    'snooze_is_indefinite', (p_snooze_until_date IS NULL),
     'note', v_note
   );
-end;
+END;
 $$;
+
 
 -- =========================================================
 -- pay_snooze_clear
 -- Clears (deactivates) a snooze by id (audit-safe; does not delete).
 -- =========================================================
-create or replace function public.pay_snooze_clear(
+CREATE OR REPLACE FUNCTION public.pay_snooze_clear(
   p_snooze_id uuid,
-  p_actor_user_id uuid default null
+  p_actor_user_id uuid DEFAULT NULL
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
   v_row record;
-begin
-  if p_snooze_id is null then
-    raise exception 'snooze_id is required';
-  end if;
+  v_before jsonb := NULL;
+  v_after jsonb := NULL;
+  v_finance_case_id uuid := NULL;
+BEGIN
+  IF p_snooze_id IS NULL THEN
+    RAISE EXCEPTION 'snooze_id is required';
+  END IF;
 
-  select
+  SELECT
     s.id,
     s.candidate_id,
     s.timesheet_id,
@@ -2647,110 +2799,366 @@ begin
     s.source_ref,
     s.snooze_kind,
     s.snooze_until_date,
+    s.note,
     s.created_at_utc,
     s.cleared_at_utc
-  into v_row
-  from public.pay_item_snoozes s
-  where s.id = p_snooze_id
-  limit 1;
+  INTO v_row
+  FROM public.pay_item_snoozes s
+  WHERE s.id = p_snooze_id
+  LIMIT 1;
 
-  if not found then
-    raise exception 'SNOOZE_NOT_FOUND';
-  end if;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SNOOZE_NOT_FOUND';
+  END IF;
 
-  if v_row.cleared_at_utc is not null then
-    return jsonb_build_object(
+  v_before := jsonb_build_object(
+    'id', v_row.id::text,
+    'candidate_id', v_row.candidate_id::text,
+    'timesheet_id', CASE WHEN v_row.timesheet_id IS NULL THEN NULL ELSE v_row.timesheet_id::text END,
+    'segment_id', v_row.segment_id,
+    'source_ref', v_row.source_ref,
+    'snooze_kind', v_row.snooze_kind,
+    'snooze_until_date', CASE WHEN v_row.snooze_until_date IS NULL THEN NULL ELSE v_row.snooze_until_date::text END,
+    'note', v_row.note,
+    'cleared_at_utc', v_row.cleared_at_utc
+  );
+
+  IF v_row.cleared_at_utc IS NOT NULL THEN
+    RETURN jsonb_build_object(
       'ok', true,
       'action', 'NOOP_ALREADY_CLEARED',
       'id', v_row.id::text
     );
-  end if;
+  END IF;
 
-  update public.pay_item_snoozes s
-  set
+  IF v_row.source_ref IS NOT NULL
+     AND v_row.source_ref LIKE 'advance:%'
+     AND split_part(v_row.source_ref, ':', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  THEN
+    v_finance_case_id := split_part(v_row.source_ref, ':', 2)::uuid;
+  END IF;
+
+  UPDATE public.pay_item_snoozes s
+  SET
     cleared_at_utc = now(),
-    cleared_by_user_id = p_actor_user_id
-  where s.id = p_snooze_id;
+    cleared_by_user_id = p_actor_user_id,
+    updated_at_utc = now(),
+    updated_by_user_id = p_actor_user_id
+  WHERE s.id = p_snooze_id;
 
-  return jsonb_build_object(
+  SELECT jsonb_build_object(
+           'id', s.id::text,
+           'candidate_id', s.candidate_id::text,
+           'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+           'segment_id', s.segment_id,
+           'source_ref', s.source_ref,
+           'snooze_kind', s.snooze_kind,
+           'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
+           'note', s.note,
+           'cleared_at_utc', s.cleared_at_utc
+         )
+  INTO v_after
+  FROM public.pay_item_snoozes s
+  WHERE s.id = p_snooze_id;
+
+  IF v_finance_case_id IS NOT NULL THEN
+    INSERT INTO public.pay_finance_case_events (
+      finance_case_id,
+      event_type,
+      event_at_utc,
+      actor_user_id,
+      before_json,
+      after_json,
+      reason,
+      note
+    )
+    VALUES (
+      v_finance_case_id,
+      'SNOOZE_CLEARED',
+      now(),
+      p_actor_user_id,
+      v_before,
+      v_after,
+      COALESCE(v_row.snooze_kind, 'SNOOZE_CLEARED'),
+      v_row.note
+    );
+
+    PERFORM public._audit_insert(
+      'finance_case',
+      v_finance_case_id::text,
+      'SNOOZE_CLEARED',
+      v_before,
+      v_after,
+      COALESCE(v_row.snooze_kind, 'SNOOZE_CLEARED'),
+      p_actor_user_id
+    );
+  ELSIF v_row.timesheet_id IS NOT NULL THEN
+    PERFORM public._audit_insert(
+      'timesheets',
+      v_row.timesheet_id::text,
+      'SNOOZE_CLEARED',
+      v_before,
+      v_after,
+      COALESCE(v_row.snooze_kind, 'SNOOZE_CLEARED'),
+      p_actor_user_id
+    );
+  ELSE
+    PERFORM public._audit_insert(
+      'pay_item_snoozes',
+      v_row.id::text,
+      'SNOOZE_CLEARED',
+      v_before,
+      v_after,
+      COALESCE(v_row.snooze_kind, 'SNOOZE_CLEARED'),
+      p_actor_user_id
+    );
+  END IF;
+
+  RETURN jsonb_build_object(
     'ok', true,
     'action', 'CLEARED',
     'id', v_row.id::text,
     'candidate_id', v_row.candidate_id::text,
-    'timesheet_id', case when v_row.timesheet_id is null then null else v_row.timesheet_id::text end,
+    'timesheet_id', CASE WHEN v_row.timesheet_id IS NULL THEN NULL ELSE v_row.timesheet_id::text END,
     'segment_id', v_row.segment_id,
     'source_ref', v_row.source_ref,
-    'snooze_kind', v_row.snooze_kind
+    'finance_case_id', CASE WHEN v_finance_case_id IS NULL THEN NULL ELSE v_finance_case_id::text END,
+    'snooze_kind', v_row.snooze_kind,
+    'preview_visibility_hint', 'RELOAD_PREVIEW'
   );
-end;
+END;
 $$;
 
--- =========================================================
--- pay_snoozes_list (optional)
--- Lists snoozes with paging. By default returns only ACTIVE snoozes.
--- =========================================================
-create or replace function public.pay_snoozes_list(
-  p_candidate_id uuid default null,
-  p_active_only boolean default true,
-  p_limit int default 200,
-  p_offset int default 0
+CREATE OR REPLACE FUNCTION public.pay_snoozes_list(
+  p_candidate_id uuid DEFAULT NULL,
+  p_active_only boolean DEFAULT true,
+  p_limit int DEFAULT 200,
+  p_offset int DEFAULT 0,
+  p_client_id uuid DEFAULT NULL
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
   v_limit int := greatest(1, least(coalesce(p_limit,200), 500));
   v_offset int := greatest(coalesce(p_offset,0), 0);
   v_total int := 0;
   v_rows jsonb := '[]'::jsonb;
-begin
-  select count(*)::int
-  into v_total
-  from public.pay_item_snoozes s
-  where (p_candidate_id is null or s.candidate_id = p_candidate_id)
-    and (coalesce(p_active_only,true) = false or s.cleared_at_utc is null);
+BEGIN
+  WITH base AS (
+    SELECT
+      s.id,
+      s.candidate_id,
+      s.timesheet_id,
+      s.segment_id,
+      s.source_ref,
+      upper(COALESCE(s.snooze_kind,'')) AS snooze_kind,
+      s.snooze_until_date,
+      s.note,
+      s.created_at_utc,
+      s.created_by_user_id,
+      s.updated_at_utc,
+      s.updated_by_user_id,
+      s.cleared_at_utc,
+      s.cleared_by_user_id,
+      CASE
+        WHEN s.source_ref IS NOT NULL
+         AND s.source_ref LIKE 'advance:%'
+         AND split_part(s.source_ref, ':', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        THEN split_part(s.source_ref, ':', 2)::uuid
+        ELSE NULL
+      END AS finance_case_id
+    FROM public.pay_item_snoozes s
+    WHERE (p_candidate_id IS NULL OR s.candidate_id = p_candidate_id)
+      AND (coalesce(p_active_only,true) = false OR s.cleared_at_utc IS NULL)
+  ),
+  enriched AS (
+    SELECT
+      b.id,
+      b.candidate_id,
+      c.tms_ref AS candidate_tms_ref,
+      c.display_name AS candidate_display_name,
+      b.timesheet_id,
+      ts.week_ending_date,
+      tf.client_id AS timesheet_client_id,
+      cli_tf.name AS timesheet_client_name,
+      b.segment_id,
+      b.source_ref,
+      b.finance_case_id,
+      vfc.case_type,
+      vfc.client_id AS finance_client_id,
+      vfc.client_name AS finance_client_name,
+      vfc.linked_shift_date,
+      vfc.adjustment_comment,
+      vfc.status AS finance_case_status,
+      vfc.payout_status AS finance_case_payout_status,
+      vfc.outstanding_amount,
+      vfc.active_snooze_until_date,
+      b.snooze_kind,
+      b.snooze_until_date,
+      b.note,
+      b.created_at_utc,
+      b.created_by_user_id,
+      b.updated_at_utc,
+      b.updated_by_user_id,
+      b.cleared_at_utc,
+      b.cleared_by_user_id,
+      CASE
+        WHEN b.finance_case_id IS NOT NULL THEN
+          CASE vfc.case_type
+            WHEN 'PAYMENT_ADVANCE' THEN 'PAYMENT_ADVANCE_REPAYMENT'
+            WHEN 'OVERPAYMENT' THEN 'OVERPAYMENT_RECOVERY'
+            WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'MANUAL_DEBT_RECOVERY'
+            WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'MANUAL_CREDIT_ADJUSTMENT'
+            ELSE 'FINANCE_CASE'
+          END
+        WHEN b.snooze_kind = 'TIMESHEET_PAYMENT' THEN 'TIMESHEET_PAYMENT'
+        WHEN b.snooze_kind = 'BLOCKED_TIMESHEET' THEN 'BLOCKED_TIMESHEET'
+        WHEN b.snooze_kind = 'DO_NOT_PAY' THEN 'DO_NOT_PAY'
+        ELSE 'SNOOZE'
+      END AS line_type,
+      CASE
+        WHEN b.finance_case_id IS NOT NULL THEN
+          CASE vfc.case_type
+            WHEN 'PAYMENT_ADVANCE' THEN 'Payment Advance Repayment'
+            WHEN 'OVERPAYMENT' THEN 'Overpayment Recovery'
+            WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'Manual Debt Adjustment Recovery'
+            WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
+            ELSE 'Finance item'
+          END
+        WHEN b.snooze_kind = 'TIMESHEET_PAYMENT' THEN 'Timesheet payment'
+        WHEN b.snooze_kind = 'BLOCKED_TIMESHEET' THEN 'Blocked timesheet line'
+        WHEN b.snooze_kind = 'DO_NOT_PAY' THEN 'Do not pay line'
+        ELSE 'Snoozed item'
+      END AS line_label,
+      CASE
+        WHEN b.finance_case_id IS NOT NULL THEN
+          trim(
+            both ' '
+            from concat(
+              CASE vfc.case_type
+                WHEN 'PAYMENT_ADVANCE' THEN 'Payment Advance Repayment'
+                WHEN 'OVERPAYMENT' THEN 'Overpayment Recovery'
+                WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'Manual Debt Adjustment Recovery'
+                WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
+                ELSE 'Finance item'
+              END,
+              CASE
+                WHEN nullif(btrim(coalesce(vfc.adjustment_comment,'')), '') IS NOT NULL
+                  THEN ' - ' || nullif(btrim(coalesce(vfc.adjustment_comment,'')), '')
+                ELSE ''
+              END
+            )
+          )
+        WHEN b.snooze_kind = 'TIMESHEET_PAYMENT' THEN 'Timesheet payment'
+        WHEN b.snooze_kind = 'BLOCKED_TIMESHEET' THEN
+          CASE
+            WHEN nullif(btrim(coalesce(b.segment_id,'')), '') IS NOT NULL THEN 'Blocked timesheet line - ' || b.segment_id
+            ELSE 'Blocked timesheet line'
+          END
+        WHEN b.snooze_kind = 'DO_NOT_PAY' THEN
+          CASE
+            WHEN nullif(btrim(coalesce(b.segment_id,'')), '') IS NOT NULL THEN 'Do not pay line - ' || b.segment_id
+            ELSE 'Do not pay line'
+          END
+        ELSE 'Snoozed item'
+      END AS line_description,
+      (b.snooze_until_date IS NULL) AS snooze_is_indefinite,
+      (
+        b.cleared_at_utc IS NULL
+        AND (b.snooze_until_date IS NULL OR b.snooze_until_date >= current_date)
+      ) AS is_currently_effective,
+      CASE
+        WHEN b.cleared_at_utc IS NOT NULL THEN 'CLEARED_HISTORY'
+        WHEN b.snooze_until_date IS NULL THEN 'LOANS_SNOOZES_ONLY'
+        WHEN b.snooze_until_date >= current_date THEN 'PREVIEW_VISIBLE_EXCLUDED'
+        ELSE 'PREVIEW_ELIGIBLE'
+      END AS visibility_hint
+    FROM base b
+    JOIN public.candidates c
+      ON c.id = b.candidate_id
+    LEFT JOIN public.timesheets ts
+      ON ts.timesheet_id = b.timesheet_id
+    LEFT JOIN public.timesheets_financials tf
+      ON tf.timesheet_id = b.timesheet_id
+     AND tf.is_current = true
+    LEFT JOIN public.clients cli_tf
+      ON cli_tf.id = tf.client_id
+    LEFT JOIN public.v_finance_cases_register vfc
+      ON vfc.finance_case_id = b.finance_case_id
+  )
+  SELECT count(*)::int
+  INTO v_total
+  FROM enriched e
+  WHERE (p_client_id IS NULL OR COALESCE(e.finance_client_id, e.timesheet_client_id) = p_client_id);
 
-  select coalesce(
+  SELECT COALESCE(
     jsonb_agg(
       jsonb_build_object(
-        'id', s.id::text,
-        'candidate_id', s.candidate_id::text,
-        'timesheet_id', case when s.timesheet_id is null then null else s.timesheet_id::text end,
-        'segment_id', s.segment_id,
-        'source_ref', s.source_ref,
-        'snooze_kind', s.snooze_kind,
-        'snooze_until_date', case when s.snooze_until_date is null then null else s.snooze_until_date::text end,
-        'note', s.note,
-        'created_at_utc', s.created_at_utc,
-        'created_by_user_id', case when s.created_by_user_id is null then null else s.created_by_user_id::text end,
-        'cleared_at_utc', s.cleared_at_utc,
-        'cleared_by_user_id', case when s.cleared_by_user_id is null then null else s.cleared_by_user_id::text end
+        'id', e.id::text,
+        'candidate_id', e.candidate_id::text,
+        'candidate_tms_ref', e.candidate_tms_ref,
+        'candidate_display_name', e.candidate_display_name,
+        'client_id', CASE WHEN COALESCE(e.finance_client_id, e.timesheet_client_id) IS NULL THEN NULL ELSE COALESCE(e.finance_client_id, e.timesheet_client_id)::text END,
+        'client_name', COALESCE(e.finance_client_name, e.timesheet_client_name),
+        'timesheet_id', CASE WHEN e.timesheet_id IS NULL THEN NULL ELSE e.timesheet_id::text END,
+        'week_ending_date', CASE WHEN e.week_ending_date IS NULL THEN NULL ELSE e.week_ending_date::text END,
+        'linked_shift_date', CASE WHEN e.linked_shift_date IS NULL THEN NULL ELSE e.linked_shift_date::text END,
+        'segment_id', e.segment_id,
+        'source_ref', e.source_ref,
+        'finance_case_id', CASE WHEN e.finance_case_id IS NULL THEN NULL ELSE e.finance_case_id::text END,
+        'case_type', e.case_type,
+        'finance_case_status', e.finance_case_status,
+        'finance_case_payout_status', e.finance_case_payout_status,
+        'finance_case_outstanding_amount', e.outstanding_amount,
+        'adjustment_comment', e.adjustment_comment,
+        'line_type', e.line_type,
+        'line_label', e.line_label,
+        'line_description', e.line_description,
+        'snooze_kind', e.snooze_kind,
+        'snooze_until_date', CASE WHEN e.snooze_until_date IS NULL THEN NULL ELSE e.snooze_until_date::text END,
+        'snooze_is_indefinite', e.snooze_is_indefinite,
+        'is_currently_effective', e.is_currently_effective,
+        'visibility_hint', e.visibility_hint,
+        'note', e.note,
+        'created_at_utc', e.created_at_utc,
+        'created_by_user_id', CASE WHEN e.created_by_user_id IS NULL THEN NULL ELSE e.created_by_user_id::text END,
+        'updated_at_utc', e.updated_at_utc,
+        'updated_by_user_id', CASE WHEN e.updated_by_user_id IS NULL THEN NULL ELSE e.updated_by_user_id::text END,
+        'cleared_at_utc', e.cleared_at_utc,
+        'cleared_by_user_id', CASE WHEN e.cleared_by_user_id IS NULL THEN NULL ELSE e.cleared_by_user_id::text END,
+        'action_flags', jsonb_build_object(
+          'can_clear', e.cleared_at_utc IS NULL,
+          'can_amend_date', e.cleared_at_utc IS NULL,
+          'can_set_indefinite', e.cleared_at_utc IS NULL AND e.snooze_until_date IS NOT NULL,
+          'can_set_dated', e.cleared_at_utc IS NULL AND e.snooze_until_date IS NULL
+        )
       )
-      order by s.created_at_utc desc, s.id desc
+      ORDER BY e.created_at_utc DESC, e.id DESC
     ),
     '[]'::jsonb
   )
-  into v_rows
-  from (
-    select s.*
-    from public.pay_item_snoozes s
-    where (p_candidate_id is null or s.candidate_id = p_candidate_id)
-      and (coalesce(p_active_only,true) = false or s.cleared_at_utc is null)
-    order by s.created_at_utc desc, s.id desc
-    limit v_limit offset v_offset
-  ) s;
+  INTO v_rows
+  FROM (
+    SELECT e.*
+    FROM enriched e
+    WHERE (p_client_id IS NULL OR COALESCE(e.finance_client_id, e.timesheet_client_id) = p_client_id)
+    ORDER BY e.created_at_utc DESC, e.id DESC
+    LIMIT v_limit OFFSET v_offset
+  ) e;
 
-  return jsonb_build_object(
+  RETURN jsonb_build_object(
     'ok', true,
     'total_count', v_total,
     'limit', v_limit,
     'offset', v_offset,
     'rows', v_rows
   );
-end;
+END;
 $$;
+
 
 commit;
 
