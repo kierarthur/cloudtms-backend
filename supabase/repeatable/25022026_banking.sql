@@ -5190,6 +5190,8 @@ begin
   select
     pb.id,
     pb.pay_date,
+    pb.authoritative_payment_date,
+    pb.authoritative_payment_date_source,
     pb.status,
     pb.bulk_reference,
     pb.banking_system_snapshot,
@@ -5239,7 +5241,6 @@ begin
       from public.pay_bank_transfers pbt
       where pbt.pay_batch_id = p_pay_batch_id
         and upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA'
-        and upper(coalesce(pbt.status,'')) = 'COMPLETED'
         and pbt.umbrella_id is not null
         and pbt.candidate_id is not null
     ),
@@ -5543,11 +5544,18 @@ begin
               'total_ex_vat', r.total_ex_vat,
               'total_vat', r.total_vat,
               'total_inc_vat', r.total_inc_vat,
-              'line_kind', r.line_kind
+              'line_kind', case
+                    when upper(coalesce(r.line_kind,'')) = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when upper(coalesce(r.line_kind,'')) = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when upper(coalesce(r.line_kind,'')) = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    else r.line_kind
+                  end
             )
             order by coalesce(r.unit_name,'') asc
           )
-          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','DEBT_CREATED')),
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','DEBT_CREATED')),
           '[]'::jsonb
         ) as other_rows,
         round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
@@ -5762,12 +5770,12 @@ begin
             select jsonb_build_object(
               'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
               'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
-              'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+              'payment_advance_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
               'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2),
               'deductions_summary', jsonb_build_object(
                 'gross_positive', round(coalesce(pbc_tot.gross_preview,0),2),
                 'overpayment_recovery', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
-                'loan_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'payment_advance_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
                 'total_deductions', round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2),
                 'final_payable', round(coalesce(pbc_tot.net_bank_amount,0),2),
                 'has_deductions', (round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2) > 0)
@@ -5782,18 +5790,31 @@ begin
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
-                  'item_type', pbi_nt.item_type,
+                  'item_type', case
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    else pbi_nt.item_type
+                  end,
+                  'internal_item_type', pbi_nt.item_type,
                   'description', pbi_nt.description,
                   'line_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
-                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
                     else pbib_nt.line_kind
                   end,
                   'line_label', case
-                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
-                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment Recovery'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Payment Advance Repayment'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Payment Advance'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual Credit Adjustment'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Adjustment Recovery'
+                    when nullif(btrim(coalesce(pa_fc.adjustment_comment,'')), '') is not null then pa_fc.adjustment_comment
                     when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
                     when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
                     else pbib_nt.line_kind
@@ -5807,22 +5828,45 @@ begin
                   'total_inc_vat', pbib_nt.amount_inc_vat,
                   'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
                   'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
-                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY')),
+                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')),
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
                     else null
                   end,
                   'deduction_amount_ex_vat', case
-                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
                     else null
                   end,
                   'deduction_amount_inc_vat', case
-                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
                     else null
                   end,
                   'source_ref', pbi_nt.source_ref,
-                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end
+                  'finance_case_id', case when coalesce(pbi_nt.finance_case_id, pa_fc.id) is null then null else coalesce(pbi_nt.finance_case_id, pa_fc.id)::text end,
+                  'finance_case_type', case when pa_fc.case_type is null then null else pa_fc.case_type::text end,
+                  'adjustment_comment', pa_fc.adjustment_comment,
+                  'lifecycle_state', case when pa_fc.status is null then null else pa_fc.status::text end,
+                  'payout_status', case when pa_fc.payout_status is null then null else pa_fc.payout_status::text end,
+                  'remaining_amount', round(coalesce(pa_fc.outstanding_amount,0),2),
+                  'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end,
+                  'overpayment_context', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY'
+                     and pa_fc.id is not null
+                     and upper(coalesce(pa_fc.case_type::text,'')) = 'OVERPAYMENT'
+                     and upper(coalesce(pa_fc.status::text,'')) = 'ACTIVE'
+                    then jsonb_build_object(
+                      'source_timesheet_id', case when pa_fc.linked_timesheet_id is null then null else pa_fc.linked_timesheet_id::text end,
+                      'shift_date', case when pa_fc.linked_shift_date is null then null else pa_fc.linked_shift_date::text end,
+                      'original_paid_amount', round(coalesce(pa_fc.source_original_paid_amount, pa_fc.original_amount, 0),2),
+                      'corrected_paid_amount', round(coalesce(pa_fc.source_corrected_paid_amount, greatest(coalesce(pa_fc.original_amount,0) - coalesce(pa_fc.outstanding_amount,0),0), 0),2),
+                      'recovery_this_payment', round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2),
+                      'remaining_balance', round(coalesce(pa_fc.outstanding_amount,0),2)
+                    )
+                    else null
+                  end
                 )
                 order by
                   case
@@ -5842,11 +5886,20 @@ begin
               on pbi_nt.pay_batch_candidate_id = pbc_nt.id
             join public.pay_batch_item_breakdowns pbib_nt
               on pbib_nt.pay_batch_item_id = pbi_nt.id
+            left join public.pay_advances pa_fc
+              on (
+                (pbi_nt.finance_case_id is not null and pa_fc.id = pbi_nt.finance_case_id)
+                or (
+                  pbi_nt.finance_case_id is null
+                  and pbi_nt.source_ref is not null
+                  and pbi_nt.source_ref = ('advance:' || pa_fc.id::text)
+                )
+              )
             where pbc_nt.pay_batch_id = p_pay_batch_id
               and pbc_nt.candidate_id = cm.candidate_id
               and pbi_nt.is_voided = false
               and pbi_nt.timesheet_id is null
-              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT')
+              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY')
           ), '[]'::jsonb)
         ) as candidate_json
       from cand_meta cm
@@ -5881,7 +5934,9 @@ begin
           'job_kind', 'UMBRELLA_REMITTANCE',
           'pay_batch_id', v_batch.id::text,
           'scope', 'UMBRELLA',
-          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+          'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+          'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+          'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
           'bulk_reference', v_batch.bulk_reference,
           'test_mode', coalesce(uj.test_mode,false),
           'detailed_breakdown', coalesce(uj.detailed_breakdown,false),
@@ -5939,7 +5994,6 @@ begin
       from public.pay_bank_transfers pbt
       where pbt.pay_batch_id = p_pay_batch_id
         and upper(coalesce(pbt.pay_channel,'')) = 'PAYE'
-        and upper(coalesce(pbt.status,'')) = 'COMPLETED'
         and pbt.candidate_id is not null
     ),
     cand_cfg as (
@@ -6213,11 +6267,18 @@ begin
               'total_ex_vat', r.total_ex_vat,
               'total_vat', r.total_vat,
               'total_inc_vat', r.total_inc_vat,
-              'line_kind', r.line_kind
+              'line_kind', case
+                    when upper(coalesce(r.line_kind,'')) = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when upper(coalesce(r.line_kind,'')) = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when upper(coalesce(r.line_kind,'')) = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    else r.line_kind
+                  end
             )
             order by coalesce(r.unit_name,'') asc
           )
-          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','DEBT_CREATED')),
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','DEBT_CREATED')),
           '[]'::jsonb
         ) as other_rows,
         round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
@@ -6451,7 +6512,9 @@ begin
           'job_kind', 'PAYE_REMITTANCE',
           'pay_batch_id', v_batch.id::text,
           'scope', 'PAYE',
-          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+          'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+          'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+          'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
           'bulk_reference', v_batch.bulk_reference,
           'test_mode', coalesce(cj.test_mode,false),
           'detailed_breakdown', coalesce(cj.eff_detailed,false),
@@ -6487,12 +6550,12 @@ begin
             select jsonb_build_object(
               'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
               'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
-              'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+              'payment_advance_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
               'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2),
               'deductions_summary', jsonb_build_object(
                 'gross_positive', round(coalesce(pbc_tot.gross_preview,0),2),
                 'overpayment_recovery', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
-                'loan_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'payment_advance_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
                 'total_deductions', round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2),
                 'final_payable', round(coalesce(pbc_tot.net_bank_amount,0),2),
                 'has_deductions', (round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2) > 0)
@@ -6512,7 +6575,7 @@ begin
                 order by pni2.imported_at_utc desc
                 limit 1
               ),
-              'loan_repayment_taken', round(coalesce(pbc_adv.loan_repayment_taken,0),2),
+              'payment_advance_repayment_taken', round(coalesce(pbc_adv.loan_repayment_taken,0),2),
               'overpayment_recovery_taken', round(coalesce(pbc_adv.overpayment_recovery_taken,0),2),
               'final_net_paid', round(coalesce(pbc_adv.net_bank_amount,0),2)
             )
@@ -6525,18 +6588,31 @@ begin
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
-                  'item_type', pbi_nt.item_type,
+                  'item_type', case
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    else pbi_nt.item_type
+                  end,
+                  'internal_item_type', pbi_nt.item_type,
                   'description', pbi_nt.description,
                   'line_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
-                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
                     else pbib_nt.line_kind
                   end,
                   'line_label', case
-                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
-                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment Recovery'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Payment Advance Repayment'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Payment Advance'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual Credit Adjustment'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Adjustment Recovery'
+                    when nullif(btrim(coalesce(pa_fc.adjustment_comment,'')), '') is not null then pa_fc.adjustment_comment
                     when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
                     when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
                     else pbib_nt.line_kind
@@ -6550,22 +6626,45 @@ begin
                   'total_inc_vat', pbib_nt.amount_inc_vat,
                   'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
                   'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
-                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY')),
+                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')),
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
                     else null
                   end,
                   'deduction_amount_ex_vat', case
-                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
                     else null
                   end,
                   'deduction_amount_inc_vat', case
-                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
                     else null
                   end,
                   'source_ref', pbi_nt.source_ref,
-                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end
+                  'finance_case_id', case when coalesce(pbi_nt.finance_case_id, pa_fc.id) is null then null else coalesce(pbi_nt.finance_case_id, pa_fc.id)::text end,
+                  'finance_case_type', case when pa_fc.case_type is null then null else pa_fc.case_type::text end,
+                  'adjustment_comment', pa_fc.adjustment_comment,
+                  'lifecycle_state', case when pa_fc.status is null then null else pa_fc.status::text end,
+                  'payout_status', case when pa_fc.payout_status is null then null else pa_fc.payout_status::text end,
+                  'remaining_amount', round(coalesce(pa_fc.outstanding_amount,0),2),
+                  'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end,
+                  'overpayment_context', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY'
+                     and pa_fc.id is not null
+                     and upper(coalesce(pa_fc.case_type::text,'')) = 'OVERPAYMENT'
+                     and upper(coalesce(pa_fc.status::text,'')) = 'ACTIVE'
+                    then jsonb_build_object(
+                      'source_timesheet_id', case when pa_fc.linked_timesheet_id is null then null else pa_fc.linked_timesheet_id::text end,
+                      'shift_date', case when pa_fc.linked_shift_date is null then null else pa_fc.linked_shift_date::text end,
+                      'original_paid_amount', round(coalesce(pa_fc.source_original_paid_amount, pa_fc.original_amount, 0),2),
+                      'corrected_paid_amount', round(coalesce(pa_fc.source_corrected_paid_amount, greatest(coalesce(pa_fc.original_amount,0) - coalesce(pa_fc.outstanding_amount,0),0), 0),2),
+                      'recovery_this_payment', round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2),
+                      'remaining_balance', round(coalesce(pa_fc.outstanding_amount,0),2)
+                    )
+                    else null
+                  end
                 )
                 order by
                   case
@@ -6585,11 +6684,20 @@ begin
               on pbi_nt.pay_batch_candidate_id = pbc_nt.id
             join public.pay_batch_item_breakdowns pbib_nt
               on pbib_nt.pay_batch_item_id = pbi_nt.id
+            left join public.pay_advances pa_fc
+              on (
+                (pbi_nt.finance_case_id is not null and pa_fc.id = pbi_nt.finance_case_id)
+                or (
+                  pbi_nt.finance_case_id is null
+                  and pbi_nt.source_ref is not null
+                  and pbi_nt.source_ref = ('advance:' || pa_fc.id::text)
+                )
+              )
             where pbc_nt.pay_batch_id = p_pay_batch_id
               and pbc_nt.candidate_id = cj.candidate_id
               and pbi_nt.is_voided = false
               and pbi_nt.timesheet_id is null
-              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT')
+              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY')
           ), '[]'::jsonb)
         )
         order by cj.display_name nulls last, cj.tms_ref nulls last, cj.candidate_id
@@ -6635,7 +6743,6 @@ begin
       from public.pay_bank_transfers pbt
       where pbt.pay_batch_id = p_pay_batch_id
         and upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA'
-        and upper(coalesce(pbt.status,'')) = 'COMPLETED'
         and pbt.umbrella_id is not null
         and pbt.candidate_id is not null
     ),
@@ -6910,11 +7017,18 @@ begin
               'total_ex_vat', r.total_ex_vat,
               'total_vat', r.total_vat,
               'total_inc_vat', r.total_inc_vat,
-              'line_kind', r.line_kind
+              'line_kind', case
+                    when upper(coalesce(r.line_kind,'')) = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when upper(coalesce(r.line_kind,'')) = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when upper(coalesce(r.line_kind,'')) = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when upper(coalesce(r.line_kind,'')) = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    else r.line_kind
+                  end
             )
             order by coalesce(r.unit_name,'') asc
           )
-          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','DEBT_CREATED')),
+          filter (where upper(coalesce(r.line_kind,'')) in ('ADJUSTMENT','CONVERSION_ADJ','LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','DEBT_CREATED')),
           '[]'::jsonb
         ) as other_rows,
         round(coalesce(sum(r.total_ex_vat),0),2) as totals_ex_vat,
@@ -7148,7 +7262,9 @@ begin
           'job_kind', 'CANDIDATE_UMBRELLA_COPY_REMITTANCE',
           'pay_batch_id', v_batch.id::text,
           'scope', 'UMBRELLA',
-          'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+          'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+          'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+          'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
           'bulk_reference', v_batch.bulk_reference,
           'test_mode', coalesce(cj.test_mode,false),
           'detailed_breakdown', coalesce(cj.eff_detailed,false),
@@ -7169,12 +7285,12 @@ begin
             select jsonb_build_object(
               'gross_preview', round(coalesce(pbc_tot.gross_preview,0),2),
               'overpayment_recovery_taken', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
-              'loan_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+              'payment_advance_repayment_taken', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
               'final_paid', round(coalesce(pbc_tot.net_bank_amount,0),2),
               'deductions_summary', jsonb_build_object(
                 'gross_positive', round(coalesce(pbc_tot.gross_preview,0),2),
                 'overpayment_recovery', round(coalesce(pbc_tot.overpayment_recovery_taken,0),2),
-                'loan_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
+                'payment_advance_repayment', round(coalesce(pbc_tot.loan_repayment_taken,0),2),
                 'total_deductions', round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2),
                 'final_payable', round(coalesce(pbc_tot.net_bank_amount,0),2),
                 'has_deductions', (round(coalesce(pbc_tot.overpayment_recovery_taken,0) + coalesce(pbc_tot.loan_repayment_taken,0),2) > 0)
@@ -7189,18 +7305,31 @@ begin
             select coalesce(
               jsonb_agg(
                 jsonb_build_object(
-                  'item_type', pbi_nt.item_type,
+                  'item_type', case
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+                    else pbi_nt.item_type
+                  end,
+                  'internal_item_type', pbi_nt.item_type,
                   'description', pbi_nt.description,
                   'line_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
-                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'PAYMENT_ADVANCE'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_ADJUSTMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
                     else pbib_nt.line_kind
                   end,
                   'line_label', case
-                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
-                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment Recovery'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'Payment Advance Repayment'
+                    when pbi_nt.item_type = 'LOAN_PAYOUT' then 'Payment Advance'
+                    when pbi_nt.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual Credit Adjustment'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual Debt Adjustment Recovery'
+                    when nullif(btrim(coalesce(pa_fc.adjustment_comment,'')), '') is not null then pa_fc.adjustment_comment
                     when nullif(btrim(coalesce(pbib_nt.unit_name,'')), '') is not null then pbib_nt.unit_name
                     when nullif(btrim(coalesce(pbi_nt.description,'')), '') is not null then pbi_nt.description
                     else pbib_nt.line_kind
@@ -7214,22 +7343,45 @@ begin
                   'total_inc_vat', pbib_nt.amount_inc_vat,
                   'signed_amount_ex_vat', pbib_nt.amount_ex_vat,
                   'signed_amount_inc_vat', pbib_nt.amount_inc_vat,
-                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY')),
+                  'is_deduction', (pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')),
                   'deduction_kind', case
                     when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+                    when pbi_nt.item_type = 'LOAN_REPAYMENT' then 'PAYMENT_ADVANCE_REPAYMENT'
+                    when pbi_nt.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_ADJUSTMENT_RECOVERY'
                     else null
                   end,
                   'deduction_amount_ex_vat', case
-                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2)
                     else null
                   end,
                   'deduction_amount_inc_vat', case
-                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
+                    when pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(pbib_nt.amount_inc_vat,0)),2)
                     else null
                   end,
                   'source_ref', pbi_nt.source_ref,
-                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end
+                  'finance_case_id', case when coalesce(pbi_nt.finance_case_id, pa_fc.id) is null then null else coalesce(pbi_nt.finance_case_id, pa_fc.id)::text end,
+                  'finance_case_type', case when pa_fc.case_type is null then null else pa_fc.case_type::text end,
+                  'adjustment_comment', pa_fc.adjustment_comment,
+                  'lifecycle_state', case when pa_fc.status is null then null else pa_fc.status::text end,
+                  'payout_status', case when pa_fc.payout_status is null then null else pa_fc.payout_status::text end,
+                  'remaining_amount', round(coalesce(pa_fc.outstanding_amount,0),2),
+                  'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+                  'repayment_week_start', case when pbi_nt.repayment_week_start is null then null else pbi_nt.repayment_week_start::text end,
+                  'overpayment_context', case
+                    when pbi_nt.item_type = 'OVERPAYMENT_RECOVERY'
+                     and pa_fc.id is not null
+                     and upper(coalesce(pa_fc.case_type::text,'')) = 'OVERPAYMENT'
+                     and upper(coalesce(pa_fc.status::text,'')) = 'ACTIVE'
+                    then jsonb_build_object(
+                      'source_timesheet_id', case when pa_fc.linked_timesheet_id is null then null else pa_fc.linked_timesheet_id::text end,
+                      'shift_date', case when pa_fc.linked_shift_date is null then null else pa_fc.linked_shift_date::text end,
+                      'original_paid_amount', round(coalesce(pa_fc.source_original_paid_amount, pa_fc.original_amount, 0),2),
+                      'corrected_paid_amount', round(coalesce(pa_fc.source_corrected_paid_amount, greatest(coalesce(pa_fc.original_amount,0) - coalesce(pa_fc.outstanding_amount,0),0), 0),2),
+                      'recovery_this_payment', round(abs(coalesce(pbib_nt.amount_ex_vat,0)),2),
+                      'remaining_balance', round(coalesce(pa_fc.outstanding_amount,0),2)
+                    )
+                    else null
+                  end
                 )
                 order by
                   case
@@ -7249,11 +7401,20 @@ begin
               on pbi_nt.pay_batch_candidate_id = pbc_nt.id
             join public.pay_batch_item_breakdowns pbib_nt
               on pbib_nt.pay_batch_item_id = pbi_nt.id
+            left join public.pay_advances pa_fc
+              on (
+                (pbi_nt.finance_case_id is not null and pa_fc.id = pbi_nt.finance_case_id)
+                or (
+                  pbi_nt.finance_case_id is null
+                  and pbi_nt.source_ref is not null
+                  and pbi_nt.source_ref = ('advance:' || pa_fc.id::text)
+                )
+              )
             where pbc_nt.pay_batch_id = p_pay_batch_id
               and pbc_nt.candidate_id = cj.candidate_id
               and pbi_nt.is_voided = false
               and pbi_nt.timesheet_id is null
-              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT')
+              and pbi_nt.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY')
           ), '[]'::jsonb)
         )
         order by cj.display_name nulls last, cj.tms_ref nulls last, cj.candidate_id
@@ -7268,7 +7429,9 @@ begin
     'ok', true,
     'pay_batch_id', v_batch.id::text,
     'scope', v_scope,
-    'pay_date', case when v_batch.pay_date is null then null else v_batch.pay_date::text end,
+    'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
+          'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+          'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
     'bulk_reference', v_batch.bulk_reference,
     'remittance_header_message', v_remittance_header_message,
     'remittance_footer_message', v_remittance_footer_message,
@@ -7276,8 +7439,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
@@ -12496,14 +12657,15 @@ declare
   v_week_start date := public._pay_week_start_monday(v_today_uk);
   v_week_end date := (public._pay_week_start_monday(v_today_uk) + 6);
 
-  v_cand record;
-
+  v_candidate record;
   v_paid_wtd numeric := 0;
-  v_loan_repaid_wtd numeric := 0;
-  v_overpay_recovered_wtd numeric := 0;
-
-  v_loans jsonb := '[]'::jsonb;
+  v_rows jsonb := '[]'::jsonb;
+  v_payment_advances jsonb := '[]'::jsonb;
   v_overpayments jsonb := '[]'::jsonb;
+  v_manual_debt_adjustments jsonb := '[]'::jsonb;
+  v_manual_credit_adjustments jsonb := '[]'::jsonb;
+  v_snoozed_deferred_items jsonb := '[]'::jsonb;
+  v_summary jsonb := '{}'::jsonb;
 begin
   if p_candidate_id is null then
     raise exception '%', jsonb_build_object(
@@ -12520,12 +12682,12 @@ begin
     c.first_name,
     c.last_name,
     c.active
-  into v_cand
+  into v_candidate
   from public.candidates c
   where c.id = p_candidate_id
   limit 1;
 
-  if v_cand.id is null then
+  if v_candidate.id is null then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_CANDIDATE_ADVANCES_REPORT',
       'code', 'CANDIDATE_NOT_FOUND',
@@ -12535,169 +12697,345 @@ begin
   end if;
 
   select
-    coalesce(wt.paid_wtd, 0),
-    coalesce(wt.loan_repaid_wtd, 0),
-    coalesce(wt.overpay_recovered_wtd, 0)
+    round(
+      coalesce(
+        sum(
+          case
+            when pbc.net_bank_amount is not null then pbc.net_bank_amount
+            when pbc.gross_preview is not null then pbc.gross_preview
+            else 0
+          end
+        ),
+        0
+      ),
+      2
+    )
+  into v_paid_wtd
+  from public.pay_batch_candidates pbc
+  join public.pay_batches pb
+    on pb.id = pbc.pay_batch_id
+  where pbc.candidate_id = p_candidate_id
+    and pb.pay_date >= v_week_start
+    and pb.pay_date <= v_week_end
+    and upper(coalesce(pb.status::text, '')) <> 'CANCELLED';
+
+  with finance_rows as (
+    select
+      case
+        when vfc.active_snooze_id is not null then 'SNOOZED_DEFERRED'
+        else vfc.case_type::text
+      end as row_group,
+      'FINANCE_CASE'::text as row_kind,
+      vfc.finance_case_id,
+      vfc.case_type::text as case_type,
+      vfc.candidate_id,
+      vfc.candidate_tms_ref,
+      vfc.candidate_display_name,
+      vfc.client_id,
+      vfc.client_name,
+      vfc.linked_timesheet_id,
+      vfc.linked_shift_date,
+      vfc.created_at,
+      vfc.start_week_start,
+      vfc.next_due_week_start,
+      round(coalesce(vfc.original_amount, 0), 2)::numeric(12,2) as original_amount,
+      round(
+        case
+          when vfc.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then 0
+          else greatest(coalesce(vfc.original_amount, 0) - coalesce(vfc.outstanding_amount, 0), 0)
+        end,
+        2
+      )::numeric(12,2) as recovered_total,
+      round(coalesce(vfc.outstanding_amount, 0), 2)::numeric(12,2) as remaining_outstanding,
+      round(
+        case
+          when vfc.case_type in ('PAYMENT_ADVANCE', 'MANUAL_DEBT_ADJUSTMENT')
+           and vfc.next_due_week_start is not null
+           and vfc.next_due_week_start <= v_week_start
+           and coalesce(vfc.written_off_at_utc, null) is null
+           and coalesce(vfc.cleared_at_utc, null) is null
+           and upper(coalesce(vfc.status, '')) not in ('PAID_OFF', 'CLEARED')
+          then least(coalesce(vfc.weekly_due, 0), coalesce(vfc.outstanding_amount, 0))
+          else 0
+        end,
+        2
+      )::numeric(12,2) as due_this_week,
+      vfc.status,
+      vfc.payout_status,
+      vfc.reason,
+      vfc.notes,
+      vfc.adjustment_comment,
+      vfc.source_original_paid_amount,
+      vfc.source_corrected_paid_amount,
+      vfc.minimum_earnings_threshold,
+      vfc.take_home_floor_override,
+      vfc.active_snooze_id,
+      vfc.active_snooze_kind,
+      vfc.active_snooze_until_date,
+      vfc.active_snooze_note,
+      case
+        when vfc.active_snooze_id is null then 'NONE'
+        when vfc.active_snooze_until_date is null then 'INDEFINITE_SNOOZE'
+        else 'DATED_SNOOZE'
+      end as snooze_status,
+      case
+        when vfc.written_off_at_utc is not null then 'WRITTEN_OFF'
+        when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'CLEARED'
+        when coalesce(vfc.active_reserved_amount, 0) > 0 then 'RESERVED'
+        when coalesce(vfc.committed_amount, 0) > 0 then 'COMMITTED'
+        when coalesce(vfc.settled_amount, 0) > 0 then 'SETTLED'
+        when vfc.active_snooze_id is not null then 'SNOOZED'
+        else upper(coalesce(vfc.status, 'ACTIVE'))
+      end as lifecycle_state,
+      case
+        when vfc.case_type in ('PAYMENT_ADVANCE', 'MANUAL_CREDIT_ADJUSTMENT') then coalesce(pbp.authoritative_payment_date, pbp.pay_date)
+        else coalesce(pbr.authoritative_payment_date, pbr.pay_date)
+      end as authoritative_payment_date,
+      case
+        when vfc.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then coalesce(vfc.payout_status, 'NOT_PAID')
+        when vfc.case_type = 'PAYMENT_ADVANCE' then
+          case
+            when coalesce(vfc.payout_status, '') = 'PAID' and coalesce(vfc.outstanding_amount, 0) > 0 then 'RECOVERY_ACTIVE'
+            when coalesce(vfc.payout_status, '') = 'PAID' and coalesce(vfc.outstanding_amount, 0) <= 0 then 'RECOVERY_CLEARED'
+            else coalesce(vfc.payout_status, 'NOT_PAID')
+          end
+        when vfc.case_type in ('OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT') then
+          case
+            when vfc.written_off_at_utc is not null then 'WRITTEN_OFF'
+            when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'RECOVERY_CLEARED'
+            when coalesce(vfc.active_reserved_amount, 0) > 0 then 'RECOVERY_RESERVED'
+            when coalesce(vfc.committed_amount, 0) > 0 then 'RECOVERY_COMMITTED'
+            when coalesce(vfc.settled_amount, 0) > 0 then 'RECOVERY_SETTLED'
+            else 'RECOVERY_ACTIVE'
+          end
+        else coalesce(vfc.status, 'ACTIVE')
+      end as payout_or_recovery_status
+    from public.v_finance_cases_register vfc
+    left join public.pay_batches pbp
+      on pbp.id = vfc.payout_pay_batch_id
+    left join public.pay_batches pbr
+      on pbr.id = vfc.latest_recovery_pay_batch_id
+    where vfc.candidate_id = p_candidate_id
+  ),
+  snoozed_timesheet_rows as (
+    select
+      'SNOOZED_DEFERRED'::text as row_group,
+      'TIMESHEET_SNOOZE'::text as row_kind,
+      null::uuid as finance_case_id,
+      null::text as case_type,
+      c.id as candidate_id,
+      c.tms_ref as candidate_tms_ref,
+      c.display_name as candidate_display_name,
+      cli.id as client_id,
+      cli.name as client_name,
+      s.timesheet_id as linked_timesheet_id,
+      null::date as linked_shift_date,
+      s.created_at_utc as created_at,
+      null::date as start_week_start,
+      null::date as next_due_week_start,
+      0::numeric(12,2) as original_amount,
+      0::numeric(12,2) as recovered_total,
+      0::numeric(12,2) as remaining_outstanding,
+      0::numeric(12,2) as due_this_week,
+      null::text as status,
+      null::text as payout_status,
+      null::text as reason,
+      null::text as notes,
+      null::text as adjustment_comment,
+      null::numeric as source_original_paid_amount,
+      null::numeric as source_corrected_paid_amount,
+      null::numeric as minimum_earnings_threshold,
+      null::numeric as take_home_floor_override,
+      s.id as active_snooze_id,
+      upper(coalesce(s.snooze_kind, '')) as active_snooze_kind,
+      s.snooze_until_date as active_snooze_until_date,
+      s.note as active_snooze_note,
+      case
+        when s.snooze_until_date is null then 'INDEFINITE_SNOOZE'
+        else 'DATED_SNOOZE'
+      end as snooze_status,
+      'SNOOZED'::text as lifecycle_state,
+      null::date as authoritative_payment_date,
+      'DEFERRED'::text as payout_or_recovery_status
+    from public.pay_item_snoozes s
+    join public.timesheets ts
+      on ts.timesheet_id = s.timesheet_id
+    join public.candidates c
+      on c.id = s.candidate_id
+    left join public.contracts ct
+      on ct.id = ts.contract_id
+    left join public.clients cli
+      on cli.id = ct.client_id
+    where s.cleared_at_utc is null
+      and s.candidate_id = p_candidate_id
+      and s.timesheet_id is not null
+      and s.source_ref is null
+      and (
+        upper(coalesce(s.snooze_kind, '')) in ('TIMESHEET_PAYMENT', 'BLOCKED_TIMESHEET', 'DO_NOT_PAY')
+        or upper(coalesce(s.snooze_kind, '')) like 'TIMESHEET%'
+      )
+  ),
+  all_rows as (
+    select * from finance_rows
+    union all
+    select * from snoozed_timesheet_rows
+  ),
+  wtd_recovery_by_case_type as (
+    with settled_items as (
+      select
+        coalesce(pbi.finance_case_id, replace(pbi.source_ref, 'advance:', '')::uuid) as finance_case_id,
+        pbi.item_type,
+        round(sum(abs(coalesce(pbi.amount_ex_vat, 0))), 2)::numeric(12,2) as recovered_wtd
+      from public.pay_batch_candidates pbc
+      join public.pay_batches pb
+        on pb.id = pbc.pay_batch_id
+      join public.pay_batch_items pbi
+        on pbi.pay_batch_candidate_id = pbc.id
+      where pbc.candidate_id = p_candidate_id
+        and pb.pay_date >= v_week_start
+        and pb.pay_date <= v_week_end
+        and upper(coalesce(pb.status::text, '')) <> 'CANCELLED'
+        and pbc.settled_at_utc is not null
+        and upper(coalesce(pbc.settlement_status, '')) = 'SETTLED'
+        and coalesce(pbi.is_voided, false) = false
+        and (
+          pbi.finance_case_id is not null
+          or pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+        )
+      group by coalesce(pbi.finance_case_id, replace(pbi.source_ref, 'advance:', '')::uuid), pbi.item_type
+    )
+    select
+      ar.finance_case_id,
+      round(coalesce(sum(si.recovered_wtd), 0), 2)::numeric(12,2) as recovered_wtd
+    from all_rows ar
+    left join settled_items si
+      on si.finance_case_id = ar.finance_case_id
+    where ar.finance_case_id is not null
+    group by ar.finance_case_id
+  )
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'row_group', ar.row_group,
+          'row_kind', ar.row_kind,
+          'finance_case_id', case when ar.finance_case_id is null then null else ar.finance_case_id::text end,
+          'case_type', ar.case_type,
+          'candidate_id', ar.candidate_id::text,
+          'candidate_tms_ref', ar.candidate_tms_ref,
+          'candidate_display_name', ar.candidate_display_name,
+          'client_id', case when ar.client_id is null then null else ar.client_id::text end,
+          'client_name', ar.client_name,
+          'linked_timesheet_id', case when ar.linked_timesheet_id is null then null else ar.linked_timesheet_id::text end,
+          'created_at', case when ar.created_at is null then null else ar.created_at::text end,
+          'start_week_start', case when ar.start_week_start is null then null else ar.start_week_start::text end,
+          'next_due_week_start', case when ar.next_due_week_start is null then null else ar.next_due_week_start::text end,
+          'original_amount', ar.original_amount,
+          'recovered_total', ar.recovered_total,
+          'recovered_wtd', coalesce(wr.recovered_wtd, 0),
+          'remaining_outstanding', ar.remaining_outstanding,
+          'due_this_week', ar.due_this_week,
+          'status', ar.status,
+          'payout_status', ar.payout_status,
+          'reason', ar.reason,
+          'notes', ar.notes,
+          'adjustment_comment', ar.adjustment_comment,
+          'source_original_paid_amount', ar.source_original_paid_amount,
+          'source_corrected_paid_amount', ar.source_corrected_paid_amount,
+          'minimum_earnings_threshold', ar.minimum_earnings_threshold,
+          'take_home_floor_override', ar.take_home_floor_override,
+          'active_snooze_id', case when ar.active_snooze_id is null then null else ar.active_snooze_id::text end,
+          'active_snooze_kind', ar.active_snooze_kind,
+          'active_snooze_until_date', case when ar.active_snooze_until_date is null then null else ar.active_snooze_until_date::text end,
+          'active_snooze_note', ar.active_snooze_note,
+          'snooze_status', ar.snooze_status,
+          'lifecycle_state', ar.lifecycle_state,
+          'authoritative_payment_date', case when ar.authoritative_payment_date is null then null else ar.authoritative_payment_date::text end,
+          'payout_or_recovery_status', ar.payout_or_recovery_status
+        )
+        order by ar.created_at desc nulls last, ar.finance_case_id asc nulls last, ar.linked_timesheet_id asc nulls last
+      ),
+      '[]'::jsonb
+    ),
+    jsonb_build_object(
+      'paid_wtd', round(coalesce(v_paid_wtd, 0), 2)::numeric(12,2),
+      'counts_by_group', jsonb_build_object(
+        'PAYMENT_ADVANCE', count(*) filter (where ar.row_group = 'PAYMENT_ADVANCE'),
+        'OVERPAYMENT', count(*) filter (where ar.row_group = 'OVERPAYMENT'),
+        'MANUAL_DEBT_ADJUSTMENT', count(*) filter (where ar.row_group = 'MANUAL_DEBT_ADJUSTMENT'),
+        'MANUAL_CREDIT_ADJUSTMENT', count(*) filter (where ar.row_group = 'MANUAL_CREDIT_ADJUSTMENT'),
+        'SNOOZED_DEFERRED', count(*) filter (where ar.row_group = 'SNOOZED_DEFERRED')
+      ),
+      'totals_by_group', jsonb_build_object(
+        'PAYMENT_ADVANCE', round(coalesce(sum(case when ar.row_group = 'PAYMENT_ADVANCE' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+        'OVERPAYMENT', round(coalesce(sum(case when ar.row_group = 'OVERPAYMENT' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+        'MANUAL_DEBT_ADJUSTMENT', round(coalesce(sum(case when ar.row_group = 'MANUAL_DEBT_ADJUSTMENT' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+        'MANUAL_CREDIT_ADJUSTMENT', round(coalesce(sum(case when ar.row_group = 'MANUAL_CREDIT_ADJUSTMENT' then ar.original_amount else 0 end), 0), 2)::numeric(12,2),
+        'SNOOZED_DEFERRED', round(coalesce(sum(case when ar.row_group = 'SNOOZED_DEFERRED' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2)
+      ),
+      'recovered_wtd_by_group', jsonb_build_object(
+        'PAYMENT_ADVANCE', round(coalesce(sum(case when ar.row_group = 'PAYMENT_ADVANCE' then coalesce(wr.recovered_wtd, 0) else 0 end), 0), 2)::numeric(12,2),
+        'OVERPAYMENT', round(coalesce(sum(case when ar.row_group = 'OVERPAYMENT' then coalesce(wr.recovered_wtd, 0) else 0 end), 0), 2)::numeric(12,2),
+        'MANUAL_DEBT_ADJUSTMENT', round(coalesce(sum(case when ar.row_group = 'MANUAL_DEBT_ADJUSTMENT' then coalesce(wr.recovered_wtd, 0) else 0 end), 0), 2)::numeric(12,2),
+        'MANUAL_CREDIT_ADJUSTMENT', 0::numeric(12,2),
+        'SNOOZED_DEFERRED', 0::numeric(12,2)
+      )
+    )
   into
-    v_paid_wtd,
-    v_loan_repaid_wtd,
-    v_overpay_recovered_wtd
-  from public._pay_candidate_week_totals(array[p_candidate_id], v_week_start) wt
-  where wt.candidate_id = p_candidate_id
-  limit 1;
+    v_rows,
+    v_summary
+  from all_rows ar
+  left join wtd_recovery_by_case_type wr
+    on wr.finance_case_id = ar.finance_case_id;
 
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'advance_id', pa.id::text,
-          'advance_kind', pa.advance_kind::text,
-          'reason', pa.reason::text,
-          'principal', round(coalesce(pa.original_amount,0),2)::numeric(12,2),
-          'weekly_due', case when pa.weekly_due is null then null else round(pa.weekly_due,2)::numeric(12,2) end,
-          'weeks_total', pa.weeks_total,
-          'start_week_start', case when pa.start_week_start is null then null else pa.start_week_start::text end,
-          'payout_status', case when pa.payout_status is null then null else pa.payout_status::text end,
-          'payout_pay_batch_id', case when pa.payout_pay_batch_id is null then null else pa.payout_pay_batch_id::text end,
-          'payout_transfer_id', case when pa.payout_transfer_id is null then null else pa.payout_transfer_id::text end,
-          'repaid_wtd', round(coalesce(lrw.repaid_wtd,0),2)::numeric(12,2),
-          'remaining', round(coalesce(pa.outstanding_amount,0),2)::numeric(12,2),
-          'due_this_week', case
-            when pa.payout_status is distinct from 'PAID'::public.pay_advance_payout_status_enum then 0::numeric(12,2)
-            when pa.weekly_due is null or pa.weekly_due <= 0 then 0::numeric(12,2)
-            when pa.start_week_start is not null and pa.start_week_start > v_week_start then 0::numeric(12,2)
-            else round(
-              greatest(
-                least(round(pa.weekly_due,2), round(pa.outstanding_amount,2)) - coalesce(lrw.repaid_wtd,0),
-                0
-              ),
-              2
-            )::numeric(12,2)
-          end,
-          'created_at', pa.created_at,
-          'notes', pa.notes
-        )
-        order by pa.created_at asc, pa.id asc
-      ),
-      '[]'::jsonb
-    )
-  into v_loans
-  from public.pay_advances pa
-  left join (
-    with
-    eligible_batches as (
-      select
-        pb.id as pay_batch_id
-      from public.pay_batches pb
-      where pb.pay_date >= v_week_start
-        and pb.pay_date <= v_week_end
-        and pb.cancelled_at_utc is null
-        and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
-    )
-    select
-      replace(pbi.source_ref, 'advance:', '')::uuid as loan_id,
-      round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))), 2)::numeric(12,2) as repaid_wtd
-    from public.pay_batch_candidates pbc
-    join eligible_batches eb
-      on eb.pay_batch_id = pbc.pay_batch_id
-    join public.pay_batch_items pbi
-      on pbi.pay_batch_candidate_id = pbc.id
-    where pbc.candidate_id = p_candidate_id
-      and pbc.settled_at_utc is not null
-      and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
-      and pbi.is_voided = false
-      and pbi.item_type = 'LOAN_REPAYMENT'
-      and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
-    group by replace(pbi.source_ref, 'advance:', '')::uuid
-  ) lrw
-    on lrw.loan_id = pa.id
-  where pa.candidate_id = p_candidate_id
-    and pa.advance_kind = 'LOAN'::public.pay_advance_kind_enum
-    and pa.status = 'ACTIVE'::public.pay_advance_status_enum
-    and pa.outstanding_amount > 0;
+  select coalesce(
+    (select jsonb_agg(x.elem) from jsonb_array_elements(v_rows) as x(elem) where x.elem->>'row_group' = 'PAYMENT_ADVANCE'),
+    '[]'::jsonb
+  ) into v_payment_advances;
 
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'advance_id', pa2.id::text,
-          'advance_kind', pa2.advance_kind::text,
-          'reason', pa2.reason::text,
-          'source_timesheet_id', case when pa2.linked_timesheet_id is null then null else pa2.linked_timesheet_id::text end,
-          'source_booking_id', ts.booking_id,
-          'source_week_ending_date', case when ts.week_ending_date is null then null else ts.week_ending_date::text end,
-          'source_shift_label_norm', ts.shift_label_norm,
-          'owed', round(coalesce(pa2.original_amount,0),2)::numeric(12,2),
-          'recovered_total', round(greatest(coalesce(pa2.original_amount,0) - coalesce(pa2.outstanding_amount,0), 0),2)::numeric(12,2),
-          'recovered_wtd', round(coalesce(orw.recovered_wtd,0),2)::numeric(12,2),
-          'remaining', round(coalesce(pa2.outstanding_amount,0),2)::numeric(12,2),
-          'baseline_signature', pa2.baseline_signature,
-          'created_at', pa2.created_at,
-          'notes', pa2.notes
-        )
-        order by pa2.created_at asc, pa2.id asc
-      ),
-      '[]'::jsonb
-    )
-  into v_overpayments
-  from public.pay_advances pa2
-  left join (
-    with
-    eligible_batches as (
-      select
-        pb.id as pay_batch_id
-      from public.pay_batches pb
-      where pb.pay_date >= v_week_start
-        and pb.pay_date <= v_week_end
-        and pb.cancelled_at_utc is null
-        and upper(coalesce(pb.batch_kind_fixed,'')) <> 'LOANS'
-    )
-    select
-      replace(pbi.source_ref, 'advance:', '')::uuid as overpay_id,
-      round(sum(abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, 0))), 2)::numeric(12,2) as recovered_wtd
-    from public.pay_batch_candidates pbc
-    join eligible_batches eb
-      on eb.pay_batch_id = pbc.pay_batch_id
-    join public.pay_batch_items pbi
-      on pbi.pay_batch_candidate_id = pbc.id
-    where pbc.candidate_id = p_candidate_id
-      and pbc.settled_at_utc is not null
-      and upper(coalesce(pbc.settlement_status,'')) = 'SETTLED'
-      and pbi.is_voided = false
-      and pbi.item_type = 'OVERPAYMENT_RECOVERY'
-      and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
-    group by replace(pbi.source_ref, 'advance:', '')::uuid
-  ) orw
-    on orw.overpay_id = pa2.id
-  left join public.timesheets ts
-    on ts.timesheet_id = pa2.linked_timesheet_id
-  where pa2.candidate_id = p_candidate_id
-    and pa2.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
-    and pa2.status = 'ACTIVE'::public.pay_advance_status_enum
-    and pa2.outstanding_amount > 0;
+  select coalesce(
+    (select jsonb_agg(x.elem) from jsonb_array_elements(v_rows) as x(elem) where x.elem->>'row_group' = 'OVERPAYMENT'),
+    '[]'::jsonb
+  ) into v_overpayments;
+
+  select coalesce(
+    (select jsonb_agg(x.elem) from jsonb_array_elements(v_rows) as x(elem) where x.elem->>'row_group' = 'MANUAL_DEBT_ADJUSTMENT'),
+    '[]'::jsonb
+  ) into v_manual_debt_adjustments;
+
+  select coalesce(
+    (select jsonb_agg(x.elem) from jsonb_array_elements(v_rows) as x(elem) where x.elem->>'row_group' = 'MANUAL_CREDIT_ADJUSTMENT'),
+    '[]'::jsonb
+  ) into v_manual_credit_adjustments;
+
+  select coalesce(
+    (select jsonb_agg(x.elem) from jsonb_array_elements(v_rows) as x(elem) where x.elem->>'row_group' = 'SNOOZED_DEFERRED'),
+    '[]'::jsonb
+  ) into v_snoozed_deferred_items;
 
   return jsonb_build_object(
     'ok', true,
     'candidate', jsonb_build_object(
-      'id', v_cand.id::text,
-      'tms_ref', v_cand.tms_ref,
-      'display_name', v_cand.display_name,
-      'first_name', v_cand.first_name,
-      'last_name', v_cand.last_name,
-      'active', v_cand.active
+      'id', v_candidate.id::text,
+      'tms_ref', v_candidate.tms_ref,
+      'display_name', v_candidate.display_name,
+      'first_name', v_candidate.first_name,
+      'last_name', v_candidate.last_name,
+      'active', v_candidate.active
     ),
     'week_start', v_week_start::text,
     'week_end', v_week_end::text,
-    'summary', jsonb_build_object(
-      'paid_wtd', round(coalesce(v_paid_wtd,0),2)::numeric(12,2),
-      'loan_repaid_wtd', round(coalesce(v_loan_repaid_wtd,0),2)::numeric(12,2),
-      'overpay_recovered_wtd', round(coalesce(v_overpay_recovered_wtd,0),2)::numeric(12,2)
-    ),
-    'loans', coalesce(v_loans,'[]'::jsonb),
-    'overpayments', coalesce(v_overpayments,'[]'::jsonb)
+    'summary', coalesce(v_summary, '{}'::jsonb),
+    'payment_advances', coalesce(v_payment_advances, '[]'::jsonb),
+    'overpayments', coalesce(v_overpayments, '[]'::jsonb),
+    'manual_debt_adjustments', coalesce(v_manual_debt_adjustments, '[]'::jsonb),
+    'manual_credit_adjustments', coalesce(v_manual_credit_adjustments, '[]'::jsonb),
+    'snoozed_deferred_items', coalesce(v_snoozed_deferred_items, '[]'::jsonb),
+    'rows', coalesce(v_rows, '[]'::jsonb)
   );
 end;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_advances_register(
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -12740,6 +13078,7 @@ declare
   v_total_count integer := 0;
   v_summary jsonb := '{}'::jsonb;
   v_rows jsonb := '[]'::jsonb;
+  v_type_filter text := null;
 begin
   if v_sort_dir not in ('ASC', 'DESC') then
     v_sort_dir := 'DESC';
@@ -12752,599 +13091,461 @@ begin
     'status',
     'created_at',
     'original_amount',
-    'recovered_wtd',
+    'recovered_total',
     'remaining_outstanding',
     'due_this_week',
     'start_week_start',
-    'next_due_week_start'
+    'next_due_week_start',
+    'authoritative_payment_date'
   ) then
     v_sort_key := 'created_at';
   end if;
 
-  create temporary table if not exists pg_temp.tmp_pay_advances_patch_stats (
-    advance_id uuid primary key,
-    recovered_wtd numeric(12,2) not null,
-    latest_recovery_pay_batch_id uuid null
-  ) on commit drop;
-
-  create temporary table if not exists pg_temp.tmp_pay_advances_sched_due (
-    advance_id uuid primary key,
-    due_this_week numeric(12,2) not null
-  ) on commit drop;
-
-  create temporary table if not exists pg_temp.tmp_pay_advances_register (
-    record_type text not null,
-    record_subtype text null,
-    advance_id uuid not null,
-    candidate_id uuid not null,
-    candidate_tms_ref text null,
-    candidate_display_name text null,
-    candidate_first_name text null,
-    candidate_last_name text null,
-    client_id uuid null,
-    client_name text null,
-    linked_timesheet_id uuid null,
-    linked_shift_date date null,
-    payout_pay_batch_id uuid null,
-    payout_transfer_id uuid null,
-    latest_recovery_pay_batch_id uuid null,
-    created_at timestamptz null,
-    start_week_start date null,
-    next_due_week_start date null,
-    original_amount numeric(12,2) not null,
-    recovered_total numeric(12,2) not null,
-    recovered_wtd numeric(12,2) not null,
-    remaining_outstanding numeric(12,2) not null,
-    due_this_week numeric(12,2) null,
-    status text null,
-    payout_status text null,
-    baseline_signature text null,
-    reason text null,
-    notes text null,
-    source_booking_id text null,
-    source_week_ending_date date null,
-    source_shift_label_norm text null
-  ) on commit drop;
-
-  truncate table pg_temp.tmp_pay_advances_patch_stats;
-  truncate table pg_temp.tmp_pay_advances_sched_due;
-  truncate table pg_temp.tmp_pay_advances_register;
-
-  insert into pg_temp.tmp_pay_advances_patch_stats (
-    advance_id,
-    recovered_wtd,
-    latest_recovery_pay_batch_id
-  )
-  with patch_rows as (
-    select
-      pap.advance_id,
-      round(
-        greatest(
-          coalesce(pap.old_outstanding_amount, 0) - coalesce(pap.new_outstanding_amount, 0),
-          0
-        ),
-        2
-      )::numeric(12,2) as recovered_amt,
-      pap.pay_batch_id,
-      pb.pay_date,
-      row_number() over (
-        partition by pap.advance_id
-        order by pb.pay_date desc nulls last, pap.id desc
-      ) as rn
-    from public.pay_advance_patches pap
-    left join public.pay_batches pb
-      on pb.id = pap.pay_batch_id
-    where pap.advance_id is not null
-      and (pb.id is null or pb.cancelled_at_utc is null)
-  )
-  select
-    pr.advance_id,
-    round(
-      coalesce(
-        sum(
-          case
-            when pr.pay_date is not null
-             and pr.pay_date >= v_week_start
-             and pr.pay_date <= v_week_end
-              then pr.recovered_amt
-            else 0
-          end
-        ),
-        0
-      ),
-      2
-    )::numeric(12,2) as recovered_wtd,
-    max(case when pr.rn = 1 then pr.pay_batch_id::text else null end)::uuid as latest_recovery_pay_batch_id
-  from patch_rows pr
-  group by pr.advance_id;
-
-  insert into pg_temp.tmp_pay_advances_sched_due (
-    advance_id,
-    due_this_week
-  )
-  select
-    pa.id as advance_id,
-    round(
-      least(
-        coalesce(pa.outstanding_amount, 0),
-        coalesce(
-          abs(
-            sum(
-              case
-                when nullif(btrim(coalesce(sj.elem->>'week_start', '')), '') = v_week_start::text
-                 and coalesce(nullif(sj.elem->>'amount', '')::numeric, 0) < 0
-                  then coalesce(nullif(sj.elem->>'amount', '')::numeric, 0)
-                else 0
-              end
-            )
-          ),
-          0
-        )
-      ),
-      2
-    )::numeric(12,2) as due_this_week
-  from public.pay_advances pa
-  left join lateral jsonb_array_elements(coalesce(pa.schedule_json, '[]'::jsonb)) as sj(elem)
-    on true
-  group by
-    pa.id,
-    pa.outstanding_amount;
-
-  insert into pg_temp.tmp_pay_advances_register (
-    record_type,
-    record_subtype,
-    advance_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    candidate_first_name,
-    candidate_last_name,
-    client_id,
-    client_name,
-    linked_timesheet_id,
-    linked_shift_date,
-    payout_pay_batch_id,
-    payout_transfer_id,
-    latest_recovery_pay_batch_id,
-    created_at,
-    start_week_start,
-    next_due_week_start,
-    original_amount,
-    recovered_total,
-    recovered_wtd,
-    remaining_outstanding,
-    due_this_week,
-    status,
-    payout_status,
-    baseline_signature,
-    reason,
-    notes,
-    source_booking_id,
-    source_week_ending_date,
-    source_shift_label_norm
-  )
-  select
-    'OVERPAYMENT'::text as record_type,
-    pa.reason::text as record_subtype,
-    pa.id as advance_id,
-    pa.candidate_id,
-    c.tms_ref as candidate_tms_ref,
-    c.display_name as candidate_display_name,
-    c.first_name as candidate_first_name,
-    c.last_name as candidate_last_name,
-    cli.id as client_id,
-    cli.name as client_name,
-    pa.linked_timesheet_id,
-    null::date as linked_shift_date,
-    null::uuid as payout_pay_batch_id,
-    null::uuid as payout_transfer_id,
-    paps.latest_recovery_pay_batch_id,
-    pa.created_at,
-    null::date as start_week_start,
-    null::date as next_due_week_start,
-    round(coalesce(pa.original_amount, 0), 2)::numeric(12,2) as original_amount,
-    round(greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2)::numeric(12,2) as recovered_total,
-    round(coalesce(paps.recovered_wtd, 0), 2)::numeric(12,2) as recovered_wtd,
-    round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2) as remaining_outstanding,
-    null::numeric(12,2) as due_this_week,
-    pa.status::text as status,
-    null::text as payout_status,
-    pa.baseline_signature,
-    pa.reason::text as reason,
-    pa.notes,
-    ts.booking_id as source_booking_id,
-    ts.week_ending_date as source_week_ending_date,
-    ts.shift_label_norm as source_shift_label_norm
-  from public.pay_advances pa
-  join public.candidates c
-    on c.id = pa.candidate_id
-  left join public.timesheets ts
-    on ts.timesheet_id = pa.linked_timesheet_id
-  left join public.contracts ct
-    on ct.id = ts.contract_id
-  left join public.clients cli
-    on cli.id = ct.client_id
-  left join pg_temp.tmp_pay_advances_patch_stats paps
-    on paps.advance_id = pa.id
-  where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum;
-
-  insert into pg_temp.tmp_pay_advances_register (
-    record_type,
-    record_subtype,
-    advance_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    candidate_first_name,
-    candidate_last_name,
-    client_id,
-    client_name,
-    linked_timesheet_id,
-    linked_shift_date,
-    payout_pay_batch_id,
-    payout_transfer_id,
-    latest_recovery_pay_batch_id,
-    created_at,
-    start_week_start,
-    next_due_week_start,
-    original_amount,
-    recovered_total,
-    recovered_wtd,
-    remaining_outstanding,
-    due_this_week,
-    status,
-    payout_status,
-    baseline_signature,
-    reason,
-    notes,
-    source_booking_id,
-    source_week_ending_date,
-    source_shift_label_norm
-  )
-  select
-    'LOAN'::text as record_type,
-    pa.reason::text as record_subtype,
-    pa.id as advance_id,
-    pa.candidate_id,
-    c.tms_ref as candidate_tms_ref,
-    c.display_name as candidate_display_name,
-    c.first_name as candidate_first_name,
-    c.last_name as candidate_last_name,
-    cli.id as client_id,
-    cli.name as client_name,
-    null::uuid as linked_timesheet_id,
-    null::date as linked_shift_date,
-    pa.payout_pay_batch_id,
-    pa.payout_transfer_id,
-    paps.latest_recovery_pay_batch_id,
-    pa.created_at,
-    pa.start_week_start,
-    pa.next_due_week_start,
-    round(coalesce(pa.original_amount, 0), 2)::numeric(12,2) as original_amount,
-    round(greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2)::numeric(12,2) as recovered_total,
-    round(coalesce(paps.recovered_wtd, 0), 2)::numeric(12,2) as recovered_wtd,
-    round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2) as remaining_outstanding,
-    case
-      when pa.payout_status is distinct from 'PAID'::public.pay_advance_payout_status_enum then 0::numeric(12,2)
-      when pa.weekly_due is null or pa.weekly_due <= 0 then 0::numeric(12,2)
-      when pa.start_week_start is not null and pa.start_week_start > v_week_start then 0::numeric(12,2)
-      else round(
-        greatest(
-          least(round(coalesce(pa.weekly_due, 0), 2), round(coalesce(pa.outstanding_amount, 0), 2))
-          - coalesce(paps.recovered_wtd, 0),
-          0
-        ),
-        2
-      )::numeric(12,2)
-    end as due_this_week,
-    pa.status::text as status,
-    pa.payout_status::text as payout_status,
-    null::text as baseline_signature,
-    pa.reason::text as reason,
-    pa.notes,
-    null::text as source_booking_id,
-    null::date as source_week_ending_date,
-    null::text as source_shift_label_norm
-  from public.pay_advances pa
-  join public.candidates c
-    on c.id = pa.candidate_id
-  left join public.clients cli
-    on cli.id = pa.client_id
-  left join pg_temp.tmp_pay_advances_patch_stats paps
-    on paps.advance_id = pa.id
-  where pa.advance_kind = 'LOAN'::public.pay_advance_kind_enum;
-
-  insert into pg_temp.tmp_pay_advances_register (
-    record_type,
-    record_subtype,
-    advance_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    candidate_first_name,
-    candidate_last_name,
-    client_id,
-    client_name,
-    linked_timesheet_id,
-    linked_shift_date,
-    payout_pay_batch_id,
-    payout_transfer_id,
-    latest_recovery_pay_batch_id,
-    created_at,
-    start_week_start,
-    next_due_week_start,
-    original_amount,
-    recovered_total,
-    recovered_wtd,
-    remaining_outstanding,
-    due_this_week,
-    status,
-    payout_status,
-    baseline_signature,
-    reason,
-    notes,
-    source_booking_id,
-    source_week_ending_date,
-    source_shift_label_norm
-  )
-  select
-    case
-      when pa.reason = 'MISSING_SHIFT'::public.pay_advance_reason_enum then 'MISSING_SHIFT_ADVANCE'::text
-      else 'ADVANCE'::text
-    end as record_type,
-    pa.reason::text as record_subtype,
-    pa.id as advance_id,
-    pa.candidate_id,
-    c.tms_ref as candidate_tms_ref,
-    c.display_name as candidate_display_name,
-    c.first_name as candidate_first_name,
-    c.last_name as candidate_last_name,
-    cli.id as client_id,
-    cli.name as client_name,
-    null::uuid as linked_timesheet_id,
-    pa.linked_shift_date,
-    pa.payout_pay_batch_id,
-    pa.payout_transfer_id,
-    paps.latest_recovery_pay_batch_id,
-    pa.created_at,
-    pa.start_week_start,
-    pa.next_due_week_start,
-    round(coalesce(pa.original_amount, 0), 2)::numeric(12,2) as original_amount,
-    round(greatest(coalesce(pa.original_amount, 0) - coalesce(pa.outstanding_amount, 0), 0), 2)::numeric(12,2) as recovered_total,
-    round(coalesce(paps.recovered_wtd, 0), 2)::numeric(12,2) as recovered_wtd,
-    round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2) as remaining_outstanding,
-    round(coalesce(psd.due_this_week, 0), 2)::numeric(12,2) as due_this_week,
-    pa.status::text as status,
-    pa.payout_status::text as payout_status,
-    pa.baseline_signature,
-    pa.reason::text as reason,
-    pa.notes,
-    null::text as source_booking_id,
-    null::date as source_week_ending_date,
-    null::text as source_shift_label_norm
-  from public.pay_advances pa
-  join public.candidates c
-    on c.id = pa.candidate_id
-  left join public.clients cli
-    on cli.id = pa.client_id
-  left join pg_temp.tmp_pay_advances_patch_stats paps
-    on paps.advance_id = pa.id
-  left join pg_temp.tmp_pay_advances_sched_due psd
-    on psd.advance_id = pa.id
-  where
-    pa.advance_kind = 'LEGACY_ADVANCE'::public.pay_advance_kind_enum
-    or pa.advance_kind is null
-    or pa.reason in (
-      'MISSING_SHIFT'::public.pay_advance_reason_enum,
-      'MANUAL_ADVANCE'::public.pay_advance_reason_enum,
-      'OVERPAY_NHSP'::public.pay_advance_reason_enum,
-      'OVERPAY_HR'::public.pay_advance_reason_enum
-    );
-
-  if v_search is not null then
-    delete from pg_temp.tmp_pay_advances_register t
-    where not (
-      coalesce(t.candidate_tms_ref, '') ilike '%' || v_search || '%'
-      or coalesce(t.candidate_display_name, '') ilike '%' || v_search || '%'
-      or coalesce(t.candidate_first_name, '') ilike '%' || v_search || '%'
-      or coalesce(t.candidate_last_name, '') ilike '%' || v_search || '%'
-    );
-  end if;
-
   if v_type <> '' then
-    if v_type = 'ADVANCE' then
-      delete from pg_temp.tmp_pay_advances_register t
-      where t.record_type not in ('ADVANCE', 'MISSING_SHIFT_ADVANCE');
-    else
-      delete from pg_temp.tmp_pay_advances_register t
-      where t.record_type <> v_type;
-    end if;
+    v_type_filter := case
+      when v_type in ('PAYMENT_ADVANCE', 'LOAN', 'ADVANCE', 'MISSING_SHIFT_ADVANCE') then 'PAYMENT_ADVANCE'
+      when v_type = 'OVERPAYMENT' then 'OVERPAYMENT'
+      when v_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_ADJUSTMENT'
+      when v_type = 'MANUAL_CREDIT_ADJUSTMENT' then 'MANUAL_CREDIT_ADJUSTMENT'
+      when v_type in ('SNOOZED', 'DEFERRED', 'SNOOZED_DEFERRED') then 'SNOOZED_DEFERRED'
+      else v_type
+    end;
   end if;
 
-  if v_status <> '' then
-    delete from pg_temp.tmp_pay_advances_register t
-    where upper(coalesce(t.status, '')) <> v_status;
-  end if;
-
-  if p_client_id is not null then
-    delete from pg_temp.tmp_pay_advances_register t
-    where t.client_id is distinct from p_client_id;
-  end if;
-
-  if coalesce(p_outstanding_only, true) then
-    delete from pg_temp.tmp_pay_advances_register t
-    where coalesce(t.remaining_outstanding, 0) <= 0;
-  end if;
-
-  if coalesce(p_due_this_week_only, false) then
-    delete from pg_temp.tmp_pay_advances_register t
-    where coalesce(t.due_this_week, 0) <= 0;
-  end if;
-
-  if p_amount_min is not null then
-    delete from pg_temp.tmp_pay_advances_register t
-    where coalesce(t.remaining_outstanding, 0) < round(p_amount_min, 2);
-  end if;
-
-  if p_amount_max is not null then
-    delete from pg_temp.tmp_pay_advances_register t
-    where coalesce(t.remaining_outstanding, 0) > round(p_amount_max, 2);
-  end if;
-
-  if p_created_from is not null then
-    delete from pg_temp.tmp_pay_advances_register t
-    where t.created_at is null
-       or (t.created_at at time zone 'Europe/London')::date < p_created_from;
-  end if;
-
-  if p_created_to is not null then
-    delete from pg_temp.tmp_pay_advances_register t
-    where t.created_at is null
-       or (t.created_at at time zone 'Europe/London')::date > p_created_to;
-  end if;
-
-  select count(*)::int
-  into v_total_count
-  from pg_temp.tmp_pay_advances_register t;
-
-  select jsonb_build_object(
-    'row_count', count(*)::int,
-    'week_start', v_week_start::text,
-    'week_end', v_week_end::text,
-    'as_of_date', v_as_of_date::text,
-    'active_overpayments_outstanding', round(coalesce(sum(case when t.record_type = 'OVERPAYMENT' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
-    'active_loans_outstanding', round(coalesce(sum(case when t.record_type = 'LOAN' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
-    'active_advances_outstanding', round(coalesce(sum(case when t.record_type in ('ADVANCE', 'MISSING_SHIFT_ADVANCE') then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
-    'due_this_week_total', round(coalesce(sum(coalesce(t.due_this_week, 0)), 0), 2)::numeric(12,2),
-    'counts_by_type', jsonb_build_object(
-      'OVERPAYMENT', count(*) filter (where t.record_type = 'OVERPAYMENT'),
-      'LOAN', count(*) filter (where t.record_type = 'LOAN'),
-      'ADVANCE', count(*) filter (where t.record_type = 'ADVANCE'),
-      'MISSING_SHIFT_ADVANCE', count(*) filter (where t.record_type = 'MISSING_SHIFT_ADVANCE')
-    ),
-    'totals_by_type', jsonb_build_object(
-      'OVERPAYMENT', round(coalesce(sum(case when t.record_type = 'OVERPAYMENT' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
-      'LOAN', round(coalesce(sum(case when t.record_type = 'LOAN' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
-      'ADVANCE', round(coalesce(sum(case when t.record_type = 'ADVANCE' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
-      'MISSING_SHIFT_ADVANCE', round(coalesce(sum(case when t.record_type = 'MISSING_SHIFT_ADVANCE' then t.remaining_outstanding else 0 end), 0), 2)::numeric(12,2)
-    )
+  with finance_rows as (
+    select
+      case
+        when vfc.active_snooze_id is not null then 'SNOOZED_DEFERRED'
+        else vfc.case_type::text
+      end as row_group,
+      'FINANCE_CASE'::text as row_kind,
+      vfc.finance_case_id,
+      vfc.case_type::text as case_type,
+      vfc.candidate_id,
+      vfc.candidate_tms_ref,
+      vfc.candidate_display_name,
+      vfc.candidate_first_name,
+      vfc.candidate_last_name,
+      vfc.client_id,
+      vfc.client_name,
+      vfc.linked_timesheet_id,
+      vfc.linked_shift_date,
+      vfc.payout_pay_batch_id,
+      vfc.payout_transfer_id,
+      vfc.latest_recovery_pay_batch_id,
+      vfc.created_at,
+      vfc.start_week_start,
+      vfc.next_due_week_start,
+      round(coalesce(vfc.original_amount, 0), 2)::numeric(12,2) as original_amount,
+      round(
+        case
+          when vfc.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then 0
+          else greatest(coalesce(vfc.original_amount, 0) - coalesce(vfc.outstanding_amount, 0), 0)
+        end,
+        2
+      )::numeric(12,2) as recovered_total,
+      round(coalesce(vfc.outstanding_amount, 0), 2)::numeric(12,2) as remaining_outstanding,
+      round(
+        case
+          when vfc.case_type in ('PAYMENT_ADVANCE', 'MANUAL_DEBT_ADJUSTMENT')
+           and coalesce(vfc.written_off_at_utc, null) is null
+           and coalesce(vfc.cleared_at_utc, null) is null
+           and upper(coalesce(vfc.status, '')) not in ('PAID_OFF', 'CLEARED')
+           and vfc.next_due_week_start is not null
+           and vfc.next_due_week_start <= v_week_start
+          then least(coalesce(vfc.weekly_due, 0), coalesce(vfc.outstanding_amount, 0))
+          else 0
+        end,
+        2
+      )::numeric(12,2) as due_this_week,
+      vfc.status,
+      vfc.payout_status,
+      vfc.baseline_signature,
+      vfc.reason,
+      vfc.notes,
+      vfc.adjustment_comment,
+      vfc.source_original_paid_amount,
+      vfc.source_corrected_paid_amount,
+      vfc.minimum_earnings_threshold,
+      vfc.take_home_floor_override,
+      vfc.active_snooze_id,
+      vfc.active_snooze_kind,
+      vfc.active_snooze_until_date,
+      vfc.active_snooze_note,
+      case
+        when vfc.active_snooze_id is null then 'NONE'
+        when vfc.active_snooze_until_date is null then 'INDEFINITE_SNOOZE'
+        else 'DATED_SNOOZE'
+      end as snooze_status,
+      case
+        when vfc.written_off_at_utc is not null then 'WRITTEN_OFF'
+        when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'CLEARED'
+        when coalesce(vfc.active_reserved_amount, 0) > 0 then 'RESERVED'
+        when coalesce(vfc.committed_amount, 0) > 0 then 'COMMITTED'
+        when coalesce(vfc.settled_amount, 0) > 0 then 'SETTLED'
+        when vfc.active_snooze_id is not null then 'SNOOZED'
+        else upper(coalesce(vfc.status, 'ACTIVE'))
+      end as lifecycle_state,
+      case
+        when vfc.case_type in ('PAYMENT_ADVANCE', 'MANUAL_CREDIT_ADJUSTMENT') then coalesce(pbp.authoritative_payment_date, pbp.pay_date)
+        else coalesce(pbr.authoritative_payment_date, pbr.pay_date)
+      end as authoritative_payment_date,
+      case
+        when vfc.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then coalesce(vfc.payout_status, 'NOT_PAID')
+        when vfc.case_type = 'PAYMENT_ADVANCE' then
+          case
+            when coalesce(vfc.payout_status, '') = 'PAID' and coalesce(vfc.outstanding_amount, 0) > 0 then 'RECOVERY_ACTIVE'
+            when coalesce(vfc.payout_status, '') = 'PAID' and coalesce(vfc.outstanding_amount, 0) <= 0 then 'RECOVERY_CLEARED'
+            else coalesce(vfc.payout_status, 'NOT_PAID')
+          end
+        when vfc.case_type in ('OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT') then
+          case
+            when vfc.written_off_at_utc is not null then 'WRITTEN_OFF'
+            when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'RECOVERY_CLEARED'
+            when coalesce(vfc.active_reserved_amount, 0) > 0 then 'RECOVERY_RESERVED'
+            when coalesce(vfc.committed_amount, 0) > 0 then 'RECOVERY_COMMITTED'
+            when coalesce(vfc.settled_amount, 0) > 0 then 'RECOVERY_SETTLED'
+            else 'RECOVERY_ACTIVE'
+          end
+        else coalesce(vfc.status, 'ACTIVE')
+      end as payout_or_recovery_status,
+      null::text as source_booking_id,
+      null::date as source_week_ending_date,
+      null::text as source_shift_label_norm
+    from public.v_finance_cases_register vfc
+    left join public.pay_batches pbp
+      on pbp.id = vfc.payout_pay_batch_id
+    left join public.pay_batches pbr
+      on pbr.id = vfc.latest_recovery_pay_batch_id
+  ),
+  snoozed_timesheet_rows as (
+    select
+      'SNOOZED_DEFERRED'::text as row_group,
+      'TIMESHEET_SNOOZE'::text as row_kind,
+      null::uuid as finance_case_id,
+      null::text as case_type,
+      c.id as candidate_id,
+      c.tms_ref as candidate_tms_ref,
+      c.display_name as candidate_display_name,
+      c.first_name as candidate_first_name,
+      c.last_name as candidate_last_name,
+      cli.id as client_id,
+      cli.name as client_name,
+      s.timesheet_id as linked_timesheet_id,
+      null::date as linked_shift_date,
+      null::uuid as payout_pay_batch_id,
+      null::uuid as payout_transfer_id,
+      null::uuid as latest_recovery_pay_batch_id,
+      s.created_at_utc as created_at,
+      null::date as start_week_start,
+      null::date as next_due_week_start,
+      0::numeric(12,2) as original_amount,
+      0::numeric(12,2) as recovered_total,
+      0::numeric(12,2) as remaining_outstanding,
+      0::numeric(12,2) as due_this_week,
+      null::text as status,
+      null::text as payout_status,
+      null::text as baseline_signature,
+      null::text as reason,
+      null::text as notes,
+      null::text as adjustment_comment,
+      null::numeric as source_original_paid_amount,
+      null::numeric as source_corrected_paid_amount,
+      null::numeric as minimum_earnings_threshold,
+      null::numeric as take_home_floor_override,
+      s.id as active_snooze_id,
+      upper(coalesce(s.snooze_kind, '')) as active_snooze_kind,
+      s.snooze_until_date as active_snooze_until_date,
+      s.note as active_snooze_note,
+      case
+        when s.snooze_until_date is null then 'INDEFINITE_SNOOZE'
+        else 'DATED_SNOOZE'
+      end as snooze_status,
+      'SNOOZED'::text as lifecycle_state,
+      null::date as authoritative_payment_date,
+      'DEFERRED'::text as payout_or_recovery_status,
+      ts.booking_id as source_booking_id,
+      ts.week_ending_date as source_week_ending_date,
+      ts.shift_label_norm as source_shift_label_norm
+    from public.pay_item_snoozes s
+    join public.timesheets ts
+      on ts.timesheet_id = s.timesheet_id
+    join public.candidates c
+      on c.id = s.candidate_id
+    left join public.contracts ct
+      on ct.id = ts.contract_id
+    left join public.clients cli
+      on cli.id = ct.client_id
+    where s.cleared_at_utc is null
+      and s.timesheet_id is not null
+      and s.source_ref is null
+      and (
+        upper(coalesce(s.snooze_kind, '')) in ('TIMESHEET_PAYMENT', 'BLOCKED_TIMESHEET', 'DO_NOT_PAY')
+        or upper(coalesce(s.snooze_kind, '')) like 'TIMESHEET%'
+      )
+  ),
+  base_rows as (
+    select * from finance_rows
+    union all
+    select * from snoozed_timesheet_rows
+  ),
+  filtered_rows as (
+    select
+      br.row_group,
+      br.row_kind,
+      br.finance_case_id,
+      br.case_type,
+      br.candidate_id,
+      br.candidate_tms_ref,
+      br.candidate_display_name,
+      br.candidate_first_name,
+      br.candidate_last_name,
+      br.client_id,
+      br.client_name,
+      br.linked_timesheet_id,
+      br.linked_shift_date,
+      br.payout_pay_batch_id,
+      br.payout_transfer_id,
+      br.latest_recovery_pay_batch_id,
+      br.created_at,
+      br.start_week_start,
+      br.next_due_week_start,
+      br.original_amount,
+      br.recovered_total,
+      br.remaining_outstanding,
+      br.due_this_week,
+      br.status,
+      br.payout_status,
+      br.baseline_signature,
+      br.reason,
+      br.notes,
+      br.adjustment_comment,
+      br.source_original_paid_amount,
+      br.source_corrected_paid_amount,
+      br.minimum_earnings_threshold,
+      br.take_home_floor_override,
+      br.active_snooze_id,
+      br.active_snooze_kind,
+      br.active_snooze_until_date,
+      br.active_snooze_note,
+      br.snooze_status,
+      br.lifecycle_state,
+      br.authoritative_payment_date,
+      br.payout_or_recovery_status,
+      br.source_booking_id,
+      br.source_week_ending_date,
+      br.source_shift_label_norm
+    from base_rows br
+    where (v_type_filter is null or br.row_group = v_type_filter)
+      and (
+        v_status = ''
+        or upper(coalesce(br.lifecycle_state, '')) = v_status
+        or upper(coalesce(br.status, '')) = v_status
+        or upper(coalesce(br.payout_or_recovery_status, '')) = v_status
+        or upper(coalesce(br.row_group, '')) = v_status
+      )
+      and (p_client_id is null or br.client_id is not distinct from p_client_id)
+      and (
+        coalesce(p_outstanding_only, true) = false
+        or br.row_group = 'SNOOZED_DEFERRED'
+        or coalesce(br.remaining_outstanding, 0) > 0
+      )
+      and (
+        coalesce(p_due_this_week_only, false) = false
+        or coalesce(br.due_this_week, 0) > 0
+      )
+      and (p_amount_min is null or coalesce(br.remaining_outstanding, 0) >= round(p_amount_min, 2))
+      and (p_amount_max is null or coalesce(br.remaining_outstanding, 0) <= round(p_amount_max, 2))
+      and (
+        p_created_from is null
+        or br.created_at is not null
+        and (br.created_at at time zone 'Europe/London')::date >= p_created_from
+      )
+      and (
+        p_created_to is null
+        or br.created_at is not null
+        and (br.created_at at time zone 'Europe/London')::date <= p_created_to
+      )
+      and (
+        v_search is null
+        or coalesce(br.candidate_tms_ref, '') ilike '%' || v_search || '%'
+        or coalesce(br.candidate_display_name, '') ilike '%' || v_search || '%'
+        or coalesce(br.candidate_first_name, '') ilike '%' || v_search || '%'
+        or coalesce(br.candidate_last_name, '') ilike '%' || v_search || '%'
+        or coalesce(br.client_name, '') ilike '%' || v_search || '%'
+        or coalesce(br.adjustment_comment, '') ilike '%' || v_search || '%'
+        or coalesce(br.notes, '') ilike '%' || v_search || '%'
+        or coalesce(br.reason, '') ilike '%' || v_search || '%'
+      )
+  ),
+  counted_rows as (
+    select count(*)::int as total_count from filtered_rows
+  ),
+  summary_rows as (
+    select
+      jsonb_build_object(
+        'row_count', count(*)::int,
+        'week_start', v_week_start::text,
+        'week_end', v_week_end::text,
+        'as_of_date', v_as_of_date::text,
+        'counts_by_group', jsonb_build_object(
+          'PAYMENT_ADVANCE', count(*) filter (where fr.row_group = 'PAYMENT_ADVANCE'),
+          'OVERPAYMENT', count(*) filter (where fr.row_group = 'OVERPAYMENT'),
+          'MANUAL_DEBT_ADJUSTMENT', count(*) filter (where fr.row_group = 'MANUAL_DEBT_ADJUSTMENT'),
+          'MANUAL_CREDIT_ADJUSTMENT', count(*) filter (where fr.row_group = 'MANUAL_CREDIT_ADJUSTMENT'),
+          'SNOOZED_DEFERRED', count(*) filter (where fr.row_group = 'SNOOZED_DEFERRED')
+        ),
+        'totals_by_group', jsonb_build_object(
+          'PAYMENT_ADVANCE', round(coalesce(sum(case when fr.row_group = 'PAYMENT_ADVANCE' then fr.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+          'OVERPAYMENT', round(coalesce(sum(case when fr.row_group = 'OVERPAYMENT' then fr.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+          'MANUAL_DEBT_ADJUSTMENT', round(coalesce(sum(case when fr.row_group = 'MANUAL_DEBT_ADJUSTMENT' then fr.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+          'MANUAL_CREDIT_ADJUSTMENT', round(coalesce(sum(case when fr.row_group = 'MANUAL_CREDIT_ADJUSTMENT' then fr.original_amount else 0 end), 0), 2)::numeric(12,2),
+          'SNOOZED_DEFERRED', round(coalesce(sum(case when fr.row_group = 'SNOOZED_DEFERRED' then fr.remaining_outstanding else 0 end), 0), 2)::numeric(12,2)
+        ),
+        'due_this_week_total', round(coalesce(sum(coalesce(fr.due_this_week, 0)), 0), 2)::numeric(12,2)
+      ) as summary_json
+    from filtered_rows fr
+  ),
+  ordered_rows as (
+    select
+      fr.row_group,
+      fr.row_kind,
+      fr.finance_case_id,
+      fr.case_type,
+      fr.candidate_id,
+      fr.candidate_tms_ref,
+      fr.candidate_display_name,
+      fr.candidate_first_name,
+      fr.candidate_last_name,
+      fr.client_id,
+      fr.client_name,
+      fr.linked_timesheet_id,
+      fr.linked_shift_date,
+      fr.payout_pay_batch_id,
+      fr.payout_transfer_id,
+      fr.latest_recovery_pay_batch_id,
+      fr.created_at,
+      fr.start_week_start,
+      fr.next_due_week_start,
+      fr.original_amount,
+      fr.recovered_total,
+      fr.remaining_outstanding,
+      fr.due_this_week,
+      fr.status,
+      fr.payout_status,
+      fr.baseline_signature,
+      fr.reason,
+      fr.notes,
+      fr.adjustment_comment,
+      fr.source_original_paid_amount,
+      fr.source_corrected_paid_amount,
+      fr.minimum_earnings_threshold,
+      fr.take_home_floor_override,
+      fr.active_snooze_id,
+      fr.active_snooze_kind,
+      fr.active_snooze_until_date,
+      fr.active_snooze_note,
+      fr.snooze_status,
+      fr.lifecycle_state,
+      fr.authoritative_payment_date,
+      fr.payout_or_recovery_status,
+      fr.source_booking_id,
+      fr.source_week_ending_date,
+      fr.source_shift_label_norm
+    from filtered_rows fr
+    order by
+      case when v_sort_dir = 'ASC' and v_sort_key = 'candidate' then lower(coalesce(fr.candidate_display_name, fr.candidate_tms_ref, '')) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'candidate' then lower(coalesce(fr.candidate_display_name, fr.candidate_tms_ref, '')) end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'client' then lower(coalesce(fr.client_name, '')) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'client' then lower(coalesce(fr.client_name, '')) end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'type' then lower(coalesce(fr.row_group, '')) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'type' then lower(coalesce(fr.row_group, '')) end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'status' then lower(coalesce(fr.lifecycle_state, fr.status, '')) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'status' then lower(coalesce(fr.lifecycle_state, fr.status, '')) end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'created_at' then fr.created_at end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'created_at' then fr.created_at end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'original_amount' then fr.original_amount end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'original_amount' then fr.original_amount end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'recovered_total' then fr.recovered_total end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'recovered_total' then fr.recovered_total end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'remaining_outstanding' then fr.remaining_outstanding end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'remaining_outstanding' then fr.remaining_outstanding end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'due_this_week' then coalesce(fr.due_this_week, 0) end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'due_this_week' then coalesce(fr.due_this_week, 0) end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'start_week_start' then fr.start_week_start end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'start_week_start' then fr.start_week_start end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'next_due_week_start' then fr.next_due_week_start end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'next_due_week_start' then fr.next_due_week_start end desc nulls last,
+      case when v_sort_dir = 'ASC' and v_sort_key = 'authoritative_payment_date' then fr.authoritative_payment_date end asc nulls last,
+      case when v_sort_dir = 'DESC' and v_sort_key = 'authoritative_payment_date' then fr.authoritative_payment_date end desc nulls last,
+      fr.created_at desc nulls last,
+      fr.finance_case_id asc nulls last,
+      fr.linked_timesheet_id asc nulls last
+    limit v_limit
+    offset v_offset
   )
-  into v_summary
-  from pg_temp.tmp_pay_advances_register t;
-
   select
+    coalesce(cr.total_count, 0),
+    coalesce(sr.summary_json, '{}'::jsonb),
     coalesce(
       jsonb_agg(
         jsonb_build_object(
-          'record_type', p.record_type,
-          'record_subtype', p.record_subtype,
-          'advance_id', p.advance_id::text,
-          'candidate_id', p.candidate_id::text,
-          'candidate_tms_ref', p.candidate_tms_ref,
-          'candidate_display_name', p.candidate_display_name,
-          'candidate_first_name', p.candidate_first_name,
-          'candidate_last_name', p.candidate_last_name,
-          'client_id', case when p.client_id is null then null else p.client_id::text end,
-          'client_name', p.client_name,
-          'linked_timesheet_id', case when p.linked_timesheet_id is null then null else p.linked_timesheet_id::text end,
-          'linked_shift_date', case when p.linked_shift_date is null then null else p.linked_shift_date::text end,
-          'payout_pay_batch_id', case when p.payout_pay_batch_id is null then null else p.payout_pay_batch_id::text end,
-          'payout_transfer_id', case when p.payout_transfer_id is null then null else p.payout_transfer_id::text end,
-          'latest_recovery_pay_batch_id', case when p.latest_recovery_pay_batch_id is null then null else p.latest_recovery_pay_batch_id::text end,
-          'created_at', case when p.created_at is null then null else p.created_at::text end,
-          'start_week_start', case when p.start_week_start is null then null else p.start_week_start::text end,
-          'next_due_week_start', case when p.next_due_week_start is null then null else p.next_due_week_start::text end,
-          'original_amount', p.original_amount,
-          'recovered_total', p.recovered_total,
-          'recovered_wtd', p.recovered_wtd,
-          'remaining_outstanding', p.remaining_outstanding,
-          'due_this_week', p.due_this_week,
-          'status', p.status,
-          'payout_status', p.payout_status,
-          'baseline_signature', p.baseline_signature,
-          'reason', p.reason,
-          'notes', p.notes,
-          'source_booking_id', p.source_booking_id,
-          'source_week_ending_date', case when p.source_week_ending_date is null then null else p.source_week_ending_date::text end,
-          'source_shift_label_norm', p.source_shift_label_norm
+          'record_type', orw.row_group,
+          'row_group', orw.row_group,
+          'row_kind', orw.row_kind,
+          'finance_case_id', case when orw.finance_case_id is null then null else orw.finance_case_id::text end,
+          'case_type', orw.case_type,
+          'candidate_id', orw.candidate_id::text,
+          'candidate_tms_ref', orw.candidate_tms_ref,
+          'candidate_display_name', orw.candidate_display_name,
+          'candidate_first_name', orw.candidate_first_name,
+          'candidate_last_name', orw.candidate_last_name,
+          'client_id', case when orw.client_id is null then null else orw.client_id::text end,
+          'client_name', orw.client_name,
+          'linked_timesheet_id', case when orw.linked_timesheet_id is null then null else orw.linked_timesheet_id::text end,
+          'linked_shift_date', case when orw.linked_shift_date is null then null else orw.linked_shift_date::text end,
+          'payout_pay_batch_id', case when orw.payout_pay_batch_id is null then null else orw.payout_pay_batch_id::text end,
+          'payout_transfer_id', case when orw.payout_transfer_id is null then null else orw.payout_transfer_id::text end,
+          'latest_recovery_pay_batch_id', case when orw.latest_recovery_pay_batch_id is null then null else orw.latest_recovery_pay_batch_id::text end,
+          'created_at', case when orw.created_at is null then null else orw.created_at::text end,
+          'start_week_start', case when orw.start_week_start is null then null else orw.start_week_start::text end,
+          'next_due_week_start', case when orw.next_due_week_start is null then null else orw.next_due_week_start::text end,
+          'original_amount', orw.original_amount,
+          'recovered_total', orw.recovered_total,
+          'remaining_outstanding', orw.remaining_outstanding,
+          'due_this_week', orw.due_this_week,
+          'status', orw.status,
+          'payout_status', orw.payout_status,
+          'baseline_signature', orw.baseline_signature,
+          'reason', orw.reason,
+          'notes', orw.notes,
+          'adjustment_comment', orw.adjustment_comment,
+          'source_original_paid_amount', orw.source_original_paid_amount,
+          'source_corrected_paid_amount', orw.source_corrected_paid_amount,
+          'minimum_earnings_threshold', orw.minimum_earnings_threshold,
+          'take_home_floor_override', orw.take_home_floor_override,
+          'active_snooze_id', case when orw.active_snooze_id is null then null else orw.active_snooze_id::text end,
+          'active_snooze_kind', orw.active_snooze_kind,
+          'active_snooze_until_date', case when orw.active_snooze_until_date is null then null else orw.active_snooze_until_date::text end,
+          'active_snooze_note', orw.active_snooze_note,
+          'snooze_status', orw.snooze_status,
+          'lifecycle_state', orw.lifecycle_state,
+          'authoritative_payment_date', case when orw.authoritative_payment_date is null then null else orw.authoritative_payment_date::text end,
+          'payout_or_recovery_status', orw.payout_or_recovery_status,
+          'source_booking_id', orw.source_booking_id,
+          'source_week_ending_date', case when orw.source_week_ending_date is null then null else orw.source_week_ending_date::text end,
+          'source_shift_label_norm', orw.source_shift_label_norm
         )
       ),
       '[]'::jsonb
     )
-  into v_rows
-  from (
-    select
-      t.record_type,
-      t.record_subtype,
-      t.advance_id,
-      t.candidate_id,
-      t.candidate_tms_ref,
-      t.candidate_display_name,
-      t.candidate_first_name,
-      t.candidate_last_name,
-      t.client_id,
-      t.client_name,
-      t.linked_timesheet_id,
-      t.linked_shift_date,
-      t.payout_pay_batch_id,
-      t.payout_transfer_id,
-      t.latest_recovery_pay_batch_id,
-      t.created_at,
-      t.start_week_start,
-      t.next_due_week_start,
-      t.original_amount,
-      t.recovered_total,
-      t.recovered_wtd,
-      t.remaining_outstanding,
-      t.due_this_week,
-      t.status,
-      t.payout_status,
-      t.baseline_signature,
-      t.reason,
-      t.notes,
-      t.source_booking_id,
-      t.source_week_ending_date,
-      t.source_shift_label_norm
-    from pg_temp.tmp_pay_advances_register t
-    order by
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'candidate' then lower(coalesce(t.candidate_display_name, t.candidate_tms_ref, '')) end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'candidate' then lower(coalesce(t.candidate_display_name, t.candidate_tms_ref, '')) end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'client' then lower(coalesce(t.client_name, '')) end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'client' then lower(coalesce(t.client_name, '')) end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'type' then lower(coalesce(t.record_type, '')) end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'type' then lower(coalesce(t.record_type, '')) end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'status' then lower(coalesce(t.status, '')) end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'status' then lower(coalesce(t.status, '')) end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'created_at' then t.created_at end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'created_at' then t.created_at end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'original_amount' then t.original_amount end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'original_amount' then t.original_amount end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'recovered_wtd' then t.recovered_wtd end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'recovered_wtd' then t.recovered_wtd end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'remaining_outstanding' then t.remaining_outstanding end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'remaining_outstanding' then t.remaining_outstanding end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'due_this_week' then coalesce(t.due_this_week, 0) end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'due_this_week' then coalesce(t.due_this_week, 0) end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'start_week_start' then t.start_week_start end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'start_week_start' then t.start_week_start end desc nulls last,
-
-      case when v_sort_dir = 'ASC'  and v_sort_key = 'next_due_week_start' then t.next_due_week_start end asc nulls last,
-      case when v_sort_dir = 'DESC' and v_sort_key = 'next_due_week_start' then t.next_due_week_start end desc nulls last,
-
-      t.created_at desc nulls last,
-      t.advance_id asc
-    limit v_limit
-    offset v_offset
-  ) p;
+  into
+    v_total_count,
+    v_summary,
+    v_rows
+  from ordered_rows orw
+  cross join counted_rows cr
+  cross join summary_rows sr;
 
   return jsonb_build_object(
     'ok', true,
@@ -13362,7 +13563,7 @@ begin
       'sort_dir', v_sort_dir,
       'applied_filters', jsonb_build_object(
         'search', v_search,
-        'type', case when v_type = '' then null else v_type end,
+        'type', case when v_type_filter is null then null else v_type_filter end,
         'status', case when v_status = '' then null else v_status end,
         'client_id', case when p_client_id is null then null else p_client_id::text end,
         'outstanding_only', coalesce(p_outstanding_only, true),
@@ -13376,6 +13577,7 @@ begin
   );
 end;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_advances_register_export_rows(
@@ -13473,7 +13675,6 @@ begin
   );
 end;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.pay_advances_register_pdf_payload(
   p_actor_user_id uuid DEFAULT NULL::uuid,
   p_search text DEFAULT NULL::text,
@@ -13521,62 +13722,38 @@ begin
 
   v_rows := coalesce(v_base->'rows', '[]'::jsonb);
 
-  select
-    jsonb_build_array(
-      jsonb_build_object(
-        'record_type', 'OVERPAYMENT',
-        'title', 'Overpayments',
-        'rows', coalesce(
-          (
-            select jsonb_agg(e.elem)
-            from jsonb_array_elements(v_rows) as e(elem)
-            where e.elem->>'record_type' = 'OVERPAYMENT'
-          ),
-          '[]'::jsonb
-        )
-      ),
-      jsonb_build_object(
-        'record_type', 'LOAN',
-        'title', 'Loans',
-        'rows', coalesce(
-          (
-            select jsonb_agg(e.elem)
-            from jsonb_array_elements(v_rows) as e(elem)
-            where e.elem->>'record_type' = 'LOAN'
-          ),
-          '[]'::jsonb
-        )
-      ),
-      jsonb_build_object(
-        'record_type', 'ADVANCE',
-        'title', 'Advances',
-        'rows', coalesce(
-          (
-            select jsonb_agg(e.elem)
-            from jsonb_array_elements(v_rows) as e(elem)
-            where e.elem->>'record_type' = 'ADVANCE'
-          ),
-          '[]'::jsonb
-        )
-      ),
-      jsonb_build_object(
-        'record_type', 'MISSING_SHIFT_ADVANCE',
-        'title', 'Missing-shift advances',
-        'rows', coalesce(
-          (
-            select jsonb_agg(e.elem)
-            from jsonb_array_elements(v_rows) as e(elem)
-            where e.elem->>'record_type' = 'MISSING_SHIFT_ADVANCE'
-          ),
-          '[]'::jsonb
-        )
-      )
+  select jsonb_build_array(
+    jsonb_build_object(
+      'record_type', 'PAYMENT_ADVANCE',
+      'title', 'Payment Advances',
+      'rows', coalesce((select jsonb_agg(e.elem) from jsonb_array_elements(v_rows) as e(elem) where e.elem->>'row_group' = 'PAYMENT_ADVANCE'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'record_type', 'OVERPAYMENT',
+      'title', 'Overpayments',
+      'rows', coalesce((select jsonb_agg(e.elem) from jsonb_array_elements(v_rows) as e(elem) where e.elem->>'row_group' = 'OVERPAYMENT'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'record_type', 'MANUAL_DEBT_ADJUSTMENT',
+      'title', 'Manual Debt Adjustments',
+      'rows', coalesce((select jsonb_agg(e.elem) from jsonb_array_elements(v_rows) as e(elem) where e.elem->>'row_group' = 'MANUAL_DEBT_ADJUSTMENT'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'record_type', 'MANUAL_CREDIT_ADJUSTMENT',
+      'title', 'Manual Credit Adjustments',
+      'rows', coalesce((select jsonb_agg(e.elem) from jsonb_array_elements(v_rows) as e(elem) where e.elem->>'row_group' = 'MANUAL_CREDIT_ADJUSTMENT'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'record_type', 'SNOOZED_DEFERRED',
+      'title', 'Snoozed / Deferred items',
+      'rows', coalesce((select jsonb_agg(e.elem) from jsonb_array_elements(v_rows) as e(elem) where e.elem->>'row_group' = 'SNOOZED_DEFERRED'), '[]'::jsonb)
     )
+  )
   into v_groups;
 
   return jsonb_build_object(
     'ok', true,
-    'title', 'Advances & Recoveries Register',
+    'title', 'Finance Cases & Snoozes Register',
     'generated_at_utc', now()::text,
     'applied_filters', coalesce(v_base->'meta'->'applied_filters', '{}'::jsonb),
     'summary', coalesce(v_base->'summary', '{}'::jsonb),
