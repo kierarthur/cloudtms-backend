@@ -11501,8 +11501,6 @@ $$;
 
 
 
-
-
 create or replace function public.pay_loans_grant(
   p_candidate_id uuid,
   p_principal_amount numeric,
@@ -11510,7 +11508,8 @@ create or replace function public.pay_loans_grant(
   p_weeks_total int,
   p_start_week_start date,
   p_actor_user_id uuid,
-  p_note text default null
+  p_note text default null,
+  p_case_type public.pay_finance_case_type_enum default 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
 )
 returns jsonb
 language plpgsql
@@ -11527,7 +11526,7 @@ declare
   v_schedule_json jsonb := '[]'::jsonb;
   v_next_due date := null;
 
-  v_advance_id uuid := null;
+  v_finance_case_id uuid := null;
   v_pay_batch_id uuid := null;
   v_pay_batch_candidate_id uuid := null;
   v_pay_batch_item_id uuid := null;
@@ -11542,6 +11541,19 @@ declare
   v_bnc_status text := null;
   v_bnc_has_override boolean := false;
   v_bpm_present boolean := false;
+
+  v_legacy_reason public.pay_advance_reason_enum := null;
+  v_legacy_advance_kind public.pay_advance_kind_enum := null;
+  v_item_type text := null;
+  v_item_description text := null;
+  v_line_kind text := null;
+  v_unit_name text := null;
+  v_paye_treatment text := null;
+  v_outstanding_amount numeric := 0;
+  v_weekly_due_out numeric := null;
+  v_weeks_total_out int := null;
+  v_start_week_start_out date := null;
+  v_status_out public.pay_advance_status_enum := 'ACTIVE'::public.pay_advance_status_enum;
 begin
   if p_candidate_id is null then
     raise exception '%', jsonb_build_object(
@@ -11559,6 +11571,14 @@ begin
     )::text;
   end if;
 
+  if p_case_type is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_LOANS_GRANT',
+      'code', 'CASE_TYPE_REQUIRED',
+      'message', 'pay_loans_grant: case_type is required'
+    )::text;
+  end if;
+
   if p_principal_amount is null or round(p_principal_amount,2) <= 0 then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_LOANS_GRANT',
@@ -11567,36 +11587,47 @@ begin
     )::text;
   end if;
 
-  if p_weekly_due is null or round(p_weekly_due,2) <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_LOANS_GRANT',
-      'code', 'WEEKLY_DUE_INVALID',
-      'message', 'pay_loans_grant: weekly_due must be > 0'
-    )::text;
-  end if;
+  if p_case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum then
+    if p_weekly_due is null or round(p_weekly_due,2) <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_LOANS_GRANT',
+        'code', 'WEEKLY_DUE_INVALID',
+        'message', 'pay_loans_grant: weekly_due must be > 0 for Payment Advance payouts'
+      )::text;
+    end if;
 
-  if p_weeks_total is null or p_weeks_total < 1 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_LOANS_GRANT',
-      'code', 'WEEKS_TOTAL_INVALID',
-      'message', 'pay_loans_grant: weeks_total must be >= 1'
-    )::text;
-  end if;
+    if p_weeks_total is null or p_weeks_total < 1 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_LOANS_GRANT',
+        'code', 'WEEKS_TOTAL_INVALID',
+        'message', 'pay_loans_grant: weeks_total must be >= 1 for Payment Advance payouts'
+      )::text;
+    end if;
 
-  if p_start_week_start is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_LOANS_GRANT',
-      'code', 'START_WEEK_START_REQUIRED',
-      'message', 'pay_loans_grant: start_week_start is required'
-    )::text;
-  end if;
+    if p_start_week_start is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_LOANS_GRANT',
+        'code', 'START_WEEK_START_REQUIRED',
+        'message', 'pay_loans_grant: start_week_start is required for Payment Advance payouts'
+      )::text;
+    end if;
 
-  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_LOANS_GRANT',
+        'code', 'START_WEEK_START_NOT_MONDAY',
+        'message', 'pay_loans_grant: start_week_start must be a Monday (week start)',
+        'start_week_start', p_start_week_start::text
+      )::text;
+    end if;
+  elsif p_case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum then
+    null;
+  else
     raise exception '%', jsonb_build_object(
       'error', 'PAY_LOANS_GRANT',
-      'code', 'START_WEEK_START_NOT_MONDAY',
-      'message', 'pay_loans_grant: start_week_start must be a Monday (week start)',
-      'start_week_start', p_start_week_start::text
+      'code', 'CASE_TYPE_INVALID',
+      'message', 'pay_loans_grant: case_type must be PAYMENT_ADVANCE or MANUAL_CREDIT_ADJUSTMENT',
+      'case_type', p_case_type::text
     )::text;
   end if;
 
@@ -11629,7 +11660,8 @@ begin
     c.account_holder,
     c.sort_code,
     c.account_number,
-    c.bank_details_hash
+    c.bank_details_hash,
+    upper(coalesce(c.pay_method,'PAYE')) as pay_method_upper
   into v_candidate
   from public.candidates c
   where c.id = p_candidate_id
@@ -11659,41 +11691,71 @@ begin
   v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
   v_requires_payee_map := (v_provider <> 'CSV');
 
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'week_start', (p_start_week_start + (gs.i * 7))::date,
-          'amount', round(
-            -least(
-              round(p_weekly_due,2),
-              greatest(round(p_principal_amount,2) - (round(p_weekly_due,2) * gs.i), 0)
-            ),
-            2
-          )
-        )
-        order by (p_start_week_start + (gs.i * 7))::date asc
-      ),
-      '[]'::jsonb
-    )
-  into v_schedule_json
-  from generate_series(0, greatest(p_weeks_total,1) - 1) as gs(i);
-
-  select min(x.week_start)
-  into v_next_due
-  from (
+  if p_case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum then
     select
-      (p_start_week_start + (gs2.i * 7))::date as week_start,
-      round(
-        -least(
-          round(p_weekly_due,2),
-          greatest(round(p_principal_amount,2) - (round(p_weekly_due,2) * gs2.i), 0)
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'week_start', (p_start_week_start + (gs.i * 7))::date,
+            'amount', round(
+              -least(
+                round(p_weekly_due,2),
+                greatest(round(p_principal_amount,2) - (round(p_weekly_due,2) * gs.i), 0)
+              ),
+              2
+            )
+          )
+          order by (p_start_week_start + (gs.i * 7))::date asc
         ),
-        2
-      )::numeric as amt
-    from generate_series(0, greatest(p_weeks_total,1) - 1) as gs2(i)
-  ) x
-  where x.amt < 0;
+        '[]'::jsonb
+      )
+    into v_schedule_json
+    from generate_series(0, greatest(p_weeks_total,1) - 1) as gs(i);
+
+    select min(x.week_start)
+    into v_next_due
+    from (
+      select
+        (p_start_week_start + (gs2.i * 7))::date as week_start,
+        round(
+          -least(
+            round(p_weekly_due,2),
+            greatest(round(p_principal_amount,2) - (round(p_weekly_due,2) * gs2.i), 0)
+          ),
+          2
+        )::numeric as amt
+      from generate_series(0, greatest(p_weeks_total,1) - 1) as gs2(i)
+    ) x
+    where x.amt < 0;
+
+    v_legacy_reason := 'LOAN'::public.pay_advance_reason_enum;
+    v_legacy_advance_kind := 'LOAN'::public.pay_advance_kind_enum;
+    v_item_type := 'LOAN_PAYOUT';
+    v_item_description := 'Payment Advance';
+    v_line_kind := 'LOAN_PAYOUT';
+    v_unit_name := 'Payment Advance';
+    v_paye_treatment := 'NONE';
+    v_outstanding_amount := round(p_principal_amount,2);
+    v_weekly_due_out := round(p_weekly_due,2);
+    v_weeks_total_out := p_weeks_total;
+    v_start_week_start_out := p_start_week_start;
+    v_status_out := 'ACTIVE'::public.pay_advance_status_enum;
+  else
+    v_schedule_json := '[]'::jsonb;
+    v_next_due := null;
+    v_legacy_reason := 'MANUAL_ADVANCE'::public.pay_advance_reason_enum;
+    v_legacy_advance_kind := 'LEGACY_ADVANCE'::public.pay_advance_kind_enum;
+    v_item_type := 'MANUAL_CREDIT_PAYOUT';
+    v_item_description := 'Manual Credit Adjustment';
+    v_line_kind := 'MANUAL_CREDIT_PAYOUT';
+    v_unit_name := 'Manual Credit Adjustment';
+    v_paye_treatment := 'GROSS_ADD';
+    v_outstanding_amount := 0;
+    v_weekly_due_out := null;
+    v_weeks_total_out := null;
+    v_start_week_start_out := null;
+    v_status_out := 'ACTIVE'::public.pay_advance_status_enum;
+  end if;
 
   insert into public.pay_advances(
     candidate_id,
@@ -11718,37 +11780,47 @@ begin
     payout_transfer_id,
     weekly_due,
     weeks_total,
-    start_week_start
+    start_week_start,
+    case_type,
+    adjustment_comment,
+    cleared_at_utc,
+    cleared_by_user_id
   )
   values (
     p_candidate_id,
     null::uuid,
-    'LOAN'::public.pay_advance_reason_enum,
+    v_legacy_reason,
     round(p_principal_amount,2),
-    round(p_principal_amount,2),
+    v_outstanding_amount,
     null::date,
     coalesce(v_schedule_json,'[]'::jsonb),
     v_next_due,
-    'ACTIVE'::public.pay_advance_status_enum,
+    v_status_out,
     null::jsonb,
     nullif(btrim(coalesce(p_note,'')), ''),
     v_now_utc,
     p_actor_user_id,
     v_now_utc,
-    'LOAN'::public.pay_advance_kind_enum,
+    v_legacy_advance_kind,
     null::uuid,
     null::text,
     'PENDING'::public.pay_advance_payout_status_enum,
     null::uuid,
     null::uuid,
-    round(p_weekly_due,2),
-    p_weeks_total,
-    p_start_week_start
+    v_weekly_due_out,
+    v_weeks_total_out,
+    v_start_week_start_out,
+    p_case_type,
+    case when p_case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum then nullif(btrim(coalesce(p_note,'')), '') else null end,
+    null::timestamptz,
+    null::uuid
   )
-  returning id into v_advance_id;
+  returning id into v_finance_case_id;
 
   insert into public.pay_batches(
     pay_date,
+    authoritative_payment_date,
+    authoritative_payment_date_source,
     created_at_utc,
     created_by_user_id,
     status,
@@ -11760,6 +11832,8 @@ begin
   )
   values (
     v_pay_date,
+    v_pay_date,
+    'PAYOUT_BATCH_CREATED',
     v_now_utc,
     p_actor_user_id,
     'DRAFT',
@@ -11821,15 +11895,18 @@ begin
     is_voided,
     is_mismatch,
     created_at,
-    updated_at
+    updated_at,
+    finance_case_id,
+    reservation_id,
+    paye_treatment
   )
   values (
     v_pay_batch_candidate_id,
-    'LOAN_PAYOUT',
+    v_item_type,
     null::uuid,
     null::text,
-    ('advance:' || v_advance_id::text),
-    'Loan payout',
+    ('advance:' || v_finance_case_id::text),
+    v_item_description,
     round(p_principal_amount,2),
     0,
     round(p_principal_amount,2),
@@ -11841,7 +11918,10 @@ begin
     false,
     false,
     v_now_utc,
-    v_now_utc
+    v_now_utc,
+    v_finance_case_id,
+    null::uuid,
+    v_paye_treatment
   )
   returning id into v_pay_batch_item_id;
 
@@ -11859,16 +11939,24 @@ begin
   )
   values (
     v_pay_batch_item_id,
-    'LOAN_PAYOUT',
+    v_line_kind,
     null,
-    'Loan payout',
+    v_unit_name,
     null::numeric,
     null::numeric,
     round(p_principal_amount,2),
     0,
     round(p_principal_amount,2),
-    '{}'::jsonb
+    jsonb_build_object(
+      'finance_case_id', v_finance_case_id::text,
+      'case_type', p_case_type::text,
+      'message_label', v_item_description
+    )
   );
+
+  update public.pay_advances pa
+  set payout_pay_batch_id = v_pay_batch_id
+  where pa.id = v_finance_case_id;
 
   if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
     v_warnings := v_warnings || jsonb_build_array(
@@ -11932,18 +12020,84 @@ begin
     end if;
   end if;
 
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    'CASE_CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    v_pay_batch_id,
+    null::uuid,
+    null,
+    jsonb_build_object(
+      'finance_case_id', v_finance_case_id::text,
+      'case_type', p_case_type::text,
+      'principal_amount', round(p_principal_amount,2),
+      'weekly_due', v_weekly_due_out,
+      'weeks_total', v_weeks_total_out,
+      'start_week_start', case when v_start_week_start_out is null then null else v_start_week_start_out::text end,
+      'payout_status', 'PENDING'
+    ),
+    'case_created',
+    nullif(btrim(coalesce(p_note,'')), '')
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    'PAYOUT_DRAFT_CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    v_pay_batch_id,
+    null::uuid,
+    null,
+    jsonb_build_object(
+      'pay_batch_id', v_pay_batch_id::text,
+      'pay_batch_item_id', v_pay_batch_item_id::text,
+      'batch_kind_fixed', 'LOANS',
+      'item_type', v_item_type,
+      'message_label', v_item_description,
+      'authoritative_payment_date', v_pay_date::text
+    ),
+    'payout_batch_created',
+    nullif(btrim(coalesce(p_note,'')), '')
+  );
+
   begin
     perform public._imp_debug_audit(
       p_actor_user_id,
-      'PAY_LOANS_GRANT',
+      'PAY_FINANCE_PAYOUT_GRANT',
       jsonb_build_object(
         'candidate_id', p_candidate_id::text,
-        'advance_id', v_advance_id::text,
+        'finance_case_id', v_finance_case_id::text,
         'pay_batch_id', v_pay_batch_id::text,
+        'case_type', p_case_type::text,
         'principal_amount', round(p_principal_amount,2),
-        'weekly_due', round(p_weekly_due,2),
-        'weeks_total', p_weeks_total,
-        'start_week_start', p_start_week_start::text,
+        'weekly_due', v_weekly_due_out,
+        'weeks_total', v_weeks_total_out,
+        'start_week_start', case when v_start_week_start_out is null then null else v_start_week_start_out::text end,
         'pay_date', v_pay_date::text,
         'rail_provider', v_settings.rail_provider_default,
         'rail_env', v_settings.rail_env_default,
@@ -11959,13 +12113,17 @@ begin
   return jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_pay_batch_id::text,
-    'advance_id', v_advance_id::text,
+    'finance_case_id', v_finance_case_id::text,
+    'advance_id', v_finance_case_id::text,
     'pay_date', v_pay_date::text,
     'batch_kind_fixed', 'LOANS',
+    'case_type', p_case_type::text,
+    'message_label', v_item_description,
     'warnings', v_warnings
   );
 end;
 $$;
+
 
 
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
