@@ -12297,7 +12297,6 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_now_utc timestamptz := now();
   v_out jsonb;
   v_has_tsfin boolean := false;
 BEGIN
@@ -12335,29 +12334,67 @@ BEGIN
     FROM tf_norm tn
   ),
   components AS (
-    -- Segment mode: one component per segment in invoice_breakdown_json
     SELECT
       nullif(btrim(COALESCE(seg->>'segment_id','')), '') AS component_id,
       nullif(btrim(COALESCE(seg->>'date','')), '') AS component_date,
       COALESCE(NULLIF(seg->>'exclude_from_pay','')::boolean, false) AS is_on_hold
     FROM tf_norm tn
-    JOIN is_seg s ON true
+    JOIN is_seg isg ON true
     JOIN LATERAL jsonb_array_elements(COALESCE(tn.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg ON true
-    WHERE s.is_segments_mode = true
+    WHERE isg.is_segments_mode = true
       AND seg IS NOT NULL
       AND jsonb_typeof(seg) = 'object'
       AND nullif(btrim(COALESCE(seg->>'segment_id','')), '') IS NOT NULL
 
     UNION ALL
 
-    -- Non-segment mode: single TOTAL component
     SELECT
       'TOTAL'::text AS component_id,
       NULL::text AS component_date,
       tn.pay_on_hold AS is_on_hold
     FROM tf_norm tn
-    JOIN is_seg s ON true
-    WHERE s.is_segments_mode = false
+    JOIN is_seg isg ON true
+    WHERE isg.is_segments_mode = false
+  ),
+  active_override AS (
+    SELECT
+      tpo.id AS override_id,
+      tpo.timesheet_id,
+      tpo.reason,
+      tpo.created_at_utc,
+      tpo.consumed_at_utc,
+      CASE
+        WHEN pb.id IS NOT NULL AND upper(COALESCE(pb.status::text,'')) <> 'CANCELLED'
+          THEN pb.id
+        ELSE NULL
+      END AS consumed_by_batch_id,
+      CASE
+        WHEN pb.id IS NOT NULL AND upper(COALESCE(pb.status::text,'')) <> 'CANCELLED'
+          THEN false
+        ELSE true
+      END AS can_unadvance
+    FROM public.timesheet_payment_overrides tpo
+    LEFT JOIN public.pay_batches pb
+      ON pb.id = tpo.consumed_by_pay_batch_id
+    WHERE tpo.timesheet_id = p_timesheet_id
+      AND tpo.cleared_at_utc IS NULL
+    ORDER BY tpo.created_at_utc DESC, tpo.id DESC
+    LIMIT 1
+  ),
+  active_payment_snooze AS (
+    SELECT
+      s.id AS snooze_id,
+      s.snooze_until_date,
+      s.note
+    FROM public.pay_item_snoozes s
+    WHERE s.timesheet_id = p_timesheet_id
+      AND s.source_ref IS NULL
+      AND s.segment_id IS NULL
+      AND s.cleared_at_utc IS NULL
+      AND upper(COALESCE(s.snooze_kind,'')) = 'TIMESHEET_PAYMENT'
+      AND (s.snooze_until_date IS NULL OR s.snooze_until_date >= current_date)
+    ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
+    LIMIT 1
   ),
   pay_items AS (
     SELECT
@@ -12369,7 +12406,6 @@ BEGIN
         ELSE 'TOTAL'
       END AS component_id,
       pb.status AS batch_status,
-      pb.override_mode AS override_mode,
       pb.completed_at_utc AS completed_at_utc
     FROM public.pay_batch_items pbi
     JOIN public.pay_batch_candidates pbc
@@ -12384,39 +12420,14 @@ BEGIN
   agg AS (
     SELECT
       pi.component_id,
-
-      -- settled flags
-      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) = 'SETTLED'
-                AND COALESCE(pi.override_mode::text,'') = 'TIMESHEET_ADVANCE'
-               THEN 1 ELSE 0 END)::int AS has_settled_adv,
-      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) = 'SETTLED'
-                AND COALESCE(pi.override_mode::text,'') <> 'TIMESHEET_ADVANCE'
-               THEN 1 ELSE 0 END)::int AS has_settled_norm,
-      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) = 'SETTLED'
-               THEN pi.completed_at_utc ELSE NULL END) AS settled_at_utc,
-
-      -- processing flags
-      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) IN (
-                 'DRAFT','DRAFT_CREATED','READY',
-                 'WAITING_BANK_CONFIRM','PARTIAL','FAILED','BLOCKED_FUNDS',
-                 'SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT'
-               )
-               AND COALESCE(pi.override_mode::text,'') = 'TIMESHEET_ADVANCE'
-               THEN 1 ELSE 0 END)::int AS has_proc_adv,
-      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) IN (
-                 'DRAFT','DRAFT_CREATED','READY',
-                 'WAITING_BANK_CONFIRM','PARTIAL','FAILED','BLOCKED_FUNDS',
-                 'SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT'
-               )
-               AND COALESCE(pi.override_mode::text,'') <> 'TIMESHEET_ADVANCE'
-               THEN 1 ELSE 0 END)::int AS has_proc_norm,
-      max(CASE WHEN upper(COALESCE(pi.batch_status,'')) IN (
+      max(CASE WHEN upper(COALESCE(pi.batch_status::text,'')) = 'SETTLED' THEN 1 ELSE 0 END)::int AS has_settled_norm,
+      max(CASE WHEN upper(COALESCE(pi.batch_status::text,'')) = 'SETTLED' THEN pi.completed_at_utc ELSE NULL END) AS settled_at_utc,
+      max(CASE WHEN upper(COALESCE(pi.batch_status::text,'')) IN (
                  'DRAFT','DRAFT_CREATED','READY',
                  'WAITING_BANK_CONFIRM','PARTIAL','FAILED','BLOCKED_FUNDS',
                  'SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT'
                )
                THEN 1 ELSE 0 END)::int AS has_proc_any
-
     FROM pay_items pi
     WHERE pi.component_id IS NOT NULL
     GROUP BY pi.component_id
@@ -12428,33 +12439,31 @@ BEGIN
       c.is_on_hold,
       CASE
         WHEN c.is_on_hold = true THEN 'ON_HOLD'
-        WHEN COALESCE(a.has_settled_adv,0) = 1 THEN 'ADVANCED'
         WHEN COALESCE(a.has_settled_norm,0) = 1 THEN 'PAID'
-        WHEN COALESCE(a.has_proc_adv,0) = 1 THEN 'ADVANCE_PROCESSING'
-        WHEN COALESCE(a.has_proc_norm,0) = 1 THEN 'PAY_PROCESSING'
+        WHEN ao.override_id IS NOT NULL AND COALESCE(a.has_proc_any,0) = 1 THEN 'ADVANCE_PROCESSING'
         WHEN COALESCE(a.has_proc_any,0) = 1 THEN 'PAY_PROCESSING'
+        WHEN ao.override_id IS NOT NULL THEN 'ADVANCED'
         ELSE 'UNPAID'
       END AS stage,
       a.settled_at_utc
     FROM components c
     LEFT JOIN agg a
       ON a.component_id = c.component_id
+    LEFT JOIN active_override ao
+      ON true
   ),
   counts AS (
     SELECT
       count(*)::int AS total_components,
       count(*) FILTER (WHERE cs.is_on_hold = true)::int AS on_hold_components,
       count(*) FILTER (WHERE cs.is_on_hold = false)::int AS payable_components,
-
       count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage IN ('PAID','ADVANCED'))::int AS paid_components,
       count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage = 'ADVANCED')::int AS advanced_components,
       count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage IN ('PAY_PROCESSING','ADVANCE_PROCESSING'))::int AS processing_components,
       count(*) FILTER (WHERE cs.is_on_hold = false AND cs.stage = 'UNPAID')::int AS unpaid_components,
-
       max(CASE WHEN cs.is_on_hold = false AND cs.stage IN ('PAY_PROCESSING','ADVANCE_PROCESSING') THEN 1 ELSE 0 END)::int AS any_processing,
       max(CASE WHEN cs.is_on_hold = false AND cs.stage = 'ADVANCED' THEN 1 ELSE 0 END)::int AS any_advanced,
-
-      max(CASE WHEN cs.is_on_hold = false AND cs.stage IN ('PAID','ADVANCED') THEN cs.settled_at_utc ELSE NULL END) AS paid_at_utc
+      max(CASE WHEN cs.is_on_hold = false AND cs.stage = 'PAID' THEN cs.settled_at_utc ELSE NULL END) AS paid_at_utc
     FROM comp_state cs
   ),
   unpaid_sample AS (
@@ -12482,7 +12491,7 @@ BEGIN
   ),
   mode AS (
     SELECT
-      COALESCE((SELECT is_segments_mode FROM is_seg), false) AS is_segments_mode
+      COALESCE((SELECT is_seg.is_segments_mode FROM is_seg LIMIT 1), false) AS is_segments_mode
   ),
   comp_json AS (
     SELECT
@@ -12566,6 +12575,19 @@ BEGIN
     FROM counts c
     CROSS JOIN unpaid_sample us
     CROSS JOIN delta d
+  ),
+  override_json AS (
+    SELECT
+      COALESCE((SELECT ao.override_id IS NOT NULL FROM active_override ao LIMIT 1), false) AS is_advanced,
+      COALESCE((SELECT ao.can_unadvance FROM active_override ao LIMIT 1), false) AS can_unadvance,
+      (SELECT ao.consumed_by_batch_id FROM active_override ao LIMIT 1) AS advanced_consumed_by_batch_id
+  ),
+  snooze_json AS (
+    SELECT
+      COALESCE((SELECT aps.snooze_id IS NOT NULL FROM active_payment_snooze aps LIMIT 1), false) AS is_snoozed,
+      (SELECT aps.snooze_until_date FROM active_payment_snooze aps LIMIT 1) AS snooze_until_date,
+      COALESCE((SELECT aps.snooze_until_date IS NULL FROM active_payment_snooze aps LIMIT 1), false) AS snooze_is_indefinite,
+      (SELECT aps.note FROM active_payment_snooze aps LIMIT 1) AS snooze_note
   )
   SELECT
     jsonb_build_object(
@@ -12577,6 +12599,13 @@ BEGIN
       'paid_at_label_uk', ps.paid_at_label_uk,
       'advanced_any', (c.any_advanced = 1),
       'processing_any', (c.any_processing = 1),
+      'is_advanced', oj.is_advanced,
+      'can_unadvance', oj.can_unadvance,
+      'advanced_consumed_by_batch_id', CASE WHEN oj.advanced_consumed_by_batch_id IS NULL THEN NULL ELSE oj.advanced_consumed_by_batch_id::text END,
+      'is_snoozed', sj.is_snoozed,
+      'snooze_until_date', CASE WHEN sj.snooze_until_date IS NULL THEN NULL ELSE sj.snooze_until_date::text END,
+      'snooze_is_indefinite', sj.snooze_is_indefinite,
+      'snooze_note', sj.snooze_note,
       'counts', jsonb_build_object(
         'total_components', c.total_components,
         'payable_components', c.payable_components,
@@ -12602,7 +12631,9 @@ BEGIN
   CROSS JOIN paid_status ps
   CROSS JOIN adjusted a
   CROSS JOIN hover h
-  CROSS JOIN comp_json cj;
+  CROSS JOIN comp_json cj
+  CROSS JOIN override_json oj
+  CROSS JOIN snooze_json sj;
 
   v_has_tsfin := EXISTS (
     SELECT 1
@@ -12619,7 +12650,6 @@ BEGIN
     );
   END IF;
 
-  -- Best-effort debug audit (gated inside _imp_debug_audit)
   BEGIN
     IF p_actor_user_id IS NOT NULL THEN
       PERFORM public._imp_debug_audit(
@@ -12641,6 +12671,9 @@ BEGIN
   RETURN v_out;
 END;
 $$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_candidate_advances_report(
   p_candidate_id uuid,
