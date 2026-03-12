@@ -6818,6 +6818,9 @@ v_exclude_ts_raw text;
 v_exclude_ts_uuid uuid;
 v_overpayment_sync jsonb := '{}'::jsonb;
 v_negative_preview_timesheets_count int := 0;
+v_rows_upd_timesheet_overrides_consumed int := 0;
+v_consumed_timesheet_payment_overrides jsonb := '[]'::jsonb;
+v_override_consume_rec record;
 begin
   v_stage := 'STAGE_00_INPUTS';
 
@@ -8109,7 +8112,9 @@ end;
         'rail_provider_snapshot', v_settings.rail_provider_default,
         'rail_env_snapshot', v_settings.rail_env_default,
         'overpayment_sync_only', true,
-        'overpayment_sync', v_overpayment_sync
+        'overpayment_sync', v_overpayment_sync,
+        'consumed_timesheet_payment_override_count', 0,
+        'consumed_timesheet_payment_overrides', '[]'::jsonb
       );
     end if;
 
@@ -10539,6 +10544,148 @@ bucket_rows as (
     raise exception 'DRAFT_CONTAINS_BLOCKED_ITEMS %', v_blocked_candidates::text;
   end if;
 
+
+  v_stage := 'STAGE_23B_CONSUME_TIMESHEET_PAYMENT_OVERRIDES';
+
+  with consumed as (
+    update public.timesheet_payment_overrides tpo
+    set
+      consumed_by_pay_batch_id = v_batch_id,
+      consumed_at_utc = v_now_utc
+    where tpo.cleared_at_utc is null
+      and tpo.consumed_by_pay_batch_id is null
+      and tpo.consumed_at_utc is null
+      and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
+      and tpo.id in (
+        select tpo_pick.id
+        from (
+          select distinct on (tpo2.timesheet_id)
+            tpo2.id,
+            tpo2.timesheet_id
+          from public.timesheet_payment_overrides tpo2
+          where tpo2.cleared_at_utc is null
+            and tpo2.consumed_by_pay_batch_id is null
+            and tpo2.consumed_at_utc is null
+            and upper(coalesce(tpo2.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
+            and exists (
+              select 1
+              from public.pay_batch_items pbi
+              join public.pay_batch_candidates pbc
+                on pbc.id = pbi.pay_batch_candidate_id
+              where pbc.pay_batch_id = v_batch_id
+                and pbi.timesheet_id = tpo2.timesheet_id
+                and coalesce(pbi.is_voided, false) = false
+                and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+            )
+          order by tpo2.timesheet_id, tpo2.created_at_utc desc, tpo2.id desc
+        ) tpo_pick
+      )
+    returning
+      tpo.id,
+      tpo.timesheet_id,
+      tpo.candidate_id,
+      tpo.override_type,
+      tpo.reason,
+      tpo.created_at_utc,
+      tpo.created_by_user_id,
+      tpo.consumed_by_pay_batch_id,
+      tpo.consumed_at_utc
+  )
+  select
+    count(*)::int,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'override_id', consumed.id::text,
+          'timesheet_id', consumed.timesheet_id::text,
+          'candidate_id', case when consumed.candidate_id is null then null else consumed.candidate_id::text end,
+          'override_type', consumed.override_type,
+          'reason', consumed.reason,
+          'created_at_utc', consumed.created_at_utc,
+          'created_by_user_id', case when consumed.created_by_user_id is null then null else consumed.created_by_user_id::text end,
+          'consumed_by_pay_batch_id', case when consumed.consumed_by_pay_batch_id is null then null else consumed.consumed_by_pay_batch_id::text end,
+          'consumed_at_utc', consumed.consumed_at_utc
+        )
+        order by consumed.timesheet_id::text, consumed.id::text
+      ),
+      '[]'::jsonb
+    )
+  into
+    v_rows_upd_timesheet_overrides_consumed,
+    v_consumed_timesheet_payment_overrides
+  from consumed;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_23B_TIMESHEET_OVERRIDES_CONSUMED',
+      jsonb_build_object(
+        'stage', v_stage,
+        'pay_batch_id', v_batch_id::text,
+        'consumed_timesheet_payment_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+        'consumed_timesheet_payment_overrides', v_consumed_timesheet_payment_overrides
+      ),
+      'pay_batches',
+      v_batch_id::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  if coalesce(v_rows_upd_timesheet_overrides_consumed, 0) > 0 then
+    for v_override_consume_rec in
+      select
+        x.override_id::uuid as override_id,
+        x.timesheet_id::uuid as timesheet_id,
+        case when x.candidate_id is null or btrim(x.candidate_id) = '' then null else x.candidate_id::uuid end as candidate_id,
+        x.override_type,
+        x.reason,
+        case when x.created_by_user_id is null or btrim(x.created_by_user_id) = '' then null else x.created_by_user_id::uuid end as created_by_user_id,
+        x.created_at_utc::timestamptz as created_at_utc,
+        case when x.consumed_by_pay_batch_id is null or btrim(x.consumed_by_pay_batch_id) = '' then null else x.consumed_by_pay_batch_id::uuid end as consumed_by_pay_batch_id,
+        x.consumed_at_utc::timestamptz as consumed_at_utc
+      from jsonb_to_recordset(v_consumed_timesheet_payment_overrides) as x(
+        override_id text,
+        timesheet_id text,
+        candidate_id text,
+        override_type text,
+        reason text,
+        created_at_utc text,
+        created_by_user_id text,
+        consumed_by_pay_batch_id text,
+        consumed_at_utc text
+      )
+    loop
+      begin
+        perform public._audit_insert(
+          'timesheets',
+          v_override_consume_rec.timesheet_id::text,
+          'TIMESHEET_PAYMENT_OVERRIDE_CONSUMED',
+          jsonb_build_object(
+            'override_id', v_override_consume_rec.override_id::text,
+            'timesheet_id', v_override_consume_rec.timesheet_id::text,
+            'candidate_id', case when v_override_consume_rec.candidate_id is null then null else v_override_consume_rec.candidate_id::text end,
+            'override_type', v_override_consume_rec.override_type,
+            'reason', v_override_consume_rec.reason,
+            'created_at_utc', v_override_consume_rec.created_at_utc,
+            'created_by_user_id', case when v_override_consume_rec.created_by_user_id is null then null else v_override_consume_rec.created_by_user_id::text end
+          ),
+          jsonb_build_object(
+            'override_id', v_override_consume_rec.override_id::text,
+            'timesheet_id', v_override_consume_rec.timesheet_id::text,
+            'candidate_id', case when v_override_consume_rec.candidate_id is null then null else v_override_consume_rec.candidate_id::text end,
+            'consumed_by_pay_batch_id', case when v_override_consume_rec.consumed_by_pay_batch_id is null then null else v_override_consume_rec.consumed_by_pay_batch_id::text end,
+            'consumed_at_utc', v_override_consume_rec.consumed_at_utc,
+            'pay_batch_id', v_batch_id::text
+          ),
+          'ADVANCE_THIS_PAYMENT',
+          p_actor_user_id
+        );
+      exception when others then
+        null;
+      end;
+    end loop;
+  end if;
+
   v_stage := 'STAGE_24_RETURN';
 
   begin
@@ -10558,7 +10705,9 @@ bucket_rows as (
           'banking_system_snapshot', v_settings.banking_system,
           'external_paye_system_snapshot', v_settings.external_paye_system,
           'rail_provider_snapshot', v_settings.rail_provider_default,
-          'rail_env_snapshot', v_settings.rail_env_default
+          'rail_env_snapshot', v_settings.rail_env_default,
+          'consumed_timesheet_payment_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+          'consumed_timesheet_payment_overrides', v_consumed_timesheet_payment_overrides
         ),
         'dml_summary', jsonb_build_object(
           'batch_insert_rowcount', v_rows,
@@ -10570,7 +10719,8 @@ bucket_rows as (
           'snapshots_inserted', v_rows_ins_snapshots,
           'breakdowns_inserted', v_rows_ins_breakdowns,
           'breakdown_missing_ct', coalesce(v_breakdown_missing_ct,0),
-          'breakdown_bad_ct', coalesce(v_breakdown_bad_ct,0)
+          'breakdown_bad_ct', coalesce(v_breakdown_bad_ct,0),
+          'timesheet_payment_overrides_consumed', coalesce(v_rows_upd_timesheet_overrides_consumed,0)
         )
       ),
       'pay_batches',
@@ -10589,7 +10739,9 @@ bucket_rows as (
     'banking_system_snapshot', v_settings.banking_system,
     'external_paye_system_snapshot', v_settings.external_paye_system,
     'rail_provider_snapshot', v_settings.rail_provider_default,
-    'rail_env_snapshot', v_settings.rail_env_default
+    'rail_env_snapshot', v_settings.rail_env_default,
+    'consumed_timesheet_payment_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed, 0),
+    'consumed_timesheet_payment_overrides', v_consumed_timesheet_payment_overrides
   );
 
 exception when others then
@@ -10615,6 +10767,8 @@ exception when others then
         ),
         'last_reserved_json', v_reserved,
         'blocked_candidates', v_blocked_candidates,
+        'consumed_timesheet_payment_override_count', coalesce(v_rows_upd_timesheet_overrides_consumed,0),
+        'consumed_timesheet_payment_overrides', v_consumed_timesheet_payment_overrides,
         'breakdown_missing_ct', coalesce(v_breakdown_missing_ct,0),
         'breakdown_bad_ct', coalesce(v_breakdown_bad_ct,0),
         'breakdown_bad', v_breakdown_bad,
@@ -10632,10 +10786,6 @@ exception when others then
   raise;
 end;
 $$;
-
-
-
-
 
 
 
