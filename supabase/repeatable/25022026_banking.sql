@@ -11675,7 +11675,6 @@ end;
 $$;
 
 
-
 create or replace function public.pay_loans_grant(
   p_candidate_id uuid,
   p_principal_amount numeric,
@@ -12007,8 +12006,8 @@ begin
   )
   values (
     v_pay_date,
-    v_pay_date,
-    'PAYOUT_BATCH_CREATED',
+    null::date,
+    null::text,
     v_now_utc,
     p_actor_user_id,
     'DRAFT',
@@ -12254,7 +12253,9 @@ begin
       'batch_kind_fixed', 'LOANS',
       'item_type', v_item_type,
       'message_label', v_item_description,
-      'authoritative_payment_date', v_pay_date::text
+      'provisional_pay_date', v_pay_date::text,
+      'authoritative_payment_date', null,
+      'authoritative_payment_date_source', null
     ),
     'payout_batch_created',
     nullif(btrim(coalesce(p_note,'')), '')
@@ -12273,7 +12274,9 @@ begin
         'weekly_due', v_weekly_due_out,
         'weeks_total', v_weeks_total_out,
         'start_week_start', case when v_start_week_start_out is null then null else v_start_week_start_out::text end,
-        'pay_date', v_pay_date::text,
+        'provisional_pay_date', v_pay_date::text,
+        'authoritative_payment_date', null,
+        'authoritative_payment_date_source', null,
         'rail_provider', v_settings.rail_provider_default,
         'rail_env', v_settings.rail_env_default,
         'warnings', v_warnings
@@ -12291,6 +12294,9 @@ begin
     'finance_case_id', v_finance_case_id::text,
     'advance_id', v_finance_case_id::text,
     'pay_date', v_pay_date::text,
+    'authoritative_payment_date', null,
+    'authoritative_payment_date_source', null,
+    'payment_date_is_authoritative', false,
     'batch_kind_fixed', 'LOANS',
     'case_type', p_case_type::text,
     'message_label', v_item_description,
@@ -12298,6 +12304,7 @@ begin
   );
 end;
 $$;
+
 
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
