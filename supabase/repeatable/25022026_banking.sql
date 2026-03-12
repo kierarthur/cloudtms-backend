@@ -18965,7 +18965,7 @@ begin
     'jobs', coalesce(v_filtered_jobs, '[]'::jsonb)
   );
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_queue_commit_stage(
   p_pay_batch_id uuid,
