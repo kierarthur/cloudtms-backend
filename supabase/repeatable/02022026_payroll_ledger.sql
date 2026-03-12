@@ -302,18 +302,34 @@ begin
       jsonb_build_object(
         'id', pb.id::text,
         'pay_date', pb.pay_date::text,
+        'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
+        'authoritative_payment_date_source', pb.authoritative_payment_date_source,
         'created_at_utc', pb.created_at_utc,
         'created_by_user_id', case when pb.created_by_user_id is null then null else pb.created_by_user_id::text end,
         'status', pb.status,
         'banking_system_snapshot', pb.banking_system_snapshot,
         'external_paye_system_snapshot', pb.external_paye_system_snapshot,
 
-        -- ✅ NEW: authoritative kind (LOANS) + derived kind (PAYE/UMBRELLA/MIXED)
         'batch_kind_fixed', pb.batch_kind_fixed,
         'batch_kind', pb.batch_kind,
         'pay_channels_present', pb.pay_channels_present,
+        'batch_display_classification', pb.batch_display_classification,
 
-        -- Rail-generic scheduling/execution fields
+        'same_week_paye_override_used', pb.same_week_paye_override_used,
+        'same_week_paye_override_reason', pb.same_week_paye_override_reason,
+        'same_week_paye_override_verified_at_utc', pb.same_week_paye_override_verified_at_utc,
+        'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
+
+        'remittance_summary', jsonb_build_object(
+          'candidate_count', pb.remittance_candidate_count,
+          'sent_count', pb.remittance_sent_count,
+          'unsent_count', pb.remittance_unsent_count,
+          'error_count', pb.remittance_error_count,
+          'latest_sent_at_utc', pb.remittance_latest_sent_at_utc,
+          'all_sent', pb.remittance_all_sent,
+          'trigger_statuses', pb.remittance_trigger_statuses
+        ),
+
         'rail_provider_snapshot', pb.rail_provider_snapshot,
         'rail_env_snapshot', pb.rail_env_snapshot,
         'schedule_kind', pb.schedule_kind,
@@ -321,10 +337,8 @@ begin
         'executing_started_at_utc', pb.executing_started_at_utc,
         'last_status_checked_at_utc', pb.last_status_checked_at_utc,
 
-        -- funding account reference used for this batch (UI audit/history)
         'funding_account_ref', pb.funding_account_ref,
 
-        -- Neutral (rail-generic) manual confirm aliases (keep legacy keys too)
         'manual_confirmed_at_utc', pb.monzo_confirmed_at_utc,
         'manual_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
 
@@ -334,12 +348,10 @@ begin
         'total_bank_out', pb.total_bank_out,
         'total_debt_created', pb.total_debt_created,
 
-        -- Bulk payment reference fields
         'bulk_ref_num', pb.bulk_ref_num,
         'bulk_ref_date', case when pb.bulk_ref_date is null then null else pb.bulk_ref_date::text end,
         'bulk_reference', pb.bulk_reference,
 
-        -- lightweight authorisation summary for list visibility
         'auth_required_quantity', pb.auth_required_quantity,
         'auth_approved_count', pb.auth_approved_count,
         'auth_label', pb.auth_label,
@@ -353,8 +365,6 @@ begin
   from (
     select
       pb0.*,
-
-      -- ✅ NEW: channels present + derived batch kind (but LOANS overrides display kind)
       case
         when upper(coalesce(pb0.batch_kind_fixed,'')) = 'LOANS' then 'LOANS'
         when ch.channels is null then null
@@ -364,7 +374,16 @@ begin
         else null
       end as batch_kind,
       coalesce(to_jsonb(ch.channels), '[]'::jsonb) as pay_channels_present,
-
+      case
+        when upper(coalesce(pb0.batch_kind_fixed,'')) = 'LOANS' and coalesce(ft.has_payment_advance,false) = true and coalesce(ft.has_manual_credit,false) = false then 'PAYMENT_ADVANCE_PAYOUTS'
+        when upper(coalesce(pb0.batch_kind_fixed,'')) = 'LOANS' and coalesce(ft.has_payment_advance,false) = false and coalesce(ft.has_manual_credit,false) = true then 'MANUAL_CREDIT_ADJUSTMENTS'
+        when upper(coalesce(pb0.batch_kind_fixed,'')) = 'LOANS' then 'FINANCE_PAYOUTS'
+        when ch.channels is null then null
+        when array_position(ch.channels,'PAYE') is not null and array_position(ch.channels,'UMBRELLA') is not null then 'MIXED_PAYROLL'
+        when array_position(ch.channels,'PAYE') is not null then 'PAYE_PAYROLL'
+        when array_position(ch.channels,'UMBRELLA') is not null then 'UMBRELLA_PAYROLL'
+        else null
+      end as batch_display_classification,
       pbar.required_quantity as auth_required_quantity,
       pbar.state as auth_state,
       case
@@ -374,7 +393,17 @@ begin
       case
         when pbar.id is null then null
         else (coalesce(pbaa.approved_count, 0)::text || '/' || pbar.required_quantity::text)
-      end as auth_label
+      end as auth_label,
+      coalesce(rmt.candidate_count, 0) as remittance_candidate_count,
+      coalesce(rmt.sent_count, 0) as remittance_sent_count,
+      greatest(coalesce(rmt.candidate_count, 0) - coalesce(rmt.sent_count, 0), 0) as remittance_unsent_count,
+      coalesce(rmt.error_count, 0) as remittance_error_count,
+      rmt.latest_sent_at_utc as remittance_latest_sent_at_utc,
+      case
+        when coalesce(rmt.candidate_count, 0) = 0 then false
+        else coalesce(rmt.all_sent, false)
+      end as remittance_all_sent,
+      coalesce(rmt.trigger_statuses, '[]'::jsonb) as remittance_trigger_statuses
     from public.pay_batches pb0
     left join lateral (
       select
@@ -386,6 +415,18 @@ begin
       where pbc.pay_batch_id = pb0.id
         and pbi.item_type <> 'DEBT_CREATED'
     ) ch on true
+    left join lateral (
+      select
+        bool_or(pa.case_type = 'PAYMENT_ADVANCE') as has_payment_advance,
+        bool_or(pa.case_type = 'MANUAL_CREDIT_ADJUSTMENT') as has_manual_credit
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc
+        on pbc.id = pbi.pay_batch_candidate_id
+      join public.pay_advances pa
+        on pa.id = pbi.finance_case_id
+      where pbc.pay_batch_id = pb0.id
+        and pbi.finance_case_id is not null
+    ) ft on true
     left join lateral (
       select
         pbar0.id,
@@ -405,6 +446,23 @@ begin
         and pbaa0.auth_request_id = pbar.id
         and pbaa0.action in ('AUTHORISE','USE_GOLDEN_KEY')
     ) pbaa on true
+    left join lateral (
+      select
+        count(*)::int as candidate_count,
+        count(*) filter (where pbc0.remittance_sent_at_utc is not null)::int as sent_count,
+        count(*) filter (where nullif(btrim(coalesce(pbc0.last_remittance_error,'')), '') is not null)::int as error_count,
+        max(pbc0.remittance_sent_at_utc) as latest_sent_at_utc,
+        bool_and(pbc0.remittance_sent_at_utc is not null) as all_sent,
+        coalesce(
+          to_jsonb(
+            array_agg(distinct pbc0.remittance_trigger_status order by pbc0.remittance_trigger_status)
+            filter (where pbc0.remittance_trigger_status is not null and btrim(coalesce(pbc0.remittance_trigger_status,'')) <> '')
+          ),
+          '[]'::jsonb
+        ) as trigger_statuses
+      from public.pay_batch_candidates pbc0
+      where pbc0.pay_batch_id = pb0.id
+    ) rmt on true
     where v_status is null or upper(coalesce(pb0.status,'')) = v_status
     order by pb0.created_at_utc desc, pb0.id desc
     limit v_limit offset v_offset
@@ -419,8 +477,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 -- =========================================================
@@ -10095,6 +10151,7 @@ begin;
 
 
 
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -10114,6 +10171,9 @@ declare
   -- ✅ NEW: child modal support payloads
   v_candidate_breakdown jsonb := '[]'::jsonb;
   v_candidate_lines jsonb := '[]'::jsonb;
+  v_finance_case_groups jsonb := '[]'::jsonb;
+  v_finance_summaries jsonb := '{}'::jsonb;
+  v_remittance_summary jsonb := '{}'::jsonb;
 
   -- ✅ C: schedule recommendations / UI defaults
   v_default_schedule_umbrella_local text := null;
@@ -10288,6 +10348,10 @@ begin
         'settled_at_utc', pbc.settled_at_utc,
         'settled_via', pbc.settled_via,
         'settled_note', pbc.settled_note,
+        'remittance_sent_at_utc', pbc.remittance_sent_at_utc,
+        'remittance_sent_by_user_id', case when pbc.remittance_sent_by_user_id is null then null else pbc.remittance_sent_by_user_id::text end,
+        'remittance_trigger_status', pbc.remittance_trigger_status,
+        'last_remittance_error', pbc.last_remittance_error,
 
         -- Latest PAYE net input summary
         'paye_net_amount', ni.net_amount,
@@ -10303,6 +10367,11 @@ begin
           'final_payable', pbc.net_bank_amount,
           'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(pbc.awaiting_net_amount,false) end,
           'paye_net_amount', ni.net_amount
+        ),
+        'finance_summary', jsonb_build_object(
+          'gross_additions_ex_vat', coalesce(fs.gross_additions_ex_vat,0),
+          'gross_deductions_ex_vat', coalesce(fs.gross_deductions_ex_vat,0),
+          'net_deductions_ex_vat', coalesce(fs.net_deductions_ex_vat,0)
         )
       )
       order by pbc.candidate_display_name nulls last, pbc.candidate_tms_ref nulls last, pbc.candidate_id
@@ -10322,6 +10391,14 @@ begin
     order by pni.imported_at_utc desc
     limit 1
   ) ni on true
+  left join lateral (
+    select
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat
+    from public.pay_batch_items pbi
+    where pbi.pay_batch_candidate_id = pbc.id
+  ) fs on true
   where pbc.pay_batch_id = p_pay_batch_id;
 
   -- Transfers + snapshot fields + rail-generic fields
@@ -10380,6 +10457,9 @@ begin
         'segment_key', pbi.segment_key,
         'source_ref', pbi.source_ref,
         'description', pbi.description,
+        'finance_case_id', case when pbi.finance_case_id is null then null else pbi.finance_case_id::text end,
+        'reservation_id', case when pbi.reservation_id is null then null else pbi.reservation_id::text end,
+        'paye_treatment', pbi.paye_treatment,
         'amount_ex_vat', pbi.amount_ex_vat,
         'amount_vat', pbi.amount_vat,
         'amount_inc_vat', pbi.amount_inc_vat,
@@ -10410,7 +10490,11 @@ begin
       pbc.awaiting_net_amount,
       pbc.net_bank_amount,
       pbc.overpayment_recovery_taken,
-      pbc.loan_repayment_taken
+      pbc.loan_repayment_taken,
+      pbc.remittance_sent_at_utc,
+      pbc.remittance_sent_by_user_id,
+      pbc.remittance_trigger_status,
+      pbc.last_remittance_error
     from public.pay_batch_candidates pbc
     where pbc.pay_batch_id = p_pay_batch_id
   ),
@@ -10440,6 +10524,18 @@ begin
       pbc.id as pay_batch_candidate_id,
       round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,'')) = 'PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as paye_total_ex_vat,
       round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as umbrella_total_inc_vat
+    from public.pay_batch_candidates pbc
+    left join public.pay_batch_items pbi
+      on pbi.pay_batch_candidate_id = pbc.id
+    where pbc.pay_batch_id = p_pay_batch_id
+    group by pbc.id
+  ),
+  fs as (
+    select
+      pbc.id as pay_batch_candidate_id,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
@@ -10504,6 +10600,10 @@ begin
           end),
         'overpayment_recovery_taken', c.overpayment_recovery_taken,
         'loan_repayment_taken', c.loan_repayment_taken,
+        'remittance_sent_at_utc', c.remittance_sent_at_utc,
+        'remittance_sent_by_user_id', case when c.remittance_sent_by_user_id is null then null else c.remittance_sent_by_user_id::text end,
+        'remittance_trigger_status', c.remittance_trigger_status,
+        'last_remittance_error', c.last_remittance_error,
         'final_net_paid', c.net_bank_amount,
         'deductions_summary', jsonb_build_object(
           'gross_positive', c.gross_preview,
@@ -10512,6 +10612,11 @@ begin
           'final_payable', c.net_bank_amount,
           'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(c.awaiting_net_amount, false) end,
           'paye_net_amount', n.net_amount
+        ),
+        'finance_summary', jsonb_build_object(
+          'gross_additions_ex_vat', coalesce(fs.gross_additions_ex_vat,0),
+          'gross_deductions_ex_vat', coalesce(fs.gross_deductions_ex_vat,0),
+          'net_deductions_ex_vat', coalesce(fs.net_deductions_ex_vat,0)
         ),
         'paye_total_ex_vat', s.paye_total_ex_vat,
         'umbrella_total_inc_vat', s.umbrella_total_inc_vat,
@@ -10547,6 +10652,8 @@ begin
     on n.pay_batch_candidate_id = c.pay_batch_candidate_id
   left join sums s
     on s.pay_batch_candidate_id = c.pay_batch_candidate_id
+  left join fs
+    on fs.pay_batch_candidate_id = c.pay_batch_candidate_id
   left join tr tr0
     on tr0.pay_batch_candidate_id = c.pay_batch_candidate_id;
 
@@ -10875,6 +10982,141 @@ begin
   into v_candidate_lines
   from cand_lines cl;
 
+  select jsonb_build_object(
+    'candidate_count', count(*)::int,
+    'sent_count', count(*) filter (where pbc.remittance_sent_at_utc is not null)::int,
+    'unsent_count', count(*) filter (where pbc.remittance_sent_at_utc is null)::int,
+    'error_count', count(*) filter (where nullif(btrim(coalesce(pbc.last_remittance_error,'')), '') is not null)::int,
+    'latest_sent_at_utc', max(pbc.remittance_sent_at_utc),
+    'all_sent', case when count(*) = 0 then false else bool_and(pbc.remittance_sent_at_utc is not null) end,
+    'trigger_statuses', coalesce(
+      to_jsonb(
+        array_agg(distinct pbc.remittance_trigger_status order by pbc.remittance_trigger_status)
+        filter (where pbc.remittance_trigger_status is not null and btrim(coalesce(pbc.remittance_trigger_status,'')) <> '')
+      ),
+      '[]'::jsonb
+    )
+  )
+  into v_remittance_summary
+  from public.pay_batch_candidates pbc
+  where pbc.pay_batch_id = p_pay_batch_id;
+
+  select jsonb_build_object(
+    'gross_additions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2),
+    'gross_deductions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2),
+    'net_deductions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2),
+    'payout_amount_inc_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT') then coalesce(pbi.amount_inc_vat,0) else 0 end),0),2),
+    'recovery_amount_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and pbi.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2),
+    'finance_case_count', count(distinct pbi.finance_case_id)
+  )
+  into v_finance_summaries
+  from public.pay_batch_items pbi
+  join public.pay_batch_candidates pbc
+    on pbc.id = pbi.pay_batch_candidate_id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbi.finance_case_id is not null;
+
+  with finance_items as (
+    select
+      pbi.finance_case_id,
+      max(pbc.candidate_id) as candidate_id,
+      max(pbc.candidate_display_name) as candidate_display_name,
+      max(pbc.candidate_tms_ref) as candidate_tms_ref,
+      round(coalesce(sum(coalesce(pbi.amount_ex_vat,0)),0),2) as batch_amount_ex_vat,
+      round(coalesce(sum(coalesce(pbi.amount_inc_vat,0)),0),2) as batch_amount_inc_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat,
+      coalesce(
+        to_jsonb(
+          array_agg(distinct pbi.item_type order by pbi.item_type)
+          filter (where pbi.item_type is not null and btrim(coalesce(pbi.item_type,'')) <> '')
+        ),
+        '[]'::jsonb
+      ) as item_types
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbc.pay_batch_id = p_pay_batch_id
+      and pbi.finance_case_id is not null
+    group by pbi.finance_case_id
+  ),
+  reservation_rollup as (
+    select
+      par.finance_case_id,
+      case
+        when bool_or(upper(coalesce(par.status,'')) = 'SETTLED') then 'SETTLED'
+        when bool_or(upper(coalesce(par.status,'')) = 'COMMITTED') then 'COMMITTED'
+        when bool_or(upper(coalesce(par.status,'')) = 'RESERVED') then 'RESERVED'
+        when bool_or(upper(coalesce(par.status,'')) = 'RELEASED') then 'RELEASED'
+        else null
+      end as lifecycle_state,
+      round(coalesce(sum(coalesce(par.reserved_amount,0)),0),2) as reservation_amount,
+      coalesce(
+        to_jsonb(
+          array_agg(distinct par.status order by par.status)
+          filter (where par.status is not null and btrim(coalesce(par.status,'')) <> '')
+        ),
+        '[]'::jsonb
+      ) as reservation_statuses
+    from public.pay_advance_reservations par
+    where par.pay_batch_id = p_pay_batch_id
+    group by par.finance_case_id
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'finance_case_id', vf.finance_case_id::text,
+        'case_type', vf.case_type,
+        'candidate_id', case when fi.candidate_id is null then null else fi.candidate_id::text end,
+        'candidate_display_name', fi.candidate_display_name,
+        'candidate_tms_ref', fi.candidate_tms_ref,
+        'lifecycle_state', coalesce(rr.lifecycle_state, upper(coalesce(vf.status,''))),
+        'finance_case_status', vf.status,
+        'payout_status', vf.payout_status,
+        'payout_or_recovery_status', case when vf.case_type in ('PAYMENT_ADVANCE','MANUAL_CREDIT_ADJUSTMENT') and upper(coalesce(v_batch_kind_fixed,'')) = 'LOANS' then coalesce(vf.payout_status, vf.status) else vf.status end,
+        'remaining_amount', vf.outstanding_amount,
+        'batch_amount_ex_vat', fi.batch_amount_ex_vat,
+        'batch_amount_inc_vat', fi.batch_amount_inc_vat,
+        'item_types', fi.item_types,
+        'reservation_amount', coalesce(rr.reservation_amount,0),
+        'reservation_statuses', coalesce(rr.reservation_statuses,'[]'::jsonb),
+        'comment_context', jsonb_build_object(
+          'adjustment_comment', vf.adjustment_comment,
+          'linked_timesheet_id', case when vf.linked_timesheet_id is null then null else vf.linked_timesheet_id::text end,
+          'linked_shift_date', case when vf.linked_shift_date is null then null else vf.linked_shift_date::text end,
+          'source_original_paid_amount', vf.source_original_paid_amount,
+          'source_corrected_paid_amount', vf.source_corrected_paid_amount,
+          'notes', vf.notes
+        ),
+        'paye_summary', jsonb_build_object(
+          'gross_additions_ex_vat', fi.gross_additions_ex_vat,
+          'gross_deductions_ex_vat', fi.gross_deductions_ex_vat,
+          'net_deductions_ex_vat', fi.net_deductions_ex_vat
+        ),
+        'active_snooze_context', case
+          when vf.active_snooze_id is null then null
+          else jsonb_build_object(
+            'snooze_id', vf.active_snooze_id::text,
+            'snooze_kind', vf.active_snooze_kind,
+            'snooze_until_date', case when vf.active_snooze_until_date is null then null else vf.active_snooze_until_date::text end,
+            'note', vf.active_snooze_note,
+            'created_at_utc', vf.active_snooze_created_at_utc,
+            'updated_at_utc', vf.active_snooze_updated_at_utc
+          )
+        end
+      )
+      order by fi.candidate_display_name nulls last, fi.candidate_tms_ref nulls last, vf.finance_case_id
+    ),
+    '[]'::jsonb
+  )
+  into v_finance_case_groups
+  from finance_items fi
+  join public.v_finance_cases_register vf
+    on vf.finance_case_id = fi.finance_case_id
+  left join reservation_rollup rr
+    on rr.finance_case_id = fi.finance_case_id;
+
   return jsonb_build_object(
     'ok', true,
 
@@ -10886,6 +11128,9 @@ begin
     -- ✅ child modal datasets
     'candidate_breakdown', v_candidate_breakdown,
     'candidate_lines', v_candidate_lines,
+    'finance_case_groups', v_finance_case_groups,
+    'finance_summaries', v_finance_summaries,
+    'remittance_summary', v_remittance_summary,
 
     -- schedule recommendations for UI preselect (includes default funding account)
     'schedule_recommendations', jsonb_build_object(
@@ -10901,6 +11146,12 @@ begin
     'batch', jsonb_build_object(
       'id', v_batch.id::text,
       'pay_date', v_batch.pay_date::text,
+      'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
+      'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
+      'same_week_paye_override_used', v_batch.same_week_paye_override_used,
+      'same_week_paye_override_reason', v_batch.same_week_paye_override_reason,
+      'same_week_paye_override_verified_at_utc', v_batch.same_week_paye_override_verified_at_utc,
+      'same_week_paye_override_verified_by_user_id', case when v_batch.same_week_paye_override_verified_by_user_id is null then null else v_batch.same_week_paye_override_verified_by_user_id::text end,
       'created_at_utc', v_batch.created_at_utc,
       'created_by_user_id', case when v_batch.created_by_user_id is null then null else v_batch.created_by_user_id::text end,
       'status', v_batch.status,
@@ -10934,6 +11185,8 @@ begin
   );
 end;
 $$;
+
+
 
 
 
