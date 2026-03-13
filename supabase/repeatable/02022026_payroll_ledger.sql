@@ -7289,7 +7289,7 @@ end;
   --  - if pay_preview returns has_any_delta => use it
   --  - otherwise derive "has_any_delta" from totals
   with preview as (
-    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null, p_force_include_timesheet_ids) as j
+    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null, null::uuid[]) as j
   ),
   all_cands as (
     select c as cand
@@ -7359,15 +7359,15 @@ end;
         on c.id = tf.candidate_id
       where tf.is_current = true
         and coalesce(tf.pay_on_hold,false) = false
-        and (ts.authorised_at_server is not null or (p_override_mode = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum and tf.timesheet_id = any(coalesce(p_force_include_timesheet_ids, array[]::uuid[]))))
+        and ts.authorised_at_server is not null
         and coalesce(tf.has_rate_issue,false) = false
         and coalesce(tf.has_pay_channel_issue,false) = false
         and upper(coalesce(tf.processing_status::text,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
         and upper(coalesce(c.pay_method,'')) in ('PAYE','UMBRELLA')
         and tf.client_id = v_client_filter_single
-        and (ts.week_ending_date::date >= v_eligibility_from_date or (p_override_mode = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum and tf.timesheet_id = any(coalesce(p_force_include_timesheet_ids, array[]::uuid[]))))
-        and (ts.week_ending_date::date <= v_eligibility_to_date or (p_override_mode = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum and tf.timesheet_id = any(coalesce(p_force_include_timesheet_ids, array[]::uuid[]))))
-        and (ts.week_ending_date::date <= p_week_ending_cutoff or (p_override_mode = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum and tf.timesheet_id = any(coalesce(p_force_include_timesheet_ids, array[]::uuid[]))))
+        and ts.week_ending_date::date >= v_eligibility_from_date
+        and ts.week_ending_date::date <= v_eligibility_to_date
+        and ts.week_ending_date::date <= p_week_ending_cutoff
     )
     select coalesce(array_agg(ci.candidate_id), array[]::uuid[])
     into v_candidate_ids
@@ -7438,7 +7438,7 @@ end;
 
   -- Validate mismatch decisions completeness for included candidates (scope-agnostic)
   with preview as (
-    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null, p_force_include_timesheet_ids) as j
+    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null, null::uuid[]) as j
   ),
   all_cands as (
     select c as cand
@@ -7609,7 +7609,7 @@ end;
     v_candidate_ids,
     v_mismatch_choices,
     v_client_filter_single,
-    p_force_include_timesheet_ids,
+    null::uuid[],
     v_exclude_timesheet_ids
   )
   into v_overpayment_sync;
@@ -7659,7 +7659,7 @@ end;
       p_actor_user_id,
       null,
       null,
-      p_force_include_timesheet_ids
+      null::uuid[]
     ) as j
   ),
   all_candidates as (
