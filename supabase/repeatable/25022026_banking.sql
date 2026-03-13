@@ -17626,6 +17626,212 @@ begin
     select v_case.latest_recovery_pay_batch_id
     where v_case.latest_recovery_pay_batch_id is not null
   ),
+  batch_override_events as (
+    select
+      x.at_utc,
+      'PAYE_OVERRIDE'::text as source,
+      x.event_type,
+      x.title,
+      x.before_json,
+      x.after_json,
+      x.reason,
+      x.note,
+      x.pay_batch_id_text,
+      null::text as reservation_id_text,
+      null::text as timesheet_id_text,
+      x.meta_json
+    from (
+      select
+        pb.created_at_utc as at_utc,
+        'SAME_WEEK_PAYE_OVERRIDE_REQUESTED'::text as event_type,
+        'Same-week PAYE override requested'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object(
+          'same_week_paye_override_used', pb.same_week_paye_override_used,
+          'same_week_paye_override_reason', pb.same_week_paye_override_reason,
+          'same_week_paye_override_verified_at_utc', case when pb.same_week_paye_override_verified_at_utc is null then null else pb.same_week_paye_override_verified_at_utc::text end,
+          'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
+          'same_week_paye_override_verified_by_display', coalesce(nullif(btrim(coalesce(tu_req.display_name, '')), ''), nullif(btrim(coalesce(tu_req.email, '')), '')),
+          'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
+          'pay_date', case when pb.pay_date is null then null else pb.pay_date::text end
+        ) as after_json,
+        pb.same_week_paye_override_reason as reason,
+        'Derived from pay batch creation because no separate requested-at field is stored on pay_batches.'::text as note,
+        pb.id::text as pay_batch_id_text,
+        jsonb_build_object(
+          'same_week_paye_override_used', pb.same_week_paye_override_used,
+          'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
+          'same_week_paye_override_verified_by_display', coalesce(nullif(btrim(coalesce(tu_req.display_name, '')), ''), nullif(btrim(coalesce(tu_req.email, '')), ''))
+        ) as meta_json
+      from batch_refs br
+      join public.pay_batches pb
+        on pb.id = br.pay_batch_id
+      left join public.tms_users tu_req
+        on tu_req.id = pb.same_week_paye_override_verified_by_user_id
+      where coalesce(pb.same_week_paye_override_used, false) = true
+
+      union all
+
+      select
+        pb.same_week_paye_override_verified_at_utc as at_utc,
+        'SAME_WEEK_PAYE_OVERRIDE_VERIFIED'::text as event_type,
+        'Same-week PAYE override verified'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object(
+          'same_week_paye_override_used', pb.same_week_paye_override_used,
+          'same_week_paye_override_reason', pb.same_week_paye_override_reason,
+          'same_week_paye_override_verified_at_utc', case when pb.same_week_paye_override_verified_at_utc is null then null else pb.same_week_paye_override_verified_at_utc::text end,
+          'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
+          'same_week_paye_override_verified_by_display', coalesce(nullif(btrim(coalesce(tu_ver.display_name, '')), ''), nullif(btrim(coalesce(tu_ver.email, '')), '')),
+          'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
+          'pay_date', case when pb.pay_date is null then null else pb.pay_date::text end
+        ) as after_json,
+        pb.same_week_paye_override_reason as reason,
+        null::text as note,
+        pb.id::text as pay_batch_id_text,
+        jsonb_build_object(
+          'same_week_paye_override_used', pb.same_week_paye_override_used,
+          'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
+          'same_week_paye_override_verified_by_display', coalesce(nullif(btrim(coalesce(tu_ver.display_name, '')), ''), nullif(btrim(coalesce(tu_ver.email, '')), ''))
+        ) as meta_json
+      from batch_refs br
+      join public.pay_batches pb
+        on pb.id = br.pay_batch_id
+      left join public.tms_users tu_ver
+        on tu_ver.id = pb.same_week_paye_override_verified_by_user_id
+      where pb.same_week_paye_override_verified_at_utc is not null
+
+      union all
+
+      select
+        pb.created_at_utc as at_utc,
+        'SAME_WEEK_PAYE_OVERRIDE_USED'::text as event_type,
+        'Same-week PAYE override used'::text as title,
+        null::jsonb as before_json,
+        jsonb_build_object(
+          'same_week_paye_override_used', pb.same_week_paye_override_used,
+          'same_week_paye_override_reason', pb.same_week_paye_override_reason,
+          'same_week_paye_override_verified_at_utc', case when pb.same_week_paye_override_verified_at_utc is null then null else pb.same_week_paye_override_verified_at_utc::text end,
+          'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
+          'same_week_paye_override_verified_by_display', coalesce(nullif(btrim(coalesce(tu_used.display_name, '')), ''), nullif(btrim(coalesce(tu_used.email, '')), '')),
+          'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
+          'pay_date', case when pb.pay_date is null then null else pb.pay_date::text end,
+          'status', pb.status
+        ) as after_json,
+        pb.same_week_paye_override_reason as reason,
+        null::text as note,
+        pb.id::text as pay_batch_id_text,
+        jsonb_build_object(
+          'same_week_paye_override_used', pb.same_week_paye_override_used,
+          'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
+          'same_week_paye_override_verified_by_display', coalesce(nullif(btrim(coalesce(tu_used.display_name, '')), ''), nullif(btrim(coalesce(tu_used.email, '')), ''))
+        ) as meta_json
+      from batch_refs br
+      join public.pay_batches pb
+        on pb.id = br.pay_batch_id
+      left join public.tms_users tu_used
+        on tu_used.id = pb.same_week_paye_override_verified_by_user_id
+      where coalesce(pb.same_week_paye_override_used, false) = true
+    ) x
+    where x.at_utc is not null
+  ),
+  batch_candidate_communication_events as (
+    select
+      pbc.remittance_sent_at_utc as at_utc,
+      'COMMUNICATION'::text as source,
+      case when upper(coalesce(pb.batch_kind_fixed, '')) = 'LOANS' then 'PAYOUT_NOTICE_SENT' else 'REMITTANCE_SENT' end as event_type,
+      case when upper(coalesce(pb.batch_kind_fixed, '')) = 'LOANS' then 'Worker payout notice sent' else 'Worker remittance sent' end as title,
+      null::jsonb as before_json,
+      jsonb_build_object(
+        'message_kind', case when upper(coalesce(pb.batch_kind_fixed, '')) = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
+        'candidate_id', case when pbc.candidate_id is null then null else pbc.candidate_id::text end,
+        'candidate_display_name', pbc.candidate_display_name,
+        'remittance_sent_at_utc', case when pbc.remittance_sent_at_utc is null then null else pbc.remittance_sent_at_utc::text end,
+        'trigger_status', pbc.remittance_trigger_status,
+        'last_remittance_error', pbc.last_remittance_error,
+        'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
+        'pay_date', case when pb.pay_date is null then null else pb.pay_date::text end
+      ) as after_json,
+      null::text as reason,
+      pbc.last_remittance_error as note,
+      pbc.pay_batch_id::text as pay_batch_id_text,
+      null::text as reservation_id_text,
+      null::text as timesheet_id_text,
+      jsonb_build_object(
+        'pay_batch_candidate_id', pbc.id::text,
+        'candidate_id', case when pbc.candidate_id is null then null else pbc.candidate_id::text end,
+        'trigger_status', pbc.remittance_trigger_status
+      ) as meta_json
+    from batch_refs br
+    join public.pay_batch_candidates pbc
+      on pbc.pay_batch_id = br.pay_batch_id
+     and pbc.candidate_id = v_case.candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbc.remittance_sent_at_utc is not null
+  ),
+  batch_audit_events as (
+    select
+      ae.ts_utc as at_utc,
+      case
+        when ae.action in (
+          'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_TRIGGERED',
+          'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_ERROR',
+          'PAY_BATCH_SETTLEMENT_CATCHUP_COMMUNICATION_TRIGGERED',
+          'PAY_BATCH_SETTLEMENT_CATCHUP_COMMUNICATION_ERROR',
+          'PAY_REMITTANCE_SENT'
+        ) then 'COMMUNICATION'::text
+        when upper(coalesce(ae.action, '')) like '%SAME_WEEK%'
+         and upper(coalesce(ae.action, '')) like '%OVERRIDE%' then 'PAYE_OVERRIDE'::text
+        else 'BATCH_AUDIT'::text
+      end as source,
+      ae.action as event_type,
+      case
+        when ae.action = 'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_TRIGGERED' then
+          case when upper(coalesce(ae.after_json->>'message_kind', '')) = 'PAYOUT_NOTICE' then 'Commit-stage worker payout notice triggered' else 'Commit-stage worker remittance triggered' end
+        when ae.action = 'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_ERROR' then
+          case when upper(coalesce(ae.after_json->>'message_kind', '')) = 'PAYOUT_NOTICE' or upper(coalesce(ae.after_json->>'trigger_status', '')) like 'PAYOUT_NOTICE%' then 'Commit-stage worker payout notice error' else 'Commit-stage worker remittance error' end
+        when ae.action = 'PAY_BATCH_SETTLEMENT_CATCHUP_COMMUNICATION_TRIGGERED' then
+          case when upper(coalesce(ae.after_json->>'message_kind', '')) = 'PAYOUT_NOTICE' or upper(coalesce(ae.after_json->>'trigger_status', '')) like 'PAYOUT_NOTICE%' then 'Settlement catch-up payout notice triggered' else 'Settlement catch-up remittance triggered' end
+        when ae.action = 'PAY_BATCH_SETTLEMENT_CATCHUP_COMMUNICATION_ERROR' then
+          case when upper(coalesce(ae.after_json->>'message_kind', '')) = 'PAYOUT_NOTICE' or upper(coalesce(ae.after_json->>'trigger_status', '')) like 'PAYOUT_NOTICE%' then 'Settlement catch-up payout notice error' else 'Settlement catch-up remittance error' end
+        when ae.action = 'PAY_REMITTANCE_SENT' then
+          case when upper(coalesce(ae.after_json->>'message_kind', '')) = 'PAYOUT_NOTICE' then 'Worker payout notice send results recorded' else 'Worker remittance send results recorded' end
+        else initcap(replace(lower(coalesce(ae.action, 'EVENT')), '_', ' '))
+      end as title,
+      ae.before_json,
+      ae.after_json,
+      ae.reason,
+      null::text as note,
+      ae.object_id_text as pay_batch_id_text,
+      null::text as reservation_id_text,
+      null::text as timesheet_id_text,
+      jsonb_build_object(
+        'object_type', ae.object_type,
+        'object_id_text', ae.object_id_text,
+        'actor_user_id', case when ae.actor_user_id is null then null else ae.actor_user_id::text end,
+        'actor_display', ae.actor_display,
+        'actor_role_at_time', ae.actor_role_at_time,
+        'correlation_id', ae.correlation_id
+      ) as meta_json
+    from public.audit_events ae
+    join batch_refs br
+      on ae.object_id_text = br.pay_batch_id::text
+    where ae.object_type in ('pay_batch', 'pay_batches')
+      and (
+        ae.action in (
+          'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_TRIGGERED',
+          'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_ERROR',
+          'PAY_BATCH_SETTLEMENT_CATCHUP_COMMUNICATION_TRIGGERED',
+          'PAY_BATCH_SETTLEMENT_CATCHUP_COMMUNICATION_ERROR',
+          'PAY_REMITTANCE_SENT'
+        )
+        or (
+          upper(coalesce(ae.action, '')) like '%SAME_WEEK%'
+          and upper(coalesce(ae.action, '')) like '%OVERRIDE%'
+        )
+      )
+  ),
   batch_events as (
     select
       x.at_utc,
@@ -17797,6 +18003,9 @@ begin
     union all select * from patch_events
     union all select * from snooze_events
     union all select * from generic_audit_events
+    union all select * from batch_override_events
+    union all select * from batch_candidate_communication_events
+    union all select * from batch_audit_events
     union all select * from batch_events
     union all select * from timesheet_events
   )
@@ -17872,6 +18081,9 @@ begin
   );
 end;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
