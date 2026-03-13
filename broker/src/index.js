@@ -2220,6 +2220,252 @@ function applyDurationBreak(acc, breakMin) {
   }
 }
 
+async function resolveBulkContextIdsFromSummarySelection(section, filters, selectionMode, includedIds, excludedIds, env, req) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const sectionKey = (() => {
+    const s = trimStr(section).toLowerCase();
+    if (s === 'candidate' || s === 'candidates') return 'candidates';
+    if (s === 'client' || s === 'clients') return 'clients';
+    if (s === 'contract' || s === 'contracts') return 'contracts';
+    if (s === 'timesheet' || s === 'timesheets') return 'timesheets';
+    if (s === 'invoice' || s === 'invoices') return 'invoices';
+    if (s === 'umbrella' || s === 'umbrellas') return 'umbrellas';
+    return '';
+  })();
+
+  if (!sectionKey) {
+    throw new Error('invalid_section');
+  }
+
+  const mode = trimStr(selectionMode).toLowerCase() === 'all_filtered' ? 'all_filtered' : 'explicit';
+  const normalizedIncludedIds = normalizeIdArray(includedIds);
+  const normalizedExcludedIds = normalizeIdArray(excludedIds);
+
+  const resolvedSelection = await resolveSummarySelection(
+    sectionKey,
+    clonePlain(filters),
+    mode,
+    normalizedIncludedIds,
+    normalizedExcludedIds,
+    env,
+    req
+  );
+
+  const summaryRowIds = normalizeIdArray(resolvedSelection && resolvedSelection.summary_row_ids);
+  const validSummaryIdSet = new Set(summaryRowIds);
+  const skippedRows = [];
+
+  if (mode === 'explicit') {
+    normalizedIncludedIds.forEach((selectedRowId) => {
+      if (!validSummaryIdSet.has(selectedRowId)) {
+        skippedRows.push({
+          selected_row_id: selectedRowId,
+          skip_reason: 'SUMMARY_ROW_NOT_IN_DATASET'
+        });
+      }
+    });
+  }
+
+  if (sectionKey !== 'timesheets') {
+    return {
+      summary_row_ids: summaryRowIds,
+      context_ids: summaryRowIds.slice(),
+      skipped_rows: skippedRows
+    };
+  }
+
+  if (!summaryRowIds.length) {
+    return {
+      summary_row_ids: [],
+      context_ids: [],
+      skipped_rows: skippedRows
+    };
+  }
+
+  const enc = encodeURIComponent;
+  const rowsBySelectedId = new Map();
+  const chunkSize = 200;
+
+  for (let i = 0; i < summaryRowIds.length; i += chunkSize) {
+    const chunk = summaryRowIds.slice(i, i + chunkSize);
+    const inList = chunk.map(enc).join(',');
+    if (!inList) continue;
+
+    const url =
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+      `?select=timesheet_id,contract_week_id` +
+      `&or=(timesheet_id.in.(${inList}),contract_week_id.in.(${inList}))`;
+
+    const fetched = await sbFetch(env, url, false);
+    const fetchedRows = Array.isArray(fetched && fetched.rows) ? fetched.rows : [];
+
+    fetchedRows.forEach((row) => {
+      const timesheetId = trimStr(row && row.timesheet_id);
+      const contractWeekId = trimStr(row && row.contract_week_id);
+
+      if (timesheetId) {
+        rowsBySelectedId.set(timesheetId, {
+          selected_row_id: timesheetId,
+          context_id: timesheetId,
+          has_timesheet_context: true
+        });
+      } else if (contractWeekId) {
+        rowsBySelectedId.set(contractWeekId, {
+          selected_row_id: contractWeekId,
+          context_id: null,
+          has_timesheet_context: false
+        });
+      }
+    });
+  }
+
+  const contextIds = [];
+  const seenContextIds = new Set();
+
+  summaryRowIds.forEach((selectedRowId) => {
+    const mapped = rowsBySelectedId.get(selectedRowId) || null;
+
+    if (!mapped) {
+      skippedRows.push({
+        selected_row_id: selectedRowId,
+        skip_reason: 'SUMMARY_ROW_NOT_FOUND'
+      });
+      return;
+    }
+
+    if (!mapped.has_timesheet_context || !mapped.context_id) {
+      skippedRows.push({
+        selected_row_id: selectedRowId,
+        skip_reason: 'NO_TIMESHEET_CONTEXT'
+      });
+      return;
+    }
+
+    if (!seenContextIds.has(mapped.context_id)) {
+      seenContextIds.add(mapped.context_id);
+      contextIds.push(mapped.context_id);
+    }
+  });
+
+  return {
+    summary_row_ids: summaryRowIds,
+    context_ids: contextIds,
+    skipped_rows: skippedRows
+  };
+}
+
+
+async function resolveSummarySelection(section, filters, selectionMode, includedIds, excludedIds, env, req) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const sectionKey = (() => {
+    const s = trimStr(section).toLowerCase();
+    if (s === 'candidate' || s === 'candidates') return 'candidates';
+    if (s === 'client' || s === 'clients') return 'clients';
+    if (s === 'contract' || s === 'contracts') return 'contracts';
+    if (s === 'timesheet' || s === 'timesheets') return 'timesheets';
+    if (s === 'invoice' || s === 'invoices') return 'invoices';
+    if (s === 'umbrella' || s === 'umbrellas') return 'umbrellas';
+    return '';
+  })();
+
+  if (!sectionKey) {
+    throw new Error('invalid_section');
+  }
+
+  const normalizeFiltersBySection = (sectionName, rawFilters) => {
+    const clean = clonePlain(rawFilters);
+    if (sectionName === 'candidates') return buildCandidateSummaryFilterSpec(clean);
+    if (sectionName === 'clients') return buildClientSummaryFilterSpec(clean);
+    if (sectionName === 'umbrellas') return buildUmbrellaSummaryFilterSpec(clean);
+    if (sectionName === 'contracts') return buildContractSummaryFilterSpec(clean);
+    if (sectionName === 'timesheets') return buildTimesheetSummaryFilterSpec(clean);
+    if (sectionName === 'invoices') return buildInvoiceSummaryFilterSpec(clean);
+    return clean;
+  };
+
+  const rpcNameBySection = {
+    candidates: 'candidate_list_ids',
+    clients: 'client_list_ids',
+    umbrellas: 'umbrella_list_ids',
+    contracts: 'contract_list_ids',
+    timesheets: 'timesheet_list_ids',
+    invoices: 'invoice_list_ids'
+  };
+
+  const effectiveFilters = normalizeFiltersBySection(sectionKey, clonePlain(filters));
+  const mode = trimStr(selectionMode).toLowerCase() === 'all_filtered' ? 'all_filtered' : 'explicit';
+  const normalizedIncludedIds = normalizeIdArray(includedIds);
+  const normalizedExcludedIds = normalizeIdArray(excludedIds);
+
+  const rpcName = rpcNameBySection[sectionKey];
+  if (!rpcName) {
+    throw new Error('unsupported_section');
+  }
+
+  const rpcResult = await sbRpc(env, rpcName, { p_filters: effectiveFilters });
+  const rows = Array.isArray(rpcResult)
+    ? rpcResult
+    : ((rpcResult && typeof rpcResult === 'object' && Array.isArray(rpcResult.rows)) ? rpcResult.rows : (rpcResult == null ? [] : [rpcResult]));
+
+  const membershipRowIds = normalizeIdArray(
+    rows.map((row) => {
+      if (row == null) return '';
+      if (typeof row === 'string') return row;
+      if (typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'id')) return row.id;
+      return '';
+    })
+  );
+
+  if (mode === 'all_filtered') {
+    const excludedIdSet = new Set(normalizedExcludedIds);
+    return {
+      summary_row_ids: membershipRowIds.filter((rowId) => !excludedIdSet.has(rowId))
+    };
+  }
+
+  const membershipIdSet = new Set(membershipRowIds);
+  return {
+    summary_row_ids: normalizedIncludedIds.filter((rowId) => membershipIdSet.has(rowId))
+  };
+}
+
+
 // Resolve hours (minutes) by bucket from an actual_schedule_json array
 async function resolveBucketsFromSchedule(env, contract, actualDays /* array */, policyOverride = null) {
   // ─────────────────────────────────────────────────────────────
@@ -5564,22 +5810,18 @@ async function handleContractsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
+  const enc = encodeURIComponent;
   const url = new URL(req.url);
-  const q  = (k) => url.searchParams.get(k);
-  const qs = (k) => url.searchParams.getAll(k);
-  const encQ = (v) => enc(v); // short alias
+  const q = (k) => url.searchParams.get(k);
+  const encQ = (v) => enc(v);
+  const format = (q('format') || 'json').toLowerCase();
 
-  // Sorting
   const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
   const sortMap = {
-    // IMPORTANT: we cannot order the top-level resource by embedded values
-    // candidate.display_name / client.name with PostgREST directly.
-    // For now, approximate by candidate_id / client_id.
     candidate_display:             'candidate_id',
     client_name:                   'client_id',
-
     role:                          'role',
     band:                          'band',
     start_date:                    'start_date',
@@ -5601,71 +5843,88 @@ async function handleContractsList(env, req) {
   const orderCol = sortMap[orderByParam] || defaultSortCol;
   const orderDir = (orderDirParam === 'asc' || orderDirParam === 'desc') ? orderDirParam : 'desc';
 
-  // SELECT with relationships (optionally includes an aggregate to avoid dupes when status=active via join fallback)
+  const spec = buildContractSummaryFilterSpec(url.searchParams);
+
+  const candidateId = spec.candidate_id || null;
+  const clientId = spec.client_id || null;
+  const payMethodSnapshot = spec.pay_method_snapshot || null;
+  const role = spec.role || null;
+  const band = spec.band || null;
+  const candidateName = spec.candidate_name || null;
+  const clientName = spec.client_name || null;
+  const activeOn = spec.active_on || null;
+  const autoInvoice = spec.auto_invoice || null;
+  const quickText = spec.q || null;
+  const submissionMode = spec.default_submission_mode || null;
+  const weekEndingWeekdaySnapshot = spec.week_ending_weekday_snapshot || null;
+  const requireReferenceToPay = spec.require_reference_to_pay || null;
+  const requireReferenceToInvoice = spec.require_reference_to_invoice || null;
+  const hasCustomLabels = spec.has_custom_labels || null;
+  const createdFrom = spec.created_from || null;
+  const createdTo = spec.created_to || null;
+  const updatedFrom = spec.updated_from || null;
+  const updatedTo = spec.updated_to || null;
+  const startDateFrom = spec.start_date_from || null;
+  const startDateTo = spec.start_date_to || null;
+  const endDateFrom = spec.end_date_from || null;
+  const endDateTo = spec.end_date_to || null;
+  const mileagePayRate = spec.mileage_pay_rate || null;
+  const mileageChargeRate = spec.mileage_charge_rate || null;
+  const statusParam = (spec.status || '').toLowerCase();
+  const ids = Array.isArray(spec.ids) ? spec.ids.map(String) : [];
+
   let selectParts = [
     '*',
     'candidate:candidates(display_name,first_name,last_name)',
     'client:clients(name)'
   ];
 
-  let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=${selectParts.join(',')}`;
-
   const filters = [];
 
-  // ── ID / IDs filters (used by Focus & selection presets) ────────────────────
-  const idExpr = q('id');   // expects "in.(uuid,uuid,...)"
-  const idsRaw = q('ids');  // optional "uuid1,uuid2,..."
-
-  if (idExpr && /^in\.\(.+\)$/.test(idExpr.trim())) {
-    // Forward the expression as-is: "id=in.(uuid1,uuid2,...)"
-    filters.push(`id=${idExpr.trim()}`);
-  } else if (idsRaw) {
-    const ids = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
-    if (ids.length) {
-      filters.push(`id=in.(${ids.map(encQ).join(',')})`);
-    }
+  let idFilterExpr = null;
+  if (ids.length) {
+    idFilterExpr = `in.(${ids.join(',')})`;
   }
 
-  // ── Core filters ────────────────────────────────────────────────────────────
-  if (q('candidate_id'))        filters.push(`candidate_id=eq.${encQ(q('candidate_id'))}`);
-  if (q('client_id'))           filters.push(`client_id=eq.${encQ(q('client_id'))}`);
-  if (q('pay_method_snapshot')) filters.push(`pay_method_snapshot=eq.${encQ(q('pay_method_snapshot').toUpperCase())}`);
-  if (q('role')) {
-    const like = `*${q('role')}*`;
+  if (idFilterExpr) {
+    filters.push(`id=${idFilterExpr}`);
+  }
+
+  if (candidateId) filters.push(`candidate_id=eq.${encQ(candidateId)}`);
+  if (clientId) filters.push(`client_id=eq.${encQ(clientId)}`);
+  if (payMethodSnapshot) filters.push(`pay_method_snapshot=eq.${encQ(payMethodSnapshot.toUpperCase())}`);
+
+  if (role) {
+    const like = `*${role}*`;
     filters.push(`role=ilike.${encQ(like)}`);
   }
-  if (q('band'))                filters.push(`band=eq.${encQ(q('band'))}`);
 
-  // Name-only filters (separate from free-text q)
-  if (q('candidate_name')) {
-    const like = `*${q('candidate_name')}*`;
-    // ✅ FIX: filter via relationship path (NOT alias prefix)
+  if (band) filters.push(`band=eq.${encQ(band)}`);
+
+  if (candidateName) {
+    const like = `*${candidateName}*`;
     filters.push(`candidates.display_name=ilike.${encQ(like)}`);
   }
-  if (q('client_name')) {
-    const like = `*${q('client_name')}*`;
-    // ✅ FIX: filter via relationship path (NOT alias prefix)
+
+  if (clientName) {
+    const like = `*${clientName}*`;
     filters.push(`clients.name=ilike.${encQ(like)}`);
   }
 
-  if (q('active_on')) {
-    const d = q('active_on');
-    filters.push(`start_date=lte.${encQ(d)}`);
-    filters.push(`end_date=gte.${encQ(d)}`);
+  if (activeOn) {
+    filters.push(`start_date=lte.${encQ(activeOn)}`);
+    filters.push(`end_date=gte.${encQ(activeOn)}`);
   }
 
-  if (q('auto_invoice')) {
-    filters.push(`auto_invoice=eq.${encQ(String(clampBool(q('auto_invoice'))))}`);
+  if (autoInvoice) {
+    filters.push(`auto_invoice=eq.${encQ(String(clampBool(autoInvoice)))}`);
   }
 
-  // Free text across related names + role (+ band when numeric)
-  // ✅ FIX: PostgREST logic-tree requires ilike.*term* (NOT %term%) and must be parseable inside or=(...)
-  if (q('q')) {
-    const raw = String(q('q') || '').trim();
+  if (quickText) {
+    const raw = String(quickText || '').trim();
     if (raw) {
-      const like = `*${raw}*`; // PostgREST wildcard format
+      const like = `*${raw}*`;
       const orTerms = [
-        // ✅ FIX: relationship paths (NOT alias prefixes)
         `clients.name.ilike.${encQ(like)}`,
         `candidates.display_name.ilike.${encQ(like)}`,
         `candidates.first_name.ilike.${encQ(like)}`,
@@ -5673,7 +5932,6 @@ async function handleContractsList(env, req) {
         `role.ilike.${encQ(like)}`
       ];
 
-      // ✅ Band quick-search support when q is a simple integer
       if (/^\d+$/.test(raw)) {
         orTerms.push(`band.eq.${encQ(raw)}`);
       }
@@ -5682,55 +5940,47 @@ async function handleContractsList(env, req) {
     }
   }
 
-  // default_submission_mode (accept alias submission_mode)
-  const dsm = q('default_submission_mode') || q('submission_mode');
-  if (dsm) filters.push(`default_submission_mode=eq.${encQ(dsm.toUpperCase())}`);
-
-  // week_ending_weekday_snapshot
-  if (q('week_ending_weekday_snapshot')) {
-    filters.push(`week_ending_weekday_snapshot=eq.${encQ(q('week_ending_weekday_snapshot'))}`);
+  if (submissionMode) {
+    filters.push(`default_submission_mode=eq.${encQ(submissionMode.toUpperCase())}`);
   }
 
-  // require_reference_* gates
-  if (q('require_reference_to_pay')) {
-    filters.push(`require_reference_to_pay=eq.${encQ(String(clampBool(q('require_reference_to_pay'))))}`);
-  }
-  if (q('require_reference_to_invoice')) {
-    filters.push(`require_reference_to_invoice=eq.${encQ(String(clampBool(q('require_reference_to_invoice'))))}`);
+  if (weekEndingWeekdaySnapshot) {
+    filters.push(`week_ending_weekday_snapshot=eq.${encQ(weekEndingWeekdaySnapshot)}`);
   }
 
-  // has_custom_labels → bucket_labels_json null/not null
-  if (q('has_custom_labels')) {
-    const yes = clampBool(q('has_custom_labels'));
+  if (requireReferenceToPay) {
+    filters.push(`require_reference_to_pay=eq.${encQ(String(clampBool(requireReferenceToPay)))}`);
+  }
+
+  if (requireReferenceToInvoice) {
+    filters.push(`require_reference_to_invoice=eq.${encQ(String(clampBool(requireReferenceToInvoice)))}`);
+  }
+
+  if (hasCustomLabels) {
+    const yes = clampBool(hasCustomLabels);
     filters.push(yes ? `bucket_labels_json=not.is.null` : `bucket_labels_json=is.null`);
   }
 
-  // created_from / created_to
-  if (q('created_from')) filters.push(`created_at=gte.${encQ(q('created_from'))}`);
-  if (q('created_to'))   filters.push(`created_at=lte.${encQ(q('created_to'))}`);
+  if (createdFrom) filters.push(`created_at=gte.${encQ(createdFrom)}`);
+  if (createdTo) filters.push(`created_at=lte.${encQ(createdTo)}`);
 
-  // updated_from / updated_to
-  if (q('updated_from')) filters.push(`updated_at=gte.${encQ(q('updated_from'))}`);
-  if (q('updated_to'))   filters.push(`updated_at=lte.${encQ(q('updated_to'))}`);
+  if (updatedFrom) filters.push(`updated_at=gte.${encQ(updatedFrom)}`);
+  if (updatedTo) filters.push(`updated_at=lte.${encQ(updatedTo)}`);
 
-  // start_date_from / start_date_to
-  if (q('start_date_from')) filters.push(`start_date=gte.${encQ(q('start_date_from'))}`);
-  if (q('start_date_to'))   filters.push(`start_date=lte.${encQ(q('start_date_to'))}`);
+  if (startDateFrom) filters.push(`start_date=gte.${encQ(startDateFrom)}`);
+  if (startDateTo) filters.push(`start_date=lte.${encQ(startDateTo)}`);
 
-  // end_date_from / end_date_to
-  if (q('end_date_from')) filters.push(`end_date=gte.${encQ(q('end_date_from'))}`);
-  if (q('end_date_to'))   filters.push(`end_date=lte.${encQ(q('end_date_to'))}`);
+  if (endDateFrom) filters.push(`end_date=gte.${encQ(endDateFrom)}`);
+  if (endDateTo) filters.push(`end_date=lte.${encQ(endDateTo)}`);
 
-  // mileage filters
-  if (q('mileage_pay_rate')) {
-    filters.push(`mileage_pay_rate=eq.${encQ(q('mileage_pay_rate'))}`);
-  }
-  if (q('mileage_charge_rate')) {
-    filters.push(`mileage_charge_rate=eq.${encQ(q('mileage_charge_rate'))}`);
+  if (mileagePayRate) {
+    filters.push(`mileage_pay_rate=eq.${encQ(mileagePayRate)}`);
   }
 
-  // ── status=active|completed|unassigned ──────────────────────────────────────
-  const statusParam = (q('status') || '').toLowerCase();
+  if (mileageChargeRate) {
+    filters.push(`mileage_charge_rate=eq.${encQ(mileageChargeRate)}`);
+  }
+
   const INCOMPLETE_STATUSES = ['OPEN','PLANNED','SUBMITTED','AUTHORISED'];
 
   if (statusParam === 'unassigned') {
@@ -5748,7 +5998,7 @@ async function handleContractsList(env, req) {
           `&contract_id=not.is.null` +
           `&limit=${limit}&offset=${offset}`;
         const { rows } = await sbFetch(env, cwApi);
-        (rows || []).forEach(r => { if (r && r.contract_id) acc.add(r.contract_id); });
+        (rows || []).forEach((r) => { if (r && r.contract_id) acc.add(r.contract_id); });
         if (!rows || rows.length < limit) break;
         offset += limit;
       }
@@ -5758,7 +6008,6 @@ async function handleContractsList(env, req) {
     const activeIds = await fetchActiveContractIds();
 
     const safeJoinFallbackForActive = () => {
-      // Use inner join filter to ensure we don't blow URL length.
       selectParts.push('cw_active:contract_weeks!inner(count)');
       const joined = `contract_weeks!inner.status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})`;
       filters.push(joined);
@@ -5766,6 +6015,9 @@ async function handleContractsList(env, req) {
 
     if (statusParam === 'active') {
       if (activeIds.length === 0) {
+        if (format === 'membership') {
+          return withCORS(env, req, ok({ ids: [], count: 0 }));
+        }
         return withCORS(env, req, ok([]));
       } else if (activeIds.length <= 300) {
         filters.push(`id=in.(${activeIds.map(encQ).join(',')})`);
@@ -5776,9 +6028,8 @@ async function handleContractsList(env, req) {
       if (activeIds.length > 0 && activeIds.length <= 300) {
         filters.push(`id=not.in.(${activeIds.map(encQ).join(',')})`);
       } else if (activeIds.length === 0) {
-        // everyone qualifies as completed; no extra filter
+        // everyone qualifies as completed
       } else {
-        // anti-join fallback: left join + is.null on alias that only links incomplete rows
         selectParts.push('cw_open:contract_weeks!left(count)');
         filters.push(`cw_open:contract_weeks!left.status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})`);
         filters.push(`cw_open.id=is.null`);
@@ -5786,39 +6037,85 @@ async function handleContractsList(env, req) {
     }
   }
 
-  // Rebuild api in case selectParts changed (aggregates)
-  api = `${env.SUPABASE_URL}/rest/v1/contracts?select=${selectParts.join(',')}`;
-  if (filters.length) api += `&${filters.join('&')}`;
+  const buildContractsApi = ({ selectArray, withPaging, limitValue, offsetValue, withOrder }) => {
+    let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=${selectArray.join(',')}`;
+    if (filters.length) api += `&${filters.join('&')}`;
 
-  // Sorting: primary on requested column, secondary on created_at for stability
-  api += `&order=${encQ(orderCol)}.${orderDir}`;
-  if (orderCol !== 'created_at') {
-    api += `&order=created_at.desc`;
-  }
+    if (withOrder) {
+      api += `&order=${encQ(orderCol)}.${orderDir}`;
+      if (orderCol !== 'created_at') {
+        api += `&order=created_at.desc`;
+      }
+    }
 
-  // paging → limit/offset
-  const page     = Math.max(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1);
+    if (withPaging) {
+      api += `&limit=${encQ(limitValue)}&offset=${encQ(offsetValue)}`;
+    }
+
+    return api;
+  };
+
+  const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1);
   const pageSizeRaw = url.searchParams.get('page_size');
-  const pageSize = (pageSizeRaw === 'ALL') ? null :
-                    Math.max(parseInt(pageSizeRaw || '50', 10) || 50, 1);
+  const pageSize = (pageSizeRaw === 'ALL') ? null : Math.max(parseInt(pageSizeRaw || '50', 10) || 50, 1);
 
-  if (pageSize != null) {
-    const limit  = pageSize;
-    const offset = (page - 1) * pageSize;
-    api += `&limit=${encQ(limit)}&offset=${encQ(offset)}`;
+  if (format === 'membership') {
+    const idsOut = [];
+    const seen = new Set();
+    let offset = 0;
+    const batchSize = 1000;
+    const membershipSelect = ['id'];
+
+    try {
+      while (true) {
+        const api = buildContractsApi({
+          selectArray: membershipSelect,
+          withPaging: true,
+          limitValue: batchSize,
+          offsetValue: offset,
+          withOrder: false
+        });
+
+        const { rows } = await sbFetch(env, api);
+        const batch = Array.isArray(rows) ? rows : [];
+
+        for (const row of batch) {
+          const id = row && row.id ? String(row.id).trim() : '';
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          idsOut.push(id);
+        }
+
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
+    } catch (err) {
+      console.error('[CONTRACTS] handleContractsList membership failed', err);
+      return withCORS(env, req, ok({ error: String(err?.message || err), ids: [], count: 0 }));
+    }
+
+    return withCORS(env, req, ok({ ids: idsOut, count: idsOut.length }));
   }
+
+  const limit = pageSize == null ? null : pageSize;
+  const offset = pageSize == null ? 0 : ((page - 1) * pageSize);
+  const api = buildContractsApi({
+    selectArray: selectParts,
+    withPaging: pageSize != null,
+    limitValue: limit,
+    offsetValue: offset,
+    withOrder: true
+  });
 
   let rows = [];
   try {
     ({ rows } = await sbFetch(env, api));
   } catch (err) {
-    // Ensure we always respond with CORS, even on Supabase error
     console.error('[CONTRACTS] handleContractsList failed', err);
     return withCORS(env, req, ok({ error: String(err?.message || err), rows: [] }));
   }
 
-  // Flatten related names into top-level fields (keep nested for back-compat)
-  const out = (rows || []).map(r => {
+  const out = (rows || []).map((r) => {
     const candidateDisplay =
       r?.candidate?.display_name ||
       ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
@@ -5834,8 +6131,6 @@ async function handleContractsList(env, req) {
 
   return withCORS(env, req, ok(out));
 }
-
-
 
 // BACKEND — handleUserGridPrefsGet
  async function handleUserGridPrefsGet(env, req) {
@@ -8816,10 +9111,8 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
     const s = String(raw || '').trim();
     if (!s) return null;
 
-    // YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
-    // DD/MM/YYYY
     const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (m) {
       const dd = m[1], mm = m[2], yyyy = m[3];
@@ -8829,6 +9122,17 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   };
 
   const paymentDateIso = paymentDateRaw ? parseIsoOrUkDateToIso(paymentDateRaw) : null;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
 
   const jsonResponse = (status, payload) => {
     const headers = new Headers();
@@ -8892,7 +9196,6 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   };
 
   try {
-    // Resolve provider + transfers snapshot via pay_batch_get
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
 
     let batchPayload = batchRes;
@@ -8906,7 +9209,6 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
     const transfers = (batchPayload && typeof batchPayload === 'object' && Array.isArray(batchPayload.transfers)) ? batchPayload.transfers : [];
 
-    // Determine if there are any PENDING transfers in the chosen scope
     const pendingInScope = (transfers || []).filter(t => {
       const st = String(t?.status || '').trim().toUpperCase();
       if (st !== 'PENDING') return false;
@@ -8915,17 +9217,26 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
       return (scope === 'ALL') ? true : (ch === scope);
     });
 
-    // ✅ If there are no transfers / no pending transfers in scope, do settle-only via pay_settle_rail([])
     if (!pendingInScope.length) {
-      const out0 = await sbRpc(env, 'pay_settle_rail', {
+      const settleOnlyRes0 = await sbRpc(env, 'pay_settle_rail', {
         p_pay_batch_id: String(payBatchId),
         p_settlement_json: [],
         p_actor_user_id: user.id
       });
-      return withCORS(env, req, ok(out0));
+      const settleOnlyRes = unwrapRpc(settleOnlyRes0, 'pay_settle_rail');
+
+      const afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
+      const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
+
+      return withCORS(env, req, ok(
+        ((settleOnlyRes && typeof settleOnlyRes === 'object') ? settleOnlyRes : {})
+        && {
+          ...((settleOnlyRes && typeof settleOnlyRes === 'object') ? settleOnlyRes : {}),
+          batch_get: afterGet
+        }
+      ));
     }
 
-    // ✅ If there are pending transfers in scope, require bank_confirm_ref and payment_date
     if (!bankConfirmRef) {
       return withCORS(env, req, badRequest('bank_confirm_ref is required'));
     }
@@ -8937,15 +9248,15 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
 
     let out = null;
 
-    // ✅ CSV: call DB RPC directly (supports new p_payment_date param) without depending on adapter implementation
     if (provider === 'CSV') {
-      out = await sbRpc(env, 'pay_settle_manual_confirm', {
+      const out0 = await sbRpc(env, 'pay_settle_manual_confirm', {
         p_pay_batch_id: String(payBatchId),
         p_scope: scope,
         p_bank_confirm_ref: bankConfirmRef,
         p_payment_date: paymentDateIso,
         p_actor_user_id: user.id
       });
+      out = unwrapRpc(out0, 'pay_settle_manual_confirm');
     } else {
       const adapter = getRailAdapter(provider);
       if (!adapter || typeof adapter.confirmManual !== 'function') {
@@ -8959,20 +9270,15 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
       }, user.id);
     }
 
-    // ✅ Auto-send remittances after successful manual confirm
-    try {
-      if (typeof handleBankingPayBatchRemittancesSend === 'function') {
-        const headers = new Headers(req.headers);
-        headers.set('Content-Type', 'application/json');
-        const req2 = new Request(req.url, { method: 'POST', headers, body: JSON.stringify({ scope }) });
-        await handleBankingPayBatchRemittancesSend(env, req2, String(payBatchId));
-      }
-    } catch {}
+    const afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
+    const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
 
-    return withCORS(env, req, ok(out));
+    return withCORS(env, req, ok({
+      ...((out && typeof out === 'object') ? out : {}),
+      batch_get: afterGet
+    }));
   } catch (e) {
     const norm = normalizeRpcError(e, 'SETTLE_FAILED', 'Manual confirm failed.');
-    // Return 400 for user-correctable; otherwise 500 with safe message.
     const status = (e && Number.isFinite(Number(e.status)) && Number(e.status) >= 400 && Number(e.status) < 500) ? Number(e.status) : null;
     if (status && status < 500) {
       return withCORS(env, req, jsonResponse(norm.status, norm.body));
@@ -9019,7 +9325,29 @@ async function sendPayBatchRemittancesInternal(env, opts) {
 
   const nowIso = new Date().toISOString();
 
-  // ✅ Load remittance policy + messages (single-row settings_defaults)
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  let batchGet = null;
+  try {
+    const batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId });
+    batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'PAY_BATCH_GET_FAILED');
+    throw new Error(msg);
+  }
+
+  const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
+  const batchKindFixed = String(batchObj?.batch_kind_fixed || '').trim().toUpperCase();
+  const isPayoutNoticeBatch = batchKindFixed === 'LOANS';
+  const messageKind = isPayoutNoticeBatch ? 'PAYOUT_NOTICE' : 'REMITTANCE';
+
   let payrollTesting = false;
   let settingsHeaderMsg = null;
   let settingsFooterMsg = null;
@@ -9046,8 +9374,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     throw new Error('Failed to load remittance settings');
   }
 
-  // ✅ Test-mode policy: allow sending ONLY if a test recipient email is configured.
-  // When enabled, ALL remittances are routed to this email and intended recipient emails are ignored.
   const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
   const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || '').trim());
 
@@ -9060,23 +9386,72 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     testTo = remittanceTestRecipientEmail.trim();
   }
 
-  let build;
+  let helperRes = null;
   try {
-    build = await sbRpc(env, 'pay_remittance_build', {
-      p_pay_batch_id: payBatchId,
-      p_scope: scope
-    });
+    const helperRpcRes = isPayoutNoticeBatch
+      ? await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
+          p_pay_batch_id: payBatchId,
+          p_actor_user_id: actorUserId
+        })
+      : await sbRpc(env, 'pay_remittance_queue_commit_stage', {
+          p_pay_batch_id: payBatchId,
+          p_scope: scope,
+          p_actor_user_id: actorUserId
+        });
+
+    helperRes = unwrapRpc(
+      helperRpcRes,
+      isPayoutNoticeBatch ? 'pay_finance_payout_notice_queue_commit_stage' : 'pay_remittance_queue_commit_stage'
+    );
   } catch (e) {
-    const msg = (e && e.message) ? String(e.message) : String(e || 'REM_BUILD_FAILED');
+    const msg = (e && e.message) ? String(e.message) : String(e || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED'));
     throw new Error(msg);
   }
 
-  const jobs = Array.isArray(build?.jobs) ? build.jobs : [];
-  const payDate = (build && build.pay_date) ? String(build.pay_date) : null;
-  const bulkRef = (build && build.bulk_reference) ? String(build.bulk_reference) : null;
+  if (!helperRes || typeof helperRes !== 'object') {
+    throw new Error(isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED');
+  }
 
-  const headerMsgFromBuild = (build && typeof build.remittance_header_message === 'string') ? build.remittance_header_message : null;
-  const footerMsgFromBuild = (build && typeof build.remittance_footer_message === 'string') ? build.remittance_footer_message : null;
+  if (helperRes.ok === false) {
+    throw new Error(String(helperRes.error || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED')));
+  }
+
+  let headerMsgFromBuild = null;
+  let footerMsgFromBuild = null;
+
+  if (!isPayoutNoticeBatch) {
+    try {
+      const buildRes0 = await sbRpc(env, 'pay_remittance_build', {
+        p_pay_batch_id: payBatchId,
+        p_scope: scope
+      });
+      const buildRes = unwrapRpc(buildRes0, 'pay_remittance_build');
+
+      headerMsgFromBuild = (buildRes && typeof buildRes.remittance_header_message === 'string') ? buildRes.remittance_header_message : null;
+      footerMsgFromBuild = (buildRes && typeof buildRes.remittance_footer_message === 'string') ? buildRes.remittance_footer_message : null;
+    } catch {}
+  }
+
+  const jobs = Array.isArray(helperRes?.jobs) ? helperRes.jobs : [];
+  const helperCandidateResults = Array.isArray(helperRes?.candidate_results) ? helperRes.candidate_results : [];
+  const authoritativePaymentDate =
+    (helperRes && helperRes.authoritative_payment_date != null && String(helperRes.authoritative_payment_date).trim())
+      ? String(helperRes.authoritative_payment_date).trim()
+      : ((batchObj && batchObj.authoritative_payment_date != null && String(batchObj.authoritative_payment_date).trim())
+          ? String(batchObj.authoritative_payment_date).trim()
+          : null);
+
+  const payDate =
+    (helperRes && helperRes.pay_date != null && String(helperRes.pay_date).trim())
+      ? String(helperRes.pay_date).trim()
+      : ((helperRes && helperRes.scheduled_payment_date != null && String(helperRes.scheduled_payment_date).trim())
+          ? String(helperRes.scheduled_payment_date).trim()
+          : (authoritativePaymentDate || ((batchObj && batchObj.pay_date != null && String(batchObj.pay_date).trim()) ? String(batchObj.pay_date).trim() : null)));
+
+  const bulkRef =
+    (helperRes && helperRes.bulk_reference != null && String(helperRes.bulk_reference).trim())
+      ? String(helperRes.bulk_reference).trim()
+      : ((batchObj && batchObj.bulk_reference != null && String(batchObj.bulk_reference).trim()) ? String(batchObj.bulk_reference).trim() : null);
 
   const headerMsg = (headerMsgFromBuild && headerMsgFromBuild.trim().length)
     ? headerMsgFromBuild
@@ -9169,7 +9544,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       const rate = asNum(r?.rate);
       const total = useInc ? asNum(r?.total_inc_vat) : asNum(r?.total_ex_vat);
 
-      // zero suppression: do not show a row with zero quantity (or a row that is effectively all zeros)
       if (qty == null || Math.abs(qty) < 1e-9) continue;
       if (total == null || Math.abs(total) < 1e-9) continue;
 
@@ -9203,7 +9577,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     const totalVat = asNum(totals.vat);
     const totalInc = asNum(totals.total_inc_vat);
 
-    // Header block (template-style)
     lines.push(`Candidate\t${candidateDisplay}`);
     lines.push(`Client\t${clientName}`);
     lines.push(`Week Ending\t${weekEnding}`);
@@ -9212,7 +9585,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     lines.push(`Timesheet Type\t${timesheetType}`);
     lines.push('');
 
-    // Detailed schedule (segments only) per locked rules
     if (detailed && renderMode === 'SEGMENT') {
       if (timesheetType === 'Adjustment') {
         const changes = Array.isArray(ctx.schedule_changes) ? ctx.schedule_changes : [];
@@ -9256,7 +9628,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       }
     }
 
-    // Unit table (always rendered, aggregate-style)
     const unitTableRows = [];
     for (const r of unitRows) {
       unitTableRows.push([
@@ -9267,17 +9638,14 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       ]);
     }
 
-    // If there are no unit rows but there are other rows (rare), we still show the table header with those in other sections.
     if (unitTableRows.length) {
       printTable(lines, ['Unit', 'Quantity', 'Rate', 'Total'], unitTableRows);
       lines.push('');
     } else {
-      // Still show the unit header if everything is in otherRows, but do not fabricate zeros.
       lines.push('Unit  Quantity  Rate  Total');
       lines.push('');
     }
 
-    // Additional Units section
     if (addlRows.length) {
       lines.push('Additional Units');
       const rows = [];
@@ -9293,7 +9661,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       lines.push('');
     }
 
-    // Expenses section
     if (expRows.length) {
       lines.push('Expenses');
       const rows = [];
@@ -9309,7 +9676,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       lines.push('');
     }
 
-    // Other rows section (optional)
     if (otherRows.length) {
       lines.push('Other');
       const rows = [];
@@ -9325,7 +9691,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       lines.push('');
     }
 
-    // Totals block (VAT rule)
     if (totalVat != null && Math.abs(totalVat) > 1e-9) {
       lines.push(`Total (exc VAT)\t\t\t£${asMoney(totalEx) ?? ''}`);
       lines.push(`VAT\t\t\t£${asMoney(totalVat) ?? ''}`);
@@ -9338,17 +9703,70 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     lines.push('');
   };
 
+  const stringifyPayoutSchedule = (v) => {
+    if (v == null) return '';
+    if (typeof v === 'string') return v.trim();
+    if (Array.isArray(v)) {
+      const parts = v.map((x) => stringifyPayoutSchedule(x)).filter(Boolean);
+      return parts.join('; ');
+    }
+    if (typeof v === 'object') {
+      try {
+        if (Array.isArray(v.lines)) {
+          const parts = v.lines.map((x) => stringifyPayoutSchedule(x)).filter(Boolean);
+          if (parts.length) return parts.join('; ');
+        }
+        if (v.text != null && String(v.text).trim()) return String(v.text).trim();
+        if (v.summary != null && String(v.summary).trim()) return String(v.summary).trim();
+        return JSON.stringify(v);
+      } catch {
+        return '';
+      }
+    }
+    return String(v).trim();
+  };
+
+  const pushPayoutBodyLines = (lines, arr) => {
+    if (!Array.isArray(arr) || !arr.length) return;
+    for (const entry of arr) {
+      const txt = String(entry == null ? '' : entry).trim();
+      if (txt) lines.push(txt);
+    }
+  };
+
+  for (const helperCandidate of helperCandidateResults) {
+    const hasJob = helperCandidate && helperCandidate.has_job === true;
+    if (hasJob) continue;
+
+    const candidateIdText = (helperCandidate && helperCandidate.candidate_id != null) ? String(helperCandidate.candidate_id).trim() : '';
+    const candidateDisplayName = (helperCandidate && helperCandidate.candidate_display_name != null) ? String(helperCandidate.candidate_display_name).trim() : '';
+    const candidateTmsRef = (helperCandidate && helperCandidate.candidate_tms_ref != null) ? String(helperCandidate.candidate_tms_ref).trim() : '';
+    const triggerStatusText = (helperCandidate && helperCandidate.trigger_status != null) ? String(helperCandidate.trigger_status).trim().toUpperCase() : 'NO_QUEUEABLE_JOB';
+
+    skipped.push({
+      job_kind: messageKind,
+      payee_entity_kind: 'CANDIDATE',
+      payee_entity_id: candidateIdText || null,
+      candidate_id: candidateIdText || null,
+      candidate_display_name: candidateDisplayName || null,
+      candidate_tms_ref: candidateTmsRef || null,
+      reason: triggerStatusText || 'NO_QUEUEABLE_JOB',
+      trigger_status: triggerStatusText || 'NO_QUEUEABLE_JOB'
+    });
+  }
+
   for (const job of jobs) {
     const jobKindRaw = String(job?.job_kind || '').trim().toUpperCase();
 
-    const isUmbrellaJob = (jobKindRaw === 'UMBRELLA_REMITTANCE');
-    const isPayeJob = (jobKindRaw === 'PAYE_REMITTANCE');
-    const isUmbrellaCopyJob = (jobKindRaw === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE');
+    const isUmbrellaJob = !isPayoutNoticeBatch && (jobKindRaw === 'UMBRELLA_REMITTANCE');
+    const isPayeJob = !isPayoutNoticeBatch && (jobKindRaw === 'PAYE_REMITTANCE');
+    const isUmbrellaCopyJob = !isPayoutNoticeBatch && (jobKindRaw === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE');
 
-    if (!isUmbrellaJob && !isPayeJob && !isUmbrellaCopyJob) {
+    if (!isPayoutNoticeBatch && !isUmbrellaJob && !isPayeJob && !isUmbrellaCopyJob) {
       skipped.push({
         job_kind: jobKindRaw || null,
-        reason: 'UNKNOWN_JOB_KIND'
+        reason: 'UNKNOWN_JOB_KIND',
+        trigger_status: 'UNKNOWN_JOB_KIND'
       });
       continue;
     }
@@ -9357,21 +9775,32 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     const detailed = !!(job && job.detailed_breakdown === true);
 
     const toEmailRaw =
-      isUmbrellaJob
-        ? (recipient?.remittance_email ?? recipient?.email ?? null)
-        : (recipient?.email ?? recipient?.remittance_email ?? null);
+      isPayoutNoticeBatch
+        ? (job?.recipient_email ?? job?.email ?? recipient?.email ?? recipient?.remittance_email ?? null)
+        : (isUmbrellaJob
+            ? (recipient?.remittance_email ?? recipient?.email ?? null)
+            : (recipient?.email ?? recipient?.remittance_email ?? null));
 
     const intendedToEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
-
-    // ✅ In payroll_testing, route to test recipient (ignore intended recipient email entirely)
     const toEmail = testTo ? testTo : intendedToEmail;
+
+    const candidateIdFromJob = isPayoutNoticeBatch
+      ? String(job?.candidate_id ?? recipient?.candidate_id ?? '').trim()
+      : String(recipient?.candidate_id || '').trim();
+
+    const umbrellaIdFromJob = !isPayoutNoticeBatch
+      ? String(recipient?.umbrella_id || '').trim()
+      : '';
 
     if (!toEmail) {
       skipped.push({
-        job_kind: jobKindRaw || null,
-        payee_entity_kind: recipient?.entity_kind ?? null,
-        payee_entity_id: (recipient?.candidate_id ?? recipient?.umbrella_id ?? null),
-        reason: 'NO_EMAIL'
+        job_kind: jobKindRaw || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE' : null),
+        payee_entity_kind: isPayoutNoticeBatch ? 'CANDIDATE' : (recipient?.entity_kind ?? null),
+        payee_entity_id: isPayoutNoticeBatch ? (candidateIdFromJob || null) : (recipient?.candidate_id ?? recipient?.umbrella_id ?? null),
+        candidate_id: candidateIdFromJob || null,
+        umbrella_id: umbrellaIdFromJob || null,
+        reason: 'NO_EMAIL',
+        trigger_status: 'NO_EMAIL'
       });
       continue;
     }
@@ -9386,7 +9815,16 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     if (isPayeJob) subjectSuffix = 'Remittance Advice – PAYE';
     if (isUmbrellaCopyJob) subjectSuffix = 'Remittance Advice – Umbrella copy';
 
-    const subject = effectiveTestMode ? `[TEST MODE] ${subjectSuffix} – ${payPeriodLabel}` : `${subjectSuffix} – ${payPeriodLabel}`;
+    const defaultSubject = effectiveTestMode ? `[TEST MODE] ${subjectSuffix} – ${payPeriodLabel}` : `${subjectSuffix} – ${payPeriodLabel}`;
+    const basePayoutSubject = String(job?.subject || '').trim();
+    const payoutSubject = (() => {
+      if (!isPayoutNoticeBatch) return defaultSubject;
+      const seed = basePayoutSubject || `Payment notice – ${payPeriodLabel}`;
+      if (!effectiveTestMode) return seed;
+      return /^\[TEST MODE\]/i.test(seed) ? seed : `[TEST MODE] ${seed}`;
+    })();
+
+    const subject = isPayoutNoticeBatch ? payoutSubject : defaultSubject;
 
     const lines = [];
     if (headerMsg) {
@@ -9406,27 +9844,180 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       }
     }
 
-    lines.push('Remittance Advice');
-    if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
-    if (payDate) lines.push(`Pay date: ${payDate}`);
-    lines.push(`Pay batch: ${payBatchId}`);
-    lines.push(`Scope: ${scope}`);
-    lines.push('');
+    if (isPayoutNoticeBatch) {
+      const payoutScheduledDate =
+        String(job?.scheduled_payment_date || authoritativePaymentDate || payDate || '').trim();
 
-    if (isUmbrellaJob) {
-      const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
-      if (umbName) {
-        lines.push(`Umbrella: ${umbName}`);
-        lines.push('');
+      const candidateDisplay = [
+        String(job?.candidate_display_name || job?.display_name || recipient?.display_name || '').trim(),
+        String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()
+          ? `(${String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()})`
+          : ''
+      ].filter(Boolean).join(' ') || '(unknown)';
+
+      lines.push('Payment Notice');
+      if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
+      if (payoutScheduledDate) lines.push(`Scheduled payment date: ${payoutScheduledDate}`);
+      lines.push(`Pay batch: ${payBatchId}`);
+      lines.push(`Scope: ${scope}`);
+      lines.push(`Candidate: ${candidateDisplay}`);
+      lines.push('');
+
+      const items = Array.isArray(job?.items) ? job.items : [];
+      if (items.length) {
+        lines.push('Items');
+        for (const item of items) {
+          const label = String(
+            item?.label ??
+            item?.title ??
+            item?.kind ??
+            item?.type ??
+            item?.item_type ??
+            'Payment item'
+          ).trim();
+
+          const amountVal =
+            item?.amount ??
+            item?.total ??
+            item?.value ??
+            item?.scheduled_amount ??
+            item?.payment_amount ??
+            null;
+          const amountNum = asNum(amountVal);
+
+          const commentText = String(
+            item?.adjustment_comment ??
+            item?.comment ??
+            item?.note ??
+            ''
+          ).trim();
+
+          const scheduleText = stringifyPayoutSchedule(
+            item?.repayment_arrangement ??
+            item?.repayment_schedule ??
+            item?.schedule ??
+            job?.repayment_arrangement ??
+            job?.repayment_schedule
+          );
+
+          const lineMain = `${label}${amountNum != null ? ` — £${asMoney(amountNum)}` : ''}`;
+          lines.push(lineMain);
+          if (commentText) lines.push(`Comment: ${commentText}`);
+          if (scheduleText) lines.push(`Repayment arrangement: ${scheduleText}`);
+          lines.push('');
+        }
+      } else {
+        const bodyLines = Array.isArray(job?.body_lines) ? job.body_lines : [];
+        if (bodyLines.length) {
+          pushPayoutBodyLines(lines, bodyLines);
+          lines.push('');
+        } else {
+          const rootScheduleText = stringifyPayoutSchedule(job?.repayment_arrangement ?? job?.repayment_schedule);
+          const rootCommentText = String(job?.adjustment_comment ?? job?.comment ?? '').trim();
+
+          if (rootCommentText) {
+            lines.push(`Comment: ${rootCommentText}`);
+          }
+          if (rootScheduleText) {
+            lines.push(`Repayment arrangement: ${rootScheduleText}`);
+          }
+          lines.push('');
+        }
       }
 
-      const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
-      for (const c of candidates) {
-        const dn = (c?.display_name && String(c.display_name).trim()) ? String(c.display_name).trim() : '';
-        const tr = (c?.tms_ref && String(c.tms_ref).trim()) ? String(c.tms_ref).trim() : '';
-        const candidateDisplay = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ') || '(unknown)';
+      lines.push('This payment notice was generated from frozen pay batch artifacts in CloudTMS.');
+    } else {
+      lines.push('Remittance Advice');
+      if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
+      if (payDate) lines.push(`Pay date: ${payDate}`);
+      lines.push(`Pay batch: ${payBatchId}`);
+      lines.push(`Scope: ${scope}`);
+      lines.push('');
 
-        const timesheets = Array.isArray(c?.timesheets) ? c.timesheets : [];
+      if (isUmbrellaJob) {
+        const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
+        if (umbName) {
+          lines.push(`Umbrella: ${umbName}`);
+          lines.push('');
+        }
+
+        const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
+        for (const c of candidates) {
+          const dn = (c?.display_name && String(c.display_name).trim()) ? String(c.display_name).trim() : '';
+          const tr = (c?.tms_ref && String(c.tms_ref).trim()) ? String(c.tms_ref).trim() : '';
+          const candidateDisplay = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ') || '(unknown)';
+
+          const timesheets = Array.isArray(c?.timesheets) ? c.timesheets : [];
+          for (const ts of timesheets) {
+            const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
+            renderTimesheetSection(lines, {
+              candidateDisplay,
+              clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
+              weekEnding,
+              jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
+              band: (ts?.band != null) ? String(ts.band) : '',
+              timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
+              renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
+              detailed,
+              unit_rows: ts?.unit_rows,
+              additional_units_rows: ts?.additional_units_rows,
+              expenses_rows: ts?.expenses_rows,
+              other_rows: ts?.other_rows,
+              totals: ts?.totals,
+              schedule_rows: ts?.schedule_rows,
+              schedule_changes: ts?.schedule_changes
+            });
+          }
+        }
+      } else {
+        const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
+        const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
+        const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
+
+        if (isPayeJob) {
+          const adv = (job && typeof job.paye_net_advisory === 'object' && job.paye_net_advisory) ? job.paye_net_advisory : null;
+
+          const originalNet = asNum(adv?.original_net_input);
+          const loanTaken = asNum(adv?.loan_repayment_taken);
+          const overpayTaken = asNum(adv?.overpayment_recovery_taken);
+          const finalNetPaid = asNum(adv?.final_net_paid);
+
+          const hasLoan = (loanTaken != null && loanTaken > 1e-9);
+          const hasOverpay = (overpayTaken != null && overpayTaken > 1e-9);
+
+          const dedTotal = Number(loanTaken || 0) + Number(overpayTaken || 0);
+          const hasAnyDeduction = (dedTotal > 1e-9);
+          const netMissing = (originalNet == null);
+
+          if (adv && (hasAnyDeduction || netMissing)) {
+            lines.push('PAYE net summary');
+
+            if (netMissing) {
+              lines.push('PAYE net not provided\t(advisory — final paid cannot be confirmed until net is entered)');
+            }
+
+            if (originalNet != null) lines.push(`Original PAYE net\t£${asMoney(originalNet) ?? ''}`);
+            else lines.push('Original PAYE net\t(not provided)');
+
+            if (hasLoan) lines.push(`Loan repayment\t-£${asMoney(loanTaken) ?? ''}`);
+            if (hasOverpay) lines.push(`Overpayment recovery\t-£${asMoney(overpayTaken) ?? ''}`);
+
+            if (originalNet != null && hasAnyDeduction) {
+              const computedFinal = Number(originalNet) - Number(dedTotal || 0);
+              lines.push(`Final paid\t£${asMoney(originalNet) ?? ''} − £${asMoney(dedTotal) ?? ''} = £${asMoney(computedFinal) ?? ''}`);
+            } else if (finalNetPaid != null) {
+              lines.push(`Final paid\t£${asMoney(finalNetPaid) ?? ''}`);
+            } else if (originalNet != null) {
+              lines.push(`Final paid\t£${asMoney(originalNet) ?? ''}`);
+            } else {
+              lines.push('Final paid\t(unknown — PAYE net not provided)');
+            }
+
+            lines.push('');
+          }
+        }
+
+        const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
         for (const ts of timesheets) {
           const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
           renderTimesheetSection(lines, {
@@ -9448,84 +10039,9 @@ async function sendPayBatchRemittancesInternal(env, opts) {
           });
         }
       }
-    } else {
-      // Candidate jobs (PAYE remittance or Umbrella copy)
-      const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
-      const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
-      const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
 
-      if (isPayeJob) {
-        const adv = (job && typeof job.paye_net_advisory === 'object' && job.paye_net_advisory) ? job.paye_net_advisory : null;
-
-        const originalNet = asNum(adv?.original_net_input);
-        const loanTaken = asNum(adv?.loan_repayment_taken);
-        const overpayTaken = asNum(adv?.overpayment_recovery_taken);
-        const finalNetPaid = asNum(adv?.final_net_paid);
-
-        const hasLoan = (loanTaken != null && loanTaken > 1e-9);
-        const hasOverpay = (overpayTaken != null && overpayTaken > 1e-9);
-
-        const dedTotal = Number(loanTaken || 0) + Number(overpayTaken || 0);
-        const hasAnyDeduction = (dedTotal > 1e-9);
-        const netMissing = (originalNet == null);
-
-        // ✅ Requirement:
-        // - If loan_repayment_taken > 0, include:
-        //   Original PAYE net, Loan repayment, Final paid (Y − X)
-        // - Also include overpayment recovery lines where applicable.
-        // - If PAYE net missing, include advisory text.
-        if (adv && (hasAnyDeduction || netMissing)) {
-          lines.push('PAYE net summary');
-
-          if (netMissing) {
-            lines.push('PAYE net not provided\t(advisory — final paid cannot be confirmed until net is entered)');
-          }
-
-          if (originalNet != null) lines.push(`Original PAYE net\t£${asMoney(originalNet) ?? ''}`);
-          else lines.push('Original PAYE net\t(not provided)');
-
-          if (hasLoan) lines.push(`Loan repayment\t-£${asMoney(loanTaken) ?? ''}`);
-          if (hasOverpay) lines.push(`Overpayment recovery\t-£${asMoney(overpayTaken) ?? ''}`);
-
-          if (originalNet != null && hasAnyDeduction) {
-            const computedFinal = Number(originalNet) - Number(dedTotal || 0);
-            lines.push(`Final paid\t£${asMoney(originalNet) ?? ''} − £${asMoney(dedTotal) ?? ''} = £${asMoney(computedFinal) ?? ''}`);
-          } else if (finalNetPaid != null) {
-            lines.push(`Final paid\t£${asMoney(finalNetPaid) ?? ''}`);
-          } else if (originalNet != null) {
-            lines.push(`Final paid\t£${asMoney(originalNet) ?? ''}`);
-          } else {
-            lines.push('Final paid\t(unknown — PAYE net not provided)');
-          }
-
-          lines.push('');
-        }
-      }
-
-      const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
-      for (const ts of timesheets) {
-        const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
-        renderTimesheetSection(lines, {
-          candidateDisplay,
-          clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
-          weekEnding,
-          jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
-          band: (ts?.band != null) ? String(ts.band) : '',
-          timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
-          renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
-          detailed,
-          unit_rows: ts?.unit_rows,
-          additional_units_rows: ts?.additional_units_rows,
-          expenses_rows: ts?.expenses_rows,
-          other_rows: ts?.other_rows,
-          totals: ts?.totals,
-          schedule_rows: ts?.schedule_rows,
-          schedule_changes: ts?.schedule_changes
-        });
-      }
+      lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
     }
-
-    lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
 
     if (footerMsg) {
       lines.push('');
@@ -9535,19 +10051,20 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     const bodyText = lines.join('\n');
     const bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
 
-    const payeeEntityKind = (recipient?.entity_kind && String(recipient.entity_kind).trim())
-      ? String(recipient.entity_kind).trim()
-      : (isUmbrellaJob ? 'UMBRELLA' : 'CANDIDATE');
+    const payeeEntityKind = isPayoutNoticeBatch
+      ? 'CANDIDATE'
+      : ((recipient?.entity_kind && String(recipient.entity_kind).trim())
+          ? String(recipient.entity_kind).trim()
+          : (isUmbrellaJob ? 'UMBRELLA' : 'CANDIDATE'));
 
-    const payeeEntityId = (isUmbrellaJob
-      ? (recipient?.umbrella_id ?? null)
-      : (recipient?.candidate_id ?? null));
+    const payeeEntityId = isPayoutNoticeBatch
+      ? (candidateIdFromJob || null)
+      : (isUmbrellaJob ? (recipient?.umbrella_id ?? null) : (recipient?.candidate_id ?? null));
 
     const payeeEntityIdText = (payeeEntityId != null) ? String(payeeEntityId).trim() : 'UNKNOWN';
+    const referencePrefix = isPayoutNoticeBatch ? 'payout_notice' : 'remit';
+    const reference = `${referencePrefix}:pay_batch:${payBatchId}:${jobKindRaw || messageKind}:${payeeEntityKind}:${payeeEntityIdText}`;
 
-    const reference = `remit:pay_batch:${payBatchId}:${jobKindRaw || 'JOB'}:${payeeEntityKind}:${payeeEntityIdText}`;
-
-    // ✅ Idempotency / dedupe: skip if an identical (type,to,reference) already exists
     try {
       const qType = encodeURIComponent('REMITTANCE');
       const qTo = encodeURIComponent(toEmail);
@@ -9561,14 +10078,17 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       if (Array.isArray(existing) && existing.length > 0) {
         const ex0 = existing[0] || {};
         skipped.push({
-          job_kind: jobKindRaw || null,
+          job_kind: jobKindRaw || messageKind,
           payee_entity_kind: payeeEntityKind,
           payee_entity_id: payeeEntityIdText,
+          candidate_id: candidateIdFromJob || null,
+          umbrella_id: umbrellaIdFromJob || null,
           to: toEmail,
           intended_to: intendedToEmail,
           subject,
           reference,
           reason: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
+          trigger_status: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
           existing_mail_outbox_id: ex0.id ? String(ex0.id) : null,
           existing_status: ex0.status ? String(ex0.status) : null
         });
@@ -9576,14 +10096,15 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       }
     } catch (e) {
       skipped.push({
-        job_kind: jobKindRaw || null,
+        job_kind: jobKindRaw || messageKind,
         payee_entity_kind: payeeEntityKind,
         payee_entity_id: payeeEntityIdText,
+        candidate_id: candidateIdFromJob || null,
+        umbrella_id: umbrellaIdFromJob || null,
         to: toEmail,
         intended_to: intendedToEmail,
-        subject,
-        reference,
         reason: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
+        trigger_status: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
         error: String(e?.message || e || 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED').slice(0, 500)
       });
       continue;
@@ -9608,8 +10129,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       reference,
       created_by: actorUserId || null,
       created_at_utc: nowIso,
-
-      // ✅ NEW: comms log metadata for unified outbox + Comms tabs
       recipient_kind: recipientKindLower,
       recipient_id: (payeeEntityId != null && isUuid(payeeEntityIdText)) ? payeeEntityIdText : null,
       context_kind: 'pay_batches',
@@ -9628,12 +10147,15 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       if (!ins.ok) {
         const errTxt = await ins.text().catch(() => '');
         skipped.push({
-          job_kind: jobKindRaw || null,
+          job_kind: jobKindRaw || messageKind,
           payee_entity_kind: payeeEntityKind,
           payee_entity_id: payeeEntityIdText,
+          candidate_id: candidateIdFromJob || null,
+          umbrella_id: umbrellaIdFromJob || null,
           to: toEmail,
           intended_to: intendedToEmail,
           reason: 'MAIL_OUTBOX_INSERT_FAILED',
+          trigger_status: 'MAIL_OUTBOX_INSERT_FAILED',
           error: (errTxt || '').slice(0, 500)
         });
         continue;
@@ -9644,47 +10166,66 @@ async function sendPayBatchRemittancesInternal(env, opts) {
       const mailId = mail?.id ? String(mail.id) : null;
 
       queued.push({
-        job_kind: jobKindRaw || null,
+        job_kind: jobKindRaw || messageKind,
         payee_entity_kind: payeeEntityKind,
         payee_entity_id: payeeEntityIdText,
+        candidate_id: candidateIdFromJob || null,
+        umbrella_id: umbrellaIdFromJob || null,
         to: toEmail,
         intended_to: intendedToEmail,
         subject,
         reference,
+        trigger_status: 'QUEUED_TO_MAIL_OUTBOX',
         mail_outbox_id: mailId
       });
     } catch (e) {
       skipped.push({
-        job_kind: jobKindRaw || null,
+        job_kind: jobKindRaw || messageKind,
         payee_entity_kind: payeeEntityKind,
         payee_entity_id: payeeEntityIdText,
+        candidate_id: candidateIdFromJob || null,
+        umbrella_id: umbrellaIdFromJob || null,
         to: toEmail,
         intended_to: intendedToEmail,
         reason: 'MAIL_OUTBOX_EXCEPTION',
+        trigger_status: 'MAIL_OUTBOX_EXCEPTION',
         error: String(e?.message || e || 'MAIL_OUTBOX_EXCEPTION').slice(0, 500)
       });
       continue;
     }
   }
 
-  // Mark sent (audit trail) — DB function is scope + results_json (not per-payee)
-  try {
-    await sbRpc(env, 'pay_remittance_mark_sent', {
-      p_pay_batch_id: payBatchId,
-      p_scope: scope,
-      p_results_json: { queued, skipped, pay_date: payDate, bulk_reference: bulkRef, payroll_testing: payrollTesting, test_recipient: testTo },
-      p_actor_user_id: actorUserId
-    });
-  } catch (e) {
-    // Non-fatal: emails are queued; audit mark can be retried.
-    console.warn('[banking][remittances] pay_remittance_mark_sent failed:', e?.message || e);
+  if ((queued.length || skipped.length) && typeof sbRpc === 'function') {
+    try {
+      await sbRpc(env, 'pay_remittance_mark_sent', {
+        p_pay_batch_id: payBatchId,
+        p_scope: scope,
+        p_results_json: {
+          message_kind: messageKind,
+          queued,
+          skipped,
+          pay_date: payDate,
+          authoritative_payment_date: authoritativePaymentDate,
+          bulk_reference: bulkRef,
+          payroll_testing: payrollTesting,
+          test_recipient: testTo
+        },
+        p_actor_user_id: actorUserId
+      });
+    } catch (e) {
+      console.warn('[banking][remittances] pay_remittance_mark_sent failed:', e?.message || e);
+    }
   }
 
   return {
     ok: true,
     pay_batch_id: payBatchId,
     scope,
+    message_kind: messageKind,
+    trigger_status: String(helperRes?.trigger_status || '').trim() || (queued.length ? 'QUEUED_TO_MAIL_OUTBOX' : 'NO_QUEUEABLE_JOB'),
+    error: null,
     pay_date: payDate,
+    authoritative_payment_date: authoritativePaymentDate,
     bulk_reference: bulkRef,
     payroll_testing: payrollTesting,
     test_recipient: testTo,
@@ -9694,7 +10235,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     skipped
   };
 }
-
 
 async function buildPayBatchDetailPdfFromRows(exportObj) {
   const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
@@ -11557,11 +12097,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -11592,9 +12128,7 @@ async function handleTimesheetAdvancePayment(env, req, timesheetId) {
     return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
   }
 
-  const _safeJsonParse = (s) => {
-    try { return JSON.parse(String(s || '')); } catch { return null; }
-  };
+  const enc = encodeURIComponent;
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -11603,6 +12137,50 @@ async function handleTimesheetAdvancePayment(env, req, timesheetId) {
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
   };
 
   let resolved = null;
@@ -11630,34 +12208,6 @@ async function handleTimesheetAdvancePayment(env, req, timesheetId) {
         { status: 409, headers: { 'Content-Type': 'application/json' } }
       )
     );
-  }
-
-  let ts = null;
-  try {
-    ts = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,contract_id,week_ending_date` +
-        `&limit=1`
-    );
-  } catch (e) {
-    ts = null;
-  }
-
-  if (!ts) {
-    return withCORS(env, req, notFound('Timesheet not found (current row missing)'));
-  }
-
-  const contractId = (ts.contract_id != null && String(ts.contract_id).trim()) ? String(ts.contract_id).trim() : null;
-  const weekEnding = (ts.week_ending_date != null && String(ts.week_ending_date).trim()) ? String(ts.week_ending_date).trim() : null;
-
-  if (!contractId || !uuidRe.test(contractId)) {
-    return withCORS(env, req, badRequest('Timesheet contract_id missing/invalid; cannot advance-payment'));
-  }
-  if (!weekEnding || !/^\d{4}-\d{2}-\d{2}$/.test(weekEnding)) {
-    return withCORS(env, req, badRequest('Timesheet week_ending_date missing/invalid; cannot advance-payment'));
   }
 
   let tsfin = null;
@@ -11695,31 +12245,60 @@ async function handleTimesheetAdvancePayment(env, req, timesheetId) {
     }
   };
 
-  const fetchPayState = async () => {
-    try {
-      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
-        p_timesheet_id: currentTimesheetId,
-        p_actor_user_id: user.id
-      });
-      return unwrapRpc(ps0, 'timesheet_pay_state');
-    } catch {
-      return null;
-    }
-  };
+  try {
+    const rpcRes = await sbRpc(env, 'timesheet_payment_override_set', {
+      p_timesheet_id: currentTimesheetId,
+      p_actor_user_id: user.id,
+      p_reason: overrideReason
+    });
 
-  let existingOverride = await fetchActiveAdvanceOverride();
+    const payload = unwrapRpc(rpcRes, 'timesheet_payment_override_set');
+    const payState = (payload && typeof payload === 'object' && payload.pay_state && typeof payload.pay_state === 'object')
+      ? payload.pay_state
+      : null;
 
-  if (existingOverride) {
-    const consumedByPayBatchId =
-      (existingOverride.consumed_by_pay_batch_id != null && String(existingOverride.consumed_by_pay_batch_id).trim())
-        ? String(existingOverride.consumed_by_pay_batch_id).trim()
-        : null;
-    const consumedAtUtc =
-      (existingOverride.consumed_at_utc != null && String(existingOverride.consumed_at_utc).trim())
-        ? String(existingOverride.consumed_at_utc).trim()
-        : null;
+    const overrideObj = (payload && typeof payload === 'object' && payload.override && typeof payload.override === 'object')
+      ? payload.override
+      : null;
 
-    if (consumedByPayBatchId || consumedAtUtc) {
+    return withCORS(env, req, ok({
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      candidate_id: (payload && typeof payload === 'object' && payload.candidate_id != null)
+        ? String(payload.candidate_id).trim()
+        : candidateId,
+      advance_override_id: (overrideObj && overrideObj.id != null)
+        ? String(overrideObj.id).trim()
+        : null,
+      already_advanced: !!(payload && typeof payload === 'object' && payload.already_exists === true),
+      advanced: true,
+      pay_state: payState,
+      message: (payload && typeof payload === 'object' && payload.already_exists === true)
+        ? 'This timesheet is already marked to be advanced in the next eligible pay run.'
+        : 'This timesheet has been marked to be advanced in the next eligible pay run.'
+    }));
+  } catch (e) {
+    const raised = _extractDbRaisedJson(e);
+    const raisedCode = String(raised?.code || '').trim().toUpperCase();
+    const errMsg = String(
+      raised?.message ||
+      e?.json?.message ||
+      e?.message ||
+      e ||
+      'Failed to create timesheet advance override'
+    ).trim();
+    const errMsgU = errMsg.toUpperCase();
+
+    if (
+      raisedCode === 'TIMESHEET_ADVANCE_ALREADY_BATCHED'
+      || errMsgU.includes('OVERRIDE ALREADY CONSUMED BY NON-CANCELLED PAY BATCH')
+    ) {
+      const existingOverride = await fetchActiveAdvanceOverride();
+      const consumedByPayBatchId =
+        (existingOverride?.consumed_by_pay_batch_id != null && String(existingOverride.consumed_by_pay_batch_id).trim())
+          ? String(existingOverride.consumed_by_pay_batch_id).trim()
+          : null;
+
       return withCORS(
         env,
         req,
@@ -11736,143 +12315,10 @@ async function handleTimesheetAdvancePayment(env, req, timesheetId) {
       );
     }
 
-    const payStateExisting = await fetchPayState();
-
-    return withCORS(env, req, ok({
-      ok: true,
-      timesheet_id: currentTimesheetId,
-      candidate_id: candidateId,
-      advance_override_id: String(existingOverride.id || '').trim() || null,
-      already_advanced: true,
-      advanced: true,
-      pay_batch_id: null,
-      batch_kind_fixed: null,
-      warnings: [],
-      preview_summary: null,
-      pay_state: payStateExisting,
-      message: 'This timesheet is already marked to be advanced in the next eligible pay run.'
-    }));
+    return withCORS(env, req, serverError(errMsg || 'Failed to create timesheet advance override'));
   }
-
-  let insertedOverride = null;
-
-  try {
-    const insRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_payment_overrides`,
-      {
-        method: 'POST',
-        headers: { ...sbAuthHeaders(env), Prefer: 'return=representation' },
-        body: JSON.stringify({
-          timesheet_id: currentTimesheetId,
-          candidate_id: candidateId,
-          override_type: 'ADVANCE_THIS_PAYMENT',
-          reason: overrideReason,
-          created_by_user_id: user.id
-        })
-      }
-    );
-
-    if (!insRes.ok) {
-      const txt = await insRes.text().catch(() => '');
-      const parsed = _safeJsonParse(txt);
-
-      existingOverride = await fetchActiveAdvanceOverride();
-      if (existingOverride) {
-        const consumedByPayBatchId =
-          (existingOverride.consumed_by_pay_batch_id != null && String(existingOverride.consumed_by_pay_batch_id).trim())
-            ? String(existingOverride.consumed_by_pay_batch_id).trim()
-            : null;
-        const consumedAtUtc =
-          (existingOverride.consumed_at_utc != null && String(existingOverride.consumed_at_utc).trim())
-            ? String(existingOverride.consumed_at_utc).trim()
-            : null;
-
-        if (consumedByPayBatchId || consumedAtUtc) {
-          return withCORS(
-            env,
-            req,
-            new Response(
-              JSON.stringify({
-                error: 'TIMESHEET_ADVANCE_ALREADY_BATCHED',
-                message: 'This timesheet advance has already been batched and cannot be changed here.',
-                timesheet_id: currentTimesheetId,
-                candidate_id: candidateId,
-                pay_batch_id: consumedByPayBatchId || null
-              }),
-              { status: 409, headers: { 'Content-Type': 'application/json' } }
-            )
-          );
-        }
-
-        const payStateExisting = await fetchPayState();
-
-        return withCORS(env, req, ok({
-          ok: true,
-          timesheet_id: currentTimesheetId,
-          candidate_id: candidateId,
-          advance_override_id: String(existingOverride.id || '').trim() || null,
-          already_advanced: true,
-          advanced: true,
-          pay_batch_id: null,
-          batch_kind_fixed: null,
-          warnings: [],
-          preview_summary: null,
-          pay_state: payStateExisting,
-          message: 'This timesheet is already marked to be advanced in the next eligible pay run.'
-        }));
-      }
-
-      return withCORS(
-        env,
-        req,
-        serverError(
-          (parsed && (parsed.message || parsed.error))
-            ? String(parsed.message || parsed.error)
-            : `Failed to create timesheet advance override (${insRes.status}) ${txt || ''}`.trim()
-        )
-      );
-    }
-
-    const j = await insRes.json().catch(() => []);
-    const row = Array.isArray(j) ? j[0] : j;
-    insertedOverride = (row && typeof row === 'object') ? row : null;
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create timesheet advance override')));
-  }
-
-  const payState = await fetchPayState();
-
-  try {
-    await writeAudit(
-      env,
-      user,
-      'TIMESHEET_ADVANCE_REQUESTED',
-      {
-        mode: 'ADVANCE_OVERRIDE_SET',
-        timesheet_id: currentTimesheetId,
-        candidate_id: candidateId,
-        reason: overrideReason,
-        advance_override_id: insertedOverride && insertedOverride.id ? String(insertedOverride.id) : null
-      },
-      { entity: 'timesheets', subject_id: currentTimesheetId, req }
-    );
-  } catch {}
-
-  return withCORS(env, req, ok({
-    ok: true,
-    timesheet_id: currentTimesheetId,
-    candidate_id: candidateId,
-    advance_override_id: insertedOverride && insertedOverride.id ? String(insertedOverride.id) : null,
-    already_advanced: false,
-    advanced: true,
-    pay_batch_id: null,
-    batch_kind_fixed: null,
-    warnings: [],
-    preview_summary: null,
-    pay_state: payState,
-    message: 'This timesheet has been marked to be advanced in the next eligible pay run.'
-  }));
 }
+
 
 function collectDraftTimesheetIdsFromPreview(previewJson, previewDecisionsJson) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -12499,7 +12945,6 @@ async function handleBankingIdLedgerList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -12629,7 +13074,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
     msg = msgFromJson || String(e?.message || e || '');
 
-    // If message looks like: "RPC <fn> failed 400: {json...}", try to extract json.message
     if (!msgFromJson) {
       try {
         const i = msg.indexOf('{');
@@ -12675,7 +13119,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       error_code = 'HAS_HARD_BLOCKERS';
       user_message = 'This batch has hard blockers and cannot proceed until they are resolved.';
     } else if (raw) {
-      // For other user-correctable 4xx errors, use a cleaned message (no RPC wrapper)
       user_message = raw;
     }
 
@@ -12692,9 +13135,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   };
 
   try {
-    // ─────────────────────────────────────────────────────────────
-    // 0) Server-side single-shot gate: do not allow execute twice.
-    // ─────────────────────────────────────────────────────────────
     let gateGet0;
     try {
       gateGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
@@ -12712,9 +13152,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return withCORS(env, req, jsonResponse(400, { error: msg, message: msg, error_code: 'EXECUTE_NOT_ALLOWED' }));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 1) Execute-bank: build transfers + link items
-    // ─────────────────────────────────────────────────────────────
     let execRes0;
     try {
       execRes0 = await sbRpc(env, 'pay_execute_bank', {
@@ -12728,10 +13165,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
     const execRes = unwrapRpc(execRes0, 'pay_execute_bank');
 
-    // ─────────────────────────────────────────────────────────────
-    // 2) Verify-only readiness gate via DB pay_batch_prepare (no fixing here).
-    //    If blockers exist, return PREVIEW_GATE_NOT_SATISFIED.
-    // ─────────────────────────────────────────────────────────────
     let prepRes0;
     try {
       prepRes0 = await sbRpc(env, 'pay_batch_prepare', {
@@ -12767,9 +13200,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 3) Schedule (if rail supports scheduling)
-    // ─────────────────────────────────────────────────────────────
     let batchGet0;
     try {
       batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
@@ -12782,6 +13212,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
     const providerRaw = String(batchObj?.rail_provider_snapshot || 'CSV').trim().toUpperCase();
     const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
+    const batchKindFixed = String(batchObj?.batch_kind_fixed || '').trim().toUpperCase();
+    const messageKindForBatch = (batchKindFixed === 'LOANS') ? 'PAYOUT_NOTICE' : 'REMITTANCE';
     const adapter = getRailAdapter(provider);
 
     if (!adapter) {
@@ -12802,7 +13234,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(msg));
     }
 
-    // Optional: rail env mismatch guard (only when caps reports worker_env)
     const batchEnvRaw = (batchObj && batchObj.rail_env_snapshot !== undefined && batchObj.rail_env_snapshot !== null)
       ? String(batchObj.rail_env_snapshot).trim().toUpperCase()
       : '';
@@ -12849,8 +13280,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
       scheduledOut = unwrapRpc(schedRes0, 'pay_batch_auth_start');
 
-      // Best-effort: “payment scheduled” notice is handled in handleBankingPayBatchSchedule,
-      // but this orchestration bypasses that handler, so we send it here when it becomes authorised.
       try {
         const becameAuthorised = (scheduledOut && scheduledOut.became_authorised === true)
           || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
@@ -12861,36 +13290,60 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         if (becameAuthorised && typeof sendPayBatchScheduledNoticeAllAuthorisers === 'function') {
           await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user?.id || null);
         }
-      } catch {
-        // best-effort only
-      }
+      } catch {}
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 4) Remittances are deferred until settlement (COMPLETED transfers).
-    //    Do NOT attempt to send on AUTHORISED_FOR_PAYMENT, because pay_remittance_build
-    //    only produces jobs once transfers are COMPLETED.
-    // ─────────────────────────────────────────────────────────────
-    let remittancesAttempted = false;
-    let remittancesSent = false;
-    let remittancesReason = null;
+    let workerCommunications = {
+      attempted: false,
+      sent_or_queued: false,
+      trigger_status: scheduleAttempted ? 'NOT_YET_AUTHORISED' : 'SCHEDULING_NOT_APPLICABLE',
+      message_kind: messageKindForBatch,
+      error: null,
+      scope: payChannelScope,
+      result: null
+    };
 
     const becameAuthorisedForPayment =
       scheduleAttempted
-      && ((scheduledOut && scheduledOut.became_authorised === true)
-          || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT'));
+      && (
+        (scheduledOut && scheduledOut.became_authorised === true)
+        || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT')
+      );
 
     if (becameAuthorisedForPayment) {
-      remittancesAttempted = false;
-      remittancesSent = false;
-      remittancesReason = 'DEFERRED_UNTIL_SETTLED';
-    } else {
-      remittancesAttempted = false;
-      remittancesSent = false;
-      remittancesReason = scheduleAttempted ? 'NOT_YET_AUTHORISED' : 'SCHEDULING_NOT_APPLICABLE';
+      try {
+        const sendResult = await sendPayBatchRemittancesInternal(env, {
+          payBatchId: id,
+          scope: payChannelScope,
+          actorUserId: user.id
+        });
+
+        const sendTriggerStatus = String(sendResult?.trigger_status || '').trim();
+        const queuedCount = Number(sendResult?.queued_count || 0);
+        const sentOrQueued = Number.isFinite(queuedCount) && queuedCount > 0;
+
+        workerCommunications = {
+          attempted: true,
+          sent_or_queued: sentOrQueued,
+          trigger_status: sendTriggerStatus || 'COMMIT_STAGE_SEND_COMPLETED',
+          message_kind: String(sendResult?.message_kind || messageKindForBatch).trim().toUpperCase() || messageKindForBatch,
+          error: null,
+          scope: payChannelScope,
+          result: sendResult
+        };
+      } catch (e) {
+        workerCommunications = {
+          attempted: true,
+          sent_or_queued: false,
+          trigger_status: 'COMMIT_STAGE_SEND_ERROR',
+          message_kind: messageKindForBatch,
+          error: String(e?.message || e || 'COMMIT_STAGE_SEND_ERROR'),
+          scope: payChannelScope,
+          result: null
+        };
+      }
     }
 
-    // Always return fresh batch snapshot
     let afterGet0;
     try {
       afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
@@ -12907,13 +13360,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       prepared: prepRes,
       scheduled: scheduledOut,
       schedule_attempted: scheduleAttempted,
-      remittances: {
-        attempted: remittancesAttempted,
-        sent: remittancesSent,
-        reason: remittancesReason,
-        deferred_until_settled: true,
-        scope: payChannelScope
-      },
+      remittances: workerCommunications,
+      worker_communications: workerCommunications,
       batch_get: afterGet
     }));
   } catch (e) {
@@ -12923,7 +13371,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
 
     const norm = normalizeRpcError(e, 'BANKING_EXECUTE_PAYMENT_FAILED');
-    // If it looks like a 4xx (user-correctable), return 400; otherwise 500 with safe message.
     const status = (e && Number.isFinite(Number(e.status)) && Number(e.status) >= 400 && Number(e.status) < 500) ? Number(e.status) : 500;
     if (status >= 400 && status < 500) {
       return withCORS(env, req, jsonResponse(norm.status, norm.body));
@@ -12931,8 +13378,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
-
-
 
 async function handleBankingPaySnoozeUpsert(env, req, user) {
   let body = null;
@@ -12957,9 +13402,29 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
   const sourceRefRaw = (body.source_ref === null || body.source_ref === undefined) ? '' : String(body.source_ref).trim();
   const sourceRef = sourceRefRaw ? sourceRefRaw : null;
 
-  const snoozeKindRaw = String(body.snooze_kind || body.snoozeKind || 'DO_NOT_PAY').trim().toUpperCase();
-  const snoozeKind = (snoozeKindRaw === 'DO_NOT_PAY' || snoozeKindRaw === 'BLOCKED') ? snoozeKindRaw : null;
-  if (!snoozeKind) return withCORS(env, req, badRequest('snooze_kind must be DO_NOT_PAY or BLOCKED'));
+  const snoozeKindInput = String(body.snooze_kind || body.snoozeKind || 'DO_NOT_PAY').trim().toUpperCase();
+  const snoozeKindAliases = {
+    BLOCKED: 'BLOCKED_TIMESHEET',
+    LOAN_REPAYMENT: 'PAYMENT_ADVANCE_REPAYMENT'
+  };
+  const snoozeKindNormalized = snoozeKindAliases[snoozeKindInput] || snoozeKindInput;
+
+  const allowedKinds = new Set([
+    'TIMESHEET_PAYMENT',
+    'BLOCKED_TIMESHEET',
+    'DO_NOT_PAY',
+    'OVERPAYMENT_RECOVERY',
+    'PAYMENT_ADVANCE_REPAYMENT',
+    'MANUAL_DEBT_RECOVERY'
+  ]);
+
+  if (!allowedKinds.has(snoozeKindNormalized)) {
+    return withCORS(
+      env,
+      req,
+      badRequest('snooze_kind must be TIMESHEET_PAYMENT, BLOCKED_TIMESHEET, DO_NOT_PAY, OVERPAYMENT_RECOVERY, PAYMENT_ADVANCE_REPAYMENT, MANUAL_DEBT_RECOVERY, or legacy LOAN_REPAYMENT')
+    );
+  }
 
   const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
   const note = noteRaw ? noteRaw : null;
@@ -12983,7 +13448,7 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
       p_timesheet_id: timesheetId,
       p_segment_id: segmentId,
       p_source_ref: sourceRef,
-      p_snooze_kind: snoozeKind,
+      p_snooze_kind: snoozeKindNormalized,
       p_snooze_until_date: untilIso,
       p_actor_user_id: user.id,
       p_note: note
@@ -14422,6 +14887,431 @@ async function handleBankingPayAuthTokenResolve(env, req, user) {
   }));
 }
 
+async function handleTimesheetUnadvancePayment(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const idIn = String(timesheetId || '').trim();
+  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+  body = body || {};
+
+  const clearReason =
+    String(
+      body.clear_reason ??
+      body.clearReason ??
+      body.reason ??
+      body.note ??
+      ''
+    ).trim() || null;
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(idIn)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  let resolved = null;
+  try {
+    resolved = await resolveTimesheetToCurrent(env, idIn);
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
+  }
+
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  if (!resolved.booking_id) {
+    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let tsfin = null;
+  try {
+    tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
+    );
+  } catch {
+    tsfin = null;
+  }
+
+  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
+  if (!candidateId || !uuidRe.test(candidateId)) {
+    return withCORS(env, req, badRequest('Timesheet candidate_id not available (ts_financials missing); cannot unadvance-payment'));
+  }
+
+  const fetchActiveAdvanceOverride = async () => {
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_payment_overrides` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&cleared_at_utc=is.null` +
+          `&select=id,timesheet_id,candidate_id,override_type,reason,created_at_utc,created_by_user_id,consumed_by_pay_batch_id,consumed_at_utc,cleared_at_utc,cleared_by_user_id,clear_reason` +
+          `&order=created_at_utc.desc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'timesheet_payment_override_clear', {
+      p_timesheet_id: currentTimesheetId,
+      p_actor_user_id: user.id,
+      p_clear_reason: clearReason
+    });
+
+    const payload = unwrapRpc(rpcRes, 'timesheet_payment_override_clear');
+    const payState = (payload && typeof payload === 'object' && payload.pay_state && typeof payload.pay_state === 'object')
+      ? payload.pay_state
+      : null;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      candidate_id: (payload && typeof payload === 'object' && payload.candidate_id != null)
+        ? String(payload.candidate_id).trim()
+        : candidateId,
+      already_cleared: !!(payload && typeof payload === 'object' && payload.already_cleared === true),
+      cleared_override_id: (payload && typeof payload === 'object' && payload.cleared_override_id != null)
+        ? String(payload.cleared_override_id).trim()
+        : null,
+      pay_state: payState,
+      message: (payload && typeof payload === 'object' && payload.already_cleared === true)
+        ? 'This timesheet is not currently marked as advanced.'
+        : 'This timesheet advance has been cleared.'
+    }));
+  } catch (e) {
+    const errMsg = String(e?.json?.message || e?.message || e || '').trim();
+    const errMsgU = errMsg.toUpperCase();
+
+    if (errMsgU.includes('OVERRIDE ALREADY CONSUMED BY NON-CANCELLED PAY BATCH')) {
+      const existingOverride = await fetchActiveAdvanceOverride();
+      const consumedByPayBatchId =
+        (existingOverride?.consumed_by_pay_batch_id != null && String(existingOverride.consumed_by_pay_batch_id).trim())
+          ? String(existingOverride.consumed_by_pay_batch_id).trim()
+          : null;
+
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({
+            error: 'TIMESHEET_ADVANCE_ALREADY_BATCHED',
+            message: 'This timesheet advance has already been batched and cannot be cleared here.',
+            timesheet_id: currentTimesheetId,
+            candidate_id: candidateId,
+            pay_batch_id: consumedByPayBatchId || null
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+
+    return withCORS(env, req, serverError(errMsg || 'Failed to clear timesheet advance override'));
+  }
+}
+
+async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const idIn = String(timesheetId || '').trim();
+  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(idIn)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const fetchPayState = async (currentTimesheetId) => {
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: currentTimesheetId,
+        p_actor_user_id: user.id
+      });
+      return unwrapRpc(ps0, 'timesheet_pay_state');
+    } catch {
+      return null;
+    }
+  };
+
+  let resolved = null;
+  try {
+    resolved = await resolveTimesheetToCurrent(env, idIn);
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
+  }
+
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  if (!resolved.booking_id) {
+    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let tsfin = null;
+  try {
+    tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
+    );
+  } catch {
+    tsfin = null;
+  }
+
+  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
+
+  let activeSnooze = null;
+  try {
+    activeSnooze = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&segment_id=is.null` +
+        `&source_ref=is.null` +
+        `&snooze_kind=eq.TIMESHEET_PAYMENT` +
+        `&cleared_at_utc=is.null` +
+        `&select=id,timesheet_id,candidate_id,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc` +
+        `&order=created_at_utc.desc` +
+        `&limit=1`
+    );
+  } catch {
+    activeSnooze = null;
+  }
+
+  if (!activeSnooze || !activeSnooze.id) {
+    const payState = await fetchPayState(currentTimesheetId);
+    return withCORS(env, req, ok({
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      candidate_id: candidateId || null,
+      already_cleared: true,
+      pay_state: payState
+    }));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
+      p_snooze_id: String(activeSnooze.id).trim(),
+      p_actor_user_id: user.id
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_snooze_clear');
+    const payState = await fetchPayState(currentTimesheetId);
+
+    return withCORS(env, req, ok({
+      ...((payload && typeof payload === 'object') ? payload : {}),
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      candidate_id: candidateId || null,
+      pay_state: payState
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear timesheet payment snooze')));
+  }
+}
+async function handleTimesheetSnoozePayment(env, req, timesheetId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const idIn = String(timesheetId || '').trim();
+  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(idIn)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
+
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
+  const note = noteRaw ? noteRaw : null;
+
+  const untilRaw = (body.snooze_until_date === null || body.snooze_until_date === undefined)
+    ? ''
+    : String(body.snooze_until_date).trim();
+  const untilIso = untilRaw ? parseIsoOrUkDateToIso(untilRaw) : null;
+  if (untilRaw && !untilIso) {
+    return withCORS(env, req, badRequest('snooze_until_date must be YYYY-MM-DD, DD/MM/YYYY, or null'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const fetchPayState = async (currentTimesheetId) => {
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: currentTimesheetId,
+        p_actor_user_id: user.id
+      });
+      return unwrapRpc(ps0, 'timesheet_pay_state');
+    } catch {
+      return null;
+    }
+  };
+
+  let resolved = null;
+  try {
+    resolved = await resolveTimesheetToCurrent(env, idIn);
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
+  }
+
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  if (!resolved.booking_id) {
+    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id);
+  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let tsfin = null;
+  try {
+    tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
+    );
+  } catch {
+    tsfin = null;
+  }
+
+  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
+  if (!candidateId || !uuidRe.test(candidateId)) {
+    return withCORS(env, req, badRequest('Timesheet candidate_id not available (ts_financials missing); cannot snooze-payment'));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_snooze_upsert', {
+      p_candidate_id: candidateId,
+      p_timesheet_id: currentTimesheetId,
+      p_segment_id: null,
+      p_source_ref: null,
+      p_snooze_kind: 'TIMESHEET_PAYMENT',
+      p_snooze_until_date: untilIso,
+      p_actor_user_id: user.id,
+      p_note: note
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_snooze_upsert');
+    const payState = await fetchPayState(currentTimesheetId);
+
+    return withCORS(env, req, ok({
+      ...((payload && typeof payload === 'object') ? payload : {}),
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      candidate_id: candidateId,
+      pay_state: payState
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to snooze timesheet payment')));
+  }
+}
+
+
+
+
+
+
 async function handleBankingPayAuthTokenAction(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -15303,352 +16193,6 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   }
 }
 
-
-async function handleTimesheetAdvancePayment(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const idIn = String(timesheetId || '').trim();
-  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
-
-  const overrideReason =
-    String(
-      body.override_reason ??
-      body.overrideReason ??
-      body.reason ??
-      body.note ??
-      ''
-    ).trim();
-
-  if (!overrideReason) {
-    return withCORS(env, req, badRequest('override_reason is required'));
-  }
-
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!uuidRe.test(idIn)) {
-    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
-  }
-
-  const _safeJsonParse = (s) => {
-    try { return JSON.parse(String(s || '')); } catch { return null; }
-  };
-
-  const _extractDbRaisedJson = (e) => {
-    try {
-      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
-
-      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
-
-      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
-        const envObj = _safeJsonParse(e.body);
-        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-      }
-
-      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
-        const m = e.message;
-        const i1 = m.indexOf('{');
-        const i2 = m.lastIndexOf('}');
-        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
-          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
-          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
-        }
-      }
-
-      if (!msg || typeof msg !== 'string') return null;
-      const t = msg.trim();
-
-      if (t.startsWith('{') && t.endsWith('}')) {
-        const payload = _safeJsonParse(t);
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-
-      const j1 = t.indexOf('{');
-      const j2 = t.lastIndexOf('}');
-      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
-        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-    } catch {}
-    return null;
-  };
-
-  const _maybeStale409 = (e) => {
-    const payload = _extractDbRaisedJson(e);
-    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json; charset=utf-8');
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
-    }
-    return null;
-  };
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
-  };
-
-  const toLondonYmd = (dt) => {
-    try {
-      const d = (dt instanceof Date) ? dt : new Date(dt);
-      if (!d || Number.isNaN(d.getTime())) return null;
-
-      const parts = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(d);
-
-      const y = parts.find(p => p.type === 'year')?.value || '';
-      const m = parts.find(p => p.type === 'month')?.value || '';
-      const dd = parts.find(p => p.type === 'day')?.value || '';
-      if (!y || !m || !dd) return null;
-
-      return `${y}-${m}-${dd}`;
-    } catch {
-      return null;
-    }
-  };
-
-  let resolved = null;
-  try {
-    resolved = await resolveTimesheetToCurrent(env, idIn);
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
-  }
-
-  if (!resolved || !resolved.current_timesheet_id) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
-
-  if (!resolved.booking_id) {
-    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
-  }
-
-  const currentTimesheetId = String(resolved.current_timesheet_id);
-  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  let ts = null;
-  try {
-    ts = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,contract_id,week_ending_date` +
-        `&limit=1`
-    );
-  } catch (e) {
-    ts = null;
-  }
-
-  if (!ts) {
-    return withCORS(env, req, notFound('Timesheet not found (current row missing)'));
-  }
-
-  const contractId = (ts.contract_id != null && String(ts.contract_id).trim()) ? String(ts.contract_id).trim() : null;
-  const weekEnding = (ts.week_ending_date != null && String(ts.week_ending_date).trim()) ? String(ts.week_ending_date).trim() : null;
-
-  if (!contractId || !uuidRe.test(contractId)) {
-    return withCORS(env, req, badRequest('Timesheet contract_id missing/invalid; cannot advance-payment'));
-  }
-  if (!weekEnding || !/^\d{4}-\d{2}-\d{2}$/.test(weekEnding)) {
-    return withCORS(env, req, badRequest('Timesheet week_ending_date missing/invalid; cannot advance-payment'));
-  }
-
-  let tsfin = null;
-  try {
-    tsfin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,candidate_id,client_id` +
-        `&limit=1`
-    );
-  } catch {
-    tsfin = null;
-  }
-
-  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
-  if (!candidateId || !uuidRe.test(candidateId)) {
-    return withCORS(env, req, badRequest('Timesheet candidate_id not available (ts_financials missing); cannot advance-payment'));
-  }
-
-  const payDate = toLondonYmd(new Date()) || String(new Date().toISOString()).slice(0, 10);
-  const weekEndingCutoff = weekEnding;
-
-  let tsfinDrain = null;
-  try {
-    tsfinDrain = await tsfinBestEffortMakeReadyForDraft(env, [currentTimesheetId], {
-      maxTimesheets: 1,
-      maxLoops: 6,
-      drainLimit: 30,
-      maxMs: 4500
-    });
-  } catch (e) {
-    tsfinDrain = null;
-  }
-
-  const excluded = Array.isArray(tsfinDrain?.excludedTimesheetIds) ? tsfinDrain.excludedTimesheetIds : [];
-  if (excluded.includes(currentTimesheetId)) {
-    const lastErr =
-      (tsfinDrain && tsfinDrain.lastErrorByTimesheetId && typeof tsfinDrain.lastErrorByTimesheetId === 'object')
-        ? (tsfinDrain.lastErrorByTimesheetId[currentTimesheetId] || null)
-        : null;
-
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({
-          error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
-          message: 'Timesheet calculations are still processing. Please try again shortly.',
-          timesheet_id: currentTimesheetId,
-          candidate_id: candidateId,
-          tsfin_drain: tsfinDrain?.stats || null,
-          last_error: lastErr
-        }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  let preview = null;
-  try {
-    const pv0 = await sbRpc(env, 'pay_preview', {
-      p_pay_date: payDate,
-      p_week_ending_cutoff: weekEndingCutoff,
-      p_actor_user_id: user.id,
-      p_candidate_id: candidateId,
-      p_client_id: null,
-      p_force_include_timesheet_ids: [currentTimesheetId]
-    });
-    preview = unwrapRpc(pv0, 'pay_preview');
-  } catch (e) {
-    const stale409 = _maybeStale409(e);
-    if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e || 'PAY_PREVIEW_FAILED')));
-  }
-
-  const blockedItems = Array.isArray(preview?.blocked_items) ? preview.blocked_items : [];
-  const doNotPayItems = Array.isArray(preview?.do_not_pay_items) ? preview.do_not_pay_items : [];
-  const snoozedItems = Array.isArray(preview?.snoozed_items) ? preview.snoozed_items : [];
-  const payees = Array.isArray(preview?.payees) ? preview.payees : [];
-
-  const payeeBlocked = payees.filter(p => p && typeof p === 'object' && p.is_ready_for_draft === false);
-  const warnings = [];
-
-  if (blockedItems.length) warnings.push({ code: 'PREVIEW_BLOCKED_ITEMS', count: blockedItems.length });
-  if (doNotPayItems.length) warnings.push({ code: 'PREVIEW_DO_NOT_PAY_ITEMS', count: doNotPayItems.length });
-  if (snoozedItems.length) warnings.push({ code: 'PREVIEW_SNOOZED_ITEMS', count: snoozedItems.length });
-  if (payeeBlocked.length) warnings.push({ code: 'PREVIEW_PAYEE_BLOCKERS', count: payeeBlocked.length });
-
-  const previewDecisionsJson = {
-    candidate_filter_id: candidateId
-  };
-
-  let created = null;
-  try {
-    const cr0 = await sbRpc(env, 'pay_create_draft_batches_split', {
-      p_pay_date: payDate,
-      p_week_ending_cutoff: weekEndingCutoff,
-      p_actor_user_id: user.id,
-      p_preview_decisions_json: previewDecisionsJson,
-      p_candidate_id: candidateId,
-      p_client_id: null,
-      p_force_include_timesheet_ids: [currentTimesheetId],
-      p_override_reason: overrideReason,
-      p_override_mode: 'TIMESHEET_ADVANCE'
-    });
-    created = unwrapRpc(cr0, 'pay_create_draft_batches_split');
-  } catch (e) {
-    const stale409 = _maybeStale409(e);
-    if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e || 'PAY_CREATE_DRAFT_FAILED')));
-  }
-
-  const umbrellaId = (created && typeof created === 'object' && created.umbrella_pay_batch_id != null) ? String(created.umbrella_pay_batch_id).trim() : '';
-  const payeId = (created && typeof created === 'object' && created.paye_pay_batch_id != null) ? String(created.paye_pay_batch_id).trim() : '';
-
-  const createdUmb = umbrellaId && uuidRe.test(umbrellaId) ? umbrellaId : null;
-  const createdPaye = payeId && uuidRe.test(payeId) ? payeId : null;
-
-  if (!createdUmb && !createdPaye) {
-    return withCORS(env, req, badRequest('Nothing to pay (draft creation returned no batch id)'));
-  }
-
-  if (createdUmb && createdPaye) {
-    return withCORS(env, req, serverError('Timesheet advance must create exactly one route batch (both PAYE and UMBRELLA were created)'));
-  }
-
-  const payBatchId = createdUmb || createdPaye;
-
-  let batchGet = null;
-  try {
-    const bg0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId });
-    batchGet = unwrapRpc(bg0, 'pay_batch_get');
-  } catch (e) {
-    const stale409 = _maybeStale409(e);
-    if (stale409) return stale409;
-    batchGet = null;
-  }
-
-  const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
-  const batchKindFixed =
-    (batchObj && batchObj.batch_kind_fixed != null && String(batchObj.batch_kind_fixed).trim())
-      ? String(batchObj.batch_kind_fixed).trim()
-      : null;
-
-  try {
-    await writeAudit(
-      env,
-      user,
-      'TIMESHEET_ADVANCE_REQUESTED',
-      {
-        timesheet_id: currentTimesheetId,
-        candidate_id: candidateId,
-        reason: overrideReason,
-        pay_batch_id: payBatchId,
-        pay_date: payDate,
-        week_ending_cutoff_date: weekEndingCutoff
-      },
-      { entity: 'timesheets', subject_id: currentTimesheetId, req }
-    );
-  } catch {}
-
-  return withCORS(env, req, ok({
-    ok: true,
-    timesheet_id: currentTimesheetId,
-    candidate_id: candidateId,
-    pay_batch_id: payBatchId,
-    batch_kind_fixed: batchKindFixed,
-    warnings,
-    preview_summary: (preview && typeof preview === 'object') ? (preview.summary || null) : null
-  }));
-}
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -16647,189 +17191,7 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
 
   return withCORS(env, req, ok(row || { updated: true, week_id: weekId, hours }));
 }
-async function handleLoansGrant(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
 
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
-
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-  const candidateId = String(body.candidate_id ?? body.candidateId ?? '').trim();
-  if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
-  if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
-
-  const principalRaw = (body.principal ?? body.principal_amount ?? body.amount ?? body.loan_amount);
-  const weeklyDueRaw = (body.weekly_due ?? body.weeklyDue);
-  const weeksTotalRaw = (body.weeks_total ?? body.weeksTotal);
-  const startWeekStartRaw = String(body.start_week_start ?? body.startWeekStart ?? '').trim();
-
-  const principal = Number(principalRaw);
-  if (!Number.isFinite(principal) || principal <= 0) return withCORS(env, req, badRequest('principal must be > 0'));
-
-  const weeklyDue = Number(weeklyDueRaw);
-  if (!Number.isFinite(weeklyDue) || weeklyDue <= 0) return withCORS(env, req, badRequest('weekly_due must be > 0'));
-
-  const weeksTotal = Number(weeksTotalRaw);
-  if (!Number.isFinite(weeksTotal) || (weeksTotal | 0) !== weeksTotal || weeksTotal < 1) {
-    return withCORS(env, req, badRequest('weeks_total must be an integer >= 1'));
-  }
-
-  if (!startWeekStartRaw) return withCORS(env, req, badRequest('start_week_start is required'));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
-    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD (Monday week start)'));
-  }
-
-  const note = (body.note === null || body.note === undefined) ? null : String(body.note).trim() || null;
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
-  };
-
-  const _safeJsonParse = (s) => {
-    try { return JSON.parse(String(s || '')); } catch { return null; }
-  };
-
-  const _extractDbRaisedJson = (e) => {
-    try {
-      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
-
-      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
-
-      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
-        const envObj = _safeJsonParse(e.body);
-        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
-      }
-
-      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
-        const m = e.message;
-        const i1 = m.indexOf('{');
-        const i2 = m.lastIndexOf('}');
-        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
-          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
-          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
-        }
-      }
-
-      if (!msg || typeof msg !== 'string') return null;
-      const t = msg.trim();
-
-      if (t.startsWith('{') && t.endsWith('}')) {
-        const payload = _safeJsonParse(t);
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-
-      const j1 = t.indexOf('{');
-      const j2 = t.lastIndexOf('}');
-      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
-        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-    } catch {}
-    return null;
-  };
-
-  const _maybeStale409 = (e) => {
-    const payload = _extractDbRaisedJson(e);
-    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json; charset=utf-8');
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
-    }
-    return null;
-  };
-
-  try {
-    const rpcRes0 = await sbRpc(env, 'pay_loans_grant', {
-      p_candidate_id: candidateId,
-      p_principal_amount: principal,
-      p_weekly_due: weeklyDue,
-      p_weeks_total: weeksTotal,
-      p_start_week_start: startWeekStartRaw,
-      p_actor_user_id: user.id,
-      p_note: note
-    });
-
-    const payload = unwrapRpc(rpcRes0, 'pay_loans_grant');
-
-    const payBatchId = (payload && typeof payload === 'object' && payload.pay_batch_id != null) ? String(payload.pay_batch_id).trim() : '';
-    const advanceId = (payload && typeof payload === 'object' && payload.advance_id != null) ? String(payload.advance_id).trim() : '';
-    const warnings = (payload && typeof payload === 'object' && Array.isArray(payload.warnings)) ? payload.warnings : [];
-
-    if (!payBatchId || !uuidRe.test(payBatchId)) {
-      return withCORS(env, req, serverError('pay_loans_grant returned an invalid pay_batch_id'));
-    }
-    if (!advanceId || !uuidRe.test(advanceId)) {
-      return withCORS(env, req, serverError('pay_loans_grant returned an invalid advance_id'));
-    }
-
-    try {
-      await writeAudit(
-        env,
-        user,
-        'LOAN_GRANTED',
-        {
-          candidate_id: candidateId,
-          advance_id: advanceId,
-          pay_batch_id: payBatchId,
-          principal_amount: Math.round(principal * 100) / 100,
-          weekly_due: Math.round(weeklyDue * 100) / 100,
-          weeks_total: weeksTotal,
-          start_week_start: startWeekStartRaw,
-          note: note
-        },
-        { entity: 'candidate', subject_id: candidateId, reason: 'PAYMENT', req }
-      );
-    } catch {}
-
-    try {
-      await writeAudit(
-        env,
-        user,
-        'LOAN_PAYOUT_BATCH_CREATED',
-        {
-          candidate_id: candidateId,
-          advance_id: advanceId,
-          pay_batch_id: payBatchId,
-          principal_amount: Math.round(principal * 100) / 100,
-          weekly_due: Math.round(weeklyDue * 100) / 100,
-          weeks_total: weeksTotal,
-          start_week_start: startWeekStartRaw
-        },
-        { entity: 'pay_batches', subject_id: payBatchId, reason: 'PAYMENT', req }
-      );
-    } catch {}
-
-    return withCORS(env, req, ok({
-      ok: true,
-      candidate_id: candidateId,
-      pay_batch_id: payBatchId,
-      advance_id: advanceId,
-      warnings
-    }));
-  } catch (e) {
-    const stale409 = _maybeStale409(e);
-    if (stale409) return stale409;
-
-    const payload = _extractDbRaisedJson(e);
-    if (payload && typeof payload === 'object' && (payload.code || payload.error || payload.message)) {
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 400, headers: JSON_HEADERS }));
-    }
-
-    return withCORS(env, req, serverError(String(e?.message || e || 'PAY_LOANS_GRANT_FAILED')));
-  }
-}
 async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -19459,6 +19821,28 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       payState = null;
     }
 
+    const payStateOut = (payState && typeof payState === 'object' && !Array.isArray(payState))
+      ? {
+          ...payState,
+          is_advanced: payState.is_advanced === true,
+          can_unadvance: payState.can_unadvance === true,
+          advanced_consumed_by_batch_id:
+            (payState.advanced_consumed_by_batch_id != null && String(payState.advanced_consumed_by_batch_id).trim())
+              ? String(payState.advanced_consumed_by_batch_id).trim()
+              : null,
+          is_snoozed: payState.is_snoozed === true,
+          snooze_until_date:
+            (payState.snooze_until_date != null && String(payState.snooze_until_date).trim())
+              ? String(payState.snooze_until_date).trim()
+              : null,
+          snooze_is_indefinite: payState.snooze_is_indefinite === true,
+          snooze_note:
+            (payState.snooze_note != null && String(payState.snooze_note).trim())
+              ? String(payState.snooze_note).trim()
+              : null
+        }
+      : null;
+
     // ─────────────────────────────────────────────────────────────
     // Contract-resolved EFFECTIVE flags (source of truth = v_timesheets_summary)
     // ─────────────────────────────────────────────────────────────
@@ -19604,6 +19988,35 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const isLockedByInvoice = !!(tsfinRaw?.locked_by_invoice_id);
     const isPaid = !!(tsfinRaw?.paid_at_utc);
     const isHardLocked = isLockedByInvoice || isPaid;
+
+    const payStatePaidStatus = String(payStateOut?.paid_status || '').trim().toUpperCase();
+    const payStateProcessingAny = !!(payStateOut && payStateOut.processing_any === true);
+    const payStateIsAdvanced = !!(payStateOut && payStateOut.is_advanced === true);
+    const payStateCanUnadvance = !!(payStateOut && payStateOut.can_unadvance === true);
+    const payStateIsSnoozed = !!(payStateOut && payStateOut.is_snoozed === true);
+
+    const canAdvancePayment =
+      (!isHardLocked) &&
+      (!payStateIsAdvanced) &&
+      (!payStateProcessingAny) &&
+      (payStatePaidStatus !== 'PAID') &&
+      (payStatePaidStatus !== 'PARTIALLY_PAID');
+
+    const canUnadvancePayment =
+      (!isHardLocked) &&
+      payStateIsAdvanced &&
+      payStateCanUnadvance;
+
+    const canSnoozePayment =
+      (!isHardLocked) &&
+      (!payStateIsSnoozed) &&
+      (!payStateProcessingAny) &&
+      (payStatePaidStatus !== 'PAID') &&
+      (payStatePaidStatus !== 'PARTIALLY_PAID');
+
+    const canClearPaymentSnooze =
+      (!isHardLocked) &&
+      payStateIsSnoozed;
 
     // Action availability flags (history by booking_id)
     let canRestoreQrPending = false;
@@ -19784,7 +20197,12 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       is_adjustment: isAdjustment,
 
       locked_by_invoice: isLockedByInvoice,
-      paid: isPaid
+      paid: isPaid,
+
+      can_advance_payment: canAdvancePayment,
+      can_unadvance_payment: canUnadvancePayment,
+      can_snooze_payment: canSnoozePayment,
+      can_clear_payment_snooze: canClearPaymentSnooze
     };
 
     return withCORS(env, req, ok({
@@ -19830,7 +20248,23 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       policy,
       evidence: [],
 
-      pay_state: payState,
+      pay_state: payStateOut,
+      is_advanced: !!(payStateOut && payStateOut.is_advanced === true),
+      can_unadvance: !!(payStateOut && payStateOut.can_unadvance === true),
+      advanced_consumed_by_batch_id:
+        (payStateOut && payStateOut.advanced_consumed_by_batch_id != null && String(payStateOut.advanced_consumed_by_batch_id).trim())
+          ? String(payStateOut.advanced_consumed_by_batch_id).trim()
+          : null,
+      is_snoozed: !!(payStateOut && payStateOut.is_snoozed === true),
+      snooze_until_date:
+        (payStateOut && payStateOut.snooze_until_date != null && String(payStateOut.snooze_until_date).trim())
+          ? String(payStateOut.snooze_until_date).trim()
+          : null,
+      snooze_is_indefinite: !!(payStateOut && payStateOut.snooze_is_indefinite === true),
+      snooze_note:
+        (payStateOut && payStateOut.snooze_note != null && String(payStateOut.snooze_note).trim())
+          ? String(payStateOut.snooze_note).trim()
+          : null,
 
       action_flags
     }));
@@ -19842,7 +20276,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
-
 
 
 async function handleTimesheetUnauthorise(env, req, timesheetId) {
@@ -23879,6 +24312,496 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   }));
 }
 
+async function handleTimesheetsSummary(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const format = String(q('format') || 'json').toLowerCase();
+
+  const pageRaw = q('page') || '1';
+  const pageSizeRaw = q('page_size') || '50';
+
+  const page = Math.max(1, parseInt(pageRaw, 10) || 1);
+  const pageSize = Math.max(1, Math.min(200, parseInt(pageSizeRaw, 10) || 50));
+
+  const includeTotals = String(q('include_totals') || '').toLowerCase() === 'true';
+  const includeCount = String(q('include_count') || '').toLowerCase() === 'true';
+
+  const orderByParam = (q('order_by') || '').toLowerCase();
+  const orderDirParam = (q('order_dir') || '').toLowerCase();
+
+  const allowedSort = {
+    week_ending_date:          'week_ending_date',
+    client_name:               'client_name',
+    candidate_name:            'candidate_name',
+    tools_stage:               'tools_stage',
+    processing_status:         'processing_status_display',
+    processing_status_display: 'processing_status_display',
+    route_type:                'route_type',
+    sheet_scope:               'sheet_scope',
+    total_pay_ex_vat:          'total_pay_ex_vat',
+    total_charge_ex_vat:       'total_charge_ex_vat',
+    margin_ex_vat:             'margin_ex_vat',
+    pay:                       'total_pay_ex_vat',
+    charge:                    'total_charge_ex_vat',
+    margin:                    'margin_ex_vat'
+  };
+
+  const defaultOrderCol = 'week_ending_date';
+  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
+  const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
+
+  const spec = buildTimesheetSummaryFilterSpec(urlObj.searchParams);
+
+  const clientId = spec.client_id || null;
+  const candidateId = spec.candidate_id || null;
+  const textQ = spec.q || null;
+  const idList = Array.isArray(spec.ids) ? spec.ids.map(String) : [];
+  const hasIdFilter = idList.length > 0;
+  const toolsStage = spec.tools_stage || null;
+  const effectiveIssues = spec.issues_filter || null;
+  const candidatePaid = spec.candidate_paid || null;
+  const isAdjusted = spec.is_adjusted || null;
+  const routeType = spec.route_type || null;
+  const sheetScope = spec.sheet_scope || null;
+  const qrStatus = spec.qr_status || null;
+  const weFrom = spec.week_ending_from || null;
+  const weTo = spec.week_ending_to || null;
+  const isQr = spec.is_qr || null;
+  const hrIssue = spec.hr_issue || null;
+
+  const mergeOrGroupsToOrParam = (groups) => {
+    const g = Array.isArray(groups) ? groups.filter(x => Array.isArray(x) && x.length) : [];
+    if (!g.length) return null;
+
+    let acc = null;
+    for (const group of g) {
+      const clean = group.map(s => String(s || '').trim()).filter(Boolean);
+      if (!clean.length) continue;
+
+      if (!acc) {
+        acc = clean.slice();
+        continue;
+      }
+
+      const combined = [];
+      for (const a of acc) {
+        for (const b of clean) {
+          combined.push(`and(${a},${b})`);
+        }
+      }
+      acc = combined;
+    }
+
+    if (!acc || !acc.length) return null;
+    return `(${acc.join(',')})`;
+  };
+
+  const applyIssuesFilter = (apiIn, tokenUp) => {
+    let api = apiIn;
+    const tok = tokenUp ? String(tokenUp).toUpperCase() : null;
+    if (!tok || tok === 'ALL') return { api, orGroup: null };
+
+    const cs1 = (val) => `cs.{${enc(val)}}`;
+
+    switch (tok) {
+      case 'NO_MATCH_ID':
+        return { api, orGroup: ['candidate_id.is.null', 'client_id.is.null'] };
+
+      case 'RATE_MISSING':
+        api += `&issue_codes=${cs1('Rate')}`;
+        return { api, orGroup: null };
+
+      case 'PAY_CHAN_MISS':
+      case 'PAY_CHANNEL_MISSING':
+        api += `&issue_codes=${cs1('Pay channel')}`;
+        return { api, orGroup: null };
+
+      case 'AWAITING_HR_VALIDATION':
+      case 'AWAITING_HR_VALIDATION_REQUIRED':
+        api += `&issue_codes=${cs1('HR validation')}`;
+        return { api, orGroup: null };
+
+      case 'HR_HOURS_MISMATCH':
+      case 'HOURS_MISMATCH_HR':
+        api += `&issue_codes=${cs1('Hours mismatch HR')}`;
+        return { api, orGroup: null };
+
+      case 'HR_HOURS_MISSING':
+        api += `&issue_codes=${cs1('HR hours missing')}`;
+        return { api, orGroup: null };
+
+      case 'DUPLICATE_CONTRACTS':
+        api += `&issue_codes=${cs1('Duplicate contracts')}`;
+        return { api, orGroup: null };
+
+      case 'REFERENCE_MISSING':
+        api += `&issue_codes=${cs1('Reference')}`;
+        return { api, orGroup: null };
+
+      case 'VALIDATION':
+        api += `&issue_codes=${cs1('Validation')}`;
+        return { api, orGroup: null };
+
+      case 'AUTHORISATION':
+        api += `&issue_codes=${cs1('Authorisation')}`;
+        return { api, orGroup: null };
+
+      case 'ON_HOLD':
+        api += `&issue_codes=${cs1('On hold')}`;
+        return { api, orGroup: null };
+
+      case 'QR_NOT_ISSUED':
+        api += `&timesheet_id=is.not.null`;
+        api += `&qr_status=eq.PENDING`;
+        api += `&qr_token=is.null`;
+        api += `&qr_generated_at=is.null`;
+        return { api, orGroup: null };
+
+      case 'QR_AWAITING_SIGNATURE':
+      case 'QR_ISSUED_AWAITING_SIGNATURE':
+        api += `&timesheet_id=is.not.null`;
+        api += `&qr_status=eq.PENDING`;
+        api += `&qr_token=is.not.null`;
+        api += `&qr_generated_at=is.not.null`;
+        api += `&qr_scanned_at=is.null`;
+        return { api, orGroup: null };
+
+      case 'REFS_PDF_INVALID':
+        api += `&issue_codes=${cs1('Refs - Timesheet PDF invalid')}`;
+        return { api, orGroup: null };
+
+      default:
+        return { api, orGroup: null };
+    }
+  };
+
+  const summaryFilters = {
+    ...spec,
+    order_by: orderCol,
+    order_dir: orderDir
+  };
+
+  const buildSummaryApi = ({ selectClause, limitValue, offsetValue, withPaging, withOrder }) => {
+    const select = Array.isArray(selectClause) ? selectClause.join(',') : String(selectClause || '*');
+
+    let api =
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+      `?select=${select}`;
+
+    if (withPaging) {
+      api += `&limit=${limitValue}&offset=${offsetValue}`;
+    }
+
+    const orGroups = [];
+
+    if (hasIdFilter) {
+      if (idList.length === 1) {
+        const one = String(idList[0]);
+        orGroups.push([`timesheet_id.eq.${one}`, `contract_week_id.eq.${one}`]);
+      } else {
+        const csv = idList.map(String).join(',');
+        orGroups.push([`timesheet_id.in.(${csv})`, `contract_week_id.in.(${csv})`]);
+      }
+    }
+
+    if (textQ) {
+      const t = String(textQ);
+      const pat = `*${t}*`;
+      orGroups.push([
+        `candidate_name.ilike.${pat}`,
+        `client_name.ilike.${pat}`,
+        `booking_id.ilike.${pat}`,
+        `occupant_key_norm.ilike.${pat}`,
+        `hospital_norm.ilike.${pat}`
+      ]);
+    }
+
+    if (clientId) api += `&client_id=eq.${enc(clientId)}`;
+    if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
+
+    if (toolsStage) {
+      api += `&tools_stage=eq.${enc(toolsStage)}`;
+    }
+
+    if (routeType) {
+      if (routeType === 'ELECTRONIC') {
+        api += `&route_type=in.(DAILY_ELECTRONIC,WEEKLY_ELECTRONIC)`;
+      } else if (routeType === 'MANUAL') {
+        api += `&route_type=in.(DAILY_MANUAL,WEEKLY_MANUAL)`;
+      } else if (routeType === 'NHSP') {
+        api += `&route_type=in.(WEEKLY_NHSP,WEEKLY_NHSP_ADJUSTMENT)`;
+      } else if (routeType === 'HEALTHROSTER') {
+        api += `&route_type=eq.WEEKLY_HEALTHROSTER`;
+      } else {
+        api += `&route_type=eq.${enc(routeType)}`;
+      }
+    }
+
+    if (sheetScope) api += `&sheet_scope=eq.${enc(sheetScope)}`;
+    if (qrStatus) api += `&qr_status=eq.${enc(qrStatus)}`;
+    if (weFrom) api += `&week_ending_date=gte.${enc(weFrom)}`;
+    if (weTo) api += `&week_ending_date=lte.${enc(weTo)}`;
+    if (isAdjusted === 'true') api += `&is_adjusted=eq.true`;
+    if (isAdjusted === 'false') api += `&is_adjusted=eq.false`;
+    if (isQr === 'true') api += `&is_qr=eq.true`;
+    if (isQr === 'false') api += `&is_qr=eq.false`;
+    if (candidatePaid === 'true') api += `&pay_paid_at_utc=is.not.null`;
+    if (hrIssue) api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
+
+    const issuesApplied = applyIssuesFilter(api, effectiveIssues);
+    api = issuesApplied.api;
+    if (issuesApplied.orGroup && Array.isArray(issuesApplied.orGroup) && issuesApplied.orGroup.length) {
+      orGroups.push(issuesApplied.orGroup);
+    }
+
+    const orExpr = mergeOrGroupsToOrParam(orGroups);
+    if (orExpr) {
+      api += `&or=${enc(orExpr)}`;
+    }
+
+    if (withOrder) {
+      if (orderByParam && allowedSort[orderByParam]) {
+        api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
+      } else {
+        api += `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
+      }
+    }
+
+    return api;
+  };
+
+  const normalizeSummaryRows = (rows) => {
+    return (rows || []).map((r) => {
+      const o = { ...(r || {}) };
+      if (!Object.prototype.hasOwnProperty.call(o, 'route_type')) o.route_type = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'route_display')) o.route_display = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'client_no_timesheet_required')) o.client_no_timesheet_required = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'client_autoprocess_hr')) o.client_autoprocess_hr = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'client_is_nhsp')) o.client_is_nhsp = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'tools_stage')) o.tools_stage = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'processing_status_display')) o.processing_status_display = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'invoice_is_paid')) o.invoice_is_paid = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_icon_code')) o.pay_icon_code = 'NONE';
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_status_code')) o.pay_status_code = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'pay_paid_at_utc')) o.pay_paid_at_utc = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'net_delta_ex_vat')) o.net_delta_ex_vat = 0;
+      return o;
+    });
+  };
+
+  const getStableSummaryId = (row) => {
+    const id = row?.timesheet_id || row?.contract_week_id || row?.id || null;
+    return id == null ? null : String(id);
+  };
+
+  const normalizeIdList = (values) => {
+    const out = [];
+    const seen = new Set();
+    const arr = Array.isArray(values) ? values : [];
+    for (const raw of arr) {
+      const v = String(raw == null ? '' : raw).trim();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      out.push(v);
+    }
+    return out;
+  };
+
+  const fetchAllMatchingRows = async (selectClause) => {
+    const batchSize = 1000;
+    let offset = 0;
+    const acc = [];
+
+    while (true) {
+      const api = buildSummaryApi({
+        selectClause,
+        limitValue: batchSize,
+        offsetValue: offset,
+        withPaging: true,
+        withOrder: false
+      });
+
+      const { rows } = await sbFetch(env, api, false);
+      const batch = Array.isArray(rows) ? rows : [];
+      acc.push(...batch);
+
+      if (batch.length < batchSize) break;
+      offset += batchSize;
+    }
+
+    return acc;
+  };
+
+  const pageSelect = [
+    '*',
+    'route_type',
+    'route_display',
+    'client_no_timesheet_required',
+    'client_autoprocess_hr',
+    'client_is_nhsp',
+    'contract_id',
+    'contract_week_id',
+    'timesheet_id',
+    'sheet_scope',
+    'submission_mode',
+    'basis',
+    'tools_stage',
+    'processing_status_display',
+    'invoice_is_paid',
+    'pay_icon_code',
+    'pay_status_code',
+    'pay_paid_at_utc',
+    'net_delta_ex_vat'
+  ];
+
+  if (format === 'membership') {
+    try {
+      const datasetKey = JSON.stringify({
+        section: 'timesheets',
+        filters: spec || {}
+      });
+
+      let membershipIds = [];
+      let usedCanonicalRpc = false;
+
+      try {
+        const rpcRes = await sbRpc(env, 'timesheet_list_ids', { p_filters: spec });
+        const rpcRows = Array.isArray(rpcRes)
+          ? rpcRes
+          : ((rpcRes && typeof rpcRes === 'object' && Array.isArray(rpcRes.data)) ? rpcRes.data : []);
+
+        membershipIds = normalizeIdList(
+          rpcRows.map((row) => {
+            if (row == null) return '';
+            if (typeof row === 'string') return row;
+            if (typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'id')) return row.id;
+            return '';
+          })
+        );
+        usedCanonicalRpc = true;
+      } catch {}
+
+      if (!usedCanonicalRpc) {
+        const allRows = await fetchAllMatchingRows(['timesheet_id', 'contract_week_id', 'id']);
+        membershipIds = normalizeIdList(
+          allRows.map((row) => getStableSummaryId(row))
+        );
+      }
+
+      const totalCount = membershipIds.length;
+
+      return withCORS(env, req, ok({
+        section: 'timesheets',
+        dataset_key: datasetKey,
+        row_ids: membershipIds,
+        ids: membershipIds.slice(),
+        total_count: totalCount,
+        total: totalCount,
+        count: totalCount
+      }));
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to fetch timesheets summary membership: ${e?.message || e}`));
+    }
+  }
+
+  const effLimit = hasIdFilter ? Math.min(200, Math.max(1, idList.length)) : pageSize;
+  const effOffset = hasIdFilter ? 0 : ((page - 1) * pageSize);
+
+  const api = buildSummaryApi({
+    selectClause: pageSelect,
+    limitValue: effLimit,
+    offsetValue: effOffset,
+    withPaging: true,
+    withOrder: true
+  });
+
+  try {
+    const { rows } = await sbFetch(env, api);
+    const outRows = normalizeSummaryRows(rows || []);
+
+    let totals = null;
+    let totalCount = outRows.length;
+
+    const needsManualParity = hasIdFilter || !!textQ;
+    const needsFullMaterialization = format === 'membership' || needsManualParity || includeTotals || includeCount;
+
+    let allMatchedRows = null;
+    if (needsFullMaterialization && needsManualParity) {
+      allMatchedRows = normalizeSummaryRows(await fetchAllMatchingRows([
+        'timesheet_id',
+        'contract_week_id',
+        'id',
+        'total_pay_ex_vat',
+        'margin_ex_vat',
+        'route_type',
+        'route_display',
+        'client_no_timesheet_required',
+        'client_autoprocess_hr',
+        'client_is_nhsp',
+        'contract_id',
+        'sheet_scope',
+        'submission_mode',
+        'basis',
+        'tools_stage',
+        'processing_status_display',
+        'invoice_is_paid',
+        'pay_icon_code',
+        'pay_status_code',
+        'pay_paid_at_utc',
+        'net_delta_ex_vat'
+      ]));
+    }
+
+    if (includeTotals) {
+      if (needsManualParity) {
+        const materialized = Array.isArray(allMatchedRows) ? allMatchedRows : [];
+        let paySum = 0;
+        let marginSum = 0;
+        for (const row of materialized) {
+          paySum += Number(row?.total_pay_ex_vat || 0) || 0;
+          marginSum += Number(row?.margin_ex_vat || 0) || 0;
+        }
+        totals = {
+          count_all: materialized.length,
+          total_pay_ex_vat_sum: paySum,
+          margin_ex_vat_sum: marginSum
+        };
+        totalCount = materialized.length;
+      } else {
+        const totRes = await sbRpc(env, 'timesheet_list_totals', { p_filters: spec });
+        const totRows = Array.isArray(totRes) ? totRes : (totRes?.data || []);
+        totals = (totRows && totRows.length)
+          ? totRows[0]
+          : { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
+        totalCount = Number(totals?.count_all || 0);
+      }
+    } else if (includeCount) {
+      if (needsManualParity) {
+        totalCount = Array.isArray(allMatchedRows) ? allMatchedRows.length : outRows.length;
+      } else {
+        const totRes = await sbRpc(env, 'timesheet_list_totals', { p_filters: spec });
+        const totRows = Array.isArray(totRes) ? totRes : (totRes?.data || []);
+        const tot0 = (totRows && totRows.length) ? totRows[0] : null;
+        totalCount = Number(tot0?.count_all || 0);
+      }
+    }
+
+    return withCORS(env, req, ok({
+      items: outRows,
+      page,
+      page_size: pageSize,
+      count: totalCount,
+      totals: totals || undefined
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
+  }
+}
 async function handleTimesheetsSubmitWeekly(env, req) {
   // Public / broker: submit weekly timesheet (ELECTRONIC or QR intent)
   const enc = encodeURIComponent;
@@ -27142,6 +28065,871 @@ function renderOutboxTable(content, rows) {
 
   updateSelectionUi();
 }
+
+async function handleBankingFinanceLoansSnoozesList(env, req, user) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const parseBool = (raw, dflt) => {
+    const s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!s) return dflt;
+    if (s === '1' || s === 'true' || s === 'yes' || s === 'y') return true;
+    if (s === '0' || s === 'false' || s === 'no' || s === 'n') return false;
+    return dflt;
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const u = new URL(req.url);
+
+  const candidateIdRaw = String(u.searchParams.get('candidate_id') || u.searchParams.get('candidateId') || '').trim();
+  const clientIdRaw = String(u.searchParams.get('client_id') || u.searchParams.get('clientId') || '').trim();
+
+  if (candidateIdRaw && !uuidRe.test(candidateIdRaw)) {
+    return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+  }
+  if (clientIdRaw && !uuidRe.test(clientIdRaw)) {
+    return withCORS(env, req, badRequest('client_id must be a UUID'));
+  }
+
+  const includePaidOff = parseBool(u.searchParams.get('include_paid_off') ?? u.searchParams.get('includePaidOff'), true);
+  const includeClearedSnoozes = parseBool(u.searchParams.get('include_cleared_snoozes') ?? u.searchParams.get('includeClearedSnoozes'), false);
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_loans_snoozes_list', {
+      p_candidate_id: candidateIdRaw || null,
+      p_client_id: clientIdRaw || null,
+      p_include_paid_off: includePaidOff,
+      p_include_cleared_snoozes: includeClearedSnoozes
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_loans_snoozes_list');
+    const financeCasesIn = Array.isArray(payload?.finance_cases) ? payload.finance_cases : [];
+    const timesheetSnoozesIn = Array.isArray(payload?.timesheet_snoozes) ? payload.timesheet_snoozes : [];
+
+    const financeCases = financeCasesIn.map((row) => {
+      const caseType = String(row?.case_type || '').trim().toUpperCase();
+      const status = String(row?.status || '').trim().toUpperCase();
+      const payoutStatus = String(row?.payout_status || '').trim().toUpperCase();
+      const outstandingAmount = Number(row?.outstanding_amount || 0);
+      const writtenOff = !!row?.written_off_at_utc || !!String(row?.write_off_reason || '').trim();
+      const activeSnoozeId = (row?.active_snooze_id != null && String(row.active_snooze_id).trim()) ? String(row.active_snooze_id).trim() : null;
+      const isRepayable =
+        caseType === 'PAYMENT_ADVANCE' ||
+        caseType === 'OVERPAYMENT' ||
+        caseType === 'MANUAL_DEBT_ADJUSTMENT';
+
+      const canEditCase =
+        (caseType === 'PAYMENT_ADVANCE') ||
+        (caseType === 'MANUAL_CREDIT_ADJUSTMENT') ||
+        (caseType === 'MANUAL_DEBT_ADJUSTMENT');
+
+      const canRestructure =
+        (caseType === 'PAYMENT_ADVANCE' || caseType === 'MANUAL_DEBT_ADJUSTMENT') &&
+        outstandingAmount > 0 &&
+        !writtenOff;
+
+      const canPause =
+        isRepayable &&
+        status === 'ACTIVE' &&
+        outstandingAmount > 0 &&
+        !writtenOff;
+
+      const canResume =
+        isRepayable &&
+        status === 'PAUSED' &&
+        outstandingAmount > 0 &&
+        !writtenOff;
+
+      const canWriteOff =
+        isRepayable &&
+        outstandingAmount > 0 &&
+        !writtenOff;
+
+      const canSnooze =
+        isRepayable &&
+        outstandingAmount > 0 &&
+        !writtenOff &&
+        !activeSnoozeId;
+
+      const canClearSnooze = !!activeSnoozeId;
+      const canEditSnooze = !!activeSnoozeId;
+
+      const canEditPayout =
+        (caseType === 'PAYMENT_ADVANCE' || caseType === 'MANUAL_CREDIT_ADJUSTMENT') &&
+        payoutStatus !== 'PAID';
+
+      return {
+        ...row,
+        action_flags: {
+          can_edit_case: canEditCase,
+          can_edit_payout: canEditPayout,
+          can_restructure: canRestructure,
+          can_pause: canPause,
+          can_resume: canResume,
+          can_write_off: canWriteOff,
+          can_snooze: canSnooze,
+          can_clear_snooze: canClearSnooze,
+          can_edit_snooze: canEditSnooze,
+          can_open_audit: true
+        }
+      };
+    });
+
+    const timesheetSnoozes = timesheetSnoozesIn.map((row) => ({
+      ...row,
+      action_flags: {
+        can_clear_snooze: !row?.cleared_at_utc,
+        can_open_audit: false
+      }
+    }));
+
+    return withCORS(env, req, ok({
+      ...((payload && typeof payload === 'object') ? payload : {}),
+      ok: true,
+      finance_cases: financeCases,
+      timesheet_snoozes: timesheetSnoozes
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load banking finance loans/snoozes list')));
+  }
+}
+
+async function handleBankingPaymentAdvanceCreate(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const candidateId = String(body.candidate_id || body.candidateId || '').trim();
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
+  if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+
+  const principalAmount = Number(body.principal_amount ?? body.principalAmount ?? body.amount);
+  if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
+    return withCORS(env, req, badRequest('principal_amount must be a number greater than 0'));
+  }
+
+  const weeklyDue = Number(body.weekly_due ?? body.weeklyDue);
+  if (!Number.isFinite(weeklyDue) || weeklyDue <= 0) {
+    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0'));
+  }
+
+  const weeksTotal = Number(body.weeks_total ?? body.weeksTotal);
+  if (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0'));
+  }
+
+  const startWeekStartRaw = String(body.start_week_start ?? body.startWeekStart ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD'));
+  }
+
+  const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
+  const note = noteRaw ? noteRaw : null;
+
+  const minimumEarningsThresholdRaw =
+    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
+      ? null
+      : Number(body.minimum_earnings_threshold);
+  if (minimumEarningsThresholdRaw !== null && !Number.isFinite(minimumEarningsThresholdRaw)) {
+    return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
+  }
+
+  const takeHomeFloorOverrideRaw =
+    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
+      ? null
+      : Number(body.take_home_floor_override);
+  if (takeHomeFloorOverrideRaw !== null && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+    return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_payment_advance_create', {
+      p_candidate_id: candidateId,
+      p_principal_amount: principalAmount,
+      p_weekly_due: weeklyDue,
+      p_weeks_total: Math.trunc(weeksTotal),
+      p_start_week_start: startWeekStartRaw,
+      p_actor_user_id: user.id,
+      p_note: note,
+      p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
+      p_take_home_floor_override: takeHomeFloorOverrideRaw
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_payment_advance_create');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create payment advance')));
+  }
+}
+
+async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const principalAmount =
+    (body.principal_amount === null || body.principal_amount === undefined) &&
+    (body.principalAmount === null || body.principalAmount === undefined) &&
+    (body.amount === null || body.amount === undefined)
+      ? null
+      : Number(body.principal_amount ?? body.principalAmount ?? body.amount);
+  if (principalAmount !== null && (!Number.isFinite(principalAmount) || principalAmount <= 0)) {
+    return withCORS(env, req, badRequest('principal_amount must be a number greater than 0 when provided'));
+  }
+
+  const weeklyDue =
+    (body.weekly_due === null || body.weekly_due === undefined) &&
+    (body.weeklyDue === null || body.weeklyDue === undefined)
+      ? null
+      : Number(body.weekly_due ?? body.weeklyDue);
+  if (weeklyDue !== null && (!Number.isFinite(weeklyDue) || weeklyDue <= 0)) {
+    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 when provided'));
+  }
+
+  const weeksTotal =
+    (body.weeks_total === null || body.weeks_total === undefined) &&
+    (body.weeksTotal === null || body.weeksTotal === undefined)
+      ? null
+      : Number(body.weeks_total ?? body.weeksTotal);
+  if (weeksTotal !== null && (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1)) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 when provided'));
+  }
+
+  const startWeekStartRaw =
+    (body.start_week_start === null || body.start_week_start === undefined) &&
+    (body.startWeekStart === null || body.startWeekStart === undefined)
+      ? null
+      : String(body.start_week_start ?? body.startWeekStart).trim();
+  if (startWeekStartRaw !== null && !/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD when provided'));
+  }
+
+  const note =
+    (body.note === null || body.note === undefined)
+      ? null
+      : String(body.note).trim();
+
+  const minimumEarningsThresholdRaw =
+    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
+      ? null
+      : Number(body.minimum_earnings_threshold);
+  if ((body.minimum_earnings_threshold !== null && body.minimum_earnings_threshold !== undefined) && !Number.isFinite(minimumEarningsThresholdRaw)) {
+    return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
+  }
+
+  const takeHomeFloorOverrideRaw =
+    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
+      ? null
+      : Number(body.take_home_floor_override);
+  if ((body.take_home_floor_override !== null && body.take_home_floor_override !== undefined) && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+    return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_payment_advance_update', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: user.id,
+      p_principal_amount: principalAmount,
+      p_weekly_due: weeklyDue,
+      p_weeks_total: (weeksTotal === null ? null : Math.trunc(weeksTotal)),
+      p_start_week_start: startWeekStartRaw,
+      p_note: note,
+      p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
+      p_take_home_floor_override: takeHomeFloorOverrideRaw
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_payment_advance_update');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update payment advance')));
+  }
+}
+
+async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const candidateId = String(body.candidate_id || body.candidateId || '').trim();
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
+  if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return withCORS(env, req, badRequest('amount must be a number greater than 0'));
+  }
+
+  const adjustmentComment = String(body.adjustment_comment ?? body.adjustmentComment ?? '').trim();
+  if (!adjustmentComment) {
+    return withCORS(env, req, badRequest('adjustment_comment is required'));
+  }
+
+  const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
+  const note = noteRaw ? noteRaw : null;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_manual_credit_adjustment_create', {
+      p_candidate_id: candidateId,
+      p_amount: amount,
+      p_actor_user_id: user.id,
+      p_adjustment_comment: adjustmentComment,
+      p_note: note
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_manual_credit_adjustment_create');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create manual credit adjustment')));
+  }
+}
+
+
+async function handleBankingManualCreditAdjustmentUpdate(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const amount =
+    (body.amount === null || body.amount === undefined)
+      ? null
+      : Number(body.amount);
+  if (amount !== null && (!Number.isFinite(amount) || amount <= 0)) {
+    return withCORS(env, req, badRequest('amount must be a number greater than 0 when provided'));
+  }
+
+  const adjustmentComment =
+    (body.adjustment_comment === null || body.adjustment_comment === undefined) &&
+    (body.adjustmentComment === null || body.adjustmentComment === undefined)
+      ? null
+      : String(body.adjustment_comment ?? body.adjustmentComment).trim();
+  if (adjustmentComment !== null && !adjustmentComment) {
+    return withCORS(env, req, badRequest('adjustment_comment cannot be blank when provided'));
+  }
+
+  const note =
+    (body.note === null || body.note === undefined)
+      ? null
+      : String(body.note).trim();
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_manual_credit_adjustment_update', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: user.id,
+      p_amount: amount,
+      p_adjustment_comment: adjustmentComment,
+      p_note: note
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_manual_credit_adjustment_update');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update manual credit adjustment')));
+  }
+}
+
+async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const candidateId = String(body.candidate_id || body.candidateId || '').trim();
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
+  if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return withCORS(env, req, badRequest('amount must be a number greater than 0'));
+  }
+
+  const weeklyDue = Number(body.weekly_due ?? body.weeklyDue);
+  if (!Number.isFinite(weeklyDue) || weeklyDue <= 0) {
+    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0'));
+  }
+
+  const weeksTotal = Number(body.weeks_total ?? body.weeksTotal);
+  if (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0'));
+  }
+
+  const startWeekStartRaw = String(body.start_week_start ?? body.startWeekStart ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD'));
+  }
+
+  const adjustmentComment = String(body.adjustment_comment ?? body.adjustmentComment ?? '').trim();
+  if (!adjustmentComment) {
+    return withCORS(env, req, badRequest('adjustment_comment is required'));
+  }
+
+  const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
+  const note = noteRaw ? noteRaw : null;
+
+  const minimumEarningsThresholdRaw =
+    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
+      ? null
+      : Number(body.minimum_earnings_threshold);
+  if (minimumEarningsThresholdRaw !== null && !Number.isFinite(minimumEarningsThresholdRaw)) {
+    return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
+  }
+
+  const takeHomeFloorOverrideRaw =
+    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
+      ? null
+      : Number(body.take_home_floor_override);
+  if (takeHomeFloorOverrideRaw !== null && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+    return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_manual_debt_adjustment_create', {
+      p_candidate_id: candidateId,
+      p_amount: amount,
+      p_weekly_due: weeklyDue,
+      p_weeks_total: Math.trunc(weeksTotal),
+      p_start_week_start: startWeekStartRaw,
+      p_actor_user_id: user.id,
+      p_adjustment_comment: adjustmentComment,
+      p_note: note,
+      p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
+      p_take_home_floor_override: takeHomeFloorOverrideRaw
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_create');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create manual debt adjustment')));
+  }
+}
+
+async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const amount =
+    (body.amount === null || body.amount === undefined)
+      ? null
+      : Number(body.amount);
+  if (amount !== null && (!Number.isFinite(amount) || amount <= 0)) {
+    return withCORS(env, req, badRequest('amount must be a number greater than 0 when provided'));
+  }
+
+  const weeklyDue =
+    (body.weekly_due === null || body.weekly_due === undefined) &&
+    (body.weeklyDue === null || body.weeklyDue === undefined)
+      ? null
+      : Number(body.weekly_due ?? body.weeklyDue);
+  if (weeklyDue !== null && (!Number.isFinite(weeklyDue) || weeklyDue <= 0)) {
+    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 when provided'));
+  }
+
+  const weeksTotal =
+    (body.weeks_total === null || body.weeks_total === undefined) &&
+    (body.weeksTotal === null || body.weeksTotal === undefined)
+      ? null
+      : Number(body.weeks_total ?? body.weeksTotal);
+  if (weeksTotal !== null && (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1)) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 when provided'));
+  }
+
+  const startWeekStartRaw =
+    (body.start_week_start === null || body.start_week_start === undefined) &&
+    (body.startWeekStart === null || body.startWeekStart === undefined)
+      ? null
+      : String(body.start_week_start ?? body.startWeekStart).trim();
+  if (startWeekStartRaw !== null && !/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD when provided'));
+  }
+
+  const adjustmentComment =
+    (body.adjustment_comment === null || body.adjustment_comment === undefined) &&
+    (body.adjustmentComment === null || body.adjustmentComment === undefined)
+      ? null
+      : String(body.adjustment_comment ?? body.adjustmentComment).trim();
+  if (adjustmentComment !== null && !adjustmentComment) {
+    return withCORS(env, req, badRequest('adjustment_comment cannot be blank when provided'));
+  }
+
+  const note =
+    (body.note === null || body.note === undefined)
+      ? null
+      : String(body.note).trim();
+
+  const minimumEarningsThresholdRaw =
+    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
+      ? null
+      : Number(body.minimum_earnings_threshold);
+  if ((body.minimum_earnings_threshold !== null && body.minimum_earnings_threshold !== undefined) && !Number.isFinite(minimumEarningsThresholdRaw)) {
+    return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
+  }
+
+  const takeHomeFloorOverrideRaw =
+    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
+      ? null
+      : Number(body.take_home_floor_override);
+  if ((body.take_home_floor_override !== null && body.take_home_floor_override !== undefined) && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+    return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_manual_debt_adjustment_update', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: user.id,
+      p_amount: amount,
+      p_weekly_due: weeklyDue,
+      p_weeks_total: (weeksTotal === null ? null : Math.trunc(weeksTotal)),
+      p_start_week_start: startWeekStartRaw,
+      p_adjustment_comment: adjustmentComment,
+      p_note: note,
+      p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
+      p_take_home_floor_override: takeHomeFloorOverrideRaw
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_update');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update manual debt adjustment')));
+  }
+}
+
+async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const weeklyDue = Number(body.weekly_due ?? body.weeklyDue);
+  if (!Number.isFinite(weeklyDue) || weeklyDue <= 0) {
+    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0'));
+  }
+
+  const weeksTotal = Number(body.weeks_total ?? body.weeksTotal);
+  if (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0'));
+  }
+
+  const startWeekStartRaw = String(body.start_week_start ?? body.startWeekStart ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD'));
+  }
+
+  const note =
+    (body.note === null || body.note === undefined)
+      ? null
+      : String(body.note).trim();
+
+  const minimumEarningsThresholdRaw =
+    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
+      ? null
+      : Number(body.minimum_earnings_threshold);
+  if ((body.minimum_earnings_threshold !== null && body.minimum_earnings_threshold !== undefined) && !Number.isFinite(minimumEarningsThresholdRaw)) {
+    return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
+  }
+
+  const takeHomeFloorOverrideRaw =
+    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
+      ? null
+      : Number(body.take_home_floor_override);
+  if ((body.take_home_floor_override !== null && body.take_home_floor_override !== undefined) && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+    return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_finance_case_restructure', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: user.id,
+      p_weekly_due: weeklyDue,
+      p_weeks_total: Math.trunc(weeksTotal),
+      p_start_week_start: startWeekStartRaw,
+      p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_note: note
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_restructure');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to restructure finance case')));
+  }
+}
+
+
+async function handleBankingFinanceCasePause(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = {}; }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+  body = body || {};
+
+  const reason =
+    String(
+      body.reason ??
+      body.note ??
+      ''
+    ).trim() || null;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_finance_case_pause_resume', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: user.id,
+      p_action: 'PAUSE',
+      p_reason: reason
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_pause_resume');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to pause finance case')));
+  }
+}
+
+async function handleBankingFinanceCaseResume(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = {}; }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+  body = body || {};
+
+  const reason =
+    String(
+      body.reason ??
+      body.note ??
+      ''
+    ).trim() || null;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_finance_case_pause_resume', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: user.id,
+      p_action: 'RESUME',
+      p_reason: reason
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_pause_resume');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resume finance case')));
+  }
+}
+
+async function handleBankingFinanceCaseWriteOff(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const writeOffReason = String(body.write_off_reason ?? body.writeOffReason ?? body.reason ?? '').trim();
+  if (!writeOffReason) {
+    return withCORS(env, req, badRequest('write_off_reason is required'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_finance_case_write_off', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: user.id,
+      p_write_off_reason: writeOffReason
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_write_off');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to write off finance case')));
+  }
+}
+
+
+async function handleBankingFinanceCaseAudit(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_finance_case_audit_feed', {
+      p_finance_case_id: financeCaseIdText
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_audit_feed');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load finance case audit')));
+  }
+}
+
+
+
+
 async function openOutboxDetailModal(rowOrRef) {
   const trimStr = (v) => String(v == null ? '' : v).trim();
   const safeHtml = (typeof escapeHtml === 'function')
@@ -40054,444 +41842,334 @@ async function applyWeeklyHoursCorrections(env, {
     warnings
   };
 }
-async function handleTimesheetsSummary(env, req) {
+
+async function handleContractsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const enc    = encodeURIComponent;
-  const urlObj = new URL(req.url);
-  const q      = (k) => urlObj.searchParams.get(k);
+  const enc = encodeURIComponent;
+  const url = new URL(req.url);
+  const q = (k) => url.searchParams.get(k);
+  const encQ = (v) => enc(v);
+  const format = (q('format') || 'json').toLowerCase();
 
-  const pageRaw     = q('page') || '1';
-  const pageSizeRaw = q('page_size') || '50';
-
-  const page     = Math.max(1, parseInt(pageRaw, 10) || 1);
-  const pageSize = Math.max(1, Math.min(200, parseInt(pageSizeRaw, 10) || 50));
-
-  const includeTotals = String(q('include_totals') || '').toLowerCase() === 'true';
-
-  const clientId    = q('client_id');
-  const candidateId = q('candidate_id');
-
-  // ✅ NEW: free-text quick search support (q= or name=)
-  // Intended for the "quick search" bar so Timesheets can filter by:
-  // candidate_name OR client_name OR booking_id OR occupant_key_norm OR hospital_norm
-  const rawTextQ = q('q') || q('name');
-  const textQ = rawTextQ ? String(rawTextQ || '').trim() : null;
-
-  // ✅ id/ids selection support (for summaryFetchCanonicalRow)
-  const idExprRaw = q('id');   // accepts uuid OR "in.(uuid1,uuid2,...)"
-  const idsCsvRaw = q('ids');  // accepts "uuid1,uuid2,..."
-
-  let idList = [];
-  try {
-    const pushMany = (arr) => {
-      (arr || []).forEach(x => {
-        const s = String(x || '').trim();
-        if (s) idList.push(s);
-      });
-    };
-
-    if (idsCsvRaw) {
-      pushMany(String(idsCsvRaw).split(','));
-    }
-
-    if (idExprRaw) {
-      const s = String(idExprRaw || '').trim();
-      if (/^in\.\(.+\)$/.test(s)) {
-        const inner = s.replace(/^in\.\(/, '').replace(/\)$/, '');
-        pushMany(inner.split(','));
-      } else {
-        pushMany([s]);
-      }
-    }
-
-    idList = Array.from(new Set(idList.map(String))).filter(Boolean);
-  } catch {
-    idList = [];
-  }
-
-  const hasIdFilter = idList.length > 0;
-
-  // ✅ Tools Stage filter token (from v_timesheets_summary.tools_stage)
-  const toolsStageRaw = q('tools_stage');
-  const toolsStageUp  = toolsStageRaw ? String(toolsStageRaw).toUpperCase() : null;
-
-  const routeTypeRaw = q('route_type');
-  const routeType    = routeTypeRaw ? routeTypeRaw.toUpperCase() : null;
-
-  const sheetScopeRaw = q('sheet_scope');
-  const sheetScope    = sheetScopeRaw ? sheetScopeRaw.toUpperCase() : null;
-
-  const qrStatusRaw   = q('qr_status');
-  const qrStatus      = qrStatusRaw ? qrStatusRaw.toUpperCase() : null;
-
-  // Tools checkboxes
-  const candidatePaid = q('candidate_paid'); // pay_paid_at_utc checkbox (advanced/paid/partially paid)
-  const isAdjusted    = q('is_adjusted');    // adjusted checkbox
-  const isQr          = q('is_qr');          // legacy route checkbox
-
-  // ✅ Issues dropdown (main summary controls)
-  const issuesFilterRaw = q('issues_filter');
-  const issuesFilterUp  = issuesFilterRaw ? String(issuesFilterRaw).toUpperCase() : null;
-
-  // Legacy passthrough
-  const statusCodeRaw = q('status_code');
-  const statusCodeUp  = statusCodeRaw ? String(statusCodeRaw).toUpperCase() : null;
-
-  // HR issue filter
-  const hrIssueRaw = q('hr_issue');
-  const hrIssue    = hrIssueRaw ? hrIssueRaw.toUpperCase() : null;
-
-  const weFrom = q('week_ending_from');
-  const weTo   = q('week_ending_to');
-
-  const orderByParam  = (q('order_by') || '').toLowerCase();
+  const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
-  // Sort keys: map any request to sort by "processing_status" to processing_status_display
-  const allowedSort = {
-    week_ending_date:          'week_ending_date',
-    client_name:               'client_name',
-    candidate_name:            'candidate_name',
-
-    tools_stage:               'tools_stage',
-    processing_status:         'processing_status_display',
-    processing_status_display: 'processing_status_display',
-
-    route_type:                'route_type',
-    sheet_scope:               'sheet_scope',
-
-    total_pay_ex_vat:          'total_pay_ex_vat',
-    total_charge_ex_vat:       'total_charge_ex_vat',
-    margin_ex_vat:             'margin_ex_vat',
-
-    pay:                       'total_pay_ex_vat',
-    charge:                    'total_charge_ex_vat',
-    margin:                    'margin_ex_vat'
+  const sortMap = {
+    candidate_display:             'candidate_id',
+    client_name:                   'client_id',
+    role:                          'role',
+    band:                          'band',
+    start_date:                    'start_date',
+    end_date:                      'end_date',
+    created_at:                    'created_at',
+    updated_at:                    'updated_at',
+    auto_invoice:                  'auto_invoice',
+    display_site:                  'display_site',
+    pay_method_snapshot:           'pay_method_snapshot',
+    default_submission_mode:       'default_submission_mode',
+    week_ending_weekday_snapshot:  'week_ending_weekday_snapshot',
+    require_reference_to_pay:      'require_reference_to_pay',
+    require_reference_to_invoice:  'require_reference_to_invoice',
+    mileage_pay_rate:              'mileage_pay_rate',
+    mileage_charge_rate:           'mileage_charge_rate'
   };
 
-  const defaultOrderCol = 'week_ending_date';
-  const orderCol = allowedSort[orderByParam] || defaultOrderCol;
-  const orderDir = (orderDirParam === 'asc') ? 'asc' : 'desc';
+  const defaultSortCol = 'start_date';
+  const orderCol = sortMap[orderByParam] || defaultSortCol;
+  const orderDir = (orderDirParam === 'asc' || orderDirParam === 'desc') ? orderDirParam : 'desc';
 
-  // ✅ NEW: single-or support (merge multiple OR groups safely)
-  // groups = [ [A,B], [D,E] ] means (A OR B) AND (D OR E)
-  // expressed as or=(and(A,D),and(A,E),and(B,D),and(B,E))
-  const mergeOrGroupsToOrParam = (groups) => {
-    const g = Array.isArray(groups) ? groups.filter(x => Array.isArray(x) && x.length) : [];
-    if (!g.length) return null;
+  const spec = buildContractSummaryFilterSpec(url.searchParams);
 
-    let acc = null; // array of predicate strings
-    for (const group of g) {
-      const clean = group.map(s => String(s || '').trim()).filter(Boolean);
-      if (!clean.length) continue;
+  const candidateId = spec.candidate_id || null;
+  const clientId = spec.client_id || null;
+  const payMethodSnapshot = spec.pay_method_snapshot || null;
+  const role = spec.role || null;
+  const band = spec.band || null;
+  const candidateName = spec.candidate_name || null;
+  const clientName = spec.client_name || null;
+  const activeOn = spec.active_on || null;
+  const autoInvoice = spec.auto_invoice || null;
+  const quickText = spec.q || null;
+  const submissionMode = spec.default_submission_mode || null;
+  const weekEndingWeekdaySnapshot = spec.week_ending_weekday_snapshot || null;
+  const requireReferenceToPay = spec.require_reference_to_pay || null;
+  const requireReferenceToInvoice = spec.require_reference_to_invoice || null;
+  const hasCustomLabels = spec.has_custom_labels || null;
+  const createdFrom = spec.created_from || null;
+  const createdTo = spec.created_to || null;
+  const updatedFrom = spec.updated_from || null;
+  const updatedTo = spec.updated_to || null;
+  const startDateFrom = spec.start_date_from || null;
+  const startDateTo = spec.start_date_to || null;
+  const endDateFrom = spec.end_date_from || null;
+  const endDateTo = spec.end_date_to || null;
+  const mileagePayRate = spec.mileage_pay_rate || null;
+  const mileageChargeRate = spec.mileage_charge_rate || null;
+  const statusParam = (spec.status || '').toLowerCase();
+  const ids = Array.isArray(spec.ids) ? spec.ids.map(String) : [];
 
-      if (!acc) {
-        acc = clean.slice();
-        continue;
+  let selectParts = [
+    '*',
+    'candidate:candidates(display_name,first_name,last_name)',
+    'client:clients(name)'
+  ];
+
+  const filters = [];
+
+  let idFilterExpr = null;
+  if (ids.length) {
+    idFilterExpr = `in.(${ids.join(',')})`;
+  }
+
+  if (idFilterExpr) {
+    filters.push(`id=${idFilterExpr}`);
+  }
+
+  if (candidateId) filters.push(`candidate_id=eq.${encQ(candidateId)}`);
+  if (clientId) filters.push(`client_id=eq.${encQ(clientId)}`);
+  if (payMethodSnapshot) filters.push(`pay_method_snapshot=eq.${encQ(payMethodSnapshot.toUpperCase())}`);
+
+  if (role) {
+    const like = `*${role}*`;
+    filters.push(`role=ilike.${encQ(like)}`);
+  }
+
+  if (band) filters.push(`band=eq.${encQ(band)}`);
+
+  if (candidateName) {
+    const like = `*${candidateName}*`;
+    filters.push(`candidates.display_name=ilike.${encQ(like)}`);
+  }
+
+  if (clientName) {
+    const like = `*${clientName}*`;
+    filters.push(`clients.name=ilike.${encQ(like)}`);
+  }
+
+  if (activeOn) {
+    filters.push(`start_date=lte.${encQ(activeOn)}`);
+    filters.push(`end_date=gte.${encQ(activeOn)}`);
+  }
+
+  if (autoInvoice) {
+    filters.push(`auto_invoice=eq.${encQ(String(clampBool(autoInvoice)))}`);
+  }
+
+  if (quickText) {
+    const raw = String(quickText || '').trim();
+    if (raw) {
+      const like = `*${raw}*`;
+      const orTerms = [
+        `clients.name.ilike.${encQ(like)}`,
+        `candidates.display_name.ilike.${encQ(like)}`,
+        `candidates.first_name.ilike.${encQ(like)}`,
+        `candidates.last_name.ilike.${encQ(like)}`,
+        `role.ilike.${encQ(like)}`
+      ];
+
+      if (/^\d+$/.test(raw)) {
+        orTerms.push(`band.eq.${encQ(raw)}`);
       }
 
-      const combined = [];
-      for (const a of acc) {
-        for (const b of clean) {
-          combined.push(`and(${a},${b})`);
-        }
+      filters.push(`or=(${orTerms.join(',')})`);
+    }
+  }
+
+  if (submissionMode) {
+    filters.push(`default_submission_mode=eq.${encQ(submissionMode.toUpperCase())}`);
+  }
+
+  if (weekEndingWeekdaySnapshot) {
+    filters.push(`week_ending_weekday_snapshot=eq.${encQ(weekEndingWeekdaySnapshot)}`);
+  }
+
+  if (requireReferenceToPay) {
+    filters.push(`require_reference_to_pay=eq.${encQ(String(clampBool(requireReferenceToPay)))}`);
+  }
+
+  if (requireReferenceToInvoice) {
+    filters.push(`require_reference_to_invoice=eq.${encQ(String(clampBool(requireReferenceToInvoice)))}`);
+  }
+
+  if (hasCustomLabels) {
+    const yes = clampBool(hasCustomLabels);
+    filters.push(yes ? `bucket_labels_json=not.is.null` : `bucket_labels_json=is.null`);
+  }
+
+  if (createdFrom) filters.push(`created_at=gte.${encQ(createdFrom)}`);
+  if (createdTo) filters.push(`created_at=lte.${encQ(createdTo)}`);
+
+  if (updatedFrom) filters.push(`updated_at=gte.${encQ(updatedFrom)}`);
+  if (updatedTo) filters.push(`updated_at=lte.${encQ(updatedTo)}`);
+
+  if (startDateFrom) filters.push(`start_date=gte.${encQ(startDateFrom)}`);
+  if (startDateTo) filters.push(`start_date=lte.${encQ(startDateTo)}`);
+
+  if (endDateFrom) filters.push(`end_date=gte.${encQ(endDateFrom)}`);
+  if (endDateTo) filters.push(`end_date=lte.${encQ(endDateTo)}`);
+
+  if (mileagePayRate) {
+    filters.push(`mileage_pay_rate=eq.${encQ(mileagePayRate)}`);
+  }
+
+  if (mileageChargeRate) {
+    filters.push(`mileage_charge_rate=eq.${encQ(mileageChargeRate)}`);
+  }
+
+  const INCOMPLETE_STATUSES = ['OPEN','PLANNED','SUBMITTED','AUTHORISED'];
+
+  if (statusParam === 'unassigned') {
+    filters.push('candidate_id=is.null');
+  } else if (statusParam === 'active' || statusParam === 'completed') {
+    const fetchActiveContractIds = async () => {
+      const limit = 1000;
+      let offset = 0;
+      const acc = new Set();
+      while (true) {
+        const cwApi =
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?select=contract_id` +
+          `&status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})` +
+          `&contract_id=not.is.null` +
+          `&limit=${limit}&offset=${offset}`;
+        const { rows } = await sbFetch(env, cwApi);
+        (rows || []).forEach((r) => { if (r && r.contract_id) acc.add(r.contract_id); });
+        if (!rows || rows.length < limit) break;
+        offset += limit;
       }
-      acc = combined;
-    }
+      return Array.from(acc);
+    };
 
-    if (!acc || !acc.length) return null;
-    return `(${acc.join(',')})`;
-  };
+    const activeIds = await fetchActiveContractIds();
 
-  // ✅ REWORKED: issues filter now returns extra OR group when needed (NO_MATCH_ID)
-  const applyIssuesFilter = (apiIn, tokenUp) => {
-    let api = apiIn;
-    const tok = tokenUp ? String(tokenUp).toUpperCase() : null;
-    if (!tok || tok === 'ALL') return { api, orGroup: null };
+    const safeJoinFallbackForActive = () => {
+      selectParts.push('cw_active:contract_weeks!inner(count)');
+      const joined = `contract_weeks!inner.status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})`;
+      filters.push(joined);
+    };
 
-    const cs1 = (val) => `cs.{${enc(val)}}`;
-
-    switch (tok) {
-      case 'NO_MATCH_ID':
-        // (candidate_id is null OR client_id is null)
-        return { api, orGroup: ['candidate_id.is.null', 'client_id.is.null'] };
-
-      case 'RATE_MISSING':
-        api += `&issue_codes=${cs1('Rate')}`;
-        return { api, orGroup: null };
-
-      case 'PAY_CHAN_MISS':
-      case 'PAY_CHANNEL_MISSING':
-        api += `&issue_codes=${cs1('Pay channel')}`;
-        return { api, orGroup: null };
-
-      case 'AWAITING_HR_VALIDATION':
-      case 'AWAITING_HR_VALIDATION_REQUIRED':
-        api += `&issue_codes=${cs1('HR validation')}`;
-        return { api, orGroup: null };
-
-      case 'HR_HOURS_MISMATCH':
-      case 'HOURS_MISMATCH_HR':
-        api += `&issue_codes=${cs1('Hours mismatch HR')}`;
-        return { api, orGroup: null };
-
-      case 'HR_HOURS_MISSING':
-        api += `&issue_codes=${cs1('HR hours missing')}`;
-        return { api, orGroup: null };
-
-      case 'DUPLICATE_CONTRACTS':
-        api += `&issue_codes=${cs1('Duplicate contracts')}`;
-        return { api, orGroup: null };
-
-      case 'REFERENCE_MISSING':
-        api += `&issue_codes=${cs1('Reference')}`;
-        return { api, orGroup: null };
-
-      case 'VALIDATION':
-        api += `&issue_codes=${cs1('Validation')}`;
-        return { api, orGroup: null };
-
-      case 'AUTHORISATION':
-        api += `&issue_codes=${cs1('Authorisation')}`;
-        return { api, orGroup: null };
-
-      case 'ON_HOLD':
-        api += `&issue_codes=${cs1('On hold')}`;
-        return { api, orGroup: null };
-
-      case 'QR_NOT_ISSUED':
-        api += `&timesheet_id=is.not.null`;
-        api += `&qr_status=eq.PENDING`;
-        api += `&qr_token=is.null`;
-        api += `&qr_generated_at=is.null`;
-        return { api, orGroup: null };
-
-      case 'QR_AWAITING_SIGNATURE':
-      case 'QR_ISSUED_AWAITING_SIGNATURE':
-        api += `&timesheet_id=is.not.null`;
-        api += `&qr_status=eq.PENDING`;
-        api += `&qr_token=is.not.null`;
-        api += `&qr_generated_at=is.not.null`;
-        api += `&qr_scanned_at=is.null`;
-        return { api, orGroup: null };
-
-      case 'REFS_PDF_INVALID':
-        api += `&issue_codes=${cs1('Refs - Timesheet PDF invalid')}`;
-        return { api, orGroup: null };
-
-      default:
-        return { api, orGroup: null };
-    }
-  };
-
-  let effectiveIssues = issuesFilterUp;
-  if ((!effectiveIssues || effectiveIssues === 'ALL') && statusCodeUp && statusCodeUp !== 'ALL') {
-    if (statusCodeUp === 'NO_MATCH_ID') effectiveIssues = 'NO_MATCH_ID';
-    else if (statusCodeUp === 'RATE_MISSING') effectiveIssues = 'RATE_MISSING';
-    else if (statusCodeUp === 'PAY_CHAN_MISS') effectiveIssues = 'PAY_CHAN_MISS';
-    else if (statusCodeUp === 'READY_FOR_HR') effectiveIssues = 'AWAITING_HR_VALIDATION';
-    else if (statusCodeUp === 'HR_HOURS_MISMATCH') effectiveIssues = 'HR_HOURS_MISMATCH';
-  }
-
-  const effLimit  = hasIdFilter ? Math.min(200, Math.max(1, idList.length)) : pageSize;
-  const effOffset = hasIdFilter ? 0 : ((page - 1) * pageSize);
-
-  let api =
-    `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-    `?select=` + [
-      '*',
-      'route_type',
-      'route_display',
-      'client_no_timesheet_required',
-      'client_autoprocess_hr',
-      'client_is_nhsp',
-      'contract_id',
-      'contract_week_id',
-      'timesheet_id',
-      'sheet_scope',
-      'submission_mode',
-      'basis',
-      'tools_stage',
-      'processing_status_display',
-      'invoice_is_paid',
-      'pay_icon_code',
-      'pay_status_code',
-      'pay_paid_at_utc',
-      'net_delta_ex_vat'
-    ].join(',') +
-    `&limit=${effLimit}&offset=${effOffset}`;
-
-  // ✅ Collect OR groups then apply as a single `or=(...)` at the end
-  const orGroups = [];
-
-  // (timesheet_id == X OR contract_week_id == X) — selection/canonical row support
-  if (hasIdFilter) {
-    if (idList.length === 1) {
-      const one = String(idList[0]);
-      orGroups.push([`timesheet_id.eq.${one}`, `contract_week_id.eq.${one}`]);
-    } else {
-      const csv = idList.map(String).join(',');
-      orGroups.push([`timesheet_id.in.(${csv})`, `contract_week_id.in.(${csv})`]);
-    }
-  }
-
-  // ✅ NEW: free-text quick search OR group (only when provided)
-  if (textQ) {
-    // Use ilike.*...* patterns for broad "contains" matching on summary-view text fields
-    // (works for names + ids + norms).
-    const t = String(textQ);
-    const pat = `*${t}*`;
-
-    orGroups.push([
-      `candidate_name.ilike.${pat}`,
-      `client_name.ilike.${pat}`,
-      `booking_id.ilike.${pat}`,
-      `occupant_key_norm.ilike.${pat}`,
-      `hospital_norm.ilike.${pat}`
-    ]);
-  }
-
-  if (clientId)    api += `&client_id=eq.${enc(clientId)}`;
-  if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
-
-  if (toolsStageUp && toolsStageUp !== 'ALL') {
-    api += `&tools_stage=eq.${enc(toolsStageUp)}`;
-  }
-
-  if (routeType && routeType !== 'ALL') {
-    if (routeType === 'ELECTRONIC') {
-      api += `&route_type=in.(DAILY_ELECTRONIC,WEEKLY_ELECTRONIC)`;
-    } else if (routeType === 'MANUAL') {
-      api += `&route_type=in.(DAILY_MANUAL,WEEKLY_MANUAL)`;
-    } else if (routeType === 'NHSP') {
-      api += `&route_type=in.(WEEKLY_NHSP,WEEKLY_NHSP_ADJUSTMENT)`;
-    } else if (routeType === 'HEALTHROSTER') {
-      api += `&route_type=eq.WEEKLY_HEALTHROSTER`;
-    } else {
-      api += `&route_type=eq.${enc(routeType)}`;
-    }
-  }
-
-  if (sheetScope && sheetScope !== 'ALL') api += `&sheet_scope=eq.${enc(sheetScope)}`;
-
-  if (qrStatus) api += `&qr_status=eq.${enc(qrStatus)}`;
-
-  if (weFrom) api += `&week_ending_date=gte.${enc(weFrom)}`;
-  if (weTo)   api += `&week_ending_date=lte.${enc(weTo)}`;
-
-  if (isAdjusted === 'true')  api += `&is_adjusted=eq.true`;
-  if (isAdjusted === 'false') api += `&is_adjusted=eq.false`;
-
-  if (isQr === 'true')        api += `&is_qr=eq.true`;
-  if (isQr === 'false')       api += `&is_qr=eq.false`;
-
-  if (candidatePaid === 'true') api += `&pay_paid_at_utc=is.not.null`;
-
-  if (hrIssue) api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
-
-  // Issues filter (may contribute a second OR-group in NO_MATCH_ID case)
-  const issuesApplied = applyIssuesFilter(api, effectiveIssues);
-  api = issuesApplied.api;
-  if (issuesApplied.orGroup && Array.isArray(issuesApplied.orGroup) && issuesApplied.orGroup.length) {
-    orGroups.push(issuesApplied.orGroup);
-  }
-
-  // ✅ Apply the single merged `or=` param once (if needed)
-  const orExpr = mergeOrGroupsToOrParam(orGroups);
-  if (orExpr) {
-    api += `&or=${enc(orExpr)}`;
-  }
-
-  if (orderByParam && allowedSort[orderByParam]) {
-    api += `&order=${enc(orderCol)}.${orderDir},client_name.asc,candidate_name.asc`;
-  } else {
-    api += `&order=week_ending_date.desc,client_name.asc,candidate_name.asc`;
-  }
-
-  try {
-    const { rows } = await sbFetch(env, api);
-
-    const outRows = (rows || []).map(r => {
-      const o = { ...(r || {}) };
-      if (!Object.prototype.hasOwnProperty.call(o, 'route_type')) o.route_type = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'route_display')) o.route_display = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'client_no_timesheet_required')) o.client_no_timesheet_required = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'client_autoprocess_hr')) o.client_autoprocess_hr = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'client_is_nhsp')) o.client_is_nhsp = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'tools_stage')) o.tools_stage = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'processing_status_display')) o.processing_status_display = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'invoice_is_paid')) o.invoice_is_paid = null;
-
-      // ✅ NEW: pay status rollup fields (from v_timesheets_summary_base/v_timesheets_summary)
-      if (!Object.prototype.hasOwnProperty.call(o, 'pay_icon_code')) o.pay_icon_code = 'NONE';
-      if (!Object.prototype.hasOwnProperty.call(o, 'pay_status_code')) o.pay_status_code = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'pay_paid_at_utc')) o.pay_paid_at_utc = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'net_delta_ex_vat')) o.net_delta_ex_vat = 0;
-
-      return o;
-    });
-
-    let totals = null;
-    let totalCount = outRows.length;
-
-    if (includeTotals) {
-      if (hasIdFilter) {
-        let paySum = 0;
-        let marginSum = 0;
-        for (const r of outRows) {
-          paySum += (Number(r?.total_pay_ex_vat || 0) || 0);
-          marginSum += (Number(r?.margin_ex_vat || 0) || 0);
+    if (statusParam === 'active') {
+      if (activeIds.length === 0) {
+        if (format === 'membership') {
+          return withCORS(env, req, ok({ ids: [], count: 0 }));
         }
-        totals = {
-          count_all: outRows.length,
-          total_pay_ex_vat_sum: paySum,
-          margin_ex_vat_sum: marginSum
-        };
-        totalCount = outRows.length;
+        return withCORS(env, req, ok([]));
+      } else if (activeIds.length <= 300) {
+        filters.push(`id=in.(${activeIds.map(encQ).join(',')})`);
       } else {
-        const filters = {
-          client_id: clientId || null,
-          candidate_id: candidateId || null,
+        safeJoinFallbackForActive();
+      }
+    } else if (statusParam === 'completed') {
+      if (activeIds.length > 0 && activeIds.length <= 300) {
+        filters.push(`id=not.in.(${activeIds.map(encQ).join(',')})`);
+      } else if (activeIds.length === 0) {
+        // everyone qualifies as completed
+      } else {
+        selectParts.push('cw_open:contract_weeks!left(count)');
+        filters.push(`cw_open:contract_weeks!left.status=in.(${INCOMPLETE_STATUSES.map(encQ).join(',')})`);
+        filters.push(`cw_open.id=is.null`);
+      }
+    }
+  }
 
-          tools_stage: (toolsStageUp && toolsStageUp !== 'ALL') ? toolsStageUp : null,
-          issues_filter: (effectiveIssues && effectiveIssues !== 'ALL') ? effectiveIssues : null,
+  const buildContractsApi = ({ selectArray, withPaging, limitValue, offsetValue, withOrder }) => {
+    let api = `${env.SUPABASE_URL}/rest/v1/contracts?select=${selectArray.join(',')}`;
+    if (filters.length) api += `&${filters.join('&')}`;
 
-          candidate_paid: candidatePaid || null,
-          is_adjusted: isAdjusted || null,
-
-          route_type: routeType || null,
-          sheet_scope: sheetScope || null,
-          qr_status: qrStatus || null,
-          week_ending_from: weFrom || null,
-          week_ending_to: weTo || null,
-          is_qr: isQr || null,
-
-          hr_issue: hrIssue || null
-        };
-
-        const totRes = await sbRpc(env, 'timesheet_list_totals', { p_filters: filters });
-        const totRows = Array.isArray(totRes) ? totRes : (totRes?.data || []);
-        totals = (totRows && totRows.length)
-          ? totRows[0]
-          : { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
-
-        totalCount = Number(totals?.count_all || 0);
+    if (withOrder) {
+      api += `&order=${encQ(orderCol)}.${orderDir}`;
+      if (orderCol !== 'created_at') {
+        api += `&order=created_at.desc`;
       }
     }
 
-    return withCORS(env, req, ok({
-      items: outRows,
-      page,
-      page_size: pageSize,
-      count: totalCount,
-      totals: totals || undefined
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
+    if (withPaging) {
+      api += `&limit=${encQ(limitValue)}&offset=${encQ(offsetValue)}`;
+    }
+
+    return api;
+  };
+
+  const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1);
+  const pageSizeRaw = url.searchParams.get('page_size');
+  const pageSize = (pageSizeRaw === 'ALL') ? null : Math.max(parseInt(pageSizeRaw || '50', 10) || 50, 1);
+
+  if (format === 'membership') {
+    const idsOut = [];
+    const seen = new Set();
+    let offset = 0;
+    const batchSize = 1000;
+    const membershipSelect = ['id'];
+
+    try {
+      while (true) {
+        const api = buildContractsApi({
+          selectArray: membershipSelect,
+          withPaging: true,
+          limitValue: batchSize,
+          offsetValue: offset,
+          withOrder: false
+        });
+
+        const { rows } = await sbFetch(env, api);
+        const batch = Array.isArray(rows) ? rows : [];
+
+        for (const row of batch) {
+          const id = row && row.id ? String(row.id).trim() : '';
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          idsOut.push(id);
+        }
+
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
+    } catch (err) {
+      console.error('[CONTRACTS] handleContractsList membership failed', err);
+      return withCORS(env, req, ok({ error: String(err?.message || err), ids: [], count: 0 }));
+    }
+
+    return withCORS(env, req, ok({ ids: idsOut, count: idsOut.length }));
   }
+
+  const limit = pageSize == null ? null : pageSize;
+  const offset = pageSize == null ? 0 : ((page - 1) * pageSize);
+  const api = buildContractsApi({
+    selectArray: selectParts,
+    withPaging: pageSize != null,
+    limitValue: limit,
+    offsetValue: offset,
+    withOrder: true
+  });
+
+  let rows = [];
+  try {
+    ({ rows } = await sbFetch(env, api));
+  } catch (err) {
+    console.error('[CONTRACTS] handleContractsList failed', err);
+    return withCORS(env, req, ok({ error: String(err?.message || err), rows: [] }));
+  }
+
+  const out = (rows || []).map((r) => {
+    const candidateDisplay =
+      r?.candidate?.display_name ||
+      ([r?.candidate?.first_name, r?.candidate?.last_name].filter(Boolean).join(' ') || null);
+    const clientName = r?.client?.name || null;
+
+    const { cw_active, cw_open, ...rest } = (r || {});
+    return {
+      ...rest,
+      candidate_display: candidateDisplay,
+      client_name: clientName
+    };
+  });
+
+  return withCORS(env, req, ok(out));
 }
+
+
 async function handleHrAutoprocessPreview(env, req, importId) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -43440,238 +45118,10 @@ function computeNextDueFromSchedule(schedule) {
   return withCORS(env, req, ok({ advances }));
 }
 
- async function handlePayAdvancesCreateMissingShift(env, req, candidateIdParam) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
 
-  const enc = encodeURIComponent;
-  const candidateId = candidateIdParam || getCandidateIdFromPath(req);
-  if (!candidateId) {
-    return withCORS(env, req, badRequest('candidate_id missing in path'));
-  }
 
-  const body = await parseJSONBody(req).catch(() => null);
-  const client_id = body?.client_id || null;
-  const shift_date = body?.shift_date || null;
-  const amountRaw = body?.amount;
-  const best_guess_hours = body?.best_guess_hours || null;
-  const notes = body?.notes || null;
 
-  const amount = Number(amountRaw || 0);
-  if (!client_id) {
-    return withCORS(env, req, badRequest('client_id is required'));
-  }
-  if (!shift_date) {
-    return withCORS(env, req, badRequest('shift_date is required'));
-  }
-  if (!amount || amount <= 0) {
-    return withCORS(env, req, badRequest('amount must be > 0'));
-  }
 
-  const nowIso = new Date().toISOString();
-
-  const payload = [{
-    candidate_id: candidateId,
-    client_id,
-    reason: 'MISSING_SHIFT',
-    original_amount: round2(amount),
-    outstanding_amount: round2(amount),
-    linked_shift_date: shift_date,
-    schedule_json: [],  // no schedule yet; repays when matching shift is paid
-    next_due_week_start: null,
-    status: 'ACTIVE',
-    best_guess_hours: best_guess_hours || null,
-    notes: notes || null,
-    created_at: nowIso,
-    updated_at: nowIso,
-    created_by: user.id || null
-  }];
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/pay_advances`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(payload)
-    }
-  );
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to create missing-shift advance: ${t}`));
-  }
-  const json = await res.json().catch(() => []);
-  const advance = Array.isArray(json) ? json[0] : json;
-
-  await writeAudit(
-    env,
-    user,
-    'PAY_ADVANCE_MISSING_SHIFT_CREATED',
-    { candidate_id: candidateId, client_id, shift_date, amount: round2(amount) },
-    { entity: 'candidate', subject_id: candidateId, reason: 'PAYMENT', req }
-  );
-
-  return withCORS(env, req, ok({ advance }));
-}
-
- async function handlePayAdvancesCreateManual(env, req, candidateIdParam) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-  const candidateId = candidateIdParam || getCandidateIdFromPath(req);
-  if (!candidateId) {
-    return withCORS(env, req, badRequest('candidate_id missing in path'));
-  }
-
-  const body = await parseJSONBody(req).catch(() => null);
-  const client_id = body?.client_id || null;
-  const amountRaw = body?.amount;
-  const start_week_start = body?.start_week_start || null;
-  const weeks = Array.isArray(body?.weeks) ? body.weeks : [];
-  const custom_schedule = Array.isArray(body?.custom_schedule) ? body.custom_schedule : null;
-  const notes = body?.notes || null;
-
-  const amount = Number(amountRaw || 0);
-  if (!amount || amount <= 0) {
-    return withCORS(env, req, badRequest('amount must be > 0'));
-  }
-
-  let schedule = [];
-
-  if (custom_schedule && custom_schedule.length) {
-    // Use custom schedule as-is, but ensure numeric amounts
-    schedule = custom_schedule
-      .map((e) => ({
-        week_start: String(e.week_start || '').trim(),
-        amount: Number(e.amount || 0)
-      }))
-      .filter((e) => e.week_start);
-  } else if (weeks.length) {
-    const N = weeks.length;
-    const perWeek = round2(-amount / N);
-    schedule = weeks.map((weekStart, i) => {
-      const ws = String(weekStart || '').trim();
-      if (!ws) return null;
-      const base = (i === N - 1)
-        ? round2(-amount - perWeek * (N - 1))
-        : perWeek;
-      return { week_start: ws, amount: base };
-    }).filter(Boolean);
-  } else if (start_week_start) {
-    // Fallback: single repayment in the specified start week
-    schedule = [{
-      week_start: String(start_week_start).trim(),
-      amount: round2(-amount)
-    }];
-  } else {
-    return withCORS(env, req, badRequest('Either weeks[] or start_week_start is required'));
-  }
-
-  const nowIso = new Date().toISOString();
-  const nextDue = computeNextDueFromSchedule(schedule);
-
-  const payload = [{
-    candidate_id: candidateId,
-    client_id,
-    reason: 'MANUAL_ADVANCE',
-    original_amount: round2(amount),
-    outstanding_amount: round2(amount),
-    linked_shift_date: null,
-    schedule_json: schedule,
-    next_due_week_start: nextDue,
-    status: 'ACTIVE',
-    best_guess_hours: null,
-    notes: notes || null,
-    created_at: nowIso,
-    updated_at: nowIso,
-    created_by: user.id || null
-  }];
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/pay_advances`,
-    {
-      method: 'POST',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(payload)
-    }
-  );
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to create manual advance: ${t}`));
-  }
-  const json = await res.json().catch(() => []);
-  const advance = Array.isArray(json) ? json[0] : json;
-
-  await writeAudit(
-    env,
-    user,
-    'PAY_ADVANCE_MANUAL_CREATED',
-    { candidate_id: candidateId, client_id, amount: round2(amount) },
-    { entity: 'candidate', subject_id: candidateId, reason: 'PAYMENT', req }
-  );
-
-  return withCORS(env, req, ok({ advance }));
-}
-
- async function handlePayAdvancesUpdate(env, req, advanceIdParam) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-  const advanceId = advanceIdParam || getAdvanceIdFromPath(req);
-  if (!advanceId) {
-    return withCORS(env, req, badRequest('advance id missing in path'));
-  }
-
-  const body = await parseJSONBody(req).catch(() => null);
-  if (!body || typeof body !== 'object') {
-    return withCORS(env, req, badRequest('Invalid JSON body'));
-  }
-
-  const patch = {};
-  if ('notes' in body) patch.notes = body.notes;
-  if ('status' in body && body.status) patch.status = body.status;
-
-  if (Array.isArray(body.schedule_json)) {
-    const schedule = body.schedule_json.map((e) => ({
-      week_start: String(e.week_start || '').trim(),
-      amount: Number(e.amount || 0)
-    })).filter((e) => e.week_start);
-    patch.schedule_json = schedule;
-    patch.next_due_week_start = computeNextDueFromSchedule(schedule);
-  }
-
-  if (!Object.keys(patch).length) {
-    return withCORS(env, req, badRequest('Nothing to update'));
-  }
-
-  patch.updated_at = new Date().toISOString();
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/pay_advances?id=eq.${enc(advanceId)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(patch)
-    }
-  );
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to update advance: ${t}`));
-  }
-  const json = await res.json().catch(() => []);
-  const advance = Array.isArray(json) ? json[0] : json;
-
-  await writeAudit(
-    env,
-    user,
-    'PAY_ADVANCE_UPDATED',
-    { advance_id: advanceId, patch },
-    { entity: 'pay_advance', subject_id: advanceId, reason: 'PAYMENT', req }
-  );
-
-  return withCORS(env, req, ok({ advance }));
-}
  async function handlePayAdvancesPause(env, req, advanceIdParam) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -50921,123 +52371,163 @@ async function handleSearchClients(env, req) {
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
-  const page     = Math.max(1, parseInt(q('page') || '1', 10));
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+  const format = (q('format') || 'json').toLowerCase();
 
-  // ✅ include_count support
   const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
-  // Sorting
-  const orderByParam  = (q('order_by') || '').toLowerCase();
+  const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
-  // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
-    name:                  'name',
-    cli_ref:               'cli_ref',
-    invoice_address:       'invoice_address',
+    name: 'name',
+    cli_ref: 'cli_ref',
+    invoice_address: 'invoice_address',
     primary_invoice_email: 'primary_invoice_email',
-    ap_phone:              'ap_phone',
-    vat_chargeable:        'vat_chargeable',
-    payment_terms_days:    'payment_terms_days',
-    mileage_charge_rate:   'mileage_charge_rate',
-    ts_queries_email:      'ts_queries_email',
-    created_at:            'created_at',
-    updated_at:            'updated_at',
-    rev:                   'rev',
-
-    // ✅ NEW: client site details + site contact fields
-    client_address:        'client_address',
-    contact_title:         'contact_title',
-    contact_known_as:      'contact_known_as',
-    contact_forename:      'contact_forename',
-    contact_surname:       'contact_surname',
-    contact_job_title:     'contact_job_title',
-    contact_tel:           'contact_tel',
-    contact_mobile:        'contact_mobile',
-    contact_email:         'contact_email',
-    website:               'website',
-    notes:                 'notes'
+    ap_phone: 'ap_phone',
+    vat_chargeable: 'vat_chargeable',
+    payment_terms_days: 'payment_terms_days',
+    mileage_charge_rate: 'mileage_charge_rate',
+    ts_queries_email: 'ts_queries_email',
+    created_at: 'created_at',
+    updated_at: 'updated_at',
+    rev: 'rev',
+    client_address: 'client_address',
+    contact_title: 'contact_title',
+    contact_known_as: 'contact_known_as',
+    contact_forename: 'contact_forename',
+    contact_surname: 'contact_surname',
+    contact_job_title: 'contact_job_title',
+    contact_tel: 'contact_tel',
+    contact_mobile: 'contact_mobile',
+    contact_email: 'contact_email',
+    website: 'website',
+    notes: 'notes'
   };
 
   const defaultOrderCol = 'name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
 
-  // explicit-ID selection support
-  const idInExpr = q('id');    // 'in.(...)'
-  const idsRaw   = q('ids');   // 'uuid1,uuid2,...'
+  const spec = buildClientSummaryFilterSpec(urlObj.searchParams);
+
+  const text = spec.q || null;
+  const cliRef = spec.cli_ref || null;
+  const primaryEmail = spec.primary_invoice_email || null;
+  const invoiceAddr = spec.invoice_address || null;
+  const postcode = spec.postcode || null;
+  const apPhone = spec.ap_phone || null;
+  const vatChargeable = spec.vat_chargeable || null;
+  const paymentTerms = spec.payment_terms_days || null;
+  const mileageRate = spec.mileage_charge_rate || null;
+  const tsQueries = spec.ts_queries_email || null;
+  const createdFrom = spec.created_from || null;
+  const createdTo = spec.created_to || null;
+  const updatedFrom = spec.updated_from || null;
+  const updatedTo = spec.updated_to || null;
+  const notesExact = spec.notes || null;
+  const ids = Array.isArray(spec.ids) ? spec.ids.map(String) : [];
+
   let idFilterExpr = null;
-  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
-    idFilterExpr = idInExpr;
-  } else if (idsRaw) {
-    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
-    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
+  if (ids.length) {
+    idFilterExpr = `in.(${ids.join(',')})`;
   }
 
-  // Filters expanded to match FE
-  // ✅ Accept both q= and name= as the "client name contains" filter (Advanced Search currently sends name=)
-  const text          = q('q') || q('name'); // name partial
-  const cliRef        = q('cli_ref');
-  const primaryEmail  = q('primary_invoice_email');
-  const invoiceAddr   = q('invoice_address');
-  const postcode      = q('postcode');              // kept as a query param, but no DB column yet
-  const apPhone       = q('ap_phone');
-  const vatChargeable = q('vat_chargeable');        // 'true'|'false'|null
-  const paymentTerms  = q('payment_terms_days');
-  const mileageRate   = q('mileage_charge_rate');
-  const tsQueries     = q('ts_queries_email');
-  const createdFrom   = q('created_from');
-  const createdTo     = q('created_to');
-  const updatedFrom   = q('updated_from');
-  const updatedTo     = q('updated_to');
+  const buildClientsApi = ({ selectClause = '*', withPaging = true, limitValue = pageSize, offsetValue = (page - 1) * pageSize, withOrder = true }) => {
+    let api =
+      `${env.SUPABASE_URL}/rest/v1/clients` +
+      `?select=${selectClause}`;
 
-  // ✅ Notes contains (case-insensitive)
-  const notesExact = q('notes');
+    if (withOrder) {
+      api += `&order=${enc(orderCol)}.${orderDir}`;
+    }
 
-  let url =
-    `${env.SUPABASE_URL}/rest/v1/clients` +
-    // ✅ IMPORTANT: return full row-shape so grid column prefs can't "lose" fields when FE switches summary to search()
-    `?select=*` +
-    `&order=${enc(orderCol)}.${orderDir}` +
-    `&limit=${pageSize}&offset=${(page-1)*pageSize}`;
+    if (withPaging) {
+      api += `&limit=${limitValue}&offset=${offsetValue}`;
+    }
 
-  if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
-  if (text)         url += `&name=ilike.*${enc(text)}*`;
-  if (cliRef)       url += `&cli_ref=ilike.*${enc(cliRef)}*`;
-  if (primaryEmail) url += `&primary_invoice_email=ilike.*${enc(primaryEmail)}*`;
-  if (invoiceAddr)  url += `&invoice_address=ilike.*${enc(invoiceAddr)}*`;
-  // NOTE: postcode is not a real column on clients table yet, so we don't add a filter here
-  if (apPhone)      url += `&ap_phone=ilike.*${enc(apPhone)}*`;
+    if (idFilterExpr) api += `&id=${enc(idFilterExpr)}`;
+    if (text) api += `&name=ilike.*${enc(text)}*`;
+    if (cliRef) api += `&cli_ref=ilike.*${enc(cliRef)}*`;
+    if (primaryEmail) api += `&primary_invoice_email=ilike.*${enc(primaryEmail)}*`;
+    if (invoiceAddr) api += `&invoice_address=ilike.*${enc(invoiceAddr)}*`;
+    if (apPhone) api += `&ap_phone=ilike.*${enc(apPhone)}*`;
 
-  // ✅ Notes contains (case-insensitive): use ilike with wildcards at both ends.
-  // Escape literal '*' and '\' (and LIKE wildcards) to avoid treating user input as a pattern.
-  if (notesExact) {
-    const escMid = String(notesExact)
-      .replace(/\\/g, '\\\\')
-      .replace(/\*/g, '\\*')
-      .replace(/%/g, '\\%')
-      .replace(/_/g, '\\_');
-    url += `&notes=ilike.*${enc(escMid)}*`;
+    if (notesExact) {
+      const escMid = String(notesExact)
+        .replace(/\\/g, '\\\\')
+        .replace(/\*/g, '\\*')
+        .replace(/%/g, '\\%')
+        .replace(/_/g, '\\_');
+      api += `&notes=ilike.*${enc(escMid)}*`;
+    }
+
+    if (vatChargeable === 'true') api += `&vat_chargeable=eq.true`;
+    if (vatChargeable === 'false') api += `&vat_chargeable=eq.false`;
+
+    if (paymentTerms) api += `&payment_terms_days=eq.${enc(paymentTerms)}`;
+    if (mileageRate) api += `&mileage_charge_rate=eq.${enc(mileageRate)}`;
+    if (tsQueries) api += `&ts_queries_email=ilike.*${enc(tsQueries)}*`;
+
+    if (createdFrom) api += `&created_at=gte.${enc(createdFrom)}`;
+    if (createdTo) api += `&created_at=lte.${enc(createdTo)}`;
+    if (updatedFrom) api += `&updated_at=gte.${enc(updatedFrom)}`;
+    if (updatedTo) api += `&updated_at=lte.${enc(updatedTo)}`;
+
+    // postcode intentionally not applied: no DB column yet
+
+    return api;
+  };
+
+  if (format === 'membership') {
+    const idsOut = [];
+    const seen = new Set();
+    let offset = 0;
+    const batchSize = 1000;
+
+    try {
+      while (true) {
+        const api = buildClientsApi({
+          selectClause: 'id',
+          withPaging: true,
+          limitValue: batchSize,
+          offsetValue: offset,
+          withOrder: false
+        });
+
+        const { rows } = await sbFetch(env, api, false);
+        const batch = Array.isArray(rows) ? rows : [];
+
+        for (const row of batch) {
+          const id = row && row.id ? String(row.id).trim() : '';
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          idsOut.push(id);
+        }
+
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
+    } catch (err) {
+      return withCORS(env, req, serverError(`Supabase fetch failed: ${String(err?.message || err)}`));
+    }
+
+    return withCORS(env, req, ok({ ids: idsOut, count: idsOut.length }));
   }
 
-  if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
-  if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
-
-  if (paymentTerms) url += `&payment_terms_days=eq.${enc(paymentTerms)}`;
-  if (mileageRate)  url += `&mileage_charge_rate=eq.${enc(mileageRate)}`;
-  if (tsQueries)    url += `&ts_queries_email=ilike.*${enc(tsQueries)}*`;
-
-  if (createdFrom)  url += `&created_at=gte.${enc(createdFrom)}`;
-  if (createdTo)    url += `&created_at=lte.${enc(createdTo)}`;
-  if (updatedFrom)  url += `&updated_at=gte.${enc(updatedFrom)}`;
-  if (updatedTo)    url += `&updated_at=lte.${enc(updatedTo)}`;
+  const api = buildClientsApi({
+    selectClause: '*',
+    withPaging: true,
+    limitValue: pageSize,
+    offsetValue: (page - 1) * pageSize,
+    withOrder: true
+  });
 
   let rows = [];
   let total = undefined;
   try {
-    const res = await sbFetch(env, url, includeCount);
+    const res = await sbFetch(env, api, includeCount);
     rows = res?.rows || [];
     total = res?.total;
   } catch (err) {
@@ -51069,7 +52559,7 @@ async function handleSearchClients(env, req) {
         r.name || '',
         r.cli_ref || '',
         r.invoice_address || '',
-        '', // postcode placeholder (no DB column yet)
+        '',
         r.vat_chargeable ? 'Y' : 'N',
         Number(r.payment_terms_days ?? ''),
         r.primary_invoice_email || '',
@@ -51118,9 +52608,11 @@ async function handleSearchClients(env, req) {
 
   return withCORS(env, req, ok({ rows, page, page_size: pageSize, count: respCount }));
 }
+
 // ───────────────────────────────────────────────────────────────────────────────
 // SEARCH — Umbrellas (richer filters + csv/print)
 // ───────────────────────────────────────────────────────────────────────────────
+
 
 async function handleSearchUmbrellas(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -51130,32 +52622,29 @@ async function handleSearchUmbrellas(env, req) {
 
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
-  const page     = Math.max(1, parseInt(q('page') || '1', 10));
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const format   = (q('format') || 'json').toLowerCase(); // 'json'|'csv'|'print'
+  const format = (q('format') || 'json').toLowerCase();
 
-  // ✅ include_count support
   const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
-  // Sorting
-  const orderByParam  = (q('order_by') || '').toLowerCase();
+  const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
-  // ✅ Expanded allow-list (must only include real columns)
   const allowedSort = {
-    name:                            'name',
-    enabled:                         'enabled',
-    vat_chargeable:                  'vat_chargeable',
-    remittance_email:                'remittance_email',
-    bank_name:                       'bank_name',
-    sort_code:                       'sort_code',
-    account_number:                  'account_number',
-    created_at:                      'created_at',
-    updated_at:                      'updated_at',
-    postcode:                        'postcode',
-    town_city:                       'town_city',
-    company_number:                  'company_number',
-    revolut_counterparty_id:         'revolut_counterparty_id',
+    name: 'name',
+    enabled: 'enabled',
+    vat_chargeable: 'vat_chargeable',
+    remittance_email: 'remittance_email',
+    bank_name: 'bank_name',
+    sort_code: 'sort_code',
+    account_number: 'account_number',
+    created_at: 'created_at',
+    updated_at: 'updated_at',
+    postcode: 'postcode',
+    town_city: 'town_city',
+    company_number: 'company_number',
+    revolut_counterparty_id: 'revolut_counterparty_id',
     revolut_counterparty_account_id: 'revolut_counterparty_account_id'
   };
 
@@ -51163,60 +52652,107 @@ async function handleSearchUmbrellas(env, req) {
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
 
-  // explicit-ID selection support
-  const idInExpr = q('id');    // 'in.(...)'
-  const idsRaw   = q('ids');   // 'uuid1,uuid2,...'
+  const spec = buildUmbrellaSummaryFilterSpec(urlObj.searchParams);
+
+  const text = spec.q || null;
+  const bankName = spec.bank_name || null;
+  const sortCode = spec.sort_code || null;
+  const accountNo = spec.account_number || null;
+  const enabled = spec.enabled || null;
+  const vatChargeable = spec.vat_chargeable || null;
+  const createdFrom = spec.created_from || null;
+  const createdTo = spec.created_to || null;
+  const ids = Array.isArray(spec.ids) ? spec.ids.map(String) : [];
+
   let idFilterExpr = null;
-  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
-    idFilterExpr = idInExpr;
-  } else if (idsRaw) {
-    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
-    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
+  if (ids.length) {
+    idFilterExpr = `in.(${ids.join(',')})`;
   }
 
-  // Expanded filters to match FE
-  // ✅ Accept both q= and name= as the "umbrella name contains" filter
-  const text          = q('q') || q('name'); // free-text
-  const bankName      = q('bank_name');
-  const sortCode      = q('sort_code');
-  const accountNo     = q('account_number');
-  const enabled       = q('enabled');        // 'true'|'false'|null
-  const vatChargeable = q('vat_chargeable'); // 'true'|'false'|null
-  const createdFrom   = q('created_from');
-  const createdTo     = q('created_to');
+  const buildUmbrellasApi = ({ selectClause = '*', withPaging = true, limitValue = pageSize, offsetValue = (page - 1) * pageSize, withOrder = true }) => {
+    let api =
+      `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+      `?select=${selectClause}`;
 
-  let url =
-    `${env.SUPABASE_URL}/rest/v1/umbrellas` +
-    `?select=*` +
-    `&order=${enc(orderCol)}.${orderDir}` +
-    `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
-
-  if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
-
-  // ✅ Free-text should match BOTH name and remittance_email
-  // ✅ IMPORTANT: encode the ENTIRE PostgREST logic expression once (prevents PGRST100 parse errors)
-  if (text) {
-    const raw = String(text || '').trim();
-    if (raw) {
-      const expr = `(name.ilike.*${raw}*,remittance_email.ilike.*${raw}*)`;
-      url += `&or=${enc(expr)}`;
+    if (withOrder) {
+      api += `&order=${enc(orderCol)}.${orderDir}`;
     }
+
+    if (withPaging) {
+      api += `&limit=${limitValue}&offset=${offsetValue}`;
+    }
+
+    if (idFilterExpr) api += `&id=${enc(idFilterExpr)}`;
+
+    if (text) {
+      const raw = String(text || '').trim();
+      if (raw) {
+        const expr = `(name.ilike.*${raw}*,remittance_email.ilike.*${raw}*)`;
+        api += `&or=${enc(expr)}`;
+      }
+    }
+
+    if (bankName) api += `&bank_name=ilike.*${enc(bankName)}*`;
+    if (sortCode) api += `&sort_code=ilike.*${enc(sortCode)}*`;
+    if (accountNo) api += `&account_number=ilike.*${enc(accountNo)}*`;
+    if (enabled === 'true') api += `&enabled=eq.true`;
+    if (enabled === 'false') api += `&enabled=eq.false`;
+    if (vatChargeable === 'true') api += `&vat_chargeable=eq.true`;
+    if (vatChargeable === 'false') api += `&vat_chargeable=eq.false`;
+    if (createdFrom) api += `&created_at=gte.${enc(createdFrom)}`;
+    if (createdTo) api += `&created_at=lte.${enc(createdTo)}`;
+
+    return api;
+  };
+
+  if (format === 'membership') {
+    const idsOut = [];
+    const seen = new Set();
+    let offset = 0;
+    const batchSize = 1000;
+
+    try {
+      while (true) {
+        const api = buildUmbrellasApi({
+          selectClause: 'id',
+          withPaging: true,
+          limitValue: batchSize,
+          offsetValue: offset,
+          withOrder: false
+        });
+
+        const { rows } = await sbFetch(env, api, false);
+        const batch = Array.isArray(rows) ? rows : [];
+
+        for (const row of batch) {
+          const id = row && row.id ? String(row.id).trim() : '';
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          idsOut.push(id);
+        }
+
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
+    } catch (err) {
+      return withCORS(env, req, serverError(`Supabase fetch failed: ${String(err?.message || err)}`));
+    }
+
+    return withCORS(env, req, ok({ ids: idsOut, count: idsOut.length }));
   }
 
-  if (bankName)  url += `&bank_name=ilike.*${enc(bankName)}*`;
-  if (sortCode)  url += `&sort_code=ilike.*${enc(sortCode)}*`;
-  if (accountNo) url += `&account_number=ilike.*${enc(accountNo)}*`;
-  if (enabled === 'true')  url += `&enabled=eq.true`;
-  if (enabled === 'false') url += `&enabled=eq.false`;
-  if (vatChargeable === 'true')  url += `&vat_chargeable=eq.true`;
-  if (vatChargeable === 'false') url += `&vat_chargeable=eq.false`;
-  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
-  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
+  const api = buildUmbrellasApi({
+    selectClause: '*',
+    withPaging: true,
+    limitValue: pageSize,
+    offsetValue: (page - 1) * pageSize,
+    withOrder: true
+  });
 
   let rows = [];
   let total = undefined;
   try {
-    const res = await sbFetch(env, url, includeCount);
+    const res = await sbFetch(env, api, includeCount);
     rows = res?.rows || [];
     total = res?.total;
   } catch (err) {
@@ -51294,6 +52830,9 @@ async function handleSearchUmbrellas(env, req) {
     count: respCount
   }));
 }
+
+
+
 async function buildHealthRosterPdf(env, invoiceId) {
   // Placeholder implementation:
   //
@@ -53611,7 +55150,6 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
   return report;
 }
 
-
 async function handleMailshotPrepare(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -53620,147 +55158,384 @@ async function handleMailshotPrepare(env, req) {
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return withCORS(env, req, badRequest('Invalid JSON'));
 
-  const contextKindRaw = String(body.context_kind || body.contextKind || '').trim();
-  const outputTypeRaw = String(body.output_type || body.outputType || '').trim();
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+  const normalizeWarnings = (arr) => Array.isArray(arr)
+    ? arr.map((x) => String(x == null ? '' : x)).filter((x) => x.length > 0)
+    : [];
+  const normalizeSelectedKeys = (arr) => Array.isArray(arr)
+    ? arr.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+    : [];
+  const normalizeAttachmentArray = (arr) => Array.isArray(arr)
+    ? arr.filter(v => v && typeof v === 'object' && !Array.isArray(v))
+    : [];
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const singularContextKind = (v) => {
+    const s = trimStr(v).toLowerCase();
+    if (s === 'candidates' || s === 'candidate') return 'candidate';
+    if (s === 'clients' || s === 'client') return 'client';
+    if (s === 'contracts' || s === 'contract') return 'contract';
+    if (s === 'timesheets' || s === 'timesheet') return 'timesheet';
+    if (s === 'invoices' || s === 'invoice') return 'invoice';
+    if (s === 'umbrellas' || s === 'umbrella') return 'umbrella';
+    return '';
+  };
+
+  const pluralSection = (v) => {
+    const s = trimStr(v).toLowerCase();
+    if (s === 'candidate' || s === 'candidates') return 'candidates';
+    if (s === 'client' || s === 'clients') return 'clients';
+    if (s === 'contract' || s === 'contracts') return 'contracts';
+    if (s === 'timesheet' || s === 'timesheets') return 'timesheets';
+    if (s === 'invoice' || s === 'invoices') return 'invoices';
+    if (s === 'umbrella' || s === 'umbrellas') return 'umbrellas';
+    return '';
+  };
+
+  const normalizeFiltersBySection = (sectionName, rawFilters) => {
+    const clean = clonePlain(rawFilters);
+    if (sectionName === 'candidates') return buildCandidateSummaryFilterSpec(clean);
+    if (sectionName === 'clients') return buildClientSummaryFilterSpec(clean);
+    if (sectionName === 'umbrellas') return buildUmbrellaSummaryFilterSpec(clean);
+    if (sectionName === 'contracts') return buildContractSummaryFilterSpec(clean);
+    if (sectionName === 'timesheets') return buildTimesheetSummaryFilterSpec(clean);
+    if (sectionName === 'invoices') return buildInvoiceSummaryFilterSpec(clean);
+    return clean;
+  };
+
+  const contextKindRaw = trimStr(body.context_kind || body.contextKind || body.section || '');
+  const outputTypeRaw = trimStr(body.output_type || body.outputType || '');
   const templateIdRaw = (body.document_template_id ?? body.documentTemplateId ?? body.template_id ?? body.templateId);
 
-  const contextKind = contextKindRaw.toLowerCase();
+  const contextKind = singularContextKind(contextKindRaw);
+  const sectionKey = pluralSection(body.section || contextKindRaw || contextKind);
   const outputType = outputTypeRaw.toUpperCase();
 
   if (!contextKind) return withCORS(env, req, badRequest('context_kind is required'));
   if (!outputType) return withCORS(env, req, badRequest('output_type is required'));
 
-  const allowedContext = new Set(['candidates', 'clients', 'contracts', 'timesheets', 'invoices', 'umbrellas', 'candidate', 'client', 'contract', 'timesheet', 'invoice', 'umbrella']);
+  const allowedContext = new Set(['candidate', 'client', 'contract', 'timesheet', 'invoice', 'umbrella']);
   if (!allowedContext.has(contextKind)) return withCORS(env, req, badRequest('invalid_context_kind'));
 
   const allowedOutput = new Set(['EMAIL', 'WHATSAPP', 'SMS', 'VOICE', 'WORD', 'EXCEL']);
   if (!allowedOutput.has(outputType)) return withCORS(env, req, badRequest('invalid_output_type'));
 
-  let contextIds = body.context_ids ?? body.contextIds ?? body.ids ?? body.context_id_list;
-  if (contextIds == null) contextIds = [];
-  if (typeof contextIds === 'string') {
-    try { contextIds = JSON.parse(contextIds); } catch { contextIds = null; }
-  }
-  if (!Array.isArray(contextIds) || contextIds.length === 0) {
-    return withCORS(env, req, badRequest('context_ids[] required'));
-  }
-
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-  const contextIdsTrimmed = contextIds
-    .map((x) => (x == null ? '' : String(x).trim()))
-    .filter(Boolean);
-
-  if (contextIdsTrimmed.length === 0) {
-    return withCORS(env, req, badRequest('context_ids[] required'));
-  }
-
-  const invalidContextIds = contextIdsTrimmed.filter((x) => !uuidRe.test(x));
-  if (invalidContextIds.length > 0) {
-    return withCORS(env, req, badRequest('context_ids must all be UUIDs'));
-  }
-
-  const ctxIdsClean = Array.from(new Set(contextIdsTrimmed));
-  if (ctxIdsClean.length === 0) return withCORS(env, req, badRequest('context_ids[] required'));
-
   let templateId = null;
-  if (templateIdRaw != null && String(templateIdRaw).trim()) {
-    const t = String(templateIdRaw).trim();
+  if (templateIdRaw != null && trimStr(templateIdRaw)) {
+    const t = trimStr(templateIdRaw);
     if (!uuidRe.test(t)) return withCORS(env, req, badRequest('invalid_document_template_id'));
     templateId = t;
   }
 
-  try {
-    let payload = await sbRpc(env, 'mailshot_prepare', {
-      p_context_kind: contextKind,
-      p_context_ids: ctxIdsClean,
-      p_output_type: outputType,
-      p_document_template_id: templateId,
-      p_actor_user_id: user.id
-    });
+  const makeSkippedRow = (selectedRowId, skipReason, extra = {}) => {
+    return {
+      context_id: null,
+      context_kind: contextKind,
+      entity_type: contextKind,
+      output_type: outputType,
+      document_template_id: templateId,
+      to_field_key: null,
+      to: null,
+      recipient_kind: null,
+      recipient_id: null,
+      eligible: false,
+      skip_reason: String(skipReason || 'SKIPPED'),
+      field_values: {},
+      template_content_json: {},
+      email_type: null,
+      warning_messages: [],
+      attachment_instructions: [],
+      attachments: [],
+      selected_row_id: selectedRowId == null ? null : String(selectedRowId),
+      ...extra
+    };
+  };
 
-    try {
-      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_prepare')) payload = payload.mailshot_prepare;
-    } catch {}
+  const selectionScope = (body.selection_scope && typeof body.selection_scope === 'object' && !Array.isArray(body.selection_scope))
+    ? body.selection_scope
+    : ((body.selectionScope && typeof body.selectionScope === 'object' && !Array.isArray(body.selectionScope)) ? body.selectionScope : null);
 
-    if (!(payload && typeof payload === 'object')) {
-      return withCORS(env, req, ok({ ok: true, result: payload }));
+  const legacyContextIds = (() => {
+    let contextIds = body.context_ids ?? body.contextIds ?? body.ids ?? body.context_id_list;
+    if (contextIds == null) contextIds = [];
+    if (typeof contextIds === 'string') {
+      try { contextIds = JSON.parse(contextIds); } catch { contextIds = null; }
     }
+    if (!Array.isArray(contextIds)) contextIds = [];
+    return normalizeIdArray(contextIds);
+  })();
 
-    const normalized = { ...payload };
+  const resolveContextSelection = async () => {
+    if (!selectionScope) {
+      if (legacyContextIds.length === 0) {
+        throw new Error('context_ids[] required');
+      }
 
-    normalized.context_kind = normalized.context_kind != null ? String(normalized.context_kind).trim().toLowerCase() : contextKind;
-    normalized.output_type = normalized.output_type != null ? String(normalized.output_type).trim().toUpperCase() : outputType;
-    normalized.document_template_id = normalized.document_template_id == null ? templateId : String(normalized.document_template_id);
-
-    normalized.selected_field_keys = Array.isArray(normalized.selected_field_keys)
-      ? normalized.selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
-      : [];
-
-    normalized.accepted_selected_field_keys = Array.isArray(normalized.accepted_selected_field_keys)
-      ? normalized.accepted_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
-      : normalized.selected_field_keys;
-
-    normalized.rejected_selected_field_keys = Array.isArray(normalized.rejected_selected_field_keys)
-      ? normalized.rejected_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
-      : [];
-
-    normalized.rejected_selected_field_details = Array.isArray(normalized.rejected_selected_field_details)
-      ? normalized.rejected_selected_field_details
-      : [];
-
-    normalized.warnings = Array.isArray(normalized.warnings)
-      ? normalized.warnings.map((x) => String(x == null ? '' : x)).filter((x) => x.length > 0)
-      : [];
-
-    const topLevelAttachmentInstructions = Array.isArray(normalized.attachment_instructions)
-      ? normalized.attachment_instructions
-      : (Array.isArray(normalized.attachments) ? normalized.attachments : []);
-
-    normalized.attachment_instructions = topLevelAttachmentInstructions;
-    normalized.attachments = Array.isArray(normalized.attachments)
-      ? normalized.attachments
-      : topLevelAttachmentInstructions;
-
-    normalized.rows = Array.isArray(normalized.rows) ? normalized.rows : [];
-
-    normalized.rows = normalized.rows.map((row) => {
-      const rawRow = (row && typeof row === 'object') ? row : {};
-
-      const rowAttachmentInstructions = Array.isArray(rawRow.attachment_instructions)
-        ? rawRow.attachment_instructions
-        : (Array.isArray(rawRow.attachments) ? rawRow.attachments : []);
+      const invalidContextIds = legacyContextIds.filter((x) => !uuidRe.test(x));
+      if (invalidContextIds.length > 0) {
+        throw new Error('context_ids must all be UUIDs');
+      }
 
       return {
-        ...rawRow,
-        context_id: rawRow.context_id == null ? null : String(rawRow.context_id),
-        context_kind: rawRow.context_kind != null ? String(rawRow.context_kind).trim().toLowerCase() : normalized.context_kind,
-        entity_type: rawRow.entity_type == null ? null : String(rawRow.entity_type).trim().toLowerCase(),
-        output_type: rawRow.output_type != null ? String(rawRow.output_type).trim().toUpperCase() : normalized.output_type,
-        document_template_id: rawRow.document_template_id == null ? normalized.document_template_id : String(rawRow.document_template_id),
-        to_field_key: rawRow.to_field_key == null ? null : String(rawRow.to_field_key),
-        to: rawRow.to == null ? null : String(rawRow.to),
-        recipient_kind: rawRow.recipient_kind == null ? null : String(rawRow.recipient_kind).trim().toLowerCase(),
-        recipient_id: rawRow.recipient_id == null ? null : String(rawRow.recipient_id),
-        eligible: rawRow.eligible == null ? false : !!rawRow.eligible,
-        skip_reason: rawRow.skip_reason == null ? null : String(rawRow.skip_reason),
-        field_values: rawRow.field_values && typeof rawRow.field_values === 'object' && !Array.isArray(rawRow.field_values)
-          ? rawRow.field_values
-          : {},
-        template_content_json: rawRow.template_content_json && typeof rawRow.template_content_json === 'object' && !Array.isArray(rawRow.template_content_json)
-          ? rawRow.template_content_json
-          : {},
-        email_type: rawRow.email_type == null ? null : String(rawRow.email_type).trim().toLowerCase(),
-        warning_messages: Array.isArray(rawRow.warning_messages)
-          ? rawRow.warning_messages.map((x) => String(x == null ? '' : x)).filter((x) => x.length > 0)
-          : [],
-        attachment_instructions: rowAttachmentInstructions,
-        attachments: Array.isArray(rawRow.attachments)
-          ? rawRow.attachments
-          : rowAttachmentInstructions
+        contextIds: legacyContextIds,
+        skippedRows: [],
+        selectionEcho: null,
+        selectedCountContext: null
       };
-    });
+    }
+
+    const selectionMode = trimStr(selectionScope.selection_mode || selectionScope.mode).toLowerCase() === 'all_filtered'
+      ? 'all_filtered'
+      : 'explicit';
+
+    const includedIds = normalizeIdArray(
+      Array.isArray(selectionScope.included_ids)
+        ? selectionScope.included_ids
+        : (Array.isArray(selectionScope.ids) ? selectionScope.ids : [])
+    );
+
+    const excludedIds = normalizeIdArray(
+      selectionMode === 'all_filtered' && Array.isArray(selectionScope.excluded_ids)
+        ? selectionScope.excluded_ids
+        : []
+    );
+
+    const rawFilters = clonePlain(
+      (body.effective_filters && typeof body.effective_filters === 'object' && !Array.isArray(body.effective_filters))
+        ? body.effective_filters
+        : ((selectionScope.effective_filters && typeof selectionScope.effective_filters === 'object' && !Array.isArray(selectionScope.effective_filters))
+            ? selectionScope.effective_filters
+            : ((selectionScope.filters && typeof selectionScope.filters === 'object' && !Array.isArray(selectionScope.filters))
+                ? selectionScope.filters
+                : {}))
+    );
+
+    const effectiveFilters = normalizeFiltersBySection(sectionKey, rawFilters);
+
+    const selectedCountContextRaw = (body.selected_count_context && typeof body.selected_count_context === 'object')
+      ? body.selected_count_context
+      : ((selectionScope.selected_count_context && typeof selectionScope.selected_count_context === 'object')
+          ? selectionScope.selected_count_context
+          : {});
+
+    let membershipTotal = Number(
+      selectionScope.membership_total ??
+      selectionScope.total_count ??
+      selectionScope.total ??
+      selectedCountContextRaw.membership_total
+    );
+    if (!Number.isFinite(membershipTotal) || membershipTotal < 0) membershipTotal = null;
+
+    let selectedCount = Number(
+      selectedCountContextRaw.selected_count ??
+      selectionScope.selected_count
+    );
+
+    const bulkResolved = await resolveBulkContextIdsFromSummarySelection(
+      sectionKey,
+      effectiveFilters,
+      selectionMode,
+      includedIds,
+      excludedIds,
+      env,
+      req
+    );
+
+    const summaryRowIds = normalizeIdArray(bulkResolved && bulkResolved.summary_row_ids);
+    if (!Number.isFinite(selectedCount) || selectedCount < 0) {
+      selectedCount = summaryRowIds.length;
+    }
+
+    const selectionEcho = {
+      section: sectionKey,
+      context_kind: contextKind,
+      dataset_key: trimStr(selectionScope.dataset_key || selectionScope.fingerprint || ''),
+      selection_mode: selectionMode,
+      included_ids: includedIds.slice(),
+      excluded_ids: excludedIds.slice(),
+      effective_filters: effectiveFilters
+    };
+
+    const selectedCountContext = {
+      selected_count: selectedCount,
+      selection_mode: selectionMode,
+      included_count: includedIds.length,
+      excluded_count: excludedIds.length,
+      membership_total: membershipTotal,
+      dataset_key: selectionEcho.dataset_key || null
+    };
+
+    const skippedRows = Array.isArray(bulkResolved?.skipped_rows)
+      ? bulkResolved.skipped_rows.map((row) => makeSkippedRow(row?.selected_row_id, row?.skip_reason, row && typeof row === 'object' ? row : {}))
+      : [];
+
+    return {
+      contextIds: normalizeIdArray(bulkResolved && bulkResolved.context_ids),
+      skippedRows,
+      selectionEcho,
+      selectedCountContext
+    };
+  };
+
+  try {
+    const resolved = await resolveContextSelection();
+    const ctxIdsClean = Array.from(new Set(
+      (Array.isArray(resolved.contextIds) ? resolved.contextIds : [])
+        .map((x) => trimStr(x))
+        .filter(Boolean)
+    ));
+
+    const invalidContextIds = ctxIdsClean.filter((x) => !uuidRe.test(x));
+    if (invalidContextIds.length > 0) {
+      return withCORS(env, req, badRequest('context_ids must all be UUIDs'));
+    }
+
+    let normalized = null;
+
+    if (ctxIdsClean.length > 0) {
+      let payload = await sbRpc(env, 'mailshot_prepare', {
+        p_context_kind: contextKind,
+        p_context_ids: ctxIdsClean,
+        p_output_type: outputType,
+        p_document_template_id: templateId,
+        p_actor_user_id: user.id
+      });
+
+      try {
+        if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+        if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_prepare')) payload = payload.mailshot_prepare;
+      } catch {}
+
+      if (!(payload && typeof payload === 'object')) {
+        return withCORS(env, req, ok({ ok: true, result: payload }));
+      }
+
+      normalized = { ...payload };
+
+      normalized.context_kind = normalized.context_kind != null ? singularContextKind(normalized.context_kind) || contextKind : contextKind;
+      normalized.output_type = normalized.output_type != null ? String(normalized.output_type).trim().toUpperCase() : outputType;
+      normalized.document_template_id = normalized.document_template_id == null ? templateId : String(normalized.document_template_id);
+
+      normalized.selected_field_keys = Array.isArray(normalized.selected_field_keys)
+        ? normalized.selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+        : [];
+
+      normalized.accepted_selected_field_keys = Array.isArray(normalized.accepted_selected_field_keys)
+        ? normalized.accepted_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+        : normalized.selected_field_keys;
+
+      normalized.rejected_selected_field_keys = Array.isArray(normalized.rejected_selected_field_keys)
+        ? normalized.rejected_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+        : [];
+
+      normalized.rejected_selected_field_details = Array.isArray(normalized.rejected_selected_field_details)
+        ? normalized.rejected_selected_field_details
+        : [];
+
+      normalized.warnings = Array.isArray(normalized.warnings)
+        ? normalized.warnings.map((x) => String(x == null ? '' : x)).filter((x) => x.length > 0)
+        : [];
+
+      const topLevelAttachmentInstructions = Array.isArray(normalized.attachment_instructions)
+        ? normalized.attachment_instructions
+        : (Array.isArray(normalized.attachments) ? normalized.attachments : []);
+
+      normalized.attachment_instructions = topLevelAttachmentInstructions;
+      normalized.attachments = Array.isArray(normalized.attachments)
+        ? normalized.attachments
+        : topLevelAttachmentInstructions;
+
+      normalized.rows = Array.isArray(normalized.rows) ? normalized.rows : [];
+
+      normalized.rows = normalized.rows.map((row) => {
+        const rawRow = (row && typeof row === 'object') ? row : {};
+
+        const rowAttachmentInstructions = Array.isArray(rawRow.attachment_instructions)
+          ? rawRow.attachment_instructions
+          : (Array.isArray(rawRow.attachments) ? rawRow.attachments : []);
+
+        return {
+          ...rawRow,
+          context_id: rawRow.context_id == null ? null : String(rawRow.context_id),
+          context_kind: rawRow.context_kind != null ? singularContextKind(rawRow.context_kind) || normalized.context_kind : normalized.context_kind,
+          entity_type: rawRow.entity_type == null ? null : String(rawRow.entity_type).trim().toLowerCase(),
+          output_type: rawRow.output_type != null ? String(rawRow.output_type).trim().toUpperCase() : normalized.output_type,
+          document_template_id: rawRow.document_template_id == null ? normalized.document_template_id : String(rawRow.document_template_id),
+          to_field_key: rawRow.to_field_key == null ? null : String(rawRow.to_field_key),
+          to: rawRow.to == null ? null : String(rawRow.to),
+          recipient_kind: rawRow.recipient_kind == null ? null : String(rawRow.recipient_kind).trim().toLowerCase(),
+          recipient_id: rawRow.recipient_id == null ? null : String(rawRow.recipient_id),
+          eligible: rawRow.eligible == null ? false : !!rawRow.eligible,
+          skip_reason: rawRow.skip_reason == null ? null : String(rawRow.skip_reason),
+          field_values: rawRow.field_values && typeof rawRow.field_values === 'object' && !Array.isArray(rawRow.field_values)
+            ? rawRow.field_values
+            : {},
+          template_content_json: rawRow.template_content_json && typeof rawRow.template_content_json === 'object' && !Array.isArray(rawRow.template_content_json)
+            ? rawRow.template_content_json
+            : {},
+          email_type: rawRow.email_type == null ? null : String(rawRow.email_type).trim().toLowerCase(),
+          warning_messages: normalizeWarnings(rawRow.warning_messages),
+          attachment_instructions: rowAttachmentInstructions,
+          attachments: Array.isArray(rawRow.attachments)
+            ? rawRow.attachments
+            : rowAttachmentInstructions,
+          selected_row_id: rawRow.selected_row_id == null ? null : String(rawRow.selected_row_id)
+        };
+      });
+    } else {
+      normalized = {
+        context_kind: contextKind,
+        output_type: outputType,
+        document_template_id: templateId,
+        selected_field_keys: [],
+        accepted_selected_field_keys: [],
+        rejected_selected_field_keys: [],
+        rejected_selected_field_details: [],
+        warnings: [],
+        attachment_instructions: [],
+        attachments: [],
+        rows: []
+      };
+    }
+
+    const skippedRows = Array.isArray(resolved.skippedRows) ? resolved.skippedRows : [];
+    if (skippedRows.length) {
+      normalized.rows = Array.isArray(normalized.rows) ? normalized.rows.concat(skippedRows) : skippedRows.slice();
+    }
+
+    if (resolved.selectionEcho) {
+      normalized.selection_scope = resolved.selectionEcho;
+    }
+    if (resolved.selectedCountContext) {
+      normalized.selected_count_context = resolved.selectedCountContext;
+    }
+
+    const eligibleCount = Array.isArray(normalized.rows)
+      ? normalized.rows.filter((row) => !!(row && row.eligible)).length
+      : 0;
+    const skippedCount = Array.isArray(normalized.rows)
+      ? normalized.rows.filter((row) => !(row && row.eligible)).length
+      : 0;
+
+    normalized.eligible_count = eligibleCount;
+    normalized.skipped_count = skippedCount;
 
     return withCORS(env, req, ok(normalized));
   } catch (e) {
@@ -53768,6 +55543,8 @@ async function handleMailshotPrepare(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
+
+
 
 async function handleMailshotExport(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -56397,6 +58174,686 @@ function buildCORSHeaders(env, reqOrigin) {
   return h;
 }
 
+function buildCandidateSummaryFilterSpec(input = {}) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+
+  const normalizeUpperTokenArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .flatMap(v => String(v == null ? '' : v).split(','))
+      .map(v => trimStr(v).toUpperCase())
+      .filter(Boolean)
+  ));
+
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const getOne = (key) => {
+    if (input && typeof input.get === 'function') {
+      const v = input.get(key);
+      return v == null ? null : String(v);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      if (Object.prototype.hasOwnProperty.call(input, key)) return input[key];
+    }
+    return null;
+  };
+
+  const getAll = (key) => {
+    if (input && typeof input.getAll === 'function') {
+      return input.getAll(key);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      const v = input[key];
+      if (Array.isArray(v)) return v;
+      if (v == null) return [];
+      if (typeof v === 'string' && v.includes(',')) return v.split(',').map(s => s.trim()).filter(Boolean);
+      return [v];
+    }
+    return [];
+  };
+
+  const firstName = trimStr(getOne('first_name')) || null;
+  const lastName = trimStr(getOne('last_name')) || null;
+  const email = trimStr(getOne('email')) || null;
+  const phone = trimStr(getOne('phone')) || null;
+  const notes = trimStr(getOne('notes')) || null;
+
+  const payMethodRaw = trimStr(getOne('pay_method')) || null;
+  const payMethod = payMethodRaw ? payMethodRaw.toUpperCase() : null;
+
+  const activeRaw = trimStr(getOne('active')) || null;
+  const active = activeRaw ? activeRaw.toLowerCase() : null;
+
+  const createdFrom = trimStr(getOne('created_from')) || null;
+  const createdTo = trimStr(getOne('created_to')) || null;
+  const updatedFrom = trimStr(getOne('updated_from')) || null;
+  const updatedTo = trimStr(getOne('updated_to')) || null;
+
+  const jobTitleContains = trimStr(getOne('job_title_contains')) || null;
+  const primaryJobTitleContains = trimStr(getOne('primary_job_title_contains')) || null;
+
+  const profRegNumber = trimStr(getOne('prof_reg_number')) || null;
+  const profRegTypeRaw = trimStr(getOne('prof_reg_type')) || null;
+  const profRegType = profRegTypeRaw ? profRegTypeRaw.toUpperCase() : null;
+
+  const dob = trimStr(getOne('dob')) || null;
+  const gender = trimStr(getOne('gender')) || null;
+  const townCity = trimStr(getOne('town_city')) || null;
+  const postcode = trimStr(getOne('postcode')) || null;
+
+  const sortCode = trimStr(getOne('sort_code')) || null;
+  const accountNumber = trimStr(getOne('account_number')) || null;
+  const umbrellaName = trimStr(getOne('umbrella_name')) || null;
+  const tmsRef = trimStr(getOne('tms_ref')) || null;
+
+  const qText = trimStr(getOne('q') || getOne('name')) || null;
+
+  const workStatusRaw = trimStr(getOne('work_status')) || null;
+  const workStatus = (workStatusRaw && workStatusRaw.toUpperCase() !== 'ALL') ? workStatusRaw.toUpperCase() : null;
+
+  const recentMonthsRaw = trimStr(getOne('recent_months')) || null;
+  const recentMonths = recentMonthsRaw ? recentMonthsRaw.toUpperCase() : null;
+
+  const idExpr = trimStr(getOne('id')) || null;
+  const idsCsv = trimStr(getOne('ids')) || null;
+
+  let ids = [];
+  if (idExpr && /^in\.\(.+\)$/.test(idExpr)) {
+    const inner = idExpr.slice(4, -1);
+    ids = normalizeIdArray(inner.split(','));
+  } else if (idsCsv) {
+    ids = normalizeIdArray(idsCsv.split(','));
+  } else {
+    ids = normalizeIdArray(getAll('ids'));
+  }
+
+  const rolesAny = normalizeUpperTokenArray(getAll('roles_any'));
+  const rolesAll = normalizeUpperTokenArray(getAll('roles_all'));
+
+  const out = {};
+  if (firstName) out.first_name = firstName;
+  if (lastName) out.last_name = lastName;
+  if (email) out.email = email;
+  if (phone) out.phone = phone;
+  if (notes) out.notes = notes;
+  if (payMethod) out.pay_method = payMethod;
+  if (active) out.active = active;
+  if (createdFrom) out.created_from = createdFrom;
+  if (createdTo) out.created_to = createdTo;
+  if (updatedFrom) out.updated_from = updatedFrom;
+  if (updatedTo) out.updated_to = updatedTo;
+  if (jobTitleContains) out.job_title_contains = jobTitleContains;
+  if (primaryJobTitleContains) out.primary_job_title_contains = primaryJobTitleContains;
+  if (profRegNumber) out.prof_reg_number = profRegNumber;
+  if (profRegType) out.prof_reg_type = profRegType;
+  if (dob) out.dob = dob;
+  if (gender) out.gender = gender;
+  if (townCity) out.town_city = townCity;
+  if (postcode) out.postcode = postcode;
+  if (sortCode) out.sort_code = sortCode;
+  if (accountNumber) out.account_number = accountNumber;
+  if (umbrellaName) out.umbrella_name = umbrellaName;
+  if (tmsRef) out.tms_ref = tmsRef;
+  if (qText) out.q = qText;
+  if (workStatus) out.work_status = workStatus;
+  if (recentMonths) out.recent_months = recentMonths;
+  if (ids.length) out.ids = ids;
+  if (rolesAny.length) out.roles_any = rolesAny;
+  if (rolesAll.length) out.roles_all = rolesAll;
+
+  return clonePlain(out);
+}
+
+function buildClientSummaryFilterSpec(input = {}) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const getOne = (key) => {
+    if (input && typeof input.get === 'function') {
+      const v = input.get(key);
+      return v == null ? null : String(v);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      if (Object.prototype.hasOwnProperty.call(input, key)) return input[key];
+    }
+    return null;
+  };
+
+  const getAll = (key) => {
+    if (input && typeof input.getAll === 'function') {
+      return input.getAll(key);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      const v = input[key];
+      if (Array.isArray(v)) return v;
+      if (v == null) return [];
+      if (typeof v === 'string' && v.includes(',')) return v.split(',').map(s => s.trim()).filter(Boolean);
+      return [v];
+    }
+    return [];
+  };
+
+  const text = trimStr(getOne('q') || getOne('name')) || null;
+  const cliRef = trimStr(getOne('cli_ref')) || null;
+  const primaryInvoiceEmail = trimStr(getOne('primary_invoice_email')) || null;
+  const invoiceAddress = trimStr(getOne('invoice_address')) || null;
+  const postcode = trimStr(getOne('postcode')) || null;
+  const apPhone = trimStr(getOne('ap_phone')) || null;
+  const vatChargeable = trimStr(getOne('vat_chargeable')) || null;
+  const paymentTermsDays = trimStr(getOne('payment_terms_days')) || null;
+  const mileageChargeRate = trimStr(getOne('mileage_charge_rate')) || null;
+  const tsQueriesEmail = trimStr(getOne('ts_queries_email')) || null;
+  const createdFrom = trimStr(getOne('created_from')) || null;
+  const createdTo = trimStr(getOne('created_to')) || null;
+  const updatedFrom = trimStr(getOne('updated_from')) || null;
+  const updatedTo = trimStr(getOne('updated_to')) || null;
+  const notes = trimStr(getOne('notes')) || null;
+
+  const idExpr = trimStr(getOne('id')) || null;
+  const idsCsv = trimStr(getOne('ids')) || null;
+
+  let ids = [];
+  if (idExpr && /^in\.\(.+\)$/.test(idExpr)) {
+    const inner = idExpr.slice(4, -1);
+    ids = normalizeIdArray(inner.split(','));
+  } else if (idsCsv) {
+    ids = normalizeIdArray(idsCsv.split(','));
+  } else {
+    ids = normalizeIdArray(getAll('ids'));
+  }
+
+  const out = {};
+  if (text) out.q = text;
+  if (cliRef) out.cli_ref = cliRef;
+  if (primaryInvoiceEmail) out.primary_invoice_email = primaryInvoiceEmail;
+  if (invoiceAddress) out.invoice_address = invoiceAddress;
+  if (postcode) out.postcode = postcode;
+  if (apPhone) out.ap_phone = apPhone;
+  if (vatChargeable) out.vat_chargeable = vatChargeable.toLowerCase();
+  if (paymentTermsDays) out.payment_terms_days = paymentTermsDays;
+  if (mileageChargeRate) out.mileage_charge_rate = mileageChargeRate;
+  if (tsQueriesEmail) out.ts_queries_email = tsQueriesEmail;
+  if (createdFrom) out.created_from = createdFrom;
+  if (createdTo) out.created_to = createdTo;
+  if (updatedFrom) out.updated_from = updatedFrom;
+  if (updatedTo) out.updated_to = updatedTo;
+  if (notes) out.notes = notes;
+  if (ids.length) out.ids = ids;
+
+  return clonePlain(out);
+}
+
+function buildUmbrellaSummaryFilterSpec(input = {}) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const getOne = (key) => {
+    if (input && typeof input.get === 'function') {
+      const v = input.get(key);
+      return v == null ? null : String(v);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      if (Object.prototype.hasOwnProperty.call(input, key)) return input[key];
+    }
+    return null;
+  };
+
+  const getAll = (key) => {
+    if (input && typeof input.getAll === 'function') {
+      return input.getAll(key);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      const v = input[key];
+      if (Array.isArray(v)) return v;
+      if (v == null) return [];
+      if (typeof v === 'string' && v.includes(',')) return v.split(',').map(s => s.trim()).filter(Boolean);
+      return [v];
+    }
+    return [];
+  };
+
+  const text = trimStr(getOne('q') || getOne('name')) || null;
+  const bankName = trimStr(getOne('bank_name')) || null;
+  const sortCode = trimStr(getOne('sort_code')) || null;
+  const accountNumber = trimStr(getOne('account_number')) || null;
+  const enabled = trimStr(getOne('enabled')) || null;
+  const vatChargeable = trimStr(getOne('vat_chargeable')) || null;
+  const createdFrom = trimStr(getOne('created_from')) || null;
+  const createdTo = trimStr(getOne('created_to')) || null;
+
+  const idExpr = trimStr(getOne('id')) || null;
+  const idsCsv = trimStr(getOne('ids')) || null;
+
+  let ids = [];
+  if (idExpr && /^in\.\(.+\)$/.test(idExpr)) {
+    const inner = idExpr.slice(4, -1);
+    ids = normalizeIdArray(inner.split(','));
+  } else if (idsCsv) {
+    ids = normalizeIdArray(idsCsv.split(','));
+  } else {
+    ids = normalizeIdArray(getAll('ids'));
+  }
+
+  const out = {};
+  if (text) out.q = text;
+  if (bankName) out.bank_name = bankName;
+  if (sortCode) out.sort_code = sortCode;
+  if (accountNumber) out.account_number = accountNumber;
+  if (enabled) out.enabled = enabled.toLowerCase();
+  if (vatChargeable) out.vat_chargeable = vatChargeable.toLowerCase();
+  if (createdFrom) out.created_from = createdFrom;
+  if (createdTo) out.created_to = createdTo;
+  if (ids.length) out.ids = ids;
+
+  return clonePlain(out);
+}
+
+function buildContractSummaryFilterSpec(input = {}) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const getOne = (key) => {
+    if (input && typeof input.get === 'function') {
+      const v = input.get(key);
+      return v == null ? null : String(v);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      if (Object.prototype.hasOwnProperty.call(input, key)) return input[key];
+    }
+    return null;
+  };
+
+  const getAll = (key) => {
+    if (input && typeof input.getAll === 'function') {
+      return input.getAll(key);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      const v = input[key];
+      if (Array.isArray(v)) return v;
+      if (v == null) return [];
+      if (typeof v === 'string' && v.includes(',')) return v.split(',').map(s => s.trim()).filter(Boolean);
+      return [v];
+    }
+    return [];
+  };
+
+  const candidateId = trimStr(getOne('candidate_id')) || null;
+  const clientId = trimStr(getOne('client_id')) || null;
+  const payMethodSnapshotRaw = trimStr(getOne('pay_method_snapshot')) || null;
+  const payMethodSnapshot = payMethodSnapshotRaw ? payMethodSnapshotRaw.toUpperCase() : null;
+  const role = trimStr(getOne('role')) || null;
+  const band = trimStr(getOne('band')) || null;
+  const candidateName = trimStr(getOne('candidate_name')) || null;
+  const clientName = trimStr(getOne('client_name')) || null;
+  const activeOn = trimStr(getOne('active_on')) || null;
+  const autoInvoice = trimStr(getOne('auto_invoice')) || null;
+  const quickText = trimStr(getOne('q')) || null;
+
+  const submissionModeRaw = trimStr(getOne('default_submission_mode') || getOne('submission_mode')) || null;
+  const submissionMode = submissionModeRaw ? submissionModeRaw.toUpperCase() : null;
+
+  const weekEndingWeekdaySnapshot = trimStr(getOne('week_ending_weekday_snapshot')) || null;
+  const requireReferenceToPay = trimStr(getOne('require_reference_to_pay')) || null;
+  const requireReferenceToInvoice = trimStr(getOne('require_reference_to_invoice')) || null;
+  const hasCustomLabels = trimStr(getOne('has_custom_labels')) || null;
+
+  const createdFrom = trimStr(getOne('created_from')) || null;
+  const createdTo = trimStr(getOne('created_to')) || null;
+  const updatedFrom = trimStr(getOne('updated_from')) || null;
+  const updatedTo = trimStr(getOne('updated_to')) || null;
+  const startDateFrom = trimStr(getOne('start_date_from')) || null;
+  const startDateTo = trimStr(getOne('start_date_to')) || null;
+  const endDateFrom = trimStr(getOne('end_date_from')) || null;
+  const endDateTo = trimStr(getOne('end_date_to')) || null;
+  const mileagePayRate = trimStr(getOne('mileage_pay_rate')) || null;
+  const mileageChargeRate = trimStr(getOne('mileage_charge_rate')) || null;
+  const statusRaw = trimStr(getOne('status')) || null;
+  const status = statusRaw ? statusRaw.toLowerCase() : null;
+
+  const idExpr = trimStr(getOne('id')) || null;
+  const idsCsv = trimStr(getOne('ids')) || null;
+
+  let ids = [];
+  if (idExpr && /^in\.\(.+\)$/.test(idExpr)) {
+    const inner = idExpr.slice(4, -1);
+    ids = normalizeIdArray(inner.split(','));
+  } else if (idsCsv) {
+    ids = normalizeIdArray(idsCsv.split(','));
+  } else {
+    ids = normalizeIdArray(getAll('ids'));
+  }
+
+  const out = {};
+  if (candidateId) out.candidate_id = candidateId;
+  if (clientId) out.client_id = clientId;
+  if (payMethodSnapshot) out.pay_method_snapshot = payMethodSnapshot;
+  if (role) out.role = role;
+  if (band) out.band = band;
+  if (candidateName) out.candidate_name = candidateName;
+  if (clientName) out.client_name = clientName;
+  if (activeOn) out.active_on = activeOn;
+  if (autoInvoice) out.auto_invoice = autoInvoice.toLowerCase();
+  if (quickText) out.q = quickText;
+  if (submissionMode) out.default_submission_mode = submissionMode;
+  if (weekEndingWeekdaySnapshot) out.week_ending_weekday_snapshot = weekEndingWeekdaySnapshot;
+  if (requireReferenceToPay) out.require_reference_to_pay = requireReferenceToPay.toLowerCase();
+  if (requireReferenceToInvoice) out.require_reference_to_invoice = requireReferenceToInvoice.toLowerCase();
+  if (hasCustomLabels) out.has_custom_labels = hasCustomLabels.toLowerCase();
+  if (createdFrom) out.created_from = createdFrom;
+  if (createdTo) out.created_to = createdTo;
+  if (updatedFrom) out.updated_from = updatedFrom;
+  if (updatedTo) out.updated_to = updatedTo;
+  if (startDateFrom) out.start_date_from = startDateFrom;
+  if (startDateTo) out.start_date_to = startDateTo;
+  if (endDateFrom) out.end_date_from = endDateFrom;
+  if (endDateTo) out.end_date_to = endDateTo;
+  if (mileagePayRate) out.mileage_pay_rate = mileagePayRate;
+  if (mileageChargeRate) out.mileage_charge_rate = mileageChargeRate;
+  if (status) out.status = status;
+  if (ids.length) out.ids = ids;
+
+  return clonePlain(out);
+}
+
+function buildTimesheetSummaryFilterSpec(input = {}) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const getOne = (key) => {
+    if (input && typeof input.get === 'function') {
+      const v = input.get(key);
+      return v == null ? null : String(v);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      if (Object.prototype.hasOwnProperty.call(input, key)) return input[key];
+    }
+    return null;
+  };
+
+  const getAll = (key) => {
+    if (input && typeof input.getAll === 'function') {
+      return input.getAll(key);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      const v = input[key];
+      if (Array.isArray(v)) return v;
+      if (v == null) return [];
+      if (typeof v === 'string' && v.includes(',')) return v.split(',').map(s => s.trim()).filter(Boolean);
+      return [v];
+    }
+    return [];
+  };
+
+  const clientId = trimStr(getOne('client_id')) || null;
+  const candidateId = trimStr(getOne('candidate_id')) || null;
+  const quickText = trimStr(getOne('q') || getOne('name')) || null;
+
+  const idExpr = trimStr(getOne('id')) || null;
+  const idsCsv = trimStr(getOne('ids')) || null;
+
+  let ids = [];
+  if (idExpr && /^in\.\(.+\)$/.test(idExpr)) {
+    const inner = idExpr.slice(4, -1);
+    ids = normalizeIdArray(inner.split(','));
+  } else if (idsCsv) {
+    ids = normalizeIdArray(idsCsv.split(','));
+  } else {
+    ids = normalizeIdArray(getAll('ids'));
+  }
+
+  const toolsStageRaw = trimStr(getOne('tools_stage')) || null;
+  const toolsStage = (toolsStageRaw && toolsStageRaw.toUpperCase() !== 'ALL') ? toolsStageRaw.toUpperCase() : null;
+
+  const routeTypeRaw = trimStr(getOne('route_type')) || null;
+  const routeType = (routeTypeRaw && routeTypeRaw.toUpperCase() !== 'ALL') ? routeTypeRaw.toUpperCase() : null;
+
+  const sheetScopeRaw = trimStr(getOne('sheet_scope')) || null;
+  const sheetScope = (sheetScopeRaw && sheetScopeRaw.toUpperCase() !== 'ALL') ? sheetScopeRaw.toUpperCase() : null;
+
+  const qrStatusRaw = trimStr(getOne('qr_status')) || null;
+  const qrStatus = qrStatusRaw ? qrStatusRaw.toUpperCase() : null;
+
+  const candidatePaid = trimStr(getOne('candidate_paid')) || null;
+  const isAdjusted = trimStr(getOne('is_adjusted')) || null;
+  const isQr = trimStr(getOne('is_qr')) || null;
+
+  const issuesFilterRaw = trimStr(getOne('issues_filter')) || null;
+  const issuesFilterUp = issuesFilterRaw ? issuesFilterRaw.toUpperCase() : null;
+
+  const statusCodeRaw = trimStr(getOne('status_code')) || null;
+  const statusCodeUp = statusCodeRaw ? statusCodeRaw.toUpperCase() : null;
+
+  const hrIssueRaw = trimStr(getOne('hr_issue')) || null;
+  const hrIssue = hrIssueRaw ? hrIssueRaw.toUpperCase() : null;
+
+  const weekEndingFrom = trimStr(getOne('week_ending_from')) || null;
+  const weekEndingTo = trimStr(getOne('week_ending_to')) || null;
+
+  let effectiveIssues = issuesFilterUp;
+  if ((!effectiveIssues || effectiveIssues === 'ALL') && statusCodeUp && statusCodeUp !== 'ALL') {
+    if (statusCodeUp === 'NO_MATCH_ID') effectiveIssues = 'NO_MATCH_ID';
+    else if (statusCodeUp === 'RATE_MISSING') effectiveIssues = 'RATE_MISSING';
+    else if (statusCodeUp === 'PAY_CHAN_MISS') effectiveIssues = 'PAY_CHAN_MISS';
+    else if (statusCodeUp === 'READY_FOR_HR') effectiveIssues = 'AWAITING_HR_VALIDATION';
+    else if (statusCodeUp === 'HR_HOURS_MISMATCH') effectiveIssues = 'HR_HOURS_MISMATCH';
+  }
+  if (effectiveIssues === 'ALL') effectiveIssues = null;
+
+  const out = {};
+  if (clientId) out.client_id = clientId;
+  if (candidateId) out.candidate_id = candidateId;
+  if (quickText) out.q = quickText;
+  if (ids.length) out.ids = ids;
+  if (toolsStage) out.tools_stage = toolsStage;
+  if (effectiveIssues) out.issues_filter = effectiveIssues;
+  if (candidatePaid) out.candidate_paid = candidatePaid.toLowerCase();
+  if (isAdjusted) out.is_adjusted = isAdjusted.toLowerCase();
+  if (routeType) out.route_type = routeType;
+  if (sheetScope) out.sheet_scope = sheetScope;
+  if (qrStatus) out.qr_status = qrStatus;
+  if (weekEndingFrom) out.week_ending_from = weekEndingFrom;
+  if (weekEndingTo) out.week_ending_to = weekEndingTo;
+  if (isQr) out.is_qr = isQr.toLowerCase();
+  if (hrIssue) out.hr_issue = hrIssue;
+
+  return clonePlain(out);
+}
+
+function buildInvoiceSummaryFilterSpec(input = {}) {
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const getOne = (key) => {
+    if (input && typeof input.get === 'function') {
+      const v = input.get(key);
+      return v == null ? null : String(v);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      if (Object.prototype.hasOwnProperty.call(input, key)) return input[key];
+    }
+    return null;
+  };
+
+  const getAll = (key) => {
+    if (input && typeof input.getAll === 'function') {
+      return input.getAll(key);
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      const v = input[key];
+      if (Array.isArray(v)) return v;
+      if (v == null) return [];
+      if (typeof v === 'string' && v.includes(',')) return v.split(',').map(s => s.trim()).filter(Boolean);
+      return [v];
+    }
+    return [];
+  };
+
+  const clientId = trimStr(getOne('client_id')) || null;
+  const quickText = trimStr(getOne('q')) || null;
+
+  const issuedFrom = trimStr(getOne('issued_from')) || null;
+  const issuedTo = trimStr(getOne('issued_to')) || null;
+  const dueFrom = trimStr(getOne('due_from')) || null;
+  const dueTo = trimStr(getOne('due_to')) || null;
+  const createdFrom = trimStr(getOne('created_from')) || null;
+  const createdTo = trimStr(getOne('created_to')) || null;
+  const weekEndingFrom = trimStr(getOne('week_ending_from')) || null;
+  const weekEndingTo = trimStr(getOne('week_ending_to')) || null;
+
+  const rawStatuses = getAll('status')
+    .flatMap(v => String(v == null ? '' : v).split(','))
+    .map(v => trimStr(v))
+    .filter(Boolean);
+
+  let status = null;
+  if (rawStatuses.length === 1) {
+    const one = rawStatuses[0].toLowerCase();
+    if (one === 'paid' || one === 'unpaid') {
+      status = [one];
+    }
+  }
+  if (!status && rawStatuses.length) {
+    const allowed = new Set(['DRAFT', 'ISSUED', 'ON_HOLD', 'PAID']);
+    const normalized = Array.from(new Set(
+      rawStatuses
+        .map(v => v.toUpperCase())
+        .filter(v => allowed.has(v))
+    ));
+    if (normalized.length) status = normalized;
+  }
+
+  const idsCsv = trimStr(getOne('ids')) || null;
+  let ids = [];
+  if (idsCsv) {
+    ids = normalizeIdArray(idsCsv.split(','));
+  } else {
+    ids = normalizeIdArray(getAll('ids'));
+  }
+
+  const out = {};
+  if (clientId) out.client_id = clientId;
+  if (status && status.length) out.status = status;
+  if (quickText) out.q = quickText;
+  if (issuedFrom) out.issued_from = issuedFrom;
+  if (issuedTo) out.issued_to = issuedTo;
+  if (dueFrom) out.due_from = dueFrom;
+  if (dueTo) out.due_to = dueTo;
+  if (createdFrom) out.created_from = createdFrom;
+  if (createdTo) out.created_to = createdTo;
+  if (weekEndingFrom) out.week_ending_from = weekEndingFrom;
+  if (weekEndingTo) out.week_ending_to = weekEndingTo;
+  if (ids.length) out.ids = ids;
+
+  return clonePlain(out);
+}
+
+
 function withCORS(env, req, res) {
   const origin = req.headers.get("origin");
   const headers = buildCORSHeaders(env, origin);
@@ -58447,6 +60904,203 @@ async function handleUpload(env, req, url) {
   });
   const size = contentLength || undefined;
   return withCORS(env, req, ok({ ok: true, role, key, etag: putRes?.etag, size, version }));
+}
+
+async function handleSummaryMembership(env, req, section) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+  const normalizeValue = (value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+
+    if (Array.isArray(value)) {
+      const arr = value
+        .map(normalizeValue)
+        .filter(v => v !== undefined)
+        .map(v => (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v);
+
+      return arr.sort((a, b) => {
+        const aa = JSON.stringify(a);
+        const bb = JSON.stringify(b);
+        if (aa < bb) return -1;
+        if (aa > bb) return 1;
+        return 0;
+      });
+    }
+
+    if (value && typeof value === 'object') {
+      const out = {};
+      Object.keys(value).sort().forEach((key) => {
+        const v = normalizeValue(value[key]);
+        if (v !== undefined) out[key] = v;
+      });
+      return out;
+    }
+
+    if (typeof value === 'number' && !Number.isFinite(value)) return null;
+    return value;
+  };
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map(v => trimStr(v))
+      .filter(Boolean)
+  ));
+  const buildQueryString = (params) => {
+    const usp = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value == null) return;
+
+      if (Array.isArray(value)) {
+        if (key === 'ids') {
+          const csv = value.map(v => trimStr(v)).filter(Boolean).join(',');
+          if (csv) usp.set(key, csv);
+          return;
+        }
+        value.forEach((vv) => {
+          const s = trimStr(vv);
+          if (!s) return;
+          usp.append(key, s);
+        });
+        return;
+      }
+
+      const s = trimStr(value);
+      if (!s) return;
+      usp.set(key, s);
+    });
+    return usp.toString();
+  };
+  const invokeJsonHandler = async (path, params) => {
+    const base = new URL(req.url);
+    const qs = buildQueryString(params || {});
+    const internalReq = new Request(`${base.origin}${path}${qs ? `?${qs}` : ''}`, {
+      method: 'GET',
+      headers: req.headers
+    });
+
+    let resp = null;
+    if (path === '/api/search/candidates') resp = await handleSearchCandidates(env, internalReq);
+    else if (path === '/api/search/clients') resp = await handleSearchClients(env, internalReq);
+    else if (path === '/api/search/umbrellas') resp = await handleSearchUmbrellas(env, internalReq);
+    else if (path === '/api/contracts') resp = await handleContractsList(env, internalReq);
+    else if (path === '/api/timesheets/summary') resp = await handleTimesheetsSummary(env, internalReq);
+    else if (path === '/api/invoices') resp = await handleListInvoices(env, internalReq);
+    else throw new Error(`Unsupported summary membership path: ${path}`);
+
+    let payload = null;
+    try { payload = await resp.clone().json(); } catch { payload = null; }
+
+    if (!resp.ok) {
+      const msg =
+        (payload && typeof payload === 'object' && (payload.error || payload.message))
+          ? String(payload.error || payload.message)
+          : `Internal handler failed (${resp.status})`;
+      throw new Error(msg);
+    }
+
+    if (payload && typeof payload === 'object' && !Array.isArray(payload) && (payload.error || payload.message)) {
+      throw new Error(String(payload.error || payload.message));
+    }
+
+    return payload;
+  };
+
+  const allowedSections = new Set(['candidates', 'clients', 'umbrellas', 'contracts', 'timesheets', 'invoices']);
+  const rawSection =
+    trimStr(section) ||
+    trimStr(body && (body.section || body.entity || body.context_kind)) ||
+    (() => {
+      try {
+        const parts = new URL(req.url).pathname.split('/').filter(Boolean);
+        return trimStr(parts[parts.length - 1]);
+      } catch {
+        return '';
+      }
+    })();
+
+  const sectionKey = rawSection.toLowerCase();
+  if (!allowedSections.has(sectionKey)) {
+    return withCORS(env, req, badRequest('invalid_section'));
+  }
+
+  const rawFilters = clonePlain(
+    (body && body.effective_filters && typeof body.effective_filters === 'object' && !Array.isArray(body.effective_filters))
+      ? body.effective_filters
+      : ((body && body.filters && typeof body.filters === 'object' && !Array.isArray(body.filters))
+          ? body.filters
+          : {})
+  );
+
+  let effectiveFilters = clonePlain(rawFilters);
+  if (sectionKey === 'candidates') effectiveFilters = buildCandidateSummaryFilterSpec(rawFilters);
+  if (sectionKey === 'clients') effectiveFilters = buildClientSummaryFilterSpec(rawFilters);
+  if (sectionKey === 'umbrellas') effectiveFilters = buildUmbrellaSummaryFilterSpec(rawFilters);
+  if (sectionKey === 'contracts') effectiveFilters = buildContractSummaryFilterSpec(rawFilters);
+  if (sectionKey === 'timesheets') effectiveFilters = buildTimesheetSummaryFilterSpec(rawFilters);
+  if (sectionKey === 'invoices') effectiveFilters = buildInvoiceSummaryFilterSpec(rawFilters);
+
+  if (Object.prototype.hasOwnProperty.call(effectiveFilters, 'ids')) {
+    effectiveFilters.ids = normalizeIdArray(effectiveFilters.ids);
+    if (!effectiveFilters.ids.length) delete effectiveFilters.ids;
+  }
+
+  const datasetKey = JSON.stringify({
+    section: sectionKey,
+    filters: normalizeValue(effectiveFilters) || {}
+  });
+
+  try {
+    const pathMap = {
+      candidates: '/api/search/candidates',
+      clients: '/api/search/clients',
+      umbrellas: '/api/search/umbrellas',
+      contracts: '/api/contracts',
+      timesheets: '/api/timesheets/summary',
+      invoices: '/api/invoices'
+    };
+
+    const payload = await invokeJsonHandler(pathMap[sectionKey], {
+      ...clonePlain(effectiveFilters),
+      format: 'membership'
+    });
+
+    const rowIds = normalizeIdArray(
+      Array.isArray(payload && payload.row_ids)
+        ? payload.row_ids
+        : (Array.isArray(payload && payload.ids) ? payload.ids : [])
+    );
+
+    const countRaw = Number(payload && (payload.total_count ?? payload.total ?? payload.count ?? rowIds.length));
+    const totalCount = Number.isFinite(countRaw) ? countRaw : rowIds.length;
+
+    return withCORS(env, req, ok({
+      section: sectionKey,
+      dataset_key: datasetKey,
+      row_ids: rowIds,
+      ids: rowIds.slice(),
+      total_count: totalCount,
+      total: totalCount
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'SUMMARY_MEMBERSHIP_FAILED')));
+  }
 }
 
 
@@ -63587,6 +66241,8 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // Add pass-through support for PostgREST 'id=in.(...)' filter
 // ======================================
 
+
+
 async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -63594,106 +66250,70 @@ async function handleSearchCandidates(env, req) {
   const enc = encodeURIComponent;
 
   const urlObj = new URL(req.url);
-  const q  = (k) => urlObj.searchParams.get(k);
-  const qa = (k) => urlObj.searchParams.getAll(k);
+  const q = (k) => urlObj.searchParams.get(k);
 
-  const page     = Math.max(1, parseInt(q('page') || '1', 10));
+  const page = Math.max(1, parseInt(q('page') || '1', 10));
   const pageSize = Math.max(1, Math.min(200, parseInt(q('page_size') || '50', 10)));
-  const format   = (q('format') || 'json').toLowerCase();
+  const format = (q('format') || 'json').toLowerCase();
 
-  // ✅ include_count support (exact totals for pagination)
   const includeCount = String(q('include_count') || 'false').toLowerCase() === 'true';
 
-  // Sorting
-  const orderByParam  = (q('order_by') || '').toLowerCase();
+  const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
 
   const allowedSort = {
     display_name: 'display_name',
-    first_name:   'first_name',
-    last_name:    'last_name',
-    email:        'email',
-    phone:        'phone',
-    pay_method:   'pay_method',
-    active:       'active',
-    created_at:   'created_at',
-
-    // ✅ NEW: TMS Ref sorting (numeric-safe)
-    // UI can send order_by=tms_ref (or tms_ref_num).
-    // When order_by=tms_ref, we apply a compound order: tms_ref_num then tms_ref.
-    tms_ref:      '__tms_ref',
-    tms_ref_num:  'tms_ref_num'
+    first_name: 'first_name',
+    last_name: 'last_name',
+    email: 'email',
+    phone: 'phone',
+    pay_method: 'pay_method',
+    active: 'active',
+    created_at: 'created_at',
+    tms_ref: '__tms_ref',
+    tms_ref_num: 'tms_ref_num'
   };
 
   const defaultOrderCol = 'display_name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
 
-  // Named filters (top-level)
-  const firstName   = q('first_name');
-  const lastName    = q('last_name');
-  const email       = q('email');
-  const phone       = q('phone');
-  const payMethod   = q('pay_method') ? q('pay_method').toUpperCase() : null;
-  const active      = q('active');
-  const createdFrom = q('created_from');
-  const createdTo   = q('created_to');
+  const spec = buildCandidateSummaryFilterSpec(urlObj.searchParams);
 
-  // ✅ Notes contains (case-insensitive)
-  const notesExact = q('notes');
+  const firstName = spec.first_name || null;
+  const lastName = spec.last_name || null;
+  const email = spec.email || null;
+  const phone = spec.phone || null;
+  const payMethod = spec.pay_method || null;
+  const active = spec.active || null;
+  const createdFrom = spec.created_from || null;
+  const createdTo = spec.created_to || null;
+  const notesExact = spec.notes || null;
+  const jobTitleContainsAll = spec.job_title_contains || null;
+  const primaryJobTitleContains = spec.primary_job_title_contains || null;
+  const profRegNumber = spec.prof_reg_number || null;
+  const profRegType = spec.prof_reg_type || null;
+  const dobExact = spec.dob || null;
+  const gender = spec.gender || null;
+  const townCity = spec.town_city || null;
+  const postcode = spec.postcode || null;
+  const updatedFrom = spec.updated_from || null;
+  const updatedTo = spec.updated_to || null;
+  const sortCode = spec.sort_code || null;
+  const accountNumber = spec.account_number || null;
+  const umbrellaName = spec.umbrella_name || null;
+  const tmsRef = spec.tms_ref || null;
+  const text = spec.q || null;
+  const workStatus = spec.work_status || null;
+  const recentMonthsRaw = spec.recent_months || null;
+  const rolesAny = Array.isArray(spec.roles_any) ? spec.roles_any.map(String) : [];
+  const rolesAll = Array.isArray(spec.roles_all) ? spec.roles_all.map(String) : [];
+  const ids = Array.isArray(spec.ids) ? spec.ids.map(String) : [];
 
-  // New job-title filters
-  const jobTitleContainsAll     = q('job_title_contains');            // all job titles
-  const primaryJobTitleContains = q('primary_job_title_contains');    // primary only
-
-  // New professional registration filters
-  const profRegNumber = q('prof_reg_number');
-  const profRegType   = q('prof_reg_type') ? q('prof_reg_type').toUpperCase() : null;
-
-  // DOB exact (YYYY-MM-DD)
-  const dobExact = q('dob');
-
-  // New demographic filters
-  const gender   = q('gender');
-  const townCity = q('town_city');
-  const postcode = q('postcode');
-
-  // New updated_at range
-  const updatedFrom = q('updated_from');
-  const updatedTo   = q('updated_to');
-
-  // New bank / umbrella / ref filters
-  const sortCode      = q('sort_code');
-  const accountNumber = q('account_number');
-  const umbrellaName  = q('umbrella_name');
-  const tmsRef        = q('tms_ref');
-
-  // roles_any / roles_all (Care Package Roles)
-  let rolesAny = qa('roles_any').filter(Boolean).map(s => s.trim()).filter(Boolean);
-  let rolesAll = qa('roles_all').filter(Boolean).map(s => s.trim()).filter(Boolean);
-
-  // explicit-IDs support (either id=in.(...) or ids=uuid1,uuid2,...)
-  const idInExpr = q('id');   // raw 'in.(...)'
-  const idsRaw   = q('ids');  // friendly csv
   let idFilterExpr = null;
-  if (idInExpr && /^in\.\(.+\)$/.test(idInExpr)) {
-    idFilterExpr = idInExpr;
-  } else if (idsRaw) {
-    const list = idsRaw.split(',').map(s => s.trim()).filter(Boolean);
-    if (list.length) idFilterExpr = `in.(${list.join(',')})`;
+  if (ids.length) {
+    idFilterExpr = `in.(${ids.join(',')})`;
   }
-
-  // Optional simple free-text
-  // ✅ Accept both q= and name= as free-text (robust to UI variations)
-  const rawQ = q('q') || q('name');
-  let text = rawQ ? String(rawQ || '').trim() : null;
-
-  rolesAny = Array.from(new Set(rolesAny.map(s => s.toUpperCase())));
-  rolesAll = Array.from(new Set(rolesAll.map(s => s.toUpperCase())));
-
-  // ✅ Working-status filter (Candidates Tools dropdown)
-  const workStatus = String(q('work_status') || '').trim().toUpperCase(); // ALL|CURRENT|RECENT|NOT
-  const recentMonthsRaw = q('recent_months');
 
   const recentAll = (workStatus === 'RECENT') && (String(recentMonthsRaw || '').trim().toUpperCase() === 'ALL');
 
@@ -63702,7 +66322,6 @@ async function handleSearchCandidates(env, req) {
       ? Math.max(1, Math.min(120, parseInt(recentMonthsRaw, 10)))
       : 3;
 
-  // ---- local date helpers for cutoff (Europe/London day anchor) ----
   const londonYMDNow = () => {
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Europe/London',
@@ -63728,204 +66347,226 @@ async function handleSearchCandidates(env, req) {
     const daysInTargetMonth = new Date(Date.UTC(y1, m1 + 1, 0)).getUTCDate();
     const d1 = Math.min(d0, daysInTargetMonth);
 
-    return `${String(y1).padStart(4,'0')}-${String(m1+1).padStart(2,'0')}-${String(d1).padStart(2,'0')}`;
+    return `${String(y1).padStart(4,'0')}-${String(m1 + 1).padStart(2,'0')}-${String(d1).padStart(2,'0')}`;
   };
 
   const cutoffYMD = ((workStatus === 'RECENT' && !recentAll) || workStatus === 'NOT')
     ? subtractMonthsYMD(londonYMDNow(), recentMonths)
     : null;
 
-  // ✅ Use activity view so work-status filters are fast + server-side
-  // ✅ ORDER: support compound sort for TMS Ref (tms_ref_num then tms_ref)
-  const orderExpr =
-    (orderCol === '__tms_ref')
-      ? `${enc('tms_ref_num')}.${orderDir},${enc('tms_ref')}.${orderDir}`
-      : `${enc(orderCol)}.${orderDir}`;
+  const buildCandidatesApi = ({ selectClause = '*', withPaging = true, limitValue = pageSize, offsetValue = (page - 1) * pageSize, withOrder = true }) => {
+    const orderExpr =
+      (orderCol === '__tms_ref')
+        ? `${enc('tms_ref_num')}.${orderDir},${enc('tms_ref')}.${orderDir}`
+        : `${enc(orderCol)}.${orderDir}`;
 
-  let url =
-    `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
-    `?select=*` +
-    `&order=${orderExpr}` +
-    `&limit=${pageSize}&offset=${(page - 1) * pageSize}`;
+    let api =
+      `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
+      `?select=${selectClause}`;
 
-  // --- OR handling (free-text / roles_any / RECENT/NOT OR groups) ---
-  // We must keep a single `or=` param. If we need (A OR B) AND (D OR E),
-  // we expand to OR of AND terms: or=(and(A,D),and(A,E),and(B,D),and(B,E))
-  let orParts = null; // array of raw PostgREST predicate strings (already encoded where needed)
-
-  // Free-text OR group: search first/surname/display/email/phone/tms_ref/job titles
-  if (text) {
-    const esc = enc(text);
-    orParts = [
-      `first_name.ilike.*${esc}*`,
-      `last_name.ilike.*${esc}*`,
-      `display_name.ilike.*${esc}*`,
-      `email.ilike.*${esc}*`,
-      `phone.ilike.*${esc}*`,
-      `tms_ref.ilike.*${esc}*`,
-      `job_titles_display.ilike.*${esc}*`
-    ];
-  }
-
-  // Care Package Roles – roles_any (OR).
-  // Note: preserves prior behaviour (roles_any becomes the OR group if provided).
-  if (rolesAny.length) {
-    const parts = rolesAny.map(code => {
-      const val = enc(JSON.stringify([{ code }]));
-      return `roles.cs.${val}`;
-    });
-    orParts = parts;
-  }
-
-  // Basic name / contact / pay filters
-  if (firstName)   url += `&first_name=ilike.*${enc(firstName)}*`;
-  if (lastName)    url += `&last_name=ilike.*${enc(lastName)}*`;
-  if (email)       url += `&email=ilike.*${enc(email)}*`;
-  if (phone)       url += `&phone=ilike.*${enc(phone)}*`;
-
-  // ✅ Notes contains (case-insensitive): use ilike with wildcards at both ends.
-  // Escape literal '*' and '\' (and LIKE wildcards) to avoid treating user input as a pattern.
-  if (notesExact) {
-    const escMid = String(notesExact)
-      .replace(/\\/g, '\\\\')
-      .replace(/\*/g, '\\*')
-      .replace(/%/g, '\\%')
-      .replace(/_/g, '\\_');
-    url += `&notes=ilike.*${enc(escMid)}*`;
-  }
-
-  // Pay method: PAYE, UMBRELLA, or BLANK (null)
-  if (payMethod === 'BLANK') {
-    url += `&pay_method=is.null`;
-  } else if (payMethod) {
-    url += `&pay_method=eq.${enc(payMethod)}`;
-  }
-
-  if (active === 'true')  url += `&active=eq.true`;
-  if (active === 'false') url += `&active=eq.false`;
-
-  if (createdFrom) url += `&created_at=gte.${enc(createdFrom)}`;
-  if (createdTo)   url += `&created_at=lte.${enc(createdTo)}`;
-
-  // Primary job title vs all job titles filters
-  if (primaryJobTitleContains) {
-    url += `&primary_job_title=ilike.*${enc(primaryJobTitleContains)}*`;
-  }
-  if (jobTitleContainsAll) {
-    url += `&job_titles_display=ilike.*${enc(jobTitleContainsAll)}*`;
-  }
-
-  // Professional registration filters
-  if (profRegNumber) {
-    url += `&prof_reg_number=ilike.*${enc(profRegNumber)}*`;
-  }
-  if (profRegType) {
-    url += `&prof_reg_type=eq.${enc(profRegType)}`;
-  }
-
-  // DOB exact
-  if (dobExact) url += `&date_of_birth=eq.${enc(dobExact)}`;
-
-  // Gender / city / postcode
-  if (gender)   url += `&gender=eq.${enc(gender)}`;
-  if (townCity) url += `&town_city=ilike.*${enc(townCity)}*`;
-  if (postcode) url += `&postcode=ilike.*${enc(postcode)}*`;
-
-  // Updated_at range
-  if (updatedFrom) url += `&updated_at=gte.${enc(updatedFrom)}`;
-  if (updatedTo)   url += `&updated_at=lte.${enc(updatedTo)}`;
-
-  // Banking / umbrella / ref
-  if (sortCode)      url += `&sort_code=ilike.*${enc(sortCode)}*`;
-  if (accountNumber) url += `&account_number=ilike.*${enc(accountNumber)}*`;
-  if (umbrellaName)  url += `&umbrella_name=ilike.*${enc(umbrellaName)}*`; // requires umbrella_name in view
-  if (tmsRef)        url += `&tms_ref=ilike.*${enc(tmsRef)}*`;
-
-  // apply explicit IDs if present
-  if (idFilterExpr) url += `&id=${enc(idFilterExpr)}`;
-
-  // Care Package Roles – roles_all (AND)
-  if (rolesAll.length) {
-    for (const code of rolesAll) {
-      const val = JSON.stringify([{ code }]);
-      url += `&roles=cs.${enc(val)}`;
+    if (withOrder) {
+      api += `&order=${orderExpr}`;
     }
-  }
 
-  // ✅ Work status filters (fast server-side via candidates_summary_activity)
-  if (workStatus === 'CURRENT') {
-    url += `&is_currently_working=eq.true`;
+    if (withPaging) {
+      api += `&limit=${limitValue}&offset=${offsetValue}`;
+    }
 
-  } else if (workStatus === 'RECENT') {
-    // ✅ UPDATED: RECENT/Previously worked includes CURRENT workers too.
-    //
-    // If recent_months=ALL:
-    //   is_currently_working = true
-    //   OR (is_currently_working = false AND last_timesheet_week_ending IS NOT NULL)
-    //
-    // Else:
-    //   is_currently_working = true
-    //   OR (is_currently_working = false AND last_timesheet_week_ending >= cutoff)
-    const d1 = `is_currently_working.eq.true`;
-    const d2 = recentAll
-      ? `and(is_currently_working.eq.false,last_timesheet_week_ending.not.is.null)`
-      : (cutoffYMD
-          ? `and(is_currently_working.eq.false,last_timesheet_week_ending.gte.${enc(cutoffYMD)})`
-          : `is_currently_working.eq.true`);
+    let orParts = null;
+
+    if (text) {
+      const esc = enc(text);
+      orParts = [
+        `first_name.ilike.*${esc}*`,
+        `last_name.ilike.*${esc}*`,
+        `display_name.ilike.*${esc}*`,
+        `email.ilike.*${esc}*`,
+        `phone.ilike.*${esc}*`,
+        `tms_ref.ilike.*${esc}*`,
+        `job_titles_display.ilike.*${esc}*`
+      ];
+    }
+
+    if (rolesAny.length) {
+      const parts = rolesAny.map((code) => {
+        const val = enc(JSON.stringify([{ code }]));
+        return `roles.cs.${val}`;
+      });
+      orParts = parts;
+    }
+
+    if (firstName)   api += `&first_name=ilike.*${enc(firstName)}*`;
+    if (lastName)    api += `&last_name=ilike.*${enc(lastName)}*`;
+    if (email)       api += `&email=ilike.*${enc(email)}*`;
+    if (phone)       api += `&phone=ilike.*${enc(phone)}*`;
+
+    if (notesExact) {
+      const escMid = String(notesExact)
+        .replace(/\\/g, '\\\\')
+        .replace(/\*/g, '\\*')
+        .replace(/%/g, '\\%')
+        .replace(/_/g, '\\_');
+      api += `&notes=ilike.*${enc(escMid)}*`;
+    }
+
+    if (payMethod === 'BLANK') {
+      api += `&pay_method=is.null`;
+    } else if (payMethod) {
+      api += `&pay_method=eq.${enc(payMethod)}`;
+    }
+
+    if (active === 'true') api += `&active=eq.true`;
+    if (active === 'false') api += `&active=eq.false`;
+
+    if (createdFrom) api += `&created_at=gte.${enc(createdFrom)}`;
+    if (createdTo) api += `&created_at=lte.${enc(createdTo)}`;
+
+    if (primaryJobTitleContains) {
+      api += `&primary_job_title=ilike.*${enc(primaryJobTitleContains)}*`;
+    }
+    if (jobTitleContainsAll) {
+      api += `&job_titles_display=ilike.*${enc(jobTitleContainsAll)}*`;
+    }
+
+    if (profRegNumber) {
+      api += `&prof_reg_number=ilike.*${enc(profRegNumber)}*`;
+    }
+    if (profRegType) {
+      api += `&prof_reg_type=eq.${enc(profRegType)}`;
+    }
+
+    if (dobExact) api += `&date_of_birth=eq.${enc(dobExact)}`;
+
+    if (gender) api += `&gender=eq.${enc(gender)}`;
+    if (townCity) api += `&town_city=ilike.*${enc(townCity)}*`;
+    if (postcode) api += `&postcode=ilike.*${enc(postcode)}*`;
+
+    if (updatedFrom) api += `&updated_at=gte.${enc(updatedFrom)}`;
+    if (updatedTo) api += `&updated_at=lte.${enc(updatedTo)}`;
+
+    if (sortCode) api += `&sort_code=ilike.*${enc(sortCode)}*`;
+    if (accountNumber) api += `&account_number=ilike.*${enc(accountNumber)}*`;
+    if (umbrellaName) api += `&umbrella_name=ilike.*${enc(umbrellaName)}*`;
+    if (tmsRef) api += `&tms_ref=ilike.*${enc(tmsRef)}*`;
+
+    if (idFilterExpr) api += `&id=${enc(idFilterExpr)}`;
+
+    if (rolesAll.length) {
+      for (const code of rolesAll) {
+        const val = JSON.stringify([{ code }]);
+        api += `&roles=cs.${enc(val)}`;
+      }
+    }
+
+    if (workStatus === 'CURRENT') {
+      api += `&is_currently_working=eq.true`;
+    } else if (workStatus === 'RECENT') {
+      const d1 = `is_currently_working.eq.true`;
+      const d2 = recentAll
+        ? `and(is_currently_working.eq.false,last_timesheet_week_ending.not.is.null)`
+        : (cutoffYMD
+            ? `and(is_currently_working.eq.false,last_timesheet_week_ending.gte.${enc(cutoffYMD)})`
+            : `is_currently_working.eq.true`);
+
+      if (Array.isArray(orParts) && orParts.length) {
+        const combined = [];
+        for (const p of orParts) {
+          combined.push(`and(${p},${d1})`);
+          combined.push(`and(${p},${d2})`);
+        }
+        orParts = combined;
+      } else {
+        orParts = [d1, d2];
+      }
+    } else if (workStatus === 'NOT') {
+      api += `&is_currently_working=eq.false`;
+      const d1 = `last_timesheet_week_ending.is.null`;
+      const d2 = cutoffYMD ? `last_timesheet_week_ending.lt.${enc(cutoffYMD)}` : `last_timesheet_week_ending.is.null`;
+
+      if (Array.isArray(orParts) && orParts.length) {
+        const combined = [];
+        for (const p of orParts) {
+          combined.push(`and(${p},${d1})`);
+          combined.push(`and(${p},${d2})`);
+        }
+        orParts = combined;
+      } else {
+        orParts = [d1, d2];
+      }
+    }
 
     if (Array.isArray(orParts) && orParts.length) {
-      const combined = [];
-      for (const p of orParts) {
-        combined.push(`and(${p},${d1})`);
-        combined.push(`and(${p},${d2})`);
-      }
-      orParts = combined;
-    } else {
-      orParts = [d1, d2];
+      api += `&or=(${orParts.join(',')})`;
     }
 
-  } else if (workStatus === 'NOT') {
-    // Must be NOT currently working, and (last_ts is null OR last_ts < cutoff)
-    url += `&is_currently_working=eq.false`;
-    const d1 = `last_timesheet_week_ending.is.null`;
-    const d2 = cutoffYMD ? `last_timesheet_week_ending.lt.${enc(cutoffYMD)}` : `last_timesheet_week_ending.is.null`;
+    return api;
+  };
 
-    if (Array.isArray(orParts) && orParts.length) {
-      const combined = [];
-      for (const p of orParts) {
-        combined.push(`and(${p},${d1})`);
-        combined.push(`and(${p},${d2})`);
+  if (format === 'membership') {
+    const idsOut = [];
+    const seen = new Set();
+    let offset = 0;
+    const batchSize = 1000;
+
+    try {
+      while (true) {
+        const api = buildCandidatesApi({
+          selectClause: 'id',
+          withPaging: true,
+          limitValue: batchSize,
+          offsetValue: offset,
+          withOrder: false
+        });
+
+        const { rows } = await sbFetch(env, api, false);
+        const batch = Array.isArray(rows) ? rows : [];
+
+        for (const row of batch) {
+          const id = row && row.id ? String(row.id).trim() : '';
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          idsOut.push(id);
+        }
+
+        if (batch.length < batchSize) break;
+        offset += batchSize;
       }
-      orParts = combined;
-    } else {
-      orParts = [d1, d2];
+    } catch (err) {
+      const msg = String(err?.message || err || 'Supabase fetch failed');
+      if (/\b400\b/.test(msg)) {
+        return withCORS(env, req, badRequest(`Supabase fetch failed: ${msg}`));
+      }
+      return withCORS(env, req, serverError(`Supabase fetch failed: ${msg}`));
     }
+
+    return withCORS(env, req, ok({ ids: idsOut, count: idsOut.length }));
   }
 
-  // Apply OR (if any) once at the end (single or= param)
-  if (Array.isArray(orParts) && orParts.length) {
-    url += `&or=(${orParts.join(',')})`;
-  }
+  const api = buildCandidatesApi({
+    selectClause: '*',
+    withPaging: true,
+    limitValue: pageSize,
+    offsetValue: (page - 1) * pageSize,
+    withOrder: true
+  });
 
   let rows = [];
   let total = undefined;
 
   try {
-    const res = await sbFetch(env, url, includeCount);
+    const res = await sbFetch(env, api, includeCount);
     rows = res?.rows || [];
     total = res?.total;
   } catch (err) {
     const msg = String(err?.message || err || 'Supabase fetch failed');
 
-    // ✅ FIX: do NOT mask Supabase errors as 200 + empty rows (prevents UI getting "stuck")
-    // If the underlying failure is a 400 (bad filters/order), return 400; otherwise 500.
     if (/\b400\b/.test(msg)) {
       return withCORS(
         env,
         req,
         badRequest(
           `Supabase fetch failed: ${msg}`,
-          { order_by: (orderByParam || null), order_dir: orderDir, url }
+          { order_by: (orderByParam || null), order_dir: orderDir, url: api }
         )
       );
     }
@@ -63935,7 +66576,6 @@ async function handleSearchCandidates(env, req) {
 
   const respCount = includeCount ? (typeof total === 'number' ? total : (rows?.length || 0)) : (rows?.length || 0);
 
-  // CSV : keep rota roles vs job titles separate
   if (format === 'csv') {
     const header = [
       'CandidateId',
@@ -63974,7 +66614,6 @@ async function handleSearchCandidates(env, req) {
     }));
   }
 
-  // Print HTML
   if (format === 'print') {
     const rowsHtml = (rows || []).map(r => `
       <tr>
@@ -64003,7 +66642,6 @@ async function handleSearchCandidates(env, req) {
     }));
   }
 
-  // Normal JSON
   return withCORS(env, req, ok({
     rows,
     page,
@@ -64011,6 +66649,11 @@ async function handleSearchCandidates(env, req) {
     count: respCount
   }));
 }
+
+
+
+
+
  async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -68203,21 +70846,22 @@ async function handleInvoiceDeleteOne(env, req, invoiceId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleListInvoices(env, req) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  if (!user) return withCORS(env, req, unauthorized());
 
   const sp = new URL(req.url).searchParams;
   const enc = encodeURIComponent;
+  const format = String(sp.get('format') || 'json').toLowerCase();
 
-  // Paging (support both styles: page/page_size OR limit/offset)
   const pageRaw = sp.get('page');
   const pageSizeRaw = sp.get('page_size');
 
   const page = pageRaw ? Math.max(1, parseInt(pageRaw || '1', 10)) : null;
   const pageSize = pageSizeRaw ? Math.max(1, Math.min(200, parseInt(pageSizeRaw || '50', 10))) : null;
 
-  const legacyLimit  = Math.min(parseInt(sp.get('limit')  || '50', 10), 200);
+  const legacyLimit = Math.min(parseInt(sp.get('limit') || '50', 10), 200);
   const legacyOffset = Math.max(0, parseInt(sp.get('offset') || '0', 10));
 
   const limit = pageSize ?? legacyLimit;
@@ -68226,61 +70870,7 @@ async function handleListInvoices(env, req) {
   const includeCount = sp.get('include_count') === 'true';
   const includeTotals = sp.get('include_totals') === 'true';
 
-  // Filters
-  const clientId    = sp.get('client_id') || null;
-
-  const statusParams = sp.getAll('status').map(s => (s || '').trim()).filter(Boolean);
-  const q = (sp.get('q') || '').trim(); // free-text for quick search (invoice no / client / candidate via RPC)
-
-  // ✅ ids filter (comma-separated OR repeated ids params)
-  const idsParams = sp.getAll('ids').map(s => String(s || '').trim()).filter(Boolean);
-  const idsCsv = idsParams.length ? idsParams.join(',') : '';
-
-  const parseUuidList = (csv) => {
-    const out = [];
-    const seen = new Set();
-    const re = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-    for (const part of String(csv || '').split(',')) {
-      const v = String(part || '').trim();
-      if (!v) continue;
-      if (!re.test(v)) continue;
-      if (seen.has(v)) continue;
-      seen.add(v);
-      out.push(v);
-    }
-    return out;
-  };
-
-  let idsFilter = null;
-  if (idsCsv) {
-    const ids = parseUuidList(idsCsv);
-    if (!ids.length) {
-      const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
-      if (includeCount) empty.count = 0;
-      if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
-      return withCORS(env, req, ok(empty));
-    }
-    if (ids.length > 600) {
-      return withCORS(env, req, serverError(`ids filter contained too many ids (${ids.length}). Narrow the selection.`));
-    }
-    idsFilter = ids;
-  }
-
-  // Date filters
-  const issuedFrom   = sp.get('issued_from')  || null;
-  const issuedTo     = sp.get('issued_to')    || null;
-  const dueFrom      = sp.get('due_from')     || null;
-  const dueTo        = sp.get('due_to')       || null;
-  const createdFrom  = sp.get('created_from') || null;
-  const createdTo    = sp.get('created_to')   || null;
-
-  // Week ending filter (derived from linked timesheets)
-  const weFrom = sp.get('week_ending_from') || null;
-  const weTo   = sp.get('week_ending_to') || null;
-
-  // Sort
-  const orderByRaw  = (sp.get('order_by') || 'issued_at_utc').toLowerCase();
+  const orderByRaw = (sp.get('order_by') || 'issued_at_utc').toLowerCase();
   const orderDirRaw = (sp.get('order_dir') || 'desc').toLowerCase();
   const orderDir = (orderDirRaw === 'asc') ? 'asc' : 'desc';
 
@@ -68298,7 +70888,33 @@ async function handleListInvoices(env, req) {
 
   const orderBy = allowedSort.has(orderByRaw) ? orderByRaw : 'issued_at_utc';
 
-  const select = [
+  const spec = buildInvoiceSummaryFilterSpec(sp);
+
+  const clientId = spec.client_id || null;
+  const quickText = spec.q || null;
+  const issuedFrom = spec.issued_from || null;
+  const issuedTo = spec.issued_to || null;
+  const dueFrom = spec.due_from || null;
+  const dueTo = spec.due_to || null;
+  const createdFrom = spec.created_from || null;
+  const createdTo = spec.created_to || null;
+  const weFrom = spec.week_ending_from || null;
+  const weTo = spec.week_ending_to || null;
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  let idsFilter = Array.isArray(spec.ids) ? spec.ids.map(String).filter(v => uuidRe.test(v)) : null;
+  if (Array.isArray(spec.ids) && spec.ids.length && (!idsFilter || !idsFilter.length)) {
+    const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
+    if (includeCount || format === 'membership') empty.count = 0;
+    if (format === 'membership') empty.ids = [];
+    if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
+    return withCORS(env, req, ok(empty));
+  }
+  if (idsFilter && idsFilter.length > 600) {
+    return withCORS(env, req, serverError(`ids filter contained too many ids (${idsFilter.length}). Narrow the selection.`));
+  }
+
+  const selectDefault = [
     'id',
     'invoice_no',
     'client_id',
@@ -68318,69 +70934,44 @@ async function handleListInvoices(env, req) {
     'client:clients(name,primary_invoice_email)'
   ].join(',');
 
-  // Status logic
-  const normStatuses = (() => {
-    if (!statusParams.length) return null;
+  const normStatuses = Array.isArray(spec.status) && spec.status.length ? spec.status.slice() : null;
 
-    // if someone passes a single "paid"/"unpaid" legacy value, honour it
-    if (statusParams.length === 1) {
-      const s0 = statusParams[0].toLowerCase();
-      if (s0 === 'paid' || s0 === 'unpaid') return [s0];
+  const buildInvoicesBaseUrl = ({ selectClause = selectDefault, withOrder = true }) => {
+    let base =
+      `${env.SUPABASE_URL}/rest/v1/invoices` +
+      `?select=${enc(selectClause)}`;
+
+    if (withOrder) {
+      base += `&order=${enc(orderBy)}.${orderDir},invoice_no.asc`;
     }
 
-    // Flatten comma lists
-    const out = [];
-    for (const s of statusParams) {
-      for (const part of String(s).split(',')) {
-        const v = part.trim();
-        if (v) out.push(v.toUpperCase());
-      }
+    if (normStatuses && normStatuses.length === 1 && (normStatuses[0] === 'paid' || normStatuses[0] === 'unpaid')) {
+      const s0 = normStatuses[0];
+      if (s0 === 'paid') base += `&paid_at_utc=not.is.null`;
+      if (s0 === 'unpaid') base += `&paid_at_utc=is.null`;
+    } else if (normStatuses && normStatuses.length) {
+      const safe = normStatuses
+        .map((s) => String(s).replace(/[(),]/g, ''))
+        .filter((s) => s === 'DRAFT' || s === 'ISSUED' || s === 'ON_HOLD' || s === 'PAID');
+
+      if (safe.length === 1) base += `&status=eq.${enc(safe[0])}`;
+      if (safe.length > 1) base += `&status=in.(${safe.map(enc).join(',')})`;
     }
-    return out.length ? out : null;
-  })();
 
-  // Build base invoices URL (without paging modifiers yet)
-  let urlBase =
-    `${env.SUPABASE_URL}/rest/v1/invoices` +
-    `?select=${enc(select)}` +
-    `&order=${enc(orderBy)}.${orderDir},invoice_no.asc`;
+    if (clientId) base += `&client_id=eq.${enc(clientId)}`;
+    if (issuedFrom) base += `&issued_at_utc=gte.${enc(issuedFrom)}`;
+    if (issuedTo)   base += `&issued_at_utc=lte.${enc(issuedTo)}`;
+    if (dueFrom)    base += `&due_at_utc=gte.${enc(dueFrom)}`;
+    if (dueTo)      base += `&due_at_utc=lte.${enc(dueTo)}`;
+    if (createdFrom) base += `&created_at=gte.${enc(createdFrom)}`;
+    if (createdTo)   base += `&created_at=lte.${enc(createdTo)}`;
 
-  // Status filters
-  if (normStatuses && normStatuses.length === 1 && (normStatuses[0] === 'PAID' || normStatuses[0] === 'UNPAID' || normStatuses[0] === 'paid' || normStatuses[0] === 'unpaid')) {
-    const s0 = normStatuses[0].toLowerCase();
-    if (s0 === 'paid') urlBase += `&paid_at_utc=not.is.null`;
-    if (s0 === 'unpaid') urlBase += `&paid_at_utc=is.null`;
-  } else if (normStatuses && normStatuses.length) {
-    const safe = normStatuses
-      .map(s => s.replace(/[(),]/g, ''))
-      .filter(s => s === 'DRAFT' || s === 'ISSUED' || s === 'ON_HOLD' || s === 'PAID');
+    return base;
+  };
 
-    if (safe.length === 1) urlBase += `&status=eq.${enc(safe[0])}`;
-    if (safe.length > 1) urlBase += `&status=in.(${safe.map(enc).join(',')})`;
-  }
-
-  if (clientId) urlBase += `&client_id=eq.${enc(clientId)}`;
-
-  // NOTE:
-  // - We intentionally do NOT apply `invoice_no ilike` here for q.
-  // - Instead, q is expanded via invoice_quicksearch_ids RPC, which can match:
-  //   invoice_no, client name, candidate name (via invoice_lines->v_timesheets_summary).
-  // - The resulting IDs are applied as an id filter (and intersected with other filters).
-
-  if (issuedFrom) urlBase += `&issued_at_utc=gte.${enc(issuedFrom)}`;
-  if (issuedTo)   urlBase += `&issued_at_utc=lte.${enc(issuedTo)}`;
-
-  if (dueFrom) urlBase += `&due_at_utc=gte.${enc(dueFrom)}`;
-  if (dueTo)   urlBase += `&due_at_utc=lte.${enc(dueTo)}`;
-
-  if (createdFrom) urlBase += `&created_at=gte.${enc(createdFrom)}`;
-  if (createdTo)   urlBase += `&created_at=lte.${enc(createdTo)}`;
-
-  // ✅ Derive invoice_ids by week ending range (if provided)
   let invoiceIdFilter = null;
   if (weFrom || weTo) {
     try {
-      // 1) find timesheets in week range
       let tsUrl =
         `${env.SUPABASE_URL}/rest/v1/timesheets?select=timesheet_id` +
         `&limit=20000&offset=0`;
@@ -68392,12 +70983,12 @@ async function handleListInvoices(env, req) {
 
       if (!tsIds.length) {
         const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
-        if (includeCount) empty.count = 0;
+        if (includeCount || format === 'membership') empty.count = 0;
+        if (format === 'membership') empty.ids = [];
         if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
         return withCORS(env, req, ok(empty));
       }
 
-      // 2) find invoice_ids via invoice_lines for those timesheets
       const chunkSize = 200;
       const invIdSet = new Set();
       for (let i = 0; i < tsIds.length; i += chunkSize) {
@@ -68412,7 +71003,8 @@ async function handleListInvoices(env, req) {
       const invIds = Array.from(invIdSet);
       if (!invIds.length) {
         const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
-        if (includeCount) empty.count = 0;
+        if (includeCount || format === 'membership') empty.count = 0;
+        if (format === 'membership') empty.ids = [];
         if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
         return withCORS(env, req, ok(empty));
       }
@@ -68423,12 +71015,11 @@ async function handleListInvoices(env, req) {
     }
   }
 
-  // ✅ Expand q (free-text) -> invoice ids via RPC, then intersect with other ID filters
   let quickQIdFilter = null;
-  if (q) {
+  if (quickText) {
     try {
       const rpcRes = await sbRpc(env, 'invoice_quicksearch_ids', {
-        p_q: q,
+        p_q: quickText,
         p_limit: 20000
       });
 
@@ -68450,7 +71041,8 @@ async function handleListInvoices(env, req) {
 
       if (!ids.length) {
         const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
-        if (includeCount) empty.count = 0;
+        if (includeCount || format === 'membership') empty.count = 0;
+        if (format === 'membership') empty.ids = [];
         if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
         return withCORS(env, req, ok(empty));
       }
@@ -68461,7 +71053,6 @@ async function handleListInvoices(env, req) {
     }
   }
 
-  // ✅ Combine (intersection where applicable)
   let finalIdFilter = null;
 
   if (invoiceIdFilter && idsFilter) {
@@ -68484,13 +71075,57 @@ async function handleListInvoices(env, req) {
 
   if (finalIdFilter && !finalIdFilter.length) {
     const empty = { items: [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
-    if (includeCount) empty.count = 0;
+    if (includeCount || format === 'membership') empty.count = 0;
+    if (format === 'membership') empty.ids = [];
     if (includeTotals) empty.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
     return withCORS(env, req, ok(empty));
   }
 
-  // Build final URL with paging + optional id filter
-  let url = urlBase + `&limit=${limit}&offset=${offset}`;
+  const fetchAllFilteredInvoiceIds = async () => {
+    const idsOut = [];
+    const seen = new Set();
+    const batchSize = 1000;
+    let off = 0;
+
+    while (true) {
+      let membershipUrl = buildInvoicesBaseUrl({ selectClause: 'id', withOrder: false });
+      membershipUrl += `&limit=${batchSize}&offset=${off}`;
+
+      if (finalIdFilter && finalIdFilter.length) {
+        if (finalIdFilter.length > 600) {
+          throw new Error(`Filter matched too many invoices (${finalIdFilter.length}). Narrow the selection.`);
+        }
+        membershipUrl += `&id=in.(${finalIdFilter.map(enc).join(',')})`;
+      }
+
+      const { rows } = await sbFetch(env, membershipUrl, false);
+      const batch = Array.isArray(rows) ? rows : [];
+
+      for (const row of batch) {
+        const id = row?.id ? String(row.id).trim() : '';
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        idsOut.push(id);
+      }
+
+      if (batch.length < batchSize) break;
+      off += batchSize;
+    }
+
+    return idsOut;
+  };
+
+  if (format === 'membership') {
+    try {
+      const idsOut = await fetchAllFilteredInvoiceIds();
+      return withCORS(env, req, ok({ ids: idsOut, count: idsOut.length }));
+    } catch (e) {
+      return withCORS(env, req, serverError(`Failed to list invoice membership: ${e?.message || e}`));
+    }
+  }
+
+  let url = buildInvoicesBaseUrl({ selectClause: selectDefault, withOrder: true });
+  url += `&limit=${limit}&offset=${offset}`;
   if (finalIdFilter && finalIdFilter.length) {
     if (finalIdFilter.length > 600) {
       return withCORS(env, req, serverError(`Filter matched too many invoices (${finalIdFilter.length}). Narrow the selection.`));
@@ -68498,19 +71133,10 @@ async function handleListInvoices(env, req) {
     url += `&id=in.(${finalIdFilter.map(enc).join(',')})`;
   }
 
-  // Totals helper
   const buildInvoiceTotalsFilters = () => {
-    const f = {};
-    if (clientId) f.client_id = clientId;
-    if (statusParams && statusParams.length) f.status = statusParams;
-    if (q) f.q = q; // keep for totals RPC (server-side parity)
-    if (issuedFrom) f.issued_from = issuedFrom;
-    if (issuedTo) f.issued_to = issuedTo;
-    if (dueFrom) f.due_from = dueFrom;
-    if (dueTo) f.due_to = dueTo;
-    if (createdFrom) f.created_from = createdFrom;
-    if (createdTo) f.created_to = createdTo;
-    return f;
+    return {
+      ...spec
+    };
   };
 
   try {
@@ -68520,26 +71146,21 @@ async function handleListInvoices(env, req) {
       ? { items: rows || [], count: total ?? undefined, page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset }
       : { items: rows || [], page: page ?? undefined, page_size: pageSize ?? undefined, limit, offset };
 
-    // totals
     if (includeTotals) {
       if (!finalIdFilter) {
-        // no id filter => can use SQL totals RPC directly
         const totRes = await sbRpc(env, 'invoice_list_totals', { p_filters: buildInvoiceTotalsFilters() });
         const totRows = Array.isArray(totRes) ? totRes : (totRes?.data || []);
         resp.totals = (totRows && totRows.length) ? totRows[0] : { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
       } else {
-        // id filter => compute totals from the filtered invoice ids to remain accurate
-        const allInvIds = finalIdFilter;
+        const allInvIds = await fetchAllFilteredInvoiceIds();
         if (!allInvIds.length) {
           resp.totals = { count_all: 0, subtotal_ex_vat_sum: 0, total_inc_vat_sum: 0, margin_ex_vat_sum: 0 };
         } else {
-          // Fetch invoices for those IDs with the same non-week filters (no paging)
           let invFetchUrl =
             `${env.SUPABASE_URL}/rest/v1/invoices?select=id,subtotal_ex_vat,total_inc_vat` +
             `&id=in.(${allInvIds.map(enc).join(',')})` +
             `&limit=20000&offset=0`;
 
-          // Re-apply same filters that were applied to list (except paging)
           if (clientId) invFetchUrl += `&client_id=eq.${enc(clientId)}`;
           if (issuedFrom) invFetchUrl += `&issued_at_utc=gte.${enc(issuedFrom)}`;
           if (issuedTo)   invFetchUrl += `&issued_at_utc=lte.${enc(issuedTo)}`;
@@ -68548,9 +71169,8 @@ async function handleListInvoices(env, req) {
           if (createdFrom) invFetchUrl += `&created_at=gte.${enc(createdFrom)}`;
           if (createdTo)   invFetchUrl += `&created_at=lte.${enc(createdTo)}`;
 
-          // status re-apply
-          if (normStatuses && normStatuses.length === 1 && (normStatuses[0].toLowerCase() === 'paid' || normStatuses[0].toLowerCase() === 'unpaid')) {
-            const s0 = normStatuses[0].toLowerCase();
+          if (normStatuses && normStatuses.length === 1 && (normStatuses[0] === 'paid' || normStatuses[0] === 'unpaid')) {
+            const s0 = normStatuses[0];
             if (s0 === 'paid') invFetchUrl += `&paid_at_utc=not.is.null`;
             if (s0 === 'unpaid') invFetchUrl += `&paid_at_utc=is.null`;
           } else if (normStatuses && normStatuses.length) {
@@ -68571,7 +71191,6 @@ async function handleListInvoices(env, req) {
             totalIncSum += Number(r?.total_inc_vat || 0);
           }
 
-          // Margin from invoice_lines
           let marginSum = 0;
           if (invIds2.length) {
             const chunkSize = 200;
@@ -68601,6 +71220,7 @@ async function handleListInvoices(env, req) {
     return withCORS(env, req, serverError(`Failed to list invoices: ${e?.message || e}`));
   }
 }
+
 
 // New: one-email-per-candidate remittance composer + queue + audit
 
@@ -84455,74 +87075,52 @@ async function handleContractWeekCreateAdditionalWeeklyAdjustment(env, req, week
 
 
 
-
 async function handleContractsCount(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const url = new URL(req.url);
-  const q = (k) => url.searchParams.get(k);
-
-  // Build filters object matching contract_list_count RPC keys
-  const filters = {};
-
-  // ids support (Focus presets): accept ids=uuid,uuid OR id=in.(...)
-  const idExpr = q('id');
-  const idsRaw = q('ids');
-
-  const ids = [];
-  if (idExpr && /^in\.\(.+\)$/.test(idExpr.trim())) {
-    const inner = idExpr.trim().slice(4, -1); // drop "in.(" and ")"
-    inner.split(',').map(s => s.trim()).filter(Boolean).forEach(x => ids.push(x));
-  } else if (idsRaw) {
-    idsRaw.split(',').map(s => s.trim()).filter(Boolean).forEach(x => ids.push(x));
-  }
-  if (ids.length) filters.ids = ids;
-
-  const pass = (k) => {
-    const v = q(k);
-    if (v != null && String(v).trim() !== '') filters[k] = v;
-  };
-
-  pass('candidate_id');
-  pass('client_id');
-  pass('pay_method_snapshot');
-  pass('role');
-  pass('band');
-  pass('candidate_name');
-  pass('client_name');
-  pass('active_on');
-  pass('auto_invoice');
-  pass('q');
-  pass('default_submission_mode');
-  pass('submission_mode');
-  pass('week_ending_weekday_snapshot');
-  pass('require_reference_to_pay');
-  pass('require_reference_to_invoice');
-  pass('has_custom_labels');
-  pass('created_from');
-  pass('created_to');
-  pass('updated_from');
-  pass('updated_to');
-  pass('start_date_from');
-  pass('start_date_to');
-  pass('end_date_from');
-  pass('end_date_to');
-  pass('mileage_pay_rate');
-  pass('mileage_charge_rate');
-  pass('status');
-
   try {
-    const res = await sbRpc(env, 'contract_list_count', { p_filters: filters });
-    const rows = Array.isArray(res) ? res : (res?.data || []);
-    const row0 = (rows && rows.length) ? rows[0] : null;
-    const count = Number(row0?.count_all || 0);
+    const inUrl = new URL(req.url);
+    const outUrl = new URL(inUrl.toString());
+
+    outUrl.pathname = '/api/contracts';
+    outUrl.searchParams.delete('page');
+    outUrl.searchParams.delete('page_size');
+    outUrl.searchParams.delete('limit');
+    outUrl.searchParams.delete('offset');
+    outUrl.searchParams.delete('include_count');
+    outUrl.searchParams.delete('include_totals');
+    outUrl.searchParams.set('format', 'membership');
+
+    const membershipReq = new Request(outUrl.toString(), {
+      method: 'GET',
+      headers: req.headers
+    });
+
+    const membershipResp = await handleContractsList(env, membershipReq);
+    let payload = null;
+    try { payload = await membershipResp.clone().json(); } catch { payload = null; }
+
+    if (!membershipResp.ok) {
+      const msg =
+        (payload && typeof payload === 'object' && (payload.error || payload.message))
+          ? String(payload.error || payload.message)
+          : 'Failed to count contracts';
+      return withCORS(env, req, serverError(msg));
+    }
+
+    const ids = Array.isArray(payload?.ids)
+      ? payload.ids.map(v => String(v || '').trim()).filter(Boolean)
+      : [];
+
+    const countRaw = Number(payload?.count);
+    const count = Number.isFinite(countRaw) ? countRaw : ids.length;
+
     return withCORS(env, req, ok({ count }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 
 async function handleTimesheetCreateAdditionalDailyManual(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
@@ -93410,6 +96008,81 @@ if (req.method === 'POST' && p === '/api/banking/pay/bank-name-check/override') 
 if (req.method === 'POST' && p === '/api/banking/pay/bank-name-check/clear-override') {
   return handleBankingBankNameCheckClearOverride(env, req, user);
 }
+if (req.method === 'GET' && p === '/api/banking/finance/loans-snoozes') {
+  return handleBankingFinanceLoansSnoozesList(env, req, user);
+}
+
+if (req.method === 'POST' && p === '/api/banking/finance/payment-advances') {
+  return handleBankingPaymentAdvanceCreate(env, req, user);
+}
+
+{
+  const m = matchPath(p, '/api/banking/finance/payment-advances/:id');
+  if (m && req.method === 'PATCH') {
+    return handleBankingPaymentAdvanceUpdate(env, req, user, m.id);
+  }
+}
+if (req.method === 'POST' && p === '/api/banking/finance/manual-credit-adjustments') {
+  return handleBankingManualCreditAdjustmentCreate(env, req, user);
+}
+
+{
+  const m = matchPath(p, '/api/banking/finance/manual-credit-adjustments/:id');
+  if (m && req.method === 'PATCH') {
+    return handleBankingManualCreditAdjustmentUpdate(env, req, user, m.id);
+  }
+}
+
+if (req.method === 'POST' && p === '/api/banking/finance/manual-debt-adjustments') {
+  return handleBankingManualDebtAdjustmentCreate(env, req, user);
+}
+
+{
+  const m = matchPath(p, '/api/banking/finance/manual-debt-adjustments/:id');
+  if (m && req.method === 'PATCH') {
+    return handleBankingManualDebtAdjustmentUpdate(env, req, user, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/banking/finance/manual-debt-adjustments/:id');
+  if (m && req.method === 'PATCH') {
+    return handleBankingManualDebtAdjustmentUpdate(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/finance/cases/:id/pause');
+  if (m && req.method === 'POST') {
+    return handleBankingFinanceCasePause(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/finance/cases/:id/resume');
+  if (m && req.method === 'POST') {
+    return handleBankingFinanceCaseResume(env, req, user, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/banking/finance/cases/:id/write-off');
+  if (m && req.method === 'POST') {
+    return handleBankingFinanceCaseWriteOff(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/finance/cases/:id/audit');
+  if (m && req.method === 'GET') {
+    return handleBankingFinanceCaseAudit(env, req, user, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/banking/finance/cases/:id/restructure');
+  if (m && req.method === 'POST') {
+    return handleBankingFinanceCaseRestructure(env, req, user, m.id);
+  }
+}
+
 
 // ====================== BANKING (Invoice Discounting — Draft runs) ======================
 // Insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
@@ -93563,6 +96236,8 @@ if (req.method === 'POST' && p === '/api/banking/id/balance-now') {
   const m = matchPath(p, '/api/banking/pay/batch/:id/settle/manual-confirm');
   if (m && req.method === 'POST') return handleBankingPayBatchManualConfirm(env, req, m.id);
 }
+
+
 
 // POST /api/banking/pay/batch/:id/remittances/send
 {
@@ -93721,6 +96396,12 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
       }
 
 {
+  const m = matchPath(p, '/api/summary-membership/:section');
+  if (m && req.method === 'POST') return handleSummaryMembership(env, req, m.section);
+}
+
+
+{
   const clientAlias = matchPath(p, '/api/clients/:id/aliases');
   if (clientAlias && req.method === 'DELETE') {
     return handleClientAliasesDelete(env, req, clientAlias.id);
@@ -93808,26 +96489,7 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
         const m = matchPath(p, '/api/candidates/:id/advances/summary');
         if (m && req.method === 'GET')   return handlePayAdvancesSummary(env, req, m.id);
       }
-      {
-        const m = matchPath(p, '/api/candidates/:id/advances/missing-shift');
-        if (m && req.method === 'POST')  return handlePayAdvancesCreateMissingShift(env, req, m.id);
-      }
-      {
-        const m = matchPath(p, '/api/candidates/:id/advances/manual');
-        if (m && req.method === 'POST')  return handlePayAdvancesCreateManual(env, req, m.id);
-      }
-      {
-        const m = matchPath(p, '/api/advances/:id');
-        if (m && req.method === 'PATCH') return handlePayAdvancesUpdate(env, req, m.id);
-      }
-      {
-        const m = matchPath(p, '/api/advances/:id/pause');
-        if (m && req.method === 'POST')  return handlePayAdvancesPause(env, req, m.id);
-      }
-      {
-        const m = matchPath(p, '/api/advances/:id/resume');
-        if (m && req.method === 'POST')  return handlePayAdvancesResume(env, req, m.id);
-      }
+
 
       // Rates — client defaults
       if (req.method === 'GET'  && p === '/api/rates/client-defaults')      return handleListClientRates(env, req);
@@ -94051,9 +96713,7 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
         }
       }
 // ROUTER (insert inside export default fetch(req, env) router, near other admin/backoffice routes)
-if (req.method === 'POST' && p === '/loans/grant') {
-  return handleLoansGrant(env, req);
-}
+
 // Evidence (timesheet_evidence)
 
 // GET /api/timesheets/:id/evidence
@@ -94467,6 +97127,11 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
   if (m && req.method === 'POST') return handleContractWeekDeletePlanned(env, req, m.id);
 }
 
+
+
+
+
+
       {
         const m = matchPath(p, '/api/contract-weeks/:id/expense-sheet');
         if (m && req.method === 'POST') return handleContractWeekCreateExpenseSheet(env, req, m.id);
@@ -94767,6 +97432,27 @@ if (req.method === 'GET' && p === '/api/comms/by-recipient') {
       if (req.method === 'GET'  && p === '/api/timesheets/summary') {
         return handleTimesheetsSummary(env, req);
       }
+
+{
+  const m = matchPath(p, '/api/timesheets/:id/unadvance-payment');
+  if (m && req.method === 'POST') {
+    return await handleTimesheetUnadvancePayment(env, req, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/timesheets/:id/snooze-payment');
+  if (m && req.method === 'POST') {
+    return await handleTimesheetSnoozePayment(env, req, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/timesheets/:id/snooze-payment/clear');
+  if (m && req.method === 'POST') {
+    return await handleTimesheetSnoozePaymentClear(env, req, m.id);
+  }
+}
 
       // NEW: Timesheets resolve preview
       if (req.method === 'POST' && p === '/api/timesheets/resolve-preview') {
