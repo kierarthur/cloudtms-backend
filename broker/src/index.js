@@ -24312,6 +24312,7 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   }));
 }
 
+
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -24456,7 +24457,7 @@ async function handleTimesheetsSummary(env, req) {
         return { api, orGroup: null };
 
       case 'QR_NOT_ISSUED':
-        api += `&timesheet_id=is.not.null`;
+        api += `&timesheet_id=not.is.null`;
         api += `&qr_status=eq.PENDING`;
         api += `&qr_token=is.null`;
         api += `&qr_generated_at=is.null`;
@@ -24464,10 +24465,10 @@ async function handleTimesheetsSummary(env, req) {
 
       case 'QR_AWAITING_SIGNATURE':
       case 'QR_ISSUED_AWAITING_SIGNATURE':
-        api += `&timesheet_id=is.not.null`;
+        api += `&timesheet_id=not.is.null`;
         api += `&qr_status=eq.PENDING`;
-        api += `&qr_token=is.not.null`;
-        api += `&qr_generated_at=is.not.null`;
+        api += `&qr_token=not.is.null`;
+        api += `&qr_generated_at=not.is.null`;
         api += `&qr_scanned_at=is.null`;
         return { api, orGroup: null };
 
@@ -24550,7 +24551,7 @@ async function handleTimesheetsSummary(env, req) {
     if (isAdjusted === 'false') api += `&is_adjusted=eq.false`;
     if (isQr === 'true') api += `&is_qr=eq.true`;
     if (isQr === 'false') api += `&is_qr=eq.false`;
-    if (candidatePaid === 'true') api += `&pay_paid_at_utc=is.not.null`;
+    if (candidatePaid === 'true') api += `&pay_paid_at_utc=not.is.null`;
     if (hrIssue) api += `&hr_crosscheck_issues=cs.{${enc(hrIssue)}}`;
 
     const issuesApplied = applyIssuesFilter(api, effectiveIssues);
@@ -24802,6 +24803,8 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
+
+
 async function handleTimesheetsSubmitWeekly(env, req) {
   // Public / broker: submit weekly timesheet (ELECTRONIC or QR intent)
   const enc = encodeURIComponent;
@@ -44761,179 +44764,11 @@ function computeNextDueFromSchedule(schedule) {
   return next;
 }
 
- async function handlePayAdvancesList(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-  const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
-
-  const candidateId = getCandidateIdFromPath(req);
-  if (!candidateId) {
-    return withCORS(env, req, badRequest('candidate_id missing in path'));
-  }
-
-  const status = q('status'); // optional: ACTIVE | PAUSED | PAID_OFF | null
-
-  let url =
-    `${env.SUPABASE_URL}/rest/v1/pay_advances` +
-    `?candidate_id=eq.${enc(candidateId)}` +
-    `&select=id,candidate_id,client_id,reason,original_amount,outstanding_amount,` +
-    `linked_shift_date,schedule_json,next_due_week_start,status,best_guess_hours,notes,created_at` +
-    `&order=created_at.asc`;
-
-  if (status) {
-    url += `&status=eq.${enc(status)}`;
-  }
-
-  const { rows } = await sbFetch(env, url);
-  const advances = rows || [];
-
-  return withCORS(env, req, ok({ advances }));
-}
 
 
 
 
 
- async function handlePayAdvancesPause(env, req, advanceIdParam) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-  const advanceId = advanceIdParam || getAdvanceIdFromPath(req);
-  if (!advanceId) {
-    return withCORS(env, req, badRequest('advance id missing in path'));
-  }
-
-  const patch = {
-    status: 'PAUSED',
-    updated_at: new Date().toISOString()
-  };
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/pay_advances?id=eq.${enc(advanceId)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(patch)
-    }
-  );
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to pause advance: ${t}`));
-  }
-  const json = await res.json().catch(() => []);
-  const advance = Array.isArray(json) ? json[0] : json;
-
-  await writeAudit(
-    env,
-    user,
-    'PAY_ADVANCE_PAUSED',
-    { advance_id: advanceId },
-    { entity: 'pay_advance', subject_id: advanceId, reason: 'PAYMENT', req }
-  );
-
-  return withCORS(env, req, ok({ advance }));
-}
-
- async function handlePayAdvancesResume(env, req, advanceIdParam) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-  const advanceId = advanceIdParam || getAdvanceIdFromPath(req);
-  if (!advanceId) {
-    return withCORS(env, req, badRequest('advance id missing in path'));
-  }
-
-  // Load current schedule so we can recompute next_due_week_start
-  const { rows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/pay_advances` +
-      `?id=eq.${enc(advanceId)}` +
-      `&select=id,schedule_json`
-  );
-  const adv = rows?.[0] || null;
-  if (!adv) {
-    return withCORS(env, req, notFound('advance not found'));
-  }
-
-  const schedule = Array.isArray(adv.schedule_json) ? adv.schedule_json : [];
-  const nextDue = computeNextDueFromSchedule(schedule);
-
-  const patch = {
-    status: 'ACTIVE',
-    next_due_week_start: nextDue,
-    updated_at: new Date().toISOString()
-  };
-
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/pay_advances?id=eq.${enc(advanceId)}`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(patch)
-    }
-  );
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    return withCORS(env, req, serverError(`Failed to resume advance: ${t}`));
-  }
-  const json = await res.json().catch(() => []);
-  const advance = Array.isArray(json) ? json[0] : json;
-
-  await writeAudit(
-    env,
-    user,
-    'PAY_ADVANCE_RESUMED',
-    { advance_id: advanceId },
-    { entity: 'pay_advance', subject_id: advanceId, reason: 'PAYMENT', req }
-  );
-
-  return withCORS(env, req, ok({ advance }));
-}
-
- async function handlePayAdvancesSummary(env, req, candidateIdParam) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-  const candidateId = candidateIdParam || getCandidateIdFromPath(req);
-  if (!candidateId) {
-    return withCORS(env, req, badRequest('candidate_id missing in path'));
-  }
-
-  const { rows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/pay_advances` +
-      `?candidate_id=eq.${enc(candidateId)}` +
-      `&select=reason,outstanding_amount,original_amount,status` +
-      `&order=created_at.asc`
-  );
-  const advances = rows || [];
-
-  let totalOwedByCandidate = 0;
-  let totalMissingShift = 0;
-
-  for (const a of advances) {
-    const out = Number(a.outstanding_amount || 0);
-    if (a.status === 'ACTIVE' || a.status === 'PAUSED') {
-      totalOwedByCandidate += out;
-      if (a.reason === 'MISSING_SHIFT') {
-        totalMissingShift += out;
-      }
-    }
-  }
-
-  const summary = {
-    total_owed_by_candidate: round2(totalOwedByCandidate),
-    total_advances_not_offset: round2(totalMissingShift)
-  };
-
-  return withCORS(env, req, ok(summary));
-}
 
 async function loadScheduledAdvanceEntries(env, candidateId, weekStart) {
   const enc = encodeURIComponent;
@@ -96156,14 +95991,8 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
       }
 
       // ====================== PAY ADVANCES ======================
-      {
-        const m = matchPath(p, '/api/candidates/:id/advances');
-        if (m && req.method === 'GET')   return handlePayAdvancesList(env, req);
-      }
-      {
-        const m = matchPath(p, '/api/candidates/:id/advances/summary');
-        if (m && req.method === 'GET')   return handlePayAdvancesSummary(env, req, m.id);
-      }
+    
+    
 
 
       // Rates — client defaults
