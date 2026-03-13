@@ -24688,7 +24688,7 @@ async function handleTimesheetsSummary(env, req) {
       } catch {}
 
       if (!usedCanonicalRpc) {
-        const allRows = await fetchAllMatchingRows(['timesheet_id', 'contract_week_id', 'id']);
+        const allRows = await fetchAllMatchingRows(['timesheet_id', 'contract_week_id']);
         membershipIds = normalizeIdList(
           allRows.map((row) => getStableSummaryId(row))
         );
@@ -24736,7 +24736,6 @@ async function handleTimesheetsSummary(env, req) {
       allMatchedRows = normalizeSummaryRows(await fetchAllMatchingRows([
         'timesheet_id',
         'contract_week_id',
-        'id',
         'total_pay_ex_vat',
         'margin_ex_vat',
         'route_type',
@@ -24803,8 +24802,6 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
-
-
 async function handleTimesheetsSubmitWeekly(env, req) {
   // Public / broker: submit weekly timesheet (ELECTRONIC or QR intent)
   const enc = encodeURIComponent;
