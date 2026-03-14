@@ -14103,921 +14103,6 @@ begin
 end;
 $function$;
 
-create or replace function public.pay_payment_advance_create(
-  p_candidate_id uuid,
-  p_principal_amount numeric,
-  p_weekly_due numeric,
-  p_weeks_total int,
-  p_start_week_start date,
-  p_actor_user_id uuid,
-  p_note text default null,
-  p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_pay_date date := (now() at time zone 'Europe/London')::date;
-
-  v_settings record;
-  v_candidate record;
-
-  v_schedule_json jsonb := '[]'::jsonb;
-  v_next_due date := null;
-
-  v_finance_case_id uuid := null;
-  v_pay_batch_id uuid := null;
-  v_pay_batch_candidate_id uuid := null;
-  v_pay_batch_item_id uuid := null;
-
-  v_warnings jsonb := '[]'::jsonb;
-
-  v_provider text := null;
-  v_env text := null;
-  v_need_name_check boolean := false;
-  v_requires_payee_map boolean := false;
-
-  v_bnc_status text := null;
-  v_bnc_has_override boolean := false;
-  v_bpm_present boolean := false;
-
-  v_required_weeks int := 0;
-  v_pay_channel text := null;
-  v_paye_treatment text := 'NONE';
-begin
-  if p_candidate_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'CANDIDATE_ID_REQUIRED',
-      'message', 'pay_payment_advance_create: candidate_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'ACTOR_USER_ID_REQUIRED',
-      'message', 'pay_payment_advance_create: actor_user_id is required'
-    )::text;
-  end if;
-
-  if p_principal_amount is null or round(p_principal_amount,2) <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'PRINCIPAL_INVALID',
-      'message', 'pay_payment_advance_create: principal_amount must be > 0'
-    )::text;
-  end if;
-
-  if p_weekly_due is null or round(p_weekly_due,2) <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'WEEKLY_DUE_INVALID',
-      'message', 'pay_payment_advance_create: weekly_due must be > 0'
-    )::text;
-  end if;
-
-  if p_weeks_total is null or p_weeks_total < 1 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'WEEKS_TOTAL_INVALID',
-      'message', 'pay_payment_advance_create: weeks_total must be >= 1'
-    )::text;
-  end if;
-
-  if p_start_week_start is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'START_WEEK_START_REQUIRED',
-      'message', 'pay_payment_advance_create: start_week_start is required'
-    )::text;
-  end if;
-
-  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'START_WEEK_START_NOT_MONDAY',
-      'message', 'pay_payment_advance_create: start_week_start must be a Monday (week start)',
-      'start_week_start', p_start_week_start::text
-    )::text;
-  end if;
-
-  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
-      'message', 'pay_payment_advance_create: minimum_earnings_threshold must be >= 0'
-    )::text;
-  end if;
-
-  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'TAKE_HOME_FLOOR_INVALID',
-      'message', 'pay_payment_advance_create: take_home_floor_override must be >= 0'
-    )::text;
-  end if;
-
-  v_required_weeks := ceil(round(p_principal_amount,2) / round(p_weekly_due,2));
-  if p_weeks_total < v_required_weeks then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'WEEKS_TOTAL_TOO_SHORT',
-      'message', 'pay_payment_advance_create: repayment schedule does not cover the principal amount',
-      'required_weeks', v_required_weeks,
-      'weeks_total', p_weeks_total
-    )::text;
-  end if;
-
-  select
-    sd.banking_system,
-    sd.external_paye_system,
-    sd.rail_provider_default,
-    sd.rail_env_default,
-    sd.rail_supports_name_check
-  into v_settings
-  from public.settings_defaults sd
-  where sd.id = 1
-  limit 1;
-
-  if v_settings.banking_system is null or v_settings.external_paye_system is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'SETTINGS_DEFAULTS_MISSING',
-      'message', 'pay_payment_advance_create: settings_defaults missing required banking defaults (id=1)'
-    )::text;
-  end if;
-
-  select
-    c.id,
-    c.active,
-    c.tms_ref,
-    c.display_name,
-    c.first_name,
-    c.last_name,
-    c.account_holder,
-    c.sort_code,
-    c.account_number,
-    c.bank_details_hash,
-    upper(coalesce(c.pay_method,'')) as pay_method
-  into v_candidate
-  from public.candidates c
-  where c.id = p_candidate_id
-  limit 1;
-
-  if v_candidate.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'CANDIDATE_NOT_FOUND',
-      'message', 'pay_payment_advance_create: candidate not found',
-      'candidate_id', p_candidate_id::text
-    )::text;
-  end if;
-
-  if coalesce(v_candidate.active,false) = false then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'CANDIDATE_INACTIVE',
-      'message', 'pay_payment_advance_create: candidate is not active',
-      'candidate_id', p_candidate_id::text
-    )::text;
-  end if;
-
-  if v_candidate.pay_method not in ('PAYE','UMBRELLA') then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'PAY_METHOD_INVALID',
-      'message', 'pay_payment_advance_create: candidate pay_method must be PAYE or UMBRELLA',
-      'candidate_id', p_candidate_id::text,
-      'pay_method', v_candidate.pay_method
-    )::text;
-  end if;
-
-  v_pay_channel := v_candidate.pay_method;
-
-  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
-  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
-  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
-  v_requires_payee_map := (v_provider <> 'CSV');
-
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'week_start', (p_start_week_start + (gs.i * 7))::date,
-          'amount', round(
-            -least(
-              round(p_weekly_due,2),
-              greatest(round(p_principal_amount,2) - (round(p_weekly_due,2) * gs.i), 0)
-            ),
-            2
-          )
-        )
-        order by (p_start_week_start + (gs.i * 7))::date asc
-      ),
-      '[]'::jsonb
-    )
-  into v_schedule_json
-  from generate_series(0, greatest(p_weeks_total,1) - 1) as gs(i);
-
-  select min(x.week_start)
-  into v_next_due
-  from (
-    select
-      (p_start_week_start + (gs2.i * 7))::date as week_start,
-      round(
-        -least(
-          round(p_weekly_due,2),
-          greatest(round(p_principal_amount,2) - (round(p_weekly_due,2) * gs2.i), 0)
-        ),
-        2
-      )::numeric as amt
-    from generate_series(0, greatest(p_weeks_total,1) - 1) as gs2(i)
-  ) x
-  where x.amt < 0;
-
-  insert into public.pay_advances(
-    candidate_id,
-    client_id,
-    reason,
-    original_amount,
-    outstanding_amount,
-    linked_shift_date,
-    schedule_json,
-    next_due_week_start,
-    status,
-    best_guess_hours,
-    notes,
-    created_at,
-    created_by,
-    updated_at,
-    advance_kind,
-    linked_timesheet_id,
-    baseline_signature,
-    payout_status,
-    payout_pay_batch_id,
-    payout_transfer_id,
-    weekly_due,
-    weeks_total,
-    start_week_start,
-    case_type,
-    adjustment_comment,
-    source_original_paid_amount,
-    source_corrected_paid_amount,
-    minimum_earnings_threshold,
-    take_home_floor_override,
-    written_off_at_utc,
-    written_off_by_user_id,
-    write_off_reason,
-    cleared_at_utc,
-    cleared_by_user_id
-  )
-  values (
-    p_candidate_id,
-    null::uuid,
-    'LOAN'::public.pay_advance_reason_enum,
-    round(p_principal_amount,2),
-    round(p_principal_amount,2),
-    null::date,
-    coalesce(v_schedule_json,'[]'::jsonb),
-    v_next_due,
-    'ACTIVE'::public.pay_advance_status_enum,
-    null::jsonb,
-    nullif(btrim(coalesce(p_note,'')), ''),
-    v_now_utc,
-    p_actor_user_id,
-    v_now_utc,
-    'LOAN'::public.pay_advance_kind_enum,
-    null::uuid,
-    null::text,
-    'PENDING'::public.pay_advance_payout_status_enum,
-    null::uuid,
-    null::uuid,
-    round(p_weekly_due,2),
-    p_weeks_total,
-    p_start_week_start,
-    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
-    null::text,
-    null::numeric,
-    null::numeric,
-    case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
-    case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
-    null::timestamptz,
-    null::uuid,
-    null::text,
-    null::timestamptz,
-    null::uuid
-  )
-  returning id into v_finance_case_id;
-
-  insert into public.pay_batches(
-    pay_date,
-    created_at_utc,
-    created_by_user_id,
-    status,
-    banking_system_snapshot,
-    external_paye_system_snapshot,
-    rail_provider_snapshot,
-    rail_env_snapshot,
-    batch_kind_fixed
-  )
-  values (
-    v_pay_date,
-    v_now_utc,
-    p_actor_user_id,
-    'DRAFT',
-    v_settings.banking_system,
-    v_settings.external_paye_system,
-    v_settings.rail_provider_default,
-    v_settings.rail_env_default,
-    'LOANS'
-  )
-  returning id into v_pay_batch_id;
-
-  update public.pay_advances pa
-  set payout_pay_batch_id = v_pay_batch_id,
-      updated_at = v_now_utc
-  where pa.id = v_finance_case_id;
-
-  insert into public.pay_batch_candidates(
-    pay_batch_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    paye_state,
-    mismatch_settlement_choice,
-    gross_preview,
-    net_bank_amount,
-    debt_created,
-    loan_repayment_taken,
-    overpayment_recovery_taken,
-    awaiting_net_amount,
-    updated_at
-  )
-  values (
-    v_pay_batch_id,
-    p_candidate_id,
-    v_candidate.tms_ref,
-    v_candidate.display_name,
-    null,
-    null,
-    round(p_principal_amount,2),
-    round(p_principal_amount,2),
-    0,
-    0,
-    0,
-    false,
-    v_now_utc
-  )
-  returning id into v_pay_batch_candidate_id;
-
-  insert into public.pay_batch_items(
-    pay_batch_candidate_id,
-    item_type,
-    timesheet_id,
-    segment_key,
-    source_ref,
-    description,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    pay_channel,
-    umbrella_id,
-    bank_reference,
-    pay_bank_transfer_id,
-    repayment_week_start,
-    is_voided,
-    is_mismatch,
-    created_at,
-    updated_at,
-    finance_case_id,
-    reservation_id,
-    paye_treatment
-  )
-  values (
-    v_pay_batch_candidate_id,
-    'LOAN_PAYOUT',
-    null::uuid,
-    null::text,
-    ('advance:' || v_finance_case_id::text),
-    'Payment Advance',
-    round(p_principal_amount,2),
-    0,
-    round(p_principal_amount,2),
-    v_pay_channel,
-    case when v_pay_channel = 'UMBRELLA' then v_candidate.umbrella_id else null::uuid end,
-    null::text,
-    null::uuid,
-    null::date,
-    false,
-    false,
-    v_now_utc,
-    v_now_utc,
-    v_finance_case_id,
-    null::uuid,
-    v_paye_treatment
-  )
-  returning id into v_pay_batch_item_id;
-
-  insert into public.pay_batch_item_breakdowns(
-    pay_batch_item_id,
-    line_kind,
-    bucket_code,
-    unit_name,
-    units,
-    rate,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    meta_json
-  )
-  values (
-    v_pay_batch_item_id,
-    'LOAN_PAYOUT',
-    null,
-    'Payment Advance',
-    null::numeric,
-    null::numeric,
-    round(p_principal_amount,2),
-    0,
-    round(p_principal_amount,2),
-    jsonb_build_object(
-      'case_type', 'PAYMENT_ADVANCE',
-      'worker_label', 'Payment Advance'
-    )
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    v_finance_case_id,
-    'CREATED',
-    v_now_utc,
-    p_actor_user_id,
-    v_pay_batch_id,
-    null::jsonb,
-    jsonb_build_object(
-      'case_type', 'PAYMENT_ADVANCE',
-      'original_amount', round(p_principal_amount,2),
-      'outstanding_amount', round(p_principal_amount,2),
-      'weekly_due', round(p_weekly_due,2),
-      'weeks_total', p_weeks_total,
-      'start_week_start', p_start_week_start::text,
-      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
-      'payout_pay_batch_id', v_pay_batch_id::text,
-      'payout_status', 'PENDING',
-      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
-      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end
-    ),
-    null::text,
-    'Payment Advance created'
-  );
-
-  if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
-    v_warnings := v_warnings || jsonb_build_array(
-      jsonb_build_object(
-        'code', 'BLOCKED_BANK_DETAILS',
-        'message', 'Candidate bank details are missing; batch can be created but will be blocked at prepare/schedule until bank details are present.',
-        'candidate_id', p_candidate_id::text
-      )
-    );
-  else
-    if v_need_name_check = true then
-      select
-        coalesce(bnc.status, 'UNVERIFIED') as status,
-        (bnc.override_reason is not null and bnc.override_hash = v_candidate.bank_details_hash) as has_override
-      into
-        v_bnc_status,
-        v_bnc_has_override
-      from public.bank_name_checks bnc
-      where bnc.rail_provider = v_settings.rail_provider_default
-        and bnc.rail_env = v_settings.rail_env_default
-        and bnc.entity_kind = 'CANDIDATE'
-        and bnc.entity_id = p_candidate_id
-        and bnc.bank_details_hash = v_candidate.bank_details_hash
-      limit 1;
-
-      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
-        v_warnings := v_warnings || jsonb_build_array(
-          jsonb_build_object(
-            'code', 'BLOCKED_NAME_CHECK',
-            'message', 'Name check has not passed (or override missing) for candidate bank details; scheduling/execution may be blocked until resolved.',
-            'candidate_id', p_candidate_id::text,
-            'rail_provider', v_settings.rail_provider_default,
-            'rail_env', v_settings.rail_env_default
-          )
-        );
-      end if;
-    end if;
-
-    if v_requires_payee_map = true then
-      select (bpm.payee_id is not null) as present
-      into v_bpm_present
-      from public.bank_payee_map bpm
-      where bpm.rail_provider = v_settings.rail_provider_default
-        and bpm.rail_env = v_settings.rail_env_default
-        and bpm.entity_kind = 'CANDIDATE'
-        and bpm.entity_id = p_candidate_id
-        and bpm.bank_details_hash = v_candidate.bank_details_hash
-      limit 1;
-
-      if coalesce(v_bpm_present,false) = false then
-        v_warnings := v_warnings || jsonb_build_array(
-          jsonb_build_object(
-            'code', 'BLOCKED_NO_PAYEE_MAP',
-            'message', 'Payee map is missing for candidate bank details on this rail; scheduling/execution may be blocked until payee mapping exists.',
-            'candidate_id', p_candidate_id::text,
-            'rail_provider', v_settings.rail_provider_default,
-            'rail_env', v_settings.rail_env_default
-          )
-        );
-      end if;
-    end if;
-  end if;
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', v_finance_case_id::text,
-    'advance_id', v_finance_case_id::text,
-    'pay_batch_id', v_pay_batch_id::text,
-    'pay_date', v_pay_date::text,
-    'batch_kind_fixed', 'LOANS',
-    'case_type', 'PAYMENT_ADVANCE',
-    'worker_label', 'Payment Advance',
-    'repayment_label', 'Payment Advance Repayment',
-    'warnings', v_warnings
-  );
-end;
-$$;
-
-create or replace function public.pay_payment_advance_update(
-  p_finance_case_id uuid,
-  p_actor_user_id uuid,
-  p_principal_amount numeric default null,
-  p_weekly_due numeric default null,
-  p_weeks_total int default null,
-  p_start_week_start date default null,
-  p_note text default null,
-  p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_case public.pay_advances%rowtype;
-  v_batch public.pay_batches%rowtype;
-  v_has_batch boolean := false;
-  v_is_committed boolean := false;
-
-  v_new_principal numeric(12,2);
-  v_new_weekly_due numeric(12,2);
-  v_new_weeks_total int;
-  v_new_start_week_start date;
-  v_new_notes text;
-  v_new_minimum_earnings_threshold numeric(12,2);
-  v_new_take_home_floor_override numeric(12,2);
-  v_new_schedule_json jsonb := '[]'::jsonb;
-  v_new_next_due date := null;
-  v_required_weeks int := 0;
-
-  v_before_json jsonb := '{}'::jsonb;
-  v_after_json jsonb := '{}'::jsonb;
-  v_can_edit_payout_details boolean := false;
-  v_has_principal_change boolean := false;
-  v_batch_item_id uuid := null;
-  v_pay_batch_candidate_id uuid := null;
-begin
-  if p_finance_case_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'FINANCE_CASE_ID_REQUIRED',
-      'message', 'pay_payment_advance_update: finance_case_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'ACTOR_USER_ID_REQUIRED',
-      'message', 'pay_payment_advance_update: actor_user_id is required'
-    )::text;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id
-    and pa.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
-  for update;
-
-  if v_case.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'FINANCE_CASE_NOT_FOUND',
-      'message', 'pay_payment_advance_update: Payment Advance not found',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  if v_case.payout_pay_batch_id is not null then
-    select pb.*
-    into v_batch
-    from public.pay_batches pb
-    where pb.id = v_case.payout_pay_batch_id
-    limit 1;
-
-    v_has_batch := v_batch.id is not null;
-  end if;
-
-  if v_has_batch then
-    v_is_committed := (
-      coalesce(v_batch.authoritative_payment_date is not null, false)
-      or upper(coalesce(v_batch.status,'')) in ('SCHEDULED','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT','EXECUTING','SETTLED','COMPLETED','PARTIAL')
-    );
-  else
-    v_is_committed := false;
-  end if;
-
-  v_can_edit_payout_details := (v_is_committed = false);
-
-  v_new_principal := coalesce(round(p_principal_amount,2), round(coalesce(v_case.original_amount,0),2));
-  v_new_weekly_due := coalesce(round(p_weekly_due,2), round(coalesce(v_case.weekly_due,0),2));
-  v_new_weeks_total := coalesce(p_weeks_total, v_case.weeks_total);
-  v_new_start_week_start := coalesce(p_start_week_start, coalesce(v_case.next_due_week_start, v_case.start_week_start));
-  v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
-  v_new_minimum_earnings_threshold := case when p_minimum_earnings_threshold is null then v_case.minimum_earnings_threshold else round(p_minimum_earnings_threshold,2) end;
-  v_new_take_home_floor_override := case when p_take_home_floor_override is null then v_case.take_home_floor_override else round(p_take_home_floor_override,2) end;
-
-  v_has_principal_change := round(v_new_principal,2) <> round(coalesce(v_case.original_amount,0),2);
-
-  if v_new_weekly_due is null or v_new_weekly_due <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'WEEKLY_DUE_INVALID',
-      'message', 'pay_payment_advance_update: weekly_due must be > 0'
-    )::text;
-  end if;
-
-  if v_new_weeks_total is null or v_new_weeks_total < 1 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'WEEKS_TOTAL_INVALID',
-      'message', 'pay_payment_advance_update: weeks_total must be >= 1'
-    )::text;
-  end if;
-
-  if v_new_start_week_start is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'START_WEEK_START_REQUIRED',
-      'message', 'pay_payment_advance_update: start_week_start is required'
-    )::text;
-  end if;
-
-  if public._pay_week_start_monday(v_new_start_week_start) <> v_new_start_week_start then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'START_WEEK_START_NOT_MONDAY',
-      'message', 'pay_payment_advance_update: start_week_start must be a Monday (week start)',
-      'start_week_start', v_new_start_week_start::text
-    )::text;
-  end if;
-
-  if v_new_minimum_earnings_threshold is not null and v_new_minimum_earnings_threshold < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
-      'message', 'pay_payment_advance_update: minimum_earnings_threshold must be >= 0'
-    )::text;
-  end if;
-
-  if v_new_take_home_floor_override is not null and v_new_take_home_floor_override < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'TAKE_HOME_FLOOR_INVALID',
-      'message', 'pay_payment_advance_update: take_home_floor_override must be >= 0'
-    )::text;
-  end if;
-
-  if v_is_committed and v_has_principal_change then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'PAYOUT_ALREADY_COMMITTED',
-      'message', 'pay_payment_advance_update: payout details can only be edited before commit; after commit only future repayment terms may be changed',
-      'finance_case_id', p_finance_case_id::text,
-      'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end
-    )::text;
-  end if;
-
-  if v_can_edit_payout_details then
-    v_required_weeks := ceil(v_new_principal / v_new_weekly_due);
-  else
-    v_required_weeks := ceil(round(coalesce(v_case.outstanding_amount,0),2) / v_new_weekly_due);
-  end if;
-
-  if v_new_weeks_total < v_required_weeks then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'WEEKS_TOTAL_TOO_SHORT',
-      'message', 'pay_payment_advance_update: repayment schedule does not cover the remaining amount',
-      'required_weeks', v_required_weeks,
-      'weeks_total', v_new_weeks_total
-    )::text;
-  end if;
-
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'week_start', (v_new_start_week_start + (gs.i * 7))::date,
-          'amount', round(
-            -least(
-              v_new_weekly_due,
-              greatest(
-                (case when v_can_edit_payout_details then v_new_principal else round(coalesce(v_case.outstanding_amount,0),2) end) - (v_new_weekly_due * gs.i),
-                0
-              )
-            ),
-            2
-          )
-        )
-        order by (v_new_start_week_start + (gs.i * 7))::date asc
-      ),
-      '[]'::jsonb
-    )
-  into v_new_schedule_json
-  from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs(i);
-
-  select min(x.week_start)
-  into v_new_next_due
-  from (
-    select
-      (v_new_start_week_start + (gs2.i * 7))::date as week_start,
-      round(
-        -least(
-          v_new_weekly_due,
-          greatest(
-            (case when v_can_edit_payout_details then v_new_principal else round(coalesce(v_case.outstanding_amount,0),2) end) - (v_new_weekly_due * gs2.i),
-            0
-          )
-        ),
-        2
-      )::numeric as amt
-    from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs2(i)
-  ) x
-  where x.amt < 0;
-
-  v_before_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'notes', v_case.notes,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override,
-    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end
-  );
-
-  update public.pay_advances pa
-  set
-    original_amount = case when v_can_edit_payout_details then v_new_principal else pa.original_amount end,
-    outstanding_amount = case when v_can_edit_payout_details then v_new_principal else pa.outstanding_amount end,
-    schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
-    next_due_week_start = v_new_next_due,
-    notes = v_new_notes,
-    weekly_due = v_new_weekly_due,
-    weeks_total = v_new_weeks_total,
-    start_week_start = v_new_start_week_start,
-    minimum_earnings_threshold = v_new_minimum_earnings_threshold,
-    take_home_floor_override = v_new_take_home_floor_override,
-    updated_at = v_now_utc
-  where pa.id = p_finance_case_id;
-
-  if v_can_edit_payout_details and v_has_batch then
-    select pbc.id
-    into v_pay_batch_candidate_id
-    from public.pay_batch_candidates pbc
-    where pbc.pay_batch_id = v_batch.id
-      and pbc.candidate_id = v_case.candidate_id
-    limit 1;
-
-    select pbi.id
-    into v_batch_item_id
-    from public.pay_batch_items pbi
-    join public.pay_batch_candidates pbc2
-      on pbc2.id = pbi.pay_batch_candidate_id
-    where pbc2.pay_batch_id = v_batch.id
-      and pbc2.candidate_id = v_case.candidate_id
-      and pbi.source_ref = ('advance:' || p_finance_case_id::text)
-      and pbi.item_type = 'LOAN_PAYOUT'
-      and pbi.is_voided = false
-    limit 1;
-
-    if v_pay_batch_candidate_id is not null then
-      update public.pay_batch_candidates pbc
-      set gross_preview = v_new_principal,
-          net_bank_amount = v_new_principal,
-          updated_at = v_now_utc
-      where pbc.id = v_pay_batch_candidate_id;
-    end if;
-
-    if v_batch_item_id is not null then
-      update public.pay_batch_items pbi
-      set description = 'Payment Advance',
-          amount_ex_vat = v_new_principal,
-          amount_vat = 0,
-          amount_inc_vat = v_new_principal,
-          updated_at = v_now_utc,
-          finance_case_id = p_finance_case_id,
-          reservation_id = null,
-          paye_treatment = 'NONE'
-      where pbi.id = v_batch_item_id;
-
-      update public.pay_batch_item_breakdowns pbib
-      set unit_name = 'Payment Advance',
-          amount_ex_vat = v_new_principal,
-          amount_vat = 0,
-          amount_inc_vat = v_new_principal,
-          meta_json = jsonb_build_object(
-            'case_type', 'PAYMENT_ADVANCE',
-            'worker_label', 'Payment Advance'
-          )
-      where pbib.pay_batch_item_id = v_batch_item_id;
-    end if;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id;
-
-  v_after_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'notes', v_case.notes,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override,
-    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    p_finance_case_id,
-    'UPDATED',
-    v_now_utc,
-    p_actor_user_id,
-    case when v_batch.id is null then null else v_batch.id end,
-    v_before_json,
-    v_after_json,
-    null::text,
-    case when v_can_edit_payout_details then 'Payment Advance payout details updated before commit' else 'Payment Advance future repayment terms updated after commit' end
-  );
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', p_finance_case_id::text,
-    'advance_id', p_finance_case_id::text,
-    'case_type', 'PAYMENT_ADVANCE',
-    'worker_label', 'Payment Advance',
-    'repayment_label', 'Payment Advance Repayment',
-    'payout_editable', v_can_edit_payout_details,
-    'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end
-  );
-end;
-$$;
 
 create or replace function public.pay_manual_credit_adjustment_create(
   p_candidate_id uuid,
@@ -15701,862 +14786,6 @@ begin
 end;
 $$;
 
-create or replace function public.pay_manual_debt_adjustment_create(
-  p_candidate_id uuid,
-  p_amount numeric,
-  p_weekly_due numeric,
-  p_weeks_total int,
-  p_start_week_start date,
-  p_actor_user_id uuid,
-  p_adjustment_comment text,
-  p_note text default null,
-  p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_candidate record;
-  v_finance_case_id uuid := null;
-  v_schedule_json jsonb := '[]'::jsonb;
-  v_next_due date := null;
-  v_required_weeks int := 0;
-begin
-  if p_candidate_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'CANDIDATE_ID_REQUIRED',
-      'message', 'pay_manual_debt_adjustment_create: candidate_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'ACTOR_USER_ID_REQUIRED',
-      'message', 'pay_manual_debt_adjustment_create: actor_user_id is required'
-    )::text;
-  end if;
-
-  if p_amount is null or round(p_amount,2) <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'AMOUNT_INVALID',
-      'message', 'pay_manual_debt_adjustment_create: amount must be > 0'
-    )::text;
-  end if;
-
-  if p_weekly_due is null or round(p_weekly_due,2) <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'WEEKLY_DUE_INVALID',
-      'message', 'pay_manual_debt_adjustment_create: weekly_due must be > 0'
-    )::text;
-  end if;
-
-  if p_weeks_total is null or p_weeks_total < 1 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'WEEKS_TOTAL_INVALID',
-      'message', 'pay_manual_debt_adjustment_create: weeks_total must be >= 1'
-    )::text;
-  end if;
-
-  if p_start_week_start is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'START_WEEK_START_REQUIRED',
-      'message', 'pay_manual_debt_adjustment_create: start_week_start is required'
-    )::text;
-  end if;
-
-  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'START_WEEK_START_NOT_MONDAY',
-      'message', 'pay_manual_debt_adjustment_create: start_week_start must be a Monday (week start)',
-      'start_week_start', p_start_week_start::text
-    )::text;
-  end if;
-
-  if nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
-      'message', 'pay_manual_debt_adjustment_create: adjustment_comment is required'
-    )::text;
-  end if;
-
-  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
-      'message', 'pay_manual_debt_adjustment_create: minimum_earnings_threshold must be >= 0'
-    )::text;
-  end if;
-
-  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'TAKE_HOME_FLOOR_INVALID',
-      'message', 'pay_manual_debt_adjustment_create: take_home_floor_override must be >= 0'
-    )::text;
-  end if;
-
-  v_required_weeks := ceil(round(p_amount,2) / round(p_weekly_due,2));
-  if p_weeks_total < v_required_weeks then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'WEEKS_TOTAL_TOO_SHORT',
-      'message', 'pay_manual_debt_adjustment_create: repayment schedule does not cover the debt amount',
-      'required_weeks', v_required_weeks,
-      'weeks_total', p_weeks_total
-    )::text;
-  end if;
-
-  select
-    c.id,
-    c.active,
-    c.tms_ref,
-    c.display_name,
-    upper(coalesce(c.pay_method,'')) as pay_method
-  into v_candidate
-  from public.candidates c
-  where c.id = p_candidate_id
-  limit 1;
-
-  if v_candidate.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'CANDIDATE_NOT_FOUND',
-      'message', 'pay_manual_debt_adjustment_create: candidate not found',
-      'candidate_id', p_candidate_id::text
-    )::text;
-  end if;
-
-  if coalesce(v_candidate.active,false) = false then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
-      'code', 'CANDIDATE_INACTIVE',
-      'message', 'pay_manual_debt_adjustment_create: candidate is not active',
-      'candidate_id', p_candidate_id::text
-    )::text;
-  end if;
-
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'week_start', (p_start_week_start + (gs.i * 7))::date,
-          'amount', round(
-            -least(
-              round(p_weekly_due,2),
-              greatest(round(p_amount,2) - (round(p_weekly_due,2) * gs.i), 0)
-            ),
-            2
-          )
-        )
-        order by (p_start_week_start + (gs.i * 7))::date asc
-      ),
-      '[]'::jsonb
-    )
-  into v_schedule_json
-  from generate_series(0, greatest(p_weeks_total,1) - 1) as gs(i);
-
-  select min(x.week_start)
-  into v_next_due
-  from (
-    select
-      (p_start_week_start + (gs2.i * 7))::date as week_start,
-      round(
-        -least(
-          round(p_weekly_due,2),
-          greatest(round(p_amount,2) - (round(p_weekly_due,2) * gs2.i), 0)
-        ),
-        2
-      )::numeric as amt
-    from generate_series(0, greatest(p_weeks_total,1) - 1) as gs2(i)
-  ) x
-  where x.amt < 0;
-
-  insert into public.pay_advances(
-    candidate_id,
-    client_id,
-    reason,
-    original_amount,
-    outstanding_amount,
-    linked_shift_date,
-    schedule_json,
-    next_due_week_start,
-    status,
-    best_guess_hours,
-    notes,
-    created_at,
-    created_by,
-    updated_at,
-    advance_kind,
-    linked_timesheet_id,
-    baseline_signature,
-    payout_status,
-    payout_pay_batch_id,
-    payout_transfer_id,
-    weekly_due,
-    weeks_total,
-    start_week_start,
-    case_type,
-    adjustment_comment,
-    source_original_paid_amount,
-    source_corrected_paid_amount,
-    minimum_earnings_threshold,
-    take_home_floor_override,
-    written_off_at_utc,
-    written_off_by_user_id,
-    write_off_reason,
-    cleared_at_utc,
-    cleared_by_user_id
-  )
-  values (
-    p_candidate_id,
-    null::uuid,
-    'MANUAL_ADVANCE'::public.pay_advance_reason_enum,
-    round(p_amount,2),
-    round(p_amount,2),
-    null::date,
-    coalesce(v_schedule_json,'[]'::jsonb),
-    v_next_due,
-    'ACTIVE'::public.pay_advance_status_enum,
-    null::jsonb,
-    nullif(btrim(coalesce(p_note,'')), ''),
-    v_now_utc,
-    p_actor_user_id,
-    v_now_utc,
-    'LEGACY_ADVANCE'::public.pay_advance_kind_enum,
-    null::uuid,
-    null::text,
-    null::public.pay_advance_payout_status_enum,
-    null::uuid,
-    null::uuid,
-    round(p_weekly_due,2),
-    p_weeks_total,
-    p_start_week_start,
-    'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
-    nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-    null::numeric,
-    null::numeric,
-    case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
-    case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
-    null::timestamptz,
-    null::uuid,
-    null::text,
-    null::timestamptz,
-    null::uuid
-  )
-  returning id into v_finance_case_id;
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    v_finance_case_id,
-    'CREATED',
-    v_now_utc,
-    p_actor_user_id,
-    null::uuid,
-    null::jsonb,
-    jsonb_build_object(
-      'case_type', 'MANUAL_DEBT_ADJUSTMENT',
-      'original_amount', round(p_amount,2),
-      'outstanding_amount', round(p_amount,2),
-      'weekly_due', round(p_weekly_due,2),
-      'weeks_total', p_weeks_total,
-      'start_week_start', p_start_week_start::text,
-      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
-      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-      'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end,
-      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
-      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end
-    ),
-    null::text,
-    'Manual debt adjustment created'
-  );
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', v_finance_case_id::text,
-    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
-    'worker_label', 'Manual debt adjustment',
-    'recovery_label', 'Manual debt adjustment recovery',
-    'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end
-  );
-end;
-$$;
-
-create or replace function public.pay_manual_debt_adjustment_update(
-  p_finance_case_id uuid,
-  p_actor_user_id uuid,
-  p_amount numeric default null,
-  p_weekly_due numeric default null,
-  p_weeks_total int default null,
-  p_start_week_start date default null,
-  p_adjustment_comment text default null,
-  p_note text default null,
-  p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_case public.pay_advances%rowtype;
-  v_new_original_amount numeric(12,2);
-  v_new_outstanding_amount numeric(12,2);
-  v_new_weekly_due numeric(12,2);
-  v_new_weeks_total int;
-  v_new_start_week_start date;
-  v_new_adjustment_comment text;
-  v_new_notes text;
-  v_new_minimum_earnings_threshold numeric(12,2);
-  v_new_take_home_floor_override numeric(12,2);
-  v_new_schedule_json jsonb := '[]'::jsonb;
-  v_new_next_due date := null;
-  v_recovered_amount numeric(12,2) := 0;
-  v_required_weeks int := 0;
-  v_before_json jsonb := '{}'::jsonb;
-  v_after_json jsonb := '{}'::jsonb;
-begin
-  if p_finance_case_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'FINANCE_CASE_ID_REQUIRED',
-      'message', 'pay_manual_debt_adjustment_update: finance_case_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'ACTOR_USER_ID_REQUIRED',
-      'message', 'pay_manual_debt_adjustment_update: actor_user_id is required'
-    )::text;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id
-    and pa.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
-  for update;
-
-  if v_case.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'FINANCE_CASE_NOT_FOUND',
-      'message', 'pay_manual_debt_adjustment_update: Manual debt adjustment not found',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  if p_adjustment_comment is not null and nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
-      'message', 'pay_manual_debt_adjustment_update: adjustment_comment is required'
-    )::text;
-  end if;
-
-  v_recovered_amount := round(greatest(coalesce(v_case.original_amount,0) - coalesce(v_case.outstanding_amount,0), 0), 2);
-  v_new_original_amount := coalesce(round(p_amount,2), round(coalesce(v_case.original_amount,0),2));
-  v_new_weekly_due := coalesce(round(p_weekly_due,2), round(coalesce(v_case.weekly_due,0),2));
-  v_new_weeks_total := coalesce(p_weeks_total, v_case.weeks_total);
-  v_new_start_week_start := coalesce(p_start_week_start, coalesce(v_case.next_due_week_start, v_case.start_week_start));
-  v_new_adjustment_comment := case when p_adjustment_comment is null then v_case.adjustment_comment else nullif(btrim(p_adjustment_comment), '') end;
-  v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
-  v_new_minimum_earnings_threshold := case when p_minimum_earnings_threshold is null then v_case.minimum_earnings_threshold else round(p_minimum_earnings_threshold,2) end;
-  v_new_take_home_floor_override := case when p_take_home_floor_override is null then v_case.take_home_floor_override else round(p_take_home_floor_override,2) end;
-
-  if p_amount is not null and v_new_original_amount <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'AMOUNT_INVALID',
-      'message', 'pay_manual_debt_adjustment_update: amount must be > 0'
-    )::text;
-  end if;
-
-  if p_amount is not null and v_new_original_amount < v_recovered_amount then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'AMOUNT_BELOW_RECOVERED',
-      'message', 'pay_manual_debt_adjustment_update: amount cannot be reduced below already recovered total',
-      'recovered_amount', v_recovered_amount,
-      'requested_amount', v_new_original_amount
-    )::text;
-  end if;
-
-  if v_new_weekly_due is null or v_new_weekly_due <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'WEEKLY_DUE_INVALID',
-      'message', 'pay_manual_debt_adjustment_update: weekly_due must be > 0'
-    )::text;
-  end if;
-
-  if v_new_weeks_total is null or v_new_weeks_total < 1 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'WEEKS_TOTAL_INVALID',
-      'message', 'pay_manual_debt_adjustment_update: weeks_total must be >= 1'
-    )::text;
-  end if;
-
-  if v_new_start_week_start is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'START_WEEK_START_REQUIRED',
-      'message', 'pay_manual_debt_adjustment_update: start_week_start is required'
-    )::text;
-  end if;
-
-  if public._pay_week_start_monday(v_new_start_week_start) <> v_new_start_week_start then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'START_WEEK_START_NOT_MONDAY',
-      'message', 'pay_manual_debt_adjustment_update: start_week_start must be a Monday (week start)',
-      'start_week_start', v_new_start_week_start::text
-    )::text;
-  end if;
-
-  if v_new_minimum_earnings_threshold is not null and v_new_minimum_earnings_threshold < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
-      'message', 'pay_manual_debt_adjustment_update: minimum_earnings_threshold must be >= 0'
-    )::text;
-  end if;
-
-  if v_new_take_home_floor_override is not null and v_new_take_home_floor_override < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'TAKE_HOME_FLOOR_INVALID',
-      'message', 'pay_manual_debt_adjustment_update: take_home_floor_override must be >= 0'
-    )::text;
-  end if;
-
-  v_new_outstanding_amount := round(v_new_original_amount - v_recovered_amount, 2);
-  v_required_weeks := ceil(v_new_outstanding_amount / v_new_weekly_due);
-  if v_new_weeks_total < v_required_weeks then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
-      'code', 'WEEKS_TOTAL_TOO_SHORT',
-      'message', 'pay_manual_debt_adjustment_update: repayment schedule does not cover the remaining debt amount',
-      'required_weeks', v_required_weeks,
-      'weeks_total', v_new_weeks_total
-    )::text;
-  end if;
-
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'week_start', (v_new_start_week_start + (gs.i * 7))::date,
-          'amount', round(
-            -least(
-              v_new_weekly_due,
-              greatest(v_new_outstanding_amount - (v_new_weekly_due * gs.i), 0)
-            ),
-            2
-          )
-        )
-        order by (v_new_start_week_start + (gs.i * 7))::date asc
-      ),
-      '[]'::jsonb
-    )
-  into v_new_schedule_json
-  from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs(i);
-
-  select min(x.week_start)
-  into v_new_next_due
-  from (
-    select
-      (v_new_start_week_start + (gs2.i * 7))::date as week_start,
-      round(
-        -least(
-          v_new_weekly_due,
-          greatest(v_new_outstanding_amount - (v_new_weekly_due * gs2.i), 0)
-        ),
-        2
-      )::numeric as amt
-    from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs2(i)
-  ) x
-  where x.amt < 0;
-
-  v_before_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'adjustment_comment', v_case.adjustment_comment,
-    'notes', v_case.notes,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override
-  );
-
-  update public.pay_advances pa
-  set original_amount = v_new_original_amount,
-      outstanding_amount = v_new_outstanding_amount,
-      schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
-      next_due_week_start = v_new_next_due,
-      weekly_due = v_new_weekly_due,
-      weeks_total = v_new_weeks_total,
-      start_week_start = v_new_start_week_start,
-      adjustment_comment = v_new_adjustment_comment,
-      notes = v_new_notes,
-      minimum_earnings_threshold = v_new_minimum_earnings_threshold,
-      take_home_floor_override = v_new_take_home_floor_override,
-      updated_at = v_now_utc
-  where pa.id = p_finance_case_id;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id;
-
-  v_after_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'adjustment_comment', v_case.adjustment_comment,
-    'notes', v_case.notes,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    p_finance_case_id,
-    'UPDATED',
-    v_now_utc,
-    p_actor_user_id,
-    null::uuid,
-    v_before_json,
-    v_after_json,
-    null::text,
-    'Manual debt adjustment updated'
-  );
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', p_finance_case_id::text,
-    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
-    'worker_label', 'Manual debt adjustment',
-    'recovery_label', 'Manual debt adjustment recovery'
-  );
-end;
-$$;
-create or replace function public.pay_finance_case_restructure(
-  p_finance_case_id uuid,
-  p_actor_user_id uuid,
-  p_weekly_due numeric,
-  p_weeks_total int,
-  p_start_week_start date,
-  p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null,
-  p_note text default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_case public.pay_advances%rowtype;
-  v_before_json jsonb := '{}'::jsonb;
-  v_after_json jsonb := '{}'::jsonb;
-  v_new_schedule_json jsonb := '[]'::jsonb;
-  v_new_next_due_week_start date := null;
-  v_required_weeks int := 0;
-  v_remaining_amount numeric(12,2);
-  v_new_weekly_due numeric(12,2);
-  v_new_weeks_total int;
-  v_new_start_week_start date;
-  v_new_minimum_earnings_threshold numeric(12,2);
-  v_new_take_home_floor_override numeric(12,2);
-  v_new_note text;
-begin
-  if p_finance_case_id is null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','FINANCE_CASE_ID_REQUIRED',
-      'message','pay_finance_case_restructure: finance_case_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','ACTOR_USER_ID_REQUIRED',
-      'message','pay_finance_case_restructure: actor_user_id is required'
-    )::text;
-  end if;
-
-  if p_weekly_due is null or round(p_weekly_due,2) <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','WEEKLY_DUE_INVALID',
-      'message','pay_finance_case_restructure: weekly_due must be > 0'
-    )::text;
-  end if;
-
-  if p_weeks_total is null or p_weeks_total < 1 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','WEEKS_TOTAL_INVALID',
-      'message','pay_finance_case_restructure: weeks_total must be >= 1'
-    )::text;
-  end if;
-
-  if p_start_week_start is null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','START_WEEK_START_REQUIRED',
-      'message','pay_finance_case_restructure: start_week_start is required'
-    )::text;
-  end if;
-
-  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','START_WEEK_START_NOT_MONDAY',
-      'message','pay_finance_case_restructure: start_week_start must be a Monday (week start)',
-      'start_week_start', p_start_week_start::text
-    )::text;
-  end if;
-
-  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','MINIMUM_EARNINGS_THRESHOLD_INVALID',
-      'message','pay_finance_case_restructure: minimum_earnings_threshold must be >= 0'
-    )::text;
-  end if;
-
-  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','TAKE_HOME_FLOOR_INVALID',
-      'message','pay_finance_case_restructure: take_home_floor_override must be >= 0'
-    )::text;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id
-    and pa.case_type in ('PAYMENT_ADVANCE'::public.pay_finance_case_type_enum, 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum)
-  for update;
-
-  if v_case.id is null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','FINANCE_CASE_NOT_FOUND',
-      'message','pay_finance_case_restructure: repayable finance case not found or not eligible for restructure',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  if coalesce(v_case.write_off_reason,'') <> '' or v_case.written_off_at_utc is not null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','FINANCE_CASE_WRITTEN_OFF',
-      'message','pay_finance_case_restructure: written-off finance cases cannot be restructured',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  if v_case.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','FINANCE_CASE_NOT_REPAYABLE',
-      'message','pay_finance_case_restructure: manual credit adjustments are not repayable and cannot be restructured',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  v_remaining_amount := round(coalesce(v_case.outstanding_amount,0),2);
-  if v_remaining_amount <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','NO_OUTSTANDING_BALANCE',
-      'message','pay_finance_case_restructure: finance case has no outstanding balance to restructure',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  v_new_weekly_due := round(p_weekly_due,2);
-  v_new_weeks_total := p_weeks_total;
-  v_new_start_week_start := p_start_week_start;
-  v_new_minimum_earnings_threshold := case when p_minimum_earnings_threshold is null then v_case.minimum_earnings_threshold else round(p_minimum_earnings_threshold,2) end;
-  v_new_take_home_floor_override := case when p_take_home_floor_override is null then v_case.take_home_floor_override else round(p_take_home_floor_override,2) end;
-  v_new_note := case when p_note is null then v_case.notes else nullif(btrim(coalesce(p_note,'')), '') end;
-
-  v_required_weeks := ceil(v_remaining_amount / v_new_weekly_due);
-  if v_new_weeks_total < v_required_weeks then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','WEEKS_TOTAL_TOO_SHORT',
-      'message','pay_finance_case_restructure: repayment schedule does not cover the remaining outstanding balance',
-      'required_weeks', v_required_weeks,
-      'weeks_total', v_new_weeks_total,
-      'outstanding_amount', v_remaining_amount
-    )::text;
-  end if;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'week_start', (v_new_start_week_start + (gs.i * 7))::date,
-        'amount', round(
-          -least(
-            v_new_weekly_due,
-            greatest(v_remaining_amount - (v_new_weekly_due * gs.i), 0)
-          ),
-          2
-        )
-      )
-      order by (v_new_start_week_start + (gs.i * 7))::date asc
-    ),
-    '[]'::jsonb
-  )
-  into v_new_schedule_json
-  from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs(i);
-
-  select min(x.week_start)
-  into v_new_next_due_week_start
-  from (
-    select
-      (v_new_start_week_start + (gs2.i * 7))::date as week_start,
-      round(
-        -least(
-          v_new_weekly_due,
-          greatest(v_remaining_amount - (v_new_weekly_due * gs2.i), 0)
-        ),
-        2
-      )::numeric as amt
-    from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs2(i)
-  ) x
-  where x.amt < 0;
-
-  v_before_json := jsonb_build_object(
-    'case_type', v_case.case_type::text,
-    'status', v_case.status::text,
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override,
-    'notes', v_case.notes
-  );
-
-  update public.pay_advances pa
-  set
-    schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
-    weekly_due = v_new_weekly_due,
-    weeks_total = v_new_weeks_total,
-    start_week_start = v_new_start_week_start,
-    next_due_week_start = v_new_next_due_week_start,
-    minimum_earnings_threshold = v_new_minimum_earnings_threshold,
-    take_home_floor_override = v_new_take_home_floor_override,
-    notes = v_new_note,
-    updated_at = v_now_utc
-  where pa.id = p_finance_case_id;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id;
-
-  v_after_json := jsonb_build_object(
-    'case_type', v_case.case_type::text,
-    'status', v_case.status::text,
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override,
-    'notes', v_case.notes
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    p_finance_case_id,
-    'RESTRUCTURED',
-    v_now_utc,
-    p_actor_user_id,
-    null::uuid,
-    v_before_json,
-    v_after_json,
-    null::text,
-    'Finance case repayment terms restructured'
-  );
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', p_finance_case_id::text,
-    'case_type', v_case.case_type::text,
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2)
-  );
-end;
-$$;
 
 create or replace function public.pay_finance_case_pause_resume(
   p_finance_case_id uuid,
@@ -19202,6 +17431,2091 @@ begin
   );
 end;
 $function$
+
+
+create or replace function public.pay_payment_advance_create(
+  p_candidate_id uuid,
+  p_principal_amount numeric,
+  p_weekly_due numeric,
+  p_weeks_total int,
+  p_start_week_start date,
+  p_actor_user_id uuid,
+  p_note text default null,
+  p_minimum_earnings_threshold numeric default null,
+  p_take_home_floor_override numeric default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_pay_date date := (now() at time zone 'Europe/London')::date;
+
+  v_settings record;
+  v_candidate record;
+
+  v_schedule_json jsonb := '[]'::jsonb;
+  v_next_due date := null;
+
+  v_finance_case_id uuid := null;
+  v_pay_batch_id uuid := null;
+  v_pay_batch_candidate_id uuid := null;
+  v_pay_batch_item_id uuid := null;
+
+  v_warnings jsonb := '[]'::jsonb;
+
+  v_provider text := null;
+  v_env text := null;
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+
+  v_bnc_status text := null;
+  v_bnc_has_override boolean := false;
+  v_bpm_present boolean := false;
+
+  v_required_weeks int := 0;
+  v_pay_channel text := null;
+  v_paye_treatment text := 'NONE';
+
+  v_principal_amount_norm numeric(12,2) := 0;
+  v_weekly_due_norm numeric(12,2) := null;
+  v_weeks_total_norm int := null;
+  v_schedule_input_mode text := null;
+  v_has_weekly_due_input boolean := false;
+  v_has_weeks_total_input boolean := false;
+begin
+  if p_candidate_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'CANDIDATE_ID_REQUIRED',
+      'message', 'pay_payment_advance_create: candidate_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_payment_advance_create: actor_user_id is required'
+    )::text;
+  end if;
+
+  if p_principal_amount is null or round(p_principal_amount,2) <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'PRINCIPAL_INVALID',
+      'message', 'pay_payment_advance_create: principal_amount must be > 0'
+    )::text;
+  end if;
+
+  if p_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'START_WEEK_START_REQUIRED',
+      'message', 'pay_payment_advance_create: start_week_start is required'
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_payment_advance_create: start_week_start must be a Monday (week start)',
+      'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
+      'message', 'pay_payment_advance_create: minimum_earnings_threshold must be >= 0'
+    )::text;
+  end if;
+
+  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'TAKE_HOME_FLOOR_INVALID',
+      'message', 'pay_payment_advance_create: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  v_principal_amount_norm := round(p_principal_amount,2);
+  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
+  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
+
+  if not v_has_weekly_due_input and not v_has_weeks_total_input then
+    if p_weekly_due is not null and round(p_weekly_due,2) <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'WEEKLY_DUE_INVALID',
+        'message', 'pay_payment_advance_create: weekly_due must be > 0 when provided'
+      )::text;
+    end if;
+
+    if p_weeks_total is not null and p_weeks_total < 1 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'WEEKS_TOTAL_INVALID',
+        'message', 'pay_payment_advance_create: weeks_total must be >= 1 when provided'
+      )::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'REPAYMENT_INPUT_REQUIRED',
+      'message', 'pay_payment_advance_create: supply either weekly_due or weeks_total'
+    )::text;
+  end if;
+
+  if v_has_weekly_due_input and v_has_weeks_total_input then
+    v_schedule_input_mode := 'LEGACY_BOTH';
+    v_weekly_due_norm := round(p_weekly_due,2);
+    v_weeks_total_norm := p_weeks_total;
+  elsif v_has_weeks_total_input then
+    v_schedule_input_mode := 'BY_WEEKS';
+    v_weeks_total_norm := p_weeks_total;
+    v_weekly_due_norm := round((ceil((v_principal_amount_norm / v_weeks_total_norm) * 100) / 100), 2);
+  else
+    v_schedule_input_mode := 'BY_WEEKLY_DUE';
+    v_weekly_due_norm := round(p_weekly_due,2);
+    v_weeks_total_norm := greatest(ceil(v_principal_amount_norm / v_weekly_due_norm)::int, 1);
+  end if;
+
+  if v_weekly_due_norm is null or v_weekly_due_norm <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'WEEKLY_DUE_INVALID',
+      'message', 'pay_payment_advance_create: normalized weekly_due must be > 0'
+    )::text;
+  end if;
+
+  if v_weeks_total_norm is null or v_weeks_total_norm < 1 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'WEEKS_TOTAL_INVALID',
+      'message', 'pay_payment_advance_create: normalized weeks_total must be >= 1'
+    )::text;
+  end if;
+
+  v_required_weeks := greatest(ceil(v_principal_amount_norm / v_weekly_due_norm)::int, 1);
+  if v_weeks_total_norm < v_required_weeks then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'WEEKS_TOTAL_TOO_SHORT',
+      'message', 'pay_payment_advance_create: repayment schedule does not cover the principal amount',
+      'required_weeks', v_required_weeks,
+      'weeks_total', v_weeks_total_norm
+    )::text;
+  end if;
+
+  select
+    sd.banking_system,
+    sd.external_paye_system,
+    sd.rail_provider_default,
+    sd.rail_env_default,
+    sd.rail_supports_name_check
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'SETTINGS_DEFAULTS_MISSING',
+      'message', 'pay_payment_advance_create: settings_defaults missing required banking defaults (id=1)'
+    )::text;
+  end if;
+
+  select
+    c.id,
+    c.active,
+    c.tms_ref,
+    c.display_name,
+    c.first_name,
+    c.last_name,
+    c.account_holder,
+    c.sort_code,
+    c.account_number,
+    c.bank_details_hash,
+    c.umbrella_id,
+    upper(coalesce(c.pay_method,'')) as pay_method
+  into v_candidate
+  from public.candidates c
+  where c.id = p_candidate_id
+  limit 1;
+
+  if v_candidate.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', 'pay_payment_advance_create: candidate not found',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  if coalesce(v_candidate.active,false) = false then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'CANDIDATE_INACTIVE',
+      'message', 'pay_payment_advance_create: candidate is not active',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  if v_candidate.pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_payment_advance_create: candidate pay_method must be PAYE or UMBRELLA',
+      'candidate_id', p_candidate_id::text,
+      'pay_method', v_candidate.pay_method
+    )::text;
+  end if;
+
+  v_pay_channel := v_candidate.pay_method;
+
+  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
+  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
+  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
+  v_requires_payee_map := (v_provider <> 'CSV');
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (p_start_week_start + (gs.i * 7))::date,
+          'amount', round(
+            -least(
+              v_weekly_due_norm,
+              greatest(v_principal_amount_norm - (v_weekly_due_norm * gs.i), 0)
+            ),
+            2
+          )
+        )
+        order by (p_start_week_start + (gs.i * 7))::date asc
+      ),
+      '[]'::jsonb
+    )
+  into v_schedule_json
+  from generate_series(0, greatest(v_weeks_total_norm,1) - 1) as gs(i);
+
+  select min(x.week_start)
+  into v_next_due
+  from (
+    select
+      (p_start_week_start + (gs2.i * 7))::date as week_start,
+      round(
+        -least(
+          v_weekly_due_norm,
+          greatest(v_principal_amount_norm - (v_weekly_due_norm * gs2.i), 0)
+        ),
+        2
+      )::numeric as amt
+    from generate_series(0, greatest(v_weeks_total_norm,1) - 1) as gs2(i)
+  ) x
+  where x.amt < 0;
+
+  insert into public.pay_advances(
+    candidate_id,
+    client_id,
+    reason,
+    original_amount,
+    outstanding_amount,
+    linked_shift_date,
+    schedule_json,
+    next_due_week_start,
+    status,
+    best_guess_hours,
+    notes,
+    created_at,
+    created_by,
+    updated_at,
+    advance_kind,
+    linked_timesheet_id,
+    baseline_signature,
+    payout_status,
+    payout_pay_batch_id,
+    payout_transfer_id,
+    weekly_due,
+    weeks_total,
+    start_week_start,
+    case_type,
+    adjustment_comment,
+    source_original_paid_amount,
+    source_corrected_paid_amount,
+    minimum_earnings_threshold,
+    take_home_floor_override,
+    written_off_at_utc,
+    written_off_by_user_id,
+    write_off_reason,
+    cleared_at_utc,
+    cleared_by_user_id
+  )
+  values (
+    p_candidate_id,
+    null::uuid,
+    'LOAN'::public.pay_advance_reason_enum,
+    v_principal_amount_norm,
+    v_principal_amount_norm,
+    null::date,
+    coalesce(v_schedule_json,'[]'::jsonb),
+    v_next_due,
+    'ACTIVE'::public.pay_advance_status_enum,
+    null::jsonb,
+    nullif(btrim(coalesce(p_note,'')), ''),
+    v_now_utc,
+    p_actor_user_id,
+    v_now_utc,
+    'LOAN'::public.pay_advance_kind_enum,
+    null::uuid,
+    null::text,
+    'PENDING'::public.pay_advance_payout_status_enum,
+    null::uuid,
+    null::uuid,
+    v_weekly_due_norm,
+    v_weeks_total_norm,
+    p_start_week_start,
+    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+    null::text,
+    null::numeric,
+    null::numeric,
+    case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+    case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+    null::timestamptz,
+    null::uuid,
+    null::text,
+    null::timestamptz,
+    null::uuid
+  )
+  returning id into v_finance_case_id;
+
+  insert into public.pay_batches(
+    pay_date,
+    created_at_utc,
+    created_by_user_id,
+    status,
+    banking_system_snapshot,
+    external_paye_system_snapshot,
+    rail_provider_snapshot,
+    rail_env_snapshot,
+    batch_kind_fixed
+  )
+  values (
+    v_pay_date,
+    v_now_utc,
+    p_actor_user_id,
+    'DRAFT',
+    v_settings.banking_system,
+    v_settings.external_paye_system,
+    v_settings.rail_provider_default,
+    v_settings.rail_env_default,
+    'LOANS'
+  )
+  returning id into v_pay_batch_id;
+
+  update public.pay_advances pa
+  set payout_pay_batch_id = v_pay_batch_id,
+      updated_at = v_now_utc
+  where pa.id = v_finance_case_id;
+
+  insert into public.pay_batch_candidates(
+    pay_batch_id,
+    candidate_id,
+    candidate_tms_ref,
+    candidate_display_name,
+    paye_state,
+    mismatch_settlement_choice,
+    gross_preview,
+    net_bank_amount,
+    debt_created,
+    loan_repayment_taken,
+    overpayment_recovery_taken,
+    awaiting_net_amount,
+    updated_at
+  )
+  values (
+    v_pay_batch_id,
+    p_candidate_id,
+    v_candidate.tms_ref,
+    v_candidate.display_name,
+    null,
+    null,
+    v_principal_amount_norm,
+    v_principal_amount_norm,
+    0,
+    0,
+    0,
+    false,
+    v_now_utc
+  )
+  returning id into v_pay_batch_candidate_id;
+
+  insert into public.pay_batch_items(
+    pay_batch_candidate_id,
+    item_type,
+    timesheet_id,
+    segment_key,
+    source_ref,
+    description,
+    amount_ex_vat,
+    amount_vat,
+    amount_inc_vat,
+    pay_channel,
+    umbrella_id,
+    bank_reference,
+    pay_bank_transfer_id,
+    repayment_week_start,
+    is_voided,
+    is_mismatch,
+    created_at,
+    updated_at,
+    finance_case_id,
+    reservation_id,
+    paye_treatment
+  )
+  values (
+    v_pay_batch_candidate_id,
+    'LOAN_PAYOUT',
+    null::uuid,
+    null::text,
+    ('advance:' || v_finance_case_id::text),
+    'Payment Advance',
+    v_principal_amount_norm,
+    0,
+    v_principal_amount_norm,
+    v_pay_channel,
+    case when v_pay_channel = 'UMBRELLA' then v_candidate.umbrella_id else null::uuid end,
+    null::text,
+    null::uuid,
+    null::date,
+    false,
+    false,
+    v_now_utc,
+    v_now_utc,
+    v_finance_case_id,
+    null::uuid,
+    v_paye_treatment
+  )
+  returning id into v_pay_batch_item_id;
+
+  insert into public.pay_batch_item_breakdowns(
+    pay_batch_item_id,
+    line_kind,
+    bucket_code,
+    unit_name,
+    units,
+    rate,
+    amount_ex_vat,
+    amount_vat,
+    amount_inc_vat,
+    meta_json
+  )
+  values (
+    v_pay_batch_item_id,
+    'LOAN_PAYOUT',
+    null,
+    'Payment Advance',
+    null::numeric,
+    null::numeric,
+    v_principal_amount_norm,
+    0,
+    v_principal_amount_norm,
+    jsonb_build_object(
+      'case_type', 'PAYMENT_ADVANCE',
+      'worker_label', 'Payment Advance'
+    )
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    'CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    v_pay_batch_id,
+    null::jsonb,
+    jsonb_build_object(
+      'case_type', 'PAYMENT_ADVANCE',
+      'original_amount', v_principal_amount_norm,
+      'outstanding_amount', v_principal_amount_norm,
+      'weekly_due', v_weekly_due_norm,
+      'weeks_total', v_weeks_total_norm,
+      'start_week_start', p_start_week_start::text,
+      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+      'payout_pay_batch_id', v_pay_batch_id::text,
+      'payout_status', 'PENDING',
+      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+      'schedule_input_mode', v_schedule_input_mode
+    ),
+    null::text,
+    'Payment Advance created'
+  );
+
+  if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
+    v_warnings := v_warnings || jsonb_build_array(
+      jsonb_build_object(
+        'code', 'BLOCKED_BANK_DETAILS',
+        'message', 'Candidate bank details are missing; batch can be created but will be blocked at prepare/schedule until bank details are present.',
+        'candidate_id', p_candidate_id::text
+      )
+    );
+  else
+    if v_need_name_check = true then
+      select
+        coalesce(bnc.status, 'UNVERIFIED') as status,
+        (bnc.override_reason is not null and bnc.override_hash = v_candidate.bank_details_hash) as has_override
+      into
+        v_bnc_status,
+        v_bnc_has_override
+      from public.bank_name_checks bnc
+      where bnc.rail_provider = v_settings.rail_provider_default
+        and bnc.rail_env = v_settings.rail_env_default
+        and bnc.entity_kind = 'CANDIDATE'
+        and bnc.entity_id = p_candidate_id
+        and bnc.bank_details_hash = v_candidate.bank_details_hash
+      limit 1;
+
+      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NAME_CHECK',
+            'message', 'Name check has not passed (or override missing) for candidate bank details; scheduling/execution may be blocked until resolved.',
+            'candidate_id', p_candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+
+    if v_requires_payee_map = true then
+      select (bpm.payee_id is not null) as present
+      into v_bpm_present
+      from public.bank_payee_map bpm
+      where bpm.rail_provider = v_settings.rail_provider_default
+        and bpm.rail_env = v_settings.rail_env_default
+        and bpm.entity_kind = 'CANDIDATE'
+        and bpm.entity_id = p_candidate_id
+        and bpm.bank_details_hash = v_candidate.bank_details_hash
+      limit 1;
+
+      if coalesce(v_bpm_present,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NO_PAYEE_MAP',
+            'message', 'Payee map is missing for candidate bank details on this rail; scheduling/execution may be blocked until payee mapping exists.',
+            'candidate_id', p_candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', v_finance_case_id::text,
+    'advance_id', v_finance_case_id::text,
+    'pay_batch_id', v_pay_batch_id::text,
+    'pay_date', v_pay_date::text,
+    'batch_kind_fixed', 'LOANS',
+    'case_type', 'PAYMENT_ADVANCE',
+    'worker_label', 'Payment Advance',
+    'repayment_label', 'Payment Advance Repayment',
+    'schedule_input_mode', v_schedule_input_mode,
+    'principal_amount', v_principal_amount_norm,
+    'weekly_due', v_weekly_due_norm,
+    'weeks_total', v_weeks_total_norm,
+    'start_week_start', p_start_week_start::text,
+    'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+    'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+    'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+    'schedule_json', coalesce(v_schedule_json,'[]'::jsonb),
+    'warnings', v_warnings
+  );
+end;
+$$;
+
+
+
+
+create or replace function public.pay_finance_case_restructure(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_weekly_due numeric,
+  p_weeks_total int,
+  p_start_week_start date,
+  p_minimum_earnings_threshold numeric default null,
+  p_take_home_floor_override numeric default null,
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_case public.pay_advances%rowtype;
+  v_before_json jsonb := '{}'::jsonb;
+  v_after_json jsonb := '{}'::jsonb;
+  v_new_schedule_json jsonb := '[]'::jsonb;
+  v_new_next_due_week_start date := null;
+  v_required_weeks int := 0;
+  v_remaining_amount numeric(12,2);
+  v_new_weekly_due numeric(12,2);
+  v_new_weeks_total int;
+  v_new_start_week_start date;
+  v_new_minimum_earnings_threshold numeric(12,2);
+  v_new_take_home_floor_override numeric(12,2);
+  v_new_note text;
+  v_schedule_input_mode text := null;
+  v_has_weekly_due_input boolean := false;
+  v_has_weeks_total_input boolean := false;
+begin
+  if p_finance_case_id is null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','FINANCE_CASE_ID_REQUIRED',
+      'message','pay_finance_case_restructure: finance_case_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','ACTOR_USER_ID_REQUIRED',
+      'message','pay_finance_case_restructure: actor_user_id is required'
+    )::text;
+  end if;
+
+  if p_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','START_WEEK_START_REQUIRED',
+      'message','pay_finance_case_restructure: start_week_start is required'
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','START_WEEK_START_NOT_MONDAY',
+      'message','pay_finance_case_restructure: start_week_start must be a Monday (week start)',
+      'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','MINIMUM_EARNINGS_THRESHOLD_INVALID',
+      'message','pay_finance_case_restructure: minimum_earnings_threshold must be >= 0'
+    )::text;
+  end if;
+
+  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','TAKE_HOME_FLOOR_INVALID',
+      'message','pay_finance_case_restructure: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id
+    and pa.case_type in ('PAYMENT_ADVANCE'::public.pay_finance_case_type_enum, 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum)
+  for update;
+
+  if v_case.id is null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','FINANCE_CASE_NOT_FOUND',
+      'message','pay_finance_case_restructure: repayable finance case not found or not eligible for restructure',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if coalesce(v_case.write_off_reason,'') <> '' or v_case.written_off_at_utc is not null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','FINANCE_CASE_WRITTEN_OFF',
+      'message','pay_finance_case_restructure: written-off finance cases cannot be restructured',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if v_case.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','FINANCE_CASE_NOT_REPAYABLE',
+      'message','pay_finance_case_restructure: manual credit adjustments are not repayable and cannot be restructured',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  v_remaining_amount := round(coalesce(v_case.outstanding_amount,0),2);
+  if v_remaining_amount <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','NO_OUTSTANDING_BALANCE',
+      'message','pay_finance_case_restructure: finance case has no outstanding balance to restructure',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
+  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
+
+  if not v_has_weekly_due_input and not v_has_weeks_total_input then
+    if p_weekly_due is not null and round(p_weekly_due,2) <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error','PAY_FINANCE_CASE_RESTRUCTURE',
+        'code','WEEKLY_DUE_INVALID',
+        'message','pay_finance_case_restructure: weekly_due must be > 0 when provided'
+      )::text;
+    end if;
+
+    if p_weeks_total is not null and p_weeks_total < 1 then
+      raise exception '%', jsonb_build_object(
+        'error','PAY_FINANCE_CASE_RESTRUCTURE',
+        'code','WEEKS_TOTAL_INVALID',
+        'message','pay_finance_case_restructure: weeks_total must be >= 1 when provided'
+      )::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','REPAYMENT_INPUT_REQUIRED',
+      'message','pay_finance_case_restructure: supply either weekly_due or weeks_total'
+    )::text;
+  end if;
+
+  if v_has_weekly_due_input and v_has_weeks_total_input then
+    v_schedule_input_mode := 'LEGACY_BOTH';
+    v_new_weekly_due := round(p_weekly_due,2);
+    v_new_weeks_total := p_weeks_total;
+  elsif v_has_weeks_total_input then
+    v_schedule_input_mode := 'BY_WEEKS';
+    v_new_weeks_total := p_weeks_total;
+    v_new_weekly_due := round((ceil((v_remaining_amount / v_new_weeks_total) * 100) / 100), 2);
+  else
+    v_schedule_input_mode := 'BY_WEEKLY_DUE';
+    v_new_weekly_due := round(p_weekly_due,2);
+    v_new_weeks_total := greatest(ceil(v_remaining_amount / v_new_weekly_due)::int, 1);
+  end if;
+
+  if v_new_weekly_due is null or v_new_weekly_due <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','WEEKLY_DUE_INVALID',
+      'message','pay_finance_case_restructure: normalized weekly_due must be > 0'
+    )::text;
+  end if;
+
+  if v_new_weeks_total is null or v_new_weeks_total < 1 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','WEEKS_TOTAL_INVALID',
+      'message','pay_finance_case_restructure: normalized weeks_total must be >= 1'
+    )::text;
+  end if;
+
+  v_new_start_week_start := p_start_week_start;
+  v_new_minimum_earnings_threshold := case when p_minimum_earnings_threshold is null then v_case.minimum_earnings_threshold else round(p_minimum_earnings_threshold,2) end;
+  v_new_take_home_floor_override := case when p_take_home_floor_override is null then v_case.take_home_floor_override else round(p_take_home_floor_override,2) end;
+  v_new_note := case when p_note is null then v_case.notes else nullif(btrim(coalesce(p_note,'')), '') end;
+
+  v_required_weeks := greatest(ceil(v_remaining_amount / v_new_weekly_due)::int, 1);
+  if v_new_weeks_total < v_required_weeks then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','WEEKS_TOTAL_TOO_SHORT',
+      'message','pay_finance_case_restructure: repayment schedule does not cover the remaining outstanding balance',
+      'required_weeks', v_required_weeks,
+      'weeks_total', v_new_weeks_total,
+      'outstanding_amount', v_remaining_amount
+    )::text;
+  end if;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'week_start', (v_new_start_week_start + (gs.i * 7))::date,
+        'amount', round(
+          -least(
+            v_new_weekly_due,
+            greatest(v_remaining_amount - (v_new_weekly_due * gs.i), 0)
+          ),
+          2
+        )
+      )
+      order by (v_new_start_week_start + (gs.i * 7))::date asc
+    ),
+    '[]'::jsonb
+  )
+  into v_new_schedule_json
+  from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs(i);
+
+  select min(x.week_start)
+  into v_new_next_due_week_start
+  from (
+    select
+      (v_new_start_week_start + (gs2.i * 7))::date as week_start,
+      round(
+        -least(
+          v_new_weekly_due,
+          greatest(v_remaining_amount - (v_new_weekly_due * gs2.i), 0)
+        ),
+        2
+      )::numeric as amt
+    from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs2(i)
+  ) x
+  where x.amt < 0;
+
+  v_before_json := jsonb_build_object(
+    'case_type', v_case.case_type::text,
+    'status', v_case.status::text,
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'notes', v_case.notes
+  );
+
+  update public.pay_advances pa
+  set
+    schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
+    weekly_due = v_new_weekly_due,
+    weeks_total = v_new_weeks_total,
+    start_week_start = v_new_start_week_start,
+    next_due_week_start = v_new_next_due_week_start,
+    minimum_earnings_threshold = v_new_minimum_earnings_threshold,
+    take_home_floor_override = v_new_take_home_floor_override,
+    notes = v_new_note,
+    updated_at = v_now_utc
+  where pa.id = p_finance_case_id;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id;
+
+  v_after_json := jsonb_build_object(
+    'case_type', v_case.case_type::text,
+    'status', v_case.status::text,
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'notes', v_case.notes,
+    'schedule_input_mode', v_schedule_input_mode
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    'RESTRUCTURED',
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    v_before_json,
+    v_after_json,
+    null::text,
+    'Finance case repayment terms restructured'
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'case_type', v_case.case_type::text,
+    'schedule_input_mode', v_schedule_input_mode,
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb)
+  );
+end;
+$$;
+
+create or replace function public.pay_payment_advance_update(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_principal_amount numeric default null,
+  p_weekly_due numeric default null,
+  p_weeks_total int default null,
+  p_start_week_start date default null,
+  p_note text default null,
+  p_minimum_earnings_threshold numeric default null,
+  p_take_home_floor_override numeric default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_case public.pay_advances%rowtype;
+  v_batch public.pay_batches%rowtype;
+  v_has_batch boolean := false;
+  v_is_committed boolean := false;
+
+  v_new_principal numeric(12,2);
+  v_new_weekly_due numeric(12,2);
+  v_new_weeks_total int;
+  v_new_start_week_start date;
+  v_new_notes text;
+  v_new_minimum_earnings_threshold numeric(12,2);
+  v_new_take_home_floor_override numeric(12,2);
+  v_new_schedule_json jsonb := '[]'::jsonb;
+  v_new_next_due date := null;
+  v_required_weeks int := 0;
+
+  v_before_json jsonb := '{}'::jsonb;
+  v_after_json jsonb := '{}'::jsonb;
+  v_can_edit_payout_details boolean := false;
+  v_has_principal_change boolean := false;
+  v_batch_item_id uuid := null;
+  v_pay_batch_candidate_id uuid := null;
+
+  v_schedule_base_amount numeric(12,2) := 0;
+  v_schedule_input_mode text := null;
+  v_has_weekly_due_input boolean := false;
+  v_has_weeks_total_input boolean := false;
+begin
+  if p_finance_case_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', 'pay_payment_advance_update: finance_case_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_payment_advance_update: actor_user_id is required'
+    )::text;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id
+    and pa.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
+  for update;
+
+  if v_case.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', 'pay_payment_advance_update: Payment Advance not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if v_case.payout_pay_batch_id is not null then
+    select pb.*
+    into v_batch
+    from public.pay_batches pb
+    where pb.id = v_case.payout_pay_batch_id
+    limit 1;
+
+    v_has_batch := v_batch.id is not null;
+  end if;
+
+  if v_has_batch then
+    v_is_committed := (
+      coalesce(v_batch.authoritative_payment_date is not null, false)
+      or upper(coalesce(v_batch.status,'')) in ('SCHEDULED','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT','EXECUTING','SETTLED','COMPLETED','PARTIAL')
+    );
+  else
+    v_is_committed := false;
+  end if;
+
+  v_can_edit_payout_details := (v_is_committed = false);
+
+  v_new_principal := coalesce(round(p_principal_amount,2), round(coalesce(v_case.original_amount,0),2));
+  v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
+  v_new_minimum_earnings_threshold := case when p_minimum_earnings_threshold is null then v_case.minimum_earnings_threshold else round(p_minimum_earnings_threshold,2) end;
+  v_new_take_home_floor_override := case when p_take_home_floor_override is null then v_case.take_home_floor_override else round(p_take_home_floor_override,2) end;
+
+  if v_new_minimum_earnings_threshold is not null and v_new_minimum_earnings_threshold < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
+      'message', 'pay_payment_advance_update: minimum_earnings_threshold must be >= 0'
+    )::text;
+  end if;
+
+  if v_new_take_home_floor_override is not null and v_new_take_home_floor_override < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'TAKE_HOME_FLOOR_INVALID',
+      'message', 'pay_payment_advance_update: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  v_has_principal_change := round(v_new_principal,2) <> round(coalesce(v_case.original_amount,0),2);
+
+  if v_is_committed and v_has_principal_change then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'PAYOUT_ALREADY_COMMITTED',
+      'message', 'pay_payment_advance_update: payout details can only be edited before commit; after commit only future repayment terms may be changed',
+      'finance_case_id', p_finance_case_id::text,
+      'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end
+    )::text;
+  end if;
+
+  if v_can_edit_payout_details then
+    if v_new_principal <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+        'code', 'PRINCIPAL_INVALID',
+        'message', 'pay_payment_advance_update: principal_amount must be > 0'
+      )::text;
+    end if;
+    v_schedule_base_amount := v_new_principal;
+  else
+    v_schedule_base_amount := round(coalesce(v_case.outstanding_amount,0),2);
+  end if;
+
+  if p_start_week_start is not null and public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_payment_advance_update: start_week_start must be a Monday (week start)',
+      'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
+  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
+
+  if p_weekly_due is not null and round(p_weekly_due,2) <= 0 and not v_has_weeks_total_input then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'WEEKLY_DUE_INVALID',
+      'message', 'pay_payment_advance_update: weekly_due must be > 0 when provided'
+    )::text;
+  end if;
+
+  if p_weeks_total is not null and p_weeks_total < 1 and not v_has_weekly_due_input then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'WEEKS_TOTAL_INVALID',
+      'message', 'pay_payment_advance_update: weeks_total must be >= 1 when provided'
+    )::text;
+  end if;
+
+  if not v_has_weekly_due_input and not v_has_weeks_total_input then
+    v_schedule_input_mode := 'UNCHANGED';
+    v_new_weekly_due := round(coalesce(v_case.weekly_due,0),2);
+    v_new_weeks_total := v_case.weeks_total;
+  elsif v_has_weekly_due_input and v_has_weeks_total_input then
+    v_schedule_input_mode := 'LEGACY_BOTH';
+    v_new_weekly_due := round(p_weekly_due,2);
+    v_new_weeks_total := p_weeks_total;
+  elsif v_has_weeks_total_input then
+    v_schedule_input_mode := 'BY_WEEKS';
+    v_new_weeks_total := p_weeks_total;
+    v_new_weekly_due := round((ceil((v_schedule_base_amount / v_new_weeks_total) * 100) / 100), 2);
+  else
+    v_schedule_input_mode := 'BY_WEEKLY_DUE';
+    v_new_weekly_due := round(p_weekly_due,2);
+    v_new_weeks_total := greatest(ceil(v_schedule_base_amount / v_new_weekly_due)::int, 1);
+  end if;
+
+  if v_new_weekly_due is null or v_new_weekly_due <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'WEEKLY_DUE_INVALID',
+      'message', 'pay_payment_advance_update: normalized weekly_due must be > 0'
+    )::text;
+  end if;
+
+  if v_new_weeks_total is null or v_new_weeks_total < 1 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'WEEKS_TOTAL_INVALID',
+      'message', 'pay_payment_advance_update: normalized weeks_total must be >= 1'
+    )::text;
+  end if;
+
+  if p_start_week_start is not null then
+    v_new_start_week_start := p_start_week_start;
+  elsif v_case.next_due_week_start is not null then
+    v_new_start_week_start := v_case.next_due_week_start;
+  else
+    v_new_start_week_start := v_case.start_week_start;
+  end if;
+
+  if v_new_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'START_WEEK_START_REQUIRED',
+      'message', 'pay_payment_advance_update: start_week_start is required'
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(v_new_start_week_start) <> v_new_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_payment_advance_update: start_week_start must be a Monday (week start)',
+      'start_week_start', v_new_start_week_start::text
+    )::text;
+  end if;
+
+  v_required_weeks := greatest(ceil(v_schedule_base_amount / v_new_weekly_due)::int, 1);
+  if v_new_weeks_total < v_required_weeks then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'WEEKS_TOTAL_TOO_SHORT',
+      'message', 'pay_payment_advance_update: repayment schedule does not cover the remaining amount',
+      'required_weeks', v_required_weeks,
+      'weeks_total', v_new_weeks_total
+    )::text;
+  end if;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (v_new_start_week_start + (gs.i * 7))::date,
+          'amount', round(
+            -least(
+              v_new_weekly_due,
+              greatest(v_schedule_base_amount - (v_new_weekly_due * gs.i), 0)
+            ),
+            2
+          )
+        )
+        order by (v_new_start_week_start + (gs.i * 7))::date asc
+      ),
+      '[]'::jsonb
+    )
+  into v_new_schedule_json
+  from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs(i);
+
+  select min(x.week_start)
+  into v_new_next_due
+  from (
+    select
+      (v_new_start_week_start + (gs2.i * 7))::date as week_start,
+      round(
+        -least(
+          v_new_weekly_due,
+          greatest(v_schedule_base_amount - (v_new_weekly_due * gs2.i), 0)
+        ),
+        2
+      )::numeric as amt
+    from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs2(i)
+  ) x
+  where x.amt < 0;
+
+  v_before_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'notes', v_case.notes,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override
+  );
+
+  update public.pay_advances pa
+  set
+    original_amount = case when v_can_edit_payout_details then v_new_principal else pa.original_amount end,
+    outstanding_amount = case when v_can_edit_payout_details then v_new_principal else pa.outstanding_amount end,
+    schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
+    next_due_week_start = v_new_next_due,
+    notes = v_new_notes,
+    weekly_due = v_new_weekly_due,
+    weeks_total = v_new_weeks_total,
+    start_week_start = v_new_start_week_start,
+    minimum_earnings_threshold = v_new_minimum_earnings_threshold,
+    take_home_floor_override = v_new_take_home_floor_override,
+    updated_at = v_now_utc
+  where pa.id = p_finance_case_id;
+
+  if v_can_edit_payout_details and v_has_batch then
+    select pbc.id
+    into v_pay_batch_candidate_id
+    from public.pay_batch_candidates pbc
+    where pbc.pay_batch_id = v_batch.id
+      and pbc.candidate_id = v_case.candidate_id
+    limit 1;
+
+    select pbi.id
+    into v_batch_item_id
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc2
+      on pbc2.id = pbi.pay_batch_candidate_id
+    where pbc2.pay_batch_id = v_batch.id
+      and pbc2.candidate_id = v_case.candidate_id
+      and pbi.source_ref = ('advance:' || p_finance_case_id::text)
+      and pbi.item_type = 'LOAN_PAYOUT'
+      and pbi.is_voided = false
+    limit 1;
+
+    if v_pay_batch_candidate_id is not null then
+      update public.pay_batch_candidates pbc
+      set gross_preview = v_new_principal,
+          net_bank_amount = v_new_principal,
+          updated_at = v_now_utc
+      where pbc.id = v_pay_batch_candidate_id;
+    end if;
+
+    if v_batch_item_id is not null then
+      update public.pay_batch_items pbi
+      set description = 'Payment Advance',
+          amount_ex_vat = v_new_principal,
+          amount_vat = 0,
+          amount_inc_vat = v_new_principal,
+          updated_at = v_now_utc,
+          finance_case_id = p_finance_case_id,
+          reservation_id = null,
+          paye_treatment = 'NONE'
+      where pbi.id = v_batch_item_id;
+
+      update public.pay_batch_item_breakdowns pbib
+      set unit_name = 'Payment Advance',
+          amount_ex_vat = v_new_principal,
+          amount_vat = 0,
+          amount_inc_vat = v_new_principal,
+          meta_json = jsonb_build_object(
+            'case_type', 'PAYMENT_ADVANCE',
+            'worker_label', 'Payment Advance'
+          )
+      where pbib.pay_batch_item_id = v_batch_item_id;
+    end if;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id;
+
+  v_after_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'notes', v_case.notes,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'schedule_input_mode', v_schedule_input_mode
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    'UPDATED',
+    v_now_utc,
+    p_actor_user_id,
+    case when v_batch.id is null then null else v_batch.id end,
+    v_before_json,
+    v_after_json,
+    null::text,
+    case when v_can_edit_payout_details then 'Payment Advance payout details updated before commit' else 'Payment Advance future repayment terms updated after commit' end
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'advance_id', p_finance_case_id::text,
+    'case_type', 'PAYMENT_ADVANCE',
+    'worker_label', 'Payment Advance',
+    'repayment_label', 'Payment Advance Repayment',
+    'payout_editable', v_can_edit_payout_details,
+    'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end,
+    'schedule_input_mode', v_schedule_input_mode,
+    'principal_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb)
+  );
+end;
+$$;
+
+
+
+
+create or replace function public.pay_manual_debt_adjustment_create(
+  p_candidate_id uuid,
+  p_amount numeric,
+  p_weekly_due numeric,
+  p_weeks_total int,
+  p_start_week_start date,
+  p_actor_user_id uuid,
+  p_adjustment_comment text,
+  p_note text default null,
+  p_minimum_earnings_threshold numeric default null,
+  p_take_home_floor_override numeric default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_candidate record;
+  v_finance_case_id uuid := null;
+  v_schedule_json jsonb := '[]'::jsonb;
+  v_next_due date := null;
+  v_required_weeks int := 0;
+
+  v_amount_norm numeric(12,2) := 0;
+  v_weekly_due_norm numeric(12,2) := null;
+  v_weeks_total_norm int := null;
+  v_schedule_input_mode text := null;
+  v_has_weekly_due_input boolean := false;
+  v_has_weeks_total_input boolean := false;
+begin
+  if p_candidate_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'CANDIDATE_ID_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_create: candidate_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_create: actor_user_id is required'
+    )::text;
+  end if;
+
+  if p_amount is null or round(p_amount,2) <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'AMOUNT_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: amount must be > 0'
+    )::text;
+  end if;
+
+  if p_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'START_WEEK_START_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_create: start_week_start is required'
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_manual_debt_adjustment_create: start_week_start must be a Monday (week start)',
+      'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  if nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_create: adjustment_comment is required'
+    )::text;
+  end if;
+
+  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: minimum_earnings_threshold must be >= 0'
+    )::text;
+  end if;
+
+  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'TAKE_HOME_FLOOR_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  v_amount_norm := round(p_amount,2);
+  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
+  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
+
+  if not v_has_weekly_due_input and not v_has_weeks_total_input then
+    if p_weekly_due is not null and round(p_weekly_due,2) <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+        'code', 'WEEKLY_DUE_INVALID',
+        'message', 'pay_manual_debt_adjustment_create: weekly_due must be > 0 when provided'
+      )::text;
+    end if;
+
+    if p_weeks_total is not null and p_weeks_total < 1 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+        'code', 'WEEKS_TOTAL_INVALID',
+        'message', 'pay_manual_debt_adjustment_create: weeks_total must be >= 1 when provided'
+      )::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'REPAYMENT_INPUT_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_create: supply either weekly_due or weeks_total'
+    )::text;
+  end if;
+
+  if v_has_weekly_due_input and v_has_weeks_total_input then
+    v_schedule_input_mode := 'LEGACY_BOTH';
+    v_weekly_due_norm := round(p_weekly_due,2);
+    v_weeks_total_norm := p_weeks_total;
+  elsif v_has_weeks_total_input then
+    v_schedule_input_mode := 'BY_WEEKS';
+    v_weeks_total_norm := p_weeks_total;
+    v_weekly_due_norm := round((ceil((v_amount_norm / v_weeks_total_norm) * 100) / 100), 2);
+  else
+    v_schedule_input_mode := 'BY_WEEKLY_DUE';
+    v_weekly_due_norm := round(p_weekly_due,2);
+    v_weeks_total_norm := greatest(ceil(v_amount_norm / v_weekly_due_norm)::int, 1);
+  end if;
+
+  if v_weekly_due_norm is null or v_weekly_due_norm <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'WEEKLY_DUE_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: normalized weekly_due must be > 0'
+    )::text;
+  end if;
+
+  if v_weeks_total_norm is null or v_weeks_total_norm < 1 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'WEEKS_TOTAL_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: normalized weeks_total must be >= 1'
+    )::text;
+  end if;
+
+  v_required_weeks := greatest(ceil(v_amount_norm / v_weekly_due_norm)::int, 1);
+  if v_weeks_total_norm < v_required_weeks then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'WEEKS_TOTAL_TOO_SHORT',
+      'message', 'pay_manual_debt_adjustment_create: repayment schedule does not cover the debt amount',
+      'required_weeks', v_required_weeks,
+      'weeks_total', v_weeks_total_norm
+    )::text;
+  end if;
+
+  select
+    c.id,
+    c.active,
+    c.tms_ref,
+    c.display_name,
+    upper(coalesce(c.pay_method,'')) as pay_method
+  into v_candidate
+  from public.candidates c
+  where c.id = p_candidate_id
+  limit 1;
+
+  if v_candidate.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', 'pay_manual_debt_adjustment_create: candidate not found',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  if coalesce(v_candidate.active,false) = false then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'CANDIDATE_INACTIVE',
+      'message', 'pay_manual_debt_adjustment_create: candidate is not active',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (p_start_week_start + (gs.i * 7))::date,
+          'amount', round(
+            -least(
+              v_weekly_due_norm,
+              greatest(v_amount_norm - (v_weekly_due_norm * gs.i), 0)
+            ),
+            2
+          )
+        )
+        order by (p_start_week_start + (gs.i * 7))::date asc
+      ),
+      '[]'::jsonb
+    )
+  into v_schedule_json
+  from generate_series(0, greatest(v_weeks_total_norm,1) - 1) as gs(i);
+
+  select min(x.week_start)
+  into v_next_due
+  from (
+    select
+      (p_start_week_start + (gs2.i * 7))::date as week_start,
+      round(
+        -least(
+          v_weekly_due_norm,
+          greatest(v_amount_norm - (v_weekly_due_norm * gs2.i), 0)
+        ),
+        2
+      )::numeric as amt
+    from generate_series(0, greatest(v_weeks_total_norm,1) - 1) as gs2(i)
+  ) x
+  where x.amt < 0;
+
+  insert into public.pay_advances(
+    candidate_id,
+    client_id,
+    reason,
+    original_amount,
+    outstanding_amount,
+    linked_shift_date,
+    schedule_json,
+    next_due_week_start,
+    status,
+    best_guess_hours,
+    notes,
+    created_at,
+    created_by,
+    updated_at,
+    advance_kind,
+    linked_timesheet_id,
+    baseline_signature,
+    payout_status,
+    payout_pay_batch_id,
+    payout_transfer_id,
+    weekly_due,
+    weeks_total,
+    start_week_start,
+    case_type,
+    adjustment_comment,
+    source_original_paid_amount,
+    source_corrected_paid_amount,
+    minimum_earnings_threshold,
+    take_home_floor_override,
+    written_off_at_utc,
+    written_off_by_user_id,
+    write_off_reason,
+    cleared_at_utc,
+    cleared_by_user_id
+  )
+  values (
+    p_candidate_id,
+    null::uuid,
+    'MANUAL_ADVANCE'::public.pay_advance_reason_enum,
+    v_amount_norm,
+    v_amount_norm,
+    null::date,
+    coalesce(v_schedule_json,'[]'::jsonb),
+    v_next_due,
+    'ACTIVE'::public.pay_advance_status_enum,
+    null::jsonb,
+    nullif(btrim(coalesce(p_note,'')), ''),
+    v_now_utc,
+    p_actor_user_id,
+    v_now_utc,
+    'LEGACY_ADVANCE'::public.pay_advance_kind_enum,
+    null::uuid,
+    null::text,
+    null::public.pay_advance_payout_status_enum,
+    null::uuid,
+    null::uuid,
+    v_weekly_due_norm,
+    v_weeks_total_norm,
+    p_start_week_start,
+    'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+    nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+    null::numeric,
+    null::numeric,
+    case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+    case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+    null::timestamptz,
+    null::uuid,
+    null::text,
+    null::timestamptz,
+    null::uuid
+  )
+  returning id into v_finance_case_id;
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    'CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    null::jsonb,
+    jsonb_build_object(
+      'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+      'original_amount', v_amount_norm,
+      'outstanding_amount', v_amount_norm,
+      'weekly_due', v_weekly_due_norm,
+      'weeks_total', v_weeks_total_norm,
+      'start_week_start', p_start_week_start::text,
+      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+      'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end,
+      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+      'schedule_input_mode', v_schedule_input_mode
+    ),
+    null::text,
+    'Manual debt adjustment created'
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', v_finance_case_id::text,
+    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+    'worker_label', 'Manual debt adjustment',
+    'recovery_label', 'Manual debt adjustment recovery',
+    'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end,
+    'schedule_input_mode', v_schedule_input_mode,
+    'amount', v_amount_norm,
+    'outstanding_amount', v_amount_norm,
+    'weekly_due', v_weekly_due_norm,
+    'weeks_total', v_weeks_total_norm,
+    'start_week_start', p_start_week_start::text,
+    'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+    'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+    'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+    'schedule_json', coalesce(v_schedule_json,'[]'::jsonb)
+  );
+end;
+$$;
+
+
+create or replace function public.pay_manual_debt_adjustment_update(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_amount numeric default null,
+  p_weekly_due numeric default null,
+  p_weeks_total int default null,
+  p_start_week_start date default null,
+  p_adjustment_comment text default null,
+  p_note text default null,
+  p_minimum_earnings_threshold numeric default null,
+  p_take_home_floor_override numeric default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_case public.pay_advances%rowtype;
+  v_new_original_amount numeric(12,2);
+  v_new_outstanding_amount numeric(12,2);
+  v_new_weekly_due numeric(12,2);
+  v_new_weeks_total int;
+  v_new_start_week_start date;
+  v_new_adjustment_comment text;
+  v_new_notes text;
+  v_new_minimum_earnings_threshold numeric(12,2);
+  v_new_take_home_floor_override numeric(12,2);
+  v_new_schedule_json jsonb := '[]'::jsonb;
+  v_new_next_due date := null;
+  v_recovered_amount numeric(12,2) := 0;
+  v_required_weeks int := 0;
+  v_before_json jsonb := '{}'::jsonb;
+  v_after_json jsonb := '{}'::jsonb;
+
+  v_schedule_base_amount numeric(12,2) := 0;
+  v_schedule_input_mode text := null;
+  v_has_weekly_due_input boolean := false;
+  v_has_weeks_total_input boolean := false;
+begin
+  if p_finance_case_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_update: finance_case_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_update: actor_user_id is required'
+    )::text;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id
+    and pa.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+  for update;
+
+  if v_case.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', 'pay_manual_debt_adjustment_update: Manual debt adjustment not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if p_adjustment_comment is not null and nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_update: adjustment_comment is required'
+    )::text;
+  end if;
+
+  v_recovered_amount := round(greatest(coalesce(v_case.original_amount,0) - coalesce(v_case.outstanding_amount,0), 0), 2);
+  v_new_original_amount := coalesce(round(p_amount,2), round(coalesce(v_case.original_amount,0),2));
+  v_new_adjustment_comment := case when p_adjustment_comment is null then v_case.adjustment_comment else nullif(btrim(p_adjustment_comment), '') end;
+  v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
+  v_new_minimum_earnings_threshold := case when p_minimum_earnings_threshold is null then v_case.minimum_earnings_threshold else round(p_minimum_earnings_threshold,2) end;
+  v_new_take_home_floor_override := case when p_take_home_floor_override is null then v_case.take_home_floor_override else round(p_take_home_floor_override,2) end;
+
+  if p_amount is not null and v_new_original_amount <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'AMOUNT_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: amount must be > 0'
+    )::text;
+  end if;
+
+  if p_amount is not null and v_new_original_amount < v_recovered_amount then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'AMOUNT_BELOW_RECOVERED',
+      'message', 'pay_manual_debt_adjustment_update: amount cannot be reduced below already recovered total',
+      'recovered_amount', v_recovered_amount,
+      'requested_amount', v_new_original_amount
+    )::text;
+  end if;
+
+  if v_new_minimum_earnings_threshold is not null and v_new_minimum_earnings_threshold < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: minimum_earnings_threshold must be >= 0'
+    )::text;
+  end if;
+
+  if v_new_take_home_floor_override is not null and v_new_take_home_floor_override < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'TAKE_HOME_FLOOR_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  if p_start_week_start is not null and public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_manual_debt_adjustment_update: start_week_start must be a Monday (week start)',
+      'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  v_new_outstanding_amount := round(v_new_original_amount - v_recovered_amount, 2);
+  v_schedule_base_amount := v_new_outstanding_amount;
+
+  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
+  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
+
+  if p_weekly_due is not null and round(p_weekly_due,2) <= 0 and not v_has_weeks_total_input then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'WEEKLY_DUE_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: weekly_due must be > 0 when provided'
+    )::text;
+  end if;
+
+  if p_weeks_total is not null and p_weeks_total < 1 and not v_has_weekly_due_input then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'WEEKS_TOTAL_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: weeks_total must be >= 1 when provided'
+    )::text;
+  end if;
+
+  if not v_has_weekly_due_input and not v_has_weeks_total_input then
+    v_schedule_input_mode := 'UNCHANGED';
+    v_new_weekly_due := round(coalesce(v_case.weekly_due,0),2);
+    v_new_weeks_total := v_case.weeks_total;
+  elsif v_has_weekly_due_input and v_has_weeks_total_input then
+    v_schedule_input_mode := 'LEGACY_BOTH';
+    v_new_weekly_due := round(p_weekly_due,2);
+    v_new_weeks_total := p_weeks_total;
+  elsif v_has_weeks_total_input then
+    v_schedule_input_mode := 'BY_WEEKS';
+    v_new_weeks_total := p_weeks_total;
+    v_new_weekly_due := round((ceil((v_schedule_base_amount / v_new_weeks_total) * 100) / 100), 2);
+  else
+    v_schedule_input_mode := 'BY_WEEKLY_DUE';
+    v_new_weekly_due := round(p_weekly_due,2);
+    v_new_weeks_total := greatest(ceil(v_schedule_base_amount / v_new_weekly_due)::int, 1);
+  end if;
+
+  if v_new_weekly_due is null or v_new_weekly_due <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'WEEKLY_DUE_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: normalized weekly_due must be > 0'
+    )::text;
+  end if;
+
+  if v_new_weeks_total is null or v_new_weeks_total < 1 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'WEEKS_TOTAL_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: normalized weeks_total must be >= 1'
+    )::text;
+  end if;
+
+  if p_start_week_start is not null then
+    v_new_start_week_start := p_start_week_start;
+  elsif v_case.next_due_week_start is not null then
+    v_new_start_week_start := v_case.next_due_week_start;
+  else
+    v_new_start_week_start := v_case.start_week_start;
+  end if;
+
+  if v_new_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'START_WEEK_START_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_update: start_week_start is required'
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(v_new_start_week_start) <> v_new_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_manual_debt_adjustment_update: start_week_start must be a Monday (week start)',
+      'start_week_start', v_new_start_week_start::text
+    )::text;
+  end if;
+
+  v_required_weeks := greatest(ceil(v_new_outstanding_amount / v_new_weekly_due)::int, 1);
+  if v_new_weeks_total < v_required_weeks then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'WEEKS_TOTAL_TOO_SHORT',
+      'message', 'pay_manual_debt_adjustment_update: repayment schedule does not cover the remaining debt amount',
+      'required_weeks', v_required_weeks,
+      'weeks_total', v_new_weeks_total
+    )::text;
+  end if;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (v_new_start_week_start + (gs.i * 7))::date,
+          'amount', round(
+            -least(
+              v_new_weekly_due,
+              greatest(v_new_outstanding_amount - (v_new_weekly_due * gs.i), 0)
+            ),
+            2
+          )
+        )
+        order by (v_new_start_week_start + (gs.i * 7))::date asc
+      ),
+      '[]'::jsonb
+    )
+  into v_new_schedule_json
+  from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs(i);
+
+  select min(x.week_start)
+  into v_new_next_due
+  from (
+    select
+      (v_new_start_week_start + (gs2.i * 7))::date as week_start,
+      round(
+        -least(
+          v_new_weekly_due,
+          greatest(v_new_outstanding_amount - (v_new_weekly_due * gs2.i), 0)
+        ),
+        2
+      )::numeric as amt
+    from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs2(i)
+  ) x
+  where x.amt < 0;
+
+  v_before_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'adjustment_comment', v_case.adjustment_comment,
+    'notes', v_case.notes,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override
+  );
+
+  update public.pay_advances pa
+  set original_amount = v_new_original_amount,
+      outstanding_amount = v_new_outstanding_amount,
+      schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
+      next_due_week_start = v_new_next_due,
+      weekly_due = v_new_weekly_due,
+      weeks_total = v_new_weeks_total,
+      start_week_start = v_new_start_week_start,
+      adjustment_comment = v_new_adjustment_comment,
+      notes = v_new_notes,
+      minimum_earnings_threshold = v_new_minimum_earnings_threshold,
+      take_home_floor_override = v_new_take_home_floor_override,
+      updated_at = v_now_utc
+  where pa.id = p_finance_case_id;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id;
+
+  v_after_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'adjustment_comment', v_case.adjustment_comment,
+    'notes', v_case.notes,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'schedule_input_mode', v_schedule_input_mode
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    'UPDATED',
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    v_before_json,
+    v_after_json,
+    null::text,
+    'Manual debt adjustment updated'
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+    'worker_label', 'Manual debt adjustment',
+    'recovery_label', 'Manual debt adjustment recovery',
+    'schedule_input_mode', v_schedule_input_mode,
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb)
+  );
+end;
+$$;
 
 
 
