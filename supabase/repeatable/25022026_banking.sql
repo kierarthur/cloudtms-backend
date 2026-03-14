@@ -817,7 +817,6 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
   text,
   public.pay_override_mode_enum
 );
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -856,9 +855,6 @@ declare
 
   v_err text;
 
-  v_override_mode public.pay_override_mode_enum := coalesce(p_override_mode, 'NONE'::public.pay_override_mode_enum);
-  v_force_include_timesheet_ids uuid[] := array[]::uuid[];
-
   v_any_scope_outcome boolean := false;
 
   v_paye_guardrails jsonb := '{}'::jsonb;
@@ -880,18 +876,9 @@ begin
     raise exception 'actor_user_id is required';
   end if;
 
-  if v_override_mode = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum then
+  if coalesce(p_override_mode, 'NONE'::public.pay_override_mode_enum) = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum then
     raise exception 'TIMESHEET_ADVANCE is no longer supported by pay_create_draft_batches_split';
   end if;
-
-  v_force_include_timesheet_ids := coalesce(
-    (
-      select array_agg(distinct t.x)
-      from unnest(coalesce(p_force_include_timesheet_ids, array[]::uuid[])) as t(x)
-      where t.x is not null
-    ),
-    array[]::uuid[]
-  );
 
   begin
     perform public._imp_debug_audit(
@@ -903,16 +890,11 @@ begin
         'actor_user_id', p_actor_user_id::text,
         'candidate_id_param', coalesce(p_candidate_id::text, null),
         'client_id_param', coalesce(p_client_id::text, null),
-        'override_mode', coalesce(v_override_mode::text, null),
         'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null),
         'override_continue', coalesce(p_override_continue, false),
         'override_verified', coalesce(p_override_verified, false),
         'override_verified_by_user_id', coalesce(p_override_verified_by_user_id::text, null),
         'override_verified_at_utc', p_override_verified_at_utc,
-        'force_include_timesheet_ids', (
-          select coalesce(jsonb_agg(x::text order by x::text), '[]'::jsonb)
-          from unnest(v_force_include_timesheet_ids) as x
-        ),
         'preview_decisions_json_keys_sample', (
           select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
           from (
@@ -939,16 +921,14 @@ begin
   v_umbrella_status := 'RUNNING';
   begin
     v_umbrella_res := public.pay_create_draft_batch(
-      p_pay_date,
-      p_week_ending_cutoff,
-      'UMBRELLA',
-      p_actor_user_id,
-      p_preview_decisions_json,
-      p_candidate_id,
-      p_client_id,
-      v_force_include_timesheet_ids,
-      p_override_reason,
-      v_override_mode
+      p_pay_date => p_pay_date,
+      p_week_ending_cutoff => p_week_ending_cutoff,
+      p_pay_channel_scope => 'UMBRELLA',
+      p_actor_user_id => p_actor_user_id,
+      p_preview_decisions_json => p_preview_decisions_json,
+      p_candidate_id => p_candidate_id,
+      p_client_id => p_client_id,
+      p_override_reason => p_override_reason
     );
 
     v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
@@ -1073,16 +1053,14 @@ begin
     v_paye_status := 'RUNNING';
     begin
       v_paye_res := public.pay_create_draft_batch(
-        p_pay_date,
-        p_week_ending_cutoff,
-        'PAYE',
-        p_actor_user_id,
-        p_preview_decisions_json,
-        p_candidate_id,
-        p_client_id,
-        v_force_include_timesheet_ids,
-        p_override_reason,
-        v_override_mode
+        p_pay_date => p_pay_date,
+        p_week_ending_cutoff => p_week_ending_cutoff,
+        p_pay_channel_scope => 'PAYE',
+        p_actor_user_id => p_actor_user_id,
+        p_preview_decisions_json => p_preview_decisions_json,
+        p_candidate_id => p_candidate_id,
+        p_client_id => p_client_id,
+        p_override_reason => p_override_reason
       );
 
       v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
@@ -1196,7 +1174,363 @@ begin
   );
 end;
 $$;
+CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
+  p_pay_date date,
+  p_week_ending_cutoff date,
+  p_actor_user_id uuid,
+  p_preview_decisions_json jsonb,
+  p_candidate_id uuid DEFAULT NULL::uuid,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_force_include_timesheet_ids uuid[] DEFAULT NULL::uuid[],
+  p_override_reason text DEFAULT NULL,
+  p_override_mode public.pay_override_mode_enum DEFAULT 'NONE'::public.pay_override_mode_enum,
+  p_override_continue boolean DEFAULT false,
+  p_override_verified boolean DEFAULT false,
+  p_override_verified_by_user_id uuid DEFAULT NULL::uuid,
+  p_override_verified_at_utc timestamptz DEFAULT NULL::timestamptz
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+declare
+  v_umbrella_res jsonb := '{}'::jsonb;
+  v_paye_res jsonb := '{}'::jsonb;
 
+  v_umbrella_pay_batch_id uuid;
+  v_paye_pay_batch_id uuid;
+
+  v_umbrella_overpayment_sync_only boolean := false;
+  v_paye_overpayment_sync_only boolean := false;
+
+  v_umbrella_overpayment_sync jsonb := '{}'::jsonb;
+  v_paye_overpayment_sync jsonb := '{}'::jsonb;
+
+  v_umbrella_status text := 'NOT_RUN';
+  v_paye_status text := 'NOT_RUN';
+
+  v_err text;
+
+  v_any_scope_outcome boolean := false;
+
+  v_paye_guardrails jsonb := '{}'::jsonb;
+  v_paye_scope_blocked boolean := false;
+  v_paye_block_reason_code text := null;
+  v_paye_block_message text := null;
+  v_paye_override_required boolean := false;
+  v_paye_create_blocked boolean := false;
+begin
+  if p_pay_date is null then
+    raise exception 'pay_date is required';
+  end if;
+
+  if p_week_ending_cutoff is null then
+    raise exception 'week_ending_cutoff is required';
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id is required';
+  end if;
+
+  if coalesce(p_override_mode, 'NONE'::public.pay_override_mode_enum) = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum then
+    raise exception 'TIMESHEET_ADVANCE is no longer supported by pay_create_draft_batches_split';
+  end if;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCHES_SPLIT:INPUTS',
+      jsonb_build_object(
+        'pay_date', p_pay_date::text,
+        'week_ending_cutoff', p_week_ending_cutoff::text,
+        'actor_user_id', p_actor_user_id::text,
+        'candidate_id_param', coalesce(p_candidate_id::text, null),
+        'client_id_param', coalesce(p_client_id::text, null),
+        'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null),
+        'override_continue', coalesce(p_override_continue, false),
+        'override_verified', coalesce(p_override_verified, false),
+        'override_verified_by_user_id', coalesce(p_override_verified_by_user_id::text, null),
+        'override_verified_at_utc', p_override_verified_at_utc,
+        'preview_decisions_json_keys_sample', (
+          select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
+          from (
+            select e.key
+            from jsonb_each(coalesce(p_preview_decisions_json,'{}'::jsonb)) e
+            order by e.key
+            limit 50
+          ) k
+        )
+      ),
+      'pay_create_draft_batches_split',
+      'pay_date:'||p_pay_date::text,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  v_umbrella_status := 'RUNNING';
+  begin
+    v_umbrella_res := public.pay_create_draft_batch(
+      p_pay_date => p_pay_date,
+      p_week_ending_cutoff => p_week_ending_cutoff,
+      p_pay_channel_scope => 'UMBRELLA',
+      p_actor_user_id => p_actor_user_id,
+      p_preview_decisions_json => p_preview_decisions_json,
+      p_candidate_id => p_candidate_id,
+      p_client_id => p_client_id,
+      p_override_reason => p_override_reason
+    );
+
+    v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
+    v_umbrella_overpayment_sync_only := coalesce(nullif(v_umbrella_res->>'overpayment_sync_only','')::boolean, false);
+    v_umbrella_overpayment_sync := coalesce(v_umbrella_res->'overpayment_sync', '{}'::jsonb);
+
+    if v_umbrella_pay_batch_id is not null then
+      v_umbrella_status := 'BATCH_CREATED';
+    elsif v_umbrella_overpayment_sync_only then
+      v_umbrella_status := 'DEBT_SYNCED_NO_BATCH';
+    else
+      v_umbrella_status := 'NOTHING_RELEVANT';
+    end if;
+  exception
+    when others then
+      v_err := coalesce(SQLERRM, '');
+      if position('Nothing to pay' in v_err) = 1 then
+        v_umbrella_pay_batch_id := null;
+        v_umbrella_overpayment_sync_only := false;
+        v_umbrella_overpayment_sync := '{}'::jsonb;
+        v_umbrella_status := 'NOTHING_RELEVANT';
+      else
+        raise;
+      end if;
+  end;
+
+  perform pg_advisory_xact_lock(94201, 1);
+
+  v_paye_guardrails := public.pay_paye_guardrails(
+    p_pay_date => p_pay_date,
+    p_ignore_pay_batch_id => null::uuid,
+    p_actor_user_id => p_actor_user_id
+  );
+
+  v_paye_create_blocked := coalesce((v_paye_guardrails->>'create_paye_blocked')::boolean, false);
+  v_paye_override_required := coalesce((v_paye_guardrails->>'override_required')::boolean, false);
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCHES_SPLIT:PAYE_GUARDRAILS',
+      jsonb_build_object(
+        'pay_date', p_pay_date::text,
+        'guardrails', v_paye_guardrails,
+        'create_paye_blocked', v_paye_create_blocked,
+        'override_required', v_paye_override_required,
+        'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null),
+        'override_continue', coalesce(p_override_continue, false),
+        'override_verified', coalesce(p_override_verified, false),
+        'override_verified_by_user_id', coalesce(p_override_verified_by_user_id::text, null),
+        'override_verified_at_utc', p_override_verified_at_utc
+      ),
+      'pay_create_draft_batches_split',
+      'pay_date:'||p_pay_date::text,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  if v_paye_create_blocked then
+    v_paye_scope_blocked := true;
+    v_paye_status := 'BLOCKED_EXISTING_PAYE_DRAFT';
+    v_paye_block_reason_code := 'PAYE_DRAFT_ALREADY_EXISTS';
+    v_paye_block_message := coalesce(
+      v_paye_guardrails #>> '{ui,existing_draft_block,message}',
+      'A PAYE draft batch already exists. Cancel or delete the existing PAYE draft before creating another PAYE draft.'
+    );
+    v_paye_pay_batch_id := null;
+    v_paye_overpayment_sync_only := false;
+    v_paye_overpayment_sync := '{}'::jsonb;
+  elsif v_paye_override_required then
+    if nullif(btrim(coalesce(p_override_reason,'')), '') is null then
+      v_paye_scope_blocked := true;
+      v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+      v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_REASON_REQUIRED';
+      v_paye_block_message := 'A same-week PAYE override reason is required before creating another PAYE batch in the same Monday-based payroll week.';
+    elsif coalesce(p_override_continue, false) = false then
+      v_paye_scope_blocked := true;
+      v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+      v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_CONTINUE_REQUIRED';
+      v_paye_block_message := 'Explicit continuation is required before creating another PAYE batch in the same Monday-based payroll week.';
+    elsif coalesce(p_override_verified, false) = false then
+      v_paye_scope_blocked := true;
+      v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+      v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFICATION_REQUIRED';
+      v_paye_block_message := 'Valid password reauthentication and 2FA verification are required before creating another PAYE batch in the same Monday-based payroll week.';
+    elsif p_override_verified_by_user_id is null then
+      v_paye_scope_blocked := true;
+      v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+      v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_BY_REQUIRED';
+      v_paye_block_message := 'The verified override user id is required for same-week PAYE override.';
+    elsif p_override_verified_by_user_id <> p_actor_user_id then
+      v_paye_scope_blocked := true;
+      v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+      v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_BY_MISMATCH';
+      v_paye_block_message := 'The same-week PAYE override verification must belong to the current actor user.';
+    elsif p_override_verified_at_utc is null then
+      v_paye_scope_blocked := true;
+      v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
+      v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_AT_REQUIRED';
+      v_paye_block_message := 'The verification timestamp is required for same-week PAYE override.';
+    else
+      v_paye_scope_blocked := false;
+      v_paye_block_reason_code := null;
+      v_paye_block_message := null;
+    end if;
+
+    if v_paye_scope_blocked then
+      v_paye_pay_batch_id := null;
+      v_paye_overpayment_sync_only := false;
+      v_paye_overpayment_sync := '{}'::jsonb;
+    end if;
+  end if;
+
+  if not v_paye_scope_blocked then
+    v_paye_status := 'RUNNING';
+    begin
+      v_paye_res := public.pay_create_draft_batch(
+        p_pay_date => p_pay_date,
+        p_week_ending_cutoff => p_week_ending_cutoff,
+        p_pay_channel_scope => 'PAYE',
+        p_actor_user_id => p_actor_user_id,
+        p_preview_decisions_json => p_preview_decisions_json,
+        p_candidate_id => p_candidate_id,
+        p_client_id => p_client_id,
+        p_override_reason => p_override_reason
+      );
+
+      v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
+      v_paye_overpayment_sync_only := coalesce(nullif(v_paye_res->>'overpayment_sync_only','')::boolean, false);
+      v_paye_overpayment_sync := coalesce(v_paye_res->'overpayment_sync', '{}'::jsonb);
+
+      if v_paye_pay_batch_id is not null then
+        v_paye_status := 'BATCH_CREATED';
+      elsif v_paye_overpayment_sync_only then
+        v_paye_status := 'DEBT_SYNCED_NO_BATCH';
+      else
+        v_paye_status := 'NOTHING_RELEVANT';
+      end if;
+    exception
+      when others then
+        v_err := coalesce(SQLERRM, '');
+        if position('Nothing to pay' in v_err) = 1 then
+          v_paye_pay_batch_id := null;
+          v_paye_overpayment_sync_only := false;
+          v_paye_overpayment_sync := '{}'::jsonb;
+          v_paye_status := 'NOTHING_RELEVANT';
+        else
+          raise;
+        end if;
+    end;
+  end if;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCHES_SPLIT:RESULT',
+      jsonb_build_object(
+        'umbrella_status', v_umbrella_status,
+        'umbrella_pay_batch_id', coalesce(v_umbrella_pay_batch_id::text, null),
+        'umbrella_overpayment_sync_only', v_umbrella_overpayment_sync_only,
+        'umbrella_overpayment_sync', v_umbrella_overpayment_sync,
+        'paye_status', v_paye_status,
+        'paye_scope_blocked', v_paye_scope_blocked,
+        'paye_block_reason_code', v_paye_block_reason_code,
+        'paye_block_message', v_paye_block_message,
+        'paye_guardrails', v_paye_guardrails,
+        'paye_pay_batch_id', coalesce(v_paye_pay_batch_id::text, null),
+        'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
+        'paye_overpayment_sync', v_paye_overpayment_sync
+      ),
+      'pay_create_draft_batches_split',
+      'pay_date:'||p_pay_date::text,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  v_any_scope_outcome :=
+       v_umbrella_pay_batch_id is not null
+    or v_paye_pay_batch_id is not null
+    or v_umbrella_overpayment_sync_only
+    or v_paye_overpayment_sync_only
+    or v_paye_scope_blocked;
+
+  if not v_any_scope_outcome then
+    raise exception 'Nothing to pay (no payable items for UMBRELLA or PAYE after readiness blockers)';
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'umbrella_pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
+    'paye_pay_batch_id', case when v_paye_pay_batch_id is null then null else v_paye_pay_batch_id::text end,
+    'umbrella_status', v_umbrella_status,
+    'paye_status', v_paye_status,
+    'umbrella_overpayment_sync_only', v_umbrella_overpayment_sync_only,
+    'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
+    'umbrella_overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
+    'paye_overpayment_sync', case when v_paye_overpayment_sync_only then v_paye_overpayment_sync else null end,
+    'paye_guardrails', v_paye_guardrails,
+    'scope_results', jsonb_build_object(
+      'UMBRELLA', jsonb_build_object(
+        'status', v_umbrella_status,
+        'created', (v_umbrella_pay_batch_id is not null),
+        'blocked', false,
+        'block_reason_code', null,
+        'block_message', null,
+        'pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
+        'overpayment_sync_only', v_umbrella_overpayment_sync_only,
+        'overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
+        'guardrails', null
+      ),
+      'PAYE', jsonb_build_object(
+        'status', v_paye_status,
+        'created', (v_paye_pay_batch_id is not null),
+        'blocked', v_paye_scope_blocked,
+        'block_reason_code', v_paye_block_reason_code,
+        'block_message', v_paye_block_message,
+        'pay_batch_id', case when v_paye_pay_batch_id is null then null else v_paye_pay_batch_id::text end,
+        'overpayment_sync_only', v_paye_overpayment_sync_only,
+        'overpayment_sync', case when v_paye_overpayment_sync_only then v_paye_overpayment_sync else null end,
+        'guardrails', v_paye_guardrails,
+        'override_required', v_paye_override_required,
+        'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null),
+        'override_continue', coalesce(p_override_continue, false),
+        'override_verified', coalesce(p_override_verified, false),
+        'override_verified_by_user_id', case when p_override_verified_by_user_id is null then null else p_override_verified_by_user_id::text end,
+        'override_verified_at_utc', p_override_verified_at_utc
+      )
+    )
+  );
+end;
+$$;
 
 
 
