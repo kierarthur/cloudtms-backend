@@ -8841,8 +8841,1158 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   }
 }
 
+async function handleBankingFinanceLedgerExportCsv(env, req, user) {
+  const actorUser = (() => {
+    if (user && typeof user === 'object' && user.id) return user;
+    return null;
+  })();
 
+  let resolvedUser = actorUser;
+  if (!resolvedUser) {
+    resolvedUser = await requireUser(env, req, ['admin']);
+    if (!resolvedUser) return withCORS(env, req, unauthorized());
+  }
 
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const parseNullableText = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (s) return s;
+    }
+    return null;
+  };
+
+  const parseDateIso = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const parseUuid = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
+  };
+
+  const normalizeLedgerStatus = (raw) => {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase();
+    if (!s || s === 'ALL') return 'ALL';
+    if (['OUTSTANDING', 'ACTIVE', 'OPEN'].includes(s)) return 'OUTSTANDING';
+    if (['FULLY_PAID', 'PAID', 'CLEARED', 'SETTLED', 'HISTORY'].includes(s)) return 'FULLY_PAID';
+    return null;
+  };
+
+  const csvEscape = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const asMoney = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(2) : '';
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
+  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'), q('date_to'), q('dateTo'));
+  const statusRaw = parseNullableText(q('status'));
+  const candidateIdRaw = parseNullableText(q('candidate_id'), q('candidateId'));
+  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
+  const caseType = parseNullableText(q('case_type'), q('caseType'));
+  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
+  const sortDir = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+  const createdFrom = createdFromRaw ? parseDateIso(createdFromRaw) : null;
+  const createdTo = createdToRaw ? parseDateIso(createdToRaw) : null;
+  const candidateId = candidateIdRaw ? parseUuid(candidateIdRaw) : null;
+  const clientId = clientIdRaw ? parseUuid(clientIdRaw) : null;
+  const status = normalizeLedgerStatus(statusRaw);
+
+  if (createdFromRaw && !createdFrom) return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
+  if (createdToRaw && !createdTo) return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
+  if (candidateIdRaw && !candidateId) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
+  if (clientIdRaw && !clientId) return withCORS(env, req, badRequest('client_id must be a valid UUID'));
+  if (!status) return withCORS(env, req, badRequest('status must be ALL, OUTSTANDING, or FULLY_PAID'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_finance_ledger_export_rows', {
+      p_actor_user_id: resolvedUser.id,
+      p_created_from: createdFrom,
+      p_created_to: createdTo,
+      p_status: status,
+      p_candidate_id: candidateId,
+      p_client_id: clientId,
+      p_case_type: caseType,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_finance_ledger_export_rows');
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
+    const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
+    const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
+
+    const cols = [
+      'case_type',
+      'row_label',
+      'candidate_reference',
+      'candidate_reference_number',
+      'candidate_first_name',
+      'candidate_last_name',
+      'candidate_display_name',
+      'pay_method',
+      'client_name',
+      'linked_timesheet_booking_id',
+      'linked_timesheet_week_ending_date',
+      'linked_timesheet_shift_label',
+      'linked_timesheet_reference_number',
+      'linked_shift_date',
+      'created_at',
+      'updated_at',
+      'created_by',
+      'finance_status',
+      'payout_status',
+      'ledger_status',
+      'original_amount',
+      'outstanding_amount',
+      'weekly_due',
+      'weeks_total',
+      'start_week_start',
+      'next_due_week_start',
+      'adjustment_comment',
+      'source_original_paid_amount',
+      'source_corrected_paid_amount',
+      'minimum_earnings_threshold',
+      'take_home_floor_override',
+      'baseline_signature',
+      'best_guess_hours',
+      'notes',
+      'written_off_at',
+      'written_off_by',
+      'write_off_reason',
+      'cleared_at',
+      'cleared_by',
+      'active_reserved_amount',
+      'reserved_amount',
+      'committed_amount',
+      'settled_amount',
+      'released_amount',
+      'active_reservation_count',
+      'latest_reservation_created_at',
+      'latest_committed_at',
+      'latest_settled_at',
+      'latest_released_at',
+      'latest_recovery_pay_date',
+      'latest_remittance_sent_at',
+      'latest_remittance_trigger_status',
+      'last_remittance_error',
+      'active_snooze_kind',
+      'active_snooze_mode',
+      'active_snooze_until_date',
+      'active_snooze_note',
+      'active_snooze_created_at',
+      'active_snooze_updated_at',
+      'active_snooze_visibility_status',
+      'schedule_json'
+    ];
+
+    const lines = [];
+    lines.push(cols.map(csvEscape).join(','));
+
+    for (const r of rows) {
+      lines.push([
+        r?.case_type ?? '',
+        r?.row_label ?? '',
+        r?.candidate_tms_ref ?? '',
+        r?.candidate_tms_ref_num ?? '',
+        r?.candidate_first_name ?? '',
+        r?.candidate_last_name ?? '',
+        r?.candidate_display_name ?? '',
+        r?.pay_method ?? '',
+        r?.client_name ?? '',
+        r?.linked_timesheet_booking_id ?? '',
+        r?.linked_timesheet_week_ending_date ?? '',
+        r?.linked_timesheet_shift_label_norm ?? '',
+        r?.linked_timesheet_reference_number ?? '',
+        r?.linked_shift_date ?? '',
+        r?.created_at ?? '',
+        r?.updated_at ?? '',
+        r?.created_by_display ?? '',
+        r?.finance_status ?? '',
+        r?.payout_status ?? '',
+        r?.ledger_status ?? '',
+        asMoney(r?.original_amount),
+        asMoney(r?.outstanding_amount),
+        asMoney(r?.weekly_due),
+        r?.weeks_total ?? '',
+        r?.start_week_start ?? '',
+        r?.next_due_week_start ?? '',
+        r?.adjustment_comment ?? '',
+        asMoney(r?.source_original_paid_amount),
+        asMoney(r?.source_corrected_paid_amount),
+        asMoney(r?.minimum_earnings_threshold),
+        asMoney(r?.take_home_floor_override),
+        r?.baseline_signature ?? '',
+        r?.best_guess_hours ?? '',
+        r?.notes ?? '',
+        r?.written_off_at_utc ?? '',
+        r?.written_off_by_display ?? '',
+        r?.write_off_reason ?? '',
+        r?.cleared_at_utc ?? '',
+        r?.cleared_by_display ?? '',
+        asMoney(r?.active_reserved_amount),
+        asMoney(r?.reserved_amount),
+        asMoney(r?.committed_amount),
+        asMoney(r?.settled_amount),
+        asMoney(r?.released_amount),
+        r?.active_reservation_count ?? '',
+        r?.latest_reservation_created_at_utc ?? '',
+        r?.latest_committed_at_utc ?? '',
+        r?.latest_settled_at_utc ?? '',
+        r?.latest_released_at_utc ?? '',
+        r?.latest_recovery_pay_date ?? '',
+        r?.latest_remittance_sent_at_utc ?? '',
+        r?.latest_remittance_trigger_status ?? '',
+        r?.last_remittance_error ?? '',
+        r?.active_snooze_kind ?? '',
+        r?.active_snooze_mode ?? '',
+        r?.active_snooze_until_date ?? '',
+        r?.active_snooze_note ?? '',
+        r?.active_snooze_created_at_utc ?? '',
+        r?.active_snooze_updated_at_utc ?? '',
+        r?.active_snooze_visibility_status ?? '',
+        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json)
+      ].map(csvEscape).join(','));
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'text/csv; charset=utf-8');
+    headers.set('Content-Disposition', `attachment; filename="finance_ledger_${String(createdTo || createdFrom || new Date().toISOString().slice(0, 10))}.csv"`);
+    headers.set('X-Report-Row-Count', String(rows.length || 0));
+    headers.set('X-Report-Title', String(meta?.title || 'Finance Ledger'));
+    headers.set('X-Report-Status', String(appliedFilters?.status || status || 'ALL'));
+    headers.set('X-Report-Outstanding-Count', String(summary?.outstanding_count ?? 0));
+    headers.set('X-Report-Fully-Paid-Count', String(summary?.fully_paid_count ?? 0));
+
+    const bom = '\ufeff';
+    return withCORS(env, req, new Response(bom + lines.join('\r\n'), { status: 200, headers }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'FINANCE_LEDGER_EXPORT_CSV_FAILED')));
+  }
+}
+
+async function handleBankingFinanceLedgerExportPdf(env, req, user) {
+  const actorUser = (() => {
+    if (user && typeof user === 'object' && user.id) return user;
+    return null;
+  })();
+
+  let resolvedUser = actorUser;
+  if (!resolvedUser) {
+    resolvedUser = await requireUser(env, req, ['admin']);
+    if (!resolvedUser) return withCORS(env, req, unauthorized());
+  }
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const parseNullableText = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (s) return s;
+    }
+    return null;
+  };
+
+  const parseDateIso = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const parseUuid = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
+  };
+
+  const normalizeLedgerStatus = (raw) => {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase();
+    if (!s || s === 'ALL') return 'ALL';
+    if (['OUTSTANDING', 'ACTIVE', 'OPEN'].includes(s)) return 'OUTSTANDING';
+    if (['FULLY_PAID', 'PAID', 'CLEARED', 'SETTLED', 'HISTORY'].includes(s)) return 'FULLY_PAID';
+    return null;
+  };
+
+  const asMoney = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? `£${n.toFixed(2)}` : '—';
+  };
+
+  const fmtDateOnly = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+    }
+    return s;
+  };
+
+  const fmtDateTime = (raw) => {
+    const d = new Date(raw);
+    if (!Number.isFinite(d.getTime())) return String(raw == null ? '' : raw);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  };
+
+  const safeStr = (v) => String(v == null ? '' : v);
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
+  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'), q('date_to'), q('dateTo'));
+  const statusRaw = parseNullableText(q('status'));
+  const candidateIdRaw = parseNullableText(q('candidate_id'), q('candidateId'));
+  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
+  const caseType = parseNullableText(q('case_type'), q('caseType'));
+  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
+  const sortDir = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+  const createdFrom = createdFromRaw ? parseDateIso(createdFromRaw) : null;
+  const createdTo = createdToRaw ? parseDateIso(createdToRaw) : null;
+  const candidateId = candidateIdRaw ? parseUuid(candidateIdRaw) : null;
+  const clientId = clientIdRaw ? parseUuid(clientIdRaw) : null;
+  const status = normalizeLedgerStatus(statusRaw);
+
+  if (createdFromRaw && !createdFrom) return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
+  if (createdToRaw && !createdTo) return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
+  if (candidateIdRaw && !candidateId) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
+  if (clientIdRaw && !clientId) return withCORS(env, req, badRequest('client_id must be a valid UUID'));
+  if (!status) return withCORS(env, req, badRequest('status must be ALL, OUTSTANDING, or FULLY_PAID'));
+
+  try {
+    const raw0 = await sbRpc(env, 'pay_finance_ledger_pdf_payload', {
+      p_actor_user_id: resolvedUser.id,
+      p_created_from: createdFrom,
+      p_created_to: createdTo,
+      p_status: status,
+      p_candidate_id: candidateId,
+      p_client_id: clientId,
+      p_case_type: caseType,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir
+    });
+
+    const payload = unwrapRpc(raw0, 'pay_finance_ledger_pdf_payload');
+    const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+    const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
+    const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
+    const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
+
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const pageW = 842;
+    const pageH = 595;
+    const margin = 34;
+    const lineH = 11;
+    const small = 8;
+    const body = 9;
+    const heading = 14;
+    const section = 11.5;
+
+    const newPage = () => pdfDoc.addPage([pageW, pageH]);
+
+    let page = newPage();
+    let y = pageH - margin;
+
+    const drawText = (txt, x, yy, size = body, bold = false, color = rgb(0, 0, 0)) => {
+      const f = bold ? fontBold : font;
+      page.drawText(safeStr(txt), { x, y: yy, size, font: f, color });
+    };
+
+    const ensureSpace = (needed = lineH) => {
+      if (y - needed < margin) {
+        page = newPage();
+        y = pageH - margin;
+      }
+    };
+
+    const wrapText = (text, width, size, bold = false) => {
+      const f = bold ? fontBold : font;
+      const words = safeStr(text).split(/\s+/).filter(Boolean);
+      if (!words.length) return [''];
+      const lines = [];
+      let cur = '';
+      for (const w of words) {
+        const test = cur ? `${cur} ${w}` : w;
+        if (f.widthOfTextAtSize(test, size) <= width) {
+          cur = test;
+        } else {
+          if (cur) lines.push(cur);
+          cur = w;
+        }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    };
+
+    const drawWrapped = (text, x, width, size = body, bold = false, color = rgb(0, 0, 0)) => {
+      const lines = wrapText(text, width, size, bold);
+      for (const ln of lines) {
+        ensureSpace(lineH);
+        drawText(ln, x, y, size, bold, color);
+        y -= lineH;
+      }
+    };
+
+    drawText(payload?.title || 'Finance Ledger', margin, y, heading, true);
+    y -= 18;
+    drawText(`Generated: ${fmtDateTime(payload?.generated_at_utc || new Date().toISOString())}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 12;
+    drawText(`Created from: ${fmtDateOnly(appliedFilters?.created_from || '') || '—'}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 11;
+    drawText(`Created to: ${fmtDateOnly(appliedFilters?.created_to || '') || '—'}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 11;
+    drawText(`Status: ${safeStr(appliedFilters?.status || status || 'ALL')}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 16;
+
+    drawText('Summary', margin, y, section, true);
+    y -= 14;
+
+    const summaryLines = [
+      `Total rows: ${safeStr(summary?.total_count ?? 0)}`,
+      `Outstanding: ${safeStr(summary?.outstanding_count ?? 0)}`,
+      `Fully paid: ${safeStr(summary?.fully_paid_count ?? 0)}`,
+      `Payment Advances: ${safeStr(summary?.payment_advance_count ?? 0)}`,
+      `Overpayments: ${safeStr(summary?.overpayment_count ?? 0)}`,
+      `Manual Debt Adjustments: ${safeStr(summary?.manual_debt_adjustment_count ?? 0)}`,
+      `Manual Credit Adjustments: ${safeStr(summary?.manual_credit_adjustment_count ?? 0)}`,
+      `Original amount total: ${asMoney(summary?.original_amount_total)}`,
+      `Outstanding amount total: ${asMoney(summary?.outstanding_amount_total)}`,
+      `Active reserved amount total: ${asMoney(summary?.active_reserved_amount_total)}`
+    ];
+
+    for (const line of summaryLines) {
+      ensureSpace(lineH);
+      drawText(line, margin, y, small, false);
+      y -= lineH;
+    }
+
+    y -= 8;
+
+    const drawSectionTable = (title, grpRows) => {
+      const list = Array.isArray(grpRows) ? grpRows : [];
+      if (!list.length) return;
+
+      ensureSpace(20);
+      drawText(title, margin, y, section, true);
+      y -= 16;
+
+      const cols = {
+        candidate: { x: margin, w: 135 },
+        client: { x: margin + 140, w: 115 },
+        status: { x: margin + 260, w: 78 },
+        original: { x: margin + 343, w: 60 },
+        outstanding: { x: margin + 408, w: 68 },
+        nextDue: { x: margin + 481, w: 66 },
+        created: { x: margin + 552, w: 84 },
+        snooze: { x: margin + 641, w: 160 }
+      };
+
+      ensureSpace(14);
+      drawText('Candidate', cols.candidate.x, y, small, true);
+      drawText('Client', cols.client.x, y, small, true);
+      drawText('Status', cols.status.x, y, small, true);
+      drawText('Original', cols.original.x, y, small, true);
+      drawText('Outstanding', cols.outstanding.x, y, small, true);
+      drawText('Next due', cols.nextDue.x, y, small, true);
+      drawText('Created', cols.created.x, y, small, true);
+      drawText('Snooze', cols.snooze.x, y, small, true);
+      y -= 12;
+
+      for (const r of list) {
+        const candidateTxt =
+          safeStr(r?.candidate_display_name || '').trim() ||
+          [safeStr(r?.candidate_first_name || '').trim(), safeStr(r?.candidate_last_name || '').trim()].filter(Boolean).join(' ').trim() ||
+          safeStr(r?.candidate_tms_ref || '').trim() ||
+          '—';
+        const clientTxt = safeStr(r?.client_name || '').trim() || '—';
+        const statusTxt = safeStr(r?.ledger_status || '').trim() || '—';
+        const originalTxt = asMoney(r?.original_amount);
+        const outstandingTxt = asMoney(r?.outstanding_amount);
+        const nextDueTxt = fmtDateOnly(r?.next_due_week_start || '') || '—';
+        const createdTxt = fmtDateOnly(r?.created_at || '') || '—';
+        const snoozeTxt = r?.active_snooze_kind
+          ? `${safeStr(r.active_snooze_kind)}${r?.active_snooze_mode ? ` (${safeStr(r.active_snooze_mode)})` : ''}${r?.active_snooze_until_date ? ` until ${fmtDateOnly(r.active_snooze_until_date)}` : ''}`
+          : '—';
+
+        const candidateLines = wrapText(candidateTxt, cols.candidate.w, small, false);
+        const clientLines = wrapText(clientTxt, cols.client.w, small, false);
+        const snoozeLines = wrapText(snoozeTxt, cols.snooze.w, small, false);
+        const rowHeight = Math.max(candidateLines.length, clientLines.length, snoozeLines.length, 1) * lineH + 10;
+
+        ensureSpace(rowHeight);
+
+        let rowY = y;
+        for (const ln of candidateLines) {
+          drawText(ln, cols.candidate.x, rowY, small, false);
+          rowY -= lineH;
+        }
+
+        rowY = y;
+        for (const ln of clientLines) {
+          drawText(ln, cols.client.x, rowY, small, false);
+          rowY -= lineH;
+        }
+
+        drawText(statusTxt, cols.status.x, y, small, false);
+        drawText(originalTxt, cols.original.x, y, small, false);
+        drawText(outstandingTxt, cols.outstanding.x, y, small, true);
+        drawText(nextDueTxt, cols.nextDue.x, y, small, false);
+        drawText(createdTxt, cols.created.x, y, small, false);
+
+        rowY = y;
+        for (const ln of snoozeLines) {
+          drawText(ln, cols.snooze.x, rowY, small, false);
+          rowY -= lineH;
+        }
+
+        y -= rowHeight - 2;
+
+        const subBits = [];
+        if (r?.candidate_tms_ref) subBits.push(`Ref: ${safeStr(r.candidate_tms_ref)}`);
+        if (r?.linked_timesheet_booking_id) subBits.push(`Booking: ${safeStr(r.linked_timesheet_booking_id)}`);
+        if (r?.linked_timesheet_shift_label_norm) subBits.push(`Shift: ${safeStr(r.linked_timesheet_shift_label_norm)}`);
+        if (r?.linked_timesheet_week_ending_date) subBits.push(`Week ending: ${fmtDateOnly(r.linked_timesheet_week_ending_date)}`);
+        if (r?.linked_shift_date) subBits.push(`Work date: ${fmtDateOnly(r.linked_shift_date)}`);
+        if (r?.weekly_due) subBits.push(`Weekly due: ${asMoney(r.weekly_due)}`);
+        if (r?.weeks_total != null) subBits.push(`Weeks: ${safeStr(r.weeks_total)}`);
+        if (r?.adjustment_comment) subBits.push(`Comment: ${safeStr(r.adjustment_comment)}`);
+        if (r?.notes) subBits.push(`Note: ${safeStr(r.notes)}`);
+        if (r?.latest_remittance_trigger_status) subBits.push(`Remittance: ${safeStr(r.latest_remittance_trigger_status)}`);
+        if (r?.payout_status) subBits.push(`Payout: ${safeStr(r.payout_status)}`);
+
+        if (subBits.length) {
+          ensureSpace(lineH);
+          drawText(subBits.join('   •   '), margin + 10, y, 7.5, false, rgb(0.35, 0.35, 0.35));
+          y -= lineH;
+        }
+
+        y -= 4;
+      }
+    };
+
+    for (const grp of groups) {
+      const title = safeStr(grp?.title || '');
+      const grpRows = Array.isArray(grp?.rows) ? grp.rows : [];
+      if (!grpRows.length) continue;
+      drawSectionTable(title, grpRows);
+    }
+
+    if (!groups.some((g) => Array.isArray(g?.rows) && g.rows.length)) {
+      ensureSpace(20);
+      drawWrapped('No finance ledger records matched the selected filters.', margin, pageW - margin * 2, body, false);
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const filename = `finance_ledger_${String(createdTo || createdFrom || new Date().toISOString().slice(0, 10))}.pdf`;
+
+    return withCORS(env, req, new Response(pdfBytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`
+      }
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'FINANCE_LEDGER_EXPORT_PDF_FAILED')));
+  }
+}
+
+async function handleBankingSnoozesExportCsv(env, req, user) {
+  const actorUser = (() => {
+    if (user && typeof user === 'object' && user.id) return user;
+    return null;
+  })();
+
+  let resolvedUser = actorUser;
+  if (!resolvedUser) {
+    resolvedUser = await requireUser(env, req, ['admin']);
+    if (!resolvedUser) return withCORS(env, req, unauthorized());
+  }
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const parseNullableText = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (s) return s;
+    }
+    return null;
+  };
+
+  const parseDateIso = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const parseUuid = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
+  };
+
+  const normalizeSnoozeStatus = (raw) => {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase();
+    if (!s || s === 'ALL') return { rpcStatus: 'ALL', uiStatus: 'ALL' };
+    if (['ACTIVE', 'OUTSTANDING', 'OPEN'].includes(s)) return { rpcStatus: 'OUTSTANDING', uiStatus: 'ACTIVE' };
+    if (['CLEARED', 'HISTORY', 'FULLY_PAID', 'PAID'].includes(s)) return { rpcStatus: 'FULLY_PAID', uiStatus: 'CLEARED_HISTORY' };
+    return null;
+  };
+
+  const csvEscape = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const asMoney = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(2) : '';
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
+  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'), q('date_to'), q('dateTo'));
+  const statusRaw = parseNullableText(q('status'));
+  const candidateIdRaw = parseNullableText(q('candidate_id'), q('candidateId'));
+  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
+  const caseType = parseNullableText(q('case_type'), q('caseType'));
+  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
+  const sortDir = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+  const createdFrom = createdFromRaw ? parseDateIso(createdFromRaw) : null;
+  const createdTo = createdToRaw ? parseDateIso(createdToRaw) : null;
+  const candidateId = candidateIdRaw ? parseUuid(candidateIdRaw) : null;
+  const clientId = clientIdRaw ? parseUuid(clientIdRaw) : null;
+  const normalizedStatus = normalizeSnoozeStatus(statusRaw);
+
+  if (createdFromRaw && !createdFrom) return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
+  if (createdToRaw && !createdTo) return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
+  if (candidateIdRaw && !candidateId) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
+  if (clientIdRaw && !clientId) return withCORS(env, req, badRequest('client_id must be a valid UUID'));
+  if (!normalizedStatus) return withCORS(env, req, badRequest('status must be ALL, ACTIVE, or CLEARED/HISTORY'));
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_snoozes_export_rows', {
+      p_actor_user_id: resolvedUser.id,
+      p_created_from: createdFrom,
+      p_created_to: createdTo,
+      p_status: normalizedStatus.rpcStatus,
+      p_candidate_id: candidateId,
+      p_client_id: clientId,
+      p_case_type: caseType,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_snoozes_export_rows');
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
+    const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
+    const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
+
+    const cols = [
+      'snooze_scope',
+      'row_label',
+      'case_type',
+      'candidate_reference',
+      'candidate_reference_number',
+      'candidate_first_name',
+      'candidate_last_name',
+      'candidate_display_name',
+      'client_name',
+      'linked_timesheet_booking_id',
+      'linked_timesheet_week_ending_date',
+      'linked_timesheet_shift_label',
+      'linked_timesheet_reference_number',
+      'snooze_kind',
+      'snooze_mode',
+      'snooze_until_date',
+      'note',
+      'created_at',
+      'created_by',
+      'updated_at',
+      'updated_by',
+      'cleared_at',
+      'cleared_by',
+      'current_visibility_status',
+      'snooze_lifecycle_status',
+      'linked_case_status',
+      'original_amount',
+      'outstanding_amount',
+      'weekly_due',
+      'weeks_total',
+      'start_week_start',
+      'next_due_week_start',
+      'adjustment_comment',
+      'schedule_json'
+    ];
+
+    const lines = [];
+    lines.push(cols.map(csvEscape).join(','));
+
+    for (const r of rows) {
+      lines.push([
+        r?.snooze_scope ?? '',
+        r?.row_label ?? '',
+        r?.case_type ?? '',
+        r?.candidate_tms_ref ?? '',
+        r?.candidate_tms_ref_num ?? '',
+        r?.candidate_first_name ?? '',
+        r?.candidate_last_name ?? '',
+        r?.candidate_display_name ?? '',
+        r?.client_name ?? '',
+        r?.linked_timesheet_booking_id ?? '',
+        r?.linked_timesheet_week_ending_date ?? '',
+        r?.linked_timesheet_shift_label_norm ?? '',
+        r?.linked_timesheet_reference_number ?? '',
+        r?.snooze_kind ?? '',
+        r?.snooze_mode ?? '',
+        r?.snooze_until_date ?? '',
+        r?.note ?? '',
+        r?.created_at_utc ?? '',
+        r?.created_by_display ?? '',
+        r?.updated_at_utc ?? '',
+        r?.updated_by_display ?? '',
+        r?.cleared_at_utc ?? '',
+        r?.cleared_by_display ?? '',
+        r?.current_visibility_status ?? '',
+        r?.snooze_lifecycle_status ?? '',
+        r?.linked_case_status ?? '',
+        asMoney(r?.original_amount),
+        asMoney(r?.outstanding_amount),
+        asMoney(r?.weekly_due),
+        r?.weeks_total ?? '',
+        r?.start_week_start ?? '',
+        r?.next_due_week_start ?? '',
+        r?.adjustment_comment ?? '',
+        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json)
+      ].map(csvEscape).join(','));
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'text/csv; charset=utf-8');
+    headers.set('Content-Disposition', `attachment; filename="snoozes_report_${String(createdTo || createdFrom || new Date().toISOString().slice(0, 10))}.csv"`);
+    headers.set('X-Report-Row-Count', String(rows.length || 0));
+    headers.set('X-Report-Title', String(meta?.title || 'Snoozes Report'));
+    headers.set('X-Report-Status', String(normalizedStatus.uiStatus));
+    headers.set('X-Report-Active-Count', String(summary?.active_count ?? 0));
+    headers.set('X-Report-Cleared-Count', String(summary?.cleared_count ?? 0));
+
+    const bom = '\ufeff';
+    return withCORS(env, req, new Response(bom + lines.join('\r\n'), { status: 200, headers }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_CSV_FAILED')));
+  }
+}
+async function handleBankingSnoozesExportPdf(env, req, user) {
+  const actorUser = (() => {
+    if (user && typeof user === 'object' && user.id) return user;
+    return null;
+  })();
+
+  let resolvedUser = actorUser;
+  if (!resolvedUser) {
+    resolvedUser = await requireUser(env, req, ['admin']);
+    if (!resolvedUser) return withCORS(env, req, unauthorized());
+  }
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const parseNullableText = (...vals) => {
+    for (const v of vals) {
+      const s = String(v == null ? '' : v).trim();
+      if (s) return s;
+    }
+    return null;
+  };
+
+  const parseDateIso = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const parseUuid = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
+  };
+
+  const normalizeSnoozeStatus = (raw) => {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase();
+    if (!s || s === 'ALL') return { rpcStatus: 'ALL', uiStatus: 'ALL' };
+    if (['ACTIVE', 'OUTSTANDING', 'OPEN'].includes(s)) return { rpcStatus: 'OUTSTANDING', uiStatus: 'ACTIVE' };
+    if (['CLEARED', 'HISTORY', 'FULLY_PAID', 'PAID'].includes(s)) return { rpcStatus: 'FULLY_PAID', uiStatus: 'CLEARED_HISTORY' };
+    return null;
+  };
+
+  const fmtDateOnly = (raw) => {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+    }
+    return s;
+  };
+
+  const fmtDateTime = (raw) => {
+    const d = new Date(raw);
+    if (!Number.isFinite(d.getTime())) return String(raw == null ? '' : raw);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  };
+
+  const safeStr = (v) => String(v == null ? '' : v);
+
+  const asMoney = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? `£${n.toFixed(2)}` : '—';
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
+  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'), q('date_to'), q('dateTo'));
+  const statusRaw = parseNullableText(q('status'));
+  const candidateIdRaw = parseNullableText(q('candidate_id'), q('candidateId'));
+  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
+  const caseType = parseNullableText(q('case_type'), q('caseType'));
+  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
+  const sortDir = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+  const createdFrom = createdFromRaw ? parseDateIso(createdFromRaw) : null;
+  const createdTo = createdToRaw ? parseDateIso(createdToRaw) : null;
+  const candidateId = candidateIdRaw ? parseUuid(candidateIdRaw) : null;
+  const clientId = clientIdRaw ? parseUuid(clientIdRaw) : null;
+  const normalizedStatus = normalizeSnoozeStatus(statusRaw);
+
+  if (createdFromRaw && !createdFrom) return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
+  if (createdToRaw && !createdTo) return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
+  if (candidateIdRaw && !candidateId) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
+  if (clientIdRaw && !clientId) return withCORS(env, req, badRequest('client_id must be a valid UUID'));
+  if (!normalizedStatus) return withCORS(env, req, badRequest('status must be ALL, ACTIVE, or CLEARED/HISTORY'));
+
+  try {
+    const raw0 = await sbRpc(env, 'pay_snoozes_pdf_payload', {
+      p_actor_user_id: resolvedUser.id,
+      p_created_from: createdFrom,
+      p_created_to: createdTo,
+      p_status: normalizedStatus.rpcStatus,
+      p_candidate_id: candidateId,
+      p_client_id: clientId,
+      p_case_type: caseType,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir
+    });
+
+    const payload = unwrapRpc(raw0, 'pay_snoozes_pdf_payload');
+    const groups = Array.isArray(payload?.groups) ? payload.groups : [];
+    const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
+    const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
+    const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
+
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const pageW = 842;
+    const pageH = 595;
+    const margin = 34;
+    const lineH = 11;
+    const small = 8;
+    const body = 9;
+    const heading = 14;
+    const section = 11.5;
+
+    const newPage = () => pdfDoc.addPage([pageW, pageH]);
+
+    let page = newPage();
+    let y = pageH - margin;
+
+    const drawText = (txt, x, yy, size = body, bold = false, color = rgb(0, 0, 0)) => {
+      const f = bold ? fontBold : font;
+      page.drawText(safeStr(txt), { x, y: yy, size, font: f, color });
+    };
+
+    const ensureSpace = (needed = lineH) => {
+      if (y - needed < margin) {
+        page = newPage();
+        y = pageH - margin;
+      }
+    };
+
+    const wrapText = (text, width, size, bold = false) => {
+      const f = bold ? fontBold : font;
+      const words = safeStr(text).split(/\s+/).filter(Boolean);
+      if (!words.length) return [''];
+      const lines = [];
+      let cur = '';
+      for (const w of words) {
+        const test = cur ? `${cur} ${w}` : w;
+        if (f.widthOfTextAtSize(test, size) <= width) {
+          cur = test;
+        } else {
+          if (cur) lines.push(cur);
+          cur = w;
+        }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    };
+
+    const drawWrapped = (text, x, width, size = body, bold = false, color = rgb(0, 0, 0)) => {
+      const lines = wrapText(text, width, size, bold);
+      for (const ln of lines) {
+        ensureSpace(lineH);
+        drawText(ln, x, y, size, bold, color);
+        y -= lineH;
+      }
+    };
+
+    drawText(payload?.title || 'Snoozes Report', margin, y, heading, true);
+    y -= 18;
+    drawText(`Generated: ${fmtDateTime(payload?.generated_at_utc || new Date().toISOString())}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 12;
+    drawText(`Created from: ${fmtDateOnly(appliedFilters?.created_from || '') || '—'}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 11;
+    drawText(`Created to: ${fmtDateOnly(appliedFilters?.created_to || '') || '—'}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 11;
+    drawText(`Status: ${safeStr(normalizedStatus.uiStatus)}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
+    y -= 16;
+
+    drawText('Summary', margin, y, section, true);
+    y -= 14;
+
+    const summaryLines = [
+      `Total rows: ${safeStr(summary?.total_count ?? 0)}`,
+      `Finance-case snoozes: ${safeStr(summary?.finance_case_snooze_count ?? 0)}`,
+      `Timesheet-payment snoozes: ${safeStr(summary?.timesheet_payment_snooze_count ?? 0)}`,
+      `Active: ${safeStr(summary?.active_count ?? 0)}`,
+      `Cleared/history: ${safeStr(summary?.cleared_count ?? 0)}`,
+      `Indefinite: ${safeStr(summary?.indefinite_count ?? 0)}`,
+      `Dated: ${safeStr(summary?.dated_count ?? 0)}`
+    ];
+
+    for (const line of summaryLines) {
+      ensureSpace(lineH);
+      drawText(line, margin, y, small, false);
+      y -= lineH;
+    }
+
+    y -= 8;
+
+    const drawSectionTable = (title, grpRows) => {
+      const list = Array.isArray(grpRows) ? grpRows : [];
+      if (!list.length) return;
+
+      ensureSpace(20);
+      drawText(title, margin, y, section, true);
+      y -= 16;
+
+      const cols = {
+        candidate: { x: margin, w: 145 },
+        client: { x: margin + 150, w: 120 },
+        kind: { x: margin + 275, w: 95 },
+        mode: { x: margin + 375, w: 76 },
+        until: { x: margin + 456, w: 72 },
+        created: { x: margin + 533, w: 82 },
+        visibility: { x: margin + 620, w: 90 },
+        linked: { x: margin + 715, w: 92 }
+      };
+
+      ensureSpace(14);
+      drawText('Candidate', cols.candidate.x, y, small, true);
+      drawText('Client', cols.client.x, y, small, true);
+      drawText('Snooze type', cols.kind.x, y, small, true);
+      drawText('Mode', cols.mode.x, y, small, true);
+      drawText('Until', cols.until.x, y, small, true);
+      drawText('Created', cols.created.x, y, small, true);
+      drawText('Visibility', cols.visibility.x, y, small, true);
+      drawText('Linked item', cols.linked.x, y, small, true);
+      y -= 12;
+
+      for (const r of list) {
+        const candidateTxt =
+          safeStr(r?.candidate_display_name || '').trim() ||
+          [safeStr(r?.candidate_first_name || '').trim(), safeStr(r?.candidate_last_name || '').trim()].filter(Boolean).join(' ').trim() ||
+          safeStr(r?.candidate_tms_ref || '').trim() ||
+          '—';
+        const clientTxt = safeStr(r?.client_name || '').trim() || '—';
+        const kindTxt = safeStr(r?.snooze_kind || '').trim() || '—';
+        const modeTxt = safeStr(r?.snooze_mode || '').trim() || '—';
+        const untilTxt = fmtDateOnly(r?.snooze_until_date || '') || (r?.snooze_mode === 'INDEFINITE' ? 'Indefinite' : '—');
+        const createdTxt = fmtDateOnly(r?.created_at_utc || '') || '—';
+        const visibilityTxt = safeStr(r?.current_visibility_status || '').trim() || '—';
+        const linkedTxt = r?.snooze_scope === 'TIMESHEET_PAYMENT'
+          ? (safeStr(r?.linked_timesheet_booking_id || '').trim() || safeStr(r?.linked_timesheet_reference_number || '').trim() || 'Timesheet payment')
+          : (safeStr(r?.row_label || '').trim() || 'Finance case');
+
+        const candidateLines = wrapText(candidateTxt, cols.candidate.w, small, false);
+        const clientLines = wrapText(clientTxt, cols.client.w, small, false);
+        const linkedLines = wrapText(linkedTxt, cols.linked.w, small, false);
+        const rowHeight = Math.max(candidateLines.length, clientLines.length, linkedLines.length, 1) * lineH + 10;
+
+        ensureSpace(rowHeight);
+
+        let rowY = y;
+        for (const ln of candidateLines) {
+          drawText(ln, cols.candidate.x, rowY, small, false);
+          rowY -= lineH;
+        }
+
+        rowY = y;
+        for (const ln of clientLines) {
+          drawText(ln, cols.client.x, rowY, small, false);
+          rowY -= lineH;
+        }
+
+        drawText(kindTxt, cols.kind.x, y, small, false);
+        drawText(modeTxt, cols.mode.x, y, small, false);
+        drawText(untilTxt, cols.until.x, y, small, false);
+        drawText(createdTxt, cols.created.x, y, small, false);
+        drawText(visibilityTxt, cols.visibility.x, y, small, false);
+
+        rowY = y;
+        for (const ln of linkedLines) {
+          drawText(ln, cols.linked.x, rowY, small, false);
+          rowY -= lineH;
+        }
+
+        y -= rowHeight - 2;
+
+        const subBits = [];
+        if (r?.candidate_tms_ref) subBits.push(`Ref: ${safeStr(r.candidate_tms_ref)}`);
+        if (r?.linked_timesheet_shift_label_norm) subBits.push(`Shift: ${safeStr(r.linked_timesheet_shift_label_norm)}`);
+        if (r?.linked_timesheet_week_ending_date) subBits.push(`Week ending: ${fmtDateOnly(r.linked_timesheet_week_ending_date)}`);
+        if (r?.note) subBits.push(`Note: ${safeStr(r.note)}`);
+        if (r?.created_by_display) subBits.push(`Created by: ${safeStr(r.created_by_display)}`);
+        if (r?.updated_by_display) subBits.push(`Updated by: ${safeStr(r.updated_by_display)}`);
+        if (r?.cleared_by_display) subBits.push(`Cleared by: ${safeStr(r.cleared_by_display)}`);
+        if (r?.linked_case_status) subBits.push(`Case status: ${safeStr(r.linked_case_status)}`);
+        if (Number.isFinite(Number(r?.outstanding_amount))) subBits.push(`Outstanding: ${asMoney(r.outstanding_amount)}`);
+        if (Number.isFinite(Number(r?.weekly_due)) && Number(r.weekly_due) > 0) subBits.push(`Weekly due: ${asMoney(r.weekly_due)}`);
+
+        if (subBits.length) {
+          ensureSpace(lineH);
+          drawText(subBits.join('   •   '), margin + 10, y, 7.5, false, rgb(0.35, 0.35, 0.35));
+          y -= lineH;
+        }
+
+        y -= 4;
+      }
+    };
+
+    for (const grp of groups) {
+      const title = safeStr(grp?.title || '');
+      const grpRows = Array.isArray(grp?.rows) ? grp.rows : [];
+      if (!grpRows.length) continue;
+      drawSectionTable(title, grpRows);
+    }
+
+    if (!groups.some((g) => Array.isArray(g?.rows) && g.rows.length)) {
+      ensureSpace(20);
+      drawWrapped('No snoozes matched the selected filters.', margin, pageW - margin * 2, body, false);
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const filename = `snoozes_report_${String(createdTo || createdFrom || new Date().toISOString().slice(0, 10))}.pdf`;
+
+    return withCORS(env, req, new Response(pdfBytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`
+      }
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_PDF_FAILED')));
+  }
+}
 
 async function handleBankingRailAccountsList(env, req, user) {
   try {
@@ -11223,7 +12373,6 @@ async function handleBankingCapabilities(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleBankingPayPreview(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -11240,11 +12389,7 @@ async function handleBankingPayPreview(env, req, user) {
   const parseIsoOrUkDateToIso = (raw) => {
     const s = String(raw || '').trim();
     if (!s) return null;
-
-    // YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-    // DD/MM/YYYY
     const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (m) {
       const dd = m[1], mm = m[2], yyyy = m[3];
@@ -11253,11 +12398,63 @@ async function handleBankingPayPreview(env, req, user) {
     return null;
   };
 
+  const buildPreviewErrorResponse = (status, code, message, details, canRetry) => {
+    const payload = {
+      ok: false,
+      preview_unavailable: true,
+      can_retry: !!canRetry,
+      error: {
+        code: String(code || 'BANKING_PAY_PREVIEW_FAILED'),
+        message: String(message || 'Unable to load Banking preview')
+      }
+    };
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+      payload.error.details = details;
+    }
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS }));
+  };
+
+  const classifyPreviewError = (err, safeDetails) => {
+    const msg = String(err?.message || err || '');
+    const lower = msg.toLowerCase();
+
+    if (lower.includes('rail_env_mismatch')) {
+      return {
+        status: 500,
+        code: 'BANKING_PAY_PREVIEW_ENV_MISMATCH',
+        message: 'Banking preview could not be loaded because the payment rail environment is misconfigured.',
+        details: { ...(safeDetails || {}), reason: msg },
+        canRetry: false
+      };
+    }
+
+    if (
+      lower.includes('rejected filter parameters') ||
+      lower.includes('could not choose the best candidate function between') ||
+      (lower.includes('pay_preview') && lower.includes('signature')) ||
+      (lower.includes('pay_preview') && lower.includes('function') && lower.includes('candidate'))
+    ) {
+      return {
+        status: 500,
+        code: 'BANKING_PAY_PREVIEW_RPC_SIGNATURE_MISMATCH',
+        message: 'Banking preview could not be loaded because the preview RPC signature does not match the backend request.',
+        details: { ...(safeDetails || {}), reason: msg },
+        canRetry: false
+      };
+    }
+
+    return {
+      status: 500,
+      code: 'BANKING_PAY_PREVIEW_FAILED',
+      message: 'Banking preview could not be loaded. Please try again.',
+      details: { ...(safeDetails || {}), reason: msg },
+      canRetry: true
+    };
+  };
+
   const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
   if (!cutoffIso) return withCORS(env, req, badRequest('week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY'));
 
-  // ✅ Perform readiness checks by default (Requirement C).
-  // Accept legacy/new keys; default true unless explicitly false.
   const prcIn =
     (body.perform_readiness_checks !== undefined) ? body.perform_readiness_checks
     : (body.performReadinessChecks !== undefined) ? body.performReadinessChecks
@@ -11275,7 +12472,6 @@ async function handleBankingPayPreview(env, req, user) {
     return true;
   })();
 
-  // ✅ Accept both legacy + new filter keys (frontend may send either)
   const candRaw = String(
     body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || ''
   ).trim();
@@ -11303,12 +12499,6 @@ async function handleBankingPayPreview(env, req, user) {
   if (candidateId) argsWithFilters.p_candidate_id = candidateId;
   if (clientId) argsWithFilters.p_client_id = clientId;
 
-  const argsWithoutFilters = {
-    p_pay_date: payDate,
-    p_week_ending_cutoff: cutoffIso,
-    p_actor_user_id: user.id
-  };
-
   const unwrapPayPreviewRpc = (rpcRes) => {
     let payload = rpcRes;
     try {
@@ -11323,39 +12513,7 @@ async function handleBankingPayPreview(env, req, user) {
   };
 
   const callPayPreview = async () => {
-    let rpcRes = null;
-    try {
-      rpcRes = await sbRpc(env, 'pay_preview', argsWithFilters);
-    } catch (e) {
-      const msg = String(e?.message || e || '');
-      const looksLikeUnexpectedParam =
-        /unexpected/i.test(msg) || /unknown/i.test(msg) || /parameter/i.test(msg) || /PGRST/i.test(msg);
-
-      // ✅ IMPORTANT: Do NOT silently drop filters. If the RPC rejects filter params, surface it loudly.
-      if (looksLikeUnexpectedParam && (candidateId || clientId)) {
-        try {
-          const keys = Object.keys(argsWithFilters || {}).sort();
-          console.error('[BANKING][API] pay_preview rejected filter params; refusing fallback', {
-            pay_date: payDate,
-            week_ending_cutoff: cutoffIso,
-            has_candidate_id: !!candidateId,
-            has_client_id: !!clientId,
-            arg_keys: keys,
-            err: msg
-          });
-        } catch {}
-
-        throw new Error(`pay_preview rejected filter parameters (candidate_id/client_id). This indicates an RPC signature mismatch between environments or wrong param names. Original error: ${msg}`);
-      }
-
-      // If no filters were supplied, keep existing error behaviour.
-      if (!looksLikeUnexpectedParam || !(candidateId || clientId)) {
-        throw e;
-      }
-
-      // Defensive: do NOT fallback silently when filters are present (this path should not be reachable).
-      rpcRes = await sbRpc(env, 'pay_preview', argsWithoutFilters);
-    }
+    const rpcRes = await sbRpc(env, 'pay_preview', argsWithFilters);
     return unwrapPayPreviewRpc(rpcRes);
   };
 
@@ -11371,28 +12529,39 @@ async function handleBankingPayPreview(env, req, user) {
     return u || f || 'PROD';
   };
 
+  const previewSafeDetails = {
+    pay_date: payDate,
+    week_ending_cutoff: cutoffIso,
+    has_candidate_id: !!candidateId,
+    has_client_id: !!clientId,
+    perform_readiness_checks: performReadinessChecks
+  };
+
+  let preview0 = null;
   try {
-    // 1) First pass preview (always)
-    const preview0 = await callPayPreview();
+    preview0 = await callPayPreview();
+  } catch (e) {
+    const classified = classifyPreviewError(e, previewSafeDetails);
+    return buildPreviewErrorResponse(classified.status, classified.code, classified.message, classified.details, classified.canRetry);
+  }
 
-    // If readiness checks are disabled, return preview only (but still include readiness wrapper for consistent API).
-    if (!performReadinessChecks) {
-      return withCORS(env, req, ok({
-        ok: true,
-        preview: preview0,
-        readiness: {
-          performed: false,
-          attempted_count: 0,
-          success_count: 0,
-          failed_count: 0,
-          payees_processed: 0,
-          did_work: false,
-          diagnostics: []
-        }
-      }));
-    }
+  if (!performReadinessChecks) {
+    return withCORS(env, req, ok({
+      ok: true,
+      preview: preview0,
+      readiness: {
+        performed: false,
+        attempted_count: 0,
+        success_count: 0,
+        failed_count: 0,
+        payees_processed: 0,
+        did_work: false,
+        diagnostics: []
+      }
+    }));
+  }
 
-    // 2) Determine rail semantics from preview
+  try {
     const settings = (preview0 && typeof preview0 === 'object' && preview0.settings && typeof preview0.settings === 'object')
       ? preview0.settings
       : {};
@@ -11414,7 +12583,6 @@ async function handleBankingPayPreview(env, req, user) {
 
     const payees0 = Array.isArray(preview0.payees) ? preview0.payees : [];
 
-    // If manual rail (CSV) or no payees, no readiness work to do.
     if (!payees0.length || providerDefault === 'CSV' || (!needNameCheck && !requiresPayeeMap)) {
       return withCORS(env, req, ok({
         ok: true,
@@ -11431,7 +12599,6 @@ async function handleBankingPayPreview(env, req, user) {
       }));
     }
 
-    // For now, readiness actions are implemented for REVOLUT only (API rail).
     if (providerDefault !== 'REVOLUT') {
       return withCORS(env, req, ok({
         ok: true,
@@ -11451,7 +12618,6 @@ async function handleBankingPayPreview(env, req, user) {
       }));
     }
 
-    // 3) Worker env vs rail env validation (match existing pattern used elsewhere)
     const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
     const workerEnv = deriveWorkerEnvFromApiBase(apiBase || '');
     const expectedEnv = normalizeEnv(railEnv, workerEnv);
@@ -11460,10 +12626,8 @@ async function handleBankingPayPreview(env, req, user) {
       throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
     }
 
-    // 4) Execute readiness via shared helper (preview-driven)
     const diag = await revolutEnsurePayeesReadyFromPreview(env, railEnv, payees0, user.id);
 
-    // 5) Second pass preview (source of truth for UI) if any work was done
     const preview1 = (diag && diag.did_work === true) ? await callPayPreview() : preview0;
 
     return withCORS(env, req, ok({
@@ -11480,10 +12644,28 @@ async function handleBankingPayPreview(env, req, user) {
       }
     }));
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return withCORS(env, req, ok({
+      ok: true,
+      preview: preview0,
+      readiness: {
+        performed: true,
+        attempted_count: 0,
+        success_count: 0,
+        failed_count: 0,
+        payees_processed: Array.isArray(preview0?.payees) ? preview0.payees.length : 0,
+        did_work: false,
+        diagnostics: [{
+          code: 'READINESS_FAILED',
+          message: String(e?.message || e || 'Readiness checks failed')
+        }]
+      },
+      warning: {
+        code: 'BANKING_PREVIEW_READINESS_FAILED',
+        message: 'Banking preview loaded, but readiness checks could not be completed.'
+      }
+    }));
   }
 }
-
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -26454,1004 +27636,6 @@ async function handleMailshotRunGet(env, req, id) {
   }
 }
 
-async function handleBankingAdvancesRegisterExportCsv(env, req, user) {
-  const actorUser = (() => {
-    if (user && typeof user === 'object' && user.id) return user;
-    return null;
-  })();
-
-  let resolvedUser = actorUser;
-  if (!resolvedUser) {
-    resolvedUser = await requireUser(env, req, ['admin']);
-    if (!resolvedUser) return withCORS(env, req, unauthorized());
-  }
-
-  const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
-
-  const parseNullableText = (...vals) => {
-    for (const v of vals) {
-      const s = String(v == null ? '' : v).trim();
-      if (s) return s;
-    }
-    return null;
-  };
-
-  const parseBool = (raw, dflt) => {
-    const s = String(raw == null ? '' : raw).trim().toLowerCase();
-    if (!s) return dflt;
-    if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
-    if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
-    return dflt;
-  };
-
-  const parseNullableNumeric = (...vals) => {
-    for (const v of vals) {
-      const s = String(v == null ? '' : v).trim();
-      if (!s) continue;
-      const n = Number(s);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  };
-
-  const parseDateIso = (raw) => {
-    const s = String(raw == null ? '' : raw).trim();
-    if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-    return null;
-  };
-
-  const parseUuid = (raw) => {
-    const s = String(raw == null ? '' : raw).trim();
-    if (!s) return null;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
-  };
-
-  const csvEscape = (v) => {
-    const s = (v === null || v === undefined) ? '' : String(v);
-    if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
-  };
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
-        payload = payload[key];
-      }
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  };
-
-  const search = parseNullableText(q('search'), q('q'));
-  const type = parseNullableText(q('type'), q('record_type'), q('recordType'));
-  const status = parseNullableText(q('status'));
-
-  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
-  const clientId = parseUuid(clientIdRaw);
-
-  const outstandingOnly = parseBool(
-    parseNullableText(q('outstanding_only'), q('outstandingOnly')),
-    true
-  );
-
-  const dueThisWeekOnly = parseBool(
-    parseNullableText(q('due_this_week_only'), q('dueThisWeekOnly')),
-    false
-  );
-
-  const amountMin = parseNullableNumeric(q('amount_min'), q('amountMin'));
-  const amountMax = parseNullableNumeric(q('amount_max'), q('amountMax'));
-
-  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'));
-  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'));
-  const asOfDateRaw = parseNullableText(q('as_of_date'), q('asOfDate'));
-
-  const createdFrom = parseDateIso(createdFromRaw);
-  const createdTo = parseDateIso(createdToRaw);
-  const asOfDate = parseDateIso(asOfDateRaw);
-
-  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
-  const sortDirRaw = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase();
-  const sortDir = (sortDirRaw === 'asc') ? 'asc' : 'desc';
-
-  if (clientIdRaw && !clientId) {
-    return withCORS(env, req, badRequest('client_id must be a valid UUID'));
-  }
-
-  if (createdFromRaw && !createdFrom) {
-    return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (createdToRaw && !createdTo) {
-    return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (asOfDateRaw && !asOfDate) {
-    return withCORS(env, req, badRequest('as_of_date must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (amountMin != null && amountMax != null && amountMin > amountMax) {
-    return withCORS(env, req, badRequest('amount_min cannot be greater than amount_max'));
-  }
-
-  try {
-    const raw0 = await sbRpc(env, 'pay_advances_register_export_rows', {
-      p_actor_user_id: resolvedUser.id,
-      p_search: search,
-      p_type: type,
-      p_status: status,
-      p_client_id: clientId,
-      p_outstanding_only: outstandingOnly,
-      p_due_this_week_only: dueThisWeekOnly,
-      p_amount_min: amountMin,
-      p_amount_max: amountMax,
-      p_created_from: createdFrom,
-      p_created_to: createdTo,
-      p_sort_key: sortKey,
-      p_sort_dir: sortDir,
-      p_as_of_date: asOfDate
-    });
-
-    const exportObj = unwrapRpc(raw0, 'pay_advances_register_export_rows');
-    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
-    const meta = (exportObj && typeof exportObj.meta === 'object' && exportObj.meta) ? exportObj.meta : {};
-    const summary = (exportObj && typeof exportObj.summary === 'object' && exportObj.summary) ? exportObj.summary : {};
-
-    const cols = [
-      'record_type',
-      'record_subtype',
-      'candidate_tms_ref',
-      'candidate_display_name',
-      'candidate_first_name',
-      'candidate_last_name',
-      'client_name',
-      'status',
-      'payout_status',
-      'source_timesheet_id',
-      'source_shift_date',
-      'source_week_ending_date',
-      'source_booking_id',
-      'source_shift_label_norm',
-      'created_at',
-      'start_week_start',
-      'next_due_week_start',
-      'original_amount',
-      'recovered_total',
-      'recovered_wtd',
-      'remaining_outstanding',
-      'due_this_week',
-      'baseline_signature',
-      'payout_pay_batch_id',
-      'payout_transfer_id',
-      'latest_recovery_pay_batch_id',
-      'advance_id',
-      'candidate_id',
-      'client_id',
-      'notes'
-    ];
-
-    const lines = [];
-    lines.push(cols.map(csvEscape).join(','));
-
-    for (const r of rows) {
-      lines.push([
-        r?.record_type ?? '',
-        r?.record_subtype ?? '',
-        r?.candidate_tms_ref ?? '',
-        r?.candidate_display_name ?? '',
-        r?.candidate_first_name ?? '',
-        r?.candidate_last_name ?? '',
-        r?.client_name ?? '',
-        r?.status ?? '',
-        r?.payout_status ?? '',
-        r?.source_timesheet_id ?? '',
-        r?.source_shift_date ?? '',
-        r?.source_week_ending_date ?? '',
-        r?.source_booking_id ?? '',
-        r?.source_shift_label_norm ?? '',
-        r?.created_at ?? '',
-        r?.start_week_start ?? '',
-        r?.next_due_week_start ?? '',
-        r?.original_amount ?? '',
-        r?.recovered_total ?? '',
-        r?.recovered_wtd ?? '',
-        r?.remaining_outstanding ?? '',
-        r?.due_this_week ?? '',
-        r?.baseline_signature ?? '',
-        r?.payout_pay_batch_id ?? '',
-        r?.payout_transfer_id ?? '',
-        r?.latest_recovery_pay_batch_id ?? '',
-        r?.advance_id ?? '',
-        r?.candidate_id ?? '',
-        r?.client_id ?? '',
-        r?.notes ?? ''
-      ].map(csvEscape).join(','));
-    }
-
-    const headers = new Headers();
-    headers.set('Content-Type', 'text/csv; charset=utf-8');
-    headers.set('Content-Disposition', `attachment; filename="advances_register_${String(meta?.as_of_date || new Date().toISOString().slice(0, 10))}.csv"`);
-    headers.set('X-Register-Row-Count', String(rows.length || 0));
-    headers.set('X-Register-Week-Start', String(summary?.week_start || ''));
-    headers.set('X-Register-Week-End', String(summary?.week_end || ''));
-
-    const bom = '\ufeff';
-    return withCORS(env, req, new Response(bom + lines.join('\r\n'), { status: 200, headers }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'ADVANCES_REGISTER_EXPORT_CSV_FAILED')));
-  }
-}
-async function handleBankingAdvancesRegisterExportPdf(env, req, user) {
-  const actorUser = (() => {
-    if (user && typeof user === 'object' && user.id) return user;
-    return null;
-  })();
-
-  let resolvedUser = actorUser;
-  if (!resolvedUser) {
-    resolvedUser = await requireUser(env, req, ['admin']);
-    if (!resolvedUser) return withCORS(env, req, unauthorized());
-  }
-
-  const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
-
-  const parseNullableText = (...vals) => {
-    for (const v of vals) {
-      const s = String(v == null ? '' : v).trim();
-      if (s) return s;
-    }
-    return null;
-  };
-
-  const parseBool = (raw, dflt) => {
-    const s = String(raw == null ? '' : raw).trim().toLowerCase();
-    if (!s) return dflt;
-    if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
-    if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
-    return dflt;
-  };
-
-  const parseNullableNumeric = (...vals) => {
-    for (const v of vals) {
-      const s = String(v == null ? '' : v).trim();
-      if (!s) continue;
-      const n = Number(s);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  };
-
-  const parseDateIso = (raw) => {
-    const s = String(raw == null ? '' : raw).trim();
-    if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-    return null;
-  };
-
-  const parseUuid = (raw) => {
-    const s = String(raw == null ? '' : raw).trim();
-    if (!s) return null;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
-  };
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
-        payload = payload[key];
-      }
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  };
-
-  const search = parseNullableText(q('search'), q('q'));
-  const type = parseNullableText(q('type'), q('record_type'), q('recordType'));
-  const status = parseNullableText(q('status'));
-
-  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
-  const clientId = parseUuid(clientIdRaw);
-
-  const outstandingOnly = parseBool(
-    parseNullableText(q('outstanding_only'), q('outstandingOnly')),
-    true
-  );
-
-  const dueThisWeekOnly = parseBool(
-    parseNullableText(q('due_this_week_only'), q('dueThisWeekOnly')),
-    false
-  );
-
-  const amountMin = parseNullableNumeric(q('amount_min'), q('amountMin'));
-  const amountMax = parseNullableNumeric(q('amount_max'), q('amountMax'));
-
-  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'));
-  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'));
-  const asOfDateRaw = parseNullableText(q('as_of_date'), q('asOfDate'));
-
-  const createdFrom = parseDateIso(createdFromRaw);
-  const createdTo = parseDateIso(createdToRaw);
-  const asOfDate = parseDateIso(asOfDateRaw);
-
-  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
-  const sortDirRaw = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase();
-  const sortDir = (sortDirRaw === 'asc') ? 'asc' : 'desc';
-
-  if (clientIdRaw && !clientId) {
-    return withCORS(env, req, badRequest('client_id must be a valid UUID'));
-  }
-
-  if (createdFromRaw && !createdFrom) {
-    return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (createdToRaw && !createdTo) {
-    return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (asOfDateRaw && !asOfDate) {
-    return withCORS(env, req, badRequest('as_of_date must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (amountMin != null && amountMax != null && amountMin > amountMax) {
-    return withCORS(env, req, badRequest('amount_min cannot be greater than amount_max'));
-  }
-
-  const safeStr = (v) => (v == null ? '' : String(v));
-  const asNum = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
-  const asMoney = (v) => {
-    const n = asNum(v);
-    if (n == null) return '';
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency: 'GBP',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(n);
-  };
-  const esc = (s) => String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  const fmtDateTime = (isoLike) => {
-    const s = safeStr(isoLike).trim();
-    if (!s) return '';
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return s;
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/London',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }).format(d);
-  };
-
-  const fmtDateOnly = (isoLike) => {
-    const s = safeStr(isoLike).trim();
-    if (!s) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-      const [y, m, d] = s.split('-');
-      return `${d}/${m}/${y}`;
-    }
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return s;
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/London',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(d);
-  };
-
-  try {
-    const raw0 = await sbRpc(env, 'pay_advances_register_pdf_payload', {
-      p_actor_user_id: resolvedUser.id,
-      p_search: search,
-      p_type: type,
-      p_status: status,
-      p_client_id: clientId,
-      p_outstanding_only: outstandingOnly,
-      p_due_this_week_only: dueThisWeekOnly,
-      p_amount_min: amountMin,
-      p_amount_max: amountMax,
-      p_created_from: createdFrom,
-      p_created_to: createdTo,
-      p_sort_key: sortKey,
-      p_sort_dir: sortDir,
-      p_as_of_date: asOfDate
-    });
-
-    const payload = unwrapRpc(raw0, 'pay_advances_register_pdf_payload');
-    const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
-    const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
-    const groups = Array.isArray(payload?.groups) ? payload.groups : [];
-    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-
-    const pdfDoc = await PDFDocument.create();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-    const pageW = 595.28;
-    const pageH = 841.89;
-    const margin = 36;
-    const lineH = 12;
-    const small = 8.5;
-    const body = 9;
-    const heading = 14;
-    const section = 11.5;
-
-    const newPage = () => pdfDoc.addPage([pageW, pageH]);
-
-    let page = newPage();
-    let y = pageH - margin;
-
-    const drawText = (txt, x, yy, size = body, bold = false, color = rgb(0, 0, 0)) => {
-      const f = bold ? fontBold : font;
-      page.drawText(safeStr(txt), { x, y: yy, size, font: f, color });
-    };
-
-    const ensureSpace = (needed = lineH) => {
-      if (y - needed < margin) {
-        page = newPage();
-        y = pageH - margin;
-      }
-    };
-
-    const wrapText = (text, width, size, bold = false) => {
-      const f = bold ? fontBold : font;
-      const words = safeStr(text).split(/\s+/).filter(Boolean);
-      if (!words.length) return [''];
-      const lines = [];
-      let cur = '';
-      for (const w of words) {
-        const test = cur ? `${cur} ${w}` : w;
-        if (f.widthOfTextAtSize(test, size) <= width) {
-          cur = test;
-        } else {
-          if (cur) lines.push(cur);
-          cur = w;
-        }
-      }
-      if (cur) lines.push(cur);
-      return lines;
-    };
-
-    const drawWrapped = (text, x, width, size = body, bold = false) => {
-      const lines = wrapText(text, width, size, bold);
-      for (const ln of lines) {
-        ensureSpace(lineH);
-        drawText(ln, x, y, size, bold);
-        y -= lineH;
-      }
-    };
-
-    drawText('Advances & Recoveries Register', margin, y, heading, true);
-    y -= 18;
-    drawText(`Generated: ${fmtDateTime(payload?.generated_at_utc || new Date().toISOString())}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
-    y -= 12;
-    drawText(`As at: ${fmtDateOnly(meta?.as_of_date || '')}`, margin, y, small, false, rgb(0.35, 0.35, 0.35));
-    y -= 16;
-
-    drawText('Applied filters', margin, y, section, true);
-    y -= 14;
-
-    const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
-    const filterLines = [
-      `Search: ${safeStr(appliedFilters.search || '—')}`,
-      `Type: ${safeStr(appliedFilters.type || 'ALL')}`,
-      `Status: ${safeStr(appliedFilters.status || 'ALL')}`,
-      `Client: ${safeStr(appliedFilters.client_id || 'ALL')}`,
-      `Outstanding only: ${appliedFilters.outstanding_only === false ? 'No' : 'Yes'}`,
-      `Due this week only: ${appliedFilters.due_this_week_only === true ? 'Yes' : 'No'}`,
-      `Amount min: ${appliedFilters.amount_min == null ? '—' : asMoney(appliedFilters.amount_min)}`,
-      `Amount max: ${appliedFilters.amount_max == null ? '—' : asMoney(appliedFilters.amount_max)}`,
-      `Created from: ${fmtDateOnly(appliedFilters.created_from || '') || '—'}`,
-      `Created to: ${fmtDateOnly(appliedFilters.created_to || '') || '—'}`
-    ];
-
-    for (const fl of filterLines) {
-      ensureSpace(lineH);
-      drawText(fl, margin, y, small, false);
-      y -= lineH;
-    }
-
-    y -= 6;
-    drawText('Summary', margin, y, section, true);
-    y -= 14;
-
-    const summaryLines = [
-      `Rows: ${safeStr(summary.row_count || rows.length || 0)}`,
-      `Week: ${fmtDateOnly(summary.week_start || '')} to ${fmtDateOnly(summary.week_end || '')}`,
-      `Overpayments outstanding: ${asMoney(summary.active_overpayments_outstanding || 0)}`,
-      `Loans outstanding: ${asMoney(summary.active_loans_outstanding || 0)}`,
-      `Advances outstanding: ${asMoney(summary.active_advances_outstanding || 0)}`,
-      `Due / recoverable this week: ${asMoney(summary.due_this_week_total || 0)}`
-    ];
-
-    for (const sl of summaryLines) {
-      ensureSpace(lineH);
-      drawText(sl, margin, y, small, false);
-      y -= lineH;
-    }
-
-    y -= 8;
-
-    const drawSectionTable = (title, grpRows) => {
-      const list = Array.isArray(grpRows) ? grpRows : [];
-      if (!list.length) return;
-
-      ensureSpace(20);
-      drawText(title, margin, y, section, true);
-      y -= 16;
-
-      const cols = {
-        candidate: { x: margin, w: 140 },
-        client: { x: margin + 145, w: 120 },
-        status: { x: margin + 270, w: 70 },
-        original: { x: margin + 345, w: 60 },
-        recovered: { x: margin + 410, w: 60 },
-        remaining: { x: margin + 475, w: 70 }
-      };
-
-      ensureSpace(14);
-      drawText('Candidate', cols.candidate.x, y, small, true);
-      drawText('Client', cols.client.x, y, small, true);
-      drawText('Status', cols.status.x, y, small, true);
-      drawText('Original', cols.original.x, y, small, true);
-      drawText('Recovered', cols.recovered.x, y, small, true);
-      drawText('Remaining', cols.remaining.x, y, small, true);
-      y -= 12;
-
-      for (const r of list) {
-        const candidateTxt = safeStr(r?.candidate_display_name || '').trim() || `${safeStr(r?.candidate_first_name || '')} ${safeStr(r?.candidate_last_name || '')}`.trim() || safeStr(r?.candidate_tms_ref || '');
-        const clientTxt = safeStr(r?.client_name || '');
-        const statusTxt = safeStr(r?.status || '');
-        const originalTxt = asMoney(r?.original_amount);
-        const recoveredTxt = asMoney(r?.recovered_total);
-        const remainingTxt = asMoney(r?.remaining_outstanding);
-
-        const candidateLines = wrapText(candidateTxt || '—', cols.candidate.w, small, false);
-        const clientLines = wrapText(clientTxt || '—', cols.client.w, small, false);
-        const rowHeight = Math.max(candidateLines.length, clientLines.length, 1) * lineH + 10;
-
-        ensureSpace(rowHeight);
-
-        let rowY = y;
-        for (const ln of candidateLines) {
-          drawText(ln, cols.candidate.x, rowY, small, false);
-          rowY -= lineH;
-        }
-
-        rowY = y;
-        for (const ln of clientLines) {
-          drawText(ln, cols.client.x, rowY, small, false);
-          rowY -= lineH;
-        }
-
-        drawText(statusTxt || '—', cols.status.x, y, small, false);
-        drawText(originalTxt || '—', cols.original.x, y, small, false);
-        drawText(recoveredTxt || '—', cols.recovered.x, y, small, false);
-        drawText(remainingTxt || '—', cols.remaining.x, y, small, true);
-
-        y -= rowHeight - 2;
-
-        const subBits = [];
-        if (r?.record_type === 'OVERPAYMENT' && r?.linked_timesheet_id) subBits.push(`TS: ${safeStr(r.linked_timesheet_id)}`);
-        if (r?.record_type === 'OVERPAYMENT' && r?.baseline_signature) subBits.push(`Baseline: ${safeStr(r.baseline_signature)}`);
-        if (r?.record_type === 'LOAN' && r?.due_this_week != null) subBits.push(`Due this week: ${asMoney(r.due_this_week)}`);
-        if ((r?.record_type === 'ADVANCE' || r?.record_type === 'MISSING_SHIFT_ADVANCE') && r?.linked_shift_date) subBits.push(`Shift: ${fmtDateOnly(r.linked_shift_date)}`);
-        if (r?.source_booking_id) subBits.push(`Booking: ${safeStr(r.source_booking_id)}`);
-        if (r?.source_week_ending_date) subBits.push(`Week ending: ${fmtDateOnly(r.source_week_ending_date)}`);
-        if (r?.source_shift_label_norm) subBits.push(`Shift label: ${safeStr(r.source_shift_label_norm)}`);
-        if (r?.payout_status) subBits.push(`Payout: ${safeStr(r.payout_status)}`);
-        if (r?.created_at) subBits.push(`Created: ${fmtDateOnly(r.created_at)}`);
-
-        if (subBits.length) {
-          ensureSpace(lineH);
-          drawText(subBits.join('   •   '), margin + 10, y, 7.5, false, rgb(0.35, 0.35, 0.35));
-          y -= lineH;
-        }
-
-        y -= 4;
-      }
-    };
-
-    for (const grp of groups) {
-      const title = safeStr(grp?.title || '');
-      const grpRows = Array.isArray(grp?.rows) ? grp.rows : [];
-      if (!grpRows.length) continue;
-      drawSectionTable(title, grpRows);
-    }
-
-    if (!rows.length) {
-      ensureSpace(20);
-      drawWrapped('No records matched the selected filters.', margin, pageW - margin * 2, body, false);
-    }
-
-    const pdfBytes = await pdfDoc.save();
-    const filename = `advances_register_${String(meta?.as_of_date || new Date().toISOString().slice(0, 10))}.pdf`;
-
-    return withCORS(env, req, new Response(pdfBytes, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`
-      }
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'ADVANCES_REGISTER_EXPORT_PDF_FAILED')));
-  }
-}
-
-
-async function handleBankingAdvancesRegisterPrint(env, req, user) {
-  const actorUser = (() => {
-    if (user && typeof user === 'object' && user.id) return user;
-    return null;
-  })();
-
-  let resolvedUser = actorUser;
-  if (!resolvedUser) {
-    resolvedUser = await requireUser(env, req, ['admin']);
-    if (!resolvedUser) return withCORS(env, req, unauthorized());
-  }
-
-  const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
-
-  const parseNullableText = (...vals) => {
-    for (const v of vals) {
-      const s = String(v == null ? '' : v).trim();
-      if (s) return s;
-    }
-    return null;
-  };
-
-  const parseBool = (raw, dflt) => {
-    const s = String(raw == null ? '' : raw).trim().toLowerCase();
-    if (!s) return dflt;
-    if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
-    if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
-    return dflt;
-  };
-
-  const parseNullableNumeric = (...vals) => {
-    for (const v of vals) {
-      const s = String(v == null ? '' : v).trim();
-      if (!s) continue;
-      const n = Number(s);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  };
-
-  const parseDateIso = (raw) => {
-    const s = String(raw == null ? '' : raw).trim();
-    if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-    return null;
-  };
-
-  const parseUuid = (raw) => {
-    const s = String(raw == null ? '' : raw).trim();
-    if (!s) return null;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s) ? s : null;
-  };
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
-        payload = payload[key];
-      }
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  };
-
-  const esc = (s) => String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
-  const fmtMoney = (v) => {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return '—';
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency: 'GBP',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(n);
-  };
-
-  const fmtDateOnly = (isoLike) => {
-    const s = String(isoLike || '').trim();
-    if (!s) return '—';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-      const [y, m, d] = s.split('-');
-      return `${d}/${m}/${y}`;
-    }
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return esc(s);
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/London',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(d);
-  };
-
-  const fmtDateTime = (isoLike) => {
-    const s = String(isoLike || '').trim();
-    if (!s) return '—';
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return esc(s);
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/London',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }).format(d);
-  };
-
-  const search = parseNullableText(q('search'), q('q'));
-  const type = parseNullableText(q('type'), q('record_type'), q('recordType'));
-  const status = parseNullableText(q('status'));
-
-  const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
-  const clientId = parseUuid(clientIdRaw);
-
-  const outstandingOnly = parseBool(
-    parseNullableText(q('outstanding_only'), q('outstandingOnly')),
-    true
-  );
-
-  const dueThisWeekOnly = parseBool(
-    parseNullableText(q('due_this_week_only'), q('dueThisWeekOnly')),
-    false
-  );
-
-  const amountMin = parseNullableNumeric(q('amount_min'), q('amountMin'));
-  const amountMax = parseNullableNumeric(q('amount_max'), q('amountMax'));
-
-  const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'));
-  const createdToRaw = parseNullableText(q('created_to'), q('createdTo'));
-  const asOfDateRaw = parseNullableText(q('as_of_date'), q('asOfDate'));
-
-  const createdFrom = parseDateIso(createdFromRaw);
-  const createdTo = parseDateIso(createdToRaw);
-  const asOfDate = parseDateIso(asOfDateRaw);
-
-  const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
-  const sortDirRaw = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase();
-  const sortDir = (sortDirRaw === 'asc') ? 'asc' : 'desc';
-
-  if (clientIdRaw && !clientId) {
-    return withCORS(env, req, badRequest('client_id must be a valid UUID'));
-  }
-
-  if (createdFromRaw && !createdFrom) {
-    return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (createdToRaw && !createdTo) {
-    return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (asOfDateRaw && !asOfDate) {
-    return withCORS(env, req, badRequest('as_of_date must be YYYY-MM-DD or DD/MM/YYYY'));
-  }
-
-  if (amountMin != null && amountMax != null && amountMin > amountMax) {
-    return withCORS(env, req, badRequest('amount_min cannot be greater than amount_max'));
-  }
-
-  try {
-    const raw0 = await sbRpc(env, 'pay_advances_register_pdf_payload', {
-      p_actor_user_id: resolvedUser.id,
-      p_search: search,
-      p_type: type,
-      p_status: status,
-      p_client_id: clientId,
-      p_outstanding_only: outstandingOnly,
-      p_due_this_week_only: dueThisWeekOnly,
-      p_amount_min: amountMin,
-      p_amount_max: amountMax,
-      p_created_from: createdFrom,
-      p_created_to: createdTo,
-      p_sort_key: sortKey,
-      p_sort_dir: sortDir,
-      p_as_of_date: asOfDate
-    });
-
-    const payload = unwrapRpc(raw0, 'pay_advances_register_pdf_payload');
-    const summary = (payload && typeof payload.summary === 'object' && payload.summary) ? payload.summary : {};
-    const meta = (payload && typeof payload.meta === 'object' && payload.meta) ? payload.meta : {};
-    const groups = Array.isArray(payload?.groups) ? payload.groups : [];
-
-    const appliedFilters = (meta && typeof meta.applied_filters === 'object' && meta.applied_filters) ? meta.applied_filters : {};
-
-    const groupHtml = groups
-      .filter(g => Array.isArray(g?.rows) && g.rows.length > 0)
-      .map(g => {
-        const rowsHtml = g.rows.map(r => {
-          const detailBits = [];
-          if (r?.record_type === 'OVERPAYMENT' && r?.linked_timesheet_id) detailBits.push(`Timesheet: ${esc(r.linked_timesheet_id)}`);
-          if (r?.record_type === 'OVERPAYMENT' && r?.baseline_signature) detailBits.push(`Baseline: ${esc(r.baseline_signature)}`);
-          if ((r?.record_type === 'ADVANCE' || r?.record_type === 'MISSING_SHIFT_ADVANCE') && r?.linked_shift_date) detailBits.push(`Shift: ${fmtDateOnly(r.linked_shift_date)}`);
-          if (r?.record_type === 'LOAN' && r?.due_this_week != null) detailBits.push(`Due this week: ${fmtMoney(r.due_this_week)}`);
-          if (r?.source_booking_id) detailBits.push(`Booking: ${esc(r.source_booking_id)}`);
-          if (r?.source_week_ending_date) detailBits.push(`Week ending: ${fmtDateOnly(r.source_week_ending_date)}`);
-          if (r?.source_shift_label_norm) detailBits.push(`Shift label: ${esc(r.source_shift_label_norm)}`);
-          if (r?.payout_status) detailBits.push(`Payout: ${esc(r.payout_status)}`);
-          if (r?.created_at) detailBits.push(`Created: ${fmtDateOnly(r.created_at)}`);
-
-          return `
-            <tr>
-              <td>${esc(r.candidate_display_name || `${r.candidate_first_name || ''} ${r.candidate_last_name || ''}`.trim() || r.candidate_tms_ref || '')}</td>
-              <td>${esc(r.client_name || '')}</td>
-              <td>${esc(r.status || '')}</td>
-              <td style="text-align:right">${fmtMoney(r.original_amount)}</td>
-              <td style="text-align:right">${fmtMoney(r.recovered_total)}</td>
-              <td style="text-align:right">${fmtMoney(r.remaining_outstanding)}</td>
-            </tr>
-            <tr>
-              <td colspan="6" class="subrow">${detailBits.join(' &nbsp; • &nbsp; ') || '&mdash;'}</td>
-            </tr>
-          `;
-        }).join('');
-
-        return `
-          <section class="group">
-            <h2>${esc(g.title || '')}</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Candidate</th>
-                  <th>Client</th>
-                  <th>Status</th>
-                  <th>Original</th>
-                  <th>Recovered / Repaid</th>
-                  <th>Remaining</th>
-                </tr>
-              </thead>
-              <tbody>${rowsHtml}</tbody>
-            </table>
-          </section>
-        `;
-      }).join('');
-
-    const html = `
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Advances & Recoveries Register</title>
-<style>
-  body {
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    color: #111;
-    margin: 24px;
-  }
-  h1 { margin: 0 0 8px 0; font-size: 24px; }
-  h2 { margin: 22px 0 8px 0; font-size: 18px; }
-  .meta, .filters, .summary {
-    margin: 12px 0 18px 0;
-    padding: 12px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(220px, 1fr));
-    gap: 8px 16px;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 8px 0 20px 0;
-  }
-  th, td {
-    border: 1px solid #ddd;
-    padding: 6px 8px;
-    vertical-align: top;
-  }
-  th {
-    background: #f5f5f5;
-    text-align: left;
-  }
-  .subrow {
-    font-size: 12px;
-    color: #444;
-    background: #fafafa;
-  }
-  .money { text-align: right; }
-  @media print {
-    body { margin: 10mm; }
-    .group { break-inside: avoid; }
-  }
-</style>
-</head>
-<body>
-  <h1>Advances & Recoveries Register</h1>
-
-  <div class="meta">
-    <div><b>Generated:</b> ${esc(fmtDateTime(payload?.generated_at_utc || new Date().toISOString()))}</div>
-    <div><b>As at:</b> ${esc(fmtDateOnly(meta?.as_of_date || ''))}</div>
-    <div><b>Week:</b> ${esc(fmtDateOnly(summary?.week_start || ''))} to ${esc(fmtDateOnly(summary?.week_end || ''))}</div>
-  </div>
-
-  <div class="filters">
-    <h2 style="margin-top:0">Applied filters</h2>
-    <div class="grid">
-      <div><b>Search:</b> ${esc(appliedFilters.search || '—')}</div>
-      <div><b>Type:</b> ${esc(appliedFilters.type || 'ALL')}</div>
-      <div><b>Status:</b> ${esc(appliedFilters.status || 'ALL')}</div>
-      <div><b>Client:</b> ${esc(appliedFilters.client_id || 'ALL')}</div>
-      <div><b>Outstanding only:</b> ${appliedFilters.outstanding_only === false ? 'No' : 'Yes'}</div>
-      <div><b>Due this week only:</b> ${appliedFilters.due_this_week_only === true ? 'Yes' : 'No'}</div>
-      <div><b>Amount min:</b> ${appliedFilters.amount_min == null ? '—' : esc(fmtMoney(appliedFilters.amount_min))}</div>
-      <div><b>Amount max:</b> ${appliedFilters.amount_max == null ? '—' : esc(fmtMoney(appliedFilters.amount_max))}</div>
-      <div><b>Created from:</b> ${esc(fmtDateOnly(appliedFilters.created_from || ''))}</div>
-      <div><b>Created to:</b> ${esc(fmtDateOnly(appliedFilters.created_to || ''))}</div>
-    </div>
-  </div>
-
-  <div class="summary">
-    <h2 style="margin-top:0">Summary</h2>
-    <div class="grid">
-      <div><b>Rows:</b> ${esc(String(summary?.row_count || 0))}</div>
-      <div><b>Overpayments outstanding:</b> ${esc(fmtMoney(summary?.active_overpayments_outstanding || 0))}</div>
-      <div><b>Loans outstanding:</b> ${esc(fmtMoney(summary?.active_loans_outstanding || 0))}</div>
-      <div><b>Advances outstanding:</b> ${esc(fmtMoney(summary?.active_advances_outstanding || 0))}</div>
-      <div><b>Due / recoverable this week:</b> ${esc(fmtMoney(summary?.due_this_week_total || 0))}</div>
-    </div>
-  </div>
-
-  ${groupHtml || '<p>No records matched the selected filters.</p>'}
-</body>
-</html>`;
-
-    const headers = new Headers();
-    headers.set('Content-Type', 'text/html; charset=utf-8');
-    headers.set('Content-Disposition', 'inline; filename="advances_register_print.html"');
-    return withCORS(env, req, new Response(html, { status: 200, headers }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'ADVANCES_REGISTER_PRINT_FAILED')));
-  }
-}
-
 
 function renderMailshotTimingStep() {
   const state = (window.modalCtx && window.modalCtx.mailshotWizard && typeof window.modalCtx.mailshotWizard === 'object')
@@ -28210,6 +28394,39 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const isMondayIso = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+    const dt = new Date(`${iso}T00:00:00Z`);
+    return Number.isFinite(dt.getTime()) && dt.getUTCDay() === 1;
+  };
+
+  const normalizeScheduleMode = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
+    if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const hasOwnValue = (obj, keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return true;
+      }
+    }
+    return false;
+  };
+
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
@@ -28219,37 +28436,77 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
     return withCORS(env, req, badRequest('principal_amount must be a number greater than 0'));
   }
 
-  const weeklyDue = Number(body.weekly_due ?? body.weeklyDue);
-  if (!Number.isFinite(weeklyDue) || weeklyDue <= 0) {
-    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0'));
+  const scheduleMode = normalizeScheduleMode(
+    body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode
+  );
+  if ((body.schedule_input_mode !== undefined || body.scheduleInputMode !== undefined || body.repayment_input_mode !== undefined || body.repaymentInputMode !== undefined || body.repayment_mode !== undefined || body.repaymentMode !== undefined) && !scheduleMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE'));
   }
 
-  const weeksTotal = Number(body.weeks_total ?? body.weeksTotal);
-  if (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1) {
-    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0'));
+  const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+  const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+
+  const weeklyDueRaw = weeklyDueProvided ? Number(body.weekly_due ?? body.weeklyDue) : null;
+  if (weeklyDueProvided && (!Number.isFinite(weeklyDueRaw) || weeklyDueRaw <= 0)) {
+    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 when provided'));
+  }
+
+  const weeksTotalRaw = weeksTotalProvided ? Number(body.weeks_total ?? body.weeksTotal) : null;
+  if (weeksTotalProvided && (!Number.isFinite(weeksTotalRaw) || Math.trunc(weeksTotalRaw) < 1)) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 when provided'));
+  }
+
+  let rpcWeeklyDue = null;
+  let rpcWeeksTotal = null;
+
+  if (scheduleMode === 'BY_WEEKS') {
+    if (!weeksTotalProvided) return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (scheduleMode === 'BY_WEEKLY_DUE') {
+    if (!weeklyDueProvided) return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeklyDueProvided && weeksTotalProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (weeklyDueProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeksTotalProvided) {
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else {
+    return withCORS(env, req, badRequest('Provide either weeks_total or weekly_due'));
   }
 
   const startWeekStartRaw = String(body.start_week_start ?? body.startWeekStart ?? '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
-    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD'));
+  const startWeekStartIso = parseIsoOrUkDateToIso(startWeekStartRaw);
+  if (!startWeekStartIso) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+  if (!isMondayIso(startWeekStartIso)) {
+    return withCORS(env, req, badRequest('start_week_start must be a Monday (week start)'));
   }
 
   const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
   const note = noteRaw ? noteRaw : null;
 
+  const minimumEarningsThresholdProvided = hasOwnValue(body, ['minimum_earnings_threshold', 'minimumEarningsThreshold']);
   const minimumEarningsThresholdRaw =
-    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
-      ? null
-      : Number(body.minimum_earnings_threshold);
-  if (minimumEarningsThresholdRaw !== null && !Number.isFinite(minimumEarningsThresholdRaw)) {
+    minimumEarningsThresholdProvided
+      ? Number(body.minimum_earnings_threshold ?? body.minimumEarningsThreshold)
+      : null;
+  if (minimumEarningsThresholdProvided && !Number.isFinite(minimumEarningsThresholdRaw)) {
     return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
   }
 
+  const takeHomeFloorOverrideProvided = hasOwnValue(body, ['take_home_floor_override', 'takeHomeFloorOverride']);
   const takeHomeFloorOverrideRaw =
-    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
-      ? null
-      : Number(body.take_home_floor_override);
-  if (takeHomeFloorOverrideRaw !== null && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+    takeHomeFloorOverrideProvided
+      ? Number(body.take_home_floor_override ?? body.takeHomeFloorOverride)
+      : null;
+  if (takeHomeFloorOverrideProvided && !Number.isFinite(takeHomeFloorOverrideRaw)) {
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
@@ -28266,9 +28523,9 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
     const rpcRes = await sbRpc(env, 'pay_payment_advance_create', {
       p_candidate_id: candidateId,
       p_principal_amount: principalAmount,
-      p_weekly_due: weeklyDue,
-      p_weeks_total: Math.trunc(weeksTotal),
-      p_start_week_start: startWeekStartRaw,
+      p_weekly_due: rpcWeeklyDue,
+      p_weeks_total: rpcWeeksTotal,
+      p_start_week_start: startWeekStartIso,
       p_actor_user_id: user.id,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
@@ -28295,41 +28552,98 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  const principalAmount =
-    (body.principal_amount === null || body.principal_amount === undefined) &&
-    (body.principalAmount === null || body.principalAmount === undefined) &&
-    (body.amount === null || body.amount === undefined)
-      ? null
-      : Number(body.principal_amount ?? body.principalAmount ?? body.amount);
-  if (principalAmount !== null && (!Number.isFinite(principalAmount) || principalAmount <= 0)) {
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const isMondayIso = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+    const dt = new Date(`${iso}T00:00:00Z`);
+    return Number.isFinite(dt.getTime()) && dt.getUTCDay() === 1;
+  };
+
+  const normalizeScheduleMode = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
+    if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const hasOwnValue = (obj, keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return true;
+      }
+    }
+    return false;
+  };
+
+  const principalAmountProvided = hasOwnValue(body, ['principal_amount', 'principalAmount', 'amount']);
+  const principalAmount = principalAmountProvided
+    ? Number(body.principal_amount ?? body.principalAmount ?? body.amount)
+    : null;
+  if (principalAmountProvided && (!Number.isFinite(principalAmount) || principalAmount <= 0)) {
     return withCORS(env, req, badRequest('principal_amount must be a number greater than 0 when provided'));
   }
 
-  const weeklyDue =
-    (body.weekly_due === null || body.weekly_due === undefined) &&
-    (body.weeklyDue === null || body.weeklyDue === undefined)
-      ? null
-      : Number(body.weekly_due ?? body.weeklyDue);
-  if (weeklyDue !== null && (!Number.isFinite(weeklyDue) || weeklyDue <= 0)) {
+  const scheduleMode = normalizeScheduleMode(
+    body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode
+  );
+  if ((body.schedule_input_mode !== undefined || body.scheduleInputMode !== undefined || body.repayment_input_mode !== undefined || body.repaymentInputMode !== undefined || body.repayment_mode !== undefined || body.repaymentMode !== undefined) && !scheduleMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE'));
+  }
+
+  const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+  const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+
+  const weeklyDueRaw = weeklyDueProvided ? Number(body.weekly_due ?? body.weeklyDue) : null;
+  if (weeklyDueProvided && (!Number.isFinite(weeklyDueRaw) || weeklyDueRaw <= 0)) {
     return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 when provided'));
   }
 
-  const weeksTotal =
-    (body.weeks_total === null || body.weeks_total === undefined) &&
-    (body.weeksTotal === null || body.weeksTotal === undefined)
-      ? null
-      : Number(body.weeks_total ?? body.weeksTotal);
-  if (weeksTotal !== null && (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1)) {
+  const weeksTotalRaw = weeksTotalProvided ? Number(body.weeks_total ?? body.weeksTotal) : null;
+  if (weeksTotalProvided && (!Number.isFinite(weeksTotalRaw) || Math.trunc(weeksTotalRaw) < 1)) {
     return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 when provided'));
   }
 
-  const startWeekStartRaw =
-    (body.start_week_start === null || body.start_week_start === undefined) &&
-    (body.startWeekStart === null || body.startWeekStart === undefined)
-      ? null
-      : String(body.start_week_start ?? body.startWeekStart).trim();
-  if (startWeekStartRaw !== null && !/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
-    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD when provided'));
+  let rpcWeeklyDue = null;
+  let rpcWeeksTotal = null;
+
+  if (scheduleMode === 'BY_WEEKS') {
+    if (!weeksTotalProvided) return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (scheduleMode === 'BY_WEEKLY_DUE') {
+    if (!weeklyDueProvided) return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeklyDueProvided && weeksTotalProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (weeklyDueProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeksTotalProvided) {
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  }
+
+  const startWeekStartProvided = hasOwnValue(body, ['start_week_start', 'startWeekStart']);
+  const startWeekStartIso = startWeekStartProvided
+    ? parseIsoOrUkDateToIso(body.start_week_start ?? body.startWeekStart)
+    : null;
+  if (startWeekStartProvided && !startWeekStartIso) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD or DD/MM/YYYY when provided'));
+  }
+  if (startWeekStartProvided && !isMondayIso(startWeekStartIso)) {
+    return withCORS(env, req, badRequest('start_week_start must be a Monday (week start) when provided'));
   }
 
   const note =
@@ -28337,19 +28651,19 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
       ? null
       : String(body.note).trim();
 
-  const minimumEarningsThresholdRaw =
-    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
-      ? null
-      : Number(body.minimum_earnings_threshold);
-  if ((body.minimum_earnings_threshold !== null && body.minimum_earnings_threshold !== undefined) && !Number.isFinite(minimumEarningsThresholdRaw)) {
+  const minimumEarningsThresholdProvided = hasOwnValue(body, ['minimum_earnings_threshold', 'minimumEarningsThreshold']);
+  const minimumEarningsThresholdRaw = minimumEarningsThresholdProvided
+    ? Number(body.minimum_earnings_threshold ?? body.minimumEarningsThreshold)
+    : null;
+  if (minimumEarningsThresholdProvided && !Number.isFinite(minimumEarningsThresholdRaw)) {
     return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
   }
 
-  const takeHomeFloorOverrideRaw =
-    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
-      ? null
-      : Number(body.take_home_floor_override);
-  if ((body.take_home_floor_override !== null && body.take_home_floor_override !== undefined) && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+  const takeHomeFloorOverrideProvided = hasOwnValue(body, ['take_home_floor_override', 'takeHomeFloorOverride']);
+  const takeHomeFloorOverrideRaw = takeHomeFloorOverrideProvided
+    ? Number(body.take_home_floor_override ?? body.takeHomeFloorOverride)
+    : null;
+  if (takeHomeFloorOverrideProvided && !Number.isFinite(takeHomeFloorOverrideRaw)) {
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
@@ -28367,9 +28681,9 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
       p_finance_case_id: financeCaseIdText,
       p_actor_user_id: user.id,
       p_principal_amount: principalAmount,
-      p_weekly_due: weeklyDue,
-      p_weeks_total: (weeksTotal === null ? null : Math.trunc(weeksTotal)),
-      p_start_week_start: startWeekStartRaw,
+      p_weekly_due: rpcWeeklyDue,
+      p_weeks_total: rpcWeeksTotal,
+      p_start_week_start: startWeekStartIso,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
       p_take_home_floor_override: takeHomeFloorOverrideRaw
@@ -28503,6 +28817,39 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const isMondayIso = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+    const dt = new Date(`${iso}T00:00:00Z`);
+    return Number.isFinite(dt.getTime()) && dt.getUTCDay() === 1;
+  };
+
+  const normalizeScheduleMode = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
+    if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const hasOwnValue = (obj, keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return true;
+      }
+    }
+    return false;
+  };
+
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
@@ -28512,19 +28859,57 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     return withCORS(env, req, badRequest('amount must be a number greater than 0'));
   }
 
-  const weeklyDue = Number(body.weekly_due ?? body.weeklyDue);
-  if (!Number.isFinite(weeklyDue) || weeklyDue <= 0) {
-    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0'));
+  const scheduleMode = normalizeScheduleMode(
+    body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode
+  );
+  if ((body.schedule_input_mode !== undefined || body.scheduleInputMode !== undefined || body.repayment_input_mode !== undefined || body.repaymentInputMode !== undefined || body.repayment_mode !== undefined || body.repaymentMode !== undefined) && !scheduleMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE'));
   }
 
-  const weeksTotal = Number(body.weeks_total ?? body.weeksTotal);
-  if (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1) {
-    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0'));
+  const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+  const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+
+  const weeklyDueRaw = weeklyDueProvided ? Number(body.weekly_due ?? body.weeklyDue) : null;
+  if (weeklyDueProvided && (!Number.isFinite(weeklyDueRaw) || weeklyDueRaw <= 0)) {
+    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 when provided'));
+  }
+
+  const weeksTotalRaw = weeksTotalProvided ? Number(body.weeks_total ?? body.weeksTotal) : null;
+  if (weeksTotalProvided && (!Number.isFinite(weeksTotalRaw) || Math.trunc(weeksTotalRaw) < 1)) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 when provided'));
+  }
+
+  let rpcWeeklyDue = null;
+  let rpcWeeksTotal = null;
+
+  if (scheduleMode === 'BY_WEEKS') {
+    if (!weeksTotalProvided) return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (scheduleMode === 'BY_WEEKLY_DUE') {
+    if (!weeklyDueProvided) return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeklyDueProvided && weeksTotalProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (weeklyDueProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeksTotalProvided) {
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else {
+    return withCORS(env, req, badRequest('Provide either weeks_total or weekly_due'));
   }
 
   const startWeekStartRaw = String(body.start_week_start ?? body.startWeekStart ?? '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
-    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD'));
+  const startWeekStartIso = parseIsoOrUkDateToIso(startWeekStartRaw);
+  if (!startWeekStartIso) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+  if (!isMondayIso(startWeekStartIso)) {
+    return withCORS(env, req, badRequest('start_week_start must be a Monday (week start)'));
   }
 
   const adjustmentComment = String(body.adjustment_comment ?? body.adjustmentComment ?? '').trim();
@@ -28535,19 +28920,21 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
   const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
   const note = noteRaw ? noteRaw : null;
 
+  const minimumEarningsThresholdProvided = hasOwnValue(body, ['minimum_earnings_threshold', 'minimumEarningsThreshold']);
   const minimumEarningsThresholdRaw =
-    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
-      ? null
-      : Number(body.minimum_earnings_threshold);
-  if (minimumEarningsThresholdRaw !== null && !Number.isFinite(minimumEarningsThresholdRaw)) {
+    minimumEarningsThresholdProvided
+      ? Number(body.minimum_earnings_threshold ?? body.minimumEarningsThreshold)
+      : null;
+  if (minimumEarningsThresholdProvided && !Number.isFinite(minimumEarningsThresholdRaw)) {
     return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
   }
 
+  const takeHomeFloorOverrideProvided = hasOwnValue(body, ['take_home_floor_override', 'takeHomeFloorOverride']);
   const takeHomeFloorOverrideRaw =
-    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
-      ? null
-      : Number(body.take_home_floor_override);
-  if (takeHomeFloorOverrideRaw !== null && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+    takeHomeFloorOverrideProvided
+      ? Number(body.take_home_floor_override ?? body.takeHomeFloorOverride)
+      : null;
+  if (takeHomeFloorOverrideProvided && !Number.isFinite(takeHomeFloorOverrideRaw)) {
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
@@ -28564,9 +28951,9 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     const rpcRes = await sbRpc(env, 'pay_manual_debt_adjustment_create', {
       p_candidate_id: candidateId,
       p_amount: amount,
-      p_weekly_due: weeklyDue,
-      p_weeks_total: Math.trunc(weeksTotal),
-      p_start_week_start: startWeekStartRaw,
+      p_weekly_due: rpcWeeklyDue,
+      p_weeks_total: rpcWeeksTotal,
+      p_start_week_start: startWeekStartIso,
       p_actor_user_id: user.id,
       p_adjustment_comment: adjustmentComment,
       p_note: note,
@@ -28594,47 +28981,103 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  const amount =
-    (body.amount === null || body.amount === undefined)
-      ? null
-      : Number(body.amount);
-  if (amount !== null && (!Number.isFinite(amount) || amount <= 0)) {
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const isMondayIso = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+    const dt = new Date(`${iso}T00:00:00Z`);
+    return Number.isFinite(dt.getTime()) && dt.getUTCDay() === 1;
+  };
+
+  const normalizeScheduleMode = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
+    if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const hasOwnValue = (obj, keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return true;
+      }
+    }
+    return false;
+  };
+
+  const amountProvided = hasOwnValue(body, ['amount']);
+  const amount = amountProvided ? Number(body.amount) : null;
+  if (amountProvided && (!Number.isFinite(amount) || amount <= 0)) {
     return withCORS(env, req, badRequest('amount must be a number greater than 0 when provided'));
   }
 
-  const weeklyDue =
-    (body.weekly_due === null || body.weekly_due === undefined) &&
-    (body.weeklyDue === null || body.weeklyDue === undefined)
-      ? null
-      : Number(body.weekly_due ?? body.weeklyDue);
-  if (weeklyDue !== null && (!Number.isFinite(weeklyDue) || weeklyDue <= 0)) {
+  const scheduleMode = normalizeScheduleMode(
+    body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode
+  );
+  if ((body.schedule_input_mode !== undefined || body.scheduleInputMode !== undefined || body.repayment_input_mode !== undefined || body.repaymentInputMode !== undefined || body.repayment_mode !== undefined || body.repaymentMode !== undefined) && !scheduleMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE'));
+  }
+
+  const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+  const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+
+  const weeklyDueRaw = weeklyDueProvided ? Number(body.weekly_due ?? body.weeklyDue) : null;
+  if (weeklyDueProvided && (!Number.isFinite(weeklyDueRaw) || weeklyDueRaw <= 0)) {
     return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 when provided'));
   }
 
-  const weeksTotal =
-    (body.weeks_total === null || body.weeks_total === undefined) &&
-    (body.weeksTotal === null || body.weeksTotal === undefined)
-      ? null
-      : Number(body.weeks_total ?? body.weeksTotal);
-  if (weeksTotal !== null && (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1)) {
+  const weeksTotalRaw = weeksTotalProvided ? Number(body.weeks_total ?? body.weeksTotal) : null;
+  if (weeksTotalProvided && (!Number.isFinite(weeksTotalRaw) || Math.trunc(weeksTotalRaw) < 1)) {
     return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 when provided'));
   }
 
-  const startWeekStartRaw =
-    (body.start_week_start === null || body.start_week_start === undefined) &&
-    (body.startWeekStart === null || body.startWeekStart === undefined)
-      ? null
-      : String(body.start_week_start ?? body.startWeekStart).trim();
-  if (startWeekStartRaw !== null && !/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
-    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD when provided'));
+  let rpcWeeklyDue = null;
+  let rpcWeeksTotal = null;
+
+  if (scheduleMode === 'BY_WEEKS') {
+    if (!weeksTotalProvided) return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (scheduleMode === 'BY_WEEKLY_DUE') {
+    if (!weeklyDueProvided) return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeklyDueProvided && weeksTotalProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (weeklyDueProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeksTotalProvided) {
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
   }
 
-  const adjustmentComment =
-    (body.adjustment_comment === null || body.adjustment_comment === undefined) &&
-    (body.adjustmentComment === null || body.adjustmentComment === undefined)
-      ? null
-      : String(body.adjustment_comment ?? body.adjustmentComment).trim();
-  if (adjustmentComment !== null && !adjustmentComment) {
+  const startWeekStartProvided = hasOwnValue(body, ['start_week_start', 'startWeekStart']);
+  const startWeekStartIso = startWeekStartProvided
+    ? parseIsoOrUkDateToIso(body.start_week_start ?? body.startWeekStart)
+    : null;
+  if (startWeekStartProvided && !startWeekStartIso) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD or DD/MM/YYYY when provided'));
+  }
+  if (startWeekStartProvided && !isMondayIso(startWeekStartIso)) {
+    return withCORS(env, req, badRequest('start_week_start must be a Monday (week start) when provided'));
+  }
+
+  const adjustmentCommentProvided = hasOwnValue(body, ['adjustment_comment', 'adjustmentComment']);
+  const adjustmentComment = adjustmentCommentProvided
+    ? String(body.adjustment_comment ?? body.adjustmentComment).trim()
+    : null;
+  if (adjustmentCommentProvided && !adjustmentComment) {
     return withCORS(env, req, badRequest('adjustment_comment cannot be blank when provided'));
   }
 
@@ -28643,19 +29086,19 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
       ? null
       : String(body.note).trim();
 
-  const minimumEarningsThresholdRaw =
-    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
-      ? null
-      : Number(body.minimum_earnings_threshold);
-  if ((body.minimum_earnings_threshold !== null && body.minimum_earnings_threshold !== undefined) && !Number.isFinite(minimumEarningsThresholdRaw)) {
+  const minimumEarningsThresholdProvided = hasOwnValue(body, ['minimum_earnings_threshold', 'minimumEarningsThreshold']);
+  const minimumEarningsThresholdRaw = minimumEarningsThresholdProvided
+    ? Number(body.minimum_earnings_threshold ?? body.minimumEarningsThreshold)
+    : null;
+  if (minimumEarningsThresholdProvided && !Number.isFinite(minimumEarningsThresholdRaw)) {
     return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
   }
 
-  const takeHomeFloorOverrideRaw =
-    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
-      ? null
-      : Number(body.take_home_floor_override);
-  if ((body.take_home_floor_override !== null && body.take_home_floor_override !== undefined) && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+  const takeHomeFloorOverrideProvided = hasOwnValue(body, ['take_home_floor_override', 'takeHomeFloorOverride']);
+  const takeHomeFloorOverrideRaw = takeHomeFloorOverrideProvided
+    ? Number(body.take_home_floor_override ?? body.takeHomeFloorOverride)
+    : null;
+  if (takeHomeFloorOverrideProvided && !Number.isFinite(takeHomeFloorOverrideRaw)) {
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
@@ -28673,9 +29116,9 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
       p_finance_case_id: financeCaseIdText,
       p_actor_user_id: user.id,
       p_amount: amount,
-      p_weekly_due: weeklyDue,
-      p_weeks_total: (weeksTotal === null ? null : Math.trunc(weeksTotal)),
-      p_start_week_start: startWeekStartRaw,
+      p_weekly_due: rpcWeeklyDue,
+      p_weeks_total: rpcWeeksTotal,
+      p_start_week_start: startWeekStartIso,
       p_adjustment_comment: adjustmentComment,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
@@ -28702,19 +29145,90 @@ async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  const weeklyDue = Number(body.weekly_due ?? body.weeklyDue);
-  if (!Number.isFinite(weeklyDue) || weeklyDue <= 0) {
-    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0'));
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const isMondayIso = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+    const dt = new Date(`${iso}T00:00:00Z`);
+    return Number.isFinite(dt.getTime()) && dt.getUTCDay() === 1;
+  };
+
+  const normalizeScheduleMode = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
+    if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const hasOwnValue = (obj, keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return true;
+      }
+    }
+    return false;
+  };
+
+  const scheduleMode = normalizeScheduleMode(
+    body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode
+  );
+  if ((body.schedule_input_mode !== undefined || body.scheduleInputMode !== undefined || body.repayment_input_mode !== undefined || body.repaymentInputMode !== undefined || body.repayment_mode !== undefined || body.repaymentMode !== undefined) && !scheduleMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE'));
   }
 
-  const weeksTotal = Number(body.weeks_total ?? body.weeksTotal);
-  if (!Number.isFinite(weeksTotal) || Math.trunc(weeksTotal) < 1) {
-    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0'));
+  const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+  const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+
+  const weeklyDueRaw = weeklyDueProvided ? Number(body.weekly_due ?? body.weeklyDue) : null;
+  if (weeklyDueProvided && (!Number.isFinite(weeklyDueRaw) || weeklyDueRaw <= 0)) {
+    return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 when provided'));
+  }
+
+  const weeksTotalRaw = weeksTotalProvided ? Number(body.weeks_total ?? body.weeksTotal) : null;
+  if (weeksTotalProvided && (!Number.isFinite(weeksTotalRaw) || Math.trunc(weeksTotalRaw) < 1)) {
+    return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 when provided'));
+  }
+
+  let rpcWeeklyDue = null;
+  let rpcWeeksTotal = null;
+
+  if (scheduleMode === 'BY_WEEKS') {
+    if (!weeksTotalProvided) return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (scheduleMode === 'BY_WEEKLY_DUE') {
+    if (!weeklyDueProvided) return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeklyDueProvided && weeksTotalProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else if (weeklyDueProvided) {
+    rpcWeeklyDue = weeklyDueRaw;
+    rpcWeeksTotal = null;
+  } else if (weeksTotalProvided) {
+    rpcWeeklyDue = null;
+    rpcWeeksTotal = Math.trunc(weeksTotalRaw);
+  } else {
+    return withCORS(env, req, badRequest('Provide either weeks_total or weekly_due'));
   }
 
   const startWeekStartRaw = String(body.start_week_start ?? body.startWeekStart ?? '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startWeekStartRaw)) {
-    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD'));
+  const startWeekStartIso = parseIsoOrUkDateToIso(startWeekStartRaw);
+  if (!startWeekStartIso) {
+    return withCORS(env, req, badRequest('start_week_start must be YYYY-MM-DD or DD/MM/YYYY'));
+  }
+  if (!isMondayIso(startWeekStartIso)) {
+    return withCORS(env, req, badRequest('start_week_start must be a Monday (week start)'));
   }
 
   const note =
@@ -28722,19 +29236,19 @@ async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId
       ? null
       : String(body.note).trim();
 
-  const minimumEarningsThresholdRaw =
-    (body.minimum_earnings_threshold === null || body.minimum_earnings_threshold === undefined)
-      ? null
-      : Number(body.minimum_earnings_threshold);
-  if ((body.minimum_earnings_threshold !== null && body.minimum_earnings_threshold !== undefined) && !Number.isFinite(minimumEarningsThresholdRaw)) {
+  const minimumEarningsThresholdProvided = hasOwnValue(body, ['minimum_earnings_threshold', 'minimumEarningsThreshold']);
+  const minimumEarningsThresholdRaw = minimumEarningsThresholdProvided
+    ? Number(body.minimum_earnings_threshold ?? body.minimumEarningsThreshold)
+    : null;
+  if (minimumEarningsThresholdProvided && !Number.isFinite(minimumEarningsThresholdRaw)) {
     return withCORS(env, req, badRequest('minimum_earnings_threshold must be a valid number or null'));
   }
 
-  const takeHomeFloorOverrideRaw =
-    (body.take_home_floor_override === null || body.take_home_floor_override === undefined)
-      ? null
-      : Number(body.take_home_floor_override);
-  if ((body.take_home_floor_override !== null && body.take_home_floor_override !== undefined) && !Number.isFinite(takeHomeFloorOverrideRaw)) {
+  const takeHomeFloorOverrideProvided = hasOwnValue(body, ['take_home_floor_override', 'takeHomeFloorOverride']);
+  const takeHomeFloorOverrideRaw = takeHomeFloorOverrideProvided
+    ? Number(body.take_home_floor_override ?? body.takeHomeFloorOverride)
+    : null;
+  if (takeHomeFloorOverrideProvided && !Number.isFinite(takeHomeFloorOverrideRaw)) {
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
@@ -28751,9 +29265,9 @@ async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId
     const rpcRes = await sbRpc(env, 'pay_finance_case_restructure', {
       p_finance_case_id: financeCaseIdText,
       p_actor_user_id: user.id,
-      p_weekly_due: weeklyDue,
-      p_weeks_total: Math.trunc(weeksTotal),
-      p_start_week_start: startWeekStartRaw,
+      p_weekly_due: rpcWeeklyDue,
+      p_weeks_total: rpcWeeksTotal,
+      p_start_week_start: startWeekStartIso,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
       p_take_home_floor_override: takeHomeFloorOverrideRaw,
       p_note: note
@@ -28765,6 +29279,10 @@ async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to restructure finance case')));
   }
 }
+
+
+
+
 
 
 async function handleBankingFinanceCasePause(env, req, user, financeCaseId) {
@@ -32060,239 +32578,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   }));
 }
 
-async function handleBankingAdvancesRegister(env, req, user) {
-  const actorUser = (() => {
-    if (user && typeof user === 'object' && user.id) return user;
-    return null;
-  })();
-
-  let resolvedUser = actorUser;
-  if (!resolvedUser) {
-    resolvedUser = await requireUser(env, req, ['admin']);
-    if (!resolvedUser) return withCORS(env, req, unauthorized());
-  }
-
-  try {
-    const u = new URL(req.url);
-
-    const clampInt = (raw, dflt, lo, hi) => {
-      const n = Number(raw);
-      if (!Number.isFinite(n)) return dflt;
-      const v = Math.trunc(n);
-      if (v < lo) return lo;
-      if (v > hi) return hi;
-      return v;
-    };
-
-    const parseNullableText = (...vals) => {
-      for (const v of vals) {
-        const s = String(v == null ? '' : v).trim();
-        if (s) return s;
-      }
-      return null;
-    };
-
-    const parseNullableNumeric = (...vals) => {
-      for (const v of vals) {
-        const s = String(v == null ? '' : v).trim();
-        if (!s) continue;
-        const n = Number(s);
-        if (Number.isFinite(n)) return n;
-      }
-      return null;
-    };
-
-    const parseBool = (raw, dflt) => {
-      const s = String(raw == null ? '' : raw).trim().toLowerCase();
-      if (!s) return dflt;
-      if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
-      if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
-      return dflt;
-    };
-
-    const parseDateIso = (raw) => {
-      const s = String(raw == null ? '' : raw).trim();
-      if (!s) return null;
-
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-      const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-
-      return null;
-    };
-
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-    const search = parseNullableText(
-      u.searchParams.get('search'),
-      u.searchParams.get('q')
-    );
-
-    const type = parseNullableText(
-      u.searchParams.get('type'),
-      u.searchParams.get('record_type'),
-      u.searchParams.get('recordType')
-    );
-
-    const status = parseNullableText(
-      u.searchParams.get('status')
-    );
-
-    const clientIdRaw = parseNullableText(
-      u.searchParams.get('client_id'),
-      u.searchParams.get('clientId')
-    );
-    const clientId = (clientIdRaw && uuidRe.test(clientIdRaw)) ? clientIdRaw : null;
-
-    const outstandingOnly = parseBool(
-      parseNullableText(
-        u.searchParams.get('outstanding_only'),
-        u.searchParams.get('outstandingOnly')
-      ),
-      true
-    );
-
-    const dueThisWeekOnly = parseBool(
-      parseNullableText(
-        u.searchParams.get('due_this_week_only'),
-        u.searchParams.get('dueThisWeekOnly')
-      ),
-      false
-    );
-
-    const amountMin = parseNullableNumeric(
-      u.searchParams.get('amount_min'),
-      u.searchParams.get('amountMin')
-    );
-
-    const amountMax = parseNullableNumeric(
-      u.searchParams.get('amount_max'),
-      u.searchParams.get('amountMax')
-    );
-
-    const createdFrom = parseDateIso(
-      parseNullableText(
-        u.searchParams.get('created_from'),
-        u.searchParams.get('createdFrom')
-      )
-    );
-
-    const createdTo = parseDateIso(
-      parseNullableText(
-        u.searchParams.get('created_to'),
-        u.searchParams.get('createdTo')
-      )
-    );
-
-    const sortKey = parseNullableText(
-      u.searchParams.get('sort_key'),
-      u.searchParams.get('sortKey')
-    ) || 'created_at';
-
-    const sortDir = parseNullableText(
-      u.searchParams.get('sort_dir'),
-      u.searchParams.get('sortDir')
-    ) || 'desc';
-
-    const limit = clampInt(
-      parseNullableText(
-        u.searchParams.get('limit')
-      ),
-      500,
-      1,
-      10000
-    );
-
-    const offset = clampInt(
-      parseNullableText(
-        u.searchParams.get('offset')
-      ),
-      0,
-      0,
-      1000000
-    );
-
-    const asOfDate = parseDateIso(
-      parseNullableText(
-        u.searchParams.get('as_of_date'),
-        u.searchParams.get('asOfDate')
-      )
-    );
-
-    if (clientIdRaw && !clientId) {
-      return withCORS(env, req, badRequest('client_id must be a valid UUID'));
-    }
-
-    if (parseNullableText(u.searchParams.get('created_from'), u.searchParams.get('createdFrom')) && !createdFrom) {
-      return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
-    }
-
-    if (parseNullableText(u.searchParams.get('created_to'), u.searchParams.get('createdTo')) && !createdTo) {
-      return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
-    }
-
-    if (parseNullableText(u.searchParams.get('as_of_date'), u.searchParams.get('asOfDate')) && !asOfDate) {
-      return withCORS(env, req, badRequest('as_of_date must be YYYY-MM-DD or DD/MM/YYYY'));
-    }
-
-    if (amountMin != null && amountMax != null && amountMin > amountMax) {
-      return withCORS(env, req, badRequest('amount_min cannot be greater than amount_max'));
-    }
-
-    const rpcRes = await sbRpc(env, 'pay_advances_register', {
-      p_actor_user_id: resolvedUser.id,
-      p_search: search,
-      p_type: type,
-      p_status: status,
-      p_client_id: clientId,
-      p_outstanding_only: outstandingOnly,
-      p_due_this_week_only: dueThisWeekOnly,
-      p_amount_min: amountMin,
-      p_amount_max: amountMax,
-      p_created_from: createdFrom,
-      p_created_to: createdTo,
-      p_sort_key: sortKey,
-      p_sort_dir: sortDir,
-      p_limit: limit,
-      p_offset: offset,
-      p_as_of_date: asOfDate
-    });
-
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_advances_register')) {
-        payload = payload.pay_advances_register;
-      }
-    } catch {}
-
-    const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-
-    const summary = (out.summary && typeof out.summary === 'object' && !Array.isArray(out.summary))
-      ? out.summary
-      : {};
-
-    const rows = Array.isArray(out.rows)
-      ? out.rows
-      : [];
-
-    const meta = (out.meta && typeof out.meta === 'object' && !Array.isArray(out.meta))
-      ? out.meta
-      : {};
-
-    return withCORS(env, req, ok({
-      ok: (typeof out.ok === 'boolean') ? out.ok : true,
-      summary,
-      rows,
-      meta
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
-  }
-}
 
 // ----------------------------------------------------------------------------
 // E) Funnel & Prechecks (read-only views)
@@ -54850,11 +55135,6 @@ async function handleMailshotPrepare(env, req) {
     );
     if (!Number.isFinite(membershipTotal) || membershipTotal < 0) membershipTotal = null;
 
-    let selectedCount = Number(
-      selectedCountContextRaw.selected_count ??
-      selectionScope.selected_count
-    );
-
     const bulkResolved = await resolveBulkContextIdsFromSummarySelection(
       sectionKey,
       effectiveFilters,
@@ -54866,9 +55146,14 @@ async function handleMailshotPrepare(env, req) {
     );
 
     const summaryRowIds = normalizeIdArray(bulkResolved && bulkResolved.summary_row_ids);
-    if (!Number.isFinite(selectedCount) || selectedCount < 0) {
-      selectedCount = summaryRowIds.length;
-    }
+    const contextIds = normalizeIdArray(bulkResolved && bulkResolved.context_ids);
+
+    const skippedRows = Array.isArray(bulkResolved?.skipped_rows)
+      ? bulkResolved.skipped_rows.map((row) => makeSkippedRow(row?.selected_row_id, row?.skip_reason, row && typeof row === 'object' ? row : {}))
+      : [];
+
+    const summarySelectedCount = summaryRowIds.length;
+    const actionableContextCount = contextIds.length;
 
     const selectionEcho = {
       section: sectionKey,
@@ -54881,7 +55166,10 @@ async function handleMailshotPrepare(env, req) {
     };
 
     const selectedCountContext = {
-      selected_count: selectedCount,
+      selected_count: actionableContextCount,
+      summary_selected_count: summarySelectedCount,
+      actionable_context_count: actionableContextCount,
+      skipped_count: skippedRows.length,
       selection_mode: selectionMode,
       included_count: includedIds.length,
       excluded_count: excludedIds.length,
@@ -54889,12 +55177,8 @@ async function handleMailshotPrepare(env, req) {
       dataset_key: selectionEcho.dataset_key || null
     };
 
-    const skippedRows = Array.isArray(bulkResolved?.skipped_rows)
-      ? bulkResolved.skipped_rows.map((row) => makeSkippedRow(row?.selected_row_id, row?.skip_reason, row && typeof row === 'object' ? row : {}))
-      : [];
-
     return {
-      contextIds: normalizeIdArray(bulkResolved && bulkResolved.context_ids),
+      contextIds,
       skippedRows,
       selectionEcho,
       selectedCountContext
@@ -55050,7 +55334,6 @@ async function handleMailshotPrepare(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 
 async function handleMailshotExport(env, req) {
@@ -95629,6 +95912,23 @@ if (req.method === 'POST' && p === '/api/banking/id/run/draft-start') {
   }
 }
 
+
+if (req.method === 'GET' && p === '/api/banking/finance/reports/ledger/export-csv') {
+  return handleBankingFinanceLedgerExportCsv(env, req, user);
+}
+
+if (req.method === 'GET' && p === '/api/banking/finance/reports/ledger/export-pdf') {
+  return handleBankingFinanceLedgerExportPdf(env, req, user);
+}
+
+if (req.method === 'GET' && p === '/api/banking/finance/reports/snoozes/export-csv') {
+  return handleBankingSnoozesExportCsv(env, req, user);
+}
+
+if (req.method === 'GET' && p === '/api/banking/finance/reports/snoozes/export-pdf') {
+  return handleBankingSnoozesExportPdf(env, req, user);
+}
+
 // NEW ROUTERS (insert alongside the other /api/banking/pay/* routes)
 
 // POST /api/banking/pay/auth-token/resolve
@@ -95679,21 +95979,6 @@ if (req.method === 'GET' && p === '/api/banking/id/ledger') {
     return handleBankingPayPreview(env, req, user);
   }
 
-if (req.method === 'GET' && p === '/api/banking/advances-register') {
-  return handleBankingAdvancesRegister(env, req);
-}
-
-if (req.method === 'GET' && p === '/api/banking/advances-register/export-csv') {
-  return handleBankingAdvancesRegisterExportCsv(env, req, user);
-}
-
-if (req.method === 'GET' && p === '/api/banking/advances-register/export-pdf') {
-  return handleBankingAdvancesRegisterExportPdf(env, req, user);
-}
-
-if (req.method === 'GET' && p === '/api/banking/advances-register/print') {
-  return handleBankingAdvancesRegisterPrint(env, req, user);
-}
 
   // ====================== BANKING (Invoice Discounting) ======================
 
