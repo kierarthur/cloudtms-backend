@@ -3204,8 +3204,7 @@ CREATE OR REPLACE FUNCTION public.pay_preview(
   p_week_ending_cutoff date,
   p_actor_user_id uuid,
   p_candidate_id uuid DEFAULT NULL::uuid,
-  p_client_id uuid DEFAULT NULL::uuid,
-  p_force_include_timesheet_ids uuid[] DEFAULT NULL::uuid[]
+  p_client_id uuid DEFAULT NULL::uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -3368,11 +3367,7 @@ begin
         or s.snooze_until_date >= p_pay_date
       )
   ),
-  force_include_requested as (
-    select distinct
-      unnest(coalesce(p_force_include_timesheet_ids, array[]::uuid[])) as timesheet_id
-  ),
-  force_include_overrides as (
+  force_include as (
     select distinct
       tpo.timesheet_id
     from public.timesheet_payment_overrides tpo
@@ -3380,15 +3375,7 @@ begin
       and tpo.consumed_at_utc is null
       and tpo.consumed_by_pay_batch_id is null
       and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
-  ),
-  force_include as (
-    select distinct fi.timesheet_id
-    from (
-      select fir.timesheet_id from force_include_requested fir
-      union
-      select fio.timesheet_id from force_include_overrides fio
-    ) fi
-    where fi.timesheet_id is not null
+      and tpo.timesheet_id is not null
   ),
   reserved_batch_items as (
     -- Items are considered "reserved" if they belong to an ACTIVE (non-cancelled, non-settled) batch.
@@ -5560,10 +5547,10 @@ ts_itemised as (
         'tms_ref', fcl.cand_tms_ref,
         'display_name', fcl.cand_display_name,
         'line_type', case
-          when fcl.case_type = 'PAYMENT_ADVANCE' then 'PAYMENT_ADVANCE_REPAYMENT'
-          when fcl.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
-          when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
-          else fcl.case_type
+          when fcl.case_type = 'PAYMENT_ADVANCE' then 'PAYMENT_ADVANCE_REPAYMENT'::text
+          when fcl.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'::text
+          when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'::text
+          else fcl.case_type::text
         end,
         'finance_case_id', fcl.finance_case_id::text,
         'timesheet_id', case when fcl.linked_timesheet_id is null then null else fcl.linked_timesheet_id::text end,
@@ -5957,6 +5944,8 @@ ts_itemised as (
   );
 end;
 $function$;
+
+
 
 
 
