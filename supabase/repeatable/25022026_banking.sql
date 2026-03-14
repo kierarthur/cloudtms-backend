@@ -19518,5 +19518,736 @@ end;
 $$;
 
 
+CREATE OR REPLACE FUNCTION public.pay_finance_ledger_export_rows(
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_created_from date DEFAULT NULL::date,
+  p_created_to date DEFAULT NULL::date,
+  p_status text DEFAULT 'ALL'::text,
+  p_candidate_id uuid DEFAULT NULL::uuid,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_case_type text DEFAULT NULL::text,
+  p_sort_key text DEFAULT 'created_at'::text,
+  p_sort_dir text DEFAULT 'desc'::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_status text := upper(btrim(coalesce(p_status, 'ALL')));
+  v_case_type text := upper(nullif(btrim(coalesce(p_case_type, '')), ''));
+  v_sort_key text := lower(coalesce(nullif(btrim(p_sort_key), ''), 'created_at'));
+  v_sort_dir text := lower(coalesce(nullif(btrim(p_sort_dir), ''), 'desc'));
+  v_rows jsonb := '[]'::jsonb;
+  v_summary jsonb := '{}'::jsonb;
+  v_meta jsonb := '{}'::jsonb;
+BEGIN
+  IF v_status NOT IN ('ALL', 'OUTSTANDING', 'FULLY_PAID') THEN
+    v_status := 'ALL';
+  END IF;
 
+  IF v_sort_key NOT IN (
+    'created_at',
+    'candidate',
+    'client',
+    'case_type',
+    'outstanding_amount',
+    'next_due_week_start'
+  ) THEN
+    v_sort_key := 'created_at';
+  END IF;
+
+  IF v_sort_dir NOT IN ('asc', 'desc') THEN
+    v_sort_dir := 'desc';
+  END IF;
+
+  WITH base_rows AS (
+    SELECT
+      vfcr.finance_case_id,
+      vfcr.case_type,
+      CASE vfcr.case_type
+        WHEN 'PAYMENT_ADVANCE' THEN 'Payment Advance'
+        WHEN 'OVERPAYMENT' THEN 'Overpayment'
+        WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'Manual Debt Adjustment'
+        WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
+        ELSE coalesce(vfcr.case_type, 'Finance Case')
+      END AS row_label,
+      CASE vfcr.case_type
+        WHEN 'PAYMENT_ADVANCE' THEN 'PAYMENT_ADVANCE'
+        WHEN 'OVERPAYMENT' THEN 'OVERPAYMENT'
+        WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'MANUAL_DEBT_ADJUSTMENT'
+        WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'MANUAL_CREDIT_ADJUSTMENT'
+        ELSE 'OTHER'
+      END AS row_group,
+      cs.tms_ref AS candidate_tms_ref,
+      cs.tms_ref_num AS candidate_tms_ref_num,
+      cs.first_name AS candidate_first_name,
+      cs.last_name AS candidate_last_name,
+      coalesce(cs.display_name, vfcr.candidate_display_name) AS candidate_display_name,
+      vfcr.pay_method,
+      vfcr.client_name,
+      ts.booking_id AS linked_timesheet_booking_id,
+      ts.week_ending_date AS linked_timesheet_week_ending_date,
+      ts.shift_label_norm AS linked_timesheet_shift_label_norm,
+      ts.reference_number AS linked_timesheet_reference_number,
+      vfcr.linked_shift_date,
+      vfcr.created_at,
+      vfcr.updated_at,
+      coalesce(nullif(btrim(coalesce(u_created.display_name, u_created.email, '')), ''), 'CloudTMS server') AS created_by_display,
+      coalesce(vfcr.status::text, '') AS finance_status,
+      coalesce(vfcr.payout_status::text, '') AS payout_status,
+      CASE
+        WHEN vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' THEN
+          CASE
+            WHEN upper(coalesce(vfcr.payout_status::text, '')) = 'PAID' THEN 'FULLY_PAID'
+            WHEN upper(coalesce(vfcr.payout_status::text, '')) = 'CANCELLED' THEN 'CANCELLED'
+            ELSE 'OUTSTANDING'
+          END
+        ELSE
+          CASE
+            WHEN vfcr.written_off_at_utc IS NOT NULL THEN 'WRITTEN_OFF'
+            WHEN round(coalesce(vfcr.outstanding_amount, 0), 2) > 0 THEN 'OUTSTANDING'
+            ELSE 'FULLY_PAID'
+          END
+      END AS ledger_status,
+      round(coalesce(vfcr.original_amount, 0), 2) AS original_amount,
+      round(coalesce(vfcr.outstanding_amount, 0), 2) AS outstanding_amount,
+      round(coalesce(vfcr.weekly_due, 0), 2) AS weekly_due,
+      vfcr.weeks_total,
+      vfcr.start_week_start,
+      vfcr.next_due_week_start,
+      vfcr.schedule_json,
+      vfcr.adjustment_comment,
+      round(coalesce(vfcr.source_original_paid_amount, 0), 2) AS source_original_paid_amount,
+      round(coalesce(vfcr.source_corrected_paid_amount, 0), 2) AS source_corrected_paid_amount,
+      round(coalesce(vfcr.minimum_earnings_threshold, 0), 2) AS minimum_earnings_threshold,
+      round(coalesce(vfcr.take_home_floor_override, 0), 2) AS take_home_floor_override,
+      vfcr.baseline_signature,
+      round(coalesce(vfcr.best_guess_hours, 0), 2) AS best_guess_hours,
+      vfcr.notes,
+      vfcr.written_off_at_utc,
+      coalesce(nullif(btrim(coalesce(u_written_off.display_name, u_written_off.email, '')), ''), NULL) AS written_off_by_display,
+      vfcr.write_off_reason,
+      vfcr.cleared_at_utc,
+      coalesce(nullif(btrim(coalesce(u_cleared.display_name, u_cleared.email, '')), ''), NULL) AS cleared_by_display,
+      round(coalesce(vfcr.active_reserved_amount, 0), 2) AS active_reserved_amount,
+      round(coalesce(vfcr.reserved_amount, 0), 2) AS reserved_amount,
+      round(coalesce(vfcr.committed_amount, 0), 2) AS committed_amount,
+      round(coalesce(vfcr.settled_amount, 0), 2) AS settled_amount,
+      round(coalesce(vfcr.released_amount, 0), 2) AS released_amount,
+      coalesce(vfcr.active_reservation_count, 0) AS active_reservation_count,
+      vfcr.latest_reservation_created_at_utc,
+      vfcr.latest_committed_at_utc,
+      vfcr.latest_settled_at_utc,
+      vfcr.latest_released_at_utc,
+      vfcr.latest_recovery_pay_date,
+      vfcr.latest_remittance_sent_at_utc,
+      vfcr.latest_remittance_trigger_status,
+      vfcr.last_remittance_error,
+      vfcr.active_snooze_kind,
+      CASE
+        WHEN vfcr.active_snooze_kind IS NULL THEN NULL
+        WHEN vfcr.active_snooze_until_date IS NULL THEN 'INDEFINITE'
+        ELSE 'DATED'
+      END AS active_snooze_mode,
+      vfcr.active_snooze_until_date,
+      vfcr.active_snooze_note,
+      vfcr.active_snooze_created_at_utc,
+      vfcr.active_snooze_updated_at_utc,
+      CASE
+        WHEN vfcr.active_snooze_kind IS NULL THEN NULL
+        WHEN vfcr.active_snooze_until_date IS NULL THEN 'INDEFINITE_DEFERRED'
+        ELSE 'ACTIVE'
+      END AS active_snooze_visibility_status
+    FROM public.v_finance_cases_register AS vfcr
+    LEFT JOIN public.candidates_summary AS cs
+      ON cs.id = vfcr.candidate_id
+    LEFT JOIN public.timesheets AS ts
+      ON ts.timesheet_id = vfcr.linked_timesheet_id
+     AND ts.is_current IS TRUE
+    LEFT JOIN public.tms_users AS u_created
+      ON u_created.id = vfcr.created_by
+    LEFT JOIN public.tms_users AS u_written_off
+      ON u_written_off.id = vfcr.written_off_by_user_id
+    LEFT JOIN public.tms_users AS u_cleared
+      ON u_cleared.id = vfcr.cleared_by_user_id
+    WHERE
+      (p_created_from IS NULL OR vfcr.created_at::date >= p_created_from)
+      AND (p_created_to IS NULL OR vfcr.created_at::date <= p_created_to)
+      AND (p_candidate_id IS NULL OR vfcr.candidate_id = p_candidate_id)
+      AND (p_client_id IS NULL OR vfcr.client_id = p_client_id)
+      AND (v_case_type IS NULL OR upper(coalesce(vfcr.case_type::text, '')) = v_case_type)
+  ),
+  filtered_rows AS (
+    SELECT
+      br.*
+    FROM base_rows AS br
+    WHERE
+      v_status = 'ALL'
+      OR (v_status = 'OUTSTANDING' AND br.ledger_status = 'OUTSTANDING')
+      OR (v_status = 'FULLY_PAID' AND br.ledger_status = 'FULLY_PAID')
+  ),
+  ordered_rows AS (
+    SELECT
+      fr.*
+    FROM filtered_rows AS fr
+    ORDER BY
+      CASE WHEN v_sort_key = 'created_at' AND v_sort_dir = 'asc' THEN fr.created_at END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'created_at' AND v_sort_dir = 'desc' THEN fr.created_at END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'candidate' AND v_sort_dir = 'asc' THEN lower(coalesce(fr.candidate_display_name, '')) END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'candidate' AND v_sort_dir = 'desc' THEN lower(coalesce(fr.candidate_display_name, '')) END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'client' AND v_sort_dir = 'asc' THEN lower(coalesce(fr.client_name, '')) END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'client' AND v_sort_dir = 'desc' THEN lower(coalesce(fr.client_name, '')) END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'case_type' AND v_sort_dir = 'asc' THEN lower(coalesce(fr.case_type::text, '')) END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'case_type' AND v_sort_dir = 'desc' THEN lower(coalesce(fr.case_type::text, '')) END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'outstanding_amount' AND v_sort_dir = 'asc' THEN fr.outstanding_amount END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'outstanding_amount' AND v_sort_dir = 'desc' THEN fr.outstanding_amount END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'next_due_week_start' AND v_sort_dir = 'asc' THEN fr.next_due_week_start END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'next_due_week_start' AND v_sort_dir = 'desc' THEN fr.next_due_week_start END DESC NULLS LAST,
+
+      fr.created_at DESC,
+      lower(coalesce(fr.candidate_display_name, '')) ASC
+  )
+  SELECT
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'row_group', orw.row_group,
+          'case_type', orw.case_type,
+          'row_label', orw.row_label,
+          'candidate_tms_ref', orw.candidate_tms_ref,
+          'candidate_tms_ref_num', orw.candidate_tms_ref_num,
+          'candidate_first_name', orw.candidate_first_name,
+          'candidate_last_name', orw.candidate_last_name,
+          'candidate_display_name', orw.candidate_display_name,
+          'pay_method', orw.pay_method,
+          'client_name', orw.client_name,
+          'linked_timesheet_booking_id', orw.linked_timesheet_booking_id,
+          'linked_timesheet_week_ending_date', CASE WHEN orw.linked_timesheet_week_ending_date IS NULL THEN NULL ELSE orw.linked_timesheet_week_ending_date::text END,
+          'linked_timesheet_shift_label_norm', orw.linked_timesheet_shift_label_norm,
+          'linked_timesheet_reference_number', orw.linked_timesheet_reference_number,
+          'linked_shift_date', CASE WHEN orw.linked_shift_date IS NULL THEN NULL ELSE orw.linked_shift_date::text END,
+          'created_at', CASE WHEN orw.created_at IS NULL THEN NULL ELSE orw.created_at::text END,
+          'updated_at', CASE WHEN orw.updated_at IS NULL THEN NULL ELSE orw.updated_at::text END,
+          'created_by_display', orw.created_by_display,
+          'finance_status', orw.finance_status,
+          'payout_status', orw.payout_status,
+          'ledger_status', orw.ledger_status,
+          'original_amount', orw.original_amount,
+          'outstanding_amount', orw.outstanding_amount,
+          'weekly_due', orw.weekly_due,
+          'weeks_total', orw.weeks_total,
+          'start_week_start', CASE WHEN orw.start_week_start IS NULL THEN NULL ELSE orw.start_week_start::text END,
+          'next_due_week_start', CASE WHEN orw.next_due_week_start IS NULL THEN NULL ELSE orw.next_due_week_start::text END,
+          'schedule_json', coalesce(orw.schedule_json, '[]'::jsonb),
+          'adjustment_comment', orw.adjustment_comment,
+          'source_original_paid_amount', orw.source_original_paid_amount,
+          'source_corrected_paid_amount', orw.source_corrected_paid_amount,
+          'minimum_earnings_threshold', orw.minimum_earnings_threshold,
+          'take_home_floor_override', orw.take_home_floor_override,
+          'baseline_signature', orw.baseline_signature,
+          'best_guess_hours', orw.best_guess_hours,
+          'notes', orw.notes,
+          'written_off_at_utc', CASE WHEN orw.written_off_at_utc IS NULL THEN NULL ELSE orw.written_off_at_utc::text END,
+          'written_off_by_display', orw.written_off_by_display,
+          'write_off_reason', orw.write_off_reason,
+          'cleared_at_utc', CASE WHEN orw.cleared_at_utc IS NULL THEN NULL ELSE orw.cleared_at_utc::text END,
+          'cleared_by_display', orw.cleared_by_display,
+          'active_reserved_amount', orw.active_reserved_amount,
+          'reserved_amount', orw.reserved_amount,
+          'committed_amount', orw.committed_amount,
+          'settled_amount', orw.settled_amount,
+          'released_amount', orw.released_amount,
+          'active_reservation_count', orw.active_reservation_count,
+          'latest_reservation_created_at_utc', CASE WHEN orw.latest_reservation_created_at_utc IS NULL THEN NULL ELSE orw.latest_reservation_created_at_utc::text END,
+          'latest_committed_at_utc', CASE WHEN orw.latest_committed_at_utc IS NULL THEN NULL ELSE orw.latest_committed_at_utc::text END,
+          'latest_settled_at_utc', CASE WHEN orw.latest_settled_at_utc IS NULL THEN NULL ELSE orw.latest_settled_at_utc::text END,
+          'latest_released_at_utc', CASE WHEN orw.latest_released_at_utc IS NULL THEN NULL ELSE orw.latest_released_at_utc::text END,
+          'latest_recovery_pay_date', CASE WHEN orw.latest_recovery_pay_date IS NULL THEN NULL ELSE orw.latest_recovery_pay_date::text END,
+          'latest_remittance_sent_at_utc', CASE WHEN orw.latest_remittance_sent_at_utc IS NULL THEN NULL ELSE orw.latest_remittance_sent_at_utc::text END,
+          'latest_remittance_trigger_status', orw.latest_remittance_trigger_status,
+          'last_remittance_error', orw.last_remittance_error,
+          'active_snooze_kind', orw.active_snooze_kind,
+          'active_snooze_mode', orw.active_snooze_mode,
+          'active_snooze_until_date', CASE WHEN orw.active_snooze_until_date IS NULL THEN NULL ELSE orw.active_snooze_until_date::text END,
+          'active_snooze_note', orw.active_snooze_note,
+          'active_snooze_created_at_utc', CASE WHEN orw.active_snooze_created_at_utc IS NULL THEN NULL ELSE orw.active_snooze_created_at_utc::text END,
+          'active_snooze_updated_at_utc', CASE WHEN orw.active_snooze_updated_at_utc IS NULL THEN NULL ELSE orw.active_snooze_updated_at_utc::text END,
+          'active_snooze_visibility_status', orw.active_snooze_visibility_status
+        )
+      ),
+      '[]'::jsonb
+    ),
+    jsonb_build_object(
+      'total_count', count(*)::int,
+      'outstanding_count', count(*) FILTER (WHERE orw.ledger_status = 'OUTSTANDING')::int,
+      'fully_paid_count', count(*) FILTER (WHERE orw.ledger_status = 'FULLY_PAID')::int,
+      'payment_advance_count', count(*) FILTER (WHERE orw.case_type = 'PAYMENT_ADVANCE')::int,
+      'overpayment_count', count(*) FILTER (WHERE orw.case_type = 'OVERPAYMENT')::int,
+      'manual_debt_adjustment_count', count(*) FILTER (WHERE orw.case_type = 'MANUAL_DEBT_ADJUSTMENT')::int,
+      'manual_credit_adjustment_count', count(*) FILTER (WHERE orw.case_type = 'MANUAL_CREDIT_ADJUSTMENT')::int,
+      'original_amount_total', round(coalesce(sum(orw.original_amount), 0), 2),
+      'outstanding_amount_total', round(coalesce(sum(orw.outstanding_amount), 0), 2),
+      'active_reserved_amount_total', round(coalesce(sum(orw.active_reserved_amount), 0), 2)
+    )
+  INTO v_rows, v_summary
+  FROM ordered_rows AS orw;
+
+  v_meta := jsonb_build_object(
+    'title', 'Finance Ledger',
+    'orientation', 'LANDSCAPE',
+    'generated_at_utc', now()::text,
+    'applied_filters', jsonb_build_object(
+      'created_from', CASE WHEN p_created_from IS NULL THEN NULL ELSE p_created_from::text END,
+      'created_to', CASE WHEN p_created_to IS NULL THEN NULL ELSE p_created_to::text END,
+      'status', v_status,
+      'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+      'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END,
+      'case_type', v_case_type,
+      'sort_key', v_sort_key,
+      'sort_dir', v_sort_dir
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'title', 'Finance Ledger',
+    'generated_at_utc', now()::text,
+    'summary', coalesce(v_summary, '{}'::jsonb),
+    'meta', v_meta,
+    'rows', coalesce(v_rows, '[]'::jsonb)
+  );
+END;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.pay_finance_ledger_pdf_payload(
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_created_from date DEFAULT NULL::date,
+  p_created_to date DEFAULT NULL::date,
+  p_status text DEFAULT 'ALL'::text,
+  p_candidate_id uuid DEFAULT NULL::uuid,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_case_type text DEFAULT NULL::text,
+  p_sort_key text DEFAULT 'created_at'::text,
+  p_sort_dir text DEFAULT 'desc'::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_base jsonb := '{}'::jsonb;
+  v_rows jsonb := '[]'::jsonb;
+  v_groups jsonb := '[]'::jsonb;
+BEGIN
+  v_base := public.pay_finance_ledger_export_rows(
+    p_actor_user_id => p_actor_user_id,
+    p_created_from => p_created_from,
+    p_created_to => p_created_to,
+    p_status => p_status,
+    p_candidate_id => p_candidate_id,
+    p_client_id => p_client_id,
+    p_case_type => p_case_type,
+    p_sort_key => p_sort_key,
+    p_sort_dir => p_sort_dir
+  );
+
+  v_rows := coalesce(v_base->'rows', '[]'::jsonb);
+
+  SELECT jsonb_build_array(
+    jsonb_build_object(
+      'row_group', 'PAYMENT_ADVANCE',
+      'title', 'Payment Advances',
+      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'row_group' = 'PAYMENT_ADVANCE'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'row_group', 'OVERPAYMENT',
+      'title', 'Overpayments',
+      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'row_group' = 'OVERPAYMENT'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'row_group', 'MANUAL_DEBT_ADJUSTMENT',
+      'title', 'Manual Debt Adjustments',
+      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'row_group' = 'MANUAL_DEBT_ADJUSTMENT'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'row_group', 'MANUAL_CREDIT_ADJUSTMENT',
+      'title', 'Manual Credit Adjustments',
+      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'row_group' = 'MANUAL_CREDIT_ADJUSTMENT'), '[]'::jsonb)
+    )
+  )
+  INTO v_groups;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'title', 'Finance Ledger',
+    'orientation', 'LANDSCAPE',
+    'generated_at_utc', now()::text,
+    'summary', coalesce(v_base->'summary', '{}'::jsonb),
+    'meta', coalesce(v_base->'meta', '{}'::jsonb),
+    'groups', coalesce(v_groups, '[]'::jsonb),
+    'rows', coalesce(v_rows, '[]'::jsonb)
+  );
+END;
+$function$;
+CREATE OR REPLACE FUNCTION public.pay_snoozes_export_rows(
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_created_from date DEFAULT NULL::date,
+  p_created_to date DEFAULT NULL::date,
+  p_status text DEFAULT 'ALL'::text,
+  p_candidate_id uuid DEFAULT NULL::uuid,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_case_type text DEFAULT NULL::text,
+  p_sort_key text DEFAULT 'created_at'::text,
+  p_sort_dir text DEFAULT 'desc'::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_status text := upper(btrim(coalesce(p_status, 'ALL')));
+  v_case_type text := upper(nullif(btrim(coalesce(p_case_type, '')), ''));
+  v_sort_key text := lower(coalesce(nullif(btrim(p_sort_key), ''), 'created_at'));
+  v_sort_dir text := lower(coalesce(nullif(btrim(p_sort_dir), ''), 'desc'));
+  v_rows jsonb := '[]'::jsonb;
+  v_summary jsonb := '{}'::jsonb;
+  v_meta jsonb := '{}'::jsonb;
+BEGIN
+  IF v_status NOT IN ('ALL', 'OUTSTANDING', 'FULLY_PAID') THEN
+    v_status := 'ALL';
+  END IF;
+
+  IF v_sort_key NOT IN (
+    'created_at',
+    'updated_at',
+    'candidate',
+    'client',
+    'snooze_until_date'
+  ) THEN
+    v_sort_key := 'created_at';
+  END IF;
+
+  IF v_sort_dir NOT IN ('asc', 'desc') THEN
+    v_sort_dir := 'desc';
+  END IF;
+
+  WITH parsed_snoozes AS (
+    SELECT
+      s.id AS snooze_id,
+      s.candidate_id AS snooze_candidate_id,
+      s.timesheet_id,
+      s.segment_id,
+      s.source_ref,
+      s.snooze_kind,
+      s.snooze_until_date,
+      s.note,
+      s.created_at_utc,
+      s.created_by_user_id,
+      s.updated_at_utc,
+      s.updated_by_user_id,
+      s.cleared_at_utc,
+      s.cleared_by_user_id,
+      CASE
+        WHEN s.source_ref IS NOT NULL
+         AND s.source_ref LIKE 'advance:%'
+         AND split_part(s.source_ref, ':', 2) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        THEN split_part(s.source_ref, ':', 2)::uuid
+        ELSE NULL::uuid
+      END AS finance_case_id
+    FROM public.pay_item_snoozes AS s
+    WHERE
+      (p_created_from IS NULL OR s.created_at_utc::date >= p_created_from)
+      AND (p_created_to IS NULL OR s.created_at_utc::date <= p_created_to)
+      AND (
+        (s.source_ref IS NOT NULL AND s.source_ref LIKE 'advance:%')
+        OR s.timesheet_id IS NOT NULL
+      )
+  ),
+  base_rows AS (
+    SELECT
+      ps.snooze_id,
+      CASE
+        WHEN ps.finance_case_id IS NOT NULL THEN 'FINANCE_CASE'
+        ELSE 'TIMESHEET_PAYMENT'
+      END AS snooze_scope,
+      CASE
+        WHEN ps.finance_case_id IS NOT NULL THEN
+          CASE vfcr.case_type
+            WHEN 'PAYMENT_ADVANCE' THEN 'Payment Advance'
+            WHEN 'OVERPAYMENT' THEN 'Overpayment'
+            WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'Manual Debt Adjustment'
+            WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
+            ELSE coalesce(vfcr.case_type, 'Finance Case')
+          END
+        ELSE 'Timesheet Payment'
+      END AS row_label,
+      vfcr.case_type,
+      cs.tms_ref AS candidate_tms_ref,
+      cs.tms_ref_num AS candidate_tms_ref_num,
+      cs.first_name AS candidate_first_name,
+      cs.last_name AS candidate_last_name,
+      coalesce(cs.display_name, vfcr.candidate_display_name, vts.candidate_name) AS candidate_display_name,
+      coalesce(vfcr.client_name, vts.client_name) AS client_name,
+      ts.booking_id AS linked_timesheet_booking_id,
+      ts.week_ending_date AS linked_timesheet_week_ending_date,
+      ts.shift_label_norm AS linked_timesheet_shift_label_norm,
+      ts.reference_number AS linked_timesheet_reference_number,
+      ps.snooze_kind,
+      CASE
+        WHEN ps.snooze_until_date IS NULL THEN 'INDEFINITE'
+        ELSE 'DATED'
+      END AS snooze_mode,
+      ps.snooze_until_date,
+      ps.note,
+      ps.created_at_utc,
+      coalesce(nullif(btrim(coalesce(u_created.display_name, u_created.email, '')), ''), 'CloudTMS server') AS created_by_display,
+      ps.updated_at_utc,
+      coalesce(nullif(btrim(coalesce(u_updated.display_name, u_updated.email, '')), ''), NULL) AS updated_by_display,
+      ps.cleared_at_utc,
+      coalesce(nullif(btrim(coalesce(u_cleared.display_name, u_cleared.email, '')), ''), NULL) AS cleared_by_display,
+      CASE
+        WHEN ps.cleared_at_utc IS NOT NULL THEN 'HISTORY'
+        WHEN ps.snooze_until_date IS NULL THEN 'INDEFINITE_DEFERRED'
+        ELSE 'ACTIVE'
+      END AS current_visibility_status,
+      CASE
+        WHEN ps.cleared_at_utc IS NOT NULL THEN 'CLEARED'
+        ELSE 'ACTIVE'
+      END AS snooze_lifecycle_status,
+      CASE
+        WHEN ps.finance_case_id IS NOT NULL THEN
+          CASE
+            WHEN vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' THEN
+              CASE
+                WHEN upper(coalesce(vfcr.payout_status::text, '')) = 'PAID' THEN 'FULLY_PAID'
+                WHEN upper(coalesce(vfcr.payout_status::text, '')) = 'CANCELLED' THEN 'CANCELLED'
+                ELSE 'OUTSTANDING'
+              END
+            ELSE
+              CASE
+                WHEN vfcr.written_off_at_utc IS NOT NULL THEN 'WRITTEN_OFF'
+                WHEN round(coalesce(vfcr.outstanding_amount, 0), 2) > 0 THEN 'OUTSTANDING'
+                ELSE 'FULLY_PAID'
+              END
+          END
+        ELSE
+          CASE
+            WHEN ps.cleared_at_utc IS NOT NULL THEN 'FULLY_PAID'
+            ELSE 'OUTSTANDING'
+          END
+      END AS linked_case_status,
+      round(coalesce(vfcr.original_amount, 0), 2) AS original_amount,
+      round(coalesce(vfcr.outstanding_amount, 0), 2) AS outstanding_amount,
+      round(coalesce(vfcr.weekly_due, 0), 2) AS weekly_due,
+      vfcr.weeks_total,
+      vfcr.start_week_start,
+      vfcr.next_due_week_start,
+      vfcr.schedule_json,
+      vfcr.adjustment_comment
+    FROM parsed_snoozes AS ps
+    LEFT JOIN public.v_finance_cases_register AS vfcr
+      ON vfcr.finance_case_id = ps.finance_case_id
+    LEFT JOIN public.v_timesheets_summary AS vts
+      ON vts.timesheet_id = ps.timesheet_id
+    LEFT JOIN public.timesheets AS ts
+      ON ts.timesheet_id = ps.timesheet_id
+     AND ts.is_current IS TRUE
+    LEFT JOIN public.candidates_summary AS cs
+      ON cs.id = coalesce(vfcr.candidate_id, vts.candidate_id, ps.snooze_candidate_id)
+    LEFT JOIN public.tms_users AS u_created
+      ON u_created.id = ps.created_by_user_id
+    LEFT JOIN public.tms_users AS u_updated
+      ON u_updated.id = ps.updated_by_user_id
+    LEFT JOIN public.tms_users AS u_cleared
+      ON u_cleared.id = ps.cleared_by_user_id
+    WHERE
+      (p_candidate_id IS NULL OR coalesce(vfcr.candidate_id, vts.candidate_id, ps.snooze_candidate_id) = p_candidate_id)
+      AND (p_client_id IS NULL OR coalesce(vfcr.client_id, vts.client_id) = p_client_id)
+      AND (v_case_type IS NULL OR upper(coalesce(vfcr.case_type::text, '')) = v_case_type)
+  ),
+  filtered_rows AS (
+    SELECT
+      br.*
+    FROM base_rows AS br
+    WHERE
+      v_status = 'ALL'
+      OR (v_status = 'OUTSTANDING' AND br.linked_case_status = 'OUTSTANDING')
+      OR (v_status = 'FULLY_PAID' AND br.linked_case_status = 'FULLY_PAID')
+  ),
+  ordered_rows AS (
+    SELECT
+      fr.*
+    FROM filtered_rows AS fr
+    ORDER BY
+      CASE WHEN v_sort_key = 'created_at' AND v_sort_dir = 'asc' THEN fr.created_at_utc END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'created_at' AND v_sort_dir = 'desc' THEN fr.created_at_utc END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'updated_at' AND v_sort_dir = 'asc' THEN fr.updated_at_utc END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'updated_at' AND v_sort_dir = 'desc' THEN fr.updated_at_utc END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'candidate' AND v_sort_dir = 'asc' THEN lower(coalesce(fr.candidate_display_name, '')) END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'candidate' AND v_sort_dir = 'desc' THEN lower(coalesce(fr.candidate_display_name, '')) END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'client' AND v_sort_dir = 'asc' THEN lower(coalesce(fr.client_name, '')) END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'client' AND v_sort_dir = 'desc' THEN lower(coalesce(fr.client_name, '')) END DESC NULLS LAST,
+
+      CASE WHEN v_sort_key = 'snooze_until_date' AND v_sort_dir = 'asc' THEN fr.snooze_until_date END ASC NULLS LAST,
+      CASE WHEN v_sort_key = 'snooze_until_date' AND v_sort_dir = 'desc' THEN fr.snooze_until_date END DESC NULLS LAST,
+
+      fr.created_at_utc DESC,
+      lower(coalesce(fr.candidate_display_name, '')) ASC
+  )
+  SELECT
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'snooze_scope', orw.snooze_scope,
+          'row_label', orw.row_label,
+          'case_type', orw.case_type,
+          'candidate_tms_ref', orw.candidate_tms_ref,
+          'candidate_tms_ref_num', orw.candidate_tms_ref_num,
+          'candidate_first_name', orw.candidate_first_name,
+          'candidate_last_name', orw.candidate_last_name,
+          'candidate_display_name', orw.candidate_display_name,
+          'client_name', orw.client_name,
+          'linked_timesheet_booking_id', orw.linked_timesheet_booking_id,
+          'linked_timesheet_week_ending_date', CASE WHEN orw.linked_timesheet_week_ending_date IS NULL THEN NULL ELSE orw.linked_timesheet_week_ending_date::text END,
+          'linked_timesheet_shift_label_norm', orw.linked_timesheet_shift_label_norm,
+          'linked_timesheet_reference_number', orw.linked_timesheet_reference_number,
+          'snooze_kind', orw.snooze_kind,
+          'snooze_mode', orw.snooze_mode,
+          'snooze_until_date', CASE WHEN orw.snooze_until_date IS NULL THEN NULL ELSE orw.snooze_until_date::text END,
+          'note', orw.note,
+          'created_at_utc', CASE WHEN orw.created_at_utc IS NULL THEN NULL ELSE orw.created_at_utc::text END,
+          'created_by_display', orw.created_by_display,
+          'updated_at_utc', CASE WHEN orw.updated_at_utc IS NULL THEN NULL ELSE orw.updated_at_utc::text END,
+          'updated_by_display', orw.updated_by_display,
+          'cleared_at_utc', CASE WHEN orw.cleared_at_utc IS NULL THEN NULL ELSE orw.cleared_at_utc::text END,
+          'cleared_by_display', orw.cleared_by_display,
+          'current_visibility_status', orw.current_visibility_status,
+          'snooze_lifecycle_status', orw.snooze_lifecycle_status,
+          'linked_case_status', orw.linked_case_status,
+          'original_amount', orw.original_amount,
+          'outstanding_amount', orw.outstanding_amount,
+          'weekly_due', orw.weekly_due,
+          'weeks_total', orw.weeks_total,
+          'start_week_start', CASE WHEN orw.start_week_start IS NULL THEN NULL ELSE orw.start_week_start::text END,
+          'next_due_week_start', CASE WHEN orw.next_due_week_start IS NULL THEN NULL ELSE orw.next_due_week_start::text END,
+          'schedule_json', coalesce(orw.schedule_json, '[]'::jsonb),
+          'adjustment_comment', orw.adjustment_comment
+        )
+      ),
+      '[]'::jsonb
+    ),
+    jsonb_build_object(
+      'total_count', count(*)::int,
+      'finance_case_snooze_count', count(*) FILTER (WHERE orw.snooze_scope = 'FINANCE_CASE')::int,
+      'timesheet_payment_snooze_count', count(*) FILTER (WHERE orw.snooze_scope = 'TIMESHEET_PAYMENT')::int,
+      'active_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'ACTIVE')::int,
+      'cleared_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'CLEARED')::int,
+      'indefinite_count', count(*) FILTER (WHERE orw.snooze_mode = 'INDEFINITE')::int,
+      'dated_count', count(*) FILTER (WHERE orw.snooze_mode = 'DATED')::int
+    )
+  INTO v_rows, v_summary
+  FROM ordered_rows AS orw;
+
+  v_meta := jsonb_build_object(
+    'title', 'Snoozes Report',
+    'orientation', 'LANDSCAPE',
+    'generated_at_utc', now()::text,
+    'applied_filters', jsonb_build_object(
+      'created_from', CASE WHEN p_created_from IS NULL THEN NULL ELSE p_created_from::text END,
+      'created_to', CASE WHEN p_created_to IS NULL THEN NULL ELSE p_created_to::text END,
+      'status', v_status,
+      'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+      'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END,
+      'case_type', v_case_type,
+      'sort_key', v_sort_key,
+      'sort_dir', v_sort_dir
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'title', 'Snoozes Report',
+    'generated_at_utc', now()::text,
+    'summary', coalesce(v_summary, '{}'::jsonb),
+    'meta', v_meta,
+    'rows', coalesce(v_rows, '[]'::jsonb)
+  );
+END;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.pay_snoozes_pdf_payload(
+  p_actor_user_id uuid DEFAULT NULL::uuid,
+  p_created_from date DEFAULT NULL::date,
+  p_created_to date DEFAULT NULL::date,
+  p_status text DEFAULT 'ALL'::text,
+  p_candidate_id uuid DEFAULT NULL::uuid,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_case_type text DEFAULT NULL::text,
+  p_sort_key text DEFAULT 'created_at'::text,
+  p_sort_dir text DEFAULT 'desc'::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_base jsonb := '{}'::jsonb;
+  v_rows jsonb := '[]'::jsonb;
+  v_groups jsonb := '[]'::jsonb;
+BEGIN
+  v_base := public.pay_snoozes_export_rows(
+    p_actor_user_id => p_actor_user_id,
+    p_created_from => p_created_from,
+    p_created_to => p_created_to,
+    p_status => p_status,
+    p_candidate_id => p_candidate_id,
+    p_client_id => p_client_id,
+    p_case_type => p_case_type,
+    p_sort_key => p_sort_key,
+    p_sort_dir => p_sort_dir
+  );
+
+  v_rows := coalesce(v_base->'rows', '[]'::jsonb);
+
+  SELECT jsonb_build_array(
+    jsonb_build_object(
+      'row_group', 'FINANCE_CASE',
+      'title', 'Finance-case Snoozes',
+      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'snooze_scope' = 'FINANCE_CASE'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
+      'row_group', 'TIMESHEET_PAYMENT',
+      'title', 'Timesheet-payment Snoozes',
+      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'snooze_scope' = 'TIMESHEET_PAYMENT'), '[]'::jsonb)
+    )
+  )
+  INTO v_groups;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'title', 'Snoozes Report',
+    'orientation', 'LANDSCAPE',
+    'generated_at_utc', now()::text,
+    'summary', coalesce(v_base->'summary', '{}'::jsonb),
+    'meta', coalesce(v_base->'meta', '{}'::jsonb),
+    'groups', coalesce(v_groups, '[]'::jsonb),
+    'rows', coalesce(v_rows, '[]'::jsonb)
+  );
+END;
+$function$;
 
