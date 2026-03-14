@@ -7278,7 +7278,7 @@ end;
   --  - if pay_preview returns has_any_delta => use it
   --  - otherwise derive "has_any_delta" from totals
   with preview as (
-    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null, null::uuid[]) as j
+    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null) as j
   ),
   all_cands as (
     select c as cand
@@ -7427,7 +7427,7 @@ end;
 
   -- Validate mismatch decisions completeness for included candidates (scope-agnostic)
   with preview as (
-    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null, null::uuid[]) as j
+    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null) as j
   ),
   all_cands as (
     select c as cand
@@ -7495,10 +7495,7 @@ end;
     banking_system_snapshot,
     external_paye_system_snapshot,
     rail_provider_snapshot,
-    rail_env_snapshot,
-    override_mode,
-    override_reason,
-    force_include_timesheet_ids
+    rail_env_snapshot
   )
   values (
     p_pay_date,
@@ -7508,10 +7505,7 @@ end;
     v_settings.banking_system,
     v_settings.external_paye_system,
     v_settings.rail_provider_default,
-    v_settings.rail_env_default,
-    p_override_mode,
-    p_override_reason,
-    p_force_include_timesheet_ids
+    v_settings.rail_env_default
   )
   returning id into v_batch_id;
 
@@ -7647,8 +7641,7 @@ end;
       p_week_ending_cutoff,
       p_actor_user_id,
       null,
-      null,
-      null::uuid[]
+      null
     ) as j
   ),
   all_candidates as (
@@ -10775,8 +10768,6 @@ exception when others then
   raise;
 end;
 $$;
-
-
 
 
 
