@@ -17430,7 +17430,7 @@ begin
     'jobs', coalesce(v_filtered_jobs, '[]'::jsonb)
   );
 end;
-$function$
+$function$;
 
 
 create or replace function public.pay_payment_advance_create(
