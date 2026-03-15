@@ -6120,14 +6120,6 @@ ts_itemised as (
     ) as payload
     from canonical_preview_lines cpl
   )
-  paye_summary_breakdown_json as (
-    select jsonb_build_object(
-      'gross_side_additions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'GROSS_ADD' and cpl.is_excluded_from_allocation = false then greatest(cpl.amount_ex_vat,0) else 0 end),0),2),
-      'gross_side_deductions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'GROSS_DEDUCT' and cpl.is_excluded_from_allocation = false then abs(cpl.amount_ex_vat) else 0 end),0),2),
-      'net_side_deductions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'NET_DEDUCT' and cpl.is_excluded_from_allocation = false then abs(cpl.amount_ex_vat) else 0 end),0),2)
-    ) as payload
-    from canonical_preview_lines cpl
-  )
   select
     coalesce(
       (
