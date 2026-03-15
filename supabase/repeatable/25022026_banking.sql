@@ -21399,8 +21399,6 @@ END;
 $function$;
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_snoozes_export_rows(
   p_actor_user_id uuid DEFAULT NULL::uuid,
   p_created_from date DEFAULT NULL::date,
@@ -21488,6 +21486,7 @@ BEGIN
           CASE vfcr.case_type
             WHEN 'PAYMENT_ADVANCE' THEN 'Payment Advance'
             WHEN 'OVERPAYMENT' THEN 'Overpayment'
+            WHEN 'UNDERPAYMENT' THEN 'Underpayment'
             WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'Manual Debt Adjustment'
             WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
             ELSE coalesce(vfcr.case_type, 'Finance Case')
@@ -21556,7 +21555,29 @@ BEGIN
       vfcr.start_week_start,
       vfcr.next_due_week_start,
       vfcr.schedule_json,
-      vfcr.adjustment_comment
+      vfcr.adjustment_comment,
+      CASE
+        WHEN ps.finance_case_id IS NULL THEN NULL::text
+        WHEN coalesce(vfcr.is_mixed_case, false) THEN 'MIXED_CASE'
+        WHEN coalesce(vfcr.open_taxable_count, 0) > 0 AND coalesce(vfcr.open_reimbursement_count, 0) = 0 THEN 'TAXABLE_RECOVERY'
+        WHEN coalesce(vfcr.open_reimbursement_count, 0) > 0 AND coalesce(vfcr.open_taxable_count, 0) = 0 THEN 'REIMBURSEMENT_CARRY_FORWARD'
+        ELSE 'UNCLASSIFIED'
+      END AS snooze_component_scope,
+      CASE
+        WHEN ps.finance_case_id IS NULL THEN NULL::text
+        WHEN coalesce(vfcr.is_mixed_case, false) THEN 'Mixed Case'
+        WHEN coalesce(vfcr.open_taxable_count, 0) > 0 AND coalesce(vfcr.open_reimbursement_count, 0) = 0 THEN 'Taxable Recovery'
+        WHEN coalesce(vfcr.open_reimbursement_count, 0) > 0 AND coalesce(vfcr.open_taxable_count, 0) = 0 THEN 'Reimbursement Carry-forward'
+        ELSE 'Unclassified'
+      END AS snooze_component_scope_label,
+      coalesce(vfcr.is_mixed_case, false) AS is_mixed_case,
+      coalesce(vfcr.open_taxable_count, 0) AS open_taxable_count,
+      coalesce(vfcr.open_reimbursement_count, 0) AS open_reimbursement_count,
+      coalesce(vfcr.unresolved_taxable_count, 0) AS unresolved_taxable_count,
+      coalesce(vfcr.stale_count, 0) AS stale_count,
+      (coalesce(vfcr.unresolved_taxable_count, 0) > 0) AS has_unresolved_taxable_components,
+      (coalesce(vfcr.stale_count, 0) > 0) AS has_stale_components,
+      coalesce(vfcr.component_resolution_summary_json, '{}'::jsonb) AS component_resolution_summary_json
     FROM parsed_snoozes AS ps
     LEFT JOIN public.v_finance_cases_register AS vfcr
       ON vfcr.finance_case_id = ps.finance_case_id
@@ -21647,7 +21668,17 @@ BEGIN
           'start_week_start', CASE WHEN orw.start_week_start IS NULL THEN NULL ELSE orw.start_week_start::text END,
           'next_due_week_start', CASE WHEN orw.next_due_week_start IS NULL THEN NULL ELSE orw.next_due_week_start::text END,
           'schedule_json', coalesce(orw.schedule_json, '[]'::jsonb),
-          'adjustment_comment', orw.adjustment_comment
+          'adjustment_comment', orw.adjustment_comment,
+          'snooze_component_scope', orw.snooze_component_scope,
+          'snooze_component_scope_label', orw.snooze_component_scope_label,
+          'is_mixed_case', orw.is_mixed_case,
+          'open_taxable_count', orw.open_taxable_count,
+          'open_reimbursement_count', orw.open_reimbursement_count,
+          'unresolved_taxable_count', orw.unresolved_taxable_count,
+          'stale_count', orw.stale_count,
+          'has_unresolved_taxable_components', orw.has_unresolved_taxable_components,
+          'has_stale_components', orw.has_stale_components,
+          'component_resolution_summary_json', orw.component_resolution_summary_json
         )
       ),
       '[]'::jsonb
@@ -21659,7 +21690,12 @@ BEGIN
       'active_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'ACTIVE')::int,
       'cleared_count', count(*) FILTER (WHERE orw.snooze_lifecycle_status = 'CLEARED')::int,
       'indefinite_count', count(*) FILTER (WHERE orw.snooze_mode = 'INDEFINITE')::int,
-      'dated_count', count(*) FILTER (WHERE orw.snooze_mode = 'DATED')::int
+      'dated_count', count(*) FILTER (WHERE orw.snooze_mode = 'DATED')::int,
+      'taxable_recovery_count', count(*) FILTER (WHERE orw.snooze_component_scope = 'TAXABLE_RECOVERY')::int,
+      'reimbursement_carry_forward_count', count(*) FILTER (WHERE orw.snooze_component_scope = 'REIMBURSEMENT_CARRY_FORWARD')::int,
+      'mixed_case_count', count(*) FILTER (WHERE orw.snooze_component_scope = 'MIXED_CASE')::int,
+      'unresolved_case_count', count(*) FILTER (WHERE coalesce(orw.unresolved_taxable_count, 0) > 0)::int,
+      'stale_case_count', count(*) FILTER (WHERE coalesce(orw.stale_count, 0) > 0)::int
     )
   INTO v_rows, v_summary
   FROM ordered_rows AS orw;
@@ -21731,12 +21767,26 @@ BEGIN
     jsonb_build_object(
       'row_group', 'FINANCE_CASE',
       'title', 'Finance-case Snoozes',
-      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'snooze_scope' = 'FINANCE_CASE'), '[]'::jsonb)
+      'rows', coalesce(
+        (
+          SELECT jsonb_agg(e.elem)
+          FROM jsonb_array_elements(v_rows) AS e(elem)
+          WHERE e.elem->>'snooze_scope' = 'FINANCE_CASE'
+        ),
+        '[]'::jsonb
+      )
     ),
     jsonb_build_object(
       'row_group', 'TIMESHEET_PAYMENT',
       'title', 'Timesheet-payment Snoozes',
-      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'snooze_scope' = 'TIMESHEET_PAYMENT'), '[]'::jsonb)
+      'rows', coalesce(
+        (
+          SELECT jsonb_agg(e.elem)
+          FROM jsonb_array_elements(v_rows) AS e(elem)
+          WHERE e.elem->>'snooze_scope' = 'TIMESHEET_PAYMENT'
+        ),
+        '[]'::jsonb
+      )
     )
   )
   INTO v_groups;
@@ -21753,6 +21803,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_finance_component_fingerprint(
   p_source_family_key text,
