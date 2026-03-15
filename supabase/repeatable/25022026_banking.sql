@@ -12899,6 +12899,8 @@ $$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_candidate_advances_report(
   p_candidate_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -12919,6 +12921,7 @@ declare
   v_rows jsonb := '[]'::jsonb;
   v_payment_advances jsonb := '[]'::jsonb;
   v_overpayments jsonb := '[]'::jsonb;
+  v_underpayments jsonb := '[]'::jsonb;
   v_manual_debt_adjustments jsonb := '[]'::jsonb;
   v_manual_credit_adjustments jsonb := '[]'::jsonb;
   v_snoozed_deferred_items jsonb := '[]'::jsonb;
@@ -13065,8 +13068,23 @@ begin
             when coalesce(vfc.settled_amount, 0) > 0 then 'RECOVERY_SETTLED'
             else 'RECOVERY_ACTIVE'
           end
+        when vfc.case_type = 'UNDERPAYMENT' then
+          case
+            when vfc.written_off_at_utc is not null then 'WRITTEN_OFF'
+            when vfc.cleared_at_utc is not null or upper(coalesce(vfc.status, '')) in ('PAID_OFF', 'CLEARED') or coalesce(vfc.outstanding_amount, 0) <= 0 then 'PAYOUT_CLEARED'
+            when coalesce(vfc.active_reserved_amount, 0) > 0 then 'PAYOUT_RESERVED'
+            when coalesce(vfc.committed_amount, 0) > 0 then 'PAYOUT_COMMITTED'
+            when coalesce(vfc.settled_amount, 0) > 0 then 'PAYOUT_SETTLED'
+            else 'PAYOUT_ACTIVE'
+          end
         else coalesce(vfc.status, 'ACTIVE')
-      end as payout_or_recovery_status
+      end as payout_or_recovery_status,
+      coalesce(vfc.is_mixed_case, false) as is_mixed_case,
+      coalesce(vfc.open_taxable_count, 0) as open_taxable_count,
+      coalesce(vfc.open_reimbursement_count, 0) as open_reimbursement_count,
+      coalesce(vfc.unresolved_taxable_count, 0) as unresolved_taxable_count,
+      coalesce(vfc.stale_count, 0) as stale_count,
+      coalesce(vfc.component_resolution_summary_json, '{}'::jsonb) as component_resolution_summary_json
     from public.v_finance_cases_register vfc
     left join public.pay_batches pbp
       on pbp.id = vfc.payout_pay_batch_id
@@ -13113,7 +13131,13 @@ begin
       end as snooze_status,
       'SNOOZED'::text as lifecycle_state,
       null::date as authoritative_payment_date,
-      'DEFERRED'::text as payout_or_recovery_status
+      'DEFERRED'::text as payout_or_recovery_status,
+      false as is_mixed_case,
+      0::integer as open_taxable_count,
+      0::integer as open_reimbursement_count,
+      0::integer as unresolved_taxable_count,
+      0::integer as stale_count,
+      '{}'::jsonb as component_resolution_summary_json
     from public.pay_item_snoozes s
     join public.timesheets ts
       on ts.timesheet_id = s.timesheet_id
@@ -13208,7 +13232,13 @@ begin
           'snooze_status', ar.snooze_status,
           'lifecycle_state', ar.lifecycle_state,
           'authoritative_payment_date', case when ar.authoritative_payment_date is null then null else ar.authoritative_payment_date::text end,
-          'payout_or_recovery_status', ar.payout_or_recovery_status
+          'payout_or_recovery_status', ar.payout_or_recovery_status,
+          'is_mixed_case', ar.is_mixed_case,
+          'open_taxable_count', ar.open_taxable_count,
+          'open_reimbursement_count', ar.open_reimbursement_count,
+          'unresolved_taxable_count', ar.unresolved_taxable_count,
+          'stale_count', ar.stale_count,
+          'component_resolution_summary_json', coalesce(ar.component_resolution_summary_json, '{}'::jsonb)
         )
         order by ar.created_at desc nulls last, ar.finance_case_id asc nulls last, ar.linked_timesheet_id asc nulls last
       ),
@@ -13219,6 +13249,7 @@ begin
       'counts_by_group', jsonb_build_object(
         'PAYMENT_ADVANCE', count(*) filter (where ar.row_group = 'PAYMENT_ADVANCE'),
         'OVERPAYMENT', count(*) filter (where ar.row_group = 'OVERPAYMENT'),
+        'UNDERPAYMENT', count(*) filter (where ar.row_group = 'UNDERPAYMENT'),
         'MANUAL_DEBT_ADJUSTMENT', count(*) filter (where ar.row_group = 'MANUAL_DEBT_ADJUSTMENT'),
         'MANUAL_CREDIT_ADJUSTMENT', count(*) filter (where ar.row_group = 'MANUAL_CREDIT_ADJUSTMENT'),
         'SNOOZED_DEFERRED', count(*) filter (where ar.row_group = 'SNOOZED_DEFERRED')
@@ -13226,6 +13257,7 @@ begin
       'totals_by_group', jsonb_build_object(
         'PAYMENT_ADVANCE', round(coalesce(sum(case when ar.row_group = 'PAYMENT_ADVANCE' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
         'OVERPAYMENT', round(coalesce(sum(case when ar.row_group = 'OVERPAYMENT' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
+        'UNDERPAYMENT', round(coalesce(sum(case when ar.row_group = 'UNDERPAYMENT' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
         'MANUAL_DEBT_ADJUSTMENT', round(coalesce(sum(case when ar.row_group = 'MANUAL_DEBT_ADJUSTMENT' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2),
         'MANUAL_CREDIT_ADJUSTMENT', round(coalesce(sum(case when ar.row_group = 'MANUAL_CREDIT_ADJUSTMENT' then ar.original_amount else 0 end), 0), 2)::numeric(12,2),
         'SNOOZED_DEFERRED', round(coalesce(sum(case when ar.row_group = 'SNOOZED_DEFERRED' then ar.remaining_outstanding else 0 end), 0), 2)::numeric(12,2)
@@ -13233,9 +13265,17 @@ begin
       'recovered_wtd_by_group', jsonb_build_object(
         'PAYMENT_ADVANCE', round(coalesce(sum(case when ar.row_group = 'PAYMENT_ADVANCE' then coalesce(wr.recovered_wtd, 0) else 0 end), 0), 2)::numeric(12,2),
         'OVERPAYMENT', round(coalesce(sum(case when ar.row_group = 'OVERPAYMENT' then coalesce(wr.recovered_wtd, 0) else 0 end), 0), 2)::numeric(12,2),
+        'UNDERPAYMENT', 0::numeric(12,2),
         'MANUAL_DEBT_ADJUSTMENT', round(coalesce(sum(case when ar.row_group = 'MANUAL_DEBT_ADJUSTMENT' then coalesce(wr.recovered_wtd, 0) else 0 end), 0), 2)::numeric(12,2),
         'MANUAL_CREDIT_ADJUSTMENT', 0::numeric(12,2),
         'SNOOZED_DEFERRED', 0::numeric(12,2)
+      ),
+      'component_totals', jsonb_build_object(
+        'mixed_case_count', count(*) filter (where ar.is_mixed_case = true),
+        'open_taxable_count_total', coalesce(sum(ar.open_taxable_count), 0),
+        'open_reimbursement_count_total', coalesce(sum(ar.open_reimbursement_count), 0),
+        'unresolved_taxable_count_total', coalesce(sum(ar.unresolved_taxable_count), 0),
+        'stale_count_total', coalesce(sum(ar.stale_count), 0)
       )
     )
   into
@@ -13254,6 +13294,11 @@ begin
     (select jsonb_agg(x.elem) from jsonb_array_elements(v_rows) as x(elem) where x.elem->>'row_group' = 'OVERPAYMENT'),
     '[]'::jsonb
   ) into v_overpayments;
+
+  select coalesce(
+    (select jsonb_agg(x.elem) from jsonb_array_elements(v_rows) as x(elem) where x.elem->>'row_group' = 'UNDERPAYMENT'),
+    '[]'::jsonb
+  ) into v_underpayments;
 
   select coalesce(
     (select jsonb_agg(x.elem) from jsonb_array_elements(v_rows) as x(elem) where x.elem->>'row_group' = 'MANUAL_DEBT_ADJUSTMENT'),
@@ -13285,6 +13330,7 @@ begin
     'summary', coalesce(v_summary, '{}'::jsonb),
     'payment_advances', coalesce(v_payment_advances, '[]'::jsonb),
     'overpayments', coalesce(v_overpayments, '[]'::jsonb),
+    'underpayments', coalesce(v_underpayments, '[]'::jsonb),
     'manual_debt_adjustments', coalesce(v_manual_debt_adjustments, '[]'::jsonb),
     'manual_credit_adjustments', coalesce(v_manual_credit_adjustments, '[]'::jsonb),
     'snoozed_deferred_items', coalesce(v_snoozed_deferred_items, '[]'::jsonb),
@@ -13292,6 +13338,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_advances_register(
@@ -20939,11 +20987,6 @@ begin
 end;
 $$;
 
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_finance_ledger_export_rows(
   p_actor_user_id uuid DEFAULT NULL::uuid,
   p_created_from date DEFAULT NULL::date,
@@ -20995,6 +21038,7 @@ BEGIN
       CASE vfcr.case_type
         WHEN 'PAYMENT_ADVANCE' THEN 'Payment Advance'
         WHEN 'OVERPAYMENT' THEN 'Overpayment'
+        WHEN 'UNDERPAYMENT' THEN 'Underpayment'
         WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'Manual Debt Adjustment'
         WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
         ELSE coalesce(vfcr.case_type, 'Finance Case')
@@ -21002,6 +21046,7 @@ BEGIN
       CASE vfcr.case_type
         WHEN 'PAYMENT_ADVANCE' THEN 'PAYMENT_ADVANCE'
         WHEN 'OVERPAYMENT' THEN 'OVERPAYMENT'
+        WHEN 'UNDERPAYMENT' THEN 'UNDERPAYMENT'
         WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'MANUAL_DEBT_ADJUSTMENT'
         WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'MANUAL_CREDIT_ADJUSTMENT'
         ELSE 'OTHER'
@@ -21085,7 +21130,13 @@ BEGIN
         WHEN vfcr.active_snooze_kind IS NULL THEN NULL
         WHEN vfcr.active_snooze_until_date IS NULL THEN 'INDEFINITE_DEFERRED'
         ELSE 'ACTIVE'
-      END AS active_snooze_visibility_status
+      END AS active_snooze_visibility_status,
+      coalesce(vfcr.is_mixed_case, false) AS is_mixed_case,
+      coalesce(vfcr.open_taxable_count, 0) AS open_taxable_count,
+      coalesce(vfcr.open_reimbursement_count, 0) AS open_reimbursement_count,
+      coalesce(vfcr.unresolved_taxable_count, 0) AS unresolved_taxable_count,
+      coalesce(vfcr.stale_count, 0) AS stale_count,
+      coalesce(vfcr.component_resolution_summary_json, '{}'::jsonb) AS component_resolution_summary_json
     FROM public.v_finance_cases_register AS vfcr
     LEFT JOIN public.candidates_summary AS cs
       ON cs.id = vfcr.candidate_id
@@ -21205,7 +21256,13 @@ BEGIN
           'active_snooze_note', orw.active_snooze_note,
           'active_snooze_created_at_utc', CASE WHEN orw.active_snooze_created_at_utc IS NULL THEN NULL ELSE orw.active_snooze_created_at_utc::text END,
           'active_snooze_updated_at_utc', CASE WHEN orw.active_snooze_updated_at_utc IS NULL THEN NULL ELSE orw.active_snooze_updated_at_utc::text END,
-          'active_snooze_visibility_status', orw.active_snooze_visibility_status
+          'active_snooze_visibility_status', orw.active_snooze_visibility_status,
+          'is_mixed_case', orw.is_mixed_case,
+          'open_taxable_count', orw.open_taxable_count,
+          'open_reimbursement_count', orw.open_reimbursement_count,
+          'unresolved_taxable_count', orw.unresolved_taxable_count,
+          'stale_count', orw.stale_count,
+          'component_resolution_summary_json', coalesce(orw.component_resolution_summary_json, '{}'::jsonb)
         )
       ),
       '[]'::jsonb
@@ -21216,11 +21273,17 @@ BEGIN
       'fully_paid_count', count(*) FILTER (WHERE orw.ledger_status = 'FULLY_PAID')::int,
       'payment_advance_count', count(*) FILTER (WHERE orw.case_type = 'PAYMENT_ADVANCE')::int,
       'overpayment_count', count(*) FILTER (WHERE orw.case_type = 'OVERPAYMENT')::int,
+      'underpayment_count', count(*) FILTER (WHERE orw.case_type = 'UNDERPAYMENT')::int,
       'manual_debt_adjustment_count', count(*) FILTER (WHERE orw.case_type = 'MANUAL_DEBT_ADJUSTMENT')::int,
       'manual_credit_adjustment_count', count(*) FILTER (WHERE orw.case_type = 'MANUAL_CREDIT_ADJUSTMENT')::int,
       'original_amount_total', round(coalesce(sum(orw.original_amount), 0), 2),
       'outstanding_amount_total', round(coalesce(sum(orw.outstanding_amount), 0), 2),
-      'active_reserved_amount_total', round(coalesce(sum(orw.active_reserved_amount), 0), 2)
+      'active_reserved_amount_total', round(coalesce(sum(orw.active_reserved_amount), 0), 2),
+      'mixed_case_count', count(*) FILTER (WHERE orw.is_mixed_case = true)::int,
+      'open_taxable_count_total', coalesce(sum(orw.open_taxable_count), 0)::int,
+      'open_reimbursement_count_total', coalesce(sum(orw.open_reimbursement_count), 0)::int,
+      'unresolved_taxable_count_total', coalesce(sum(orw.unresolved_taxable_count), 0)::int,
+      'stale_count_total', coalesce(sum(orw.stale_count), 0)::int
     )
   INTO v_rows, v_summary
   FROM ordered_rows AS orw;
@@ -21251,6 +21314,11 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_finance_ledger_pdf_payload(
@@ -21305,6 +21373,11 @@ BEGIN
       'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'row_group' = 'MANUAL_DEBT_ADJUSTMENT'), '[]'::jsonb)
     ),
     jsonb_build_object(
+      'row_group', 'UNDERPAYMENT',
+      'title', 'Underpayments',
+      'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'row_group' = 'UNDERPAYMENT'), '[]'::jsonb)
+    ),
+    jsonb_build_object(
       'row_group', 'MANUAL_CREDIT_ADJUSTMENT',
       'title', 'Manual Credit Adjustments',
       'rows', coalesce((SELECT jsonb_agg(e.elem) FROM jsonb_array_elements(v_rows) AS e(elem) WHERE e.elem->>'row_group' = 'MANUAL_CREDIT_ADJUSTMENT'), '[]'::jsonb)
@@ -21324,6 +21397,10 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_snoozes_export_rows(
   p_actor_user_id uuid DEFAULT NULL::uuid,
   p_created_from date DEFAULT NULL::date,
