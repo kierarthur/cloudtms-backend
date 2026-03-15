@@ -52226,6 +52226,78 @@ async function handleSearchClients(env, req) {
     idFilterExpr = `in.(${ids.join(',')})`;
   }
 
+  const normalizePickerRows = (value) => {
+    const arr = Array.isArray(value)
+      ? value
+      : ((value && typeof value === 'object' && Array.isArray(value.rows)) ? value.rows : (value == null ? [] : [value]));
+
+    return arr
+      .filter((row) => row && typeof row === 'object')
+      .map((row) => ({
+        id: row.id == null ? null : String(row.id),
+        name: row.name == null ? '' : String(row.name),
+        cli_ref: row.cli_ref == null ? '' : String(row.cli_ref),
+        primary_invoice_email: row.primary_invoice_email == null ? '' : String(row.primary_invoice_email),
+        is_nhsp: !!row.is_nhsp,
+        autoprocess_hr: !!row.autoprocess_hr,
+        rev: Number.isFinite(Number(row.rev)) ? Number(row.rev) : null,
+        updated_at: row.updated_at == null ? null : String(row.updated_at),
+        match_rank: Number.isFinite(Number(row.match_rank)) ? Number(row.match_rank) : null
+      }));
+  };
+
+  if (format === 'picker') {
+    const pickerQuery = String(
+      text ||
+      cliRef ||
+      primaryEmail ||
+      apPhone
+    ).trim();
+
+    const pickerPage = Math.max(1, parseInt(q('page') || '1', 10));
+    const pickerPageSize = Math.max(1, Math.min(50, parseInt(q('page_size') || '25', 10)));
+    const nhspOnly = String(q('nhsp_only') || q('is_nhsp') || '').trim().toLowerCase() === 'true';
+    const hrAutoOnly = String(q('hr_auto_only') || q('autoprocess_hr') || '').trim().toLowerCase() === 'true';
+
+    if (!pickerQuery || pickerQuery.length < 2) {
+      return withCORS(env, req, ok({
+        rows: [],
+        page: pickerPage,
+        page_size: pickerPageSize,
+        count: 0,
+        has_more: false
+      }));
+    }
+
+    try {
+      const rpcLimit = Math.max(1, Math.min(100, pickerPageSize + 1));
+      const rpcOffset = Math.max(0, (pickerPage - 1) * pickerPageSize);
+
+      const rpcRowsRaw = await sbRpc(env, 'client_picker_search', {
+        p_query: pickerQuery,
+        p_limit: rpcLimit,
+        p_offset: rpcOffset,
+        p_nhsp_only: nhspOnly,
+        p_hr_auto_only: hrAutoOnly
+      });
+
+      const rpcRows = normalizePickerRows(rpcRowsRaw);
+      const hasMore = rpcRows.length > pickerPageSize;
+      const outRows = rpcRows.slice(0, pickerPageSize);
+
+      return withCORS(env, req, ok({
+        rows: outRows,
+        page: pickerPage,
+        page_size: pickerPageSize,
+        count: outRows.length,
+        has_more: hasMore
+      }));
+    } catch (err) {
+      const msg = String(err?.message || err || 'Client picker search failed');
+      return withCORS(env, req, serverError(msg));
+    }
+  }
+
   const buildClientsApi = ({ selectClause = '*', withPaging = true, limitValue = pageSize, offsetValue = (page - 1) * pageSize, withOrder = true }) => {
     let api =
       `${env.SUPABASE_URL}/rest/v1/clients` +
@@ -52266,8 +52338,6 @@ async function handleSearchClients(env, req) {
     if (createdTo) api += `&created_at=lte.${enc(createdTo)}`;
     if (updatedFrom) api += `&updated_at=gte.${enc(updatedFrom)}`;
     if (updatedTo) api += `&updated_at=lte.${enc(updatedTo)}`;
-
-    // postcode intentionally not applied: no DB column yet
 
     return api;
   };
@@ -64186,8 +64256,6 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
 }
 
 
-
-
 async function handleTimesheetsResolvePreview(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -64199,11 +64267,37 @@ async function handleTimesheetsResolvePreview(env, req) {
     body = null;
   }
 
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+  const normalizeIdArray = (arr) => Array.from(new Set(
+    (Array.isArray(arr) ? arr : [])
+      .map((v) => trimStr(v))
+      .filter(Boolean)
+  ));
+  const clonePlain = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      const out = {};
+      Object.keys(value).forEach((key) => {
+        out[key] = value[key];
+      });
+      return out;
+    }
+  };
+
+  const selectionScope = (body && body.selection_scope && typeof body.selection_scope === 'object' && !Array.isArray(body.selection_scope))
+    ? body.selection_scope
+    : ((body && body.selectionScope && typeof body.selectionScope === 'object' && !Array.isArray(body.selectionScope)) ? body.selectionScope : null);
+
   const ids = Array.isArray(body?.timesheet_ids)
     ? [...new Set(body.timesheet_ids.map(String).filter(Boolean))]
     : [];
 
-  if (!ids.length) {
+  const previewLimitRaw = Number(body?.preview_limit ?? body?.previewLimit ?? 200);
+  const previewLimit = Number.isFinite(previewLimitRaw) ? Math.max(1, Math.min(500, Math.trunc(previewLimitRaw))) : 200;
+
+  if (!selectionScope && !ids.length) {
     return withCORS(
       env,
       req,
@@ -64211,36 +64305,162 @@ async function handleTimesheetsResolvePreview(env, req) {
     );
   }
 
-  const enc = encodeURIComponent;
-  const idsParam = ids.map(enc).join(',');
+  const fetchResolveRows = async (timesheetIds) => {
+    const rowsByTimesheetId = new Map();
+    const chunkSize = 200;
+
+    for (let idx = 0; idx < timesheetIds.length; idx += chunkSize) {
+      const chunk = timesheetIds.slice(idx, idx + chunkSize);
+      const idsParam = chunk.map(encodeURIComponent).join(',');
+      if (!idsParam) continue;
+
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+          `?timesheet_id=in.(${idsParam})` +
+          `&select=` +
+            [
+              'timesheet_id',
+              'sheet_scope',
+              'week_ending_date',
+              'candidate_id',
+              'client_id',
+              'processing_status',
+              'occupant_key_norm',
+              'hospital_norm',
+              'candidate_name',
+              'candidate_hint_text'
+            ].join(',')
+      );
+
+      (rows || []).forEach((row) => {
+        const timesheetId = trimStr(row && row.timesheet_id);
+        if (!timesheetId) return;
+        rowsByTimesheetId.set(timesheetId, row);
+      });
+    }
+
+    return rowsByTimesheetId;
+  };
 
   try {
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-        `?timesheet_id=in.(${idsParam})` +
-        `&select=` +
-          [
-            'timesheet_id',
-            'sheet_scope',
-            'week_ending_date',
-            'candidate_id',
-            'client_id',
-            'processing_status',
-            'occupant_key_norm',
-            'hospital_norm',
-            // ✅ NEW: needed for hint display + seeded best matches
-            'candidate_name',
-            'candidate_hint_text'
-          ].join(',')
+    if (!selectionScope) {
+      const rowsByTimesheetId = await fetchResolveRows(ids);
+
+      const filtered = ids
+        .map((timesheetId) => rowsByTimesheetId.get(String(timesheetId)) || null)
+        .filter(Boolean)
+        .filter((row) => {
+          const p = String(row.processing_status || '').toUpperCase();
+          return p === 'UNASSIGNED' || p === 'CLIENT_UNRESOLVED';
+        });
+
+      return withCORS(env, req, ok(filtered));
+    }
+
+    const selectionMode = trimStr(selectionScope.selection_mode || selectionScope.mode).toLowerCase() === 'all_filtered'
+      ? 'all_filtered'
+      : 'explicit';
+
+    const includedIds = normalizeIdArray(
+      Array.isArray(selectionScope.included_ids)
+        ? selectionScope.included_ids
+        : (Array.isArray(selectionScope.ids) ? selectionScope.ids : [])
     );
 
-    const filtered = (rows || []).filter((r) => {
-      const p = String(r.processing_status || '').toUpperCase();
-      return p === 'UNASSIGNED' || p === 'CLIENT_UNRESOLVED';
+    const excludedIds = normalizeIdArray(
+      selectionMode === 'all_filtered' && Array.isArray(selectionScope.excluded_ids)
+        ? selectionScope.excluded_ids
+        : []
+    );
+
+    const effectiveFilters = clonePlain(
+      (body && body.effective_filters && typeof body.effective_filters === 'object' && !Array.isArray(body.effective_filters))
+        ? body.effective_filters
+        : ((selectionScope.effective_filters && typeof selectionScope.effective_filters === 'object' && !Array.isArray(selectionScope.effective_filters))
+            ? selectionScope.effective_filters
+            : ((selectionScope.filters && typeof selectionScope.filters === 'object' && !Array.isArray(selectionScope.filters))
+                ? selectionScope.filters
+                : {}))
+    );
+
+    const resolvedSelection = await resolveBulkContextIdsFromSummarySelection(
+      'timesheets',
+      effectiveFilters,
+      selectionMode,
+      includedIds,
+      excludedIds,
+      env,
+      req
+    );
+
+    const timesheetIds = normalizeIdArray(resolvedSelection && resolvedSelection.context_ids);
+    const skippedRows = Array.isArray(resolvedSelection && resolvedSelection.skipped_rows)
+      ? resolvedSelection.skipped_rows.map((row) => ({
+          selected_row_id: row && row.selected_row_id != null ? String(row.selected_row_id) : null,
+          skip_reason: row && row.skip_reason != null ? String(row.skip_reason) : 'SKIPPED'
+        }))
+      : [];
+
+    if (!timesheetIds.length) {
+      return withCORS(env, req, ok({
+        rows: [],
+        unresolved_total: 0,
+        preview_count: 0,
+        capped: false,
+        selection_scope: {
+          section: 'timesheets',
+          dataset_key: trimStr(selectionScope.dataset_key || selectionScope.fingerprint || ''),
+          selection_mode: selectionMode,
+          included_ids: includedIds.slice(),
+          excluded_ids: excludedIds.slice(),
+          effective_filters: effectiveFilters
+        },
+        resolved_timesheet_ids: [],
+        skipped_rows: skippedRows
+      }));
+    }
+
+    const rowsByTimesheetId = await fetchResolveRows(timesheetIds);
+
+    const fetchSkippedRows = [];
+    const filtered = [];
+
+    timesheetIds.forEach((timesheetId) => {
+      const row = rowsByTimesheetId.get(timesheetId) || null;
+      if (!row) {
+        fetchSkippedRows.push({
+          selected_row_id: timesheetId,
+          skip_reason: 'TIMESHEET_NOT_FOUND'
+        });
+        return;
+      }
+
+      const p = String(row.processing_status || '').toUpperCase();
+      if (p === 'UNASSIGNED' || p === 'CLIENT_UNRESOLVED') {
+        filtered.push(row);
+      }
     });
 
-    return withCORS(env, req, ok(filtered));
+    const previewRows = filtered.slice(0, previewLimit);
+    const capped = filtered.length > previewLimit;
+
+    return withCORS(env, req, ok({
+      rows: previewRows,
+      unresolved_total: filtered.length,
+      preview_count: previewRows.length,
+      capped,
+      selection_scope: {
+        section: 'timesheets',
+        dataset_key: trimStr(selectionScope.dataset_key || selectionScope.fingerprint || ''),
+        selection_mode: selectionMode,
+        included_ids: includedIds.slice(),
+        excluded_ids: excludedIds.slice(),
+        effective_filters: effectiveFilters
+      },
+      resolved_timesheet_ids: timesheetIds,
+      skipped_rows: skippedRows.concat(fetchSkippedRows)
+    }));
   } catch (e) {
     return withCORS(
       env,
@@ -64249,6 +64469,8 @@ async function handleTimesheetsResolvePreview(env, req) {
     );
   }
 }
+
+
 
 async function handleTimesheetResolveCandidate(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -66144,11 +66366,39 @@ async function handleSearchCandidates(env, req) {
     ? subtractMonthsYMD(londonYMDNow(), recentMonths)
     : null;
 
-  const buildCandidatesApi = ({ selectClause = '*', withPaging = true, limitValue = pageSize, offsetValue = (page - 1) * pageSize, withOrder = true }) => {
+  const normalizePickerRows = (value) => {
+    const arr = Array.isArray(value)
+      ? value
+      : ((value && typeof value === 'object' && Array.isArray(value.rows)) ? value.rows : (value == null ? [] : [value]));
+
+    return arr
+      .filter((row) => row && typeof row === 'object')
+      .map((row) => ({
+        id: row.id == null ? null : String(row.id),
+        display_name: row.display_name == null ? '' : String(row.display_name),
+        first_name: row.first_name == null ? '' : String(row.first_name),
+        last_name: row.last_name == null ? '' : String(row.last_name),
+        email: row.email == null ? '' : String(row.email),
+        phone: row.phone == null ? '' : String(row.phone),
+        tms_ref: row.tms_ref == null ? '' : String(row.tms_ref),
+        roles: row.roles == null ? null : row.roles,
+        job_titles_display: row.job_titles_display == null ? '' : String(row.job_titles_display),
+        active: !!row.active,
+        match_rank: Number.isFinite(Number(row.match_rank)) ? Number(row.match_rank) : null
+      }));
+  };
+
+  const buildCandidatesApi = ({
+    selectClause = '*',
+    withPaging = true,
+    limitValue = pageSize,
+    offsetValue = (page - 1) * pageSize,
+    withOrder = true
+  }) => {
     const orderExpr =
       (orderCol === '__tms_ref')
-        ? `${enc('tms_ref_num')}.${orderDir},${enc('tms_ref')}.${orderDir}`
-        : `${enc(orderCol)}.${orderDir}`;
+        ? `${enc('tms_ref_num')}.${orderDir},${enc('tms_ref')}.${orderDir},id.asc`
+        : `${enc(orderCol)}.${orderDir},id.asc`;
 
     let api =
       `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
@@ -66292,6 +66542,55 @@ async function handleSearchCandidates(env, req) {
     return api;
   };
 
+  if (format === 'picker') {
+    const pickerQuery = String(
+      text ||
+      tmsRef ||
+      email ||
+      phone ||
+      [firstName, lastName].filter(Boolean).join(' ')
+    ).trim();
+
+    const pickerPage = Math.max(1, parseInt(q('page') || '1', 10));
+    const pickerPageSize = Math.max(1, Math.min(50, parseInt(q('page_size') || '25', 10)));
+
+    if (!pickerQuery || pickerQuery.length < 2) {
+      return withCORS(env, req, ok({
+        rows: [],
+        page: pickerPage,
+        page_size: pickerPageSize,
+        count: 0,
+        has_more: false
+      }));
+    }
+
+    try {
+      const pickerApi = buildCandidatesApi({
+        selectClause: 'id,display_name,first_name,last_name,email,phone,tms_ref,roles,job_titles_display,active',
+        withPaging: true,
+        limitValue: pickerPageSize + 1,
+        offsetValue: (pickerPage - 1) * pickerPageSize,
+        withOrder: true
+      });
+
+      const { rows } = await sbFetch(env, pickerApi, false);
+      const pickerRows = normalizePickerRows(rows);
+      const hasMore = pickerRows.length > pickerPageSize;
+      const outRows = pickerRows.slice(0, pickerPageSize);
+
+      return withCORS(env, req, ok({
+        rows: outRows,
+        page: pickerPage,
+        page_size: pickerPageSize,
+        count: outRows.length,
+        has_more: hasMore
+      }));
+    } catch (err) {
+      const msg = String(err?.message || err || 'Candidate picker search failed');
+      return withCORS(env, req, serverError(msg));
+    }
+  }
+
   if (format === 'membership') {
     const idsOut = [];
     const seen = new Set();
@@ -66305,7 +66604,7 @@ async function handleSearchCandidates(env, req) {
           withPaging: true,
           limitValue: batchSize,
           offsetValue: offset,
-          withOrder: false
+          withOrder: true
         });
 
         const { rows } = await sbFetch(env, api, false);
@@ -66440,38 +66739,47 @@ async function handleSearchCandidates(env, req) {
   }));
 }
 
-
-
-
-
- async function handleListCandidates(env, req) {
+async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  const params = new URL(req.url).searchParams;
-  const includeCount = params.get('include_count') === 'true';
-
-  // Prefer page/page_size; fall back to limit/offset for backward compatibility
-  const pageRaw      = parseInt(params.get('page') || '1', 10);
-  const pageSizeRaw  = params.get('page_size');
-  const legacyLimit  = parseInt(params.get('limit')  || '50', 10);
-  const legacyOffset = parseInt(params.get('offset') || '0',  10);
-
-  const page     = Math.max(1, isNaN(pageRaw) ? 1 : pageRaw);
-  const pageSize = pageSizeRaw != null ? Math.max(1, Math.min(200, parseInt(pageSizeRaw, 10) || 50)) : null;
-  const limit    = pageSize != null ? pageSize : Math.max(1, Math.min(200, isNaN(legacyLimit) ? 50 : legacyLimit));
-  const offset   = pageSize != null ? (page - 1) * limit : Math.max(0, isNaN(legacyOffset) ? 0 : legacyOffset);
-
-  const url = new URL(`${env.SUPABASE_URL}/rest/v1/candidates`);
-  url.searchParams.set('select', '*');
-  url.searchParams.set('order',  'display_name.asc');
-  url.searchParams.set('limit',  String(limit));
-  url.searchParams.set('offset', String(offset));
-
   try {
-    const { rows, total } = await sbFetch(env, url.toString(), includeCount);
-    const resp = includeCount ? { items: rows, count: total ?? undefined } : { items: rows };
-    return withCORS(env, req, ok(resp));
+    const incomingUrl = new URL(req.url);
+    const forwardUrl = new URL(incomingUrl.toString());
+    forwardUrl.pathname = '/api/search/candidates';
+
+    const internalReq = new Request(forwardUrl.toString(), {
+      method: 'GET',
+      headers: req.headers
+    });
+
+    const resp = await handleSearchCandidates(env, internalReq);
+    if (!resp) return withCORS(env, req, serverError('Failed to list candidates'));
+
+    let payload = null;
+    try { payload = await resp.clone().json(); } catch { payload = null; }
+
+    if (!resp.ok) {
+      return withCORS(env, req, resp);
+    }
+
+    if (payload && typeof payload === 'object' && Array.isArray(payload.rows)) {
+      return withCORS(env, req, ok({
+        items: payload.rows,
+        count: (typeof payload.count === 'number') ? payload.count : undefined,
+        page: payload.page,
+        page_size: payload.page_size
+      }));
+    }
+
+    if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
+      return withCORS(env, req, ok(payload));
+    }
+
+    return withCORS(env, req, ok({
+      items: [],
+      count: 0
+    }));
   } catch {
     return withCORS(env, req, serverError('Failed to list candidates'));
   }
