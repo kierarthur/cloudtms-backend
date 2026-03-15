@@ -15233,7 +15233,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_finance_case_audit_feed(
   p_finance_case_id uuid
 )
@@ -15246,6 +15245,7 @@ declare
   v_finance_case_id uuid := p_finance_case_id;
   v_case record;
   v_timeline jsonb := '[]'::jsonb;
+  v_current_component_state jsonb := '[]'::jsonb;
 begin
   if v_finance_case_id is null then
     raise exception 'pay_finance_case_audit_feed: finance_case_id is required';
@@ -15292,7 +15292,13 @@ begin
     vfcr.schedule_json,
     vfcr.notes,
     vfcr.created_at,
-    vfcr.updated_at
+    vfcr.updated_at,
+    vfcr.is_mixed_case,
+    vfcr.open_taxable_count,
+    vfcr.open_reimbursement_count,
+    vfcr.unresolved_taxable_count,
+    vfcr.stale_count,
+    vfcr.component_resolution_summary_json
   into v_case
   from public.v_finance_cases_register vfcr
   where vfcr.finance_case_id = v_finance_case_id;
@@ -15300,6 +15306,50 @@ begin
   if v_case.finance_case_id is null then
     raise exception 'pay_finance_case_audit_feed: finance case % not found.', v_finance_case_id;
   end if;
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'finance_component_id', pfc.id::text,
+          'candidate_id', pfc.candidate_id::text,
+          'client_id', case when pfc.client_id is null then null else pfc.client_id::text end,
+          'linked_timesheet_id', case when pfc.linked_timesheet_id is null then null else pfc.linked_timesheet_id::text end,
+          'source_family_key', pfc.source_family_key,
+          'component_key_type', pfc.component_key_type,
+          'component_key_value', pfc.component_key_value,
+          'classification', pfc.classification::text,
+          'source_pay_method', pfc.source_pay_method,
+          'source_basis_json', pfc.source_basis_json,
+          'source_amount', pfc.source_amount,
+          'remaining_source_amount', pfc.remaining_source_amount,
+          'saved_target_pay_method', pfc.saved_target_pay_method,
+          'saved_resolution_mode', case when pfc.saved_resolution_mode is null then null else pfc.saved_resolution_mode::text end,
+          'saved_resolution_payload_json', pfc.saved_resolution_payload_json,
+          'saved_resolution_result_json', pfc.saved_resolution_result_json,
+          'resolution_fingerprint', pfc.resolution_fingerprint,
+          'is_resolution_stale', pfc.is_resolution_stale,
+          'stale_reason', pfc.stale_reason,
+          'allocation_priority_group', pfc.allocation_priority_group,
+          'allocation_priority_order', pfc.allocation_priority_order,
+          'created_at_utc', pfc.created_at_utc,
+          'updated_at_utc', pfc.updated_at_utc,
+          'resolved_at_utc', pfc.resolved_at_utc,
+          'closed_at_utc', pfc.closed_at_utc
+        )
+        order by
+          pfc.source_family_key,
+          pfc.allocation_priority_group,
+          pfc.allocation_priority_order,
+          pfc.component_key_type,
+          pfc.component_key_value
+      ),
+      '[]'::jsonb
+    )
+  into v_current_component_state
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = v_finance_case_id
+    and pfc.closed_at_utc is null;
 
   with booking_ctx as (
     select ts.booking_id
@@ -15320,8 +15370,33 @@ begin
       case when pfce.pay_batch_id is null then null else pfce.pay_batch_id::text end as pay_batch_id_text,
       case when pfce.reservation_id is null then null else pfce.reservation_id::text end as reservation_id_text,
       null::text as timesheet_id_text,
-      null::jsonb as meta_json
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'finance_component_id', case when pfce.finance_component_id is null then null else pfce.finance_component_id::text end,
+          'classification', case when pfc.classification is null then null else pfc.classification::text end,
+          'source_pay_method', pfc.source_pay_method,
+          'target_pay_method', pfc.saved_target_pay_method,
+          'resolution_mode', case when pfc.saved_resolution_mode is null then null else pfc.saved_resolution_mode::text end,
+          'resolution_payload_json', pfc.saved_resolution_payload_json,
+          'resolution_result_json', pfc.saved_resolution_result_json,
+          'stale_reason', pfc.stale_reason,
+          'remaining_source_amount', pfc.remaining_source_amount,
+          'frozen_component_snapshot_json', par.frozen_component_snapshot_json,
+          'frozen_source_basis_json', par.frozen_source_basis_json,
+          'frozen_source_pay_method', par.frozen_source_pay_method,
+          'frozen_target_pay_method', par.frozen_target_pay_method,
+          'frozen_resolution_mode', case when par.frozen_resolution_mode is null then null else par.frozen_resolution_mode::text end,
+          'frozen_resolution_payload_json', par.frozen_resolution_payload_json,
+          'frozen_resolution_result_json', par.frozen_resolution_result_json,
+          'reserved_source_amount', par.reserved_source_amount,
+          'frozen_rounded_target_amount', par.frozen_rounded_target_amount
+        )
+      ) as meta_json
     from public.pay_finance_case_events pfce
+    left join public.pay_finance_case_components pfc
+      on pfc.id = pfce.finance_component_id
+    left join public.pay_advance_reservations par
+      on par.id = pfce.reservation_id
     where pfce.finance_case_id = v_finance_case_id
   ),
   reservation_events as (
@@ -15347,13 +15422,32 @@ begin
         jsonb_build_object(
           'reserved_amount', par.reserved_amount,
           'repayment_week_start', case when par.repayment_week_start is null then null else par.repayment_week_start::text end,
-          'status', par.status
+          'status', par.status,
+          'finance_component_id', case when par.finance_component_id is null then null else par.finance_component_id::text end,
+          'frozen_component_classification', case when par.frozen_component_classification is null then null else par.frozen_component_classification::text end,
+          'frozen_source_basis_json', par.frozen_source_basis_json,
+          'frozen_source_pay_method', par.frozen_source_pay_method,
+          'frozen_target_pay_method', par.frozen_target_pay_method,
+          'frozen_resolution_mode', case when par.frozen_resolution_mode is null then null else par.frozen_resolution_mode::text end,
+          'frozen_resolution_payload_json', par.frozen_resolution_payload_json,
+          'frozen_resolution_result_json', par.frozen_resolution_result_json,
+          'reserved_source_amount', par.reserved_source_amount,
+          'frozen_rounded_target_amount', par.frozen_rounded_target_amount,
+          'frozen_component_snapshot_json', par.frozen_component_snapshot_json
         ) as after_json,
         null::text as reason,
         null::text as note,
         par.pay_batch_id::text as pay_batch_id_text,
         par.id::text as reservation_id_text,
-        jsonb_build_object('reservation_status', par.status) as meta_json
+        jsonb_build_object(
+          'reservation_status', par.status,
+          'finance_component_id', case when par.finance_component_id is null then null else par.finance_component_id::text end,
+          'frozen_component_classification', case when par.frozen_component_classification is null then null else par.frozen_component_classification::text end,
+          'frozen_source_pay_method', par.frozen_source_pay_method,
+          'frozen_target_pay_method', par.frozen_target_pay_method,
+          'frozen_resolution_mode', case when par.frozen_resolution_mode is null then null else par.frozen_resolution_mode::text end,
+          'reserved_source_amount', par.reserved_source_amount
+        ) as meta_json
       from public.pay_advance_reservations par
       where par.finance_case_id = v_finance_case_id
         and par.created_at_utc is not null
@@ -15365,12 +15459,22 @@ begin
         'COMMITTED'::text as event_type,
         'Finance reservation committed'::text as title,
         null::jsonb as before_json,
-        jsonb_build_object('reserved_amount', par.reserved_amount, 'status', 'COMMITTED') as after_json,
+        jsonb_build_object(
+          'reserved_amount', par.reserved_amount,
+          'status', 'COMMITTED',
+          'finance_component_id', case when par.finance_component_id is null then null else par.finance_component_id::text end,
+          'frozen_component_snapshot_json', par.frozen_component_snapshot_json,
+          'reserved_source_amount', par.reserved_source_amount,
+          'frozen_rounded_target_amount', par.frozen_rounded_target_amount
+        ) as after_json,
         null::text as reason,
         null::text as note,
         par.pay_batch_id::text as pay_batch_id_text,
         par.id::text as reservation_id_text,
-        jsonb_build_object('reservation_status', 'COMMITTED') as meta_json
+        jsonb_build_object(
+          'reservation_status', 'COMMITTED',
+          'finance_component_id', case when par.finance_component_id is null then null else par.finance_component_id::text end
+        ) as meta_json
       from public.pay_advance_reservations par
       where par.finance_case_id = v_finance_case_id
         and par.committed_at_utc is not null
@@ -15382,12 +15486,22 @@ begin
         'SETTLED'::text as event_type,
         'Finance reservation settled'::text as title,
         null::jsonb as before_json,
-        jsonb_build_object('reserved_amount', par.reserved_amount, 'status', 'SETTLED') as after_json,
+        jsonb_build_object(
+          'reserved_amount', par.reserved_amount,
+          'status', 'SETTLED',
+          'finance_component_id', case when par.finance_component_id is null then null else par.finance_component_id::text end,
+          'frozen_component_snapshot_json', par.frozen_component_snapshot_json,
+          'reserved_source_amount', par.reserved_source_amount,
+          'frozen_rounded_target_amount', par.frozen_rounded_target_amount
+        ) as after_json,
         null::text as reason,
         null::text as note,
         par.pay_batch_id::text as pay_batch_id_text,
         par.id::text as reservation_id_text,
-        jsonb_build_object('reservation_status', 'SETTLED') as meta_json
+        jsonb_build_object(
+          'reservation_status', 'SETTLED',
+          'finance_component_id', case when par.finance_component_id is null then null else par.finance_component_id::text end
+        ) as meta_json
       from public.pay_advance_reservations par
       where par.finance_case_id = v_finance_case_id
         and par.settled_at_utc is not null
@@ -15399,17 +15513,75 @@ begin
         'RELEASED'::text as event_type,
         'Finance reservation released'::text as title,
         null::jsonb as before_json,
-        jsonb_build_object('reserved_amount', par.reserved_amount, 'status', 'RELEASED') as after_json,
+        jsonb_build_object(
+          'reserved_amount', par.reserved_amount,
+          'status', 'RELEASED',
+          'finance_component_id', case when par.finance_component_id is null then null else par.finance_component_id::text end,
+          'released_reason', par.released_reason,
+          'frozen_component_snapshot_json', par.frozen_component_snapshot_json,
+          'reserved_source_amount', par.reserved_source_amount,
+          'frozen_rounded_target_amount', par.frozen_rounded_target_amount
+        ) as after_json,
         par.released_reason as reason,
         null::text as note,
         par.pay_batch_id::text as pay_batch_id_text,
         par.id::text as reservation_id_text,
-        jsonb_build_object('reservation_status', 'RELEASED') as meta_json
+        jsonb_build_object(
+          'reservation_status', 'RELEASED',
+          'finance_component_id', case when par.finance_component_id is null then null else par.finance_component_id::text end
+        ) as meta_json
       from public.pay_advance_reservations par
       where par.finance_case_id = v_finance_case_id
         and par.released_at_utc is not null
     ) x
     where x.at_utc is not null
+  ),
+  batch_item_events as (
+    select
+      pbi.created_at as at_utc,
+      'BATCH_ITEM'::text as source,
+      coalesce(pbi.item_type, 'BATCH_ITEM_CREATED')::text as event_type,
+      'Finance batch item created'::text as title,
+      null::jsonb as before_json,
+      jsonb_build_object(
+        'item_type', pbi.item_type,
+        'finance_case_id', case when pbi.finance_case_id is null then null else pbi.finance_case_id::text end,
+        'finance_component_id', case when pbi.finance_component_id is null then null else pbi.finance_component_id::text end,
+        'frozen_component_classification', case when pbi.frozen_component_classification is null then null else pbi.frozen_component_classification::text end,
+        'frozen_source_basis_json', pbi.frozen_source_basis_json,
+        'frozen_source_pay_method', pbi.frozen_source_pay_method,
+        'frozen_target_pay_method', pbi.frozen_target_pay_method,
+        'frozen_resolution_mode', case when pbi.frozen_resolution_mode is null then null else pbi.frozen_resolution_mode::text end,
+        'frozen_resolution_payload_json', pbi.frozen_resolution_payload_json,
+        'frozen_resolution_result_json', pbi.frozen_resolution_result_json,
+        'frozen_source_amount', pbi.frozen_source_amount,
+        'frozen_target_amount_ex_vat', pbi.frozen_target_amount_ex_vat,
+        'frozen_target_amount_vat', pbi.frozen_target_amount_vat,
+        'frozen_target_amount_inc_vat', pbi.frozen_target_amount_inc_vat,
+        'frozen_component_snapshot_json', pbi.frozen_component_snapshot_json,
+        'is_voided', pbi.is_voided
+      ) as after_json,
+      null::text as reason,
+      null::text as note,
+      pbc.pay_batch_id::text as pay_batch_id_text,
+      null::text as reservation_id_text,
+      null::text as timesheet_id_text,
+      jsonb_build_object(
+        'pay_batch_candidate_id', pbi.pay_batch_candidate_id::text,
+        'finance_component_id', case when pbi.finance_component_id is null then null else pbi.finance_component_id::text end,
+        'is_voided', pbi.is_voided
+      ) as meta_json
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    where pbi.created_at is not null
+      and (
+        pbi.finance_case_id = v_finance_case_id
+        or (
+          pbi.source_ref is not null
+          and pbi.source_ref = ('advance:' || v_finance_case_id::text)
+        )
+      )
   ),
   patch_events as (
     select
@@ -15916,6 +16088,7 @@ begin
   all_events as (
     select * from finance_events
     union all select * from reservation_events
+    union all select * from batch_item_events
     union all select * from patch_events
     union all select * from snooze_events
     union all select * from generic_audit_events
@@ -15991,13 +16164,19 @@ begin
       'schedule_json', v_case.schedule_json,
       'notes', v_case.notes,
       'created_at', v_case.created_at,
-      'updated_at', v_case.updated_at
+      'updated_at', v_case.updated_at,
+      'is_mixed_case', v_case.is_mixed_case,
+      'open_taxable_count', v_case.open_taxable_count,
+      'open_reimbursement_count', v_case.open_reimbursement_count,
+      'unresolved_taxable_count', v_case.unresolved_taxable_count,
+      'stale_count', v_case.stale_count,
+      'component_resolution_summary_json', v_case.component_resolution_summary_json
     ),
+    'current_component_state', coalesce(v_current_component_state, '[]'::jsonb),
     'timeline', coalesce(v_timeline, '[]'::jsonb)
   );
 end;
 $function$;
-
 
 
 
