@@ -17070,6 +17070,7 @@ end;
 $function$;
 
 
+
 create or replace function public.pay_payment_advance_create(
   p_candidate_id uuid,
   p_principal_amount numeric,
@@ -17100,6 +17101,7 @@ declare
   v_pay_batch_id uuid := null;
   v_pay_batch_candidate_id uuid := null;
   v_pay_batch_item_id uuid := null;
+  v_finance_component_id uuid := null;
 
   v_warnings jsonb := '[]'::jsonb;
 
@@ -17122,6 +17124,11 @@ declare
   v_schedule_input_mode text := null;
   v_has_weekly_due_input boolean := false;
   v_has_weeks_total_input boolean := false;
+
+  v_source_family_key text := null;
+  v_component_source_basis_json jsonb := '{}'::jsonb;
+  v_component_snapshot_json jsonb := '{}'::jsonb;
+  v_component_summary_json jsonb := '{}'::jsonb;
 begin
   if p_candidate_id is null then
     raise exception '%', jsonb_build_object(
@@ -17431,6 +17438,105 @@ begin
   )
   returning id into v_finance_case_id;
 
+  v_source_family_key := 'case:' || v_finance_case_id::text;
+  v_component_source_basis_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'case_type', 'PAYMENT_ADVANCE',
+      'advance_kind', 'LOAN',
+      'principal_amount', v_principal_amount_norm,
+      'weekly_due', v_weekly_due_norm,
+      'weeks_total', v_weeks_total_norm,
+      'start_week_start', p_start_week_start::text,
+      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+      'schedule_json', coalesce(v_schedule_json, '[]'::jsonb),
+      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+      'note', nullif(btrim(coalesce(p_note,'')), '')
+    )
+  );
+
+  insert into public.pay_finance_case_components (
+    finance_case_id,
+    candidate_id,
+    client_id,
+    linked_timesheet_id,
+    source_family_key,
+    component_key_type,
+    component_key_value,
+    classification,
+    source_pay_method,
+    source_basis_json,
+    source_amount,
+    remaining_source_amount,
+    saved_target_pay_method,
+    saved_resolution_mode,
+    saved_resolution_payload_json,
+    saved_resolution_result_json,
+    resolution_fingerprint,
+    is_resolution_stale,
+    stale_reason,
+    allocation_priority_group,
+    allocation_priority_order,
+    created_at_utc,
+    updated_at_utc,
+    resolved_at_utc,
+    closed_at_utc
+  )
+  values (
+    v_finance_case_id,
+    p_candidate_id,
+    null::uuid,
+    null::uuid,
+    v_source_family_key,
+    'CASE_TOTAL',
+    'TOTAL',
+    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    v_candidate.pay_method,
+    v_component_source_basis_json,
+    v_principal_amount_norm,
+    v_principal_amount_norm,
+    null,
+    null,
+    null,
+    null,
+    null,
+    false,
+    null,
+    0,
+    0,
+    v_now_utc,
+    v_now_utc,
+    null,
+    null
+  )
+  returning id into v_finance_component_id;
+
+  v_component_snapshot_json := jsonb_build_object(
+    'finance_component_id', v_finance_component_id::text,
+    'finance_case_id', v_finance_case_id::text,
+    'source_family_key', v_source_family_key,
+    'component_key_type', 'CASE_TOTAL',
+    'component_key_value', 'TOTAL',
+    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'source_pay_method', v_candidate.pay_method,
+    'target_pay_method', v_candidate.pay_method,
+    'source_basis_json', v_component_source_basis_json,
+    'source_amount', v_principal_amount_norm,
+    'remaining_source_amount', v_principal_amount_norm,
+    'current_component_fingerprint', public.pay_finance_component_fingerprint(
+      p_source_family_key => v_source_family_key,
+      p_component_key_type => 'CASE_TOTAL',
+      p_component_key_value => 'TOTAL',
+      p_classification => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      p_source_pay_method => v_candidate.pay_method,
+      p_current_target_pay_method => v_candidate.pay_method,
+      p_source_basis_json => v_component_source_basis_json,
+      p_source_amount => v_principal_amount_norm,
+      p_relevant_erni_pct => null,
+      p_target_basis_json => jsonb_build_object('current_target_pay_method', v_candidate.pay_method)
+    )
+  );
+
   insert into public.pay_batches(
     pay_date,
     created_at_utc,
@@ -17513,7 +17619,22 @@ begin
     updated_at,
     finance_case_id,
     reservation_id,
-    paye_treatment
+    paye_treatment,
+    finance_component_id,
+    frozen_component_snapshot_json,
+    frozen_component_key_type,
+    frozen_component_key_value,
+    frozen_component_classification,
+    frozen_source_basis_json,
+    frozen_source_pay_method,
+    frozen_target_pay_method,
+    frozen_resolution_mode,
+    frozen_resolution_payload_json,
+    frozen_resolution_result_json,
+    frozen_source_amount,
+    frozen_target_amount_ex_vat,
+    frozen_target_amount_vat,
+    frozen_target_amount_inc_vat
   )
   values (
     v_pay_batch_candidate_id,
@@ -17536,7 +17657,22 @@ begin
     v_now_utc,
     v_finance_case_id,
     null::uuid,
-    v_paye_treatment
+    v_paye_treatment,
+    v_finance_component_id,
+    v_component_snapshot_json,
+    'CASE_TOTAL',
+    'TOTAL',
+    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    v_component_source_basis_json,
+    v_candidate.pay_method,
+    v_candidate.pay_method,
+    null,
+    null,
+    null,
+    v_principal_amount_norm,
+    v_principal_amount_norm,
+    0,
+    v_principal_amount_norm
   )
   returning id into v_pay_batch_item_id;
 
@@ -17570,6 +17706,7 @@ begin
 
   insert into public.pay_finance_case_events(
     finance_case_id,
+    finance_component_id,
     event_type,
     event_at_utc,
     actor_user_id,
@@ -17581,6 +17718,7 @@ begin
   )
   values (
     v_finance_case_id,
+    null,
     'CREATED',
     v_now_utc,
     p_actor_user_id,
@@ -17602,6 +17740,31 @@ begin
     ),
     null::text,
     'Payment Advance created'
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    v_finance_component_id,
+    'COMPONENT_CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    v_pay_batch_id,
+    null::jsonb,
+    v_component_snapshot_json,
+    'PAYMENT_ADVANCE_COMPONENT_CREATE',
+    'Created taxable finance component for Payment Advance principal'
   );
 
   if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
@@ -17666,6 +17829,22 @@ begin
     end if;
   end if;
 
+  v_component_summary_json := jsonb_build_object(
+    'finance_component_id', v_finance_component_id::text,
+    'source_family_key', v_source_family_key,
+    'component_key_type', 'CASE_TOTAL',
+    'component_key_value', 'TOTAL',
+    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'source_pay_method', v_candidate.pay_method,
+    'source_amount', v_principal_amount_norm,
+    'remaining_source_amount', v_principal_amount_norm,
+    'saved_target_pay_method', null,
+    'saved_resolution_mode', null,
+    'is_resolution_stale', false,
+    'stale_reason', null,
+    'source_basis_json', v_component_source_basis_json
+  );
+
   return jsonb_build_object(
     'ok', true,
     'finance_case_id', v_finance_case_id::text,
@@ -17685,12 +17864,12 @@ begin
     'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
     'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
     'schedule_json', coalesce(v_schedule_json,'[]'::jsonb),
+    'finance_component_id', v_finance_component_id::text,
+    'component_summary', v_component_summary_json,
     'warnings', v_warnings
   );
 end;
 $$;
-
-
 
 
 create or replace function public.pay_finance_case_restructure(
@@ -18015,7 +18194,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.pay_payment_advance_update(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -18061,6 +18239,22 @@ declare
   v_schedule_input_mode text := null;
   v_has_weekly_due_input boolean := false;
   v_has_weeks_total_input boolean := false;
+
+  v_component public.pay_finance_case_components%rowtype;
+  v_component_after public.pay_finance_case_components%rowtype;
+  v_finance_component_id uuid := null;
+  v_component_before_json jsonb := '{}'::jsonb;
+  v_component_after_json jsonb := '{}'::jsonb;
+  v_component_source_basis_json jsonb := '{}'::jsonb;
+  v_component_snapshot_json jsonb := '{}'::jsonb;
+  v_component_summary_json jsonb := '{}'::jsonb;
+  v_component_has_saved_resolution boolean := false;
+  v_component_mark_stale boolean := false;
+  v_component_stale_reason text := null;
+  v_component_remaining_amount numeric(12,2) := 0;
+  v_source_family_key text := null;
+
+  v_candidate_pay_method text := null;
 begin
   if p_finance_case_id is null then
     raise exception '%', jsonb_build_object(
@@ -18093,6 +18287,12 @@ begin
       'finance_case_id', p_finance_case_id::text
     )::text;
   end if;
+
+  select upper(coalesce(c.pay_method,''))
+  into v_candidate_pay_method
+  from public.candidates c
+  where c.id = v_case.candidate_id
+  limit 1;
 
   if v_case.payout_pay_batch_id is not null then
     select pb.*
@@ -18295,17 +18495,149 @@ begin
   ) x
   where x.amt < 0;
 
-  v_before_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'notes', v_case.notes,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override
+  v_source_family_key := 'case:' || p_finance_case_id::text;
+
+  select pfc.*
+  into v_component
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.source_family_key = v_source_family_key
+    and pfc.component_key_type = 'CASE_TOTAL'
+    and pfc.component_key_value = 'TOTAL'
+    and pfc.closed_at_utc is null
+  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
+  limit 1
+  for update;
+
+  v_component_source_basis_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'case_type', 'PAYMENT_ADVANCE',
+      'advance_kind', 'LOAN',
+      'principal_amount', v_new_principal,
+      'weekly_due', v_new_weekly_due,
+      'weeks_total', v_new_weeks_total,
+      'start_week_start', v_new_start_week_start::text,
+      'next_due_week_start', case when v_new_next_due is null then null else v_new_next_due::text end,
+      'schedule_json', coalesce(v_new_schedule_json, '[]'::jsonb),
+      'minimum_earnings_threshold', v_new_minimum_earnings_threshold,
+      'take_home_floor_override', v_new_take_home_floor_override,
+      'note', v_new_notes
+    )
   );
+
+  if v_component.id is null then
+    insert into public.pay_finance_case_components (
+      finance_case_id,
+      candidate_id,
+      client_id,
+      linked_timesheet_id,
+      source_family_key,
+      component_key_type,
+      component_key_value,
+      classification,
+      source_pay_method,
+      source_basis_json,
+      source_amount,
+      remaining_source_amount,
+      saved_target_pay_method,
+      saved_resolution_mode,
+      saved_resolution_payload_json,
+      saved_resolution_result_json,
+      resolution_fingerprint,
+      is_resolution_stale,
+      stale_reason,
+      allocation_priority_group,
+      allocation_priority_order,
+      created_at_utc,
+      updated_at_utc,
+      resolved_at_utc,
+      closed_at_utc
+    )
+    values (
+      p_finance_case_id,
+      v_case.candidate_id,
+      v_case.client_id,
+      v_case.linked_timesheet_id,
+      v_source_family_key,
+      'CASE_TOTAL',
+      'TOTAL',
+      'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      v_candidate_pay_method,
+      v_component_source_basis_json,
+      v_new_principal,
+      case when v_can_edit_payout_details then v_new_principal else round(coalesce(v_case.outstanding_amount,0),2) end,
+      null,
+      null,
+      null,
+      null,
+      null,
+      false,
+      null,
+      0,
+      0,
+      v_now_utc,
+      v_now_utc,
+      null,
+      null
+    )
+    returning * into v_component;
+  end if;
+
+  v_component_has_saved_resolution := (
+    v_component.saved_target_pay_method is not null
+    or v_component.saved_resolution_mode is not null
+    or v_component.saved_resolution_payload_json is not null
+    or v_component.saved_resolution_result_json is not null
+    or v_component.resolution_fingerprint is not null
+    or v_component.is_resolution_stale = true
+  );
+
+  if v_can_edit_payout_details then
+    v_component_remaining_amount := v_new_principal;
+  else
+    v_component_remaining_amount := round(coalesce(v_case.outstanding_amount,0),2);
+  end if;
+
+  if v_has_principal_change and v_component_has_saved_resolution then
+    v_component_mark_stale := true;
+    v_component_stale_reason := 'COMPONENT_BASIS_CHANGED';
+  else
+    v_component_mark_stale := coalesce(v_component.is_resolution_stale, false);
+    v_component_stale_reason := v_component.stale_reason;
+  end if;
+
+  v_component_before_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'classification', v_component.classification::text,
+    'source_pay_method', v_component.source_pay_method,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason,
+    'source_basis_json', v_component.source_basis_json
+  );
+
+  update public.pay_finance_case_components pfc
+  set
+    candidate_id = v_case.candidate_id,
+    client_id = v_case.client_id,
+    linked_timesheet_id = v_case.linked_timesheet_id,
+    classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    source_pay_method = v_candidate_pay_method,
+    source_basis_json = v_component_source_basis_json,
+    source_amount = v_new_principal,
+    remaining_source_amount = v_component_remaining_amount,
+    is_resolution_stale = v_component_mark_stale,
+    stale_reason = v_component_stale_reason,
+    allocation_priority_group = 0,
+    allocation_priority_order = 0,
+    updated_at_utc = v_now_utc
+  where pfc.id = v_component.id
+  returning * into v_component_after;
+
+  v_finance_component_id := v_component_after.id;
 
   update public.pay_advances pa
   set
@@ -18350,6 +18682,36 @@ begin
       where pbc.id = v_pay_batch_candidate_id;
     end if;
 
+    v_component_snapshot_json := jsonb_build_object(
+      'finance_component_id', v_finance_component_id::text,
+      'finance_case_id', p_finance_case_id::text,
+      'source_family_key', v_source_family_key,
+      'component_key_type', 'CASE_TOTAL',
+      'component_key_value', 'TOTAL',
+      'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+      'source_pay_method', v_candidate_pay_method,
+      'target_pay_method', v_candidate_pay_method,
+      'source_basis_json', v_component_source_basis_json,
+      'source_amount', v_new_principal,
+      'remaining_source_amount', v_component_remaining_amount,
+      'saved_target_pay_method', v_component_after.saved_target_pay_method,
+      'saved_resolution_mode', case when v_component_after.saved_resolution_mode is null then null else v_component_after.saved_resolution_mode::text end,
+      'saved_resolution_payload_json', v_component_after.saved_resolution_payload_json,
+      'saved_resolution_result_json', v_component_after.saved_resolution_result_json,
+      'current_component_fingerprint', public.pay_finance_component_fingerprint(
+        p_source_family_key => v_source_family_key,
+        p_component_key_type => 'CASE_TOTAL',
+        p_component_key_value => 'TOTAL',
+        p_classification => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+        p_source_pay_method => v_candidate_pay_method,
+        p_current_target_pay_method => v_candidate_pay_method,
+        p_source_basis_json => v_component_source_basis_json,
+        p_source_amount => v_new_principal,
+        p_relevant_erni_pct => null,
+        p_target_basis_json => jsonb_build_object('current_target_pay_method', v_candidate_pay_method)
+      )
+    );
+
     if v_batch_item_id is not null then
       update public.pay_batch_items pbi
       set description = 'Payment Advance',
@@ -18359,7 +18721,22 @@ begin
           updated_at = v_now_utc,
           finance_case_id = p_finance_case_id,
           reservation_id = null,
-          paye_treatment = 'NONE'
+          paye_treatment = 'NONE',
+          finance_component_id = v_finance_component_id,
+          frozen_component_snapshot_json = v_component_snapshot_json,
+          frozen_component_key_type = 'CASE_TOTAL',
+          frozen_component_key_value = 'TOTAL',
+          frozen_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+          frozen_source_basis_json = v_component_source_basis_json,
+          frozen_source_pay_method = v_candidate_pay_method,
+          frozen_target_pay_method = v_candidate_pay_method,
+          frozen_resolution_mode = v_component_after.saved_resolution_mode,
+          frozen_resolution_payload_json = v_component_after.saved_resolution_payload_json,
+          frozen_resolution_result_json = v_component_after.saved_resolution_result_json,
+          frozen_source_amount = v_new_principal,
+          frozen_target_amount_ex_vat = v_new_principal,
+          frozen_target_amount_vat = 0,
+          frozen_target_amount_inc_vat = v_new_principal
       where pbi.id = v_batch_item_id;
 
       update public.pay_batch_item_breakdowns pbib
@@ -18393,6 +18770,19 @@ begin
     'schedule_input_mode', v_schedule_input_mode
   );
 
+  v_component_after_json := jsonb_build_object(
+    'finance_component_id', v_component_after.id::text,
+    'classification', v_component_after.classification::text,
+    'source_pay_method', v_component_after.source_pay_method,
+    'source_amount', round(coalesce(v_component_after.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount,0),2),
+    'saved_target_pay_method', v_component_after.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component_after.saved_resolution_mode is null then null else v_component_after.saved_resolution_mode::text end,
+    'is_resolution_stale', v_component_after.is_resolution_stale,
+    'stale_reason', v_component_after.stale_reason,
+    'source_basis_json', v_component_after.source_basis_json
+  );
+
   insert into public.pay_finance_case_events(
     finance_case_id,
     event_type,
@@ -18416,6 +18806,47 @@ begin
     case when v_can_edit_payout_details then 'Payment Advance payout details updated before commit' else 'Payment Advance future repayment terms updated after commit' end
   );
 
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    v_finance_component_id,
+    case when v_has_principal_change and v_component_has_saved_resolution then 'COMPONENT_STALE' else 'COMPONENT_UPDATED' end,
+    v_now_utc,
+    p_actor_user_id,
+    case when v_batch.id is null then null else v_batch.id end,
+    v_component_before_json,
+    v_component_after_json,
+    case when v_has_principal_change and v_component_has_saved_resolution then 'PAYMENT_ADVANCE_COMPONENT_BASIS_CHANGED' else 'PAYMENT_ADVANCE_COMPONENT_UPDATED' end,
+    case when v_has_principal_change and v_component_has_saved_resolution then 'Updated Payment Advance component and marked saved taxable resolution stale because principal/source basis changed' else 'Updated Payment Advance component state' end
+  );
+
+  v_component_summary_json := jsonb_build_object(
+    'finance_component_id', v_finance_component_id::text,
+    'source_family_key', v_source_family_key,
+    'component_key_type', 'CASE_TOTAL',
+    'component_key_value', 'TOTAL',
+    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'source_pay_method', v_component_after.source_pay_method,
+    'source_amount', round(coalesce(v_component_after.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount,0),2),
+    'saved_target_pay_method', v_component_after.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component_after.saved_resolution_mode is null then null else v_component_after.saved_resolution_mode::text end,
+    'is_resolution_stale', v_component_after.is_resolution_stale,
+    'stale_reason', v_component_after.stale_reason,
+    'source_basis_json', v_component_after.source_basis_json
+  );
+
   return jsonb_build_object(
     'ok', true,
     'finance_case_id', p_finance_case_id::text,
@@ -18434,11 +18865,12 @@ begin
     'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
-    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb)
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'finance_component_id', v_finance_component_id::text,
+    'component_summary', v_component_summary_json
   );
 end;
 $$;
-
 
 
 
