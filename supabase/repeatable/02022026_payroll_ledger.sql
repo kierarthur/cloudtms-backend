@@ -12870,7 +12870,6 @@ declare
 
   v_aff_timesheets uuid[] := array[]::uuid[];
 
-  v_hist record;
   v_latest record;
 
   v_patch record;
@@ -12878,9 +12877,15 @@ declare
   v_old_schedule jsonb;
   v_old_next_due date;
 
+  v_component_restore record;
+  v_component_before_json jsonb;
+  v_component_after_json jsonb;
+
   v_reverted_adv int := 0;
   v_removed_hist int := 0;
   v_rebuilt_states int := 0;
+  v_restored_components int := 0;
+  v_released_reservations int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -12903,7 +12908,7 @@ begin
     raise exception 'UNPAY_REQUIRES_FORCE_FOR_SETTLED_BATCH';
   end if;
 
-  -- Revert advances using patches
+  -- Revert finance-case header patches first so header totals are restored
   for v_patch in
     select
       pap.advance_id,
@@ -12922,12 +12927,201 @@ begin
       outstanding_amount = v_old_outstanding,
       schedule_json = v_old_schedule,
       next_due_week_start = v_old_next_due,
-      status = case when coalesce(v_old_outstanding,0) <= 0 then 'PAID_OFF'::pay_advance_status_enum else 'ACTIVE'::pay_advance_status_enum end,
-      updated_at = now()
+      status = case
+        when coalesce(v_old_outstanding, 0) <= 0 then 'PAID_OFF'::public.pay_advance_status_enum
+        else 'ACTIVE'::public.pay_advance_status_enum
+      end,
+      updated_at = v_now
     where pa.id = v_patch.advance_id;
 
     v_reverted_adv := v_reverted_adv + 1;
   end loop;
+
+  -- Restore component-level remainders from frozen snapshots on batch items first,
+  -- then fall back to reservation snapshots only for components that had no batch item snapshot.
+  for v_component_restore in
+    with item_component_restore as (
+      select
+        pbi.finance_case_id,
+        pbi.finance_component_id,
+        round(
+          sum(
+            coalesce(
+              pbi.frozen_source_amount,
+              case
+                when pbi.frozen_component_snapshot_json ? 'frozen_source_amount'
+                  and nullif(btrim(pbi.frozen_component_snapshot_json ->> 'frozen_source_amount'), '') is not null
+                then (pbi.frozen_component_snapshot_json ->> 'frozen_source_amount')::numeric
+                else null::numeric
+              end,
+              case
+                when pbi.frozen_component_snapshot_json ? 'reserved_source_amount'
+                  and nullif(btrim(pbi.frozen_component_snapshot_json ->> 'reserved_source_amount'), '') is not null
+                then (pbi.frozen_component_snapshot_json ->> 'reserved_source_amount')::numeric
+                else null::numeric
+              end,
+              0::numeric
+            )
+          ),
+          2
+        )::numeric(12,2) as restore_source_amount
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc
+        on pbc.id = pbi.pay_batch_candidate_id
+      where pbc.pay_batch_id = p_pay_batch_id
+        and coalesce(pbi.is_voided, false) = false
+        and pbi.finance_component_id is not null
+      group by
+        pbi.finance_case_id,
+        pbi.finance_component_id
+    ),
+    reservation_component_restore as (
+      select
+        par.finance_case_id,
+        par.finance_component_id,
+        round(
+          sum(
+            coalesce(
+              par.reserved_source_amount,
+              par.reserved_amount,
+              0::numeric
+            )
+          ),
+          2
+        )::numeric(12,2) as restore_source_amount
+      from public.pay_advance_reservations par
+      where par.pay_batch_id = p_pay_batch_id
+        and par.finance_component_id is not null
+        and par.status in ('RESERVED','COMMITTED','SETTLED')
+      group by
+        par.finance_case_id,
+        par.finance_component_id
+    ),
+    combined_restore as (
+      select
+        icr.finance_case_id,
+        icr.finance_component_id,
+        icr.restore_source_amount
+      from item_component_restore icr
+
+      union all
+
+      select
+        rcr.finance_case_id,
+        rcr.finance_component_id,
+        rcr.restore_source_amount
+      from reservation_component_restore rcr
+      where not exists (
+        select 1
+        from item_component_restore icr2
+        where icr2.finance_case_id is not distinct from rcr.finance_case_id
+          and icr2.finance_component_id = rcr.finance_component_id
+      )
+    )
+    select
+      cr.finance_case_id,
+      cr.finance_component_id,
+      cr.restore_source_amount,
+      pfc.source_amount,
+      pfc.remaining_source_amount,
+      pfc.closed_at_utc,
+      pfc.classification,
+      pfc.source_pay_method,
+      pfc.saved_target_pay_method,
+      pfc.saved_resolution_mode,
+      pfc.saved_resolution_payload_json,
+      pfc.saved_resolution_result_json,
+      pfc.stale_reason
+    from combined_restore cr
+    join public.pay_finance_case_components pfc
+      on pfc.id = cr.finance_component_id
+    where cr.restore_source_amount > 0
+    order by
+      pfc.allocation_priority_group,
+      pfc.allocation_priority_order,
+      pfc.created_at_utc,
+      pfc.id
+  loop
+    select jsonb_build_object(
+      'finance_component_id', v_component_restore.finance_component_id::text,
+      'classification', v_component_restore.classification::text,
+      'source_pay_method', v_component_restore.source_pay_method,
+      'saved_target_pay_method', v_component_restore.saved_target_pay_method,
+      'saved_resolution_mode', case when v_component_restore.saved_resolution_mode is null then null else v_component_restore.saved_resolution_mode::text end,
+      'saved_resolution_payload_json', v_component_restore.saved_resolution_payload_json,
+      'saved_resolution_result_json', v_component_restore.saved_resolution_result_json,
+      'stale_reason', v_component_restore.stale_reason,
+      'source_amount', round(coalesce(v_component_restore.source_amount, 0), 2),
+      'remaining_source_amount', round(coalesce(v_component_restore.remaining_source_amount, 0), 2),
+      'closed_at_utc', v_component_restore.closed_at_utc
+    )
+    into v_component_before_json;
+
+    update public.pay_finance_case_components pfc
+    set
+      remaining_source_amount = least(
+        round(coalesce(pfc.source_amount, 0), 2),
+        round(coalesce(pfc.remaining_source_amount, 0), 2) + round(coalesce(v_component_restore.restore_source_amount, 0), 2)
+      )::numeric(12,2),
+      closed_at_utc = null,
+      updated_at_utc = v_now
+    where pfc.id = v_component_restore.finance_component_id
+    returning jsonb_build_object(
+      'finance_component_id', pfc.id::text,
+      'classification', pfc.classification::text,
+      'source_pay_method', pfc.source_pay_method,
+      'saved_target_pay_method', pfc.saved_target_pay_method,
+      'saved_resolution_mode', case when pfc.saved_resolution_mode is null then null else pfc.saved_resolution_mode::text end,
+      'saved_resolution_payload_json', pfc.saved_resolution_payload_json,
+      'saved_resolution_result_json', pfc.saved_resolution_result_json,
+      'stale_reason', pfc.stale_reason,
+      'source_amount', round(coalesce(pfc.source_amount, 0), 2),
+      'remaining_source_amount', round(coalesce(pfc.remaining_source_amount, 0), 2),
+      'closed_at_utc', pfc.closed_at_utc
+    )
+    into v_component_after_json;
+
+    insert into public.pay_finance_case_events (
+      finance_case_id,
+      finance_component_id,
+      event_type,
+      event_at_utc,
+      actor_user_id,
+      pay_batch_id,
+      reservation_id,
+      before_json,
+      after_json,
+      reason,
+      note
+    )
+    values (
+      v_component_restore.finance_case_id,
+      v_component_restore.finance_component_id,
+      'COMPONENT_RESTORED_ON_UNPAY',
+      v_now,
+      p_actor_user_id,
+      p_pay_batch_id,
+      null,
+      v_component_before_json,
+      v_component_after_json,
+      coalesce(nullif(btrim(coalesce(p_reason, '')), ''), 'UNPAID'),
+      'Restored finance component remainder from frozen batch-item/reservation snapshot during unpay.'
+    );
+
+    v_restored_components := v_restored_components + 1;
+  end loop;
+
+  -- Release any reservations tied to the batch so finance cases remain open correctly.
+  update public.pay_advance_reservations par
+  set
+    status = 'RELEASED',
+    settled_at_utc = null,
+    released_at_utc = coalesce(par.released_at_utc, v_now),
+    released_reason = coalesce(nullif(btrim(coalesce(p_reason, '')), ''), 'UNPAID')
+  where par.pay_batch_id = p_pay_batch_id
+    and par.status in ('RESERVED','COMMITTED','SETTLED');
+
+  get diagnostics v_released_reservations = row_count;
 
   -- Revert LOANS payout status (if this batch paid out loans)
   if upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then
@@ -13030,6 +13224,8 @@ begin
     'pay_batch_id', p_pay_batch_id::text,
     'action', 'UNPAID',
     'reverted_advances', v_reverted_adv,
+    'restored_components', v_restored_components,
+    'released_reservations', v_released_reservations,
     'deleted_history_rows', v_removed_hist,
     'rebuilt_timesheet_states', v_rebuilt_states
   );
