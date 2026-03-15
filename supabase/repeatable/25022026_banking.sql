@@ -4218,7 +4218,6 @@ $$;
 
 
 
-
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -4271,6 +4270,8 @@ declare
   v_payment_advance_recovery_patched_ct int := 0;
   v_manual_debt_patched_ct int := 0;
   v_payout_cases_marked_paid_ct int := 0;
+  v_component_settled_count int := 0;
+  v_component_settled_amount numeric := 0;
 
   v_comm_result jsonb := '{}'::jsonb;
   v_comm_trigger_status text := null;
@@ -4621,8 +4622,203 @@ begin
     and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
     and upper(coalesce(par.status,'')) = 'COMMITTED';
 
+  create temp table if not exists _tmp_component_settle (
+    finance_component_id uuid not null primary key,
+    finance_case_id uuid null,
+    settled_source_amount numeric not null
+  ) on commit drop;
+
+  truncate table _tmp_component_settle;
+
+  with settled_source as (
+    select
+      coalesce(
+        par.finance_component_id,
+        pbi.finance_component_id,
+        fb.finance_component_id
+      ) as finance_component_id,
+      coalesce(
+        par.finance_case_id,
+        pbi.finance_case_id,
+        fb.finance_case_id
+      ) as finance_case_id,
+      round(
+        sum(
+          coalesce(
+            par.reserved_source_amount,
+            pbi.frozen_source_amount,
+            abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, par.reserved_amount, 0))
+          )
+        ),
+        2
+      ) as settled_source_amount
+    from public.pay_advance_reservations par
+    join public.pay_batch_items pbi
+      on pbi.id = par.pay_batch_item_id
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+     and pbc.pay_batch_id = p_pay_batch_id
+    left join lateral (
+      select
+        pfc_fb.id as finance_component_id,
+        pfc_fb.finance_case_id as finance_case_id
+      from public.pay_finance_case_components pfc_fb
+      where pfc_fb.finance_case_id = coalesce(par.finance_case_id, pbi.finance_case_id)
+        and pfc_fb.component_key_type = coalesce(
+          nullif(
+            btrim(
+              coalesce(
+                par.frozen_component_key_type,
+                pbi.frozen_component_key_type,
+                par.frozen_component_snapshot_json->>'component_key_type',
+                pbi.frozen_component_snapshot_json->>'component_key_type',
+                ''
+              )
+            ),
+            ''
+          ),
+          '§NO_COMPONENT_KEY§'
+        )
+        and pfc_fb.component_key_value = coalesce(
+          nullif(
+            btrim(
+              coalesce(
+                par.frozen_component_key_value,
+                pbi.frozen_component_key_value,
+                par.frozen_component_snapshot_json->>'component_key_value',
+                pbi.frozen_component_snapshot_json->>'component_key_value',
+                ''
+              )
+            ),
+            ''
+          ),
+          '§NO_COMPONENT_VALUE§'
+        )
+      order by
+        pfc_fb.closed_at_utc nulls first,
+        pfc_fb.updated_at_utc desc,
+        pfc_fb.created_at_utc desc,
+        pfc_fb.id desc
+      limit 1
+    ) fb on true
+    where par.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(par.status,'')) = 'SETTLED'
+      and par.settled_at_utc = v_now
+      and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
+    group by
+      coalesce(
+        par.finance_component_id,
+        pbi.finance_component_id,
+        fb.finance_component_id
+      ),
+      coalesce(
+        par.finance_case_id,
+        pbi.finance_case_id,
+        fb.finance_case_id
+      )
+    having coalesce(
+      coalesce(
+        par.finance_component_id,
+        pbi.finance_component_id,
+        fb.finance_component_id
+      ),
+      '00000000-0000-0000-0000-000000000000'::uuid
+    ) <> '00000000-0000-0000-0000-000000000000'::uuid
+  )
+  insert into _tmp_component_settle(finance_component_id, finance_case_id, settled_source_amount)
+  select
+    ss.finance_component_id,
+    ss.finance_case_id,
+    ss.settled_source_amount
+  from settled_source ss
+  where ss.finance_component_id is not null
+    and ss.settled_source_amount > 0;
+
+  create temp table if not exists _tmp_component_settle_apply (
+    finance_component_id uuid not null primary key,
+    finance_case_id uuid null,
+    classification public.pay_finance_component_classification_enum not null,
+    settled_source_amount numeric not null,
+    remaining_before numeric not null,
+    remaining_after numeric not null
+  ) on commit drop;
+
+  truncate table _tmp_component_settle_apply;
+
+  insert into _tmp_component_settle_apply(
+    finance_component_id,
+    finance_case_id,
+    classification,
+    settled_source_amount,
+    remaining_before,
+    remaining_after
+  )
+  select
+    pfc.id,
+    pfc.finance_case_id,
+    pfc.classification,
+    tcs.settled_source_amount,
+    round(coalesce(pfc.remaining_source_amount, 0), 2) as remaining_before,
+    round(greatest(coalesce(pfc.remaining_source_amount, 0) - coalesce(tcs.settled_source_amount, 0), 0), 2) as remaining_after
+  from _tmp_component_settle tcs
+  join public.pay_finance_case_components pfc
+    on pfc.id = tcs.finance_component_id;
+
+  update public.pay_finance_case_components pfc
+  set
+    remaining_source_amount = csa.remaining_after,
+    resolved_at_utc = case
+      when csa.remaining_after <= 0 then coalesce(pfc.resolved_at_utc, v_now)
+      else pfc.resolved_at_utc
+    end,
+    updated_at_utc = v_now
+  from _tmp_component_settle_apply csa
+  where pfc.id = csa.finance_component_id;
+
+  select
+    count(*)::int,
+    round(coalesce(sum(csa.settled_source_amount), 0), 2)
+  into
+    v_component_settled_count,
+    v_component_settled_amount
+  from _tmp_component_settle_apply csa;
+
   insert into public.pay_finance_case_events(
     finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  select
+    csa.finance_case_id,
+    csa.finance_component_id,
+    'COMPONENT_SETTLED',
+    v_now,
+    p_actor_user_id,
+    p_pay_batch_id,
+    null::uuid,
+    jsonb_build_object(
+      'remaining_source_amount', csa.remaining_before
+    ),
+    jsonb_build_object(
+      'remaining_source_amount', csa.remaining_after,
+      'settled_source_amount', csa.settled_source_amount,
+      'classification', csa.classification::text
+    ),
+    'rail_settlement',
+    null
+  from _tmp_component_settle_apply csa;
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
     event_type,
     event_at_utc,
     actor_user_id,
@@ -4635,6 +4831,7 @@ begin
   )
   select
     par.finance_case_id,
+    par.finance_component_id,
     'RESERVATION_SETTLED',
     v_now,
     p_actor_user_id,
@@ -5311,6 +5508,8 @@ begin
         'payment_advance_recovery_patches_applied', v_payment_advance_recovery_patched_ct,
         'manual_debt_recovery_patches_applied', v_manual_debt_patched_ct,
         'payout_cases_marked_paid', v_payout_cases_marked_paid_ct,
+        'component_settlements_applied', v_component_settled_count,
+        'component_settlement_amount', v_component_settled_amount,
         'batch_status', v_batch_status,
         'worker_communications', v_worker_communications
       ),
@@ -5342,12 +5541,16 @@ begin
       'overpayment_patches_applied', v_overpay_patched_ct,
       'payment_advance_recovery_patches_applied', v_payment_advance_recovery_patched_ct,
       'manual_debt_recovery_patches_applied', v_manual_debt_patched_ct,
-      'payout_cases_marked_paid', v_payout_cases_marked_paid_ct
+      'payout_cases_marked_paid', v_payout_cases_marked_paid_ct,
+      'component_settlements_applied', v_component_settled_count,
+      'component_settlement_amount', v_component_settled_amount
     ),
     'worker_communications', v_worker_communications
   );
 end;
 $$;
+
+
 
 create or replace function public.pay_remittance_mark_sent(
   p_pay_batch_id uuid,
