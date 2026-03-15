@@ -13808,10 +13808,31 @@ set search_path = public
 as $$
 declare
   v_scope text := upper(btrim(coalesce(p_pay_channel_scope, '')));
-  v_negative_count int := 0;
+  v_timesheet_case_count int := 0;
   v_cases_inserted int := 0;
   v_cases_touched int := 0;
-  v_negative_json jsonb := '[]'::jsonb;
+  v_cases_amended int := 0;
+  v_cases_reopened int := 0;
+  v_cases_cleared int := 0;
+  v_overpayment_case_count int := 0;
+  v_underpayment_case_count int := 0;
+  v_case_candidates_json jsonb := '[]'::jsonb;
+  v_overpayment_json jsonb := '[]'::jsonb;
+  v_underpayment_json jsonb := '[]'::jsonb;
+
+  v_target_case_row record;
+  v_existing_case_row record;
+  v_case_before_json jsonb;
+  v_case_after_json jsonb;
+  v_components_sync_result jsonb;
+  v_existing_recovered_amount numeric(12,2);
+  v_new_outstanding_amount numeric(12,2);
+  v_selected_finance_case_id uuid;
+  v_selected_event_type text;
+  v_selected_reason text;
+  v_selected_note text;
+  v_open_case_candidate record;
+  v_target_case_amount_ex numeric(12,2);
 begin
   if p_pay_date is null then
     raise exception 'pay_date is required';
@@ -13821,226 +13842,734 @@ begin
     raise exception 'week_ending_cutoff is required';
   end if;
 
+  if p_actor_user_id is null then
+    raise exception 'actor_user_id is required';
+  end if;
+
   if v_scope not in ('PAYE', 'UMBRELLA') then
     raise exception 'Invalid pay_channel_scope (expected PAYE or UMBRELLA)';
   end if;
 
-  create temporary table if not exists pg_temp.tmp_preview_negative_timesheets (
+  create temporary table if not exists pg_temp.tmp_sync_timesheet_case_candidates (
     candidate_id uuid not null,
     timesheet_id uuid not null,
-    owed_ex numeric(12,2) not null,
-    baseline_signature text null
+    client_id uuid null,
+    linked_shift_date date null,
+    corrected_amount_ex numeric(12,2) not null,
+    baseline_signature text null,
+    candidate_pay_method text not null,
+    case_is_blocked boolean not null,
+    overpayment_amount_ex numeric(12,2) not null,
+    underpayment_amount_ex numeric(12,2) not null,
+    desired_case_type public.pay_finance_case_type_enum null,
+    desired_advance_kind public.pay_advance_kind_enum null,
+    desired_reason public.pay_advance_reason_enum null,
+    source_original_paid_amount numeric(12,2) null,
+    source_corrected_paid_amount numeric(12,2) null,
+    components_sync_json jsonb not null default '[]'::jsonb,
+    primary key (candidate_id, timesheet_id)
   ) on commit drop;
 
-  truncate table pg_temp.tmp_preview_negative_timesheets;
+  create temporary table if not exists pg_temp.tmp_sync_case_links (
+    candidate_id uuid not null,
+    timesheet_id uuid not null,
+    finance_case_id uuid not null,
+    desired_case_type public.pay_finance_case_type_enum not null,
+    source_original_paid_amount numeric(12,2) not null,
+    source_corrected_paid_amount numeric(12,2) not null,
+    case_amount_ex numeric(12,2) not null,
+    linked_shift_date date null,
+    baseline_signature text null,
+    components_sync_json jsonb not null,
+    primary key (candidate_id, timesheet_id)
+  ) on commit drop;
 
-  insert into pg_temp.tmp_preview_negative_timesheets (
+  create temporary table if not exists pg_temp.tmp_sync_case_clears (
+    finance_case_id uuid not null primary key,
+    candidate_id uuid not null,
+    timesheet_id uuid not null,
+    old_case_type public.pay_finance_case_type_enum not null,
+    old_original_amount numeric(12,2) not null,
+    old_outstanding_amount numeric(12,2) not null,
+    old_source_original_paid_amount numeric(12,2) null,
+    old_source_corrected_paid_amount numeric(12,2) null,
+    old_linked_shift_date date null,
+    old_baseline_signature text null
+  ) on commit drop;
+
+  truncate table pg_temp.tmp_sync_timesheet_case_candidates;
+  truncate table pg_temp.tmp_sync_case_links;
+  truncate table pg_temp.tmp_sync_case_clears;
+
+  insert into pg_temp.tmp_sync_timesheet_case_candidates (
     candidate_id,
     timesheet_id,
-    owed_ex,
-    baseline_signature
+    client_id,
+    linked_shift_date,
+    corrected_amount_ex,
+    baseline_signature,
+    candidate_pay_method,
+    case_is_blocked,
+    overpayment_amount_ex,
+    underpayment_amount_ex,
+    desired_case_type,
+    desired_advance_kind,
+    desired_reason,
+    source_original_paid_amount,
+    source_corrected_paid_amount,
+    components_sync_json
   )
-  with preview as (
+  with preview_payload as (
     select public.pay_preview(
       p_pay_date,
       p_week_ending_cutoff,
       p_actor_user_id,
-      null,
-      null,
-      p_force_include_timesheet_ids
-    ) as j
+      null::uuid,
+      p_client_filter_single
+    ) as payload
   ),
-  all_candidates as (
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'paye_candidates', '[]'::jsonb)) as c
+  preview_candidates as (
+    select cand.value as candidate_json
+    from preview_payload pp
+    cross join lateral jsonb_array_elements(coalesce(pp.payload->'paye_candidates', '[]'::jsonb)) as cand(value)
     union all
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'non_paye_payees', '[]'::jsonb)) as c
+    select cand.value as candidate_json
+    from preview_payload pp
+    cross join lateral jsonb_array_elements(coalesce(pp.payload->'non_paye_payees', '[]'::jsonb)) as cand(value)
   ),
   candidate_rows as (
     select
-      s.candidate_id,
-      s.cand_pay_method,
-      s.itemisation
-    from (
-      select
-        nullif(btrim(coalesce(cand->>'candidate_id', '')), '')::uuid as candidate_id,
-        upper(btrim(coalesce(cand->>'current_pay_method', ''))) as cand_pay_method,
-        coalesce(nullif(cand->>'is_ready_for_draft', '')::boolean, false) as is_ready_for_draft,
-        coalesce(cand->'blockers', '[]'::jsonb) as blockers,
-        coalesce(cand->'itemisation', '[]'::jsonb) as itemisation
-      from all_candidates
-      where nullif(btrim(coalesce(cand->>'candidate_id', '')), '') is not null
-    ) s
-    where s.candidate_id = any(coalesce(p_candidate_ids, array[]::uuid[]))
-      and s.is_ready_for_draft = true
-      and jsonb_array_length(s.blockers) = 0
+      nullif(btrim(coalesce(pc.candidate_json->>'candidate_id', '')), '')::uuid as candidate_id,
+      upper(btrim(coalesce(pc.candidate_json->>'current_pay_method', ''))) as candidate_pay_method,
+      coalesce(pc.candidate_json->'itemisation', '[]'::jsonb) as itemisation_json
+    from preview_candidates pc
+    where nullif(btrim(coalesce(pc.candidate_json->>'candidate_id', '')), '') is not null
+      and upper(btrim(coalesce(pc.candidate_json->>'current_pay_method', ''))) = v_scope
+      and (
+        coalesce(array_length(p_candidate_ids, 1), 0) = 0
+        or nullif(btrim(coalesce(pc.candidate_json->>'candidate_id', '')), '')::uuid = any(p_candidate_ids)
+      )
   ),
   item_rows as (
     select
       cr.candidate_id,
-      cr.cand_pay_method,
-      itm as item_json,
-      nullif(btrim(coalesce(itm->>'timesheet_id', '')), '')::uuid as timesheet_id,
-      nullif(btrim(coalesce(itm->>'client_id', '')), '')::uuid as client_id,
-      upper(btrim(coalesce(itm->>'source_pay_method', ''))) as source_pay_method
+      cr.candidate_pay_method,
+      itm.value as item_json,
+      nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '')::uuid as timesheet_id,
+      nullif(btrim(coalesce(itm.value->>'client_id', '')), '')::uuid as client_id,
+      round(coalesce(nullif(itm.value->>'amount_ex_vat', '')::numeric, 0), 2)::numeric(12,2) as corrected_amount_ex,
+      coalesce(itm.value->>'case_is_blocked', 'false')::boolean as case_is_blocked,
+      coalesce(itm.value->'case_components', '[]'::jsonb) as case_components_json
     from candidate_rows cr
-    cross join lateral jsonb_array_elements(coalesce(cr.itemisation, '[]'::jsonb)) as itm
+    cross join lateral jsonb_array_elements(coalesce(cr.itemisation_json, '[]'::jsonb)) as itm(value)
+    where coalesce(itm.value->>'line_type', '') = 'TIMESHEET_PAYMENT'
+      and nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '') is not null
+      and (
+        coalesce(array_length(p_force_include_timesheet_ids, 1), 0) = 0
+        or nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '')::uuid = any(p_force_include_timesheet_ids)
+        or p_force_include_timesheet_ids is null
+      )
+      and not (
+        coalesce(array_length(p_exclude_timesheet_ids, 1), 0) > 0
+        and nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '')::uuid = any(p_exclude_timesheet_ids)
+      )
   ),
-  filtered_rows as (
+  item_with_baseline as (
     select
       ir.candidate_id,
       ir.timesheet_id,
-      ir.item_json,
-      case
-        when ir.source_pay_method = ir.cand_pay_method then ir.cand_pay_method
-        else upper(coalesce(nullif(coalesce(p_mismatch_choices, '{}'::jsonb)->>ir.candidate_id::text, ''), ''))
-      end as pay_channel
+      ir.client_id,
+      coalesce(ts.worked_start_iso::date, ts.scheduled_start_iso::date, ts.week_ending_date) as linked_shift_date,
+      ir.corrected_amount_ex,
+      coalesce(
+        tps.last_settled_signature,
+        md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
+      ) as baseline_signature,
+      ir.candidate_pay_method,
+      ir.case_is_blocked,
+      ir.case_components_json
     from item_rows ir
-    where ir.timesheet_id is not null
-      and not (ir.timesheet_id = any(coalesce(p_exclude_timesheet_ids, array[]::uuid[])))
-      and (p_client_filter_single is null or ir.client_id = p_client_filter_single)
+    join public.timesheets ts
+      on ts.timesheet_id = ir.timesheet_id
+    left join public.timesheet_pay_state tps
+      on tps.timesheet_id = ir.timesheet_id
   ),
-  negative_component_rows as (
+  exploded_components as (
     select
-      fr.candidate_id,
-      fr.timesheet_id,
-      abs(round(coalesce(nullif(seg.seg_json->>'delta_pay_ex_vat', '')::numeric, 0), 2))::numeric(12,2) as owed_ex
-    from filtered_rows fr
-    cross join lateral jsonb_array_elements(coalesce(fr.item_json->'segment_deltas', '[]'::jsonb)) as seg(seg_json)
-    where fr.pay_channel = v_scope
-      and round(coalesce(nullif(seg.seg_json->>'delta_pay_ex_vat', '')::numeric, 0), 2) < 0
-
-    union all
-
-    select
-      fr.candidate_id,
-      fr.timesheet_id,
-      abs(round(coalesce(nullif(adj.adj_json->>'delta_pay_ex_vat', '')::numeric, 0), 2))::numeric(12,2) as owed_ex
-    from filtered_rows fr
-    cross join lateral jsonb_array_elements(coalesce(fr.item_json->'adjustment_deltas', '[]'::jsonb)) as adj(adj_json)
-    where fr.pay_channel = v_scope
-      and round(coalesce(nullif(adj.adj_json->>'delta_pay_ex_vat', '')::numeric, 0), 2) < 0
-
-    union all
-
-    select
-      fr.candidate_id,
-      fr.timesheet_id,
-      abs(x.delta_ex)::numeric(12,2) as owed_ex
-    from filtered_rows fr
-    cross join lateral (
-      values
-        (round(coalesce(nullif(fr.item_json->>'delta_additional_pay_ex_vat', '')::numeric, 0), 2)),
-        (round(coalesce(nullif(fr.item_json->>'delta_expenses_pay_ex_vat', '')::numeric, 0), 2)),
-        (round(coalesce(nullif(fr.item_json->>'delta_travel_pay_ex_vat', '')::numeric, 0), 2)),
-        (round(coalesce(nullif(fr.item_json->>'delta_accommodation_pay_ex_vat', '')::numeric, 0), 2)),
-        (round(coalesce(nullif(fr.item_json->>'delta_other_pay_ex_vat', '')::numeric, 0), 2)),
-        (round(coalesce(nullif(fr.item_json->>'delta_mileage_pay_ex_vat', '')::numeric, 0), 2))
-    ) as x(delta_ex)
-    where fr.pay_channel = v_scope
-      and x.delta_ex < 0
+      iwb.candidate_id,
+      iwb.timesheet_id,
+      iwb.client_id,
+      iwb.linked_shift_date,
+      iwb.corrected_amount_ex,
+      iwb.baseline_signature,
+      iwb.candidate_pay_method,
+      iwb.case_is_blocked,
+      comp.value as component_json,
+      comp.ordinality::integer as component_order,
+      round(coalesce(nullif(comp.value->>'component_amount_ex_vat', '')::numeric, 0), 2)::numeric(12,2) as component_amount_ex
+    from item_with_baseline iwb
+    cross join lateral jsonb_array_elements(coalesce(iwb.case_components_json, '[]'::jsonb)) with ordinality as comp(value, ordinality)
   ),
-  negative_rows as (
+  case_rollup as (
     select
-      ncr.candidate_id,
-      ncr.timesheet_id,
-      round(sum(ncr.owed_ex), 2)::numeric(12,2) as owed_ex
-    from negative_component_rows ncr
-    group by
-      ncr.candidate_id,
-      ncr.timesheet_id
-    having round(sum(ncr.owed_ex), 2) > 0
+      ec.candidate_id,
+      ec.timesheet_id,
+      min(ec.client_id) as client_id,
+      min(ec.linked_shift_date) as linked_shift_date,
+      min(ec.corrected_amount_ex) as corrected_amount_ex,
+      min(ec.baseline_signature) as baseline_signature,
+      min(ec.candidate_pay_method) as candidate_pay_method,
+      bool_or(ec.case_is_blocked) as case_is_blocked,
+      round(coalesce(sum(ec.component_amount_ex), 0), 2)::numeric(12,2) as net_case_delta_ex,
+      round(coalesce(sum(case when ec.component_amount_ex < 0 then abs(ec.component_amount_ex) else 0 end), 0), 2)::numeric(12,2) as overpayment_amount_ex,
+      round(coalesce(sum(case when ec.component_amount_ex > 0 then ec.component_amount_ex else 0 end), 0), 2)::numeric(12,2) as underpayment_amount_ex,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'candidate_id', ec.candidate_id::text,
+            'client_id', case when ec.client_id is null then null else ec.client_id::text end,
+            'linked_timesheet_id', ec.timesheet_id::text,
+            'source_family_key', coalesce(nullif(btrim(coalesce(ec.component_json->>'source_family_key', '')), ''), 'timesheet:' || ec.timesheet_id::text),
+            'component_key_type', coalesce(nullif(btrim(coalesce(ec.component_json->>'component_key_type', '')), ''), 'CASE_TOTAL'),
+            'component_key_value', coalesce(nullif(btrim(coalesce(ec.component_json->>'component_key_value', '')), ''), 'TOTAL'),
+            'classification', ec.component_json->>'classification',
+            'source_pay_method', coalesce(nullif(btrim(coalesce(ec.component_json->>'source_pay_method', '')), ''), ec.candidate_pay_method),
+            'current_target_pay_method', ec.candidate_pay_method,
+            'source_basis_json', coalesce(ec.component_json->'source_basis_json', '{}'::jsonb),
+            'source_amount', abs(ec.component_amount_ex),
+            'allocation_priority_group', case when ec.component_json->>'classification' = 'TAXABLE_CHANNEL_SENSITIVE' then 0 else 1 end,
+            'allocation_priority_order', ec.component_order
+          )
+          order by coalesce(ec.component_json->>'classification',''), coalesce(ec.component_json->>'component_key_type',''), coalesce(ec.component_json->>'component_key_value','')
+        ) filter (where ec.component_amount_ex <> 0),
+        '[]'::jsonb
+      ) as all_components_json,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'candidate_id', ec.candidate_id::text,
+            'client_id', case when ec.client_id is null then null else ec.client_id::text end,
+            'linked_timesheet_id', ec.timesheet_id::text,
+            'source_family_key', coalesce(nullif(btrim(coalesce(ec.component_json->>'source_family_key', '')), ''), 'timesheet:' || ec.timesheet_id::text),
+            'component_key_type', coalesce(nullif(btrim(coalesce(ec.component_json->>'component_key_type', '')), ''), 'CASE_TOTAL'),
+            'component_key_value', coalesce(nullif(btrim(coalesce(ec.component_json->>'component_key_value', '')), ''), 'TOTAL'),
+            'classification', ec.component_json->>'classification',
+            'source_pay_method', coalesce(nullif(btrim(coalesce(ec.component_json->>'source_pay_method', '')), ''), ec.candidate_pay_method),
+            'current_target_pay_method', ec.candidate_pay_method,
+            'source_basis_json', coalesce(ec.component_json->'source_basis_json', '{}'::jsonb),
+            'source_amount', abs(ec.component_amount_ex),
+            'allocation_priority_group', case when ec.component_json->>'classification' = 'TAXABLE_CHANNEL_SENSITIVE' then 0 else 1 end,
+            'allocation_priority_order', ec.component_order
+          )
+          order by coalesce(ec.component_json->>'classification',''), coalesce(ec.component_json->>'component_key_type',''), coalesce(ec.component_json->>'component_key_value','')
+        ) filter (where ec.component_amount_ex < 0),
+        '[]'::jsonb
+      ) as overpayment_components_json,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'candidate_id', ec.candidate_id::text,
+            'client_id', case when ec.client_id is null then null else ec.client_id::text end,
+            'linked_timesheet_id', ec.timesheet_id::text,
+            'source_family_key', coalesce(nullif(btrim(coalesce(ec.component_json->>'source_family_key', '')), ''), 'timesheet:' || ec.timesheet_id::text),
+            'component_key_type', coalesce(nullif(btrim(coalesce(ec.component_json->>'component_key_type', '')), ''), 'CASE_TOTAL'),
+            'component_key_value', coalesce(nullif(btrim(coalesce(ec.component_json->>'component_key_value', '')), ''), 'TOTAL'),
+            'classification', ec.component_json->>'classification',
+            'source_pay_method', coalesce(nullif(btrim(coalesce(ec.component_json->>'source_pay_method', '')), ''), ec.candidate_pay_method),
+            'current_target_pay_method', ec.candidate_pay_method,
+            'source_basis_json', coalesce(ec.component_json->'source_basis_json', '{}'::jsonb),
+            'source_amount', abs(ec.component_amount_ex),
+            'allocation_priority_group', case when ec.component_json->>'classification' = 'TAXABLE_CHANNEL_SENSITIVE' then 0 else 1 end,
+            'allocation_priority_order', ec.component_order
+          )
+          order by coalesce(ec.component_json->>'classification',''), coalesce(ec.component_json->>'component_key_type',''), coalesce(ec.component_json->>'component_key_value','')
+        ) filter (where ec.component_amount_ex > 0),
+        '[]'::jsonb
+      ) as underpayment_components_json
+    from exploded_components ec
+    group by ec.candidate_id, ec.timesheet_id
   )
   select
-    nr.candidate_id,
-    nr.timesheet_id,
-    nr.owed_ex,
-    coalesce(
-      tps.last_settled_signature,
-      md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
-    ) as baseline_signature
-  from negative_rows nr
-  left join public.timesheet_pay_state tps
-    on tps.timesheet_id = nr.timesheet_id;
+    cr.candidate_id,
+    cr.timesheet_id,
+    cr.client_id,
+    cr.linked_shift_date,
+    cr.corrected_amount_ex,
+    cr.baseline_signature,
+    cr.candidate_pay_method,
+    cr.case_is_blocked,
+    cr.overpayment_amount_ex,
+    cr.underpayment_amount_ex,
+    case
+      when cr.overpayment_amount_ex > 0 then 'OVERPAYMENT'::public.pay_finance_case_type_enum
+      when cr.case_is_blocked = true and cr.underpayment_amount_ex > 0 then 'UNDERPAYMENT'::public.pay_finance_case_type_enum
+      else null::public.pay_finance_case_type_enum
+    end as desired_case_type,
+    case
+      when cr.overpayment_amount_ex > 0 then 'OVERPAYMENT'::public.pay_advance_kind_enum
+      when cr.case_is_blocked = true and cr.underpayment_amount_ex > 0 then 'UNDERPAYMENT'::public.pay_advance_kind_enum
+      else null::public.pay_advance_kind_enum
+    end as desired_advance_kind,
+    case
+      when cr.overpayment_amount_ex > 0 then 'OVERPAYMENT'::public.pay_advance_reason_enum
+      when cr.case_is_blocked = true and cr.underpayment_amount_ex > 0 then 'UNDERPAYMENT'::public.pay_advance_reason_enum
+      else null::public.pay_advance_reason_enum
+    end as desired_reason,
+    case
+      when cr.overpayment_amount_ex > 0 then round(cr.corrected_amount_ex + cr.overpayment_amount_ex, 2)::numeric(12,2)
+      when cr.case_is_blocked = true and cr.underpayment_amount_ex > 0 then round(cr.corrected_amount_ex - cr.underpayment_amount_ex, 2)::numeric(12,2)
+      else null::numeric(12,2)
+    end as source_original_paid_amount,
+    case
+      when cr.overpayment_amount_ex > 0 then round(cr.corrected_amount_ex, 2)::numeric(12,2)
+      when cr.case_is_blocked = true and cr.underpayment_amount_ex > 0 then round(cr.corrected_amount_ex, 2)::numeric(12,2)
+      else null::numeric(12,2)
+    end as source_corrected_paid_amount,
+    case
+      when cr.overpayment_amount_ex > 0 then cr.overpayment_components_json
+      when cr.case_is_blocked = true and cr.underpayment_amount_ex > 0 then cr.underpayment_components_json
+      else '[]'::jsonb
+    end as components_sync_json
+  from case_rollup cr
+  where cr.overpayment_amount_ex > 0
+     or (cr.case_is_blocked = true and cr.underpayment_amount_ex > 0);
 
-  get diagnostics v_negative_count = row_count;
+  select count(*)::int into v_timesheet_case_count from pg_temp.tmp_sync_timesheet_case_candidates;
+  select count(*)::int into v_overpayment_case_count from pg_temp.tmp_sync_timesheet_case_candidates where desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum;
+  select count(*)::int into v_underpayment_case_count from pg_temp.tmp_sync_timesheet_case_candidates where desired_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum;
 
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'candidate_id', tpnt.candidate_id::text,
-          'timesheet_id', tpnt.timesheet_id::text,
-          'owed_ex', tpnt.owed_ex,
-          'baseline_signature', tpnt.baseline_signature
-        )
-        order by tpnt.candidate_id::text, tpnt.timesheet_id::text
-      ),
-      '[]'::jsonb
-    )
-  into v_negative_json
-  from pg_temp.tmp_preview_negative_timesheets tpnt;
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'candidate_id', t.candidate_id::text,
+        'timesheet_id', t.timesheet_id::text,
+        'client_id', case when t.client_id is null then null else t.client_id::text end,
+        'linked_shift_date', case when t.linked_shift_date is null then null else t.linked_shift_date::text end,
+        'baseline_signature', t.baseline_signature,
+        'corrected_amount_ex', t.corrected_amount_ex,
+        'case_is_blocked', t.case_is_blocked,
+        'desired_case_type', case when t.desired_case_type is null then null else t.desired_case_type::text end,
+        'overpayment_amount_ex', t.overpayment_amount_ex,
+        'underpayment_amount_ex', t.underpayment_amount_ex
+      )
+      order by t.candidate_id::text, t.timesheet_id::text
+    ),
+    '[]'::jsonb
+  ) into v_case_candidates_json
+  from pg_temp.tmp_sync_timesheet_case_candidates t;
 
-  if v_negative_count > 0 then
-    with ins as (
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'candidate_id', t.candidate_id::text,
+        'timesheet_id', t.timesheet_id::text,
+        'case_type', t.desired_case_type::text,
+        'amount_ex', t.overpayment_amount_ex
+      )
+      order by t.candidate_id::text, t.timesheet_id::text
+    ),
+    '[]'::jsonb
+  ) into v_overpayment_json
+  from pg_temp.tmp_sync_timesheet_case_candidates t
+  where t.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'candidate_id', t.candidate_id::text,
+        'timesheet_id', t.timesheet_id::text,
+        'case_type', t.desired_case_type::text,
+        'amount_ex', t.underpayment_amount_ex
+      )
+      order by t.candidate_id::text, t.timesheet_id::text
+    ),
+    '[]'::jsonb
+  ) into v_underpayment_json
+  from pg_temp.tmp_sync_timesheet_case_candidates t
+  where t.desired_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum;
+
+  for v_target_case_row in
+    select
+      t.*
+    from pg_temp.tmp_sync_timesheet_case_candidates t
+    order by t.candidate_id, t.timesheet_id
+  loop
+    if v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then
+      v_target_case_amount_ex := round(v_target_case_row.overpayment_amount_ex, 2)::numeric(12,2);
+    elsif v_target_case_row.desired_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum then
+      v_target_case_amount_ex := round(v_target_case_row.underpayment_amount_ex, 2)::numeric(12,2);
+    else
+      v_target_case_amount_ex := null;
+    end if;
+
+    select
+      pa.id as finance_case_id,
+      pa.case_type as old_case_type,
+      pa.status as old_status,
+      round(coalesce(pa.original_amount, 0), 2)::numeric(12,2) as old_original_amount,
+      round(coalesce(pa.outstanding_amount, 0), 2)::numeric(12,2) as old_outstanding_amount,
+      round(coalesce(pa.source_original_paid_amount, 0), 2)::numeric(12,2) as old_source_original_paid_amount,
+      round(coalesce(pa.source_corrected_paid_amount, 0), 2)::numeric(12,2) as old_source_corrected_paid_amount,
+      pa.linked_shift_date as old_linked_shift_date,
+      pa.baseline_signature as old_baseline_signature
+    into v_existing_case_row
+    from public.pay_advances pa
+    where pa.candidate_id = v_target_case_row.candidate_id
+      and pa.linked_timesheet_id = v_target_case_row.timesheet_id
+      and pa.case_type in ('OVERPAYMENT'::public.pay_finance_case_type_enum, 'UNDERPAYMENT'::public.pay_finance_case_type_enum)
+    order by
+      case when upper(coalesce(pa.status::text,'')) = 'ACTIVE' then 0 else 1 end,
+      pa.updated_at desc,
+      pa.created_at desc,
+      pa.id desc
+    limit 1
+    for update;
+
+    v_existing_recovered_amount := greatest(coalesce(v_existing_case_row.old_original_amount, 0) - coalesce(v_existing_case_row.old_outstanding_amount, 0), 0);
+    v_new_outstanding_amount := greatest(v_target_case_amount_ex - v_existing_recovered_amount, 0)::numeric(12,2);
+
+    if v_existing_case_row.finance_case_id is null then
       insert into public.pay_advances (
         candidate_id,
+        client_id,
+        case_type,
         advance_kind,
         reason,
         linked_timesheet_id,
+        linked_shift_date,
         baseline_signature,
+        source_original_paid_amount,
+        source_corrected_paid_amount,
         original_amount,
         outstanding_amount,
-        status
+        status,
+        created_by,
+        updated_at,
+        created_at,
+        cleared_at_utc,
+        cleared_by_user_id,
+        write_off_reason,
+        written_off_at_utc,
+        written_off_by_user_id
       )
-      select
-        tpnt.candidate_id,
-        'OVERPAYMENT'::public.pay_advance_kind_enum,
-        'OVERPAYMENT'::public.pay_advance_reason_enum,
-        tpnt.timesheet_id,
-        tpnt.baseline_signature,
-        tpnt.owed_ex,
-        tpnt.owed_ex,
-        'ACTIVE'::public.pay_advance_status_enum
-      from pg_temp.tmp_preview_negative_timesheets tpnt
-      where tpnt.owed_ex > 0
-      on conflict do nothing
-      returning 1
-    )
-    select count(*)::int
-    into v_cases_inserted
-    from ins;
+      values (
+        v_target_case_row.candidate_id,
+        v_target_case_row.client_id,
+        v_target_case_row.desired_case_type,
+        v_target_case_row.desired_advance_kind,
+        v_target_case_row.desired_reason,
+        v_target_case_row.timesheet_id,
+        v_target_case_row.linked_shift_date,
+        v_target_case_row.baseline_signature,
+        v_target_case_row.source_original_paid_amount,
+        v_target_case_row.source_corrected_paid_amount,
+        v_target_case_amount_ex,
+        v_target_case_amount_ex,
+        'ACTIVE'::public.pay_advance_status_enum,
+        p_actor_user_id,
+        now(),
+        now(),
+        null,
+        null,
+        null,
+        null,
+        null
+      )
+      returning id into v_selected_finance_case_id;
 
+      v_cases_inserted := v_cases_inserted + 1;
+      v_selected_event_type := 'CREATED';
+      v_selected_reason := 'PREVIEW_FINANCE_SYNC';
+      v_selected_note := case when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then 'Created overpayment finance case from component-aware preview sync' else 'Created unresolved underpayment finance case from blocked component-aware preview sync' end;
+      v_case_before_json := null;
+      v_case_after_json := jsonb_build_object(
+        'case_type', v_target_case_row.desired_case_type::text,
+        'candidate_id', v_target_case_row.candidate_id::text,
+        'linked_timesheet_id', v_target_case_row.timesheet_id::text,
+        'linked_shift_date', case when v_target_case_row.linked_shift_date is null then null else v_target_case_row.linked_shift_date::text end,
+        'baseline_signature', v_target_case_row.baseline_signature,
+        'original_amount', v_target_case_amount_ex,
+        'outstanding_amount', v_target_case_amount_ex,
+        'source_original_paid_amount', v_target_case_row.source_original_paid_amount,
+        'source_corrected_paid_amount', v_target_case_row.source_corrected_paid_amount,
+        'status', 'ACTIVE'
+      );
+    else
+      v_case_before_json := jsonb_build_object(
+        'case_type', v_existing_case_row.old_case_type::text,
+        'status', v_existing_case_row.old_status::text,
+        'original_amount', v_existing_case_row.old_original_amount,
+        'outstanding_amount', v_existing_case_row.old_outstanding_amount,
+        'source_original_paid_amount', v_existing_case_row.old_source_original_paid_amount,
+        'source_corrected_paid_amount', v_existing_case_row.old_source_corrected_paid_amount,
+        'linked_shift_date', case when v_existing_case_row.old_linked_shift_date is null then null else v_existing_case_row.old_linked_shift_date::text end,
+        'baseline_signature', v_existing_case_row.old_baseline_signature
+      );
+
+      update public.pay_advances pa
+      set
+        client_id = v_target_case_row.client_id,
+        case_type = v_target_case_row.desired_case_type,
+        advance_kind = v_target_case_row.desired_advance_kind,
+        reason = v_target_case_row.desired_reason,
+        linked_shift_date = v_target_case_row.linked_shift_date,
+        baseline_signature = v_target_case_row.baseline_signature,
+        source_original_paid_amount = v_target_case_row.source_original_paid_amount,
+        source_corrected_paid_amount = v_target_case_row.source_corrected_paid_amount,
+        original_amount = v_target_case_amount_ex,
+        outstanding_amount = v_new_outstanding_amount,
+        status = case when v_new_outstanding_amount > 0 then 'ACTIVE'::public.pay_advance_status_enum else 'PAID_OFF'::public.pay_advance_status_enum end,
+        cleared_at_utc = case when v_new_outstanding_amount > 0 then null else coalesce(pa.cleared_at_utc, now()) end,
+        cleared_by_user_id = case when v_new_outstanding_amount > 0 then null else coalesce(pa.cleared_by_user_id, p_actor_user_id) end,
+        updated_at = now()
+      where pa.id = v_existing_case_row.finance_case_id;
+
+      v_selected_finance_case_id := v_existing_case_row.finance_case_id;
+      v_cases_touched := v_cases_touched + 1;
+
+      if upper(coalesce(v_existing_case_row.old_status::text,'')) = 'PAID_OFF' and v_new_outstanding_amount > 0 then
+        v_cases_reopened := v_cases_reopened + 1;
+        v_selected_event_type := 'REOPENED';
+        v_selected_reason := 'PREVIEW_FINANCE_SYNC';
+        v_selected_note := case when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then 'Reopened overpayment finance case from component-aware preview sync' else 'Reopened unresolved underpayment finance case from blocked component-aware preview sync' end;
+      else
+        if v_existing_case_row.old_case_type is distinct from v_target_case_row.desired_case_type
+           or v_existing_case_row.old_original_amount is distinct from v_target_case_amount_ex
+           or v_existing_case_row.old_outstanding_amount is distinct from v_new_outstanding_amount
+           or v_existing_case_row.old_source_original_paid_amount is distinct from v_target_case_row.source_original_paid_amount
+           or v_existing_case_row.old_source_corrected_paid_amount is distinct from v_target_case_row.source_corrected_paid_amount
+           or v_existing_case_row.old_linked_shift_date is distinct from v_target_case_row.linked_shift_date
+           or v_existing_case_row.old_baseline_signature is distinct from v_target_case_row.baseline_signature then
+          v_cases_amended := v_cases_amended + 1;
+        end if;
+        v_selected_event_type := 'AMENDED';
+        v_selected_reason := 'PREVIEW_FINANCE_SYNC';
+        v_selected_note := case when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then 'Amended overpayment finance case from component-aware preview sync' else 'Amended unresolved underpayment finance case from blocked component-aware preview sync' end;
+      end if;
+
+      v_case_after_json := jsonb_build_object(
+        'case_type', v_target_case_row.desired_case_type::text,
+        'status', case when v_new_outstanding_amount > 0 then 'ACTIVE' else 'PAID_OFF' end,
+        'original_amount', v_target_case_amount_ex,
+        'outstanding_amount', v_new_outstanding_amount,
+        'source_original_paid_amount', v_target_case_row.source_original_paid_amount,
+        'source_corrected_paid_amount', v_target_case_row.source_corrected_paid_amount,
+        'linked_shift_date', case when v_target_case_row.linked_shift_date is null then null else v_target_case_row.linked_shift_date::text end,
+        'baseline_signature', v_target_case_row.baseline_signature
+      );
+    end if;
+
+    insert into pg_temp.tmp_sync_case_links (
+      candidate_id,
+      timesheet_id,
+      finance_case_id,
+      desired_case_type,
+      source_original_paid_amount,
+      source_corrected_paid_amount,
+      case_amount_ex,
+      linked_shift_date,
+      baseline_signature,
+      components_sync_json
+    )
+    values (
+      v_target_case_row.candidate_id,
+      v_target_case_row.timesheet_id,
+      v_selected_finance_case_id,
+      v_target_case_row.desired_case_type,
+      v_target_case_row.source_original_paid_amount,
+      v_target_case_row.source_corrected_paid_amount,
+      v_target_case_amount_ex,
+      v_target_case_row.linked_shift_date,
+      v_target_case_row.baseline_signature,
+      v_target_case_row.components_sync_json
+    )
+    on conflict (candidate_id, timesheet_id) do update
+    set
+      finance_case_id = excluded.finance_case_id,
+      desired_case_type = excluded.desired_case_type,
+      source_original_paid_amount = excluded.source_original_paid_amount,
+      source_corrected_paid_amount = excluded.source_corrected_paid_amount,
+      case_amount_ex = excluded.case_amount_ex,
+      linked_shift_date = excluded.linked_shift_date,
+      baseline_signature = excluded.baseline_signature,
+      components_sync_json = excluded.components_sync_json;
+
+    insert into public.pay_finance_case_events (
+      finance_case_id,
+      event_type,
+      event_at_utc,
+      actor_user_id,
+      pay_batch_id,
+      reservation_id,
+      before_json,
+      after_json,
+      reason,
+      note
+    )
+    values (
+      v_selected_finance_case_id,
+      v_selected_event_type,
+      now(),
+      p_actor_user_id,
+      null,
+      null,
+      v_case_before_json,
+      v_case_after_json,
+      v_selected_reason,
+      v_selected_note
+    );
+  end loop;
+
+  for v_open_case_candidate in
+    select
+      pa.id as finance_case_id,
+      pa.candidate_id,
+      pa.linked_timesheet_id as timesheet_id,
+      pa.case_type as old_case_type,
+      round(coalesce(pa.original_amount,0),2)::numeric(12,2) as old_original_amount,
+      round(coalesce(pa.outstanding_amount,0),2)::numeric(12,2) as old_outstanding_amount,
+      round(coalesce(pa.source_original_paid_amount,0),2)::numeric(12,2) as old_source_original_paid_amount,
+      round(coalesce(pa.source_corrected_paid_amount,0),2)::numeric(12,2) as old_source_corrected_paid_amount,
+      pa.linked_shift_date as old_linked_shift_date,
+      pa.baseline_signature as old_baseline_signature
+    from public.pay_advances pa
+    where pa.case_type in ('OVERPAYMENT'::public.pay_finance_case_type_enum, 'UNDERPAYMENT'::public.pay_finance_case_type_enum)
+      and pa.linked_timesheet_id is not null
+      and (
+        coalesce(array_length(p_candidate_ids, 1), 0) = 0
+        or pa.candidate_id = any(p_candidate_ids)
+      )
+      and not exists (
+        select 1
+        from pg_temp.tmp_sync_case_links l
+        where l.finance_case_id = pa.id
+      )
+      and exists (
+        select 1
+        from public.candidates c
+        where c.id = pa.candidate_id
+          and upper(coalesce(c.pay_method,'')) = v_scope
+      )
+  loop
+    insert into pg_temp.tmp_sync_case_clears (
+      finance_case_id,
+      candidate_id,
+      timesheet_id,
+      old_case_type,
+      old_original_amount,
+      old_outstanding_amount,
+      old_source_original_paid_amount,
+      old_source_corrected_paid_amount,
+      old_linked_shift_date,
+      old_baseline_signature
+    )
+    values (
+      v_open_case_candidate.finance_case_id,
+      v_open_case_candidate.candidate_id,
+      v_open_case_candidate.timesheet_id,
+      v_open_case_candidate.old_case_type,
+      v_open_case_candidate.old_original_amount,
+      v_open_case_candidate.old_outstanding_amount,
+      v_open_case_candidate.old_source_original_paid_amount,
+      v_open_case_candidate.old_source_corrected_paid_amount,
+      v_open_case_candidate.old_linked_shift_date,
+      v_open_case_candidate.old_baseline_signature
+    )
+    on conflict (finance_case_id) do nothing;
+  end loop;
+
+  for v_existing_case_row in
+    select *
+    from pg_temp.tmp_sync_case_clears
+    order by candidate_id, timesheet_id, finance_case_id
+  loop
     update public.pay_advances pa
     set
-      outstanding_amount = tpnt.owed_ex,
-      original_amount = greatest(coalesce(pa.original_amount, 0), tpnt.owed_ex),
-      status = case
-        when tpnt.owed_ex > 0 then 'ACTIVE'::public.pay_advance_status_enum
-        else 'PAID_OFF'::public.pay_advance_status_enum
-      end,
-      reason = 'OVERPAYMENT'::public.pay_advance_reason_enum,
+      status = 'PAID_OFF'::public.pay_advance_status_enum,
+      outstanding_amount = 0,
+      cleared_at_utc = coalesce(pa.cleared_at_utc, now()),
+      cleared_by_user_id = coalesce(pa.cleared_by_user_id, p_actor_user_id),
       updated_at = now()
-    from pg_temp.tmp_preview_negative_timesheets tpnt
-    where pa.candidate_id = tpnt.candidate_id
-      and pa.linked_timesheet_id = tpnt.timesheet_id
-      and pa.baseline_signature is not distinct from tpnt.baseline_signature
-      and pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
-      and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum);
+    where pa.id = v_existing_case_row.finance_case_id;
 
-    get diagnostics v_cases_touched = row_count;
-  end if;
+    insert into public.pay_finance_case_events (
+      finance_case_id,
+      event_type,
+      event_at_utc,
+      actor_user_id,
+      pay_batch_id,
+      reservation_id,
+      before_json,
+      after_json,
+      reason,
+      note
+    )
+    values (
+      v_existing_case_row.finance_case_id,
+      'CLEARED',
+      now(),
+      p_actor_user_id,
+      null,
+      null,
+      jsonb_build_object(
+        'case_type', v_existing_case_row.old_case_type::text,
+        'status', 'ACTIVE',
+        'original_amount', v_existing_case_row.old_original_amount,
+        'outstanding_amount', v_existing_case_row.old_outstanding_amount,
+        'source_original_paid_amount', v_existing_case_row.old_source_original_paid_amount,
+        'source_corrected_paid_amount', v_existing_case_row.old_source_corrected_paid_amount,
+        'linked_shift_date', case when v_existing_case_row.old_linked_shift_date is null then null else v_existing_case_row.old_linked_shift_date::text end,
+        'baseline_signature', v_existing_case_row.old_baseline_signature
+      ),
+      jsonb_build_object(
+        'case_type', v_existing_case_row.old_case_type::text,
+        'status', 'PAID_OFF',
+        'original_amount', v_existing_case_row.old_original_amount,
+        'outstanding_amount', 0,
+        'source_original_paid_amount', v_existing_case_row.old_source_original_paid_amount,
+        'source_corrected_paid_amount', v_existing_case_row.old_source_corrected_paid_amount,
+        'linked_shift_date', case when v_existing_case_row.old_linked_shift_date is null then null else v_existing_case_row.old_linked_shift_date::text end,
+        'baseline_signature', v_existing_case_row.old_baseline_signature
+      ),
+      'PREVIEW_FINANCE_SYNC',
+      'Cleared finance case because the current preview no longer requires a persistent overpayment/underpayment header'
+    );
+
+    perform public.pay_finance_components_sync_from_preview(
+      v_existing_case_row.finance_case_id,
+      '[]'::jsonb,
+      p_actor_user_id
+    );
+
+    v_cases_cleared := v_cases_cleared + 1;
+  end loop;
+
+  for v_target_case_row in
+    select l.*
+    from pg_temp.tmp_sync_case_links l
+    order by l.candidate_id, l.timesheet_id
+  loop
+    v_components_sync_result := public.pay_finance_components_sync_from_preview(
+      v_target_case_row.finance_case_id,
+      v_target_case_row.components_sync_json,
+      p_actor_user_id
+    );
+  end loop;
 
   return jsonb_build_object(
     'ok', true,
     'pay_channel_scope', v_scope,
-    'negative_preview_timesheets_count', v_negative_count,
-    'negative_preview_timesheets', v_negative_json,
+    'negative_preview_timesheets_count', v_overpayment_case_count,
+    'negative_preview_timesheets', v_overpayment_json,
+    'underpayment_case_count', v_underpayment_case_count,
+    'underpayment_cases', v_underpayment_json,
+    'timesheet_finance_case_candidates_count', v_timesheet_case_count,
+    'timesheet_finance_case_candidates', v_case_candidates_json,
     'cases_inserted', v_cases_inserted,
-    'cases_touched', v_cases_touched
+    'cases_touched', v_cases_touched,
+    'cases_amended', v_cases_amended,
+    'cases_reopened', v_cases_reopened,
+    'cases_cleared', v_cases_cleared
   );
 end;
 $$;
