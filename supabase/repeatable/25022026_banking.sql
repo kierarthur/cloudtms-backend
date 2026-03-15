@@ -13741,687 +13741,6 @@ end;
 $function$;
 
 
-create or replace function public.pay_manual_credit_adjustment_create(
-  p_candidate_id uuid,
-  p_amount numeric,
-  p_actor_user_id uuid,
-  p_adjustment_comment text,
-  p_note text default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_pay_date date := (now() at time zone 'Europe/London')::date;
-
-  v_settings record;
-  v_candidate record;
-
-  v_finance_case_id uuid := null;
-  v_pay_batch_id uuid := null;
-  v_pay_batch_candidate_id uuid := null;
-  v_pay_batch_item_id uuid := null;
-
-  v_warnings jsonb := '[]'::jsonb;
-  v_provider text := null;
-  v_env text := null;
-  v_need_name_check boolean := false;
-  v_requires_payee_map boolean := false;
-  v_bnc_status text := null;
-  v_bnc_has_override boolean := false;
-  v_bpm_present boolean := false;
-
-  v_pay_channel text := null;
-  v_paye_treatment text := 'NONE';
-begin
-  if p_candidate_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
-      'code', 'CANDIDATE_ID_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_create: candidate_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
-      'code', 'ACTOR_USER_ID_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_create: actor_user_id is required'
-    )::text;
-  end if;
-
-  if p_amount is null or round(p_amount,2) <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
-      'code', 'AMOUNT_INVALID',
-      'message', 'pay_manual_credit_adjustment_create: amount must be > 0'
-    )::text;
-  end if;
-
-  if nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
-      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_create: adjustment_comment is required'
-    )::text;
-  end if;
-
-  select
-    sd.banking_system,
-    sd.external_paye_system,
-    sd.rail_provider_default,
-    sd.rail_env_default,
-    sd.rail_supports_name_check
-  into v_settings
-  from public.settings_defaults sd
-  where sd.id = 1
-  limit 1;
-
-  if v_settings.banking_system is null or v_settings.external_paye_system is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
-      'code', 'SETTINGS_DEFAULTS_MISSING',
-      'message', 'pay_manual_credit_adjustment_create: settings_defaults missing required banking defaults (id=1)'
-    )::text;
-  end if;
-
-  select
-    c.id,
-    c.active,
-    c.tms_ref,
-    c.display_name,
-    c.first_name,
-    c.last_name,
-    c.account_holder,
-    c.sort_code,
-    c.account_number,
-    c.bank_details_hash,
-    upper(coalesce(c.pay_method,'')) as pay_method,
-    c.umbrella_id
-  into v_candidate
-  from public.candidates c
-  where c.id = p_candidate_id
-  limit 1;
-
-  if v_candidate.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
-      'code', 'CANDIDATE_NOT_FOUND',
-      'message', 'pay_manual_credit_adjustment_create: candidate not found',
-      'candidate_id', p_candidate_id::text
-    )::text;
-  end if;
-
-  if coalesce(v_candidate.active,false) = false then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
-      'code', 'CANDIDATE_INACTIVE',
-      'message', 'pay_manual_credit_adjustment_create: candidate is not active',
-      'candidate_id', p_candidate_id::text
-    )::text;
-  end if;
-
-  if v_candidate.pay_method not in ('PAYE','UMBRELLA') then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
-      'code', 'PAY_METHOD_INVALID',
-      'message', 'pay_manual_credit_adjustment_create: candidate pay_method must be PAYE or UMBRELLA',
-      'candidate_id', p_candidate_id::text,
-      'pay_method', v_candidate.pay_method
-    )::text;
-  end if;
-
-  v_pay_channel := v_candidate.pay_method;
-  v_paye_treatment := case when v_pay_channel = 'PAYE' then 'GROSS_ADD' else 'NONE' end;
-
-  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
-  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
-  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
-  v_requires_payee_map := (v_provider <> 'CSV');
-
-  insert into public.pay_advances(
-    candidate_id,
-    client_id,
-    reason,
-    original_amount,
-    outstanding_amount,
-    linked_shift_date,
-    schedule_json,
-    next_due_week_start,
-    status,
-    best_guess_hours,
-    notes,
-    created_at,
-    created_by,
-    updated_at,
-    advance_kind,
-    linked_timesheet_id,
-    baseline_signature,
-    payout_status,
-    payout_pay_batch_id,
-    payout_transfer_id,
-    weekly_due,
-    weeks_total,
-    start_week_start,
-    case_type,
-    adjustment_comment,
-    source_original_paid_amount,
-    source_corrected_paid_amount,
-    minimum_earnings_threshold,
-    take_home_floor_override,
-    written_off_at_utc,
-    written_off_by_user_id,
-    write_off_reason,
-    cleared_at_utc,
-    cleared_by_user_id
-  )
-  values (
-    p_candidate_id,
-    null::uuid,
-    'MANUAL_ADVANCE'::public.pay_advance_reason_enum,
-    round(p_amount,2),
-    0,
-    null::date,
-    '[]'::jsonb,
-    null::date,
-    'ACTIVE'::public.pay_advance_status_enum,
-    null::jsonb,
-    nullif(btrim(coalesce(p_note,'')), ''),
-    v_now_utc,
-    p_actor_user_id,
-    v_now_utc,
-    'LEGACY_ADVANCE'::public.pay_advance_kind_enum,
-    null::uuid,
-    null::text,
-    'PENDING'::public.pay_advance_payout_status_enum,
-    null::uuid,
-    null::uuid,
-    null::numeric,
-    null::int,
-    null::date,
-    'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum,
-    nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-    null::numeric,
-    null::numeric,
-    null::numeric,
-    null::numeric,
-    null::timestamptz,
-    null::uuid,
-    null::text,
-    null::timestamptz,
-    null::uuid
-  )
-  returning id into v_finance_case_id;
-
-  insert into public.pay_batches(
-    pay_date,
-    created_at_utc,
-    created_by_user_id,
-    status,
-    banking_system_snapshot,
-    external_paye_system_snapshot,
-    rail_provider_snapshot,
-    rail_env_snapshot,
-    batch_kind_fixed
-  )
-  values (
-    v_pay_date,
-    v_now_utc,
-    p_actor_user_id,
-    'DRAFT',
-    v_settings.banking_system,
-    v_settings.external_paye_system,
-    v_settings.rail_provider_default,
-    v_settings.rail_env_default,
-    'LOANS'
-  )
-  returning id into v_pay_batch_id;
-
-  update public.pay_advances pa
-  set payout_pay_batch_id = v_pay_batch_id,
-      updated_at = v_now_utc
-  where pa.id = v_finance_case_id;
-
-  insert into public.pay_batch_candidates(
-    pay_batch_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    paye_state,
-    mismatch_settlement_choice,
-    gross_preview,
-    net_bank_amount,
-    debt_created,
-    loan_repayment_taken,
-    overpayment_recovery_taken,
-    awaiting_net_amount,
-    updated_at
-  )
-  values (
-    v_pay_batch_id,
-    p_candidate_id,
-    v_candidate.tms_ref,
-    v_candidate.display_name,
-    null,
-    null,
-    round(p_amount,2),
-    round(p_amount,2),
-    0,
-    0,
-    0,
-    false,
-    v_now_utc
-  )
-  returning id into v_pay_batch_candidate_id;
-
-  insert into public.pay_batch_items(
-    pay_batch_candidate_id,
-    item_type,
-    timesheet_id,
-    segment_key,
-    source_ref,
-    description,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    pay_channel,
-    umbrella_id,
-    bank_reference,
-    pay_bank_transfer_id,
-    repayment_week_start,
-    is_voided,
-    is_mismatch,
-    created_at,
-    updated_at,
-    finance_case_id,
-    reservation_id,
-    paye_treatment
-  )
-  values (
-    v_pay_batch_candidate_id,
-    'MANUAL_CREDIT_PAYOUT',
-    null::uuid,
-    null::text,
-    ('advance:' || v_finance_case_id::text),
-    'Manual credit adjustment',
-    round(p_amount,2),
-    0,
-    round(p_amount,2),
-    v_pay_channel,
-    case when v_pay_channel = 'UMBRELLA' then v_candidate.umbrella_id else null::uuid end,
-    null::text,
-    null::uuid,
-    null::date,
-    false,
-    false,
-    v_now_utc,
-    v_now_utc,
-    v_finance_case_id,
-    null::uuid,
-    v_paye_treatment
-  )
-  returning id into v_pay_batch_item_id;
-
-  insert into public.pay_batch_item_breakdowns(
-    pay_batch_item_id,
-    line_kind,
-    bucket_code,
-    unit_name,
-    units,
-    rate,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    meta_json
-  )
-  values (
-    v_pay_batch_item_id,
-    'MANUAL_CREDIT_PAYOUT',
-    null,
-    'Manual credit adjustment',
-    null::numeric,
-    null::numeric,
-    round(p_amount,2),
-    0,
-    round(p_amount,2),
-    jsonb_build_object(
-      'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-      'worker_label', 'Manual credit adjustment',
-      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), '')
-    )
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    v_finance_case_id,
-    'CREATED',
-    v_now_utc,
-    p_actor_user_id,
-    v_pay_batch_id,
-    null::jsonb,
-    jsonb_build_object(
-      'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-      'amount', round(p_amount,2),
-      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-      'payout_pay_batch_id', v_pay_batch_id::text,
-      'payout_status', 'PENDING',
-      'paye_treatment', v_paye_treatment
-    ),
-    null::text,
-    'Manual credit adjustment created'
-  );
-
-  if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
-    v_warnings := v_warnings || jsonb_build_array(
-      jsonb_build_object(
-        'code', 'BLOCKED_BANK_DETAILS',
-        'message', 'Candidate bank details are missing; batch can be created but will be blocked at prepare/schedule until bank details are present.',
-        'candidate_id', p_candidate_id::text
-      )
-    );
-  else
-    if v_need_name_check = true then
-      select
-        coalesce(bnc.status, 'UNVERIFIED') as status,
-        (bnc.override_reason is not null and bnc.override_hash = v_candidate.bank_details_hash) as has_override
-      into
-        v_bnc_status,
-        v_bnc_has_override
-      from public.bank_name_checks bnc
-      where bnc.rail_provider = v_settings.rail_provider_default
-        and bnc.rail_env = v_settings.rail_env_default
-        and bnc.entity_kind = 'CANDIDATE'
-        and bnc.entity_id = p_candidate_id
-        and bnc.bank_details_hash = v_candidate.bank_details_hash
-      limit 1;
-
-      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
-        v_warnings := v_warnings || jsonb_build_array(
-          jsonb_build_object(
-            'code', 'BLOCKED_NAME_CHECK',
-            'message', 'Name check has not passed (or override missing) for candidate bank details; scheduling/execution may be blocked until resolved.',
-            'candidate_id', p_candidate_id::text,
-            'rail_provider', v_settings.rail_provider_default,
-            'rail_env', v_settings.rail_env_default
-          )
-        );
-      end if;
-    end if;
-
-    if v_requires_payee_map = true then
-      select (bpm.payee_id is not null) as present
-      into v_bpm_present
-      from public.bank_payee_map bpm
-      where bpm.rail_provider = v_settings.rail_provider_default
-        and bpm.rail_env = v_settings.rail_env_default
-        and bpm.entity_kind = 'CANDIDATE'
-        and bpm.entity_id = p_candidate_id
-        and bpm.bank_details_hash = v_candidate.bank_details_hash
-      limit 1;
-
-      if coalesce(v_bpm_present,false) = false then
-        v_warnings := v_warnings || jsonb_build_array(
-          jsonb_build_object(
-            'code', 'BLOCKED_NO_PAYEE_MAP',
-            'message', 'Payee map is missing for candidate bank details on this rail; scheduling/execution may be blocked until payee mapping exists.',
-            'candidate_id', p_candidate_id::text,
-            'rail_provider', v_settings.rail_provider_default,
-            'rail_env', v_settings.rail_env_default
-          )
-        );
-      end if;
-    end if;
-  end if;
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', v_finance_case_id::text,
-    'pay_batch_id', v_pay_batch_id::text,
-    'pay_date', v_pay_date::text,
-    'batch_kind_fixed', 'LOANS',
-    'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-    'worker_label', 'Manual credit adjustment',
-    'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-    'warnings', v_warnings
-  );
-end;
-$$;
-
-create or replace function public.pay_manual_credit_adjustment_update(
-  p_finance_case_id uuid,
-  p_actor_user_id uuid,
-  p_amount numeric default null,
-  p_adjustment_comment text default null,
-  p_note text default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_case public.pay_advances%rowtype;
-  v_batch public.pay_batches%rowtype;
-  v_has_batch boolean := false;
-  v_is_committed boolean := false;
-  v_new_amount numeric(12,2);
-  v_new_comment text;
-  v_new_notes text;
-  v_before_json jsonb := '{}'::jsonb;
-  v_after_json jsonb := '{}'::jsonb;
-  v_batch_item_id uuid := null;
-  v_pay_batch_candidate_id uuid := null;
-begin
-  if p_finance_case_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'FINANCE_CASE_ID_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_update: finance_case_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'ACTOR_USER_ID_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_update: actor_user_id is required'
-    )::text;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id
-    and pa.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
-  for update;
-
-  if v_case.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'FINANCE_CASE_NOT_FOUND',
-      'message', 'pay_manual_credit_adjustment_update: Manual credit adjustment not found',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  if v_case.payout_pay_batch_id is not null then
-    select pb.*
-    into v_batch
-    from public.pay_batches pb
-    where pb.id = v_case.payout_pay_batch_id
-    limit 1;
-    v_has_batch := v_batch.id is not null;
-  end if;
-
-  if v_has_batch then
-    v_is_committed := (
-      coalesce(v_batch.authoritative_payment_date is not null, false)
-      or upper(coalesce(v_batch.status,'')) in ('SCHEDULED','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT','EXECUTING','SETTLED','COMPLETED','PARTIAL')
-    );
-  else
-    v_is_committed := false;
-  end if;
-
-  v_new_amount := coalesce(round(p_amount,2), round(coalesce(v_case.original_amount,0),2));
-  v_new_comment := case when p_adjustment_comment is null then v_case.adjustment_comment else nullif(btrim(p_adjustment_comment), '') end;
-  v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
-
-  if p_amount is not null and v_new_amount <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'AMOUNT_INVALID',
-      'message', 'pay_manual_credit_adjustment_update: amount must be > 0'
-    )::text;
-  end if;
-
-  if p_adjustment_comment is not null and v_new_comment is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_update: adjustment_comment is required'
-    )::text;
-  end if;
-
-  if v_is_committed and (
-    (p_amount is not null and v_new_amount <> round(coalesce(v_case.original_amount,0),2))
-    or (p_adjustment_comment is not null and coalesce(v_new_comment,'') <> coalesce(v_case.adjustment_comment,''))
-  ) then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'PAYOUT_ALREADY_COMMITTED',
-      'message', 'pay_manual_credit_adjustment_update: payout details can only be edited before commit',
-      'finance_case_id', p_finance_case_id::text,
-      'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end
-    )::text;
-  end if;
-
-  v_before_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'adjustment_comment', v_case.adjustment_comment,
-    'notes', v_case.notes,
-    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end
-  );
-
-  update public.pay_advances pa
-  set original_amount = case when v_is_committed then pa.original_amount else v_new_amount end,
-      adjustment_comment = case when v_is_committed then pa.adjustment_comment else v_new_comment end,
-      notes = v_new_notes,
-      updated_at = v_now_utc
-  where pa.id = p_finance_case_id;
-
-  if v_is_committed = false and v_has_batch then
-    select pbc.id
-    into v_pay_batch_candidate_id
-    from public.pay_batch_candidates pbc
-    where pbc.pay_batch_id = v_batch.id
-      and pbc.candidate_id = v_case.candidate_id
-    limit 1;
-
-    select pbi.id
-    into v_batch_item_id
-    from public.pay_batch_items pbi
-    join public.pay_batch_candidates pbc2
-      on pbc2.id = pbi.pay_batch_candidate_id
-    where pbc2.pay_batch_id = v_batch.id
-      and pbc2.candidate_id = v_case.candidate_id
-      and pbi.source_ref = ('advance:' || p_finance_case_id::text)
-      and pbi.item_type = 'MANUAL_CREDIT_PAYOUT'
-      and pbi.is_voided = false
-    limit 1;
-
-    if v_pay_batch_candidate_id is not null then
-      update public.pay_batch_candidates pbc
-      set gross_preview = v_new_amount,
-          net_bank_amount = v_new_amount,
-          updated_at = v_now_utc
-      where pbc.id = v_pay_batch_candidate_id;
-    end if;
-
-    if v_batch_item_id is not null then
-      update public.pay_batch_items pbi
-      set description = 'Manual credit adjustment',
-          amount_ex_vat = v_new_amount,
-          amount_vat = 0,
-          amount_inc_vat = v_new_amount,
-          updated_at = v_now_utc,
-          finance_case_id = p_finance_case_id,
-          reservation_id = null,
-          paye_treatment = case when upper(coalesce(pbi.pay_channel,'')) = 'PAYE' then 'GROSS_ADD' else 'NONE' end
-      where pbi.id = v_batch_item_id;
-
-      update public.pay_batch_item_breakdowns pbib
-      set unit_name = 'Manual credit adjustment',
-          amount_ex_vat = v_new_amount,
-          amount_vat = 0,
-          amount_inc_vat = v_new_amount,
-          meta_json = jsonb_build_object(
-            'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-            'worker_label', 'Manual credit adjustment',
-            'adjustment_comment', v_new_comment
-          )
-      where pbib.pay_batch_item_id = v_batch_item_id;
-    end if;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id;
-
-  v_after_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'adjustment_comment', v_case.adjustment_comment,
-    'notes', v_case.notes,
-    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    p_finance_case_id,
-    'UPDATED',
-    v_now_utc,
-    p_actor_user_id,
-    case when v_batch.id is null then null else v_batch.id end,
-    v_before_json,
-    v_after_json,
-    null::text,
-    'Manual credit adjustment updated'
-  );
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', p_finance_case_id::text,
-    'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-    'worker_label', 'Manual credit adjustment',
-    'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end,
-    'payout_editable', (v_is_committed = false)
-  );
-end;
-$$;
 
 
 create or replace function public.pay_finance_case_pause_resume(
@@ -17872,6 +17191,8 @@ end;
 $$;
 
 
+
+
 create or replace function public.pay_finance_case_restructure(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -17896,6 +17217,8 @@ declare
   v_new_next_due_week_start date := null;
   v_required_weeks int := 0;
   v_remaining_amount numeric(12,2);
+  v_component_remaining_amount numeric(12,2) := 0;
+  v_open_component_count integer := 0;
   v_new_weekly_due numeric(12,2);
   v_new_weeks_total int;
   v_new_start_week_start date;
@@ -17989,7 +17312,21 @@ begin
     )::text;
   end if;
 
-  v_remaining_amount := round(coalesce(v_case.outstanding_amount,0),2);
+  select
+    round(coalesce(sum(pfc.remaining_source_amount), 0), 2)::numeric(12,2),
+    count(*)::integer
+  into
+    v_component_remaining_amount,
+    v_open_component_count
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.closed_at_utc is null;
+
+  v_remaining_amount := case
+    when v_open_component_count > 0 then v_component_remaining_amount
+    else round(coalesce(v_case.outstanding_amount,0),2)
+  end;
+
   if v_remaining_amount <= 0 then
     raise exception '%', jsonb_build_object(
       'error','PAY_FINANCE_CASE_RESTRUCTURE',
@@ -18112,6 +17449,8 @@ begin
     'case_type', v_case.case_type::text,
     'status', v_case.status::text,
     'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'component_remaining_amount', v_component_remaining_amount,
+    'open_component_count', v_open_component_count,
     'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
     'weekly_due', round(coalesce(v_case.weekly_due,0),2),
     'weeks_total', v_case.weeks_total,
@@ -18124,6 +17463,7 @@ begin
 
   update public.pay_advances pa
   set
+    outstanding_amount = v_remaining_amount,
     schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
     weekly_due = v_new_weekly_due,
     weeks_total = v_new_weeks_total,
@@ -18144,6 +17484,8 @@ begin
     'case_type', v_case.case_type::text,
     'status', v_case.status::text,
     'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'component_remaining_amount', v_component_remaining_amount,
+    'open_component_count', v_open_component_count,
     'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
     'weekly_due', round(coalesce(v_case.weekly_due,0),2),
     'weeks_total', v_case.weeks_total,
@@ -18157,6 +17499,7 @@ begin
 
   insert into public.pay_finance_case_events(
     finance_case_id,
+    finance_component_id,
     event_type,
     event_at_utc,
     actor_user_id,
@@ -18168,6 +17511,7 @@ begin
   )
   values (
     p_finance_case_id,
+    null::uuid,
     'RESTRUCTURED',
     v_now_utc,
     p_actor_user_id,
@@ -18188,12 +17532,16 @@ begin
     'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
     'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
     'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'component_remaining_amount', v_component_remaining_amount,
+    'open_component_count', v_open_component_count,
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
     'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb)
   );
 end;
 $$;
+
+
 create or replace function public.pay_payment_advance_update(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -18873,7 +18221,6 @@ end;
 $$;
 
 
-
 create or replace function public.pay_manual_debt_adjustment_create(
   p_candidate_id uuid,
   p_amount numeric,
@@ -18895,6 +18242,7 @@ declare
   v_now_utc timestamptz := now();
   v_candidate record;
   v_finance_case_id uuid := null;
+  v_finance_component_id uuid := null;
   v_schedule_json jsonb := '[]'::jsonb;
   v_next_due date := null;
   v_required_weeks int := 0;
@@ -18905,6 +18253,12 @@ declare
   v_schedule_input_mode text := null;
   v_has_weekly_due_input boolean := false;
   v_has_weeks_total_input boolean := false;
+
+  v_component_source_basis_json jsonb := '{}'::jsonb;
+  v_component_resolution_payload_json jsonb := '{}'::jsonb;
+  v_component_resolution_result_json jsonb := '{}'::jsonb;
+  v_component_resolution_fingerprint text := null;
+  v_component_summary_json jsonb := '{}'::jsonb;
 begin
   if p_candidate_id is null then
     raise exception '%', jsonb_build_object(
@@ -19179,8 +18533,111 @@ begin
   )
   returning id into v_finance_case_id;
 
+  v_component_source_basis_json := jsonb_build_object(
+    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+    'amount', v_amount_norm
+  );
+
+  v_component_resolution_payload_json := jsonb_build_object(
+    'same_channel', true,
+    'target_amount', v_amount_norm,
+    'target_pay_method', v_candidate.pay_method
+  );
+
+  v_component_resolution_result_json := jsonb_build_object(
+    'target_amount', v_amount_norm,
+    'target_amount_ex_vat', v_amount_norm,
+    'target_amount_vat', 0,
+    'target_amount_inc_vat', v_amount_norm,
+    'target_pay_method', v_candidate.pay_method
+  );
+
+  v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+    p_source_family_key         => 'case:' || v_finance_case_id::text,
+    p_component_key_type        => 'CASE_TOTAL',
+    p_component_key_value       => 'TOTAL',
+    p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    p_source_pay_method         => v_candidate.pay_method,
+    p_current_target_pay_method => v_candidate.pay_method,
+    p_source_basis_json         => v_component_source_basis_json,
+    p_source_amount             => v_amount_norm,
+    p_relevant_erni_pct         => null::numeric,
+    p_target_basis_json         => jsonb_build_object('same_channel', true)
+  );
+
+  insert into public.pay_finance_case_components(
+    finance_case_id,
+    candidate_id,
+    client_id,
+    linked_timesheet_id,
+    source_family_key,
+    component_key_type,
+    component_key_value,
+    classification,
+    source_pay_method,
+    source_basis_json,
+    source_amount,
+    remaining_source_amount,
+    saved_target_pay_method,
+    saved_resolution_mode,
+    saved_resolution_payload_json,
+    saved_resolution_result_json,
+    resolution_fingerprint,
+    is_resolution_stale,
+    stale_reason,
+    allocation_priority_group,
+    allocation_priority_order,
+    created_at_utc,
+    updated_at_utc,
+    resolved_at_utc,
+    closed_at_utc
+  )
+  values (
+    v_finance_case_id,
+    p_candidate_id,
+    null::uuid,
+    null::uuid,
+    'case:' || v_finance_case_id::text,
+    'CASE_TOTAL',
+    'TOTAL',
+    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    v_candidate.pay_method,
+    v_component_source_basis_json,
+    v_amount_norm,
+    v_amount_norm,
+    v_candidate.pay_method,
+    'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
+    v_component_resolution_payload_json,
+    v_component_resolution_result_json,
+    v_component_resolution_fingerprint,
+    false,
+    null::text,
+    0,
+    0,
+    v_now_utc,
+    v_now_utc,
+    v_now_utc,
+    null::timestamptz
+  )
+  returning id into v_finance_component_id;
+
+  v_component_summary_json := jsonb_build_object(
+    'finance_component_id', v_finance_component_id::text,
+    'source_family_key', 'case:' || v_finance_case_id::text,
+    'component_key_type', 'CASE_TOTAL',
+    'component_key_value', 'TOTAL',
+    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'source_pay_method', v_candidate.pay_method,
+    'saved_target_pay_method', v_candidate.pay_method,
+    'saved_resolution_mode', 'MANUAL_AMOUNT',
+    'source_amount', v_amount_norm,
+    'remaining_source_amount', v_amount_norm,
+    'is_resolution_stale', false
+  );
+
   insert into public.pay_finance_case_events(
     finance_case_id,
+    finance_component_id,
     event_type,
     event_at_utc,
     actor_user_id,
@@ -19192,6 +18649,7 @@ begin
   )
   values (
     v_finance_case_id,
+    null::uuid,
     'CREATED',
     v_now_utc,
     p_actor_user_id,
@@ -19209,15 +18667,42 @@ begin
       'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end,
       'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
       'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
-      'schedule_input_mode', v_schedule_input_mode
+      'schedule_input_mode', v_schedule_input_mode,
+      'component_summary', v_component_summary_json
     ),
     null::text,
     'Manual debt adjustment created'
   );
 
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    v_finance_component_id,
+    'COMPONENT_CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    null::jsonb,
+    v_component_summary_json,
+    'MANUAL_DEBT_ADJUSTMENT_CREATE',
+    'Created taxable total component for manual debt adjustment'
+  );
+
   return jsonb_build_object(
     'ok', true,
     'finance_case_id', v_finance_case_id::text,
+    'finance_component_id', v_finance_component_id::text,
     'case_type', 'MANUAL_DEBT_ADJUSTMENT',
     'worker_label', 'Manual debt adjustment',
     'recovery_label', 'Manual debt adjustment recovery',
@@ -19231,12 +18716,11 @@ begin
     'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
     'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
     'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
-    'schedule_json', coalesce(v_schedule_json,'[]'::jsonb)
+    'schedule_json', coalesce(v_schedule_json,'[]'::jsonb),
+    'component_summary', v_component_summary_json
   );
 end;
 $$;
-
-
 create or replace function public.pay_manual_debt_adjustment_update(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -19257,6 +18741,20 @@ as $$
 declare
   v_now_utc timestamptz := now();
   v_case public.pay_advances%rowtype;
+  v_candidate_pay_method text := null;
+  v_component public.pay_finance_case_components%rowtype;
+  v_has_component boolean := false;
+  v_component_created boolean := false;
+  v_component_before_json jsonb := null;
+  v_component_after_json jsonb := null;
+  v_component_source_basis_json jsonb := '{}'::jsonb;
+  v_component_resolution_fingerprint text := null;
+  v_component_resolution_payload_json jsonb := null;
+  v_component_resolution_result_json jsonb := null;
+  v_component_is_resolution_stale boolean := false;
+  v_component_stale_reason text := null;
+  v_source_basis_changed boolean := false;
+
   v_new_original_amount numeric(12,2);
   v_new_outstanding_amount numeric(12,2);
   v_new_weekly_due numeric(12,2);
@@ -19277,6 +18775,7 @@ declare
   v_schedule_input_mode text := null;
   v_has_weekly_due_input boolean := false;
   v_has_weeks_total_input boolean := false;
+  v_component_summary_json jsonb := '{}'::jsonb;
 begin
   if p_finance_case_id is null then
     raise exception '%', jsonb_build_object(
@@ -19309,6 +18808,12 @@ begin
       'finance_case_id', p_finance_case_id::text
     )::text;
   end if;
+
+  select upper(coalesce(c.pay_method, ''))
+  into v_candidate_pay_method
+  from public.candidates c
+  where c.id = v_case.candidate_id
+  limit 1;
 
   if p_adjustment_comment is not null and nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
     raise exception '%', jsonb_build_object(
@@ -19496,6 +19001,24 @@ begin
   ) x
   where x.amt < 0;
 
+  select pfc.*
+  into v_component
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.closed_at_utc is null
+    and pfc.component_key_type = 'CASE_TOTAL'
+    and pfc.component_key_value = 'TOTAL'
+  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
+  limit 1
+  for update;
+
+  v_has_component := (v_component.id is not null);
+
+  v_component_source_basis_json := jsonb_build_object(
+    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+    'amount', v_new_original_amount
+  );
+
   v_before_json := jsonb_build_object(
     'original_amount', round(coalesce(v_case.original_amount,0),2),
     'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
@@ -19524,10 +19047,153 @@ begin
       updated_at = v_now_utc
   where pa.id = p_finance_case_id;
 
+  if v_has_component then
+    v_component_before_json := jsonb_build_object(
+      'finance_component_id', v_component.id::text,
+      'source_amount', round(coalesce(v_component.source_amount,0),2),
+      'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+      'source_pay_method', v_component.source_pay_method,
+      'saved_target_pay_method', v_component.saved_target_pay_method,
+      'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+      'resolution_fingerprint', v_component.resolution_fingerprint,
+      'is_resolution_stale', v_component.is_resolution_stale,
+      'stale_reason', v_component.stale_reason,
+      'source_basis_json', v_component.source_basis_json
+    );
+
+    v_source_basis_changed := (
+      round(coalesce(v_component.source_amount,0),2) is distinct from round(coalesce(v_new_original_amount,0),2)
+      or v_component.source_basis_json is distinct from v_component_source_basis_json
+    );
+
+    if v_source_basis_changed then
+      v_component_is_resolution_stale := (
+        v_component.saved_target_pay_method is not null
+        or v_component.saved_resolution_mode is not null
+        or v_component.saved_resolution_payload_json is not null
+        or v_component.saved_resolution_result_json is not null
+        or v_component.resolution_fingerprint is not null
+        or v_component.is_resolution_stale = true
+      );
+
+      if v_component_is_resolution_stale then
+        v_component_stale_reason := 'COMPONENT_BASIS_CHANGED';
+      else
+        v_component_stale_reason := null;
+      end if;
+    else
+      v_component_is_resolution_stale := coalesce(v_component.is_resolution_stale,false);
+      v_component_stale_reason := v_component.stale_reason;
+    end if;
+
+    update public.pay_finance_case_components pfc
+    set
+      source_basis_json = v_component_source_basis_json,
+      source_amount = v_new_original_amount,
+      remaining_source_amount = v_new_outstanding_amount,
+      is_resolution_stale = v_component_is_resolution_stale,
+      stale_reason = v_component_stale_reason,
+      updated_at_utc = v_now_utc
+    where pfc.id = v_component.id
+    returning pfc.* into v_component;
+  else
+    insert into public.pay_finance_case_components(
+      finance_case_id,
+      candidate_id,
+      client_id,
+      linked_timesheet_id,
+      source_family_key,
+      component_key_type,
+      component_key_value,
+      classification,
+      source_pay_method,
+      source_basis_json,
+      source_amount,
+      remaining_source_amount,
+      saved_target_pay_method,
+      saved_resolution_mode,
+      saved_resolution_payload_json,
+      saved_resolution_result_json,
+      resolution_fingerprint,
+      is_resolution_stale,
+      stale_reason,
+      allocation_priority_group,
+      allocation_priority_order,
+      created_at_utc,
+      updated_at_utc,
+      resolved_at_utc,
+      closed_at_utc
+    )
+    values (
+      p_finance_case_id,
+      v_case.candidate_id,
+      v_case.client_id,
+      v_case.linked_timesheet_id,
+      'case:' || p_finance_case_id::text,
+      'CASE_TOTAL',
+      'TOTAL',
+      'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      v_candidate_pay_method,
+      v_component_source_basis_json,
+      v_new_original_amount,
+      v_new_outstanding_amount,
+      v_candidate_pay_method,
+      'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
+      jsonb_build_object(
+        'same_channel', true,
+        'target_amount', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
+      ),
+      jsonb_build_object(
+        'target_amount', v_new_original_amount,
+        'target_amount_ex_vat', v_new_original_amount,
+        'target_amount_vat', 0,
+        'target_amount_inc_vat', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
+      ),
+      public.pay_finance_component_fingerprint(
+        p_source_family_key         => 'case:' || p_finance_case_id::text,
+        p_component_key_type        => 'CASE_TOTAL',
+        p_component_key_value       => 'TOTAL',
+        p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+        p_source_pay_method         => v_candidate_pay_method,
+        p_current_target_pay_method => v_candidate_pay_method,
+        p_source_basis_json         => v_component_source_basis_json,
+        p_source_amount             => v_new_original_amount,
+        p_relevant_erni_pct         => null::numeric,
+        p_target_basis_json         => jsonb_build_object('same_channel', true)
+      ),
+      false,
+      null::text,
+      0,
+      0,
+      v_now_utc,
+      v_now_utc,
+      v_now_utc,
+      null::timestamptz
+    )
+    returning * into v_component;
+
+    v_component_created := true;
+  end if;
+
   select pa.*
   into v_case
   from public.pay_advances pa
   where pa.id = p_finance_case_id;
+
+  v_component_after_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'source_pay_method', v_component.source_pay_method,
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'resolution_fingerprint', v_component.resolution_fingerprint,
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason,
+    'source_basis_json', v_component.source_basis_json
+  );
 
   v_after_json := jsonb_build_object(
     'original_amount', round(coalesce(v_case.original_amount,0),2),
@@ -19540,11 +19206,13 @@ begin
     'notes', v_case.notes,
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
-    'schedule_input_mode', v_schedule_input_mode
+    'schedule_input_mode', v_schedule_input_mode,
+    'component_summary', v_component_after_json
   );
 
   insert into public.pay_finance_case_events(
     finance_case_id,
+    finance_component_id,
     event_type,
     event_at_utc,
     actor_user_id,
@@ -19556,6 +19224,7 @@ begin
   )
   values (
     p_finance_case_id,
+    null::uuid,
     'UPDATED',
     v_now_utc,
     p_actor_user_id,
@@ -19566,9 +19235,54 @@ begin
     'Manual debt adjustment updated'
   );
 
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    v_component.id,
+    case when v_component_created then 'COMPONENT_CREATED' else 'COMPONENT_UPDATED' end,
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    v_component_before_json,
+    v_component_after_json,
+    case when v_source_basis_changed then 'COMPONENT_BASIS_CHANGED' else null::text end,
+    case
+      when v_component_created then 'Created taxable total component for manual debt adjustment update'
+      when v_source_basis_changed then 'Updated taxable total component and marked saved resolution stale only because source basis changed'
+      else 'Updated taxable total component for manual debt adjustment without changing source basis'
+    end
+  );
+
+  v_component_summary_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'source_family_key', v_component.source_family_key,
+    'component_key_type', v_component.component_key_type,
+    'component_key_value', v_component.component_key_value,
+    'classification', v_component.classification::text,
+    'source_pay_method', v_component.source_pay_method,
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason
+  );
+
   return jsonb_build_object(
     'ok', true,
     'finance_case_id', p_finance_case_id::text,
+    'finance_component_id', v_component.id::text,
     'case_type', 'MANUAL_DEBT_ADJUSTMENT',
     'worker_label', 'Manual debt adjustment',
     'recovery_label', 'Manual debt adjustment recovery',
@@ -19581,10 +19295,1077 @@ begin
     'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
-    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb)
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'component_summary', v_component_summary_json
   );
 end;
 $$;
+
+create or replace function public.pay_manual_credit_adjustment_update(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_amount numeric default null,
+  p_adjustment_comment text default null,
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_case public.pay_advances%rowtype;
+  v_batch public.pay_batches%rowtype;
+  v_has_batch boolean := false;
+  v_is_committed boolean := false;
+  v_new_amount numeric(12,2);
+  v_new_comment text;
+  v_new_notes text;
+  v_before_json jsonb := '{}'::jsonb;
+  v_after_json jsonb := '{}'::jsonb;
+  v_batch_item_id uuid := null;
+  v_pay_batch_candidate_id uuid := null;
+  v_component public.pay_finance_case_components%rowtype;
+  v_component_before_json jsonb := null;
+  v_component_after_json jsonb := null;
+  v_component_source_basis_json jsonb := '{}'::jsonb;
+  v_component_resolution_payload_json jsonb := '{}'::jsonb;
+  v_component_resolution_result_json jsonb := '{}'::jsonb;
+  v_component_resolution_fingerprint text := null;
+  v_component_summary_json jsonb := '{}'::jsonb;
+  v_component_changed boolean := false;
+  v_target_pay_method_for_rebuild text := null;
+  v_batch_item_pay_channel text := null;
+  v_batch_item_paye_treatment text := null;
+begin
+  if p_finance_case_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_update: finance_case_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_update: actor_user_id is required'
+    )::text;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id
+    and pa.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+  for update;
+
+  if v_case.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', 'pay_manual_credit_adjustment_update: Manual credit adjustment not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if v_case.payout_pay_batch_id is not null then
+    select pb.*
+    into v_batch
+    from public.pay_batches pb
+    where pb.id = v_case.payout_pay_batch_id
+    limit 1;
+    v_has_batch := v_batch.id is not null;
+  end if;
+
+  if v_has_batch then
+    v_is_committed := (
+      coalesce(v_batch.authoritative_payment_date is not null, false)
+      or upper(coalesce(v_batch.status,'')) in ('SCHEDULED','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT','EXECUTING','SETTLED','COMPLETED','PARTIAL')
+    );
+  else
+    v_is_committed := false;
+  end if;
+
+  v_new_amount := coalesce(round(p_amount,2), round(coalesce(v_case.original_amount,0),2));
+  v_new_comment := case when p_adjustment_comment is null then v_case.adjustment_comment else nullif(btrim(p_adjustment_comment), '') end;
+  v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
+
+  if p_amount is not null and v_new_amount <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'AMOUNT_INVALID',
+      'message', 'pay_manual_credit_adjustment_update: amount must be > 0'
+    )::text;
+  end if;
+
+  if p_adjustment_comment is not null and v_new_comment is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_update: adjustment_comment is required'
+    )::text;
+  end if;
+
+  if v_is_committed and (
+    (p_amount is not null and v_new_amount <> round(coalesce(v_case.original_amount,0),2))
+    or (p_adjustment_comment is not null and coalesce(v_new_comment,'') <> coalesce(v_case.adjustment_comment,''))
+  ) then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'PAYOUT_ALREADY_COMMITTED',
+      'message', 'pay_manual_credit_adjustment_update: payout details can only be edited before commit',
+      'finance_case_id', p_finance_case_id::text,
+      'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end
+    )::text;
+  end if;
+
+  select pfc.*
+  into v_component
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.component_key_type = 'CASE_TOTAL'
+    and pfc.component_key_value = 'TOTAL'
+    and pfc.closed_at_utc is null
+  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
+  limit 1
+  for update;
+
+  if v_component.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'FINANCE_COMPONENT_NOT_FOUND',
+      'message', 'pay_manual_credit_adjustment_update: linked taxable total component not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  v_before_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'adjustment_comment', v_case.adjustment_comment,
+    'notes', v_case.notes,
+    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end
+  );
+
+  v_component_before_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'source_pay_method', v_component.source_pay_method,
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'resolution_fingerprint', v_component.resolution_fingerprint,
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason,
+    'source_basis_json', v_component.source_basis_json
+  );
+
+  update public.pay_advances pa
+  set original_amount = case when v_is_committed then pa.original_amount else v_new_amount end,
+      adjustment_comment = case when v_is_committed then pa.adjustment_comment else v_new_comment end,
+      notes = v_new_notes,
+      updated_at = v_now_utc
+  where pa.id = p_finance_case_id;
+
+  if v_is_committed = false then
+    v_component_source_basis_json := jsonb_build_object(
+      'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+      'amount', v_new_amount
+    );
+
+    if v_has_batch then
+      select pbc.id
+      into v_pay_batch_candidate_id
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = v_batch.id
+        and pbc.candidate_id = v_case.candidate_id
+      limit 1;
+
+      select
+        pbi.id,
+        upper(coalesce(pbi.pay_channel,'')) as pay_channel,
+        coalesce(pbi.paye_treatment,'NONE') as paye_treatment
+      into
+        v_batch_item_id,
+        v_batch_item_pay_channel,
+        v_batch_item_paye_treatment
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc2
+        on pbc2.id = pbi.pay_batch_candidate_id
+      where pbc2.pay_batch_id = v_batch.id
+        and pbc2.candidate_id = v_case.candidate_id
+        and pbi.source_ref = ('advance:' || p_finance_case_id::text)
+        and pbi.item_type = 'MANUAL_CREDIT_PAYOUT'
+        and pbi.is_voided = false
+      limit 1;
+    end if;
+
+    v_target_pay_method_for_rebuild := coalesce(nullif(v_batch_item_pay_channel,''), v_component.saved_target_pay_method, v_component.source_pay_method);
+    v_batch_item_paye_treatment := case when upper(coalesce(v_target_pay_method_for_rebuild,'')) = 'PAYE' then 'GROSS_ADD' else 'NONE' end;
+
+    v_component_resolution_payload_json := jsonb_build_object(
+      'same_channel', upper(coalesce(v_component.source_pay_method,'')) = upper(coalesce(v_target_pay_method_for_rebuild,'')),
+      'target_amount', v_new_amount,
+      'target_pay_method', v_target_pay_method_for_rebuild
+    );
+
+    v_component_resolution_result_json := jsonb_build_object(
+      'target_amount', v_new_amount,
+      'target_amount_ex_vat', v_new_amount,
+      'target_amount_vat', 0,
+      'target_amount_inc_vat', v_new_amount,
+      'target_pay_method', v_target_pay_method_for_rebuild
+    );
+
+    v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+      p_source_family_key         => v_component.source_family_key,
+      p_component_key_type        => v_component.component_key_type,
+      p_component_key_value       => v_component.component_key_value,
+      p_classification            => v_component.classification,
+      p_source_pay_method         => v_component.source_pay_method,
+      p_current_target_pay_method => v_target_pay_method_for_rebuild,
+      p_source_basis_json         => v_component_source_basis_json,
+      p_source_amount             => v_new_amount,
+      p_relevant_erni_pct         => null::numeric,
+      p_target_basis_json         => jsonb_build_object('same_channel', upper(coalesce(v_component.source_pay_method,'')) = upper(coalesce(v_target_pay_method_for_rebuild,'')))
+    );
+
+    v_component_changed := (
+      round(coalesce(v_component.source_amount,0),2) is distinct from round(coalesce(v_new_amount,0),2)
+      or v_component.source_basis_json is distinct from v_component_source_basis_json
+      or coalesce(v_new_comment,'') is distinct from coalesce(v_case.adjustment_comment,'')
+    );
+
+    update public.pay_finance_case_components pfc
+    set source_basis_json = v_component_source_basis_json,
+        source_amount = v_new_amount,
+        remaining_source_amount = 0,
+        saved_target_pay_method = v_target_pay_method_for_rebuild,
+        saved_resolution_mode = 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
+        saved_resolution_payload_json = v_component_resolution_payload_json,
+        saved_resolution_result_json = v_component_resolution_result_json,
+        resolution_fingerprint = v_component_resolution_fingerprint,
+        is_resolution_stale = false,
+        stale_reason = null::text,
+        updated_at_utc = v_now_utc
+    where pfc.id = v_component.id
+    returning pfc.* into v_component;
+
+    if v_pay_batch_candidate_id is not null then
+      update public.pay_batch_candidates pbc
+      set gross_preview = v_new_amount,
+          net_bank_amount = v_new_amount,
+          updated_at = v_now_utc
+      where pbc.id = v_pay_batch_candidate_id;
+    end if;
+
+    if v_batch_item_id is not null then
+      update public.pay_batch_items pbi
+      set description = 'Manual credit adjustment',
+          amount_ex_vat = v_new_amount,
+          amount_vat = 0,
+          amount_inc_vat = v_new_amount,
+          updated_at = v_now_utc,
+          finance_case_id = p_finance_case_id,
+          finance_component_id = v_component.id,
+          reservation_id = null,
+          paye_treatment = v_batch_item_paye_treatment,
+          frozen_component_snapshot_json = jsonb_build_object(
+            'finance_component_id', v_component.id::text,
+            'source_family_key', v_component.source_family_key,
+            'component_key_type', v_component.component_key_type,
+            'component_key_value', v_component.component_key_value,
+            'classification', v_component.classification::text,
+            'source_pay_method', v_component.source_pay_method,
+            'source_basis_json', v_component.source_basis_json,
+            'source_amount', round(coalesce(v_component.source_amount,0),2),
+            'saved_target_pay_method', v_component.saved_target_pay_method,
+            'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+            'saved_resolution_payload_json', v_component.saved_resolution_payload_json,
+            'saved_resolution_result_json', v_component.saved_resolution_result_json,
+            'resolution_fingerprint', v_component.resolution_fingerprint,
+            'is_resolution_stale', v_component.is_resolution_stale
+          ),
+          frozen_component_key_type = v_component.component_key_type,
+          frozen_component_key_value = v_component.component_key_value,
+          frozen_component_classification = v_component.classification,
+          frozen_source_basis_json = v_component.source_basis_json,
+          frozen_source_pay_method = v_component.source_pay_method,
+          frozen_target_pay_method = v_component.saved_target_pay_method,
+          frozen_resolution_mode = v_component.saved_resolution_mode,
+          frozen_resolution_payload_json = v_component.saved_resolution_payload_json,
+          frozen_resolution_result_json = v_component.saved_resolution_result_json,
+          frozen_source_amount = v_component.source_amount,
+          frozen_target_amount_ex_vat = v_new_amount,
+          frozen_target_amount_vat = 0,
+          frozen_target_amount_inc_vat = v_new_amount
+      where pbi.id = v_batch_item_id;
+
+      update public.pay_batch_item_breakdowns pbib
+      set unit_name = 'Manual credit adjustment',
+          amount_ex_vat = v_new_amount,
+          amount_vat = 0,
+          amount_inc_vat = v_new_amount,
+          meta_json = jsonb_build_object(
+            'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+            'worker_label', 'Manual credit adjustment',
+            'adjustment_comment', v_new_comment,
+            'finance_component_id', v_component.id::text
+          )
+      where pbib.pay_batch_item_id = v_batch_item_id;
+    end if;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id;
+
+  v_component_after_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'source_pay_method', v_component.source_pay_method,
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'resolution_fingerprint', v_component.resolution_fingerprint,
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason,
+    'source_basis_json', v_component.source_basis_json
+  );
+
+  v_after_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'adjustment_comment', v_case.adjustment_comment,
+    'notes', v_case.notes,
+    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end,
+    'component_summary', v_component_after_json
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    null::uuid,
+    'UPDATED',
+    v_now_utc,
+    p_actor_user_id,
+    case when v_batch.id is null then null else v_batch.id end,
+    v_before_json,
+    v_after_json,
+    null::text,
+    'Manual credit adjustment updated'
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    v_component.id,
+    'COMPONENT_UPDATED',
+    v_now_utc,
+    p_actor_user_id,
+    case when v_batch.id is null then null else v_batch.id end,
+    v_component_before_json,
+    v_component_after_json,
+    case when v_component_changed then 'COMPONENT_BASIS_CHANGED' else null::text end,
+    case
+      when v_is_committed then 'Manual credit adjustment payout already committed; component left unchanged for payout basis'
+      when v_component_changed then 'Manual credit adjustment component source basis changed before commit and the payout snapshot was rebuilt from the component'
+      else 'Manual credit adjustment component refreshed without source-basis change'
+    end
+  );
+
+  v_component_summary_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'source_family_key', v_component.source_family_key,
+    'component_key_type', v_component.component_key_type,
+    'component_key_value', v_component.component_key_value,
+    'classification', v_component.classification::text,
+    'source_pay_method', v_component.source_pay_method,
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'finance_component_id', v_component.id::text,
+    'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+    'worker_label', 'Manual credit adjustment',
+    'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end,
+    'payout_editable', (v_is_committed = false),
+    'component_summary', v_component_summary_json
+  );
+end;
+$$;
+
+
+
+create or replace function public.pay_manual_credit_adjustment_create(
+  p_candidate_id uuid,
+  p_amount numeric,
+  p_actor_user_id uuid,
+  p_adjustment_comment text,
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_pay_date date := (now() at time zone 'Europe/London')::date;
+
+  v_settings record;
+  v_candidate record;
+
+  v_finance_case_id uuid := null;
+  v_finance_component_id uuid := null;
+  v_pay_batch_id uuid := null;
+  v_pay_batch_candidate_id uuid := null;
+  v_pay_batch_item_id uuid := null;
+
+  v_component_source_basis_json jsonb := '{}'::jsonb;
+  v_component_resolution_payload_json jsonb := '{}'::jsonb;
+  v_component_resolution_result_json jsonb := '{}'::jsonb;
+  v_component_resolution_fingerprint text := null;
+  v_component_snapshot_json jsonb := '{}'::jsonb;
+  v_component_summary_json jsonb := '{}'::jsonb;
+
+  v_warnings jsonb := '[]'::jsonb;
+  v_provider text := null;
+  v_env text := null;
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+  v_bnc_status text := null;
+  v_bnc_has_override boolean := false;
+  v_bpm_present boolean := false;
+
+  v_pay_channel text := null;
+  v_paye_treatment text := 'NONE';
+begin
+  if p_candidate_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'CANDIDATE_ID_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_create: candidate_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_create: actor_user_id is required'
+    )::text;
+  end if;
+
+  if p_amount is null or round(p_amount,2) <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'AMOUNT_INVALID',
+      'message', 'pay_manual_credit_adjustment_create: amount must be > 0'
+    )::text;
+  end if;
+
+  if nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_create: adjustment_comment is required'
+    )::text;
+  end if;
+
+  select
+    sd.banking_system,
+    sd.external_paye_system,
+    sd.rail_provider_default,
+    sd.rail_env_default,
+    sd.rail_supports_name_check
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'SETTINGS_DEFAULTS_MISSING',
+      'message', 'pay_manual_credit_adjustment_create: settings_defaults missing required banking defaults (id=1)'
+    )::text;
+  end if;
+
+  select
+    c.id,
+    c.active,
+    c.tms_ref,
+    c.display_name,
+    c.first_name,
+    c.last_name,
+    c.account_holder,
+    c.sort_code,
+    c.account_number,
+    c.bank_details_hash,
+    upper(coalesce(c.pay_method,'')) as pay_method,
+    c.umbrella_id
+  into v_candidate
+  from public.candidates c
+  where c.id = p_candidate_id
+  limit 1;
+
+  if v_candidate.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', 'pay_manual_credit_adjustment_create: candidate not found',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  if coalesce(v_candidate.active,false) = false then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'CANDIDATE_INACTIVE',
+      'message', 'pay_manual_credit_adjustment_create: candidate is not active',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  if v_candidate.pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_manual_credit_adjustment_create: candidate pay_method must be PAYE or UMBRELLA',
+      'candidate_id', p_candidate_id::text,
+      'pay_method', v_candidate.pay_method
+    )::text;
+  end if;
+
+  v_pay_channel := v_candidate.pay_method;
+  v_paye_treatment := case when v_pay_channel = 'PAYE' then 'GROSS_ADD' else 'NONE' end;
+
+  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
+  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
+  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
+  v_requires_payee_map := (v_provider <> 'CSV');
+
+  insert into public.pay_advances(
+    candidate_id,
+    client_id,
+    reason,
+    original_amount,
+    outstanding_amount,
+    linked_shift_date,
+    schedule_json,
+    next_due_week_start,
+    status,
+    best_guess_hours,
+    notes,
+    created_at,
+    created_by,
+    updated_at,
+    advance_kind,
+    linked_timesheet_id,
+    baseline_signature,
+    payout_status,
+    payout_pay_batch_id,
+    payout_transfer_id,
+    weekly_due,
+    weeks_total,
+    start_week_start,
+    case_type,
+    adjustment_comment,
+    source_original_paid_amount,
+    source_corrected_paid_amount,
+    minimum_earnings_threshold,
+    take_home_floor_override,
+    written_off_at_utc,
+    written_off_by_user_id,
+    write_off_reason,
+    cleared_at_utc,
+    cleared_by_user_id
+  )
+  values (
+    p_candidate_id,
+    null::uuid,
+    'MANUAL_ADVANCE'::public.pay_advance_reason_enum,
+    round(p_amount,2),
+    0,
+    null::date,
+    '[]'::jsonb,
+    null::date,
+    'ACTIVE'::public.pay_advance_status_enum,
+    null::jsonb,
+    nullif(btrim(coalesce(p_note,'')), ''),
+    v_now_utc,
+    p_actor_user_id,
+    v_now_utc,
+    'LEGACY_ADVANCE'::public.pay_advance_kind_enum,
+    null::uuid,
+    null::text,
+    'PENDING'::public.pay_advance_payout_status_enum,
+    null::uuid,
+    null::uuid,
+    null::numeric,
+    null::int,
+    null::date,
+    'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+    nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+    null::numeric,
+    null::numeric,
+    null::numeric,
+    null::numeric,
+    null::timestamptz,
+    null::uuid,
+    null::text,
+    null::timestamptz,
+    null::uuid
+  )
+  returning id into v_finance_case_id;
+
+  v_component_source_basis_json := jsonb_build_object(
+    'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+    'amount', round(p_amount,2)
+  );
+
+  v_component_resolution_payload_json := jsonb_build_object(
+    'same_channel', true,
+    'target_amount', round(p_amount,2),
+    'target_pay_method', v_pay_channel
+  );
+
+  v_component_resolution_result_json := jsonb_build_object(
+    'target_amount', round(p_amount,2),
+    'target_amount_ex_vat', round(p_amount,2),
+    'target_amount_vat', 0,
+    'target_amount_inc_vat', round(p_amount,2),
+    'target_pay_method', v_pay_channel
+  );
+
+  v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+    p_source_family_key         => 'case:' || v_finance_case_id::text,
+    p_component_key_type        => 'CASE_TOTAL',
+    p_component_key_value       => 'TOTAL',
+    p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    p_source_pay_method         => v_pay_channel,
+    p_current_target_pay_method => v_pay_channel,
+    p_source_basis_json         => v_component_source_basis_json,
+    p_source_amount             => round(p_amount,2),
+    p_relevant_erni_pct         => null::numeric,
+    p_target_basis_json         => jsonb_build_object('same_channel', true)
+  );
+
+  insert into public.pay_finance_case_components(
+    finance_case_id,
+    candidate_id,
+    client_id,
+    linked_timesheet_id,
+    source_family_key,
+    component_key_type,
+    component_key_value,
+    classification,
+    source_pay_method,
+    source_basis_json,
+    source_amount,
+    remaining_source_amount,
+    saved_target_pay_method,
+    saved_resolution_mode,
+    saved_resolution_payload_json,
+    saved_resolution_result_json,
+    resolution_fingerprint,
+    is_resolution_stale,
+    stale_reason,
+    allocation_priority_group,
+    allocation_priority_order,
+    created_at_utc,
+    updated_at_utc,
+    resolved_at_utc,
+    closed_at_utc
+  )
+  values (
+    v_finance_case_id,
+    p_candidate_id,
+    null::uuid,
+    null::uuid,
+    'case:' || v_finance_case_id::text,
+    'CASE_TOTAL',
+    'TOTAL',
+    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    v_pay_channel,
+    v_component_source_basis_json,
+    round(p_amount,2),
+    0,
+    v_pay_channel,
+    'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
+    v_component_resolution_payload_json,
+    v_component_resolution_result_json,
+    v_component_resolution_fingerprint,
+    false,
+    null::text,
+    0,
+    0,
+    v_now_utc,
+    v_now_utc,
+    v_now_utc,
+    null::timestamptz
+  )
+  returning id into v_finance_component_id;
+
+  v_component_snapshot_json := jsonb_build_object(
+    'finance_component_id', v_finance_component_id::text,
+    'source_family_key', 'case:' || v_finance_case_id::text,
+    'component_key_type', 'CASE_TOTAL',
+    'component_key_value', 'TOTAL',
+    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'source_pay_method', v_pay_channel,
+    'source_basis_json', v_component_source_basis_json,
+    'source_amount', round(p_amount,2),
+    'saved_target_pay_method', v_pay_channel,
+    'saved_resolution_mode', 'MANUAL_AMOUNT',
+    'saved_resolution_payload_json', v_component_resolution_payload_json,
+    'saved_resolution_result_json', v_component_resolution_result_json,
+    'resolution_fingerprint', v_component_resolution_fingerprint,
+    'is_resolution_stale', false
+  );
+
+  v_component_summary_json := v_component_snapshot_json;
+
+  insert into public.pay_batches(
+    pay_date,
+    created_at_utc,
+    created_by_user_id,
+    status,
+    banking_system_snapshot,
+    external_paye_system_snapshot,
+    rail_provider_snapshot,
+    rail_env_snapshot,
+    batch_kind_fixed
+  )
+  values (
+    v_pay_date,
+    v_now_utc,
+    p_actor_user_id,
+    'DRAFT',
+    v_settings.banking_system,
+    v_settings.external_paye_system,
+    v_settings.rail_provider_default,
+    v_settings.rail_env_default,
+    'LOANS'
+  )
+  returning id into v_pay_batch_id;
+
+  update public.pay_advances pa
+  set payout_pay_batch_id = v_pay_batch_id,
+      updated_at = v_now_utc
+  where pa.id = v_finance_case_id;
+
+  insert into public.pay_batch_candidates(
+    pay_batch_id,
+    candidate_id,
+    candidate_tms_ref,
+    candidate_display_name,
+    paye_state,
+    mismatch_settlement_choice,
+    gross_preview,
+    net_bank_amount,
+    debt_created,
+    loan_repayment_taken,
+    overpayment_recovery_taken,
+    awaiting_net_amount,
+    updated_at
+  )
+  values (
+    v_pay_batch_id,
+    p_candidate_id,
+    v_candidate.tms_ref,
+    v_candidate.display_name,
+    null,
+    null,
+    round(p_amount,2),
+    round(p_amount,2),
+    0,
+    0,
+    0,
+    false,
+    v_now_utc
+  )
+  returning id into v_pay_batch_candidate_id;
+
+  insert into public.pay_batch_items(
+    pay_batch_candidate_id,
+    item_type,
+    timesheet_id,
+    segment_key,
+    source_ref,
+    description,
+    amount_ex_vat,
+    amount_vat,
+    amount_inc_vat,
+    pay_channel,
+    umbrella_id,
+    bank_reference,
+    pay_bank_transfer_id,
+    repayment_week_start,
+    is_voided,
+    is_mismatch,
+    created_at,
+    updated_at,
+    finance_case_id,
+    reservation_id,
+    paye_treatment,
+    finance_component_id,
+    frozen_component_snapshot_json,
+    frozen_component_key_type,
+    frozen_component_key_value,
+    frozen_component_classification,
+    frozen_source_basis_json,
+    frozen_source_pay_method,
+    frozen_target_pay_method,
+    frozen_resolution_mode,
+    frozen_resolution_payload_json,
+    frozen_resolution_result_json,
+    frozen_source_amount,
+    frozen_target_amount_ex_vat,
+    frozen_target_amount_vat,
+    frozen_target_amount_inc_vat
+  )
+  values (
+    v_pay_batch_candidate_id,
+    'MANUAL_CREDIT_PAYOUT',
+    null::uuid,
+    null::text,
+    ('advance:' || v_finance_case_id::text),
+    'Manual credit adjustment',
+    round(p_amount,2),
+    0,
+    round(p_amount,2),
+    v_pay_channel,
+    case when v_pay_channel = 'UMBRELLA' then v_candidate.umbrella_id else null::uuid end,
+    null::text,
+    null::uuid,
+    null::date,
+    false,
+    false,
+    v_now_utc,
+    v_now_utc,
+    v_finance_case_id,
+    null::uuid,
+    v_paye_treatment,
+    v_finance_component_id,
+    v_component_snapshot_json,
+    'CASE_TOTAL',
+    'TOTAL',
+    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    v_component_source_basis_json,
+    v_pay_channel,
+    v_pay_channel,
+    'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
+    v_component_resolution_payload_json,
+    v_component_resolution_result_json,
+    round(p_amount,2),
+    round(p_amount,2),
+    0,
+    round(p_amount,2)
+  )
+  returning id into v_pay_batch_item_id;
+
+  insert into public.pay_batch_item_breakdowns(
+    pay_batch_item_id,
+    line_kind,
+    bucket_code,
+    unit_name,
+    units,
+    rate,
+    amount_ex_vat,
+    amount_vat,
+    amount_inc_vat,
+    meta_json
+  )
+  values (
+    v_pay_batch_item_id,
+    'MANUAL_CREDIT_PAYOUT',
+    null,
+    'Manual credit adjustment',
+    null::numeric,
+    null::numeric,
+    round(p_amount,2),
+    0,
+    round(p_amount,2),
+    jsonb_build_object(
+      'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+      'worker_label', 'Manual credit adjustment',
+      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+      'finance_component_id', v_finance_component_id::text
+    )
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    null::uuid,
+    'CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    v_pay_batch_id,
+    null::jsonb,
+    jsonb_build_object(
+      'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+      'amount', round(p_amount,2),
+      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+      'payout_pay_batch_id', v_pay_batch_id::text,
+      'payout_status', 'PENDING',
+      'paye_treatment', v_paye_treatment,
+      'component_summary', v_component_summary_json
+    ),
+    null::text,
+    'Manual credit adjustment created'
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    v_finance_component_id,
+    'COMPONENT_CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    v_pay_batch_id,
+    null::jsonb,
+    v_component_summary_json,
+    'MANUAL_CREDIT_ADJUSTMENT_CREATE',
+    'Created taxable total component for manual credit adjustment'
+  );
+
+  if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
+    v_warnings := v_warnings || jsonb_build_array(
+      jsonb_build_object(
+        'code', 'BLOCKED_BANK_DETAILS',
+        'message', 'Candidate bank details are missing; batch can be created but will be blocked at prepare/schedule until bank details are present.',
+        'candidate_id', p_candidate_id::text
+      )
+    );
+  else
+    if v_need_name_check = true then
+      select
+        coalesce(bnc.status, 'UNVERIFIED') as status,
+        (bnc.override_reason is not null and bnc.override_hash = v_candidate.bank_details_hash) as has_override
+      into
+        v_bnc_status,
+        v_bnc_has_override
+      from public.bank_name_checks bnc
+      where bnc.rail_provider = v_settings.rail_provider_default
+        and bnc.rail_env = v_settings.rail_env_default
+        and bnc.entity_kind = 'CANDIDATE'
+        and bnc.entity_id = p_candidate_id
+        and bnc.bank_details_hash = v_candidate.bank_details_hash
+      limit 1;
+
+      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NAME_CHECK',
+            'message', 'Name check has not passed (or override missing) for candidate bank details; scheduling/execution may be blocked until resolved.',
+            'candidate_id', p_candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+
+    if v_requires_payee_map = true then
+      select (bpm.payee_id is not null) as present
+      into v_bpm_present
+      from public.bank_payee_map bpm
+      where bpm.rail_provider = v_settings.rail_provider_default
+        and bpm.rail_env = v_settings.rail_env_default
+        and bpm.entity_kind = 'CANDIDATE'
+        and bpm.entity_id = p_candidate_id
+        and bpm.bank_details_hash = v_candidate.bank_details_hash
+      limit 1;
+
+      if coalesce(v_bpm_present,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NO_PAYEE_MAP',
+            'message', 'Payee map is missing for candidate bank details on this rail; scheduling/execution may be blocked until payee mapping exists.',
+            'candidate_id', p_candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', v_finance_case_id::text,
+    'finance_component_id', v_finance_component_id::text,
+    'pay_batch_id', v_pay_batch_id::text,
+    'pay_date', v_pay_date::text,
+    'batch_kind_fixed', 'LOANS',
+    'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+    'worker_label', 'Manual credit adjustment',
+    'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+    'component_summary', v_component_summary_json,
+    'warnings', v_warnings
+  );
+end;
+$$;
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_finance_ledger_export_rows(
