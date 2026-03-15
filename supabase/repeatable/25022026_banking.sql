@@ -20157,3 +20157,1227 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pay_finance_component_fingerprint(
+  p_source_family_key text,
+  p_component_key_type text,
+  p_component_key_value text,
+  p_classification public.pay_finance_component_classification_enum,
+  p_source_pay_method text,
+  p_current_target_pay_method text,
+  p_source_basis_json jsonb,
+  p_source_amount numeric,
+  p_relevant_erni_pct numeric DEFAULT NULL::numeric,
+  p_target_basis_json jsonb DEFAULT NULL::jsonb
+)
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+  SELECT md5(
+    jsonb_build_object(
+      'source_family_key', coalesce(btrim(p_source_family_key), ''),
+      'component_key_type', coalesce(btrim(p_component_key_type), ''),
+      'component_key_value', coalesce(btrim(p_component_key_value), ''),
+      'classification', coalesce(p_classification::text, ''),
+      'source_pay_method', upper(coalesce(btrim(p_source_pay_method), '')),
+      'current_target_pay_method', upper(coalesce(btrim(p_current_target_pay_method), '')),
+      'source_basis_json', coalesce(jsonb_strip_nulls(p_source_basis_json), '{}'::jsonb),
+      'source_amount', round(coalesce(abs(p_source_amount), 0), 2),
+      'relevant_erni_pct', CASE WHEN p_relevant_erni_pct IS NULL THEN NULL ELSE round(p_relevant_erni_pct, 6) END,
+      'target_basis_json', coalesce(jsonb_strip_nulls(p_target_basis_json), '{}'::jsonb)
+    )::text
+  );
+$function$;
+
+
+
+CREATE OR REPLACE FUNCTION public.pay_finance_components_sync_from_preview(
+  p_finance_case_id uuid,
+  p_preview_lines_json jsonb,
+  p_actor_user_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now_utc timestamptz := now();
+  v_case_candidate_id uuid;
+  v_case_client_id uuid;
+  v_case_linked_timesheet_id uuid;
+  v_case_current_pay_method text;
+
+  v_input_json jsonb := coalesce(p_preview_lines_json, '[]'::jsonb);
+  v_line_json jsonb;
+  v_row_seq integer := 0;
+
+  v_source_family_key text;
+  v_component_key_type text;
+  v_component_key_value text;
+  v_raw_key_type text;
+  v_raw_key_value text;
+  v_raw_classification text;
+  v_raw_item_type text;
+  v_raw_source_ref text;
+  v_raw_expense_kind text;
+  v_source_pay_method text;
+  v_current_target_pay_method text;
+
+  v_source_amount_text text;
+  v_remaining_amount_text text;
+  v_relevant_erni_text text;
+  v_allocation_group_text text;
+  v_allocation_order_text text;
+
+  v_source_amount numeric(12,2);
+  v_incoming_remaining_source_amount numeric(12,2);
+  v_incoming_remaining_is_explicit boolean;
+  v_relevant_erni_pct numeric;
+  v_allocation_priority_group integer;
+  v_allocation_priority_order integer;
+
+  v_source_basis_json jsonb;
+  v_target_basis_json jsonb;
+  v_current_basis_fingerprint text;
+  v_classification public.pay_finance_component_classification_enum;
+
+  v_line_candidate_id uuid;
+  v_line_client_id uuid;
+  v_line_linked_timesheet_id uuid;
+  v_line_classification public.pay_finance_component_classification_enum;
+  v_line_source_amount numeric(12,2);
+  v_line_incoming_remaining_source_amount numeric(12,2);
+  v_line_allocation_priority_group integer;
+  v_line_allocation_priority_order integer;
+  v_line_source_basis_json jsonb;
+  v_line_current_target_pay_method text;
+  v_line_source_pay_method text;
+
+  v_existing_component public.pay_finance_case_components%ROWTYPE;
+  v_reopen_component public.pay_finance_case_components%ROWTYPE;
+  v_component_after public.pay_finance_case_components%ROWTYPE;
+
+  v_before_json jsonb;
+  v_after_json jsonb;
+
+  v_has_saved_resolution boolean;
+  v_should_be_stale boolean;
+  v_stale_reason text;
+  v_consumed_amount numeric(12,2);
+  v_new_remaining_source_amount numeric(12,2);
+  v_created_component_id uuid;
+
+  v_inserted_count integer := 0;
+  v_updated_count integer := 0;
+  v_reopened_count integer := 0;
+  v_closed_count integer := 0;
+  v_stale_marked_count integer := 0;
+
+  v_open_components_json jsonb := '[]'::jsonb;
+BEGIN
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION 'p_finance_case_id is required';
+  END IF;
+
+  IF jsonb_typeof(v_input_json) <> 'array' THEN
+    RAISE EXCEPTION 'p_preview_lines_json must be a jsonb array';
+  END IF;
+
+  SELECT
+    pa.candidate_id,
+    pa.client_id,
+    pa.linked_timesheet_id,
+    upper(coalesce(c.pay_method, ''))
+  INTO
+    v_case_candidate_id,
+    v_case_client_id,
+    v_case_linked_timesheet_id,
+    v_case_current_pay_method
+  FROM public.pay_advances pa
+  JOIN public.candidates c
+    ON c.id = pa.candidate_id
+  WHERE pa.id = p_finance_case_id;
+
+  IF v_case_candidate_id IS NULL THEN
+    RAISE EXCEPTION 'Finance case % not found in public.pay_advances', p_finance_case_id;
+  END IF;
+
+  CREATE TEMP TABLE IF NOT EXISTS pg_temp.tmp_pay_finance_component_sync_input (
+    row_seq integer NOT NULL,
+    source_family_key text NOT NULL,
+    component_key_type text NOT NULL,
+    component_key_value text NOT NULL,
+    classification public.pay_finance_component_classification_enum NOT NULL,
+    candidate_id uuid NOT NULL,
+    client_id uuid NULL,
+    linked_timesheet_id uuid NULL,
+    source_pay_method text NOT NULL,
+    current_target_pay_method text NULL,
+    source_basis_json jsonb NOT NULL,
+    target_basis_json jsonb NULL,
+    source_amount numeric(12,2) NOT NULL,
+    incoming_remaining_source_amount numeric(12,2) NULL,
+    incoming_remaining_is_explicit boolean NOT NULL,
+    relevant_erni_pct numeric NULL,
+    allocation_priority_group integer NOT NULL,
+    allocation_priority_order integer NOT NULL,
+    current_basis_fingerprint text NOT NULL
+  ) ON COMMIT DROP;
+
+  TRUNCATE TABLE pg_temp.tmp_pay_finance_component_sync_input;
+
+  FOR v_line_json IN
+    SELECT x.value
+    FROM jsonb_array_elements(v_input_json) AS x(value)
+  LOOP
+    v_row_seq := v_row_seq + 1;
+
+    IF v_line_json IS NULL OR jsonb_typeof(v_line_json) <> 'object' THEN
+      RAISE EXCEPTION 'Each preview line must be a jsonb object (row %)', v_row_seq;
+    END IF;
+
+    v_raw_key_type := upper(
+      coalesce(
+        nullif(btrim(v_line_json->>'component_key_type'), ''),
+        nullif(btrim(v_line_json->>'key_type'), ''),
+        ''
+      )
+    );
+
+    v_raw_key_value := coalesce(
+      nullif(btrim(v_line_json->>'component_key_value'), ''),
+      nullif(btrim(v_line_json->>'key_value'), ''),
+      ''
+    );
+
+    v_raw_classification := upper(
+      coalesce(
+        nullif(btrim(v_line_json->>'classification'), ''),
+        nullif(btrim(v_line_json->>'component_classification'), ''),
+        ''
+      )
+    );
+
+    v_raw_item_type := upper(
+      coalesce(
+        nullif(btrim(v_line_json->>'item_type'), ''),
+        nullif(btrim(v_line_json->>'line_type'), ''),
+        ''
+      )
+    );
+
+    v_raw_source_ref := upper(coalesce(nullif(btrim(v_line_json->>'source_ref'), ''), ''));
+    v_raw_expense_kind := upper(
+      coalesce(
+        nullif(btrim(v_line_json->>'expense_kind'), ''),
+        nullif(btrim(v_line_json->>'expense_code'), ''),
+        nullif(btrim(v_line_json->>'expense_type'), ''),
+        ''
+      )
+    );
+
+    v_component_key_type := NULL;
+    v_component_key_value := NULL;
+
+    IF v_raw_key_type <> '' THEN
+      v_component_key_type := v_raw_key_type;
+    ELSIF v_raw_item_type = 'SEGMENT_DELTA' THEN
+      IF coalesce(nullif(btrim(v_line_json->>'work_date'), ''), nullif(btrim(v_line_json->>'date'), '')) ~ '^\d{4}-\d{2}-\d{2}$' THEN
+        v_component_key_type := 'TS_DAY';
+      ELSE
+        v_component_key_type := 'TS_TOTAL';
+      END IF;
+    ELSIF v_raw_item_type = 'ADDITIONAL_DELTA'
+       OR nullif(btrim(v_line_json->>'additional_code'), '') IS NOT NULL THEN
+      v_component_key_type := 'ADDITIONAL_CODE';
+    ELSIF v_raw_item_type IN ('MILEAGE_DELTA', 'TRAVEL_DELTA', 'ACCOMMODATION_DELTA', 'OTHER_DELTA', 'EXPENSE_DELTA')
+       OR v_raw_expense_kind <> '' THEN
+      v_component_key_type := 'EXPENSE_CODE';
+    ELSIF v_raw_item_type = 'ADJUSTMENT_DELTA' THEN
+      IF v_raw_source_ref LIKE 'PREVIEW_SEG:%' THEN
+        v_component_key_type := 'TS_TOTAL';
+      ELSE
+        v_component_key_type := 'EXPENSE_CODE';
+      END IF;
+    ELSE
+      v_component_key_type := 'CASE_TOTAL';
+    END IF;
+
+    IF v_raw_key_value <> '' THEN
+      v_component_key_value := v_raw_key_value;
+    ELSIF v_component_key_type = 'TS_DAY' THEN
+      v_component_key_value := coalesce(
+        nullif(btrim(v_line_json->>'work_date'), ''),
+        nullif(btrim(v_line_json->>'date'), ''),
+        'UNKNOWN_DAY'
+      );
+    ELSIF v_component_key_type = 'TS_TOTAL' THEN
+      v_component_key_value := coalesce(
+        nullif(btrim(v_line_json->>'segment_id'), ''),
+        CASE
+          WHEN coalesce(nullif(btrim(v_line_json->>'linked_timesheet_id'), ''), v_case_linked_timesheet_id::text) IS NULL THEN 'TOTAL'
+          ELSE coalesce(nullif(btrim(v_line_json->>'linked_timesheet_id'), ''), v_case_linked_timesheet_id::text)
+        END
+      );
+    ELSIF v_component_key_type = 'ADDITIONAL_CODE' THEN
+      v_component_key_value := coalesce(
+        nullif(btrim(v_line_json->>'additional_code'), ''),
+        nullif(btrim(v_line_json->>'source_ref'), ''),
+        nullif(btrim(v_line_json->>'code'), ''),
+        'TOTAL'
+      );
+    ELSIF v_component_key_type = 'EXPENSE_CODE' THEN
+      IF v_raw_item_type = 'ADJUSTMENT_DELTA' THEN
+        v_component_key_value := coalesce(
+          nullif(btrim(v_line_json->>'adjustment_code'), ''),
+          nullif(btrim(v_line_json->>'adjustment_id'), ''),
+          nullif(btrim(v_line_json->>'source_ref'), ''),
+          'ADJUSTMENT'
+        );
+      ELSE
+        v_component_key_value := coalesce(
+          nullif(btrim(v_line_json->>'expense_code'), ''),
+          nullif(btrim(v_line_json->>'expense_kind'), ''),
+          nullif(btrim(v_line_json->>'expense_type'), ''),
+          nullif(btrim(v_line_json->>'item_type'), ''),
+          'EXPENSE'
+        );
+      END IF;
+    ELSE
+      v_component_key_value := 'TOTAL';
+    END IF;
+
+    IF v_raw_classification IN ('TAXABLE_CHANNEL_SENSITIVE', 'REIMBURSEMENT_GROSS_FIXED') THEN
+      v_classification := v_raw_classification::public.pay_finance_component_classification_enum;
+    ELSIF v_component_key_type IN ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'CASE_TOTAL') THEN
+      v_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    ELSIF v_raw_item_type = 'ADJUSTMENT_DELTA'
+       OR v_raw_source_ref LIKE 'ADJ:%'
+       OR v_raw_source_ref LIKE 'PREVIEW_SEG:%' THEN
+      v_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    ELSIF v_component_key_type = 'EXPENSE_CODE' THEN
+      IF upper(v_component_key_value) IN (
+           'MILEAGE',
+           'TRAVEL',
+           'ACCOMMODATION',
+           'OTHER',
+           'EXPENSE',
+           'EXPENSES',
+           'MILEAGE_PAY_EX_VAT',
+           'TRAVEL_PAY_EX_VAT',
+           'ACCOMMODATION_PAY_EX_VAT',
+           'OTHER_PAY_EX_VAT',
+           'EXPENSES_PAY_EX_VAT'
+         )
+         OR v_raw_expense_kind IN (
+           'MILEAGE',
+           'TRAVEL',
+           'ACCOMMODATION',
+           'OTHER',
+           'EXPENSE',
+           'EXPENSES',
+           'MILEAGE_PAY_EX_VAT',
+           'TRAVEL_PAY_EX_VAT',
+           'ACCOMMODATION_PAY_EX_VAT',
+           'OTHER_PAY_EX_VAT',
+           'EXPENSES_PAY_EX_VAT'
+         )
+         OR v_raw_item_type IN ('MILEAGE_DELTA', 'TRAVEL_DELTA', 'ACCOMMODATION_DELTA', 'OTHER_DELTA')
+         OR v_raw_source_ref LIKE 'MILEAGE:%'
+         OR v_raw_source_ref LIKE 'TRAVEL:%'
+         OR v_raw_source_ref LIKE 'ACCOMMODATION:%'
+         OR v_raw_source_ref LIKE 'OTHER:%'
+         OR v_raw_source_ref LIKE 'EXPENSE:%'
+      THEN
+        v_classification := 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum;
+      ELSE
+        v_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+      END IF;
+    ELSE
+      v_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    END IF;
+
+    v_source_pay_method := upper(
+      coalesce(
+        nullif(btrim(v_line_json->>'source_pay_method'), ''),
+        v_case_current_pay_method
+      )
+    );
+
+    v_current_target_pay_method := upper(
+      coalesce(
+        nullif(btrim(v_line_json->>'current_target_pay_method'), ''),
+        nullif(btrim(v_line_json->>'target_pay_method'), ''),
+        v_case_current_pay_method
+      )
+    );
+
+    v_source_amount_text := nullif(btrim(v_line_json->>'source_amount'), '');
+    IF v_source_amount_text IS NULL THEN
+      v_source_amount_text := nullif(btrim(v_line_json->>'amount'), '');
+    END IF;
+    IF v_source_amount_text IS NULL THEN
+      v_source_amount_text := nullif(btrim(v_line_json->>'amount_ex_vat'), '');
+    END IF;
+    IF v_source_amount_text IS NULL THEN
+      RAISE EXCEPTION 'Preview line % is missing source_amount/amount/amount_ex_vat', v_row_seq;
+    END IF;
+    IF v_source_amount_text !~ '^-?\d+(\.\d+)?$' THEN
+      RAISE EXCEPTION 'Preview line % has invalid source amount: %', v_row_seq, v_source_amount_text;
+    END IF;
+    v_source_amount := round(abs(v_source_amount_text::numeric), 2)::numeric(12,2);
+
+    v_remaining_amount_text := nullif(btrim(v_line_json->>'remaining_source_amount'), '');
+    v_incoming_remaining_is_explicit := v_remaining_amount_text IS NOT NULL;
+    IF v_incoming_remaining_is_explicit THEN
+      IF v_remaining_amount_text !~ '^-?\d+(\.\d+)?$' THEN
+        RAISE EXCEPTION 'Preview line % has invalid remaining_source_amount: %', v_row_seq, v_remaining_amount_text;
+      END IF;
+      v_incoming_remaining_source_amount := round(abs(v_remaining_amount_text::numeric), 2)::numeric(12,2);
+    ELSE
+      v_incoming_remaining_source_amount := NULL;
+    END IF;
+
+    v_relevant_erni_text := nullif(
+      btrim(
+        coalesce(
+          v_line_json->>'relevant_erni_pct',
+          v_line_json->>'erni_pct'
+        )
+      ),
+      ''
+    );
+    IF v_relevant_erni_text IS NOT NULL THEN
+      IF v_relevant_erni_text !~ '^-?\d+(\.\d+)?$' THEN
+        RAISE EXCEPTION 'Preview line % has invalid relevant_erni_pct: %', v_row_seq, v_relevant_erni_text;
+      END IF;
+      v_relevant_erni_pct := round(v_relevant_erni_text::numeric, 6);
+    ELSE
+      v_relevant_erni_pct := NULL;
+    END IF;
+
+    v_allocation_group_text := nullif(btrim(v_line_json->>'allocation_priority_group'), '');
+    IF v_allocation_group_text IS NOT NULL THEN
+      IF v_allocation_group_text !~ '^-?\d+$' THEN
+        RAISE EXCEPTION 'Preview line % has invalid allocation_priority_group: %', v_row_seq, v_allocation_group_text;
+      END IF;
+      v_allocation_priority_group := v_allocation_group_text::integer;
+    ELSE
+      v_allocation_priority_group := CASE
+        WHEN v_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum THEN 0
+        ELSE 1
+      END;
+    END IF;
+
+    v_allocation_order_text := nullif(btrim(v_line_json->>'allocation_priority_order'), '');
+    IF v_allocation_order_text IS NOT NULL THEN
+      IF v_allocation_order_text !~ '^-?\d+$' THEN
+        RAISE EXCEPTION 'Preview line % has invalid allocation_priority_order: %', v_row_seq, v_allocation_order_text;
+      END IF;
+      v_allocation_priority_order := v_allocation_order_text::integer;
+    ELSE
+      v_allocation_priority_order := v_row_seq;
+    END IF;
+
+    IF v_line_json ? 'source_basis_json'
+       AND jsonb_typeof(v_line_json->'source_basis_json') IN ('object', 'array') THEN
+      v_source_basis_json := v_line_json->'source_basis_json';
+    ELSE
+      v_source_basis_json := jsonb_strip_nulls(
+        jsonb_build_object(
+          'linked_timesheet_id', coalesce(nullif(btrim(v_line_json->>'linked_timesheet_id'), ''), v_case_linked_timesheet_id::text),
+          'work_date', nullif(btrim(v_line_json->>'work_date'), ''),
+          'date', nullif(btrim(v_line_json->>'date'), ''),
+          'segment_id', nullif(btrim(v_line_json->>'segment_id'), ''),
+          'item_type', nullif(btrim(v_line_json->>'item_type'), ''),
+          'line_type', nullif(btrim(v_line_json->>'line_type'), ''),
+          'source_ref', nullif(btrim(v_line_json->>'source_ref'), ''),
+          'additional_code', nullif(btrim(v_line_json->>'additional_code'), ''),
+          'expense_code', nullif(btrim(v_line_json->>'expense_code'), ''),
+          'expense_kind', nullif(btrim(v_line_json->>'expense_kind'), ''),
+          'adjustment_code', nullif(btrim(v_line_json->>'adjustment_code'), ''),
+          'rate_code', nullif(btrim(v_line_json->>'rate_code'), ''),
+          'units', nullif(btrim(v_line_json->>'units'), ''),
+          'hours', nullif(btrim(v_line_json->>'hours'), ''),
+          'rate', nullif(btrim(v_line_json->>'rate'), '')
+        )
+      );
+    END IF;
+
+    IF v_line_json ? 'target_basis_json'
+       AND jsonb_typeof(v_line_json->'target_basis_json') IN ('object', 'array') THEN
+      v_target_basis_json := v_line_json->'target_basis_json';
+    ELSE
+      v_target_basis_json := jsonb_strip_nulls(
+        jsonb_build_object(
+          'current_target_pay_method', v_current_target_pay_method,
+          'relevant_erni_pct', v_relevant_erni_pct
+        )
+      );
+    END IF;
+
+    v_source_family_key := coalesce(
+      nullif(btrim(v_line_json->>'source_family_key'), ''),
+      CASE
+        WHEN coalesce(nullif(btrim(v_line_json->>'linked_timesheet_id'), ''), v_case_linked_timesheet_id::text) IS NOT NULL
+          THEN 'timesheet:' || coalesce(nullif(btrim(v_line_json->>'linked_timesheet_id'), ''), v_case_linked_timesheet_id::text)
+        ELSE 'case:' || p_finance_case_id::text
+      END
+    );
+
+    v_current_basis_fingerprint := public.pay_finance_component_fingerprint(
+      p_source_family_key         => v_source_family_key,
+      p_component_key_type        => v_component_key_type,
+      p_component_key_value       => v_component_key_value,
+      p_classification            => v_classification,
+      p_source_pay_method         => v_source_pay_method,
+      p_current_target_pay_method => v_current_target_pay_method,
+      p_source_basis_json         => v_source_basis_json,
+      p_source_amount             => v_source_amount,
+      p_relevant_erni_pct         => v_relevant_erni_pct,
+      p_target_basis_json         => v_target_basis_json
+    );
+
+    v_line_candidate_id := coalesce(
+      CASE
+        WHEN nullif(btrim(v_line_json->>'candidate_id'), '') IS NULL THEN NULL
+        ELSE (nullif(btrim(v_line_json->>'candidate_id'), ''))::uuid
+      END,
+      v_case_candidate_id
+    );
+
+    v_line_client_id := CASE
+      WHEN nullif(btrim(v_line_json->>'client_id'), '') IS NULL THEN v_case_client_id
+      ELSE (nullif(btrim(v_line_json->>'client_id'), ''))::uuid
+    END;
+
+    v_line_linked_timesheet_id := CASE
+      WHEN nullif(btrim(v_line_json->>'linked_timesheet_id'), '') IS NULL THEN v_case_linked_timesheet_id
+      ELSE (nullif(btrim(v_line_json->>'linked_timesheet_id'), ''))::uuid
+    END;
+
+    INSERT INTO pg_temp.tmp_pay_finance_component_sync_input (
+      row_seq,
+      source_family_key,
+      component_key_type,
+      component_key_value,
+      classification,
+      candidate_id,
+      client_id,
+      linked_timesheet_id,
+      source_pay_method,
+      current_target_pay_method,
+      source_basis_json,
+      target_basis_json,
+      source_amount,
+      incoming_remaining_source_amount,
+      incoming_remaining_is_explicit,
+      relevant_erni_pct,
+      allocation_priority_group,
+      allocation_priority_order,
+      current_basis_fingerprint
+    )
+    VALUES (
+      v_row_seq,
+      v_source_family_key,
+      v_component_key_type,
+      v_component_key_value,
+      v_classification,
+      v_line_candidate_id,
+      v_line_client_id,
+      v_line_linked_timesheet_id,
+      v_source_pay_method,
+      v_current_target_pay_method,
+      v_source_basis_json,
+      v_target_basis_json,
+      v_source_amount,
+      v_incoming_remaining_source_amount,
+      v_incoming_remaining_is_explicit,
+      v_relevant_erni_pct,
+      v_allocation_priority_group,
+      v_allocation_priority_order,
+      v_current_basis_fingerprint
+    );
+  END LOOP;
+
+  FOR v_existing_component IN
+    SELECT
+      pfc.*
+    FROM public.pay_finance_case_components pfc
+    WHERE pfc.finance_case_id = p_finance_case_id
+      AND pfc.closed_at_utc IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM (
+          SELECT DISTINCT ON (
+            src.source_family_key,
+            src.component_key_type,
+            src.component_key_value
+          )
+            src.source_family_key,
+            src.component_key_type,
+            src.component_key_value
+          FROM pg_temp.tmp_pay_finance_component_sync_input src
+          ORDER BY
+            src.source_family_key,
+            src.component_key_type,
+            src.component_key_value,
+            src.row_seq DESC
+        ) keep_rows
+        WHERE keep_rows.source_family_key = pfc.source_family_key
+          AND keep_rows.component_key_type = pfc.component_key_type
+          AND keep_rows.component_key_value = pfc.component_key_value
+      )
+  LOOP
+    v_before_json := jsonb_build_object(
+      'candidate_id', v_existing_component.candidate_id::text,
+      'client_id', CASE WHEN v_existing_component.client_id IS NULL THEN NULL ELSE v_existing_component.client_id::text END,
+      'linked_timesheet_id', CASE WHEN v_existing_component.linked_timesheet_id IS NULL THEN NULL ELSE v_existing_component.linked_timesheet_id::text END,
+      'source_family_key', v_existing_component.source_family_key,
+      'component_key_type', v_existing_component.component_key_type,
+      'component_key_value', v_existing_component.component_key_value,
+      'classification', v_existing_component.classification::text,
+      'source_pay_method', v_existing_component.source_pay_method,
+      'source_basis_json', v_existing_component.source_basis_json,
+      'source_amount', round(coalesce(v_existing_component.source_amount, 0), 2),
+      'remaining_source_amount', round(coalesce(v_existing_component.remaining_source_amount, 0), 2),
+      'saved_target_pay_method', v_existing_component.saved_target_pay_method,
+      'saved_resolution_mode', CASE WHEN v_existing_component.saved_resolution_mode IS NULL THEN NULL ELSE v_existing_component.saved_resolution_mode::text END,
+      'resolution_fingerprint', v_existing_component.resolution_fingerprint,
+      'is_resolution_stale', v_existing_component.is_resolution_stale,
+      'stale_reason', v_existing_component.stale_reason,
+      'closed_at_utc', v_existing_component.closed_at_utc
+    );
+
+    UPDATE public.pay_finance_case_components pfc
+    SET
+      remaining_source_amount = 0,
+      is_resolution_stale = false,
+      stale_reason = NULL,
+      closed_at_utc = v_now_utc,
+      updated_at_utc = v_now_utc
+    WHERE pfc.id = v_existing_component.id
+    RETURNING pfc.* INTO v_component_after;
+
+    v_after_json := jsonb_build_object(
+      'candidate_id', v_component_after.candidate_id::text,
+      'client_id', CASE WHEN v_component_after.client_id IS NULL THEN NULL ELSE v_component_after.client_id::text END,
+      'linked_timesheet_id', CASE WHEN v_component_after.linked_timesheet_id IS NULL THEN NULL ELSE v_component_after.linked_timesheet_id::text END,
+      'source_family_key', v_component_after.source_family_key,
+      'component_key_type', v_component_after.component_key_type,
+      'component_key_value', v_component_after.component_key_value,
+      'classification', v_component_after.classification::text,
+      'source_pay_method', v_component_after.source_pay_method,
+      'source_basis_json', v_component_after.source_basis_json,
+      'source_amount', round(coalesce(v_component_after.source_amount, 0), 2),
+      'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount, 0), 2),
+      'saved_target_pay_method', v_component_after.saved_target_pay_method,
+      'saved_resolution_mode', CASE WHEN v_component_after.saved_resolution_mode IS NULL THEN NULL ELSE v_component_after.saved_resolution_mode::text END,
+      'resolution_fingerprint', v_component_after.resolution_fingerprint,
+      'is_resolution_stale', v_component_after.is_resolution_stale,
+      'stale_reason', v_component_after.stale_reason,
+      'closed_at_utc', v_component_after.closed_at_utc
+    );
+
+    INSERT INTO public.pay_finance_case_events (
+      finance_case_id,
+      finance_component_id,
+      event_type,
+      event_at_utc,
+      actor_user_id,
+      pay_batch_id,
+      reservation_id,
+      before_json,
+      after_json,
+      reason,
+      note
+    )
+    VALUES (
+      p_finance_case_id,
+      v_existing_component.id,
+      'COMPONENT_CLOSED',
+      v_now_utc,
+      p_actor_user_id,
+      NULL,
+      NULL,
+      v_before_json,
+      v_after_json,
+      'COMPONENT_SYNC',
+      'Closed finance component because it no longer exists in the current preview/truth line set'
+    );
+
+    v_closed_count := v_closed_count + 1;
+  END LOOP;
+
+  FOR v_line_json IN
+    SELECT to_jsonb(src.*)
+    FROM (
+      SELECT DISTINCT ON (
+        src.source_family_key,
+        src.component_key_type,
+        src.component_key_value
+      )
+        src.row_seq,
+        src.source_family_key,
+        src.component_key_type,
+        src.component_key_value,
+        src.classification,
+        src.candidate_id,
+        src.client_id,
+        src.linked_timesheet_id,
+        src.source_pay_method,
+        src.current_target_pay_method,
+        src.source_basis_json,
+        src.target_basis_json,
+        src.source_amount,
+        src.incoming_remaining_source_amount,
+        src.incoming_remaining_is_explicit,
+        src.relevant_erni_pct,
+        src.allocation_priority_group,
+        src.allocation_priority_order,
+        src.current_basis_fingerprint
+      FROM pg_temp.tmp_pay_finance_component_sync_input src
+      ORDER BY
+        src.source_family_key,
+        src.component_key_type,
+        src.component_key_value,
+        src.row_seq DESC
+    ) src
+    ORDER BY
+      (src.source_basis_json->>'work_date') NULLS LAST,
+      src.allocation_priority_group,
+      src.allocation_priority_order,
+      src.row_seq
+  LOOP
+    v_line_candidate_id := (v_line_json->>'candidate_id')::uuid;
+    v_line_client_id := CASE
+      WHEN nullif(v_line_json->>'client_id', '') IS NULL THEN NULL
+      ELSE (v_line_json->>'client_id')::uuid
+    END;
+    v_line_linked_timesheet_id := CASE
+      WHEN nullif(v_line_json->>'linked_timesheet_id', '') IS NULL THEN NULL
+      ELSE (v_line_json->>'linked_timesheet_id')::uuid
+    END;
+    v_line_classification := (v_line_json->>'classification')::public.pay_finance_component_classification_enum;
+    v_line_source_pay_method := v_line_json->>'source_pay_method';
+    v_line_current_target_pay_method := coalesce(v_line_json->>'current_target_pay_method', '');
+    v_line_source_basis_json := v_line_json->'source_basis_json';
+    v_line_source_amount := round(coalesce((v_line_json->>'source_amount')::numeric, 0), 2)::numeric(12,2);
+    v_line_incoming_remaining_source_amount := CASE
+      WHEN (v_line_json->>'incoming_remaining_is_explicit')::boolean
+        THEN round(coalesce((v_line_json->>'incoming_remaining_source_amount')::numeric, 0), 2)::numeric(12,2)
+      ELSE NULL
+    END;
+    v_line_allocation_priority_group := (v_line_json->>'allocation_priority_group')::integer;
+    v_line_allocation_priority_order := (v_line_json->>'allocation_priority_order')::integer;
+
+    SELECT
+      pfc.*
+    INTO
+      v_existing_component
+    FROM public.pay_finance_case_components pfc
+    WHERE pfc.finance_case_id = p_finance_case_id
+      AND pfc.source_family_key = v_line_json->>'source_family_key'
+      AND pfc.component_key_type = v_line_json->>'component_key_type'
+      AND pfc.component_key_value = v_line_json->>'component_key_value'
+      AND pfc.closed_at_utc IS NULL
+    ORDER BY
+      pfc.updated_at_utc DESC,
+      pfc.created_at_utc DESC,
+      pfc.id DESC
+    LIMIT 1;
+
+    IF FOUND THEN
+      v_consumed_amount := greatest(
+        round(coalesce(v_existing_component.source_amount, 0), 2) - round(coalesce(v_existing_component.remaining_source_amount, 0), 2),
+        0
+      )::numeric(12,2);
+
+      IF (v_line_json->>'incoming_remaining_is_explicit')::boolean THEN
+        v_new_remaining_source_amount := greatest(
+          round(coalesce((v_line_json->>'incoming_remaining_source_amount')::numeric, 0), 2),
+          0
+        )::numeric(12,2);
+      ELSE
+        v_new_remaining_source_amount := greatest(
+          round(coalesce((v_line_json->>'source_amount')::numeric, 0), 2) - v_consumed_amount,
+          0
+        )::numeric(12,2);
+      END IF;
+
+      v_has_saved_resolution := (
+        v_existing_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        AND (
+          v_existing_component.saved_target_pay_method IS NOT NULL
+          OR v_existing_component.saved_resolution_mode IS NOT NULL
+          OR v_existing_component.saved_resolution_payload_json IS NOT NULL
+          OR v_existing_component.saved_resolution_result_json IS NOT NULL
+          OR v_existing_component.resolution_fingerprint IS NOT NULL
+          OR v_existing_component.is_resolution_stale = true
+        )
+      );
+
+      IF v_has_saved_resolution THEN
+        IF v_existing_component.saved_target_pay_method IS NOT NULL
+           AND upper(v_existing_component.saved_target_pay_method) IS DISTINCT FROM upper(v_line_current_target_pay_method) THEN
+          v_should_be_stale := true;
+          v_stale_reason := 'TARGET_PAY_METHOD_CHANGED';
+        ELSIF v_existing_component.resolution_fingerprint IS NOT NULL
+              AND v_existing_component.resolution_fingerprint IS DISTINCT FROM (v_line_json->>'current_basis_fingerprint') THEN
+          v_should_be_stale := true;
+          v_stale_reason := 'COMPONENT_BASIS_CHANGED';
+        ELSE
+          v_should_be_stale := false;
+          v_stale_reason := NULL;
+        END IF;
+      ELSE
+        v_should_be_stale := false;
+        v_stale_reason := NULL;
+      END IF;
+
+      v_before_json := jsonb_build_object(
+        'candidate_id', v_existing_component.candidate_id::text,
+        'client_id', CASE WHEN v_existing_component.client_id IS NULL THEN NULL ELSE v_existing_component.client_id::text END,
+        'linked_timesheet_id', CASE WHEN v_existing_component.linked_timesheet_id IS NULL THEN NULL ELSE v_existing_component.linked_timesheet_id::text END,
+        'source_family_key', v_existing_component.source_family_key,
+        'component_key_type', v_existing_component.component_key_type,
+        'component_key_value', v_existing_component.component_key_value,
+        'classification', v_existing_component.classification::text,
+        'source_pay_method', v_existing_component.source_pay_method,
+        'source_basis_json', v_existing_component.source_basis_json,
+        'source_amount', round(coalesce(v_existing_component.source_amount, 0), 2),
+        'remaining_source_amount', round(coalesce(v_existing_component.remaining_source_amount, 0), 2),
+        'saved_target_pay_method', v_existing_component.saved_target_pay_method,
+        'saved_resolution_mode', CASE WHEN v_existing_component.saved_resolution_mode IS NULL THEN NULL ELSE v_existing_component.saved_resolution_mode::text END,
+        'resolution_fingerprint', v_existing_component.resolution_fingerprint,
+        'is_resolution_stale', v_existing_component.is_resolution_stale,
+        'stale_reason', v_existing_component.stale_reason,
+        'closed_at_utc', v_existing_component.closed_at_utc
+      );
+
+      IF round(coalesce(v_existing_component.source_amount, 0), 2) IS DISTINCT FROM round(coalesce(v_line_source_amount, 0), 2)
+         OR round(coalesce(v_existing_component.remaining_source_amount, 0), 2) IS DISTINCT FROM round(coalesce(v_new_remaining_source_amount, 0), 2)
+         OR v_existing_component.candidate_id IS DISTINCT FROM v_line_candidate_id
+         OR v_existing_component.client_id IS DISTINCT FROM v_line_client_id
+         OR v_existing_component.linked_timesheet_id IS DISTINCT FROM v_line_linked_timesheet_id
+         OR v_existing_component.source_pay_method IS DISTINCT FROM v_line_source_pay_method
+         OR v_existing_component.source_basis_json IS DISTINCT FROM v_line_source_basis_json
+         OR v_existing_component.classification IS DISTINCT FROM v_line_classification
+         OR v_existing_component.allocation_priority_group IS DISTINCT FROM v_line_allocation_priority_group
+         OR v_existing_component.allocation_priority_order IS DISTINCT FROM v_line_allocation_priority_order
+         OR v_existing_component.is_resolution_stale IS DISTINCT FROM v_should_be_stale
+         OR v_existing_component.stale_reason IS DISTINCT FROM v_stale_reason
+      THEN
+        UPDATE public.pay_finance_case_components pfc
+        SET
+          candidate_id = v_line_candidate_id,
+          client_id = v_line_client_id,
+          linked_timesheet_id = v_line_linked_timesheet_id,
+          classification = v_line_classification,
+          source_pay_method = v_line_source_pay_method,
+          source_basis_json = v_line_source_basis_json,
+          source_amount = round(coalesce(v_line_source_amount, 0), 2)::numeric(12,2),
+          remaining_source_amount = round(coalesce(v_new_remaining_source_amount, 0), 2)::numeric(12,2),
+          is_resolution_stale = v_should_be_stale,
+          stale_reason = v_stale_reason,
+          allocation_priority_group = v_line_allocation_priority_group,
+          allocation_priority_order = v_line_allocation_priority_order,
+          updated_at_utc = v_now_utc
+        WHERE pfc.id = v_existing_component.id
+        RETURNING pfc.* INTO v_component_after;
+
+        v_after_json := jsonb_build_object(
+          'candidate_id', v_component_after.candidate_id::text,
+          'client_id', CASE WHEN v_component_after.client_id IS NULL THEN NULL ELSE v_component_after.client_id::text END,
+          'linked_timesheet_id', CASE WHEN v_component_after.linked_timesheet_id IS NULL THEN NULL ELSE v_component_after.linked_timesheet_id::text END,
+          'source_family_key', v_component_after.source_family_key,
+          'component_key_type', v_component_after.component_key_type,
+          'component_key_value', v_component_after.component_key_value,
+          'classification', v_component_after.classification::text,
+          'source_pay_method', v_component_after.source_pay_method,
+          'source_basis_json', v_component_after.source_basis_json,
+          'source_amount', round(coalesce(v_component_after.source_amount, 0), 2),
+          'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount, 0), 2),
+          'saved_target_pay_method', v_component_after.saved_target_pay_method,
+          'saved_resolution_mode', CASE WHEN v_component_after.saved_resolution_mode IS NULL THEN NULL ELSE v_component_after.saved_resolution_mode::text END,
+          'resolution_fingerprint', v_component_after.resolution_fingerprint,
+          'is_resolution_stale', v_component_after.is_resolution_stale,
+          'stale_reason', v_component_after.stale_reason,
+          'closed_at_utc', v_component_after.closed_at_utc
+        );
+
+        INSERT INTO public.pay_finance_case_events (
+          finance_case_id,
+          finance_component_id,
+          event_type,
+          event_at_utc,
+          actor_user_id,
+          pay_batch_id,
+          reservation_id,
+          before_json,
+          after_json,
+          reason,
+          note
+        )
+        VALUES (
+          p_finance_case_id,
+          v_existing_component.id,
+          CASE
+            WHEN v_existing_component.is_resolution_stale IS DISTINCT FROM true AND v_should_be_stale = true THEN 'COMPONENT_STALE'
+            ELSE 'COMPONENT_UPDATED'
+          END,
+          v_now_utc,
+          p_actor_user_id,
+          NULL,
+          NULL,
+          v_before_json,
+          v_after_json,
+          'COMPONENT_SYNC',
+          CASE
+            WHEN v_existing_component.is_resolution_stale IS DISTINCT FROM true AND v_should_be_stale = true
+              THEN 'Updated finance component and marked saved taxable resolution stale because the basis or target pay method changed materially'
+            ELSE 'Updated finance component from current preview/truth line set'
+          END
+        );
+
+        IF v_existing_component.is_resolution_stale IS DISTINCT FROM true AND v_should_be_stale = true THEN
+          v_stale_marked_count := v_stale_marked_count + 1;
+        END IF;
+
+        v_updated_count := v_updated_count + 1;
+      END IF;
+    ELSE
+      SELECT
+        pfc.*
+      INTO
+        v_reopen_component
+      FROM public.pay_finance_case_components pfc
+      WHERE pfc.finance_case_id = p_finance_case_id
+        AND pfc.source_family_key = v_line_json->>'source_family_key'
+        AND pfc.component_key_type = v_line_json->>'component_key_type'
+        AND pfc.component_key_value = v_line_json->>'component_key_value'
+        AND pfc.closed_at_utc IS NOT NULL
+      ORDER BY
+        pfc.closed_at_utc DESC,
+        pfc.updated_at_utc DESC,
+        pfc.created_at_utc DESC,
+        pfc.id DESC
+      LIMIT 1;
+
+      IF FOUND THEN
+        v_has_saved_resolution := (
+          v_reopen_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          AND (
+            v_reopen_component.saved_target_pay_method IS NOT NULL
+            OR v_reopen_component.saved_resolution_mode IS NOT NULL
+            OR v_reopen_component.saved_resolution_payload_json IS NOT NULL
+            OR v_reopen_component.saved_resolution_result_json IS NOT NULL
+            OR v_reopen_component.resolution_fingerprint IS NOT NULL
+            OR v_reopen_component.is_resolution_stale = true
+          )
+        );
+
+        IF v_has_saved_resolution THEN
+          IF v_reopen_component.saved_target_pay_method IS NOT NULL
+             AND upper(v_reopen_component.saved_target_pay_method) IS DISTINCT FROM upper(v_line_current_target_pay_method) THEN
+            v_should_be_stale := true;
+            v_stale_reason := 'TARGET_PAY_METHOD_CHANGED';
+          ELSIF v_reopen_component.resolution_fingerprint IS NOT NULL
+                AND v_reopen_component.resolution_fingerprint IS DISTINCT FROM (v_line_json->>'current_basis_fingerprint') THEN
+            v_should_be_stale := true;
+            v_stale_reason := 'COMPONENT_BASIS_CHANGED';
+          ELSE
+            v_should_be_stale := false;
+            v_stale_reason := NULL;
+          END IF;
+        ELSE
+          v_should_be_stale := false;
+          v_stale_reason := NULL;
+        END IF;
+
+        v_before_json := jsonb_build_object(
+          'candidate_id', v_reopen_component.candidate_id::text,
+          'client_id', CASE WHEN v_reopen_component.client_id IS NULL THEN NULL ELSE v_reopen_component.client_id::text END,
+          'linked_timesheet_id', CASE WHEN v_reopen_component.linked_timesheet_id IS NULL THEN NULL ELSE v_reopen_component.linked_timesheet_id::text END,
+          'source_family_key', v_reopen_component.source_family_key,
+          'component_key_type', v_reopen_component.component_key_type,
+          'component_key_value', v_reopen_component.component_key_value,
+          'classification', v_reopen_component.classification::text,
+          'source_pay_method', v_reopen_component.source_pay_method,
+          'source_basis_json', v_reopen_component.source_basis_json,
+          'source_amount', round(coalesce(v_reopen_component.source_amount, 0), 2),
+          'remaining_source_amount', round(coalesce(v_reopen_component.remaining_source_amount, 0), 2),
+          'saved_target_pay_method', v_reopen_component.saved_target_pay_method,
+          'saved_resolution_mode', CASE WHEN v_reopen_component.saved_resolution_mode IS NULL THEN NULL ELSE v_reopen_component.saved_resolution_mode::text END,
+          'resolution_fingerprint', v_reopen_component.resolution_fingerprint,
+          'is_resolution_stale', v_reopen_component.is_resolution_stale,
+          'stale_reason', v_reopen_component.stale_reason,
+          'closed_at_utc', v_reopen_component.closed_at_utc
+        );
+
+        IF (v_line_json->>'incoming_remaining_is_explicit')::boolean THEN
+          v_new_remaining_source_amount := greatest(
+            round(coalesce((v_line_json->>'incoming_remaining_source_amount')::numeric, 0), 2),
+            0
+          )::numeric(12,2);
+        ELSE
+          v_new_remaining_source_amount := round(coalesce((v_line_json->>'source_amount')::numeric, 0), 2)::numeric(12,2);
+        END IF;
+
+        UPDATE public.pay_finance_case_components pfc
+        SET
+          candidate_id = v_line_candidate_id,
+          client_id = v_line_client_id,
+          linked_timesheet_id = v_line_linked_timesheet_id,
+          classification = v_line_classification,
+          source_pay_method = v_line_source_pay_method,
+          source_basis_json = v_line_source_basis_json,
+          source_amount = round(coalesce(v_line_source_amount, 0), 2)::numeric(12,2),
+          remaining_source_amount = round(coalesce(v_new_remaining_source_amount, 0), 2)::numeric(12,2),
+          is_resolution_stale = v_should_be_stale,
+          stale_reason = v_stale_reason,
+          allocation_priority_group = v_line_allocation_priority_group,
+          allocation_priority_order = v_line_allocation_priority_order,
+          closed_at_utc = NULL,
+          updated_at_utc = v_now_utc
+        WHERE pfc.id = v_reopen_component.id
+        RETURNING pfc.* INTO v_component_after;
+
+        v_after_json := jsonb_build_object(
+          'candidate_id', v_component_after.candidate_id::text,
+          'client_id', CASE WHEN v_component_after.client_id IS NULL THEN NULL ELSE v_component_after.client_id::text END,
+          'linked_timesheet_id', CASE WHEN v_component_after.linked_timesheet_id IS NULL THEN NULL ELSE v_component_after.linked_timesheet_id::text END,
+          'source_family_key', v_component_after.source_family_key,
+          'component_key_type', v_component_after.component_key_type,
+          'component_key_value', v_component_after.component_key_value,
+          'classification', v_component_after.classification::text,
+          'source_pay_method', v_component_after.source_pay_method,
+          'source_basis_json', v_component_after.source_basis_json,
+          'source_amount', round(coalesce(v_component_after.source_amount, 0), 2),
+          'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount, 0), 2),
+          'saved_target_pay_method', v_component_after.saved_target_pay_method,
+          'saved_resolution_mode', CASE WHEN v_component_after.saved_resolution_mode IS NULL THEN NULL ELSE v_component_after.saved_resolution_mode::text END,
+          'resolution_fingerprint', v_component_after.resolution_fingerprint,
+          'is_resolution_stale', v_component_after.is_resolution_stale,
+          'stale_reason', v_component_after.stale_reason,
+          'closed_at_utc', v_component_after.closed_at_utc
+        );
+
+        INSERT INTO public.pay_finance_case_events (
+          finance_case_id,
+          finance_component_id,
+          event_type,
+          event_at_utc,
+          actor_user_id,
+          pay_batch_id,
+          reservation_id,
+          before_json,
+          after_json,
+          reason,
+          note
+        )
+        VALUES (
+          p_finance_case_id,
+          v_reopen_component.id,
+          'COMPONENT_REOPENED',
+          v_now_utc,
+          p_actor_user_id,
+          NULL,
+          NULL,
+          v_before_json,
+          v_after_json,
+          'COMPONENT_SYNC',
+          'Reopened finance component because the same component identity reappeared in the current preview/truth line set'
+        );
+
+        IF v_should_be_stale = true THEN
+          v_stale_marked_count := v_stale_marked_count + 1;
+        END IF;
+
+        v_reopened_count := v_reopened_count + 1;
+      ELSE
+        v_created_component_id := gen_random_uuid();
+
+        INSERT INTO public.pay_finance_case_components (
+          id,
+          finance_case_id,
+          candidate_id,
+          client_id,
+          linked_timesheet_id,
+          source_family_key,
+          component_key_type,
+          component_key_value,
+          classification,
+          source_pay_method,
+          source_basis_json,
+          source_amount,
+          remaining_source_amount,
+          saved_target_pay_method,
+          saved_resolution_mode,
+          saved_resolution_payload_json,
+          saved_resolution_result_json,
+          resolution_fingerprint,
+          is_resolution_stale,
+          stale_reason,
+          allocation_priority_group,
+          allocation_priority_order,
+          created_at_utc,
+          updated_at_utc,
+          resolved_at_utc,
+          closed_at_utc
+        )
+        VALUES (
+          v_created_component_id,
+          p_finance_case_id,
+          v_line_candidate_id,
+          v_line_client_id,
+          v_line_linked_timesheet_id,
+          v_line_json->>'source_family_key',
+          v_line_json->>'component_key_type',
+          v_line_json->>'component_key_value',
+          v_line_classification,
+          v_line_source_pay_method,
+          v_line_source_basis_json,
+          round(coalesce(v_line_source_amount, 0), 2)::numeric(12,2),
+          round(
+            coalesce(
+              CASE
+                WHEN (v_line_json->>'incoming_remaining_is_explicit')::boolean
+                  THEN (v_line_json->>'incoming_remaining_source_amount')::numeric
+                ELSE (v_line_json->>'source_amount')::numeric
+              END,
+              0
+            ),
+            2
+          )::numeric(12,2),
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          false,
+          NULL,
+          v_line_allocation_priority_group,
+          v_line_allocation_priority_order,
+          v_now_utc,
+          v_now_utc,
+          NULL,
+          NULL
+        );
+
+        SELECT
+          pfc.*
+        INTO
+          v_component_after
+        FROM public.pay_finance_case_components pfc
+        WHERE pfc.id = v_created_component_id;
+
+        v_after_json := jsonb_build_object(
+          'candidate_id', v_component_after.candidate_id::text,
+          'client_id', CASE WHEN v_component_after.client_id IS NULL THEN NULL ELSE v_component_after.client_id::text END,
+          'linked_timesheet_id', CASE WHEN v_component_after.linked_timesheet_id IS NULL THEN NULL ELSE v_component_after.linked_timesheet_id::text END,
+          'source_family_key', v_component_after.source_family_key,
+          'component_key_type', v_component_after.component_key_type,
+          'component_key_value', v_component_after.component_key_value,
+          'classification', v_component_after.classification::text,
+          'source_pay_method', v_component_after.source_pay_method,
+          'source_basis_json', v_component_after.source_basis_json,
+          'source_amount', round(coalesce(v_component_after.source_amount, 0), 2),
+          'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount, 0), 2),
+          'saved_target_pay_method', v_component_after.saved_target_pay_method,
+          'saved_resolution_mode', CASE WHEN v_component_after.saved_resolution_mode IS NULL THEN NULL ELSE v_component_after.saved_resolution_mode::text END,
+          'resolution_fingerprint', v_component_after.resolution_fingerprint,
+          'is_resolution_stale', v_component_after.is_resolution_stale,
+          'stale_reason', v_component_after.stale_reason,
+          'closed_at_utc', v_component_after.closed_at_utc
+        );
+
+        INSERT INTO public.pay_finance_case_events (
+          finance_case_id,
+          finance_component_id,
+          event_type,
+          event_at_utc,
+          actor_user_id,
+          pay_batch_id,
+          reservation_id,
+          before_json,
+          after_json,
+          reason,
+          note
+        )
+        VALUES (
+          p_finance_case_id,
+          v_created_component_id,
+          'COMPONENT_CREATED',
+          v_now_utc,
+          p_actor_user_id,
+          NULL,
+          NULL,
+          NULL,
+          v_after_json,
+          'COMPONENT_SYNC',
+          'Created finance component from current preview/truth line set'
+        );
+
+        v_inserted_count := v_inserted_count + 1;
+      END IF;
+    END IF;
+  END LOOP;
+
+  SELECT
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', pfc.id::text,
+          'finance_case_id', pfc.finance_case_id::text,
+          'candidate_id', pfc.candidate_id::text,
+          'client_id', CASE WHEN pfc.client_id IS NULL THEN NULL ELSE pfc.client_id::text END,
+          'linked_timesheet_id', CASE WHEN pfc.linked_timesheet_id IS NULL THEN NULL ELSE pfc.linked_timesheet_id::text END,
+          'source_family_key', pfc.source_family_key,
+          'component_key_type', pfc.component_key_type,
+          'component_key_value', pfc.component_key_value,
+          'classification', pfc.classification::text,
+          'source_pay_method', pfc.source_pay_method,
+          'source_amount', round(coalesce(pfc.source_amount, 0), 2),
+          'remaining_source_amount', round(coalesce(pfc.remaining_source_amount, 0), 2),
+          'saved_target_pay_method', pfc.saved_target_pay_method,
+          'saved_resolution_mode', CASE WHEN pfc.saved_resolution_mode IS NULL THEN NULL ELSE pfc.saved_resolution_mode::text END,
+          'is_resolution_stale', pfc.is_resolution_stale,
+          'stale_reason', pfc.stale_reason,
+          'allocation_priority_group', pfc.allocation_priority_group,
+          'allocation_priority_order', pfc.allocation_priority_order,
+          'created_at_utc', pfc.created_at_utc,
+          'updated_at_utc', pfc.updated_at_utc
+        )
+        ORDER BY
+          pfc.source_family_key,
+          pfc.allocation_priority_group,
+          pfc.allocation_priority_order,
+          pfc.component_key_type,
+          pfc.component_key_value
+      ),
+      '[]'::jsonb
+    )
+  INTO
+    v_open_components_json
+  FROM public.pay_finance_case_components pfc
+  WHERE pfc.finance_case_id = p_finance_case_id
+    AND pfc.closed_at_utc IS NULL;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'inserted_count', v_inserted_count,
+    'updated_count', v_updated_count,
+    'reopened_count', v_reopened_count,
+    'closed_count', v_closed_count,
+    'stale_marked_count', v_stale_marked_count,
+    'open_components', v_open_components_json
+  );
+END;
+$function$;
+
+
