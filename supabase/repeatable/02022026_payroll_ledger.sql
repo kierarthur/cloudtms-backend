@@ -169,6 +169,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -187,6 +188,8 @@ declare
   v_cleared_timesheet_override_count int := 0;
   v_released_finance_case_ids jsonb := '[]'::jsonb;
   v_reincluded_timesheet_ids jsonb := '[]'::jsonb;
+  v_component_restored_count int := 0;
+  v_component_restored_amount numeric := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_cancel: pay_batch_id is required';
@@ -283,8 +286,200 @@ begin
     v_released_finance_case_ids
   from rel;
 
+  create temp table if not exists _tmp_component_restore (
+    finance_component_id uuid not null primary key,
+    finance_case_id uuid null,
+    restore_source_amount numeric not null
+  ) on commit drop;
+
+  truncate table _tmp_component_restore;
+
+  with released_source as (
+    select
+      coalesce(
+        par.finance_component_id,
+        pbi.finance_component_id,
+        fb.finance_component_id
+      ) as finance_component_id,
+      coalesce(
+        par.finance_case_id,
+        pbi.finance_case_id,
+        fb.finance_case_id
+      ) as finance_case_id,
+      round(
+        sum(
+          coalesce(
+            par.reserved_source_amount,
+            pbi.frozen_source_amount,
+            abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, par.reserved_amount, 0))
+          )
+        ),
+        2
+      ) as restore_source_amount
+    from public.pay_advance_reservations par
+    left join public.pay_batch_items pbi
+      on pbi.id = par.pay_batch_item_id
+    left join lateral (
+      select
+        pfc_fb.id as finance_component_id,
+        pfc_fb.finance_case_id as finance_case_id
+      from public.pay_finance_case_components pfc_fb
+      where pfc_fb.finance_case_id = coalesce(par.finance_case_id, pbi.finance_case_id)
+        and pfc_fb.component_key_type = coalesce(
+          nullif(
+            btrim(
+              coalesce(
+                par.frozen_component_key_type,
+                pbi.frozen_component_key_type,
+                par.frozen_component_snapshot_json->>'component_key_type',
+                pbi.frozen_component_snapshot_json->>'component_key_type',
+                ''
+              )
+            ),
+            ''
+          ),
+          '§NO_COMPONENT_KEY§'
+        )
+        and pfc_fb.component_key_value = coalesce(
+          nullif(
+            btrim(
+              coalesce(
+                par.frozen_component_key_value,
+                pbi.frozen_component_key_value,
+                par.frozen_component_snapshot_json->>'component_key_value',
+                pbi.frozen_component_snapshot_json->>'component_key_value',
+                ''
+              )
+            ),
+            ''
+          ),
+          '§NO_COMPONENT_VALUE§'
+        )
+      order by
+        pfc_fb.closed_at_utc nulls first,
+        pfc_fb.updated_at_utc desc,
+        pfc_fb.created_at_utc desc,
+        pfc_fb.id desc
+      limit 1
+    ) fb on true
+    where par.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(par.status,'')) = 'RELEASED'
+      and par.released_at_utc = v_cancelled_at_utc
+    group by
+      coalesce(
+        par.finance_component_id,
+        pbi.finance_component_id,
+        fb.finance_component_id
+      ),
+      coalesce(
+        par.finance_case_id,
+        pbi.finance_case_id,
+        fb.finance_case_id
+      )
+    having coalesce(
+      coalesce(
+        par.finance_component_id,
+        pbi.finance_component_id,
+        fb.finance_component_id
+      ),
+      '00000000-0000-0000-0000-000000000000'::uuid
+    ) <> '00000000-0000-0000-0000-000000000000'::uuid
+  )
+  insert into _tmp_component_restore(finance_component_id, finance_case_id, restore_source_amount)
+  select
+    rs.finance_component_id,
+    rs.finance_case_id,
+    rs.restore_source_amount
+  from released_source rs
+  where rs.finance_component_id is not null
+    and rs.restore_source_amount > 0;
+
+  create temp table if not exists _tmp_component_restore_apply (
+    finance_component_id uuid not null primary key,
+    finance_case_id uuid null,
+    classification public.pay_finance_component_classification_enum not null,
+    restore_source_amount numeric not null,
+    remaining_before numeric not null,
+    remaining_after numeric not null
+  ) on commit drop;
+
+  truncate table _tmp_component_restore_apply;
+
+  insert into _tmp_component_restore_apply(
+    finance_component_id,
+    finance_case_id,
+    classification,
+    restore_source_amount,
+    remaining_before,
+    remaining_after
+  )
+  select
+    pfc.id,
+    pfc.finance_case_id,
+    pfc.classification,
+    tcr.restore_source_amount,
+    round(coalesce(pfc.remaining_source_amount, 0), 2) as remaining_before,
+    round(least(coalesce(pfc.source_amount, 0), coalesce(pfc.remaining_source_amount, 0) + coalesce(tcr.restore_source_amount, 0)), 2) as remaining_after
+  from _tmp_component_restore tcr
+  join public.pay_finance_case_components pfc
+    on pfc.id = tcr.finance_component_id;
+
+  update public.pay_finance_case_components pfc
+  set
+    remaining_source_amount = cra.remaining_after,
+    resolved_at_utc = case
+      when cra.remaining_after > 0 then null
+      else pfc.resolved_at_utc
+    end,
+    closed_at_utc = null,
+    updated_at_utc = v_cancelled_at_utc
+  from _tmp_component_restore_apply cra
+  where pfc.id = cra.finance_component_id;
+
+  select
+    count(*)::int,
+    round(coalesce(sum(cra.restore_source_amount), 0), 2)
+  into
+    v_component_restored_count,
+    v_component_restored_amount
+  from _tmp_component_restore_apply cra;
+
   insert into public.pay_finance_case_events(
     finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    reservation_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  select
+    cra.finance_case_id,
+    cra.finance_component_id,
+    'COMPONENT_RESTORED',
+    v_cancelled_at_utc,
+    p_actor_user_id,
+    p_pay_batch_id,
+    null::uuid,
+    jsonb_build_object(
+      'remaining_source_amount', cra.remaining_before
+    ),
+    jsonb_build_object(
+      'remaining_source_amount', cra.remaining_after,
+      'restored_source_amount', cra.restore_source_amount,
+      'classification', cra.classification::text
+    ),
+    'batch_cancel',
+    p_reason
+  from _tmp_component_restore_apply cra;
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
     event_type,
     event_at_utc,
     actor_user_id,
@@ -297,6 +492,7 @@ begin
   )
   select
     par.finance_case_id,
+    par.finance_component_id,
     'RESERVATION_RELEASED',
     v_cancelled_at_utc,
     p_actor_user_id,
@@ -374,6 +570,8 @@ begin
       'released_reservation_count', v_released_reservation_count,
       'released_reservation_amount', v_released_reservation_amount,
       'released_finance_case_ids', v_released_finance_case_ids,
+      'component_restored_count', v_component_restored_count,
+      'component_restored_amount', v_component_restored_amount,
       'cleared_timesheet_override_count', v_cleared_timesheet_override_count,
       'reincluded_timesheet_ids', v_reincluded_timesheet_ids,
       'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
@@ -393,6 +591,10 @@ begin
       'count', v_released_reservation_count,
       'amount', v_released_reservation_amount,
       'finance_case_ids', v_released_finance_case_ids
+    ),
+    'component_restoration', jsonb_build_object(
+      'count', v_component_restored_count,
+      'amount', v_component_restored_amount
     ),
     'timesheet_payment_overrides', jsonb_build_object(
       'cleared_count', v_cleared_timesheet_override_count,
