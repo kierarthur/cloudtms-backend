@@ -11069,6 +11069,8 @@ begin;
 
 
 
+
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -11375,7 +11377,22 @@ begin
         'source_ref', pbi.source_ref,
         'description', pbi.description,
         'finance_case_id', case when pbi.finance_case_id is null then null else pbi.finance_case_id::text end,
+        'finance_component_id', case when pbi.finance_component_id is null then null else pbi.finance_component_id::text end,
         'reservation_id', case when pbi.reservation_id is null then null else pbi.reservation_id::text end,
+        'frozen_component_snapshot_json', pbi.frozen_component_snapshot_json,
+        'frozen_component_key_type', pbi.frozen_component_key_type,
+        'frozen_component_key_value', pbi.frozen_component_key_value,
+        'frozen_component_classification', case when pbi.frozen_component_classification is null then null else pbi.frozen_component_classification::text end,
+        'frozen_source_basis_json', pbi.frozen_source_basis_json,
+        'frozen_source_pay_method', pbi.frozen_source_pay_method,
+        'frozen_target_pay_method', pbi.frozen_target_pay_method,
+        'frozen_resolution_mode', case when pbi.frozen_resolution_mode is null then null else pbi.frozen_resolution_mode::text end,
+        'frozen_resolution_payload_json', pbi.frozen_resolution_payload_json,
+        'frozen_resolution_result_json', pbi.frozen_resolution_result_json,
+        'frozen_source_amount', pbi.frozen_source_amount,
+        'frozen_target_amount_ex_vat', pbi.frozen_target_amount_ex_vat,
+        'frozen_target_amount_vat', pbi.frozen_target_amount_vat,
+        'frozen_target_amount_inc_vat', pbi.frozen_target_amount_inc_vat,
         'paye_treatment', pbi.paye_treatment,
         'amount_ex_vat', pbi.amount_ex_vat,
         'amount_vat', pbi.amount_vat,
@@ -12011,6 +12028,12 @@ begin
           'gross_deductions_ex_vat', fi.gross_deductions_ex_vat,
           'net_deductions_ex_vat', fi.net_deductions_ex_vat
         ),
+        'is_mixed_case', coalesce(vf.is_mixed_case, false),
+        'open_taxable_count', coalesce(vf.open_taxable_count, 0),
+        'open_reimbursement_count', coalesce(vf.open_reimbursement_count, 0),
+        'unresolved_taxable_count', coalesce(vf.unresolved_taxable_count, 0),
+        'stale_count', coalesce(vf.stale_count, 0),
+        'component_resolution_summary_json', coalesce(vf.component_resolution_summary_json, '{}'::jsonb),
         'active_snooze_context', case
           when vf.active_snooze_id is null then null
           else jsonb_build_object(
@@ -12102,12 +12125,6 @@ begin
   );
 end;
 $$;
-
-
-
-
-
-
 
 
 
