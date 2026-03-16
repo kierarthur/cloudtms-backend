@@ -66,7 +66,6 @@ CREATE INDEX IF NOT EXISTS idx_timesheet_evidence_timesheet_kind
 --     hr_validation_required_for_invoice
 -- ============================================================
 
-
 CREATE OR REPLACE VIEW public.v_timesheets_summary_base AS
 WITH latest_tsfin AS (
   SELECT DISTINCT ON (tf.timesheet_id)
@@ -763,8 +762,151 @@ with_issues AS (
 
   FROM all_rows ar
 )
+,
+pay_ts AS (
+  SELECT DISTINCT
+    wi.timesheet_id,
+    COALESCE(wi.pay_on_hold, false) AS pay_on_hold,
+    wi.invoice_breakdown_json
+  FROM with_issues wi
+  WHERE wi.timesheet_id IS NOT NULL
+),
+pay_is_seg AS (
+  SELECT
+    pt.timesheet_id,
+    (
+      pt.invoice_breakdown_json IS NOT NULL
+      AND jsonb_typeof(pt.invoice_breakdown_json) = 'object'
+      AND upper(coalesce(pt.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+      AND jsonb_typeof(pt.invoice_breakdown_json->'segments') = 'array'
+    ) AS is_segments_mode
+  FROM pay_ts pt
+),
+pay_components AS (
+  SELECT
+    pt.timesheet_id,
+    nullif(btrim(coalesce(seg->>'segment_id','')), '') AS component_id,
+    COALESCE(NULLIF(seg->>'exclude_from_pay','')::boolean, false) AS is_on_hold
+  FROM pay_ts pt
+  JOIN pay_is_seg ps
+    ON ps.timesheet_id = pt.timesheet_id
+  JOIN LATERAL jsonb_array_elements(coalesce(pt.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg ON true
+  WHERE ps.is_segments_mode = true
+    AND seg IS NOT NULL
+    AND jsonb_typeof(seg) = 'object'
+    AND nullif(btrim(coalesce(seg->>'segment_id','')), '') IS NOT NULL
+
+  UNION ALL
+
+  SELECT
+    pt.timesheet_id,
+    'TOTAL'::text AS component_id,
+    pt.pay_on_hold AS is_on_hold
+  FROM pay_ts pt
+  JOIN pay_is_seg ps
+    ON ps.timesheet_id = pt.timesheet_id
+  WHERE ps.is_segments_mode = false
+),
+pay_items AS (
+  SELECT
+    pbi.timesheet_id,
+    CASE
+      WHEN nullif(btrim(coalesce(pbi.segment_key,'')), '') IS NOT NULL
+        THEN nullif(btrim(coalesce(pbi.segment_key,'')), '')
+      WHEN pbi.source_ref IS NOT NULL AND btrim(coalesce(pbi.source_ref,'')) LIKE 'seg:%'
+        THEN nullif(btrim(split_part(btrim(pbi.source_ref), ':', 2)), '')
+      ELSE 'TOTAL'
+    END AS component_id,
+    upper(coalesce(pb.status,'')) AS batch_status,
+    pb.completed_at_utc AS completed_at_utc
+  FROM public.pay_batch_items pbi
+  JOIN public.pay_batch_candidates pbc
+    ON pbc.id = pbi.pay_batch_candidate_id
+  JOIN public.pay_batches pb
+    ON pb.id = pbc.pay_batch_id
+  JOIN pay_ts pt
+    ON pt.timesheet_id = pbi.timesheet_id
+  WHERE pbi.is_voided = false
+    AND pb.cancelled_at_utc IS NULL
+    AND pbi.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+),
+pay_items_agg AS (
+  SELECT
+    pi.timesheet_id,
+    pi.component_id,
+    max(CASE WHEN pi.batch_status = 'SETTLED' THEN 1 ELSE 0 END)::int AS has_settled,
+    max(CASE WHEN pi.batch_status IN (
+      'DRAFT','DRAFT_CREATED','READY',
+      'WAITING_BANK_CONFIRM','PARTIAL','FAILED','BLOCKED_FUNDS',
+      'SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT'
+    ) THEN 1 ELSE 0 END)::int AS has_processing,
+    max(CASE WHEN pi.batch_status = 'SETTLED' THEN pi.completed_at_utc ELSE NULL END) AS settled_at_utc
+  FROM pay_items pi
+  WHERE pi.component_id IS NOT NULL
+  GROUP BY pi.timesheet_id, pi.component_id
+),
+pay_component_state AS (
+  SELECT
+    pc.timesheet_id,
+    pc.component_id,
+    pc.is_on_hold,
+    CASE
+      WHEN pc.is_on_hold = true THEN 'ON_HOLD'
+      WHEN coalesce(pia.has_settled,0) = 1 THEN 'PAID'
+      WHEN coalesce(pia.has_processing,0) = 1 THEN 'PROCESSING'
+      ELSE 'UNPAID'
+    END AS component_stage,
+    pia.settled_at_utc
+  FROM pay_components pc
+  LEFT JOIN pay_items_agg pia
+    ON pia.timesheet_id = pc.timesheet_id
+   AND pia.component_id = pc.component_id
+),
+pay_counts AS (
+  SELECT
+    pcs.timesheet_id,
+    count(*)::int AS total_components,
+    count(*) FILTER (WHERE pcs.is_on_hold = true)::int AS on_hold_components,
+    count(*) FILTER (WHERE pcs.is_on_hold = false)::int AS payable_components,
+    count(*) FILTER (WHERE pcs.is_on_hold = false AND pcs.component_stage = 'PAID')::int AS paid_components,
+    max(CASE WHEN pcs.is_on_hold = false AND pcs.component_stage = 'PROCESSING' THEN 1 ELSE 0 END)::int AS any_processing,
+    max(CASE WHEN pcs.is_on_hold = false AND pcs.component_stage = 'PAID' THEN pcs.settled_at_utc ELSE NULL END) AS pay_paid_at_utc
+  FROM pay_component_state pcs
+  GROUP BY pcs.timesheet_id
+),
+pay_delta AS (
+  SELECT
+    pt.timesheet_id,
+    round(coalesce(sum(coalesce(oc.truth_ex_vat,0) - coalesce(oc.baseline_ex_vat,0)),0),2)::numeric AS net_delta_ex_vat
+  FROM pay_ts pt
+  LEFT JOIN LATERAL public._pay_outstanding_components(ARRAY[pt.timesheet_id]) oc ON true
+  GROUP BY pt.timesheet_id
+),
+pay_rollup AS (
+  SELECT
+    pc.timesheet_id,
+    CASE
+      WHEN pc.payable_components IS NULL OR pc.payable_components = 0 THEN 'UNPAID'
+      WHEN pc.any_processing = 1 THEN 'PROCESSING'
+      WHEN pc.paid_components = pc.payable_components THEN 'PAID'
+      WHEN pc.paid_components > 0 THEN 'PARTIALLY_PAID'
+      ELSE 'UNPAID'
+    END AS pay_status_code,
+    pc.pay_paid_at_utc AS pay_paid_at_utc,
+    pd.net_delta_ex_vat AS net_delta_ex_vat,
+    CASE
+      WHEN pc.any_processing = 1 THEN 'CLOCK'
+      WHEN pd.net_delta_ex_vat < 0 THEN 'RED_COIN'
+      WHEN pd.net_delta_ex_vat > 0 THEN 'HALF_COIN'
+      WHEN pc.payable_components > 0 AND pc.paid_components = pc.payable_components THEN 'COIN'
+      ELSE 'NONE'
+    END AS pay_icon_code
+  FROM pay_counts pc
+  LEFT JOIN pay_delta pd
+    ON pd.timesheet_id = pc.timesheet_id
+)
 SELECT
-  timesheet_id,
+  wi.timesheet_id AS timesheet_id,
   timesheet_status,
   week_ending_date,
   booking_id,
@@ -786,7 +928,7 @@ SELECT
   pay_on_hold,
 
   (
-    timesheet_id IS NOT NULL
+    wi.timesheet_id IS NOT NULL
     AND paid_at_utc IS NULL
     AND COALESCE(pay_on_hold, false) = false
     AND authorised_at_server IS NOT NULL
@@ -897,7 +1039,7 @@ SELECT
   validation_status,
 
   CASE
-    WHEN timesheet_id IS NULL THEN
+    WHEN wi.timesheet_id IS NULL THEN
       CASE contract_week_status
         WHEN 'PLANNED'::contract_week_status_enum THEN 'PLANNED'
         WHEN 'OPEN'::contract_week_status_enum THEN 'PLANNED'
@@ -916,12 +1058,12 @@ SELECT
         AND COALESCE(seg.seg_locked,0) >= seg.seg_total
       )
     ) THEN 'INVOICED'
-    WHEN timesheet_id IS NOT NULL
+    WHEN wi.timesheet_id IS NOT NULL
       AND qr_status = 'PENDING'::timesheet_qr_status_enum
       AND (qr_token IS NULL OR length(btrim(qr_token)) = 0)
       AND qr_generated_at IS NULL
       THEN 'QR_NOT_ISSUED'
-    WHEN timesheet_id IS NOT NULL
+    WHEN wi.timesheet_id IS NOT NULL
       AND qr_status = 'PENDING'::timesheet_qr_status_enum
       AND (qr_token IS NOT NULL AND length(btrim(qr_token)) > 0)
       AND qr_generated_at IS NOT NULL
@@ -1037,7 +1179,7 @@ SELECT
 
   -- ✅ NEW (APPENDED AT END): policy flag for “HR validation required before invoicing”
   (
-    timesheet_id IS NOT NULL
+    wi.timesheet_id IS NOT NULL
     AND COALESCE(client_hr_validation_required, false) = true
     AND COALESCE(client_no_timesheet_required, false) = false
     AND COALESCE(total_hours, 0::numeric) > 0::numeric
@@ -1137,9 +1279,16 @@ SELECT
   -- ✅ NEW (APPENDED AT END): reference blockers for UI badges
   (CASE WHEN wi.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' THEN true ELSE false END) AS refs_block_invoicing,
   (CASE WHEN wi.timesheet_id IS NOT NULL AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_issuing_invoices,
-  (CASE WHEN wi.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_invoice_and_issuing
+  (CASE WHEN wi.timesheet_id IS NOT NULL AND pc.precheck_status = 'BLOCK_NO_REFERENCE' AND COALESCE(pc.issue_missing_reference, false) = true THEN true ELSE false END) AS refs_block_invoice_and_issuing,
+  -- ✅ NEW (APPENDED AT END): pay status/icon for timesheet summary list
+  (CASE WHEN wi.timesheet_id IS NULL THEN 'NONE' ELSE COALESCE(payr.pay_icon_code, 'NONE') END) AS pay_icon_code,
+  (CASE WHEN wi.timesheet_id IS NULL THEN NULL ELSE payr.pay_status_code END) AS pay_status_code,
+  (CASE WHEN wi.timesheet_id IS NULL THEN NULL ELSE payr.pay_paid_at_utc END) AS pay_paid_at_utc,
+  (CASE WHEN wi.timesheet_id IS NULL THEN NULL ELSE payr.net_delta_ex_vat END) AS net_delta_ex_vat
+
 
 FROM with_issues wi
+LEFT JOIN pay_rollup payr ON payr.timesheet_id = wi.timesheet_id
 LEFT JOIN LATERAL (
   SELECT public.timesheet_pdf_reference_sig(wi.timesheet_id) AS current_refs_sig
 ) rs ON true
@@ -1305,10 +1454,11 @@ LEFT JOIN LATERAL (
 ) seg ON true;
 
 
+
+
 -- ============================================================
 -- UPDATE VIEW: public.v_timesheets_summary
 -- ============================================================
-
 create or replace view public.v_timesheets_summary as
 select
   v.timesheet_id,
@@ -1443,7 +1593,13 @@ select
         when v.route_type = 'WEEKLY_HEALTHROSTER' then 'Weekly HealthRoster'
         else 'Unknown'
       end
-  end as route_display
+  end as route_display,
+
+  -- ✅ NEW (APPENDED AT END ONLY): pay status rollup fields from v_timesheets_summary_base
+  v.pay_icon_code,
+  v.pay_status_code,
+  v.pay_paid_at_utc,
+  v.net_delta_ex_vat
 
 from public.v_timesheets_summary_base v
 left join public.contract_weeks cw
@@ -1460,8 +1616,6 @@ GRANT SELECT ON public.v_timesheets_summary_base TO service_role;
 GRANT SELECT ON public.v_timesheets_summary      TO service_role;
 GRANT SELECT ON public.v_timesheets_summary_base TO authenticated;
 GRANT SELECT ON public.v_timesheets_summary      TO authenticated;
-
-
 
 -- ============================================================
 -- v_timesheets_details

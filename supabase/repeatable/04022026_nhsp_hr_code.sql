@@ -7513,63 +7513,87 @@ begin
 end;
 $$;
 
+-- Backward-compatible _imp_debug_audit overloads (10-arg + 11-arg)
+-- Purpose: allow legacy callers that pass extra trailing args, without ambiguity.
+-- Safe to rerun: drops only the 10/11-arg overloads (if present), then recreates them.
 
-create or replace function public._imp_debug_audit(
+-- Drop any existing 10/11-arg overloads (including earlier DEFAULT-based versions)
+DROP FUNCTION IF EXISTS public._imp_debug_audit(
+  uuid, text, jsonb, text, text, jsonb, text, text, text, text
+);
+
+DROP FUNCTION IF EXISTS public._imp_debug_audit(
+  uuid, text, jsonb, text, text, jsonb, text, text, text, text, text
+);
+
+-- 10-arg overload (NO DEFAULTS to avoid ambiguity)
+CREATE OR REPLACE FUNCTION public._imp_debug_audit(
   p_actor_user_id uuid,
   p_action text,
   p_after_json jsonb,
   p_entity text,
   p_subject_id text,
-  p_before_json jsonb default null,
-  p_ip text default null,
-  p_user_agent text default null,
-  p_correlation_id text default null
+  p_before_json jsonb,
+  p_ip text,
+  p_user_agent text,
+  p_correlation_id text,
+  p_unused_1 text
 )
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_invoice_debug boolean := false;
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
 begin
-  -- Load invoice_debug flag (safe even if column not yet present)
-  begin
-    select coalesce(sd.invoice_debug, false)
-      into v_invoice_debug
-    from public.settings_defaults sd
-    where sd.id = 1
-    limit 1;
-  exception when undefined_column then
-    v_invoice_debug := false;
-  when others then
-    v_invoice_debug := false;
-  end;
-
-  if not v_invoice_debug then
-    return;
-  end if;
-
-  -- Never allow audit failures to break the caller
-  begin
-    perform public._inv_write_audit(
-      p_actor_user_id,
-      p_action,
-      p_after_json,
-      p_entity,
-      p_subject_id,
-      p_before_json,
-      'INVOICE_DEBUG',
-      p_ip,
-      p_user_agent,
-      p_correlation_id
-    );
-  exception when others then
-    null;
-  end;
+  -- Forward to the canonical 9-arg implementation (which applies invoice_debug gating)
+  perform public._imp_debug_audit(
+    p_actor_user_id,
+    p_action,
+    p_after_json,
+    p_entity,
+    p_subject_id,
+    p_before_json,
+    p_ip,
+    p_user_agent,
+    p_correlation_id
+  );
 end;
-$$;
+$function$;
 
+-- 11-arg overload (NO DEFAULTS to avoid ambiguity)
+CREATE OR REPLACE FUNCTION public._imp_debug_audit(
+  p_actor_user_id uuid,
+  p_action text,
+  p_after_json jsonb,
+  p_entity text,
+  p_subject_id text,
+  p_before_json jsonb,
+  p_ip text,
+  p_user_agent text,
+  p_correlation_id text,
+  p_unused_1 text,
+  p_unused_2 text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+begin
+  -- Forward to the canonical 9-arg implementation (which applies invoice_debug gating)
+  perform public._imp_debug_audit(
+    p_actor_user_id,
+    p_action,
+    p_after_json,
+    p_entity,
+    p_subject_id,
+    p_before_json,
+    p_ip,
+    p_user_agent,
+    p_correlation_id
+  );
+end;
+$function$;
 
 
 create or replace function public.weekly_import_create_cancellation_corrections(
