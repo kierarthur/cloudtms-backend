@@ -15586,6 +15586,7 @@ begin
   );
 end;
 $$;
+
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -15865,6 +15866,18 @@ begin
     from timesheet_exploded_components tec
     group by tec.candidate_id, tec.timesheet_id
   ),
+  active_linked_underpayment_cases as (
+    select
+      pa.candidate_id,
+      pa.linked_timesheet_id as timesheet_id,
+      true as has_existing_active_underpayment_case
+    from public.pay_advances pa
+    where pa.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
+      and pa.linked_timesheet_id is not null
+      and upper(coalesce(pa.status::text, '')) = 'ACTIVE'
+      and round(coalesce(pa.outstanding_amount, 0), 2) > 0
+    group by pa.candidate_id, pa.linked_timesheet_id
+  ),
   timesheet_case_candidates as (
     select
       tcr.candidate_id,
@@ -15875,43 +15888,85 @@ begin
       tcr.baseline_signature,
       tcr.candidate_pay_method,
       tcr.case_is_blocked,
-      (tcr.overpayment_amount_ex > 0 or (tcr.underpayment_amount_ex > 0 and tcr.case_is_blocked = true)) as needs_lifecycle_tracking,
+      (
+        tcr.overpayment_amount_ex > 0
+        or (
+          tcr.underpayment_amount_ex > 0
+          and (
+            tcr.case_is_blocked = true
+            or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+          )
+        )
+      ) as needs_lifecycle_tracking,
       tcr.overpayment_amount_ex,
       tcr.underpayment_amount_ex,
       case
         when tcr.overpayment_amount_ex > 0 then 'OVERPAYMENT'::public.pay_finance_case_type_enum
-        when tcr.underpayment_amount_ex > 0 and tcr.case_is_blocked = true then 'UNDERPAYMENT'::public.pay_finance_case_type_enum
+        when tcr.underpayment_amount_ex > 0
+         and (
+           tcr.case_is_blocked = true
+           or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+         ) then 'UNDERPAYMENT'::public.pay_finance_case_type_enum
         else null::public.pay_finance_case_type_enum
       end as desired_case_type,
       case
         when tcr.overpayment_amount_ex > 0 then 'OVERPAYMENT'::public.pay_advance_kind_enum
-        when tcr.underpayment_amount_ex > 0 and tcr.case_is_blocked = true then 'UNDERPAYMENT'::public.pay_advance_kind_enum
+        when tcr.underpayment_amount_ex > 0
+         and (
+           tcr.case_is_blocked = true
+           or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+         ) then 'UNDERPAYMENT'::public.pay_advance_kind_enum
         else null::public.pay_advance_kind_enum
       end as desired_advance_kind,
       case
         when tcr.overpayment_amount_ex > 0 then 'OVERPAYMENT'::public.pay_advance_reason_enum
-        when tcr.underpayment_amount_ex > 0 and tcr.case_is_blocked = true then 'UNDERPAYMENT'::public.pay_advance_reason_enum
+        when tcr.underpayment_amount_ex > 0
+         and (
+           tcr.case_is_blocked = true
+           or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+         ) then 'UNDERPAYMENT'::public.pay_advance_reason_enum
         else null::public.pay_advance_reason_enum
       end as desired_reason,
       case
         when tcr.overpayment_amount_ex > 0 then round(tcr.corrected_amount_ex + tcr.overpayment_amount_ex, 2)::numeric(12,2)
-        when tcr.underpayment_amount_ex > 0 and tcr.case_is_blocked = true then round(tcr.corrected_amount_ex - tcr.underpayment_amount_ex, 2)::numeric(12,2)
+        when tcr.underpayment_amount_ex > 0
+         and (
+           tcr.case_is_blocked = true
+           or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+         ) then round(tcr.corrected_amount_ex - tcr.underpayment_amount_ex, 2)::numeric(12,2)
         else null::numeric(12,2)
       end as source_original_paid_amount,
       case
         when tcr.overpayment_amount_ex > 0 then round(tcr.corrected_amount_ex, 2)::numeric(12,2)
-        when tcr.underpayment_amount_ex > 0 and tcr.case_is_blocked = true then round(tcr.corrected_amount_ex, 2)::numeric(12,2)
+        when tcr.underpayment_amount_ex > 0
+         and (
+           tcr.case_is_blocked = true
+           or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+         ) then round(tcr.corrected_amount_ex, 2)::numeric(12,2)
         else null::numeric(12,2)
       end as source_corrected_paid_amount,
       case
         when tcr.overpayment_amount_ex > 0 then tcr.overpayment_components_json
-        when tcr.underpayment_amount_ex > 0 and tcr.case_is_blocked = true then tcr.underpayment_components_json
+        when tcr.underpayment_amount_ex > 0
+         and (
+           tcr.case_is_blocked = true
+           or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+         ) then tcr.underpayment_components_json
         else '[]'::jsonb
       end as components_sync_json,
       1 as candidate_priority
     from timesheet_case_rollup tcr
+    left join active_linked_underpayment_cases aluc
+      on aluc.candidate_id = tcr.candidate_id
+     and aluc.timesheet_id = tcr.timesheet_id
     where tcr.overpayment_amount_ex > 0
-       or (tcr.underpayment_amount_ex > 0 and tcr.case_is_blocked = true)
+       or (
+         tcr.underpayment_amount_ex > 0
+         and (
+           tcr.case_is_blocked = true
+           or coalesce(aluc.has_existing_active_underpayment_case, false) = true
+         )
+       )
   ),
   finance_case_item_rows as (
     select
