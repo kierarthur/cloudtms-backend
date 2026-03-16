@@ -3401,6 +3401,7 @@ begin;
 begin;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -5920,7 +5921,7 @@ ts_itemised as (
       on pfc.finance_case_id = vfcr.finance_case_id
      and pfc.closed_at_utc is null
      and coalesce(pfc.remaining_source_amount, 0) > 0
-    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT')
+    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','UNDERPAYMENT')
       and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
       and coalesce(vfcr.outstanding_amount,0) > 0
   ),
@@ -5952,6 +5953,7 @@ ts_itemised as (
           case
             when vfcr.case_type = 'OVERPAYMENT' then coalesce(vfcr.outstanding_amount,0)
             when vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT') then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+            when vfcr.case_type = 'UNDERPAYMENT' then coalesce(vfcr.outstanding_amount,0)
             else 0
           end
           - coalesce(fcrw.repaid_wtd_ex,0)
@@ -6010,11 +6012,11 @@ ts_itemised as (
       on fcrw.finance_case_id = vfcr.finance_case_id
     left join finance_case_component_rows fccr
       on fccr.finance_case_id = vfcr.finance_case_id
-    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT')
+    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','UNDERPAYMENT')
       and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
       and coalesce(vfcr.outstanding_amount,0) > 0
       and (vfcr.case_type <> 'PAYMENT_ADVANCE' or upper(coalesce(vfcr.payout_status::text,'')) = 'PAID')
-      and (vfcr.case_type = 'OVERPAYMENT' or vfcr.next_due_week_start is null or vfcr.next_due_week_start <= v_week_start)
+      and (vfcr.case_type in ('OVERPAYMENT','UNDERPAYMENT') or vfcr.next_due_week_start is null or vfcr.next_due_week_start <= v_week_start)
       and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
     group by
       vfcr.finance_case_id,
@@ -6175,6 +6177,7 @@ ts_itemised as (
           when fcl.case_type = 'PAYMENT_ADVANCE' then 'PAYMENT_ADVANCE_REPAYMENT'::text
           when fcl.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'::text
           when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'::text
+          when fcl.case_type = 'UNDERPAYMENT' then 'UNDERPAYMENT_PAYMENT'::text
           else fcl.case_type::text
         end,
         'finance_case_id', fcl.finance_case_id::text,
@@ -6192,12 +6195,13 @@ ts_itemised as (
         'paye_treatment', case
           when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'PAYMENT_ADVANCE' then 'NET_DEDUCT'
           when fcl.candidate_pay_method = 'PAYE' and fcl.case_type in ('OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') then 'GROSS_DEDUCT'
+          when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'UNDERPAYMENT' then 'GROSS_ADD'
           else 'NONE'
         end,
         'route_type', 'NORMAL_PAYMENT',
         'adjustment_comment', fcl.adjustment_comment,
-        'amount_ex_vat', -fcl.due_amount_ex_vat,
-        'amount_display', -fcl.due_amount_ex_vat,
+        'amount_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
+        'amount_display', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
         'is_advanced', false,
         'advanced_override_id', null,
         'advanced_reason', null,
@@ -6229,9 +6233,10 @@ ts_itemised as (
       case
         when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'PAYMENT_ADVANCE' then 'NET_DEDUCT'
         when fcl.candidate_pay_method = 'PAYE' and fcl.case_type in ('OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') then 'GROSS_DEDUCT'
+        when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'UNDERPAYMENT' then 'GROSS_ADD'
         else 'NONE'
       end as paye_treatment,
-      (-fcl.due_amount_ex_vat) as amount_ex_vat,
+      (case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else (-fcl.due_amount_ex_vat) end) as amount_ex_vat,
       (fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null) as is_excluded_from_allocation
     from finance_case_lines fcl
     where fcl.due_amount_ex_vat > 0
@@ -6664,7 +6669,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
 
 
 
