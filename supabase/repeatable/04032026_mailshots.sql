@@ -3945,7 +3945,7 @@ begin
       v_scheduled_for_utc := v_now + make_interval(mins => v_relative_minutes);
     end if;
 
-    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_futureDays)) then
+    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_future_days)) then
       raise exception 'delivery_timing_json.scheduled_for_utc exceeds max_future_days';
     end if;
 
@@ -4116,7 +4116,7 @@ begin
       v_email_type_override,
       nullif(coalesce(v_row_template_content->>'email_type',''), ''),
       nullif(btrim(coalesce(v_row->>'email_type','')), ''),
-      'plain'
+      'html'
     );
 
     v_rendered_subject := coalesce(v_row_subject_tpl, '');
@@ -4399,5 +4399,4 @@ begin
   );
 end;
 $$;
-
 
