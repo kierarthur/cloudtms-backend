@@ -26,7 +26,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Apply migrations + repeatables
+      - name: Apply repeatables first, then migrations (UK date order)
         shell: bash
         run: |
           set -euo pipefail
@@ -85,47 +85,78 @@ jobs:
             record_name "$base"
           }
 
-          # Gather migration files
-          shopt -s nullglob
-          MIG_FILES=( "$MIG_DIR"/*.sql )
-          IFS=$'\n' MIG_FILES_SORTED=( $(printf "%s\n" "${MIG_FILES[@]}" | sort) )
-          unset IFS
+          # Build a sortable key from the filename:
+          # - DDMMYYYY -> YYYYMMDD
+          # - YYYYMMDD -> YYYYMMDD
+          # - otherwise fallback after dated files using ZZZZZZZZ_
+          sort_key_for_file () {
+            local f="$1"
+            local base
+            base="$(basename "$f")"
 
-          # 3) Bootstrap mode:
-          # If DB is already populated AND ledger empty, mark all current migration files as applied (no replay)
-          # AND also write a sentinel so future runs go NORMAL even if there were no files at bootstrap time.
+            if [[ "$base" =~ ^([0-9]{2})([0-9]{2})([0-9]{4})(.*)$ ]]; then
+              # UK format DDMMYYYY...
+              printf '%s|%s\n' "${BASH_REMATCH[3]}${BASH_REMATCH[2]}${BASH_REMATCH[1]}${BASH_REMATCH[4]}" "$f"
+            elif [[ "$base" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})(.*)$ ]]; then
+              # ISO-like format YYYYMMDD...
+              printf '%s|%s\n' "${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}${BASH_REMATCH[4]}" "$f"
+            else
+              # Undated files sort after dated files, alphabetically
+              printf 'ZZZZZZZZ_%s|%s\n' "$base" "$f"
+            fi
+          }
+
+          sorted_sql_files () {
+            local dir="$1"
+            local files=()
+            local f
+
+            shopt -s nullglob
+            files=( "$dir"/*.sql )
+
+            if [[ "${#files[@]}" -eq 0 ]]; then
+              return 0
+            fi
+
+            for f in "${files[@]}"; do
+              sort_key_for_file "$f"
+            done | sort | cut -d'|' -f2-
+          }
+
+          # Gather migration files in UK date order
+          mapfile -t MIG_FILES_SORTED < <(sorted_sql_files "$MIG_DIR")
+
+          # 3) Bootstrap mode for migrations ledger only
           if [[ "${LEDGER_COUNT}" == "0" && "${EXISTING_PUBLIC_TABLES}" != "0" ]]; then
             echo "BOOTSTRAP: DB already populated; marking existing migrations as applied (no replay)."
             for f in "${MIG_FILES_SORTED[@]}"; do
               record_migration "$f"
             done
             record_name "__BOOTSTRAPPED__"
-          else
-            # 4) Normal mode: apply only migrations not in ledger
-            echo "NORMAL: applying new one-time migrations (if any)."
-            for f in "${MIG_FILES_SORTED[@]}"; do
-              base="$(basename "$f")"
-              already=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc \
-                "select 1 from public.schema_migrations where filename = '$base' limit 1;" | tr -d '[:space:]')
-              if [[ "$already" == "1" ]]; then
-                echo "SKIP migration: $base"
-              else
-                echo "APPLY migration: $base"
-                apply_file "$f"
-                record_migration "$f"
-              fi
-            done
           fi
 
-          # 5) Always apply repeatables (functions/views) every run
-          echo "Applying repeatables (always)."
-          REP_FILES=( "$REP_DIR"/*.sql )
-          IFS=$'\n' REP_FILES_SORTED=( $(printf "%s\n" "${REP_FILES[@]}" | sort) )
-          unset IFS
+          # 4) Apply repeatables first, always, in UK date order
+          echo "Applying repeatables first (always), in UK date order."
+          mapfile -t REP_FILES_SORTED < <(sorted_sql_files "$REP_DIR")
 
           for f in "${REP_FILES_SORTED[@]}"; do
             echo "APPLY repeatable: $(basename "$f")"
             apply_file "$f"
+          done
+
+          # 5) Then apply one-time migrations, in UK date order
+          echo "Applying one-time migrations after repeatables, in UK date order."
+          for f in "${MIG_FILES_SORTED[@]}"; do
+            base="$(basename "$f")"
+            already=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc \
+              "select 1 from public.schema_migrations where filename = '$base' limit 1;" | tr -d '[:space:]')
+            if [[ "$already" == "1" ]]; then
+              echo "SKIP migration: $base"
+            else
+              echo "APPLY migration: $base"
+              apply_file "$f"
+              record_migration "$f"
+            fi
           done
 
           echo "Done."
