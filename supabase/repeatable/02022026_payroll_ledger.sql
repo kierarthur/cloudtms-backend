@@ -15586,7 +15586,6 @@ begin
   );
 end;
 $$;
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -15986,6 +15985,15 @@ begin
     where coalesce(itm.value->>'line_type', '') in ('OVERPAYMENT_RECOVERY', 'UNDERPAYMENT_PAYMENT')
       and nullif(btrim(coalesce(itm.value->>'finance_case_id', '')), '') is not null
       and nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '') is not null
+      and (
+        coalesce(array_length(p_force_include_timesheet_ids, 1), 0) = 0
+        or nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '')::uuid = any(p_force_include_timesheet_ids)
+        or p_force_include_timesheet_ids is null
+      )
+      and not (
+        coalesce(array_length(p_exclude_timesheet_ids, 1), 0) > 0
+        and nullif(btrim(coalesce(itm.value->>'timesheet_id', '')), '')::uuid = any(p_exclude_timesheet_ids)
+      )
   ),
   finance_case_candidates_raw as (
     select
@@ -16419,6 +16427,19 @@ begin
       and (
         coalesce(array_length(p_candidate_ids, 1), 0) = 0
         or pa.candidate_id = any(p_candidate_ids)
+      )
+      and (
+        p_client_filter_single is null
+        or pa.client_id = p_client_filter_single
+      )
+      and (
+        coalesce(array_length(p_force_include_timesheet_ids, 1), 0) = 0
+        or pa.linked_timesheet_id = any(p_force_include_timesheet_ids)
+        or p_force_include_timesheet_ids is null
+      )
+      and not (
+        coalesce(array_length(p_exclude_timesheet_ids, 1), 0) > 0
+        and pa.linked_timesheet_id = any(p_exclude_timesheet_ids)
       )
       and not exists (
         select 1
