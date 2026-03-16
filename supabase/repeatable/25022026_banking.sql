@@ -23029,7 +23029,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_finance_component_resolutions_apply(
   p_candidate_id uuid,
   p_component_resolutions jsonb,
@@ -23077,6 +23076,11 @@ DECLARE
   v_target_amount_vat numeric(12,2) := 0;
   v_target_amount_inc_vat numeric(12,2) := 0;
   v_rate_precision numeric := null;
+
+  v_target_amount_ex_vat_per_source numeric(18,10) := 0;
+  v_target_amount_vat_per_source numeric(18,10) := 0;
+  v_target_amount_inc_vat_per_source numeric(18,10) := 0;
+  v_target_units_per_source numeric(18,10) := null;
 
   v_target_amounts_json jsonb := '{}'::jsonb;
   v_target_basis_json jsonb := '{}'::jsonb;
@@ -23422,6 +23426,11 @@ BEGIN
     v_resolution_payload_json := '{}'::jsonb;
     v_resolution_result_json := '{}'::jsonb;
     v_resolution_fingerprint := null;
+    v_target_amount_ex_vat_per_source := 0;
+    v_target_amount_vat_per_source := 0;
+    v_target_amount_inc_vat_per_source := 0;
+    v_target_units_per_source := null;
+
     v_before_json := jsonb_build_object(
       'finance_component_id', v_component.id::text,
       'finance_case_id', v_component.finance_case_id::text,
@@ -23495,32 +23504,6 @@ BEGIN
       ELSE
         v_rate_precision := null;
       END IF;
-
-      v_target_basis_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'target_pay_method', v_target_pay_method,
-          'calculation_kind', 'SUGGESTED_EQUIVALENT_BASIS',
-          'basis_source_amount_ex_vat', v_basis_amount_ex_vat,
-          'relevant_erni_pct', round(v_relevant_erni_pct, 6),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
-          'target_units', v_target_units,
-          'suggested_target_rate', v_rate_precision
-        )
-      );
-
-      v_resolution_payload_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'resolution_mode', 'SUGGESTED_EQUIVALENT_BASIS',
-          'target_pay_method', v_target_pay_method,
-          'basis_source_amount_ex_vat', v_basis_amount_ex_vat,
-          'relevant_erni_pct', round(v_relevant_erni_pct, 6),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
-          'target_units', v_target_units,
-          'suggested_target_rate', v_rate_precision
-        )
-      );
     ELSIF v_resolution_mode = 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum THEN
       IF v_target_units IS NULL OR v_target_units <= 0 THEN
         RAISE EXCEPTION '%', jsonb_build_object(
@@ -23560,27 +23543,7 @@ BEGIN
         v_target_amount_inc_vat := round(coalesce((v_target_amounts_json->>'inc')::numeric, 0), 2);
       END IF;
 
-      v_target_basis_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'target_pay_method', v_target_pay_method,
-          'calculation_kind', 'MANUAL_REPLACEMENT_RATE',
-          'target_units', round(v_target_units, 6),
-          'replacement_rate', round(v_manual_replacement_rate, 6),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable
-        )
-      );
-
-      v_resolution_payload_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'resolution_mode', 'MANUAL_REPLACEMENT_RATE',
-          'target_pay_method', v_target_pay_method,
-          'target_units', round(v_target_units, 6),
-          'replacement_rate', round(v_manual_replacement_rate, 6),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable
-        )
-      );
+      v_rate_precision := round(v_manual_replacement_rate, 6);
     ELSE
       IF v_manual_amount_ex_vat IS NULL OR v_manual_amount_ex_vat < 0 THEN
         RAISE EXCEPTION '%', jsonb_build_object(
@@ -23609,26 +23572,59 @@ BEGIN
         v_target_amount_inc_vat := round(coalesce((v_target_amounts_json->>'inc')::numeric, 0), 2);
       END IF;
 
-      v_target_basis_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'target_pay_method', v_target_pay_method,
-          'calculation_kind', 'MANUAL_AMOUNT',
-          'manual_amount_ex_vat', round(v_manual_amount_ex_vat, 2),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable
-        )
-      );
-
-      v_resolution_payload_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'resolution_mode', 'MANUAL_AMOUNT',
-          'target_pay_method', v_target_pay_method,
-          'manual_amount_ex_vat', round(v_manual_amount_ex_vat, 2),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable
-        )
-      );
+      v_rate_precision := null;
     END IF;
+
+    IF v_basis_amount_ex_vat <= 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_COMPONENT_RESOLUTIONS_APPLY',
+        'code', 'BASIS_AMOUNT_INVALID',
+        'message', 'pay_finance_component_resolutions_apply: basis_source_amount_ex_vat must be > 0',
+        'row_index', v_row_seq,
+        'finance_component_id', v_component.id::text,
+        'basis_source_amount_ex_vat', v_basis_amount_ex_vat
+      )::text;
+    END IF;
+
+    v_target_amount_ex_vat_per_source := round(v_target_amount_ex_vat / v_basis_amount_ex_vat, 10);
+    v_target_amount_vat_per_source := round(v_target_amount_vat / v_basis_amount_ex_vat, 10);
+    v_target_amount_inc_vat_per_source := round(v_target_amount_inc_vat / v_basis_amount_ex_vat, 10);
+    v_target_units_per_source := CASE
+      WHEN v_target_units IS NOT NULL THEN round(v_target_units / v_basis_amount_ex_vat, 10)
+      ELSE NULL
+    END;
+
+    v_target_basis_json := jsonb_strip_nulls(
+      jsonb_build_object(
+        'target_pay_method', v_target_pay_method,
+        'calculation_kind', v_resolution_mode::text,
+        'relevant_erni_pct', round(v_relevant_erni_pct, 6),
+        'vat_rate_pct', round(v_vat_rate_pct, 6),
+        'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'replacement_rate', CASE WHEN v_resolution_mode = 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum THEN round(v_manual_replacement_rate, 6) ELSE NULL END,
+        'target_amount_ex_vat_per_source_ex_vat', v_target_amount_ex_vat_per_source,
+        'target_amount_vat_per_source_ex_vat', v_target_amount_vat_per_source,
+        'target_amount_inc_vat_per_source_ex_vat', v_target_amount_inc_vat_per_source,
+        'target_units_per_source_ex_vat', v_target_units_per_source,
+        'suggested_target_rate', CASE WHEN v_resolution_mode = 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum THEN v_rate_precision ELSE NULL END
+      )
+    );
+
+    v_resolution_payload_json := jsonb_strip_nulls(
+      jsonb_build_object(
+        'resolution_mode', v_resolution_mode::text,
+        'target_pay_method', v_target_pay_method,
+        'applied_basis_source_amount_ex_vat', round(v_basis_amount_ex_vat, 2),
+        'relevant_erni_pct', round(v_relevant_erni_pct, 6),
+        'vat_rate_pct', round(v_vat_rate_pct, 6),
+        'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'target_units', CASE WHEN v_target_units IS NULL THEN NULL ELSE round(v_target_units, 6) END,
+        'replacement_rate', CASE WHEN v_manual_replacement_rate IS NULL THEN NULL ELSE round(v_manual_replacement_rate, 6) END,
+        'manual_amount_ex_vat', CASE WHEN v_manual_amount_ex_vat IS NULL THEN NULL ELSE round(v_manual_amount_ex_vat, 2) END,
+        'suggested_target_rate', CASE WHEN v_resolution_mode = 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum THEN v_rate_precision ELSE NULL END,
+        'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT'
+      )
+    );
 
     v_resolution_result_json := jsonb_strip_nulls(
       jsonb_build_object(
@@ -23637,9 +23633,17 @@ BEGIN
         'target_amount_vat', round(v_target_amount_vat, 2),
         'target_amount_inc_vat', round(v_target_amount_inc_vat, 2),
         'basis_source_amount_ex_vat', round(v_basis_amount_ex_vat, 2),
+        'applied_basis_source_amount_ex_vat', round(v_basis_amount_ex_vat, 2),
         'relevant_erni_pct', round(v_relevant_erni_pct, 6),
         'vat_rate_pct', round(v_vat_rate_pct, 6),
-        'umbrella_vat_chargeable', v_umbrella_vat_chargeable
+        'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'target_units', CASE WHEN v_target_units IS NULL THEN NULL ELSE round(v_target_units, 6) END,
+        'replacement_rate', CASE WHEN v_manual_replacement_rate IS NULL THEN NULL ELSE round(v_manual_replacement_rate, 6) END,
+        'target_amount_ex_vat_per_source_ex_vat', v_target_amount_ex_vat_per_source,
+        'target_amount_vat_per_source_ex_vat', v_target_amount_vat_per_source,
+        'target_amount_inc_vat_per_source_ex_vat', v_target_amount_inc_vat_per_source,
+        'target_units_per_source_ex_vat', v_target_units_per_source,
+        'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT'
       )
     );
 
@@ -23742,3 +23746,4 @@ BEGIN
   );
 END;
 $function$;
+
