@@ -1011,6 +1011,8 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
   text,
   public.pay_override_mode_enum
 );
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1034,7 +1036,6 @@ AS $$
 declare
   v_preview_decisions_json jsonb := coalesce(p_preview_decisions_json, '{}'::jsonb);
   v_component_resolutions jsonb := '{}'::jsonb;
-  v_legacy_mismatch_choices jsonb := '{}'::jsonb;
   v_case_resolution_states jsonb := '[]'::jsonb;
   v_blocked_case_states jsonb := '[]'::jsonb;
   v_safe_case_states jsonb := '[]'::jsonb;
@@ -1091,12 +1092,6 @@ begin
     v_component_resolutions := '{}'::jsonb;
   end if;
 
-  if jsonb_typeof(coalesce(v_preview_decisions_json->'mismatch_choices', '{}'::jsonb)) = 'object' then
-    v_legacy_mismatch_choices := coalesce(v_preview_decisions_json->'mismatch_choices', '{}'::jsonb);
-  else
-    v_legacy_mismatch_choices := '{}'::jsonb;
-  end if;
-
   if jsonb_typeof(coalesce(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb)) = 'array' then
     v_case_resolution_states := coalesce(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb);
   else
@@ -1116,9 +1111,9 @@ begin
   end if;
 
   v_preview_decisions_json := coalesce(v_preview_decisions_json, '{}'::jsonb)
+    - 'mismatch_choices'
     || jsonb_build_object(
          'component_resolutions', v_component_resolutions,
-         'mismatch_choices', v_legacy_mismatch_choices,
          'case_resolution_states', v_case_resolution_states,
          'blocked_case_states', v_blocked_case_states,
          'safe_case_states', v_safe_case_states
@@ -1162,10 +1157,6 @@ begin
         'component_resolution_count', (
           select count(*)::int
           from jsonb_each(v_component_resolutions) e
-        ),
-        'legacy_mismatch_choice_count', (
-          select count(*)::int
-          from jsonb_each(v_legacy_mismatch_choices) e
         ),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
@@ -1380,10 +1371,6 @@ begin
           select count(*)::int
           from jsonb_each(v_component_resolutions) e
         ),
-        'legacy_mismatch_choice_count', (
-          select count(*)::int
-          from jsonb_each(v_legacy_mismatch_choices) e
-        ),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
         'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
@@ -1423,6 +1410,12 @@ begin
     'umbrella_overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
     'paye_overpayment_sync', case when v_paye_overpayment_sync_only then v_paye_overpayment_sync else null end,
     'paye_guardrails', v_paye_guardrails,
+    'blocked_case_states', v_blocked_case_states,
+    'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+    'safe_case_states', v_safe_case_states,
+    'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
+    'case_resolution_states', v_case_resolution_states,
+    'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
     'scope_results', jsonb_build_object(
       'UMBRELLA', jsonb_build_object(
         'status', v_umbrella_status,
@@ -1433,7 +1426,11 @@ begin
         'pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
         'overpayment_sync_only', v_umbrella_overpayment_sync_only,
         'overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
-        'guardrails', null
+        'guardrails', null,
+        'blocked_case_states', v_blocked_case_states,
+        'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+        'safe_case_states', v_safe_case_states,
+        'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
       ),
       'PAYE', jsonb_build_object(
         'status', v_paye_status,
@@ -1450,7 +1447,11 @@ begin
         'override_continue', coalesce(p_override_continue, false),
         'override_verified', coalesce(p_override_verified, false),
         'override_verified_by_user_id', case when p_override_verified_by_user_id is null then null else p_override_verified_by_user_id::text end,
-        'override_verified_at_utc', p_override_verified_at_utc
+        'override_verified_at_utc', p_override_verified_at_utc,
+        'blocked_case_states', v_blocked_case_states,
+        'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+        'safe_case_states', v_safe_case_states,
+        'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
       )
     )
   );
