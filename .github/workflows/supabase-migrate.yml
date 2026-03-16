@@ -26,7 +26,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Apply repeatables first, block migrations if any repeatable fails
+      - name: Apply repeatables first, then migrations even if repeatables fail
         shell: bash
         run: |
           set -euo pipefail
@@ -153,13 +153,8 @@ jobs:
           done
           set -e
 
-          if [[ "${REPEATABLE_FAILED}" -ne 0 ]]; then
-            echo "One or more repeatables failed. Skipping one-time migrations."
-            exit 1
-          fi
-
-          # 5) Then apply one-time migrations, in UK date order, only if all repeatables succeeded
-          echo "All repeatables succeeded. Applying one-time migrations after repeatables, in UK date order."
+          # 5) Then apply one-time migrations anyway, in UK date order
+          echo "Applying one-time migrations after repeatables, in UK date order."
           for f in "${MIG_FILES_SORTED[@]}"; do
             base="$(basename "$f")"
             already=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc \
@@ -172,5 +167,10 @@ jobs:
               record_migration "$f"
             fi
           done
+
+          if [[ "${REPEATABLE_FAILED}" -ne 0 ]]; then
+            echo "One or more repeatables failed, but migrations were still attempted."
+            exit 1
+          fi
 
           echo "Done."
