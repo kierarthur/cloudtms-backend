@@ -3402,6 +3402,7 @@ begin;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -5355,7 +5356,7 @@ ts_itemised as (
     select
       tcr.candidate_id,
       tcr.timesheet_id,
-      max(tcr.client_id) as client_id,
+      max(tcr.client_id::text)::uuid as client_id,
       max(tcr.ts_week_ending_date) as ts_week_ending_date,
       max(tcr.ts_client_name) as ts_client_name,
       max(tcr.ts_pay_method) as ts_pay_method,
@@ -5450,7 +5451,7 @@ ts_itemised as (
         2
       ) as payment_amount,
       jsonb_build_object(
-        'case_key', ('timesheet:' || max(tcr.timesheet_id)::text),
+        'case_key', ('timesheet:' || max(tcr.timesheet_id::text)),
         'case_type', 'TIMESHEET_PAYMENT',
         'is_mixed_case', (count(*) filter (where tcr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum) > 0 and count(*) filter (where tcr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum) > 0),
         'open_taxable_count', count(*) filter (where tcr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum),
@@ -6991,6 +6992,7 @@ ts_itemised as (
   );
 end;
 $function$;
+
 
 
 
