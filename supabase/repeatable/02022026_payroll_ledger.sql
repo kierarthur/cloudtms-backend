@@ -6672,6 +6672,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -6730,6 +6731,7 @@ declare
   v_candidate_filter uuid[] := null;
 
   v_mismatch_choices jsonb := coalesce(p_preview_decisions_json->'mismatch_choices','{}'::jsonb);
+  v_component_resolutions jsonb := coalesce(p_preview_decisions_json->'component_resolutions','null'::jsonb);
   v_reserved jsonb := '[]'::jsonb;
   v_blocked_case_states jsonb := '[]'::jsonb;
 
@@ -6780,10 +6782,12 @@ v_exclude_timesheet_ids uuid[] := array[]::uuid[];
 v_exclude_ts_raw text;
 v_exclude_ts_uuid uuid;
 v_overpayment_sync jsonb := '{}'::jsonb;
+v_component_resolution_apply_result jsonb := '{}'::jsonb;
 v_negative_preview_timesheets_count int := 0;
 v_rows_upd_timesheet_overrides_consumed int := 0;
 v_consumed_timesheet_payment_overrides jsonb := '[]'::jsonb;
 v_override_consume_rec record;
+v_component_resolution_candidate record;
 begin
   v_stage := 'STAGE_00_INPUTS';
 
@@ -7223,6 +7227,33 @@ end;
           order by e.key
           limit 50
         ) k
+      ),
+      'component_resolutions_type', jsonb_typeof(v_component_resolutions),
+      'component_resolution_candidate_keys_sample', (
+        case
+          when jsonb_typeof(v_component_resolutions) = 'object' then (
+            select coalesce(jsonb_agg(k.key_text order by k.key_text), '[]'::jsonb)
+            from (
+              select e.key as key_text
+              from jsonb_each(v_component_resolutions) e
+              where e.key is not null
+              order by e.key
+              limit 50
+            ) k
+          )
+          when jsonb_typeof(v_component_resolutions) = 'array' then (
+            select coalesce(jsonb_agg(k.key_text order by k.key_text), '[]'::jsonb)
+            from (
+              select nullif(btrim(coalesce(a.value->>'candidate_id','')), '') as key_text
+              from jsonb_array_elements(v_component_resolutions) a(value)
+              where jsonb_typeof(a.value) = 'object'
+                and nullif(btrim(coalesce(a.value->>'candidate_id','')), '') is not null
+              order by nullif(btrim(coalesce(a.value->>'candidate_id','')), '')
+              limit 50
+            ) k
+          )
+          else '[]'::jsonb
+        end
       )
     );
 
@@ -7397,6 +7428,144 @@ end;
     raise exception 'Nothing to pay (no payable deltas after blockers)';
   end if;
 
+  v_stage := 'STAGE_08A_SYNC_OVERPAYMENTS_FROM_PREVIEW';
+
+  select public.pay_sync_overpayments_from_preview(
+    p_pay_date,
+    p_week_ending_cutoff,
+    p_actor_user_id,
+    v_scope,
+    v_candidate_ids,
+    v_mismatch_choices,
+    v_client_filter_single,
+    null::uuid[],
+    v_exclude_timesheet_ids
+  )
+  into v_overpayment_sync;
+
+  v_negative_preview_timesheets_count := coalesce(nullif(v_overpayment_sync->>'negative_preview_timesheets_count', '')::int, 0);
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_08A_SYNC_OVERPAYMENTS_FROM_PREVIEW',
+      jsonb_build_object(
+        'stage', v_stage,
+        'scope', v_scope,
+        'candidate_ids_count', coalesce(array_length(v_candidate_ids,1),0),
+        'sync_result', v_overpayment_sync
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  v_stage := 'STAGE_08B_APPLY_COMPONENT_RESOLUTIONS';
+
+  create temporary table if not exists pg_temp.tmp_pay_component_resolution_apply (
+    candidate_id uuid not null primary key,
+    component_resolutions jsonb not null
+  ) on commit drop;
+
+  truncate table pg_temp.tmp_pay_component_resolution_apply;
+
+  if jsonb_typeof(v_component_resolutions) = 'array' then
+    insert into pg_temp.tmp_pay_component_resolution_apply (
+      candidate_id,
+      component_resolutions
+    )
+    with raw_rows as (
+      select
+        nullif(btrim(coalesce(elem.value->>'candidate_id','')), '')::uuid as candidate_id,
+        (elem.value - 'candidate_id') as resolution_json,
+        elem.ordinality as ord
+      from jsonb_array_elements(v_component_resolutions) with ordinality as elem(value, ordinality)
+      where jsonb_typeof(elem.value) = 'object'
+        and nullif(btrim(coalesce(elem.value->>'candidate_id','')), '') is not null
+        and nullif(btrim(coalesce(elem.value->>'candidate_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    )
+    select
+      rr.candidate_id,
+      jsonb_agg(rr.resolution_json order by rr.ord) as component_resolutions
+    from raw_rows rr
+    where rr.candidate_id = any(v_candidate_ids)
+    group by rr.candidate_id;
+  elsif jsonb_typeof(v_component_resolutions) = 'object' then
+    insert into pg_temp.tmp_pay_component_resolution_apply (
+      candidate_id,
+      component_resolutions
+    )
+    select
+      nullif(btrim(coalesce(obj.key, '')), '')::uuid as candidate_id,
+      case
+        when jsonb_typeof(obj.value) = 'array' then obj.value
+        when jsonb_typeof(obj.value) = 'object' and jsonb_typeof(obj.value->'component_resolutions') = 'array' then obj.value->'component_resolutions'
+        when jsonb_typeof(obj.value) = 'object' then jsonb_build_array(obj.value)
+        else '[]'::jsonb
+      end as component_resolutions
+    from jsonb_each(v_component_resolutions) as obj(key, value)
+    where nullif(btrim(coalesce(obj.key, '')), '') is not null
+      and nullif(btrim(coalesce(obj.key, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      and nullif(btrim(coalesce(obj.key, '')), '')::uuid = any(v_candidate_ids);
+  end if;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_08B_COMPONENT_RESOLUTION_INPUTS',
+      jsonb_build_object(
+        'stage', v_stage,
+        'component_resolutions_type', jsonb_typeof(v_component_resolutions),
+        'candidate_resolution_rows', (
+          select coalesce(jsonb_agg(jsonb_build_object(
+            'candidate_id', t.candidate_id::text,
+            'resolution_count', case when jsonb_typeof(t.component_resolutions) = 'array' then jsonb_array_length(t.component_resolutions) else 0 end
+          ) order by t.candidate_id::text), '[]'::jsonb)
+          from pg_temp.tmp_pay_component_resolution_apply t
+        )
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  for v_component_resolution_candidate in
+    select
+      t.candidate_id,
+      t.component_resolutions
+    from pg_temp.tmp_pay_component_resolution_apply t
+    where jsonb_typeof(t.component_resolutions) = 'array'
+      and jsonb_array_length(t.component_resolutions) > 0
+    order by t.candidate_id
+  loop
+    select public.pay_finance_component_resolutions_apply(
+      v_component_resolution_candidate.candidate_id,
+      v_component_resolution_candidate.component_resolutions,
+      p_actor_user_id,
+      null::uuid,
+      'DRAFT_PREVIEW_COMPONENT_RESOLUTION'
+    )
+    into v_component_resolution_apply_result;
+
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:STAGE_08B_COMPONENT_RESOLUTION_APPLIED',
+        jsonb_build_object(
+          'stage', v_stage,
+          'candidate_id', v_component_resolution_candidate.candidate_id::text,
+          'resolution_count', jsonb_array_length(v_component_resolution_candidate.component_resolutions),
+          'apply_result', v_component_resolution_apply_result
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+  end loop;
+
   v_stage := 'STAGE_09_VALIDATE_COMPONENT_CASE_STATES';
 
   with preview as (
@@ -7557,21 +7726,6 @@ end;
 
   v_stage := 'STAGE_12_SYNC_OVERPAYMENTS_FROM_PREVIEW';
 
-  select public.pay_sync_overpayments_from_preview(
-    p_pay_date,
-    p_week_ending_cutoff,
-    p_actor_user_id,
-    v_scope,
-    v_candidate_ids,
-    v_mismatch_choices,
-    v_client_filter_single,
-    null::uuid[],
-    v_exclude_timesheet_ids
-  )
-  into v_overpayment_sync;
-
-  v_negative_preview_timesheets_count := coalesce(nullif(v_overpayment_sync->>'negative_preview_timesheets_count', '')::int, 0);
-
   begin
     perform public._imp_debug_audit(
       p_actor_user_id,
@@ -7580,7 +7734,8 @@ end;
         'stage', v_stage,
         'pay_batch_id', v_batch_id::text,
         'scope', v_scope,
-        'sync_result', v_overpayment_sync
+        'sync_result', v_overpayment_sync,
+        'sync_result_reused_from_stage', 'STAGE_08A_SYNC_OVERPAYMENTS_FROM_PREVIEW'
       ),
       'pay_batches',
       v_batch_id::text,
@@ -11017,7 +11172,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 
