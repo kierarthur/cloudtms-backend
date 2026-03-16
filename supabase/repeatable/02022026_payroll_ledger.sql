@@ -15812,7 +15812,7 @@ begin
     select
       tec.candidate_id,
       tec.timesheet_id,
-      min(tec.client_id) as client_id,
+      min(tec.client_id::text)::uuid as client_id,
       min(tec.linked_shift_date) as linked_shift_date,
       min(tec.corrected_amount_ex) as corrected_amount_ex,
       min(tec.baseline_signature) as baseline_signature,
