@@ -14522,6 +14522,9 @@ begin
 end;
 $$;
 
+
+
+
 create or replace function public.pay_loans_snoozes_list(
   p_candidate_id uuid default null,
   p_client_id uuid default null,
@@ -14587,11 +14590,18 @@ begin
       vfcr.active_snooze_note,
       vfcr.active_snooze_created_at_utc,
       vfcr.active_snooze_updated_at_utc,
+      coalesce(vfcr.is_mixed_case, false) as is_mixed_case,
+      coalesce(vfcr.open_taxable_count, 0) as open_taxable_count,
+      coalesce(vfcr.open_reimbursement_count, 0) as open_reimbursement_count,
+      coalesce(vfcr.unresolved_taxable_count, 0) as unresolved_taxable_count,
+      coalesce(vfcr.stale_count, 0) as stale_count,
+      coalesce(vfcr.component_resolution_summary_json, '{}'::jsonb) as component_resolution_summary_json,
       case
         when vfcr.case_type = 'PAYMENT_ADVANCE' then 'Payment Advance'
         when vfcr.case_type = 'OVERPAYMENT' then 'Overpayment'
         when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual Debt Adjustment'
         when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then 'Manual Credit Adjustment'
+        when vfcr.case_type = 'UNDERPAYMENT' then 'Underpayment'
         else vfcr.case_type::text
       end as admin_label,
       case
@@ -14599,6 +14609,16 @@ begin
         when vfcr.active_snooze_until_date is null then 'INDEFINITE_SNOOZE'
         else 'DATED_SNOOZE'
       end as snooze_state,
+      case
+        when coalesce(vfcr.unresolved_taxable_count, 0) > 0 and coalesce(vfcr.stale_count, 0) > 0 then 'BLOCKED_STALE_TAXABLE_COMPONENTS'
+        when coalesce(vfcr.unresolved_taxable_count, 0) > 0 then 'BLOCKED_UNRESOLVED_TAXABLE_COMPONENTS'
+        else 'READY'
+      end as blocked_state,
+      case
+        when coalesce(vfcr.unresolved_taxable_count, 0) > 0 and coalesce(vfcr.stale_count, 0) > 0 then 'One or more taxable components are stale and must be re-resolved before the case can proceed.'
+        when coalesce(vfcr.unresolved_taxable_count, 0) > 0 then 'One or more taxable components are unresolved and must be resolved before the case can proceed.'
+        else null
+      end as blocked_reason,
       case
         when vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT') and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
         else false
@@ -14678,6 +14698,14 @@ begin
           'latest_remittance_sent_at_utc', case when fr.latest_remittance_sent_at_utc is null then null else fr.latest_remittance_sent_at_utc::text end,
           'latest_remittance_trigger_status', fr.latest_remittance_trigger_status,
           'last_remittance_error', fr.last_remittance_error,
+          'is_mixed_case', fr.is_mixed_case,
+          'open_taxable_count', fr.open_taxable_count,
+          'open_reimbursement_count', fr.open_reimbursement_count,
+          'unresolved_taxable_count', fr.unresolved_taxable_count,
+          'stale_count', fr.stale_count,
+          'component_resolution_summary_json', fr.component_resolution_summary_json,
+          'blocked_state', fr.blocked_state,
+          'blocked_reason', fr.blocked_reason,
           'snooze', case
             when fr.active_snooze_id is null then null
             else jsonb_build_object(
@@ -14789,8 +14817,12 @@ begin
     select jsonb_build_object(
       'payment_advances_active_count', count(*) filter (where fr.case_type = 'PAYMENT_ADVANCE' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
       'overpayments_active_count', count(*) filter (where fr.case_type = 'OVERPAYMENT' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
+      'underpayments_active_count', count(*) filter (where fr.case_type = 'UNDERPAYMENT' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
       'manual_debt_adjustments_active_count', count(*) filter (where fr.case_type = 'MANUAL_DEBT_ADJUSTMENT' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
       'manual_credit_adjustments_count', count(*) filter (where fr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'),
+      'mixed_finance_cases_count', count(*) filter (where fr.is_mixed_case),
+      'unresolved_finance_cases_count', count(*) filter (where fr.unresolved_taxable_count > 0),
+      'stale_finance_cases_count', count(*) filter (where fr.stale_count > 0),
       'finance_cases_with_active_snooze_count', count(*) filter (where fr.active_snooze_id is not null),
       'timesheet_snoozes_count', (select count(*) from timesheet_snooze_rows)
     ) as payload
@@ -14816,6 +14848,8 @@ begin
   );
 end;
 $$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_build(
   p_pay_batch_id uuid
