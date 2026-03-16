@@ -3403,6 +3403,7 @@ begin;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -5434,7 +5435,7 @@ ts_itemised as (
         ) filter (where tcr.component_key_type = 'ADDITIONAL_CODE'),
         '[]'::jsonb
       ) as additional_unit_deltas_json,
-      max(coalesce(td.reservation_overrun_detected,false)) as reservation_overrun_detected,
+      bool_or(coalesce(td.reservation_overrun_detected,false)) as reservation_overrun_detected,
       round(sum(tcr.component_amount_ex_vat),2) as payment_amount_ex_vat,
       round(
         case
@@ -6992,6 +6993,7 @@ ts_itemised as (
   );
 end;
 $function$;
+
 
 
 
