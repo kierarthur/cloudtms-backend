@@ -8841,6 +8841,7 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   }
 }
 
+
 async function handleBankingFinanceLedgerExportCsv(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -9014,7 +9015,13 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
       'active_snooze_created_at',
       'active_snooze_updated_at',
       'active_snooze_visibility_status',
-      'schedule_json'
+      'schedule_json',
+      'is_mixed_case',
+      'open_taxable_count',
+      'open_reimbursement_count',
+      'unresolved_taxable_count',
+      'stale_count',
+      'component_resolution_summary_json'
     ];
 
     const lines = [];
@@ -9082,7 +9089,13 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
         r?.active_snooze_created_at_utc ?? '',
         r?.active_snooze_updated_at_utc ?? '',
         r?.active_snooze_visibility_status ?? '',
-        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json)
+        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json),
+        r?.is_mixed_case === true ? 'true' : 'false',
+        r?.open_taxable_count ?? '',
+        r?.open_reimbursement_count ?? '',
+        r?.unresolved_taxable_count ?? '',
+        r?.stale_count ?? '',
+        r?.component_resolution_summary_json == null ? '' : JSON.stringify(r.component_resolution_summary_json)
       ].map(csvEscape).join(','));
     }
 
@@ -9183,6 +9196,93 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
       }
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const normalizeRowLabel = (row) => {
+    const raw = String(row?.row_label || '').trim();
+    if (raw) return raw;
+    const caseType = String(row?.case_type || '').trim().toUpperCase();
+    if (caseType === 'UNDERPAYMENT') return 'Underpayment';
+    if (caseType === 'OVERPAYMENT') return 'Overpayment';
+    if (caseType === 'PAYMENT_ADVANCE') return 'Payment Advance';
+    if (caseType === 'MANUAL_DEBT_ADJUSTMENT') return 'Manual Debt Adjustment';
+    if (caseType === 'MANUAL_CREDIT_ADJUSTMENT') return 'Manual Credit Adjustment';
+    return 'Finance Case';
+  };
+
+  const parseComponentSummary = (raw) => {
+    if (raw == null) return null;
+    if (typeof raw === 'object') return raw;
+    const s = String(raw).trim();
+    if (!s) return null;
+    try {
+      return JSON.parse(s);
+    } catch {
+      return s;
+    }
+  };
+
+  const summarizeComponentResolution = (raw) => {
+    const parsed = parseComponentSummary(raw);
+    if (!parsed) return '';
+    if (typeof parsed === 'string') return parsed;
+
+    if (Array.isArray(parsed)) {
+      const parts = [];
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object') continue;
+        const label =
+          String(item.label || item.component_label || item.component_key_value || item.component_key_type || '').trim();
+        const classification = String(item.classification || item.component_classification || '').trim();
+        const resolutionMode = String(item.resolution_mode || item.saved_resolution_mode || '').trim();
+        const stale = item.is_stale === true || item.stale === true;
+        const unresolved =
+          item.is_unresolved === true ||
+          item.unresolved === true ||
+          (String(item.status || '').trim().toUpperCase() === 'UNRESOLVED');
+        const bits = [];
+        if (label) bits.push(label);
+        if (classification) bits.push(classification);
+        if (resolutionMode) bits.push(resolutionMode);
+        if (unresolved) bits.push('UNRESOLVED');
+        if (stale) bits.push('STALE');
+        if (bits.length) parts.push(bits.join(' / '));
+      }
+      return parts.join(' | ');
+    }
+
+    if (typeof parsed === 'object') {
+      const parts = [];
+      const mixed = parsed.is_mixed_case === true || parsed.mixed === true;
+      const openTaxable = Number(parsed.open_taxable_count);
+      const openReimbursement = Number(parsed.open_reimbursement_count);
+      const unresolved = Number(parsed.unresolved_taxable_count);
+      const stale = Number(parsed.stale_count);
+
+      if (mixed) parts.push('Mixed');
+      if (Number.isFinite(openTaxable)) parts.push(`Taxable open: ${openTaxable}`);
+      if (Number.isFinite(openReimbursement)) parts.push(`Reimbursement open: ${openReimbursement}`);
+      if (Number.isFinite(unresolved)) parts.push(`Unresolved taxable: ${unresolved}`);
+      if (Number.isFinite(stale)) parts.push(`Stale: ${stale}`);
+
+      const modeCounts = parsed.mode_counts && typeof parsed.mode_counts === 'object' ? parsed.mode_counts : null;
+      if (modeCounts) {
+        const modeBits = [];
+        for (const [k, v] of Object.entries(modeCounts)) {
+          const n = Number(v);
+          if (!Number.isFinite(n)) continue;
+          modeBits.push(`${k}: ${n}`);
+        }
+        if (modeBits.length) parts.push(`Modes: ${modeBits.join(', ')}`);
+      }
+
+      const summaryText = String(parsed.summary_text || parsed.text || '').trim();
+      if (summaryText) parts.push(summaryText);
+
+      return parts.join(' • ');
+    }
+
+    return '';
   };
 
   const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
@@ -9303,6 +9403,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
       `Fully paid: ${safeStr(summary?.fully_paid_count ?? 0)}`,
       `Payment Advances: ${safeStr(summary?.payment_advance_count ?? 0)}`,
       `Overpayments: ${safeStr(summary?.overpayment_count ?? 0)}`,
+      `Underpayments: ${safeStr(summary?.underpayment_count ?? 0)}`,
       `Manual Debt Adjustments: ${safeStr(summary?.manual_debt_adjustment_count ?? 0)}`,
       `Manual Credit Adjustments: ${safeStr(summary?.manual_credit_adjustment_count ?? 0)}`,
       `Original amount total: ${asMoney(summary?.original_amount_total)}`,
@@ -9349,6 +9450,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
       y -= 12;
 
       for (const r of list) {
+        const rowLabel = normalizeRowLabel(r);
         const candidateTxt =
           safeStr(r?.candidate_display_name || '').trim() ||
           [safeStr(r?.candidate_first_name || '').trim(), safeStr(r?.candidate_last_name || '').trim()].filter(Boolean).join(' ').trim() ||
@@ -9398,6 +9500,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
         y -= rowHeight - 2;
 
         const subBits = [];
+        subBits.push(`Label: ${rowLabel}`);
         if (r?.candidate_tms_ref) subBits.push(`Ref: ${safeStr(r.candidate_tms_ref)}`);
         if (r?.linked_timesheet_booking_id) subBits.push(`Booking: ${safeStr(r.linked_timesheet_booking_id)}`);
         if (r?.linked_timesheet_shift_label_norm) subBits.push(`Shift: ${safeStr(r.linked_timesheet_shift_label_norm)}`);
@@ -9409,6 +9512,17 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
         if (r?.notes) subBits.push(`Note: ${safeStr(r.notes)}`);
         if (r?.latest_remittance_trigger_status) subBits.push(`Remittance: ${safeStr(r.latest_remittance_trigger_status)}`);
         if (r?.payout_status) subBits.push(`Payout: ${safeStr(r.payout_status)}`);
+
+        const componentStateBits = [];
+        if (r?.is_mixed_case === true) componentStateBits.push('Mixed case');
+        if (Number.isFinite(Number(r?.open_taxable_count))) componentStateBits.push(`Taxable open: ${Number(r.open_taxable_count)}`);
+        if (Number.isFinite(Number(r?.open_reimbursement_count))) componentStateBits.push(`Reimbursement open: ${Number(r.open_reimbursement_count)}`);
+        if (Number.isFinite(Number(r?.unresolved_taxable_count))) componentStateBits.push(`Unresolved taxable: ${Number(r.unresolved_taxable_count)}`);
+        if (Number.isFinite(Number(r?.stale_count))) componentStateBits.push(`Stale: ${Number(r.stale_count)}`);
+        if (componentStateBits.length) subBits.push(`Components: ${componentStateBits.join(', ')}`);
+
+        const componentSummary = summarizeComponentResolution(r?.component_resolution_summary_json);
+        if (componentSummary) subBits.push(`Resolution: ${componentSummary}`);
 
         if (subBits.length) {
           ensureSpace(lineH);
@@ -9519,6 +9633,18 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
+  const normalizeRowLabel = (row) => {
+    const raw = String(row?.row_label || '').trim();
+    if (raw) return raw;
+    const caseTypeRaw = String(row?.case_type || '').trim().toUpperCase();
+    if (caseTypeRaw === 'UNDERPAYMENT') return 'Underpayment';
+    if (caseTypeRaw === 'OVERPAYMENT') return 'Overpayment';
+    if (caseTypeRaw === 'PAYMENT_ADVANCE') return 'Payment Advance';
+    if (caseTypeRaw === 'MANUAL_DEBT_ADJUSTMENT') return 'Manual Debt Adjustment';
+    if (caseTypeRaw === 'MANUAL_CREDIT_ADJUSTMENT') return 'Manual Credit Adjustment';
+    return '';
+  };
+
   const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
   const createdToRaw = parseNullableText(q('created_to'), q('createdTo'), q('date_to'), q('dateTo'));
   const statusRaw = parseNullableText(q('status'));
@@ -9593,16 +9719,23 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
       'start_week_start',
       'next_due_week_start',
       'adjustment_comment',
-      'schedule_json'
+      'schedule_json',
+      'is_mixed_case',
+      'open_taxable_count',
+      'open_reimbursement_count',
+      'unresolved_taxable_count',
+      'stale_count',
+      'component_resolution_summary_json'
     ];
 
     const lines = [];
     lines.push(cols.map(csvEscape).join(','));
 
     for (const r of rows) {
+      const isFinanceCase = String(r?.snooze_scope || '').trim().toUpperCase() === 'FINANCE_CASE';
       lines.push([
         r?.snooze_scope ?? '',
-        r?.row_label ?? '',
+        normalizeRowLabel(r),
         r?.case_type ?? '',
         r?.candidate_tms_ref ?? '',
         r?.candidate_tms_ref_num ?? '',
@@ -9634,7 +9767,15 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
         r?.start_week_start ?? '',
         r?.next_due_week_start ?? '',
         r?.adjustment_comment ?? '',
-        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json)
+        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json),
+        isFinanceCase ? String(r?.is_mixed_case === true) : '',
+        isFinanceCase && r?.open_taxable_count != null ? r.open_taxable_count : '',
+        isFinanceCase && r?.open_reimbursement_count != null ? r.open_reimbursement_count : '',
+        isFinanceCase && r?.unresolved_taxable_count != null ? r.unresolved_taxable_count : '',
+        isFinanceCase && r?.stale_count != null ? r.stale_count : '',
+        isFinanceCase
+          ? (r?.component_resolution_summary_json == null ? '' : JSON.stringify(r.component_resolution_summary_json))
+          : ''
       ].map(csvEscape).join(','));
     }
 
@@ -9653,6 +9794,7 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_CSV_FAILED')));
   }
 }
+
 async function handleBankingSnoozesExportPdf(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -9734,6 +9876,72 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
       }
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const normalizeRowLabel = (row) => {
+    const raw = String(row?.row_label || '').trim();
+    if (raw) return raw;
+    const caseTypeRaw = String(row?.case_type || '').trim().toUpperCase();
+    if (caseTypeRaw === 'UNDERPAYMENT') return 'Underpayment';
+    if (caseTypeRaw === 'OVERPAYMENT') return 'Overpayment';
+    if (caseTypeRaw === 'PAYMENT_ADVANCE') return 'Payment Advance';
+    if (caseTypeRaw === 'MANUAL_DEBT_ADJUSTMENT') return 'Manual Debt Adjustment';
+    if (caseTypeRaw === 'MANUAL_CREDIT_ADJUSTMENT') return 'Manual Credit Adjustment';
+    return 'Finance Case';
+  };
+
+  const parseComponentSummary = (raw) => {
+    if (raw == null) return null;
+    if (typeof raw === 'object') return raw;
+    const s = String(raw).trim();
+    if (!s) return null;
+    try {
+      return JSON.parse(s);
+    } catch {
+      return s;
+    }
+  };
+
+  const summarizeComponentResolution = (raw) => {
+    const parsed = parseComponentSummary(raw);
+    if (!parsed) return '';
+    if (typeof parsed === 'string') return parsed;
+
+    if (Array.isArray(parsed)) {
+      const parts = [];
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object') continue;
+        const label =
+          String(item.label || item.component_label || item.component_key_value || item.component_key_type || '').trim();
+        const resolutionMode = String(item.resolution_mode || item.saved_resolution_mode || '').trim();
+        const stale = item.is_stale === true || item.stale === true;
+        const unresolved =
+          item.is_unresolved === true ||
+          item.unresolved === true ||
+          (String(item.status || '').trim().toUpperCase() === 'UNRESOLVED');
+        const bits = [];
+        if (label) bits.push(label);
+        if (resolutionMode) bits.push(resolutionMode);
+        if (unresolved) bits.push('UNRESOLVED');
+        if (stale) bits.push('STALE');
+        if (bits.length) parts.push(bits.join(' / '));
+      }
+      return parts.join(' | ');
+    }
+
+    if (typeof parsed === 'object') {
+      const parts = [];
+      if (parsed.is_mixed_case === true || parsed.mixed === true) parts.push('Mixed');
+      if (Number.isFinite(Number(parsed.open_taxable_count))) parts.push(`Taxable open: ${Number(parsed.open_taxable_count)}`);
+      if (Number.isFinite(Number(parsed.open_reimbursement_count))) parts.push(`Reimbursement open: ${Number(parsed.open_reimbursement_count)}`);
+      if (Number.isFinite(Number(parsed.unresolved_taxable_count))) parts.push(`Unresolved taxable: ${Number(parsed.unresolved_taxable_count)}`);
+      if (Number.isFinite(Number(parsed.stale_count))) parts.push(`Stale: ${Number(parsed.stale_count)}`);
+      const summaryText = String(parsed.summary_text || parsed.text || '').trim();
+      if (summaryText) parts.push(summaryText);
+      return parts.join(' • ');
+    }
+
+    return '';
   };
 
   const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
@@ -9897,6 +10105,8 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
       y -= 12;
 
       for (const r of list) {
+        const isFinanceCase = String(r?.snooze_scope || '').trim().toUpperCase() === 'FINANCE_CASE';
+        const rowLabel = normalizeRowLabel(r);
         const candidateTxt =
           safeStr(r?.candidate_display_name || '').trim() ||
           [safeStr(r?.candidate_first_name || '').trim(), safeStr(r?.candidate_last_name || '').trim()].filter(Boolean).join(' ').trim() ||
@@ -9910,7 +10120,7 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
         const visibilityTxt = safeStr(r?.current_visibility_status || '').trim() || '—';
         const linkedTxt = r?.snooze_scope === 'TIMESHEET_PAYMENT'
           ? (safeStr(r?.linked_timesheet_booking_id || '').trim() || safeStr(r?.linked_timesheet_reference_number || '').trim() || 'Timesheet payment')
-          : (safeStr(r?.row_label || '').trim() || 'Finance case');
+          : rowLabel;
 
         const candidateLines = wrapText(candidateTxt, cols.candidate.w, small, false);
         const clientLines = wrapText(clientTxt, cols.client.w, small, false);
@@ -9957,6 +10167,19 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
         if (Number.isFinite(Number(r?.outstanding_amount))) subBits.push(`Outstanding: ${asMoney(r.outstanding_amount)}`);
         if (Number.isFinite(Number(r?.weekly_due)) && Number(r.weekly_due) > 0) subBits.push(`Weekly due: ${asMoney(r.weekly_due)}`);
 
+        if (isFinanceCase) {
+          const componentStateBits = [];
+          if (r?.is_mixed_case === true) componentStateBits.push('Mixed case');
+          if (Number.isFinite(Number(r?.open_taxable_count))) componentStateBits.push(`Taxable open: ${Number(r.open_taxable_count)}`);
+          if (Number.isFinite(Number(r?.open_reimbursement_count))) componentStateBits.push(`Reimbursement open: ${Number(r.open_reimbursement_count)}`);
+          if (Number.isFinite(Number(r?.unresolved_taxable_count))) componentStateBits.push(`Unresolved taxable: ${Number(r.unresolved_taxable_count)}`);
+          if (Number.isFinite(Number(r?.stale_count))) componentStateBits.push(`Stale: ${Number(r.stale_count)}`);
+          if (componentStateBits.length) subBits.push(`Components: ${componentStateBits.join(', ')}`);
+
+          const componentSummary = summarizeComponentResolution(r?.component_resolution_summary_json);
+          if (componentSummary) subBits.push(`Resolution: ${componentSummary}`);
+        }
+
         if (subBits.length) {
           ensureSpace(lineH);
           drawText(subBits.join('   •   '), margin + 10, y, 7.5, false, rgb(0.35, 0.35, 0.35));
@@ -9993,6 +10216,8 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_PDF_FAILED')));
   }
 }
+
+
 
 async function handleBankingRailAccountsList(env, req, user) {
   try {
@@ -12666,6 +12891,7 @@ async function handleBankingPayPreview(env, req, user) {
     }));
   }
 }
+
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -12749,6 +12975,20 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+  const normalizeUuidArray = (raw, label) => {
+    if (!Array.isArray(raw)) return null;
+    const out = [];
+    for (const x of raw) {
+      const s = String(x || '').trim();
+      if (!s) continue;
+      if (!uuidRe.test(s)) {
+        return { error: `${label} must contain UUIDs (bad value: ${s})` };
+      }
+      out.push(s);
+    }
+    return out;
+  };
+
   const candidateId = candRaw ? candRaw : null;
   const clientId = clientRaw ? clientRaw : null;
   const overrideReason = overrideReasonRaw || null;
@@ -12767,20 +13007,19 @@ async function handleBankingPayCreateDraft(env, req, user) {
     : Array.isArray(body.candidateIds) ? body.candidateIds
     : null;
 
-  const includeSet = (() => {
-    if (!Array.isArray(includeSetIn)) return null;
-    const out = [];
-    for (const x of includeSetIn) {
-      const s = String(x || '').trim();
-      if (!s) continue;
-      if (!uuidRe.test(s)) return { error: `include_set/candidate_ids must contain UUIDs (bad value: ${s})` };
-      out.push(s);
-    }
-    return out;
-  })();
-
+  const includeSet = normalizeUuidArray(includeSetIn, 'include_set/candidate_ids');
   if (includeSet && includeSet.error) {
     return withCORS(env, req, badRequest(includeSet.error));
+  }
+
+  const excludeTimesheetIdsIn =
+    Array.isArray(body.exclude_timesheet_ids) ? body.exclude_timesheet_ids
+    : Array.isArray(body.excludeTimesheetIds) ? body.excludeTimesheetIds
+    : null;
+
+  const excludeTimesheetIds = normalizeUuidArray(excludeTimesheetIdsIn, 'exclude_timesheet_ids');
+  if (excludeTimesheetIds && excludeTimesheetIds.error) {
+    return withCORS(env, req, badRequest(excludeTimesheetIds.error));
   }
 
   const previewDecisions =
@@ -12788,13 +13027,44 @@ async function handleBankingPayCreateDraft(env, req, user) {
       ? { ...previewDecisionsIn }
       : {};
 
+  const componentResolutionsIn =
+    (previewDecisions.component_resolutions && typeof previewDecisions.component_resolutions === 'object' && !Array.isArray(previewDecisions.component_resolutions))
+      ? previewDecisions.component_resolutions
+      : (
+        body.component_resolutions && typeof body.component_resolutions === 'object' && !Array.isArray(body.component_resolutions)
+          ? body.component_resolutions
+          : null
+      );
+
+  if (body.component_resolutions != null && (typeof body.component_resolutions !== 'object' || Array.isArray(body.component_resolutions))) {
+    return withCORS(env, req, badRequest('component_resolutions must be an object when provided'));
+  }
+  if (previewDecisions.component_resolutions != null && (typeof previewDecisions.component_resolutions !== 'object' || Array.isArray(previewDecisions.component_resolutions))) {
+    return withCORS(env, req, badRequest('preview_decisions_json.component_resolutions must be an object when provided'));
+  }
+  if (componentResolutionsIn) {
+    previewDecisions.component_resolutions = componentResolutionsIn;
+  }
+
   if (candidateId && !previewDecisions.candidate_filter_id) previewDecisions.candidate_filter_id = candidateId;
   if (clientId && !previewDecisions.client_filter_id) previewDecisions.client_filter_id = clientId;
 
   if (Array.isArray(includeSet) && includeSet.length) {
-    if (!Array.isArray(previewDecisions.candidate_ids) || previewDecisions.candidate_ids.length === 0) {
-      previewDecisions.candidate_ids = [...includeSet];
+    previewDecisions.candidate_ids = [...includeSet];
+  }
+
+  if (Array.isArray(excludeTimesheetIds) && excludeTimesheetIds.length) {
+    const mergedExclude = new Set();
+    const existingExclude = Array.isArray(previewDecisions.exclude_timesheet_ids) ? previewDecisions.exclude_timesheet_ids : [];
+    for (const x of existingExclude) {
+      const s = String(x || '').trim();
+      if (uuidRe.test(s)) mergedExclude.add(s);
     }
+    for (const x of excludeTimesheetIds) {
+      const s = String(x || '').trim();
+      if (uuidRe.test(s)) mergedExclude.add(s);
+    }
+    previewDecisions.exclude_timesheet_ids = Array.from(mergedExclude);
   }
 
   if (overrideReason && !previewDecisions.same_week_paye_override_reason) {
@@ -12915,10 +13185,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return unwrapPayPreviewRpc(rpcRes);
   };
 
-  const countEligibleCandidates = (preview, decisions, includeCandidateIds) => {
-    const dec = (decisions && typeof decisions === 'object') ? decisions : {};
-    const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object') ? dec.mismatch_choices : {};
-
+  const countEligibleCandidates = (preview, includeCandidateIds) => {
     const includeSetNorm = (() => {
       if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
       const s = new Set();
@@ -12944,18 +13211,15 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
       if (includeSetNorm && !includeSetNorm.has(candId)) continue;
 
-      const hasAnyDelta = (c.has_any_delta === true);
-      if (!hasAnyDelta) continue;
-
       const isReadyForDraft = (c.is_ready_for_draft === true);
       if (!isReadyForDraft) continue;
 
-      const hasMismatch = !!(c.mismatch && typeof c.mismatch === 'object' && c.mismatch.has_mismatch === true);
-      if (hasMismatch) {
-        const choiceRaw = mismatchChoices[candId];
-        const choice = String(choiceRaw || '').trim().toUpperCase();
-        if (choice !== 'PAYE' && choice !== 'UMBRELLA') continue;
-      }
+      const hasAnyDelta = (c.has_any_delta === true);
+      const safeCaseCount = Number(c.safe_case_count || 0);
+      const financeSafeDueTotal = Number(c.finance_safe_due_total_ex_vat || 0);
+      const itemisation = Array.isArray(c.itemisation) ? c.itemisation : [];
+
+      if (!hasAnyDelta && safeCaseCount <= 0 && financeSafeDueTotal === 0 && itemisation.length === 0) continue;
 
       eligible += 1;
     }
@@ -12963,10 +13227,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return eligible;
   };
 
-  const collectEligibleTimesheetsForDraft = (preview, decisions, includeCandidateIds) => {
-    const dec = (decisions && typeof decisions === 'object') ? decisions : {};
-    const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object') ? dec.mismatch_choices : {};
-
+  const collectEligibleTimesheetsForDraft = (preview, includeCandidateIds) => {
     const includeSetNorm = (() => {
       if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
       const s = new Set();
@@ -12992,18 +13253,15 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
       if (includeSetNorm && !includeSetNorm.has(candId)) continue;
 
-      const hasAnyDelta = (c.has_any_delta === true);
-      if (!hasAnyDelta) continue;
-
       const isReadyForDraft = (c.is_ready_for_draft === true);
       if (!isReadyForDraft) continue;
 
-      const hasMismatch = !!(c.mismatch && typeof c.mismatch === 'object' && c.mismatch.has_mismatch === true);
-      if (hasMismatch) {
-        const choiceRaw = mismatchChoices[candId];
-        const choice = String(choiceRaw || '').trim().toUpperCase();
-        if (choice !== 'PAYE' && choice !== 'UMBRELLA') continue;
-      }
+      const hasAnyDelta = (c.has_any_delta === true);
+      const safeCaseCount = Number(c.safe_case_count || 0);
+      const financeSafeDueTotal = Number(c.finance_safe_due_total_ex_vat || 0);
+      const itemisation = Array.isArray(c.itemisation) ? c.itemisation : [];
+
+      if (!hasAnyDelta && safeCaseCount <= 0 && financeSafeDueTotal === 0 && itemisation.length === 0) continue;
 
       eligibleCandidateIds.add(candId);
     }
@@ -13161,32 +13419,32 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
   try {
     const preview0 = await callPayPreview();
-    const eligibleCount = countEligibleCandidates(preview0, previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+    const eligibleCount = countEligibleCandidates(preview0, (Array.isArray(includeSet) ? includeSet : null));
 
     if (eligibleCount <= 0) {
       return withCORS(env, req, badRequest('Nothing eligible to draft; resolve Review required items and refresh preview.'));
     }
 
     const { timesheetIds: inScopeTimesheetIds, timesheetToCandidateId } =
-      collectEligibleTimesheetsForDraft(preview0, previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+      collectEligibleTimesheetsForDraft(preview0, (Array.isArray(includeSet) ? includeSet : null));
 
     const uniqueInScopeIds = Array.isArray(inScopeTimesheetIds)
       ? Array.from(new Set(inScopeTimesheetIds.filter(x => uuidRe.test(String(x || '').trim()))))
       : [];
 
     const tsfinAttempt = await bestEffortDrainTsfinForTimesheets(uniqueInScopeIds);
-    const excludedTimesheetIds = Array.isArray(tsfinAttempt?.excludedTimesheetIds) ? tsfinAttempt.excludedTimesheetIds : [];
+    const excludedTimesheetIdsFromDrain = Array.isArray(tsfinAttempt?.excludedTimesheetIds) ? tsfinAttempt.excludedTimesheetIds : [];
     const outboxRowsFinal = Array.isArray(tsfinAttempt?.outboxRowsFinal) ? tsfinAttempt.outboxRowsFinal : [];
 
-    const excludedSet = new Set(excludedTimesheetIds.map(x => String(x)));
+    const excludedSet = new Set(excludedTimesheetIdsFromDrain.map(x => String(x)));
     const remainingInScope = uniqueInScopeIds.filter(tid => !excludedSet.has(String(tid)));
 
-    if (uniqueInScopeIds.length > 0 && remainingInScope.length === 0 && excludedTimesheetIds.length > 0) {
+    if (uniqueInScopeIds.length > 0 && remainingInScope.length === 0 && excludedTimesheetIdsFromDrain.length > 0) {
       return withCORS(env, req, new Response(
         JSON.stringify({
           error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
           message: 'No timesheets were ready to draft (calculations still processing). Please try again shortly.',
-          excluded_timesheets: excludedTimesheetIds.map((tid) => ({
+          excluded_timesheets: excludedTimesheetIdsFromDrain.map((tid) => ({
             timesheet_id: tid,
             candidate_id: timesheetToCandidateId.get(tid) || null,
             reason_summary: 'CALCULATIONS_STILL_PROCESSING'
@@ -13196,14 +13454,14 @@ async function handleBankingPayCreateDraft(env, req, user) {
       ));
     }
 
-    if (excludedTimesheetIds.length > 0) {
-      const existing = Array.isArray(previewDecisions.exclude_timesheet_ids) ? previewDecisions.exclude_timesheet_ids : [];
+    if (excludedTimesheetIdsFromDrain.length > 0) {
       const exSet = new Set();
+      const existing = Array.isArray(previewDecisions.exclude_timesheet_ids) ? previewDecisions.exclude_timesheet_ids : [];
       for (const x of existing) {
         const s = String(x || '').trim();
         if (uuidRe.test(s)) exSet.add(s);
       }
-      for (const s of excludedTimesheetIds) {
+      for (const s of excludedTimesheetIdsFromDrain) {
         const id = String(s || '').trim();
         if (uuidRe.test(id)) exSet.add(id);
       }
@@ -13240,11 +13498,24 @@ async function handleBankingPayCreateDraft(env, req, user) {
       }
     } catch {}
 
-    const outPayload = (payload && typeof payload === 'object') ? payload : {};
+    const outPayload = (payload && typeof payload === 'object') ? { ...payload } : {};
 
     outPayload.override_verification = overrideVerification;
 
-    if (excludedTimesheetIds.length > 0) {
+    if (Array.isArray(outPayload.blocked_case_ids)) {
+      outPayload.blocked_case_ids = Array.from(new Set(outPayload.blocked_case_ids.map((x) => String(x || '').trim()).filter(Boolean)));
+    }
+    if (Array.isArray(outPayload.safe_case_ids)) {
+      outPayload.safe_case_ids = Array.from(new Set(outPayload.safe_case_ids.map((x) => String(x || '').trim()).filter(Boolean)));
+    }
+    if (Array.isArray(outPayload.blocked_cases)) {
+      outPayload.blocked_cases = outPayload.blocked_cases.filter((x) => x && typeof x === 'object');
+    }
+    if (Array.isArray(outPayload.safe_cases)) {
+      outPayload.safe_cases = outPayload.safe_cases.filter((x) => x && typeof x === 'object');
+    }
+
+    if (excludedTimesheetIdsFromDrain.length > 0) {
       const rowsByTimesheet = new Map();
       for (const r of outboxRowsFinal || []) {
         const tid = String(r?.timesheet_id || '').trim();
@@ -13253,7 +13524,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
         rowsByTimesheet.get(tid).push(r);
       }
 
-      outPayload.excluded_timesheets = excludedTimesheetIds.map((tid) => {
+      outPayload.excluded_timesheets = excludedTimesheetIdsFromDrain.map((tid) => {
         const cid = timesheetToCandidateId.get(tid) || null;
 
         const rs = rowsByTimesheet.get(tid) || [];
@@ -13279,6 +13550,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -28250,6 +28522,7 @@ function renderOutboxTable(content, rows) {
   updateSelectionUi();
 }
 
+
 async function handleBankingFinanceLoansSnoozesList(env, req, user) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -28268,6 +28541,43 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const asInt = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : 0;
+  };
+
+  const defaultRowLabelForCaseType = (caseType) => {
+    const s = String(caseType || '').trim().toUpperCase();
+    if (s === 'PAYMENT_ADVANCE') return 'Payment advance';
+    if (s === 'OVERPAYMENT') return 'Overpayment';
+    if (s === 'MANUAL_DEBT_ADJUSTMENT') return 'Manual debt adjustment';
+    if (s === 'MANUAL_CREDIT_ADJUSTMENT') return 'Manual credit adjustment';
+    if (s === 'UNDERPAYMENT') return 'Underpayment';
+    return s || 'Finance case';
+  };
+
+  const blockedStateForRow = (row) => {
+    const explicit = String(row?.blocked_state || row?.blocked_status || '').trim().toUpperCase();
+    if (explicit) return explicit;
+
+    const unresolvedTaxableCount = asInt(row?.unresolved_taxable_count);
+    const staleCount = asInt(row?.stale_count);
+    if (unresolvedTaxableCount > 0 || staleCount > 0) return 'BLOCKED';
+    return 'SAFE';
+  };
+
+  const blockedReasonForRow = (row) => {
+    const explicit = String(row?.blocked_reason || row?.blocked_reason_code || row?.blocked_reason_summary || '').trim();
+    if (explicit) return explicit;
+
+    const unresolvedTaxableCount = asInt(row?.unresolved_taxable_count);
+    const staleCount = asInt(row?.stale_count);
+
+    if (staleCount > 0) return 'STALE_COMPONENT_RESOLUTION';
+    if (unresolvedTaxableCount > 0) return 'UNRESOLVED_TAXABLE_COMPONENTS';
+    return null;
   };
 
   const u = new URL(req.url);
@@ -28304,15 +28614,19 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
       const outstandingAmount = Number(row?.outstanding_amount || 0);
       const writtenOff = !!row?.written_off_at_utc || !!String(row?.write_off_reason || '').trim();
       const activeSnoozeId = (row?.active_snooze_id != null && String(row.active_snooze_id).trim()) ? String(row.active_snooze_id).trim() : null;
+      const blockedState = blockedStateForRow(row);
+      const blockedReason = blockedReasonForRow(row);
+      const rowLabel = String(row?.row_label || '').trim() || defaultRowLabelForCaseType(caseType);
+
       const isRepayable =
         caseType === 'PAYMENT_ADVANCE' ||
         caseType === 'OVERPAYMENT' ||
         caseType === 'MANUAL_DEBT_ADJUSTMENT';
 
       const canEditCase =
-        (caseType === 'PAYMENT_ADVANCE') ||
-        (caseType === 'MANUAL_CREDIT_ADJUSTMENT') ||
-        (caseType === 'MANUAL_DEBT_ADJUSTMENT');
+        caseType === 'PAYMENT_ADVANCE' ||
+        caseType === 'MANUAL_CREDIT_ADJUSTMENT' ||
+        caseType === 'MANUAL_DEBT_ADJUSTMENT';
 
       const canRestructure =
         (caseType === 'PAYMENT_ADVANCE' || caseType === 'MANUAL_DEBT_ADJUSTMENT') &&
@@ -28351,6 +28665,18 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
 
       return {
         ...row,
+        row_label: rowLabel,
+        blocked_state: blockedState,
+        blocked_reason: blockedReason,
+        is_mixed_case: row?.is_mixed_case === true,
+        open_taxable_count: asInt(row?.open_taxable_count),
+        open_reimbursement_count: asInt(row?.open_reimbursement_count),
+        unresolved_taxable_count: asInt(row?.unresolved_taxable_count),
+        stale_count: asInt(row?.stale_count),
+        component_resolution_summary_json:
+          (row?.component_resolution_summary_json && typeof row.component_resolution_summary_json === 'object')
+            ? row.component_resolution_summary_json
+            : null,
         action_flags: {
           can_edit_case: canEditCase,
           can_edit_payout: canEditPayout,
@@ -28384,6 +28710,7 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load banking finance loans/snoozes list')));
   }
 }
+
 
 async function handleBankingPaymentAdvanceCreate(env, req, user) {
   let body = null;
