@@ -27662,8 +27662,29 @@ async function handleMailshotRunsList(env, req) {
       const commsCounts = classifyChildRows(commsByRun.get(runId) || []);
 
       const totalRows = mailCounts.total_rows + commsCounts.total_rows;
+      const pendingTotal = mailCounts.pending_total + commsCounts.pending_total;
+      const liveFailedTotal = mailCounts.failed_total + commsCounts.failed_total;
+      const sentTotal = mailCounts.sent_total + commsCounts.sent_total;
+      const deliveredTotal = mailCounts.delivered_total + commsCounts.delivered_total;
+      const readTotal = mailCounts.read_total + commsCounts.read_total;
       const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
       const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
+
+      const initialQueued = Number(resultJson.queued || 0);
+      const initialSkipped = Number(resultJson.skipped || 0);
+      const initialFailed = Number(resultJson.failed || 0);
+
+      const canonicalCounts = {
+        queued: pendingTotal,
+        skipped: initialSkipped,
+        failed: initialFailed + liveFailedTotal,
+        blocking: blockingTotal,
+        total_rows: totalRows,
+        cancelable: cancelableTotal,
+        sent: sentTotal,
+        delivered: deliveredTotal,
+        read: readTotal
+      };
 
       return {
         id: runId,
@@ -27675,25 +27696,31 @@ async function handleMailshotRunsList(env, req) {
         created_by: r.created_by || null,
         created_at_utc: r.created_at_utc || null,
         delivery_timing_json: deliveryTimingJson,
+
+        counts: canonicalCounts,
+
         initial_counts: {
-          queued: Number(resultJson.queued || 0),
-          skipped: Number(resultJson.skipped || 0),
-          failed: Number(resultJson.failed || 0)
+          queued: initialQueued,
+          skipped: initialSkipped,
+          failed: initialFailed
         },
+
         live_counts: {
           total_rows: totalRows,
           mail_rows: mailCounts.total_rows,
           comms_rows: commsCounts.total_rows,
-          pending_total: mailCounts.pending_total + commsCounts.pending_total,
-          failed_total: mailCounts.failed_total + commsCounts.failed_total,
-          sent_total: mailCounts.sent_total + commsCounts.sent_total,
-          delivered_total: mailCounts.delivered_total + commsCounts.delivered_total,
-          read_total: mailCounts.read_total + commsCounts.read_total,
+          pending_total: pendingTotal,
+          failed_total: liveFailedTotal,
+          sent_total: sentTotal,
+          delivered_total: deliveredTotal,
+          read_total: readTotal,
           blocking_total: blockingTotal,
           cancelable_total: cancelableTotal
         },
-        can_cancel_pending: cancelableTotal > 0,
+
+        can_cancel_pending: (cancelableTotal > 0) || (blockingTotal === 0),
         can_delete_if_unsent: blockingTotal === 0,
+
         result_json: resultJson
       };
     });
@@ -27837,8 +27864,29 @@ async function handleMailshotRunGet(env, req, id) {
       : {};
 
     const totalRows = mailCounts.total_rows + commsCounts.total_rows;
+    const pendingTotal = mailCounts.pending_total + commsCounts.pending_total;
+    const liveFailedTotal = mailCounts.failed_total + commsCounts.failed_total;
+    const sentTotal = mailCounts.sent_total + commsCounts.sent_total;
+    const deliveredTotal = mailCounts.delivered_total + commsCounts.delivered_total;
+    const readTotal = mailCounts.read_total + commsCounts.read_total;
     const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
     const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
+
+    const initialQueued = Number(resultJson.queued || 0);
+    const initialSkipped = Number(resultJson.skipped || 0);
+    const initialFailed = Number(resultJson.failed || 0);
+
+    const canonicalCounts = {
+      queued: pendingTotal,
+      skipped: initialSkipped,
+      failed: initialFailed + liveFailedTotal,
+      blocking: blockingTotal,
+      total_rows: totalRows,
+      cancelable: cancelableTotal,
+      sent: sentTotal,
+      delivered: deliveredTotal,
+      read: readTotal
+    };
 
     return withCORS(env, req, ok({
       ok: true,
@@ -27854,20 +27902,24 @@ async function handleMailshotRunGet(env, req, id) {
         delivery_timing_json: deliveryTimingJson,
         selection_json: selectionJson,
         result_json: resultJson,
+
+        counts: canonicalCounts,
+
         initial_counts: {
-          queued: Number(resultJson.queued || 0),
-          skipped: Number(resultJson.skipped || 0),
-          failed: Number(resultJson.failed || 0)
+          queued: initialQueued,
+          skipped: initialSkipped,
+          failed: initialFailed
         },
+
         live_counts: {
           total_rows: totalRows,
           mail_rows: mailCounts.total_rows,
           comms_rows: commsCounts.total_rows,
-          pending_total: mailCounts.pending_total + commsCounts.pending_total,
-          failed_total: mailCounts.failed_total + commsCounts.failed_total,
-          sent_total: mailCounts.sent_total + commsCounts.sent_total,
-          delivered_total: mailCounts.delivered_total + commsCounts.delivered_total,
-          read_total: mailCounts.read_total + commsCounts.read_total,
+          pending_total: pendingTotal,
+          failed_total: liveFailedTotal,
+          sent_total: sentTotal,
+          delivered_total: deliveredTotal,
+          read_total: readTotal,
           blocking_total: blockingTotal,
           cancelable_total: cancelableTotal,
           blocking_mail_sent: mailCounts.sent_total,
@@ -27877,8 +27929,10 @@ async function handleMailshotRunGet(env, req, id) {
           blocking_comms_delivered: commsCounts.delivered_total,
           blocking_comms_read: commsCounts.read_total
         },
-        can_cancel_pending: cancelableTotal > 0,
+
+        can_cancel_pending: (cancelableTotal > 0) || (blockingTotal === 0),
         can_delete_if_unsent: blockingTotal === 0,
+
         child_preview: {
           mail_items: (Array.isArray(mailChildRows) ? mailChildRows : []).slice(0, 25).map(r => ({
             id: r.id,
@@ -27907,6 +27961,8 @@ async function handleMailshotRunGet(env, req, id) {
     return withCORS(env, req, serverError(msg));
   }
 }
+
+
 
 
 function renderMailshotTimingStep() {
