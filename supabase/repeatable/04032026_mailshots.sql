@@ -292,6 +292,8 @@ begin
 end;
 $function$;
 
+
+
 create or replace function public.document_templates_upsert(
   p_template_id uuid,
   p_entity_type text,
@@ -325,6 +327,17 @@ declare
 
   v_content jsonb := coalesce(p_template_content_json, '{}'::jsonb);
   v_attachment_cfg jsonb := '{}'::jsonb;
+  v_attachment_items_raw jsonb := '[]'::jsonb;
+  v_attachment_items_norm jsonb := '[]'::jsonb;
+  v_attachment_item jsonb := '{}'::jsonb;
+  v_attachment_item_idx integer := 0;
+  v_attachment_item_r2_key text;
+  v_attachment_item_filename text;
+  v_attachment_item_content_type text;
+  v_attachment_item_source text;
+  v_attachment_item_source_label text;
+  v_attachment_item_read_only boolean := false;
+  v_attachment_item_size_bytes bigint;
   v_attach_timesheet_pdf boolean := false;
   v_attach_invoice_pdf boolean := false;
 
@@ -407,11 +420,111 @@ begin
     raise exception 'mailshot_attachments.attach_authoritative_invoice_pdf must be boolean';
   end if;
 
+  if v_attachment_cfg ? 'attachments'
+     and jsonb_typeof(v_attachment_cfg->'attachments') <> 'array' then
+    raise exception 'mailshot_attachments.attachments must be array';
+  end if;
+
+  if v_attachment_cfg ? 'template_files'
+     and jsonb_typeof(v_attachment_cfg->'template_files') <> 'array' then
+    raise exception 'mailshot_attachments.template_files must be array';
+  end if;
+
+  if v_attachment_cfg ? 'files'
+     and jsonb_typeof(v_attachment_cfg->'files') <> 'array' then
+    raise exception 'mailshot_attachments.files must be array';
+  end if;
+
+  v_attachment_items_raw :=
+    coalesce(case when v_attachment_cfg ? 'attachments' then v_attachment_cfg->'attachments' else '[]'::jsonb end, '[]'::jsonb)
+    ||
+    coalesce(case when v_attachment_cfg ? 'template_files' then v_attachment_cfg->'template_files' else '[]'::jsonb end, '[]'::jsonb)
+    ||
+    coalesce(case when v_attachment_cfg ? 'files' then v_attachment_cfg->'files' else '[]'::jsonb end, '[]'::jsonb);
+
+  v_attachment_items_norm := '[]'::jsonb;
+  v_attachment_item_idx := 0;
+
+  for v_attachment_item in
+    select jbe.value
+    from jsonb_array_elements(v_attachment_items_raw) as jbe(value)
+  loop
+    v_attachment_item_idx := v_attachment_item_idx + 1;
+
+    if jsonb_typeof(v_attachment_item) <> 'object' then
+      raise exception 'mailshot_attachments.attachments[%] must be object', v_attachment_item_idx;
+    end if;
+
+    v_attachment_item_r2_key := nullif(btrim(coalesce(v_attachment_item->>'r2_key', '')), '');
+    v_attachment_item_filename := coalesce(
+      nullif(btrim(coalesce(v_attachment_item->>'filename', '')), ''),
+      nullif(btrim(coalesce(v_attachment_item->>'name', '')), '')
+    );
+    v_attachment_item_content_type := coalesce(
+      nullif(btrim(coalesce(v_attachment_item->>'content_type', '')), ''),
+      nullif(btrim(coalesce(v_attachment_item->>'contentType', '')), '')
+    );
+    v_attachment_item_source := nullif(btrim(coalesce(v_attachment_item->>'source', '')), '');
+    v_attachment_item_source_label := coalesce(
+      nullif(btrim(coalesce(v_attachment_item->>'source_label', '')), ''),
+      nullif(btrim(coalesce(v_attachment_item->>'sourceLabel', '')), '')
+    );
+
+    if v_attachment_item_r2_key is null then
+      raise exception 'mailshot_attachments.attachments[%].r2_key required', v_attachment_item_idx;
+    end if;
+
+    if v_attachment_item_filename is null then
+      raise exception 'mailshot_attachments.attachments[%].filename required', v_attachment_item_idx;
+    end if;
+
+    if v_attachment_item ? 'read_only' then
+      if jsonb_typeof(v_attachment_item->'read_only') <> 'boolean' then
+        raise exception 'mailshot_attachments.attachments[%].read_only must be boolean', v_attachment_item_idx;
+      end if;
+      v_attachment_item_read_only := coalesce((v_attachment_item->>'read_only')::boolean, false);
+    elsif v_attachment_item ? 'readOnly' then
+      if jsonb_typeof(v_attachment_item->'readOnly') <> 'boolean' then
+        raise exception 'mailshot_attachments.attachments[%].readOnly must be boolean', v_attachment_item_idx;
+      end if;
+      v_attachment_item_read_only := coalesce((v_attachment_item->>'readOnly')::boolean, false);
+    else
+      v_attachment_item_read_only := false;
+    end if;
+
+    v_attachment_item_size_bytes := null;
+    if nullif(btrim(coalesce(v_attachment_item->>'size_bytes', '')), '') is not null then
+      if btrim(coalesce(v_attachment_item->>'size_bytes', '')) !~ '^\d+$' then
+        raise exception 'mailshot_attachments.attachments[%].size_bytes must be non-negative integer', v_attachment_item_idx;
+      end if;
+      v_attachment_item_size_bytes := (v_attachment_item->>'size_bytes')::bigint;
+    elsif nullif(btrim(coalesce(v_attachment_item->>'sizeBytes', '')), '') is not null then
+      if btrim(coalesce(v_attachment_item->>'sizeBytes', '')) !~ '^\d+$' then
+        raise exception 'mailshot_attachments.attachments[%].sizeBytes must be non-negative integer', v_attachment_item_idx;
+      end if;
+      v_attachment_item_size_bytes := (v_attachment_item->>'sizeBytes')::bigint;
+    end if;
+
+    v_attachment_items_norm := v_attachment_items_norm || jsonb_build_array(
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'r2_key', v_attachment_item_r2_key,
+          'filename', v_attachment_item_filename,
+          'content_type', v_attachment_item_content_type,
+          'source', v_attachment_item_source,
+          'source_label', v_attachment_item_source_label,
+          'read_only', v_attachment_item_read_only,
+          'size_bytes', v_attachment_item_size_bytes
+        )
+      )
+    );
+  end loop;
+
   v_attach_timesheet_pdf := coalesce((v_attachment_cfg->>'attach_authoritative_timesheet_pdf')::boolean, false);
   v_attach_invoice_pdf := coalesce((v_attachment_cfg->>'attach_authoritative_invoice_pdf')::boolean, false);
 
   if v_output_type_norm <> 'EMAIL' then
-    if v_attach_timesheet_pdf or v_attach_invoice_pdf then
+    if v_attach_timesheet_pdf or v_attach_invoice_pdf or jsonb_array_length(v_attachment_items_norm) > 0 then
       raise exception 'mailshot attachments are only supported for EMAIL templates';
     end if;
 
@@ -437,7 +550,8 @@ begin
         'attach_authoritative_timesheet_pdf',
         case when v_entity_type_norm = 'timesheet' then v_attach_timesheet_pdf else false end,
         'attach_authoritative_invoice_pdf',
-        case when v_entity_type_norm = 'invoice' then v_attach_invoice_pdf else false end
+        case when v_entity_type_norm = 'invoice' then v_attach_invoice_pdf else false end,
+        'attachments', coalesce(v_attachment_items_norm, '[]'::jsonb)
       )
     );
   end if;
@@ -772,8 +886,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
