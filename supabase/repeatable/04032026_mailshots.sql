@@ -1599,7 +1599,6 @@ as $$
     )
   order by lower(coalesce(o.label_override, f.label_default)) asc, lower(f.field_key) asc;
 $$;
-
 create or replace function public.mailshot_fields_seed_from_schema(
   p_actor_user_id uuid
 )
@@ -1765,14 +1764,17 @@ begin
     jsonb_build_object(
       'managed_by', 'system_seed',
       'source_family', 'system',
-      'source_view_name', 'tms_users',
-      'source_column_name', 'display_name',
+      'source_view_name', 'runtime_system',
+      'source_column_name', 'sender_display_name',
       'path', 'system.sender_display_name',
+      'resolution_mode', 'runtime_injected',
+      'runtime_source_function', 'public.mailshot_prepare',
+      'runtime_value_key', 'sender_display_name',
       'stale', false
     ),
     'system',
-    'tms_users',
-    'display_name'
+    'runtime_system',
+    'sender_display_name'
   );
 
   select count(*) into v_discovered_total
@@ -1858,7 +1860,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
