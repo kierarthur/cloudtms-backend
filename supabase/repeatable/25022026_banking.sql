@@ -12540,7 +12540,6 @@ begin
 end;
 $$;
 
-
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
   p_actor_user_id uuid DEFAULT NULL
@@ -12553,6 +12552,7 @@ AS $$
 DECLARE
   v_out jsonb;
   v_has_tsfin boolean := false;
+  v_today_uk date := (now() AT TIME ZONE 'Europe/London')::date;
 BEGIN
   IF p_timesheet_id IS NULL THEN
     RAISE EXCEPTION 'timesheet_pay_state: timesheet_id is required';
@@ -12562,9 +12562,14 @@ BEGIN
   tf AS (
     SELECT
       tf.timesheet_id,
+      tf.candidate_id,
+      ts.booking_id,
       tf.pay_on_hold,
       tf.invoice_breakdown_json
     FROM public.timesheets_financials tf
+    LEFT JOIN public.timesheets ts
+      ON ts.timesheet_id = tf.timesheet_id
+     AND ts.is_current = true
     WHERE tf.timesheet_id = p_timesheet_id
       AND tf.is_current = true
     LIMIT 1
@@ -12572,6 +12577,8 @@ BEGIN
   tf_norm AS (
     SELECT
       t.timesheet_id,
+      t.candidate_id,
+      t.booking_id,
       COALESCE(t.pay_on_hold, false) AS pay_on_hold,
       CASE
         WHEN t.invoice_breakdown_json IS NOT NULL AND jsonb_typeof(t.invoice_breakdown_json) = 'object'
@@ -12587,27 +12594,49 @@ BEGIN
       AND (jsonb_typeof(tn.invoice_breakdown_json->'segments') = 'array') AS is_segments_mode
     FROM tf_norm tn
   ),
+  segment_components AS (
+    SELECT
+      nullif(btrim(COALESCE(seg.value->>'segment_id','')), '') AS component_id,
+      nullif(btrim(COALESCE(seg.value->>'date','')), '') AS component_date,
+      coalesce(
+        nullif(btrim(COALESCE(seg.value->>'segment_stable_key','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'date','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'ref_num','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'segment_key','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'segment_id','')), '')
+      ) AS component_stable_key,
+      nullif(btrim(COALESCE(seg.value->>'ref_num','')), '') AS component_ref_num,
+      COALESCE(NULLIF(seg.value->>'exclude_from_pay','')::boolean, false) AS is_on_hold
+    FROM tf_norm tn
+    JOIN is_seg isg
+      ON true
+    JOIN LATERAL jsonb_array_elements(COALESCE(tn.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg(value)
+      ON true
+    WHERE isg.is_segments_mode = true
+      AND seg.value IS NOT NULL
+      AND jsonb_typeof(seg.value) = 'object'
+      AND nullif(btrim(COALESCE(seg.value->>'segment_id','')), '') IS NOT NULL
+  ),
   components AS (
     SELECT
-      nullif(btrim(COALESCE(seg->>'segment_id','')), '') AS component_id,
-      nullif(btrim(COALESCE(seg->>'date','')), '') AS component_date,
-      COALESCE(NULLIF(seg->>'exclude_from_pay','')::boolean, false) AS is_on_hold
-    FROM tf_norm tn
-    JOIN is_seg isg ON true
-    JOIN LATERAL jsonb_array_elements(COALESCE(tn.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg ON true
-    WHERE isg.is_segments_mode = true
-      AND seg IS NOT NULL
-      AND jsonb_typeof(seg) = 'object'
-      AND nullif(btrim(COALESCE(seg->>'segment_id','')), '') IS NOT NULL
+      sc.component_id,
+      sc.component_date,
+      sc.component_stable_key,
+      sc.component_ref_num,
+      sc.is_on_hold
+    FROM segment_components sc
 
     UNION ALL
 
     SELECT
       'TOTAL'::text AS component_id,
       NULL::text AS component_date,
+      ('timesheet:' || COALESCE(tn.booking_id, tn.timesheet_id::text))::text AS component_stable_key,
+      NULL::text AS component_ref_num,
       tn.pay_on_hold AS is_on_hold
     FROM tf_norm tn
-    JOIN is_seg isg ON true
+    JOIN is_seg isg
+      ON true
     WHERE isg.is_segments_mode = false
   ),
   active_override AS (
@@ -12645,15 +12674,104 @@ BEGIN
       s.id AS snooze_id,
       s.snooze_until_date,
       s.note
-    FROM public.pay_item_snoozes s
-    WHERE s.timesheet_id = p_timesheet_id
-      AND s.source_ref IS NULL
-      AND s.segment_id IS NULL
-      AND s.cleared_at_utc IS NULL
-      AND upper(COALESCE(s.snooze_kind,'')) = 'TIMESHEET_PAYMENT'
-      AND (s.snooze_until_date IS NULL OR s.snooze_until_date >= current_date)
+    FROM tf_norm tn
+    JOIN public.pay_item_snoozes s
+      ON s.candidate_id = tn.candidate_id
+     AND s.source_ref IS NULL
+     AND s.segment_id IS NULL
+     AND s.segment_stable_key IS NULL
+     AND s.cleared_at_utc IS NULL
+     AND upper(COALESCE(s.snooze_kind,'')) = 'TIMESHEET_PAYMENT'
+     AND (s.snooze_until_date IS NULL OR s.snooze_until_date >= v_today_uk)
+     AND (
+       (tn.booking_id IS NOT NULL AND s.booking_id IS NOT DISTINCT FROM tn.booking_id)
+       OR
+       (s.booking_id IS NULL AND s.timesheet_id = p_timesheet_id)
+     )
     ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
     LIMIT 1
+  ),
+  active_segment_snoozes_source AS (
+    SELECT
+      s.id AS snooze_id,
+      s.candidate_id,
+      s.timesheet_id,
+      s.booking_id,
+      s.segment_id,
+      coalesce(
+        nullif(btrim(COALESCE(s.segment_stable_key,'')), ''),
+        nullif(btrim(COALESCE(s.segment_id,'')), '')
+      ) AS segment_stable_key,
+      upper(COALESCE(s.snooze_kind,'')) AS snooze_kind,
+      s.snooze_until_date,
+      s.note,
+      s.created_at_utc,
+      s.updated_at_utc
+    FROM tf_norm tn
+    JOIN public.pay_item_snoozes s
+      ON s.candidate_id = tn.candidate_id
+     AND s.source_ref IS NULL
+     AND s.cleared_at_utc IS NULL
+     AND upper(COALESCE(s.snooze_kind,'')) = 'TIMESHEET_PAYMENT'
+     AND (s.snooze_until_date IS NULL OR s.snooze_until_date >= v_today_uk)
+     AND coalesce(
+           nullif(btrim(COALESCE(s.segment_stable_key,'')), ''),
+           nullif(btrim(COALESCE(s.segment_id,'')), '')
+         ) IS NOT NULL
+     AND (
+       (tn.booking_id IS NOT NULL AND s.booking_id IS NOT DISTINCT FROM tn.booking_id)
+       OR
+       (s.booking_id IS NULL AND s.timesheet_id = p_timesheet_id)
+     )
+  ),
+  active_segment_snooze_matches AS (
+    SELECT
+      sc.component_id,
+      sc.component_date,
+      sc.component_stable_key,
+      sc.component_ref_num,
+      ass.snooze_id,
+      ass.candidate_id,
+      ass.timesheet_id,
+      ass.booking_id,
+      ass.segment_id,
+      ass.segment_stable_key,
+      ass.snooze_kind,
+      ass.snooze_until_date,
+      ass.note,
+      ass.created_at_utc,
+      ass.updated_at_utc,
+      row_number() OVER (
+        PARTITION BY sc.component_id
+        ORDER BY ass.updated_at_utc DESC NULLS LAST, ass.created_at_utc DESC, ass.snooze_id DESC
+      ) AS rn
+    FROM segment_components sc
+    JOIN active_segment_snoozes_source ass
+      ON (
+        (ass.booking_id IS NOT NULL AND ass.segment_stable_key IS NOT DISTINCT FROM sc.component_stable_key)
+        OR
+        (ass.booking_id IS NULL AND ass.timesheet_id IS NOT DISTINCT FROM p_timesheet_id AND ass.segment_id IS NOT DISTINCT FROM sc.component_id)
+      )
+  ),
+  active_segment_snoozes AS (
+    SELECT
+      asm.component_id,
+      asm.component_date,
+      asm.component_stable_key,
+      asm.component_ref_num,
+      asm.snooze_id,
+      asm.candidate_id,
+      asm.timesheet_id,
+      asm.booking_id,
+      asm.segment_id,
+      asm.segment_stable_key,
+      asm.snooze_kind,
+      asm.snooze_until_date,
+      asm.note,
+      asm.created_at_utc,
+      asm.updated_at_utc
+    FROM active_segment_snooze_matches asm
+    WHERE asm.rn = 1
   ),
   pay_items AS (
     SELECT
@@ -12695,6 +12813,8 @@ BEGIN
     SELECT
       c.component_id,
       c.component_date,
+      c.component_stable_key,
+      c.component_ref_num,
       c.is_on_hold,
       CASE
         WHEN c.is_on_hold = true THEN 'ON_HOLD'
@@ -12704,12 +12824,25 @@ BEGIN
         WHEN ao.override_id IS NOT NULL THEN 'ADVANCED'
         ELSE 'UNPAID'
       END AS stage,
-      a.settled_at_utc
+      a.settled_at_utc,
+      CASE
+        WHEN c.component_id = 'TOTAL' THEN 'NONE'
+        WHEN ass.snooze_id IS NULL THEN 'NONE'
+        WHEN ass.snooze_until_date IS NULL THEN 'INDEFINITE_SNOOZED'
+        ELSE 'DATED_SNOOZED'
+      END AS snooze_state,
+      ass.snooze_id,
+      ass.snooze_until_date,
+      ass.note AS snooze_note,
+      ass.segment_id AS snooze_segment_id,
+      ass.segment_stable_key AS snooze_segment_stable_key
     FROM components c
     LEFT JOIN agg a
       ON a.component_id = c.component_id
     LEFT JOIN active_override ao
       ON true
+    LEFT JOIN active_segment_snoozes ass
+      ON ass.component_id = c.component_id
   ),
   counts AS (
     SELECT
@@ -12759,6 +12892,8 @@ BEGIN
           jsonb_build_object(
             'component_id', cs.component_id,
             'date', cs.component_date,
+            'segment_stable_key', cs.component_stable_key,
+            'ref_num', cs.component_ref_num,
             'is_on_hold', cs.is_on_hold,
             'stage', cs.stage,
             'paid_at_utc', cs.settled_at_utc,
@@ -12766,7 +12901,13 @@ BEGIN
               CASE
                 WHEN cs.settled_at_utc IS NULL THEN NULL
                 ELSE to_char(cs.settled_at_utc AT TIME ZONE 'Europe/London', 'Dy DD/MM/YYYY HH24:MI') || 'hrs'
-              END
+              END,
+            'snooze_state', cs.snooze_state,
+            'snooze_id', CASE WHEN cs.snooze_id IS NULL THEN NULL ELSE cs.snooze_id::text END,
+            'snooze_until_date', CASE WHEN cs.snooze_until_date IS NULL THEN NULL ELSE cs.snooze_until_date::text END,
+            'snooze_note', cs.snooze_note,
+            'snooze_segment_id', cs.snooze_segment_id,
+            'snooze_segment_stable_key', cs.snooze_segment_stable_key
           )
           ORDER BY
             CASE WHEN cs.component_id = 'TOTAL' THEN 0 ELSE 1 END,
@@ -12776,6 +12917,36 @@ BEGIN
         '[]'::jsonb
       ) AS components
     FROM comp_state cs
+  ),
+  segment_snoozes_json AS (
+    SELECT
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'snooze_id', ass.snooze_id::text,
+            'candidate_id', ass.candidate_id::text,
+            'timesheet_id', CASE WHEN ass.timesheet_id IS NULL THEN NULL ELSE ass.timesheet_id::text END,
+            'booking_id', ass.booking_id,
+            'segment_id', ass.segment_id,
+            'segment_stable_key', ass.segment_stable_key,
+            'snooze_kind', ass.snooze_kind,
+            'snooze_until_date', CASE WHEN ass.snooze_until_date IS NULL THEN NULL ELSE ass.snooze_until_date::text END,
+            'note', ass.note,
+            'snooze_note', ass.note,
+            'date', ass.component_date,
+            'work_date', ass.component_date,
+            'ref_num', ass.component_ref_num,
+            'snooze_state',
+              CASE
+                WHEN ass.snooze_until_date IS NULL THEN 'INDEFINITE_SNOOZED'
+                ELSE 'DATED_SNOOZED'
+              END
+          )
+          ORDER BY ass.component_date NULLS LAST, ass.segment_stable_key NULLS LAST, ass.segment_id NULLS LAST
+        ),
+        '[]'::jsonb
+      ) AS segment_snoozes
+    FROM active_segment_snoozes ass
   ),
   paid_status AS (
     SELECT
@@ -12886,7 +13057,8 @@ BEGIN
         'reserved_ex_vat', a.reserved_ex_vat
       ),
       'hover', h.hover_summary,
-      'components', cj.components
+      'components', cj.components,
+      'segment_snoozes', ssj.segment_snoozes
     )
   INTO v_out
   FROM counts c
@@ -12895,6 +13067,7 @@ BEGIN
   CROSS JOIN adjusted a
   CROSS JOIN hover h
   CROSS JOIN comp_json cj
+  CROSS JOIN segment_snoozes_json ssj
   CROSS JOIN override_json oj
   CROSS JOIN snooze_json sj;
 
@@ -12934,9 +13107,6 @@ BEGIN
   RETURN v_out;
 END;
 $$;
-
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_candidate_advances_report(
