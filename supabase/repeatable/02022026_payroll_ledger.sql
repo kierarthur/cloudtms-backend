@@ -2713,9 +2713,22 @@ AS $$
 DECLARE
   v_kind_input text := upper(btrim(coalesce(p_snooze_kind, 'DO_NOT_PAY')));
   v_kind text;
-  v_segment_id text := nullif(btrim(coalesce(p_segment_id, '')), '');
+  v_segment_id_input text := nullif(btrim(coalesce(p_segment_id, '')), '');
   v_source_ref text := nullif(btrim(coalesce(p_source_ref, '')), '');
   v_note text := nullif(btrim(coalesce(p_note, '')), '');
+
+  v_input_booking_id text := NULL;
+  v_booking_id text := NULL;
+  v_current_timesheet_id uuid := NULL;
+  v_effective_timesheet_id uuid := NULL;
+
+  v_input_invoice_breakdown_json jsonb := NULL;
+  v_current_invoice_breakdown_json jsonb := NULL;
+
+  v_input_segment_stable_key text := NULL;
+  v_segment_stable_key text := NULL;
+  v_current_segment_id text := NULL;
+  v_effective_segment_id text := NULL;
 
   v_keeper_id uuid := NULL;
   v_action text := NULL;
@@ -2754,14 +2767,14 @@ BEGIN
     IF v_source_ref IS NULL THEN
       RAISE EXCEPTION 'source_ref is required for finance-case snoozes';
     END IF;
-    IF p_timesheet_id IS NOT NULL OR v_segment_id IS NOT NULL THEN
+    IF p_timesheet_id IS NOT NULL OR v_segment_id_input IS NOT NULL THEN
       RAISE EXCEPTION 'timesheet_id/segment_id must not be supplied for finance-case snoozes';
     END IF;
   ELSIF v_kind = 'TIMESHEET_PAYMENT' THEN
     IF p_timesheet_id IS NULL THEN
       RAISE EXCEPTION 'timesheet_id is required for TIMESHEET_PAYMENT snoozes';
     END IF;
-    IF v_segment_id IS NOT NULL THEN
+    IF v_segment_id_input IS NOT NULL THEN
       RAISE EXCEPTION 'segment_id must be null for TIMESHEET_PAYMENT snoozes';
     END IF;
     IF v_source_ref IS NOT NULL THEN
@@ -2783,11 +2796,181 @@ BEGIN
     v_finance_case_id := split_part(v_source_ref, ':', 2)::uuid;
   END IF;
 
+  IF v_source_ref IS NULL THEN
+    SELECT
+      nullif(btrim(coalesce(t.booking_id, '')), '')
+    INTO v_input_booking_id
+    FROM public.timesheets t
+    WHERE t.timesheet_id = p_timesheet_id
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'timesheet_id is invalid or no longer exists';
+    END IF;
+
+    v_booking_id := v_input_booking_id;
+
+    IF v_booking_id IS NOT NULL THEN
+      SELECT t.timesheet_id
+      INTO v_current_timesheet_id
+      FROM public.timesheets t
+      WHERE t.booking_id = v_booking_id
+        AND t.is_current = true
+      ORDER BY coalesce(t.version, 0) DESC, t.updated_at DESC NULLS LAST, t.created_at DESC NULLS LAST, t.timesheet_id DESC
+      LIMIT 1;
+    END IF;
+
+    v_effective_timesheet_id := coalesce(v_current_timesheet_id, p_timesheet_id);
+
+    SELECT tf.invoice_breakdown_json
+    INTO v_input_invoice_breakdown_json
+    FROM public.timesheets_financials tf
+    WHERE tf.timesheet_id = p_timesheet_id
+    ORDER BY CASE WHEN tf.is_current THEN 0 ELSE 1 END, tf.updated_at DESC NULLS LAST, tf.created_at DESC NULLS LAST, tf.id DESC
+    LIMIT 1;
+
+    IF v_effective_timesheet_id IS NOT NULL THEN
+      SELECT tf.invoice_breakdown_json
+      INTO v_current_invoice_breakdown_json
+      FROM public.timesheets_financials tf
+      WHERE tf.timesheet_id = v_effective_timesheet_id
+      ORDER BY CASE WHEN tf.is_current THEN 0 ELSE 1 END, tf.updated_at DESC NULLS LAST, tf.created_at DESC NULLS LAST, tf.id DESC
+      LIMIT 1;
+    END IF;
+
+    IF v_segment_id_input IS NOT NULL THEN
+      SELECT
+        nullif(
+          btrim(
+            coalesce(
+              nullif(btrim(coalesce(seg.value->>'segment_stable_key', '')), ''),
+              nullif(btrim(coalesce(seg.value->>'work_date', '')), ''),
+              nullif(btrim(coalesce(seg.value->>'ref_num', '')), ''),
+              nullif(btrim(coalesce(seg.value->>'segment_key', '')), ''),
+              nullif(btrim(coalesce(seg.value->>'segment_id', '')), '')
+            )
+          ),
+          ''
+        )
+      INTO v_input_segment_stable_key
+      FROM jsonb_array_elements(
+        CASE
+          WHEN v_input_invoice_breakdown_json IS NOT NULL
+           AND jsonb_typeof(v_input_invoice_breakdown_json) = 'object'
+           AND jsonb_typeof(v_input_invoice_breakdown_json->'segments') = 'array'
+          THEN v_input_invoice_breakdown_json->'segments'
+          ELSE '[]'::jsonb
+        END
+      ) AS seg(value)
+      WHERE jsonb_typeof(seg.value) = 'object'
+        AND (
+          nullif(btrim(coalesce(seg.value->>'segment_id', '')), '') = v_segment_id_input
+          OR nullif(btrim(coalesce(seg.value->>'segment_stable_key', '')), '') = v_segment_id_input
+          OR nullif(btrim(coalesce(seg.value->>'segment_key', '')), '') = v_segment_id_input
+          OR nullif(btrim(coalesce(seg.value->>'ref_num', '')), '') = v_segment_id_input
+          OR nullif(btrim(coalesce(seg.value->>'work_date', '')), '') = v_segment_id_input
+        )
+      ORDER BY
+        CASE
+          WHEN nullif(btrim(coalesce(seg.value->>'segment_id', '')), '') = v_segment_id_input THEN 1
+          WHEN nullif(btrim(coalesce(seg.value->>'segment_stable_key', '')), '') = v_segment_id_input THEN 2
+          WHEN nullif(btrim(coalesce(seg.value->>'segment_key', '')), '') = v_segment_id_input THEN 3
+          WHEN nullif(btrim(coalesce(seg.value->>'ref_num', '')), '') = v_segment_id_input THEN 4
+          WHEN nullif(btrim(coalesce(seg.value->>'work_date', '')), '') = v_segment_id_input THEN 5
+          ELSE 99
+        END
+      LIMIT 1;
+
+      SELECT
+        nullif(btrim(coalesce(seg.value->>'segment_id', '')), ''),
+        nullif(
+          btrim(
+            coalesce(
+              nullif(btrim(coalesce(seg.value->>'segment_stable_key', '')), ''),
+              nullif(btrim(coalesce(seg.value->>'work_date', '')), ''),
+              nullif(btrim(coalesce(seg.value->>'ref_num', '')), ''),
+              nullif(btrim(coalesce(seg.value->>'segment_key', '')), ''),
+              nullif(btrim(coalesce(seg.value->>'segment_id', '')), '')
+            )
+          ),
+          ''
+        )
+      INTO v_current_segment_id, v_segment_stable_key
+      FROM jsonb_array_elements(
+        CASE
+          WHEN v_current_invoice_breakdown_json IS NOT NULL
+           AND jsonb_typeof(v_current_invoice_breakdown_json) = 'object'
+           AND jsonb_typeof(v_current_invoice_breakdown_json->'segments') = 'array'
+          THEN v_current_invoice_breakdown_json->'segments'
+          ELSE '[]'::jsonb
+        END
+      ) AS seg(value)
+      WHERE jsonb_typeof(seg.value) = 'object'
+        AND (
+          (
+            v_input_segment_stable_key IS NOT NULL
+            AND nullif(
+                  btrim(
+                    coalesce(
+                      nullif(btrim(coalesce(seg.value->>'segment_stable_key', '')), ''),
+                      nullif(btrim(coalesce(seg.value->>'work_date', '')), ''),
+                      nullif(btrim(coalesce(seg.value->>'ref_num', '')), ''),
+                      nullif(btrim(coalesce(seg.value->>'segment_key', '')), ''),
+                      nullif(btrim(coalesce(seg.value->>'segment_id', '')), '')
+                    )
+                  ),
+                  ''
+                ) = v_input_segment_stable_key
+          )
+          OR nullif(btrim(coalesce(seg.value->>'segment_id', '')), '') = v_segment_id_input
+          OR nullif(btrim(coalesce(seg.value->>'segment_stable_key', '')), '') = v_segment_id_input
+          OR nullif(btrim(coalesce(seg.value->>'segment_key', '')), '') = v_segment_id_input
+          OR nullif(btrim(coalesce(seg.value->>'ref_num', '')), '') = v_segment_id_input
+          OR nullif(btrim(coalesce(seg.value->>'work_date', '')), '') = v_segment_id_input
+        )
+      ORDER BY
+        CASE
+          WHEN v_input_segment_stable_key IS NOT NULL
+           AND nullif(
+                 btrim(
+                   coalesce(
+                     nullif(btrim(coalesce(seg.value->>'segment_stable_key', '')), ''),
+                     nullif(btrim(coalesce(seg.value->>'work_date', '')), ''),
+                     nullif(btrim(coalesce(seg.value->>'ref_num', '')), ''),
+                     nullif(btrim(coalesce(seg.value->>'segment_key', '')), ''),
+                     nullif(btrim(coalesce(seg.value->>'segment_id', '')), '')
+                   )
+                 ),
+                 ''
+               ) = v_input_segment_stable_key THEN 1
+          WHEN nullif(btrim(coalesce(seg.value->>'segment_id', '')), '') = v_segment_id_input THEN 2
+          WHEN nullif(btrim(coalesce(seg.value->>'segment_stable_key', '')), '') = v_segment_id_input THEN 3
+          WHEN nullif(btrim(coalesce(seg.value->>'segment_key', '')), '') = v_segment_id_input THEN 4
+          WHEN nullif(btrim(coalesce(seg.value->>'ref_num', '')), '') = v_segment_id_input THEN 5
+          WHEN nullif(btrim(coalesce(seg.value->>'work_date', '')), '') = v_segment_id_input THEN 6
+          ELSE 99
+        END
+      LIMIT 1;
+
+      v_segment_stable_key := coalesce(v_segment_stable_key, v_input_segment_stable_key);
+      v_effective_segment_id := v_current_segment_id;
+
+      IF v_segment_stable_key IS NULL THEN
+        RAISE EXCEPTION 'segment_id could not be resolved on the timesheet';
+      END IF;
+    ELSE
+      v_segment_stable_key := NULL;
+      v_effective_segment_id := NULL;
+    END IF;
+  END IF;
+
   SELECT jsonb_build_object(
            'id', s.id::text,
            'candidate_id', s.candidate_id::text,
            'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+           'booking_id', s.booking_id,
            'segment_id', s.segment_id,
+           'segment_stable_key', s.segment_stable_key,
            'source_ref', s.source_ref,
            'snooze_kind', s.snooze_kind,
            'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
@@ -2800,7 +2983,26 @@ BEGIN
     AND (
       (v_source_ref IS NOT NULL AND s.source_ref IS NOT DISTINCT FROM v_source_ref)
       OR
-      (v_source_ref IS NULL AND s.source_ref IS NULL AND s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id AND s.segment_id IS NOT DISTINCT FROM v_segment_id)
+      (
+        v_source_ref IS NULL
+        AND s.source_ref IS NULL
+        AND (
+          (
+            v_booking_id IS NOT NULL
+            AND s.booking_id IS NOT DISTINCT FROM v_booking_id
+            AND coalesce(s.segment_stable_key, '') IS NOT DISTINCT FROM coalesce(v_segment_stable_key, '')
+          )
+          OR
+          (
+            s.booking_id IS NULL
+            AND (
+              s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+              OR s.timesheet_id IS NOT DISTINCT FROM v_effective_timesheet_id
+            )
+            AND s.segment_id IS NOT DISTINCT FROM coalesce(v_effective_segment_id, v_segment_id_input)
+          )
+        )
+      )
     )
   ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
   LIMIT 1;
@@ -2813,10 +3015,87 @@ BEGIN
     AND (
       (v_source_ref IS NOT NULL AND s.source_ref IS NOT DISTINCT FROM v_source_ref)
       OR
-      (v_source_ref IS NULL AND s.source_ref IS NULL AND s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id AND s.segment_id IS NOT DISTINCT FROM v_segment_id)
+      (
+        v_source_ref IS NULL
+        AND s.source_ref IS NULL
+        AND (
+          (
+            v_booking_id IS NOT NULL
+            AND s.booking_id IS NOT DISTINCT FROM v_booking_id
+            AND coalesce(s.segment_stable_key, '') IS NOT DISTINCT FROM coalesce(v_segment_stable_key, '')
+          )
+          OR
+          (
+            s.booking_id IS NULL
+            AND (
+              s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+              OR s.timesheet_id IS NOT DISTINCT FROM v_effective_timesheet_id
+            )
+            AND s.segment_id IS NOT DISTINCT FROM coalesce(v_effective_segment_id, v_segment_id_input)
+          )
+        )
+      )
     )
   ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
   LIMIT 1;
+
+  IF v_source_ref IS NULL AND v_segment_id_input IS NOT NULL AND v_effective_segment_id IS NULL THEN
+    IF v_keeper_id IS NOT NULL THEN
+      UPDATE public.pay_item_snoozes s
+      SET
+        cleared_at_utc = now(),
+        cleared_by_user_id = p_actor_user_id,
+        updated_at_utc = now(),
+        updated_by_user_id = p_actor_user_id
+      WHERE s.id = v_keeper_id;
+
+      SELECT jsonb_build_object(
+               'id', s.id::text,
+               'candidate_id', s.candidate_id::text,
+               'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+               'booking_id', s.booking_id,
+               'segment_id', s.segment_id,
+               'segment_stable_key', s.segment_stable_key,
+               'source_ref', s.source_ref,
+               'snooze_kind', s.snooze_kind,
+               'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
+               'note', s.note,
+               'cleared_at_utc', CASE WHEN s.cleared_at_utc IS NULL THEN NULL ELSE s.cleared_at_utc::text END
+             )
+      INTO v_after
+      FROM public.pay_item_snoozes s
+      WHERE s.id = v_keeper_id;
+
+      PERFORM public._audit_insert(
+        'timesheets',
+        coalesce(v_effective_timesheet_id, p_timesheet_id)::text,
+        'SNOOZE_CLEARED',
+        v_before,
+        v_after,
+        'SEGMENT_NO_LONGER_MATCHED',
+        p_actor_user_id
+      );
+
+      RETURN jsonb_build_object(
+        'ok', true,
+        'action', 'CLEARED_ORPHANED',
+        'id', v_keeper_id::text,
+        'candidate_id', p_candidate_id::text,
+        'timesheet_id', CASE WHEN v_effective_timesheet_id IS NULL THEN NULL ELSE v_effective_timesheet_id::text END,
+        'booking_id', v_booking_id,
+        'segment_id', NULL,
+        'segment_stable_key', v_segment_stable_key,
+        'source_ref', NULL,
+        'snooze_kind', v_kind,
+        'snooze_until_date', NULL,
+        'snooze_is_indefinite', NULL,
+        'note', v_note,
+        'preview_visibility_hint', 'RELOAD_PREVIEW'
+      );
+    END IF;
+
+    RAISE EXCEPTION 'segment_id could not be matched on the current timesheet';
+  END IF;
 
   UPDATE public.pay_item_snoozes s
   SET
@@ -2830,12 +3109,35 @@ BEGIN
     AND (
       (v_source_ref IS NOT NULL AND s.source_ref IS NOT DISTINCT FROM v_source_ref)
       OR
-      (v_source_ref IS NULL AND s.source_ref IS NULL AND s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id AND s.segment_id IS NOT DISTINCT FROM v_segment_id)
+      (
+        v_source_ref IS NULL
+        AND s.source_ref IS NULL
+        AND (
+          (
+            v_booking_id IS NOT NULL
+            AND s.booking_id IS NOT DISTINCT FROM v_booking_id
+            AND coalesce(s.segment_stable_key, '') IS NOT DISTINCT FROM coalesce(v_segment_stable_key, '')
+          )
+          OR
+          (
+            s.booking_id IS NULL
+            AND (
+              s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+              OR s.timesheet_id IS NOT DISTINCT FROM v_effective_timesheet_id
+            )
+            AND s.segment_id IS NOT DISTINCT FROM coalesce(v_effective_segment_id, v_segment_id_input)
+          )
+        )
+      )
     );
 
   IF v_keeper_id IS NOT NULL THEN
     UPDATE public.pay_item_snoozes s
     SET
+      timesheet_id = CASE WHEN v_source_ref IS NULL THEN v_effective_timesheet_id ELSE NULL END,
+      booking_id = CASE WHEN v_source_ref IS NULL THEN v_booking_id ELSE NULL END,
+      segment_id = CASE WHEN v_source_ref IS NULL THEN v_effective_segment_id ELSE NULL END,
+      segment_stable_key = CASE WHEN v_source_ref IS NULL THEN v_segment_stable_key ELSE NULL END,
       snooze_kind = v_kind,
       snooze_until_date = p_snooze_until_date,
       note = v_note,
@@ -2848,7 +3150,9 @@ BEGIN
     INSERT INTO public.pay_item_snoozes (
       candidate_id,
       timesheet_id,
+      booking_id,
       segment_id,
+      segment_stable_key,
       source_ref,
       snooze_kind,
       snooze_until_date,
@@ -2862,8 +3166,10 @@ BEGIN
     )
     VALUES (
       p_candidate_id,
-      p_timesheet_id,
-      v_segment_id,
+      CASE WHEN v_source_ref IS NULL THEN v_effective_timesheet_id ELSE NULL END,
+      CASE WHEN v_source_ref IS NULL THEN v_booking_id ELSE NULL END,
+      CASE WHEN v_source_ref IS NULL THEN v_effective_segment_id ELSE NULL END,
+      CASE WHEN v_source_ref IS NULL THEN v_segment_stable_key ELSE NULL END,
       v_source_ref,
       v_kind,
       p_snooze_until_date,
@@ -2884,7 +3190,9 @@ BEGIN
            'id', s.id::text,
            'candidate_id', s.candidate_id::text,
            'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+           'booking_id', s.booking_id,
            'segment_id', s.segment_id,
+           'segment_stable_key', s.segment_stable_key,
            'source_ref', s.source_ref,
            'snooze_kind', s.snooze_kind,
            'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
@@ -2930,10 +3238,10 @@ BEGIN
       v_kind,
       p_actor_user_id
     );
-  ELSIF p_timesheet_id IS NOT NULL THEN
+  ELSIF coalesce(v_effective_timesheet_id, p_timesheet_id) IS NOT NULL THEN
     PERFORM public._audit_insert(
       'timesheets',
-      p_timesheet_id::text,
+      coalesce(v_effective_timesheet_id, p_timesheet_id)::text,
       v_event_type,
       v_before,
       v_after,
@@ -2957,8 +3265,10 @@ BEGIN
     'action', v_action,
     'id', v_keeper_id::text,
     'candidate_id', p_candidate_id::text,
-    'timesheet_id', CASE WHEN p_timesheet_id IS NULL THEN NULL ELSE p_timesheet_id::text END,
-    'segment_id', v_segment_id,
+    'timesheet_id', CASE WHEN v_effective_timesheet_id IS NULL THEN NULL ELSE v_effective_timesheet_id::text END,
+    'booking_id', v_booking_id,
+    'segment_id', v_effective_segment_id,
+    'segment_stable_key', v_segment_stable_key,
     'source_ref', v_source_ref,
     'finance_case_id', CASE WHEN v_finance_case_id IS NULL THEN NULL ELSE v_finance_case_id::text END,
     'snooze_kind', v_kind,
