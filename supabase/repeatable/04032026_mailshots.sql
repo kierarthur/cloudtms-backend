@@ -3708,8 +3708,6 @@ begin
 end;
 $$;
 
-
-
 create or replace function public.mailshot_enqueue(
   p_prepare_json jsonb,
   p_final_edits_json jsonb,
@@ -3812,6 +3810,14 @@ declare
   v_max_future_days int := 365;
   v_allow_past_grace_minutes int := 15;
   v_scheduled_text text;
+
+  v_prepare_counts jsonb := '{}'::jsonb;
+  v_selected_count_context jsonb := '{}'::jsonb;
+  v_requested_selected_count int := null;
+  v_resolved_context_count int := null;
+  v_prepare_row_count int := null;
+  v_prepare_eligible_count int := null;
+  v_prepare_skipped_count int := null;
 begin
   if p_actor_user_id is null then
     raise exception 'actor_user_id required';
@@ -3840,6 +3846,69 @@ begin
   v_rows := p_prepare_json->'rows';
   if v_rows is null or jsonb_typeof(v_rows) <> 'array' then
     raise exception 'prepare_json.rows must be array';
+  end if;
+
+  if p_prepare_json ? 'prepare_counts' and jsonb_typeof(p_prepare_json->'prepare_counts') = 'object' then
+    v_prepare_counts := coalesce(p_prepare_json->'prepare_counts', '{}'::jsonb);
+  else
+    v_prepare_counts := '{}'::jsonb;
+  end if;
+
+  if p_prepare_json ? 'selected_count_context' and jsonb_typeof(p_prepare_json->'selected_count_context') = 'object' then
+    v_selected_count_context := coalesce(p_prepare_json->'selected_count_context', '{}'::jsonb);
+  else
+    v_selected_count_context := '{}'::jsonb;
+  end if;
+
+  if nullif(coalesce(v_selected_count_context->>'summary_selected_count',''), '') is not null then
+    v_requested_selected_count := (v_selected_count_context->>'summary_selected_count')::int;
+  elsif nullif(coalesce(v_selected_count_context->>'selected_count',''), '') is not null then
+    v_requested_selected_count := (v_selected_count_context->>'selected_count')::int;
+  elsif nullif(coalesce(v_prepare_counts->>'requested_context_count',''), '') is not null then
+    v_requested_selected_count := (v_prepare_counts->>'requested_context_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'requested_context_count',''), '') is not null then
+    v_requested_selected_count := (p_prepare_json->>'requested_context_count')::int;
+  else
+    v_requested_selected_count := jsonb_array_length(v_rows);
+  end if;
+
+  if nullif(coalesce(v_selected_count_context->>'actionable_context_count',''), '') is not null then
+    v_resolved_context_count := (v_selected_count_context->>'actionable_context_count')::int;
+  elsif nullif(coalesce(v_prepare_counts->>'resolved_context_count',''), '') is not null then
+    v_resolved_context_count := (v_prepare_counts->>'resolved_context_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'resolved_context_count',''), '') is not null then
+    v_resolved_context_count := (p_prepare_json->>'resolved_context_count')::int;
+  elsif nullif(coalesce(v_selected_count_context->>'selected_count',''), '') is not null then
+    v_resolved_context_count := (v_selected_count_context->>'selected_count')::int;
+  else
+    v_resolved_context_count := jsonb_array_length(v_rows);
+  end if;
+
+  if nullif(coalesce(v_prepare_counts->>'returned_row_count',''), '') is not null then
+    v_prepare_row_count := (v_prepare_counts->>'returned_row_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'returned_row_count',''), '') is not null then
+    v_prepare_row_count := (p_prepare_json->>'returned_row_count')::int;
+  else
+    v_prepare_row_count := jsonb_array_length(v_rows);
+  end if;
+
+  if nullif(coalesce(v_prepare_counts->>'eligible_count',''), '') is not null then
+    v_prepare_eligible_count := (v_prepare_counts->>'eligible_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'eligible_count',''), '') is not null then
+    v_prepare_eligible_count := (p_prepare_json->>'eligible_count')::int;
+  else
+    select count(*)
+    into v_prepare_eligible_count
+    from jsonb_array_elements(v_rows) as jbe(value)
+    where coalesce((jbe.value->>'eligible')::boolean, false) = true;
+  end if;
+
+  if nullif(coalesce(v_prepare_counts->>'skipped_count',''), '') is not null then
+    v_prepare_skipped_count := (v_prepare_counts->>'skipped_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'skipped_count',''), '') is not null then
+    v_prepare_skipped_count := (p_prepare_json->>'skipped_count')::int;
+  else
+    v_prepare_skipped_count := greatest(coalesce(v_prepare_row_count, 0) - coalesce(v_prepare_eligible_count, 0), 0);
   end if;
 
   v_to_field_key := nullif(btrim(coalesce(p_prepare_json->>'to_field_key','')), '');
@@ -4383,6 +4452,27 @@ begin
     'queued', v_queued,
     'skipped', v_skipped,
     'failed', v_failed,
+    'requested_selected_count', v_requested_selected_count,
+    'resolved_context_count', v_resolved_context_count,
+    'prepare_row_count', v_prepare_row_count,
+    'eligible_count', v_prepare_eligible_count,
+    'prepare_skipped_count', v_prepare_skipped_count,
+    'prepare_counts', jsonb_build_object(
+      'requested_selected_count', v_requested_selected_count,
+      'resolved_context_count', v_resolved_context_count,
+      'prepare_row_count', v_prepare_row_count,
+      'eligible_count', v_prepare_eligible_count,
+      'prepare_skipped_count', v_prepare_skipped_count
+    ),
+    'parity_snapshot', jsonb_build_object(
+      'requested_selected_count', v_requested_selected_count,
+      'resolved_context_count', v_resolved_context_count,
+      'prepare_row_count', v_prepare_row_count,
+      'eligible_count', v_prepare_eligible_count,
+      'queued_count', v_queued,
+      'skipped_count', v_skipped,
+      'failed_count', v_failed
+    ),
     'skips', v_skip_list,
     'delivery_timing', v_delivery_timing_json
   )
@@ -4394,9 +4484,32 @@ begin
     'queued', v_queued,
     'skipped', v_skipped,
     'failed', v_failed,
+    'requested_selected_count', v_requested_selected_count,
+    'resolved_context_count', v_resolved_context_count,
+    'prepare_row_count', v_prepare_row_count,
+    'eligible_count', v_prepare_eligible_count,
+    'prepare_skipped_count', v_prepare_skipped_count,
+    'prepare_counts', jsonb_build_object(
+      'requested_selected_count', v_requested_selected_count,
+      'resolved_context_count', v_resolved_context_count,
+      'prepare_row_count', v_prepare_row_count,
+      'eligible_count', v_prepare_eligible_count,
+      'prepare_skipped_count', v_prepare_skipped_count
+    ),
+    'parity_snapshot', jsonb_build_object(
+      'requested_selected_count', v_requested_selected_count,
+      'resolved_context_count', v_resolved_context_count,
+      'prepare_row_count', v_prepare_row_count,
+      'eligible_count', v_prepare_eligible_count,
+      'queued_count', v_queued,
+      'skipped_count', v_skipped,
+      'failed_count', v_failed
+    ),
     'skips', v_skip_list,
     'delivery_timing', v_delivery_timing_json
   );
 end;
 $$;
+
+
 
