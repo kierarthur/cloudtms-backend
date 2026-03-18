@@ -14561,10 +14561,9 @@ $$;
 
 
 
-
 create or replace function public.pay_loans_snoozes_list(
-  p_candidate_id uuid default null,
-  p_client_id uuid default null,
+  p_candidate_id uuid default null::uuid,
+  p_client_id uuid default null::uuid,
   p_include_paid_off boolean default true,
   p_include_cleared_snoozes boolean default false
 )
@@ -14572,8 +14571,9 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $function$
 declare
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
   v_finance_cases jsonb := '[]'::jsonb;
   v_timesheet_snoozes jsonb := '[]'::jsonb;
   v_summary jsonb := '{}'::jsonb;
@@ -14592,9 +14592,9 @@ begin
       vfcr.payout_status,
       vfcr.payout_pay_batch_id,
       vfcr.payout_transfer_id,
-      round(coalesce(vfcr.original_amount,0),2) as original_amount,
-      round(coalesce(vfcr.outstanding_amount,0),2) as outstanding_amount,
-      round(coalesce(vfcr.weekly_due,0),2) as weekly_due,
+      round(coalesce(vfcr.original_amount, 0), 2) as original_amount,
+      round(coalesce(vfcr.outstanding_amount, 0), 2) as outstanding_amount,
+      round(coalesce(vfcr.weekly_due, 0), 2) as weekly_due,
       vfcr.weeks_total,
       vfcr.start_week_start,
       vfcr.next_due_week_start,
@@ -14657,41 +14657,53 @@ begin
         else null
       end as blocked_reason,
       case
-        when vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT') and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
-        else false
+        when vfcr.case_type in ('PAYMENT_ADVANCE', 'MANUAL_DEBT_ADJUSTMENT')
+         and round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+         and vfcr.written_off_at_utc is null
+        then true else false
       end as can_restructure,
       case
-        when vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') and vfcr.status = 'ACTIVE' and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
-        else false
+        when vfcr.case_type in ('PAYMENT_ADVANCE', 'OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT')
+         and vfcr.status = 'ACTIVE'
+         and round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+         and vfcr.written_off_at_utc is null
+        then true else false
       end as can_pause,
       case
-        when vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') and vfcr.status = 'PAUSED' and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
-        else false
+        when vfcr.case_type in ('PAYMENT_ADVANCE', 'OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT')
+         and vfcr.status = 'PAUSED'
+         and round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+         and vfcr.written_off_at_utc is null
+        then true else false
       end as can_resume,
       case
-        when vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
-        else false
+        when vfcr.case_type in ('PAYMENT_ADVANCE', 'OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT')
+         and round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+         and vfcr.written_off_at_utc is null
+        then true else false
       end as can_write_off,
       case
-        when vfcr.case_type = 'PAYMENT_ADVANCE' then coalesce(vfcr.payout_status,'PENDING') in ('PENDING','CANCELLED')
-        when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then coalesce(vfcr.payout_status,'PENDING') in ('PENDING','CANCELLED')
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then coalesce(vfcr.payout_status, 'PENDING') in ('PENDING', 'CANCELLED')
+        when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then coalesce(vfcr.payout_status, 'PENDING') in ('PENDING', 'CANCELLED')
         when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT' then true
         else false
       end as can_edit,
-      case
-        when vfcr.active_snooze_id is not null then true else false end as can_unsnooze
+      case when vfcr.active_snooze_id is not null then true else false end as can_unsnooze
     from public.v_finance_cases_register vfcr
     where (p_candidate_id is null or vfcr.candidate_id = p_candidate_id)
       and (p_client_id is null or vfcr.client_id = p_client_id)
       and (
         p_include_paid_off = true
         or vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
-        or (vfcr.status <> 'PAID_OFF' and coalesce(vfcr.outstanding_amount,0) > 0)
+        or (vfcr.status <> 'PAID_OFF' and coalesce(vfcr.outstanding_amount, 0) > 0)
       )
   ),
-  finance_json as (
-    select coalesce(
-      jsonb_agg(
+  finance_payload_rows as (
+    select
+      fr.candidate_display_name,
+      fr.admin_label,
+      fr.finance_case_id,
+      jsonb_strip_nulls(
         jsonb_build_object(
           'finance_case_id', fr.finance_case_id::text,
           'case_type', fr.case_type::text,
@@ -14704,6 +14716,11 @@ begin
           'client_name', fr.client_name,
           'status', fr.status::text,
           'payout_status', case when fr.payout_status is null then null else fr.payout_status::text end,
+          'blocked_state', fr.blocked_state,
+          'blocked_reason', fr.blocked_reason
+        )
+        ||
+        jsonb_build_object(
           'payout_pay_batch_id', case when fr.payout_pay_batch_id is null then null else fr.payout_pay_batch_id::text end,
           'payout_transfer_id', case when fr.payout_transfer_id is null then null else fr.payout_transfer_id::text end,
           'original_amount', fr.original_amount,
@@ -14712,11 +14729,14 @@ begin
           'weeks_total', fr.weeks_total,
           'start_week_start', case when fr.start_week_start is null then null else fr.start_week_start::text end,
           'next_due_week_start', case when fr.next_due_week_start is null then null else fr.next_due_week_start::text end,
-          'schedule_json', coalesce(fr.schedule_json,'[]'::jsonb),
+          'schedule_json', coalesce(fr.schedule_json, '[]'::jsonb),
           'adjustment_comment', fr.adjustment_comment,
           'notes', fr.notes,
           'linked_timesheet_id', case when fr.linked_timesheet_id is null then null else fr.linked_timesheet_id::text end,
-          'linked_shift_date', case when fr.linked_shift_date is null then null else fr.linked_shift_date::text end,
+          'linked_shift_date', case when fr.linked_shift_date is null then null else fr.linked_shift_date::text end
+        )
+        ||
+        jsonb_build_object(
           'source_original_paid_amount', fr.source_original_paid_amount,
           'source_corrected_paid_amount', fr.source_corrected_paid_amount,
           'minimum_earnings_threshold', fr.minimum_earnings_threshold,
@@ -14724,12 +14744,15 @@ begin
           'written_off_at_utc', case when fr.written_off_at_utc is null then null else fr.written_off_at_utc::text end,
           'write_off_reason', fr.write_off_reason,
           'cleared_at_utc', case when fr.cleared_at_utc is null then null else fr.cleared_at_utc::text end,
-          'active_reserved_amount', coalesce(fr.active_reserved_amount,0),
-          'reserved_amount', coalesce(fr.reserved_amount,0),
-          'committed_amount', coalesce(fr.committed_amount,0),
-          'settled_amount', coalesce(fr.settled_amount,0),
-          'released_amount', coalesce(fr.released_amount,0),
-          'active_reservation_count', coalesce(fr.active_reservation_count,0),
+          'active_reserved_amount', coalesce(fr.active_reserved_amount, 0),
+          'reserved_amount', coalesce(fr.reserved_amount, 0),
+          'committed_amount', coalesce(fr.committed_amount, 0),
+          'settled_amount', coalesce(fr.settled_amount, 0),
+          'released_amount', coalesce(fr.released_amount, 0),
+          'active_reservation_count', coalesce(fr.active_reservation_count, 0)
+        )
+        ||
+        jsonb_build_object(
           'latest_recovery_pay_batch_id', case when fr.latest_recovery_pay_batch_id is null then null else fr.latest_recovery_pay_batch_id::text end,
           'latest_recovery_pay_date', case when fr.latest_recovery_pay_date is null then null else fr.latest_recovery_pay_date::text end,
           'latest_remittance_sent_at_utc', case when fr.latest_remittance_sent_at_utc is null then null else fr.latest_remittance_sent_at_utc::text end,
@@ -14741,8 +14764,6 @@ begin
           'unresolved_taxable_count', fr.unresolved_taxable_count,
           'stale_count', fr.stale_count,
           'component_resolution_summary_json', fr.component_resolution_summary_json,
-          'blocked_state', fr.blocked_state,
-          'blocked_reason', fr.blocked_reason,
           'snooze', case
             when fr.active_snooze_id is null then null
             else jsonb_build_object(
@@ -14764,112 +14785,413 @@ begin
             'can_unsnooze', fr.can_unsnooze
           )
         )
-        order by fr.candidate_display_name asc, fr.admin_label asc, fr.finance_case_id asc
-      ),
-      '[]'::jsonb
-    ) as payload
+      ) as row_json
     from finance_rows fr
   ),
-  timesheet_snooze_rows as (
+  finance_json as (
+    select
+      coalesce(
+        jsonb_agg(
+          fpr.row_json
+          order by fpr.candidate_display_name asc, fpr.admin_label asc, fpr.finance_case_id asc
+        ),
+        '[]'::jsonb
+      ) as payload
+    from finance_payload_rows fpr
+  ),
+  pay_item_snooze_source as (
     select
       pis.id as snooze_id,
       pis.candidate_id,
       c.tms_ref as candidate_tms_ref,
       c.display_name as candidate_display_name,
-      tf.client_id,
-      cl.name as client_name,
-      pis.timesheet_id,
-      pis.segment_id,
-      pis.snooze_kind,
+      pis.timesheet_id as stored_timesheet_id,
+      coalesce(pis.booking_id, ts_stored.booking_id) as booking_id,
+      pis.segment_id as stored_segment_id,
+      coalesce(nullif(btrim(coalesce(pis.segment_stable_key, '')), ''), nullif(btrim(coalesce(pis.segment_id, '')), '')) as segment_stable_key,
+      upper(coalesce(pis.snooze_kind, '')) as snooze_kind,
       pis.snooze_until_date,
       pis.note,
       pis.created_at_utc,
       pis.updated_at_utc,
+      pis.cleared_at_utc,
       pis.created_by_user_id,
-      pis.updated_by_user_id,
-      ts.week_ending_date,
-      ts.reference_number,
-      case
-        when pis.snooze_until_date is null then 'INDEFINITE_SNOOZE'
-        else 'DATED_SNOOZE'
-      end as snooze_state
+      pis.updated_by_user_id
     from public.pay_item_snoozes pis
     join public.candidates c
       on c.id = pis.candidate_id
-    left join public.timesheets_financials tf
-      on tf.timesheet_id = pis.timesheet_id
-     and tf.is_current = true
-    left join public.clients cl
-      on cl.id = tf.client_id
-    left join public.timesheets ts
-      on ts.timesheet_id = pis.timesheet_id
+    left join public.timesheets ts_stored
+      on ts_stored.timesheet_id = pis.timesheet_id
     where pis.source_ref is null
-      and pis.timesheet_id is not null
-      and (
-        (p_include_cleared_snoozes = true and pis.cleared_at_utc is not null)
-        or (pis.cleared_at_utc is null)
-      )
       and (p_candidate_id is null or pis.candidate_id = p_candidate_id)
-      and (p_client_id is null or tf.client_id = p_client_id)
       and (
-        p_include_cleared_snoozes = true
-        or pis.snooze_until_date is null
-        or pis.snooze_until_date >= (now() at time zone 'Europe/London')::date
+        coalesce(pis.booking_id, ts_stored.booking_id) is not null
+        or pis.timesheet_id is not null
+      )
+  ),
+  current_timesheet_context as (
+    select distinct
+      pss.booking_id,
+      ts_current.timesheet_id as current_timesheet_id,
+      tf_current.client_id as client_id,
+      cl_current.name as client_name,
+      tf_current.role as role,
+      tf_current.band as band,
+      ts_current.week_ending_date as week_ending_date,
+      ts_current.reference_number as reference_number,
+      tf_current.invoice_breakdown_json as invoice_breakdown_json,
+      round(coalesce(tf_current.total_pay_ex_vat, 0), 2) as total_pay_ex_vat
+    from pay_item_snooze_source pss
+    join public.timesheets ts_current
+      on ts_current.booking_id = pss.booking_id
+     and ts_current.is_current = true
+    left join public.timesheets_financials tf_current
+      on tf_current.timesheet_id = ts_current.timesheet_id
+     and tf_current.is_current = true
+    left join public.clients cl_current
+      on cl_current.id = tf_current.client_id
+  ),
+  current_timesheet_segments_actual as (
+    select
+      ctc.current_timesheet_id,
+      ctc.booking_id,
+      nullif(btrim(coalesce(seg_item.value->>'segment_id', '')), '') as segment_id,
+      coalesce(
+        nullif(btrim(coalesce(seg_item.value->>'segment_stable_key', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'date', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'ref_num', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'segment_key', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'segment_id', '')), '')
+      ) as segment_stable_key,
+      nullif(btrim(coalesce(seg_item.value->>'date', '')), '') as work_date,
+      coalesce(nullif(btrim(coalesce(seg_item.value->>'client_name', '')), ''), ctc.client_name) as client_name,
+      coalesce(nullif(btrim(coalesce(seg_item.value->>'role', '')), ''), ctc.role) as role,
+      coalesce(nullif(btrim(coalesce(seg_item.value->>'band', '')), ''), ctc.band) as band,
+      coalesce(
+        nullif(btrim(coalesce(seg_item.value->>'start', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'start_hhmm', '')), '')
+      ) as start_time,
+      coalesce(
+        nullif(btrim(coalesce(seg_item.value->>'end', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'end_hhmm', '')), '')
+      ) as finish_time,
+      nullif(btrim(coalesce(seg_item.value->>'break_start', '')), '') as break_start,
+      nullif(btrim(coalesce(seg_item.value->>'break_end', '')), '') as break_end,
+      coalesce(
+        nullif(seg_item.value->>'break_mins', '')::numeric,
+        nullif(seg_item.value->>'break_minutes', '')::numeric
+      ) as break_mins,
+      round(coalesce(nullif(seg_item.value->>'pay_amount', '')::numeric, 0), 2) as pay_amount_ex_vat,
+      nullif(btrim(coalesce(seg_item.value->>'ref_num', '')), '') as ref_num
+    from current_timesheet_context ctc
+    join lateral jsonb_array_elements(
+      case
+        when ctc.invoice_breakdown_json is not null
+         and jsonb_typeof(ctc.invoice_breakdown_json) = 'object'
+         and jsonb_typeof(ctc.invoice_breakdown_json->'segments') = 'array'
+        then ctc.invoice_breakdown_json->'segments'
+        else '[]'::jsonb
+      end
+    ) as seg_item(value)
+      on true
+    where seg_item.value is not null
+      and jsonb_typeof(seg_item.value) = 'object'
+  ),
+  current_timesheet_segments as (
+    select
+      ctsa.current_timesheet_id,
+      ctsa.booking_id,
+      ctsa.segment_id,
+      ctsa.segment_stable_key,
+      ctsa.work_date,
+      ctsa.client_name,
+      ctsa.role,
+      ctsa.band,
+      ctsa.start_time,
+      ctsa.finish_time,
+      ctsa.break_start,
+      ctsa.break_end,
+      ctsa.break_mins,
+      ctsa.pay_amount_ex_vat,
+      ctsa.ref_num
+    from current_timesheet_segments_actual ctsa
+
+    union all
+
+    select
+      ctc.current_timesheet_id,
+      ctc.booking_id,
+      null::text as segment_id,
+      ('timesheet:' || coalesce(ctc.booking_id, ctc.current_timesheet_id::text)) as segment_stable_key,
+      null::text as work_date,
+      ctc.client_name,
+      ctc.role,
+      ctc.band,
+      null::text as start_time,
+      null::text as finish_time,
+      null::text as break_start,
+      null::text as break_end,
+      null::numeric as break_mins,
+      round(coalesce(ctc.total_pay_ex_vat, 0), 2) as pay_amount_ex_vat,
+      ctc.reference_number as ref_num
+    from current_timesheet_context ctc
+    where not exists (
+      select 1
+      from current_timesheet_segments_actual ctsa
+      where ctsa.current_timesheet_id = ctc.current_timesheet_id
+    )
+  ),
+  current_timesheet_segment_groups as (
+    select
+      cts.current_timesheet_id,
+      count(*)::int as segment_count,
+      round(coalesce(sum(cts.pay_amount_ex_vat), 0), 2) as total_segment_pay_ex_vat,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'segment_id', cts.segment_id,
+            'segment_stable_key', cts.segment_stable_key,
+            'date', cts.work_date,
+            'client_name', cts.client_name,
+            'role', cts.role,
+            'band', cts.band,
+            'start', cts.start_time,
+            'finish', cts.finish_time,
+            'break_start', cts.break_start,
+            'break_end', cts.break_end,
+            'break_mins', cts.break_mins,
+            'pay_amount_ex_vat', cts.pay_amount_ex_vat,
+            'ref_num', cts.ref_num
+          )
+          order by cts.work_date asc nulls last, cts.start_time asc nulls last, cts.segment_stable_key asc
+        ),
+        '[]'::jsonb
+      ) as segment_rows_json
+    from current_timesheet_segments cts
+    group by cts.current_timesheet_id
+  ),
+  timesheet_snooze_rows_raw as (
+    select
+      pss.snooze_id,
+      pss.candidate_id,
+      pss.candidate_tms_ref,
+      pss.candidate_display_name,
+      pss.stored_timesheet_id,
+      pss.booking_id,
+      pss.stored_segment_id,
+      pss.segment_stable_key,
+      pss.snooze_kind,
+      pss.snooze_until_date,
+      pss.note,
+      pss.created_at_utc,
+      pss.updated_at_utc,
+      pss.cleared_at_utc,
+      pss.created_by_user_id,
+      pss.updated_by_user_id,
+      case when pss.segment_stable_key is null then 'WHOLE_TIMESHEET' else 'SEGMENT' end as row_kind,
+      ctc.current_timesheet_id,
+      ctc.client_id as current_client_id,
+      ctc.client_name as current_client_name,
+      ctc.role as current_role,
+      ctc.band as current_band,
+      ctc.week_ending_date as current_week_ending_date,
+      ctc.reference_number as current_reference_number,
+      cts.segment_id as current_segment_id,
+      cts.segment_stable_key as current_segment_stable_key,
+      cts.work_date as current_segment_date,
+      cts.client_name as current_segment_client_name,
+      cts.role as current_segment_role,
+      cts.band as current_segment_band,
+      cts.start_time as current_segment_start,
+      cts.finish_time as current_segment_finish,
+      cts.break_start as current_segment_break_start,
+      cts.break_end as current_segment_break_end,
+      cts.break_mins as current_segment_break_mins,
+      cts.pay_amount_ex_vat as current_segment_pay_amount_ex_vat,
+      cts.ref_num as current_segment_ref_num,
+      ctsg.segment_count,
+      ctsg.total_segment_pay_ex_vat,
+      ctsg.segment_rows_json
+    from pay_item_snooze_source pss
+    left join current_timesheet_context ctc
+      on ctc.booking_id = pss.booking_id
+    left join current_timesheet_segments cts
+      on cts.current_timesheet_id = ctc.current_timesheet_id
+     and pss.segment_stable_key is not null
+     and cts.segment_stable_key = pss.segment_stable_key
+    left join current_timesheet_segment_groups ctsg
+      on ctsg.current_timesheet_id = ctc.current_timesheet_id
+  ),
+  timesheet_snooze_rows_lifecycle as (
+    select
+      tsrr.*,
+      case
+        when tsrr.cleared_at_utc is not null then 'CLEARED'
+        when tsrr.current_timesheet_id is null then 'CLEARED_DELETED_TIMESHEET'
+        when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then 'CLEARED_DELETED_SEGMENT'
+        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then 'EXPIRED'
+        else 'ACTIVE'
+      end as lifecycle_state,
+      case
+        when tsrr.cleared_at_utc is not null then tsrr.cleared_at_utc
+        when tsrr.current_timesheet_id is null then tsrr.updated_at_utc
+        when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then tsrr.updated_at_utc
+        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then tsrr.updated_at_utc
+        else null::timestamptz
+      end as effective_cleared_at_utc,
+      case
+        when tsrr.cleared_at_utc is not null then 'USER_CLEARED'
+        when tsrr.current_timesheet_id is null then 'DELETED_TIMESHEET'
+        when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then 'DELETED_SEGMENT'
+        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then 'EXPIRED'
+        else null::text
+      end as clear_reason
+    from timesheet_snooze_rows_raw tsrr
+  ),
+  timesheet_snooze_rows_filtered as (
+    select
+      tsrl.snooze_id,
+      tsrl.candidate_id,
+      tsrl.candidate_tms_ref,
+      tsrl.candidate_display_name,
+      case when tsrl.current_client_id is null then null else tsrl.current_client_id::text end as client_id_text,
+      tsrl.current_client_name as client_name,
+      coalesce(tsrl.current_timesheet_id, tsrl.stored_timesheet_id) as display_timesheet_id,
+      tsrl.current_timesheet_id,
+      tsrl.stored_timesheet_id,
+      tsrl.booking_id,
+      case when tsrl.row_kind = 'SEGMENT' then coalesce(tsrl.current_segment_id, tsrl.stored_segment_id) else null end as display_segment_id,
+      tsrl.stored_segment_id,
+      tsrl.segment_stable_key,
+      tsrl.row_kind,
+      tsrl.snooze_kind,
+      tsrl.snooze_until_date,
+      tsrl.note,
+      tsrl.created_at_utc,
+      tsrl.updated_at_utc,
+      tsrl.effective_cleared_at_utc,
+      tsrl.lifecycle_state,
+      tsrl.clear_reason,
+      case
+        when tsrl.lifecycle_state = 'ACTIVE' and tsrl.snooze_until_date is null then 'INDEFINITE_SNOOZE'
+        when tsrl.lifecycle_state = 'ACTIVE' and tsrl.snooze_until_date is not null then 'DATED_SNOOZE'
+        when tsrl.lifecycle_state = 'EXPIRED' then 'EXPIRED'
+        else 'CLEARED'
+      end as snooze_state,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then tsrl.current_week_ending_date
+        else null::date
+      end as week_ending_date,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then tsrl.current_reference_number
+        else tsrl.current_segment_ref_num
+      end as reference_number,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then round(coalesce(tsrl.total_segment_pay_ex_vat, 0), 2)
+        else round(coalesce(tsrl.current_segment_pay_amount_ex_vat, 0), 2)
+      end as pay_amount_ex_vat,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then coalesce(tsrl.segment_count, 0)
+        when tsrl.current_segment_stable_key is not null then 1
+        else 0
+      end as segment_count,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then coalesce(tsrl.segment_rows_json, '[]'::jsonb)
+        when tsrl.current_segment_stable_key is not null then jsonb_build_array(
+          jsonb_build_object(
+            'segment_id', tsrl.current_segment_id,
+            'segment_stable_key', tsrl.current_segment_stable_key,
+            'date', tsrl.current_segment_date,
+            'client_name', tsrl.current_segment_client_name,
+            'role', tsrl.current_segment_role,
+            'band', tsrl.current_segment_band,
+            'start', tsrl.current_segment_start,
+            'finish', tsrl.current_segment_finish,
+            'break_start', tsrl.current_segment_break_start,
+            'break_end', tsrl.current_segment_break_end,
+            'break_mins', tsrl.current_segment_break_mins,
+            'pay_amount_ex_vat', tsrl.current_segment_pay_amount_ex_vat,
+            'ref_num', tsrl.current_segment_ref_num
+          )
+        )
+        else '[]'::jsonb
+      end as segment_rows_json
+    from timesheet_snooze_rows_lifecycle tsrl
+    where (p_client_id is null or tsrl.current_client_id = p_client_id)
+      and (
+        tsrl.lifecycle_state = 'ACTIVE'
+        or (p_include_cleared_snoozes = true and tsrl.lifecycle_state <> 'ACTIVE')
       )
   ),
   timesheet_snoozes_json as (
-    select coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'snooze_id', tsr.snooze_id::text,
-          'candidate_id', tsr.candidate_id::text,
-          'candidate_tms_ref', tsr.candidate_tms_ref,
-          'candidate_display_name', tsr.candidate_display_name,
-          'client_id', case when tsr.client_id is null then null else tsr.client_id::text end,
-          'client_name', tsr.client_name,
-          'timesheet_id', tsr.timesheet_id::text,
-          'segment_id', tsr.segment_id,
-          'week_ending_date', case when tsr.week_ending_date is null then null else tsr.week_ending_date::text end,
-          'reference_number', tsr.reference_number,
-          'snooze_kind', tsr.snooze_kind,
-          'snooze_until_date', case when tsr.snooze_until_date is null then null else tsr.snooze_until_date::text end,
-          'note', tsr.note,
-          'created_at_utc', case when tsr.created_at_utc is null then null else tsr.created_at_utc::text end,
-          'updated_at_utc', case when tsr.updated_at_utc is null then null else tsr.updated_at_utc::text end,
-          'snooze_state', tsr.snooze_state,
-          'action_flags', jsonb_build_object(
-            'can_unsnooze', true,
-            'can_change_to_indefinite', tsr.snooze_until_date is not null,
-            'can_change_to_dated', tsr.snooze_until_date is null,
-            'can_amend_date', tsr.snooze_until_date is not null
+    select
+      coalesce(
+        jsonb_agg(
+          jsonb_strip_nulls(
+            jsonb_build_object(
+              'snooze_id', tsf.snooze_id::text,
+              'row_kind', tsf.row_kind,
+              'lifecycle_state', tsf.lifecycle_state,
+              'clear_reason', tsf.clear_reason,
+              'candidate_id', tsf.candidate_id::text,
+              'candidate_tms_ref', tsf.candidate_tms_ref,
+              'candidate_display_name', tsf.candidate_display_name,
+              'client_id', tsf.client_id_text,
+              'client_name', tsf.client_name,
+              'timesheet_id', case when tsf.display_timesheet_id is null then null else tsf.display_timesheet_id::text end,
+              'current_timesheet_id', case when tsf.current_timesheet_id is null then null else tsf.current_timesheet_id::text end,
+              'original_timesheet_id', case when tsf.stored_timesheet_id is null then null else tsf.stored_timesheet_id::text end,
+              'booking_id', tsf.booking_id,
+              'segment_id', tsf.display_segment_id,
+              'original_segment_id', tsf.stored_segment_id,
+              'segment_stable_key', tsf.segment_stable_key,
+              'week_ending_date', case when tsf.week_ending_date is null then null else tsf.week_ending_date::text end,
+              'reference_number', tsf.reference_number,
+              'snooze_kind', tsf.snooze_kind,
+              'snooze_until_date', case when tsf.snooze_until_date is null then null else tsf.snooze_until_date::text end,
+              'note', tsf.note,
+              'created_at_utc', case when tsf.created_at_utc is null then null else tsf.created_at_utc::text end,
+              'updated_at_utc', case when tsf.updated_at_utc is null then null else tsf.updated_at_utc::text end,
+              'cleared_at_utc', case when tsf.effective_cleared_at_utc is null then null else tsf.effective_cleared_at_utc::text end,
+              'snooze_state', tsf.snooze_state,
+              'pay_amount_ex_vat', tsf.pay_amount_ex_vat,
+              'segment_count', tsf.segment_count,
+              'segment_rows', tsf.segment_rows_json,
+              'action_flags', jsonb_build_object(
+                'can_unsnooze', (tsf.lifecycle_state = 'ACTIVE'),
+                'can_change_to_indefinite', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is not null),
+                'can_change_to_dated', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is null),
+                'can_amend_date', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is not null)
+              )
+            )
           )
-        )
-        order by tsr.candidate_display_name asc, tsr.week_ending_date asc nulls last, tsr.timesheet_id asc
-      ),
-      '[]'::jsonb
-    ) as payload
-    from timesheet_snooze_rows tsr
+          order by tsf.candidate_display_name asc, tsf.row_kind asc, tsf.week_ending_date asc nulls last, tsf.display_timesheet_id asc nulls last, tsf.segment_stable_key asc nulls last, tsf.snooze_id asc
+        ),
+        '[]'::jsonb
+      ) as payload
+    from timesheet_snooze_rows_filtered tsf
   ),
   summary_data as (
-    select jsonb_build_object(
-      'payment_advances_active_count', count(*) filter (where fr.case_type = 'PAYMENT_ADVANCE' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
-      'overpayments_active_count', count(*) filter (where fr.case_type = 'OVERPAYMENT' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
-      'underpayments_active_count', count(*) filter (where fr.case_type = 'UNDERPAYMENT' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
-      'manual_debt_adjustments_active_count', count(*) filter (where fr.case_type = 'MANUAL_DEBT_ADJUSTMENT' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
-      'manual_credit_adjustments_count', count(*) filter (where fr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'),
-      'mixed_finance_cases_count', count(*) filter (where fr.is_mixed_case),
-      'unresolved_finance_cases_count', count(*) filter (where fr.unresolved_taxable_count > 0),
-      'stale_finance_cases_count', count(*) filter (where fr.stale_count > 0),
-      'finance_cases_with_active_snooze_count', count(*) filter (where fr.active_snooze_id is not null),
-      'timesheet_snoozes_count', (select count(*) from timesheet_snooze_rows)
-    ) as payload
+    select
+      jsonb_build_object(
+        'payment_advances_active_count', count(*) filter (where fr.case_type = 'PAYMENT_ADVANCE' and fr.status in ('ACTIVE', 'PAUSED') and fr.outstanding_amount > 0),
+        'overpayments_active_count', count(*) filter (where fr.case_type = 'OVERPAYMENT' and fr.status in ('ACTIVE', 'PAUSED') and fr.outstanding_amount > 0),
+        'underpayments_active_count', count(*) filter (where fr.case_type = 'UNDERPAYMENT' and fr.status in ('ACTIVE', 'PAUSED') and fr.outstanding_amount > 0),
+        'manual_debt_adjustments_active_count', count(*) filter (where fr.case_type = 'MANUAL_DEBT_ADJUSTMENT' and fr.status in ('ACTIVE', 'PAUSED') and fr.outstanding_amount > 0),
+        'manual_credit_adjustments_count', count(*) filter (where fr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'),
+        'mixed_finance_cases_count', count(*) filter (where fr.is_mixed_case),
+        'unresolved_finance_cases_count', count(*) filter (where fr.unresolved_taxable_count > 0),
+        'stale_finance_cases_count', count(*) filter (where fr.stale_count > 0),
+        'finance_cases_with_active_snooze_count', count(*) filter (where fr.active_snooze_id is not null),
+        'timesheet_snoozes_count', (select count(*) from timesheet_snooze_rows_filtered)
+      ) as payload
     from finance_rows fr
   )
-  select fj.payload, tsj.payload, sd.payload
-  into v_finance_cases, v_timesheet_snoozes, v_summary
-  from finance_json fj
-  cross join timesheet_snoozes_json tsj
-  cross join summary_data sd;
+  select
+    coalesce((select fj.payload from finance_json fj), '[]'::jsonb),
+    coalesce((select tsj.payload from timesheet_snoozes_json tsj), '[]'::jsonb),
+    coalesce((select sd.payload from summary_data sd), '{}'::jsonb)
+  into v_finance_cases, v_timesheet_snoozes, v_summary;
 
   return jsonb_build_object(
     'ok', true,
@@ -14884,8 +15206,7 @@ begin
     'timesheet_snoozes', v_timesheet_snoozes
   );
 end;
-$$;
-
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_build(
