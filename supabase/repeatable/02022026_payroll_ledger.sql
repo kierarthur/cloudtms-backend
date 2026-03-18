@@ -7634,6 +7634,15 @@ v_exclude_ts_raw text;
 v_exclude_ts_uuid uuid;
 v_overpayment_sync jsonb := '{}'::jsonb;
 v_component_resolution_apply_result jsonb := '{}'::jsonb;
+v_component_resolutions_supplied boolean := coalesce((p_preview_decisions_json ? 'component_resolutions'), false);
+v_component_resolutions_input_type text := coalesce(jsonb_typeof(p_preview_decisions_json->'component_resolutions'), 'null');
+v_component_resolution_input_entry_count int := 0;
+v_component_resolution_candidate_count int := 0;
+v_component_resolution_rows_parsed int := 0;
+v_component_resolution_apply_candidate_count int := 0;
+v_component_resolution_rows_applied int := 0;
+v_component_resolution_rows_skipped int := 0;
+v_component_resolution_invalid_sample jsonb := '[]'::jsonb;
 v_negative_preview_timesheets_count int := 0;
 v_rows_upd_timesheet_overrides_consumed int := 0;
 v_consumed_timesheet_payment_overrides jsonb := '[]'::jsonb;
@@ -8071,6 +8080,15 @@ end;
 
     v_preview_decisions_keys := jsonb_build_object(
       'component_resolutions_type', jsonb_typeof(v_component_resolutions),
+      'component_resolution_input_type', v_component_resolutions_input_type,
+      'component_resolution_input_entry_count', case
+        when jsonb_typeof(v_component_resolutions) = 'object' then (
+          select count(*)::int
+          from jsonb_each(v_component_resolutions)
+        )
+        when jsonb_typeof(v_component_resolutions) = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
+        else 0
+      end,
       'component_resolution_candidate_keys_sample', (
         case
           when jsonb_typeof(v_component_resolutions) = 'object' then (
@@ -8350,7 +8368,62 @@ end;
 
   truncate table pg_temp.tmp_pay_component_resolution_apply;
 
-  if jsonb_typeof(v_component_resolutions) = 'array' then
+  v_component_resolution_input_entry_count := 0;
+  v_component_resolution_candidate_count := 0;
+  v_component_resolution_rows_parsed := 0;
+  v_component_resolution_apply_candidate_count := 0;
+  v_component_resolution_rows_applied := 0;
+  v_component_resolution_rows_skipped := 0;
+  v_component_resolution_invalid_sample := '[]'::jsonb;
+
+  if v_component_resolutions_supplied and v_component_resolutions_input_type not in ('array', 'object') then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_COMPONENT_RESOLUTION_INVALID_TYPE',
+        jsonb_build_object(
+          'stage', v_stage,
+          'component_resolutions_type', v_component_resolutions_input_type,
+          'error', 'component_resolutions must be an array or object when supplied'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
+    raise exception 'component_resolutions must be an array or object when supplied';
+  end if;
+
+  if v_component_resolutions_input_type = 'array' then
+    v_component_resolution_input_entry_count := coalesce(jsonb_array_length(v_component_resolutions), 0);
+
+    select coalesce(jsonb_agg(s.sample_row order by s.ord), '[]'::jsonb)
+    into v_component_resolution_invalid_sample
+    from (
+      select
+        jsonb_build_object(
+          'ordinality', elem.ordinality,
+          'candidate_id_raw', nullif(btrim(coalesce(elem.value->>'candidate_id','')), ''),
+          'resolution_mode', nullif(btrim(coalesce(elem.value->>'resolution_mode','')), ''),
+          'reason', case
+            when jsonb_typeof(elem.value) <> 'object' then 'ROW_NOT_OBJECT'
+            when nullif(btrim(coalesce(elem.value->>'candidate_id','')), '') is null then 'MISSING_CANDIDATE_ID'
+            when not (nullif(btrim(coalesce(elem.value->>'candidate_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') then 'INVALID_CANDIDATE_ID'
+            when not (nullif(btrim(coalesce(elem.value->>'candidate_id','')), '')::uuid = any(v_candidate_ids)) then 'OUT_OF_SCOPE_CANDIDATE'
+            else 'UNKNOWN'
+          end
+        ) as sample_row,
+        elem.ordinality as ord
+      from jsonb_array_elements(v_component_resolutions) with ordinality as elem(value, ordinality)
+      where jsonb_typeof(elem.value) <> 'object'
+         or nullif(btrim(coalesce(elem.value->>'candidate_id','')), '') is null
+         or not (nullif(btrim(coalesce(elem.value->>'candidate_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+         or not (nullif(btrim(coalesce(elem.value->>'candidate_id','')), '')::uuid = any(v_candidate_ids))
+      order by elem.ordinality
+      limit 20
+    ) s;
+
     insert into pg_temp.tmp_pay_component_resolution_apply (
       candidate_id,
       component_resolutions
@@ -8371,7 +8444,36 @@ end;
     from raw_rows rr
     where rr.candidate_id = any(v_candidate_ids)
     group by rr.candidate_id;
-  elsif jsonb_typeof(v_component_resolutions) = 'object' then
+  elsif v_component_resolutions_input_type = 'object' then
+    select count(*)::int
+    into v_component_resolution_input_entry_count
+    from jsonb_each(v_component_resolutions);
+
+    select coalesce(jsonb_agg(s.sample_row order by s.key_text), '[]'::jsonb)
+    into v_component_resolution_invalid_sample
+    from (
+      select
+        jsonb_build_object(
+          'candidate_id_key', obj.key,
+          'bucket_type', jsonb_typeof(obj.value),
+          'reason', case
+            when nullif(btrim(coalesce(obj.key, '')), '') is null then 'MISSING_CANDIDATE_ID'
+            when not (nullif(btrim(coalesce(obj.key, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') then 'INVALID_CANDIDATE_ID'
+            when jsonb_typeof(obj.value) not in ('array', 'object') then 'INVALID_BUCKET_TYPE'
+            when not (nullif(btrim(coalesce(obj.key, '')), '')::uuid = any(v_candidate_ids)) then 'OUT_OF_SCOPE_CANDIDATE'
+            else 'UNKNOWN'
+          end
+        ) as sample_row,
+        obj.key as key_text
+      from jsonb_each(v_component_resolutions) as obj(key, value)
+      where nullif(btrim(coalesce(obj.key, '')), '') is null
+         or not (nullif(btrim(coalesce(obj.key, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+         or jsonb_typeof(obj.value) not in ('array', 'object')
+         or not (nullif(btrim(coalesce(obj.key, '')), '')::uuid = any(v_candidate_ids))
+      order by obj.key
+      limit 20
+    ) s;
+
     insert into pg_temp.tmp_pay_component_resolution_apply (
       candidate_id,
       component_resolutions
@@ -8387,8 +8489,23 @@ end;
     from jsonb_each(v_component_resolutions) as obj(key, value)
     where nullif(btrim(coalesce(obj.key, '')), '') is not null
       and nullif(btrim(coalesce(obj.key, '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      and jsonb_typeof(obj.value) in ('array', 'object')
       and nullif(btrim(coalesce(obj.key, '')), '')::uuid = any(v_candidate_ids);
   end if;
+
+  select
+    count(*)::int,
+    coalesce(sum(case when jsonb_typeof(t.component_resolutions) = 'array' then jsonb_array_length(t.component_resolutions) else 0 end), 0)::int
+  into
+    v_component_resolution_candidate_count,
+    v_component_resolution_rows_parsed
+  from pg_temp.tmp_pay_component_resolution_apply t;
+
+  v_component_resolution_rows_skipped := case
+    when v_component_resolutions_input_type = 'array' then greatest(v_component_resolution_input_entry_count - v_component_resolution_rows_parsed, 0)
+    when v_component_resolutions_input_type = 'object' then greatest(v_component_resolution_input_entry_count - v_component_resolution_candidate_count, 0)
+    else 0
+  end;
 
   begin
     perform public._imp_debug_audit(
@@ -8396,7 +8513,13 @@ end;
       'PAY_CREATE_DRAFT_BATCH:STAGE_08B_COMPONENT_RESOLUTION_INPUTS',
       jsonb_build_object(
         'stage', v_stage,
-        'component_resolutions_type', jsonb_typeof(v_component_resolutions),
+        'component_resolutions_supplied', v_component_resolutions_supplied,
+        'component_resolutions_type', v_component_resolutions_input_type,
+        'component_resolution_input_entry_count', v_component_resolution_input_entry_count,
+        'component_resolution_candidate_count', v_component_resolution_candidate_count,
+        'component_resolution_rows_parsed', v_component_resolution_rows_parsed,
+        'component_resolution_rows_skipped', v_component_resolution_rows_skipped,
+        'component_resolution_invalid_sample', v_component_resolution_invalid_sample,
         'candidate_resolution_rows', (
           select coalesce(jsonb_agg(jsonb_build_object(
             'candidate_id', t.candidate_id::text,
@@ -8410,6 +8533,30 @@ end;
       null, null, null, null, null
     );
   exception when others then null; end;
+
+  if v_component_resolutions_supplied and v_component_resolution_rows_parsed = 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_COMPONENT_RESOLUTIONS_ZERO_VALID_ROWS',
+        jsonb_build_object(
+          'stage', v_stage,
+          'component_resolutions_type', v_component_resolutions_input_type,
+          'component_resolution_input_entry_count', v_component_resolution_input_entry_count,
+          'component_resolution_candidate_count', v_component_resolution_candidate_count,
+          'component_resolution_rows_parsed', v_component_resolution_rows_parsed,
+          'component_resolution_rows_skipped', v_component_resolution_rows_skipped,
+          'component_resolution_invalid_sample', v_component_resolution_invalid_sample,
+          'error', 'component_resolutions supplied but zero valid rows parsed'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
+    raise exception 'component_resolutions supplied but zero valid rows parsed';
+  end if;
 
   for v_component_resolution_candidate in
     select
@@ -8429,6 +8576,9 @@ end;
     )
     into v_component_resolution_apply_result;
 
+    v_component_resolution_apply_candidate_count := v_component_resolution_apply_candidate_count + 1;
+    v_component_resolution_rows_applied := v_component_resolution_rows_applied + jsonb_array_length(v_component_resolution_candidate.component_resolutions);
+
     begin
       perform public._imp_debug_audit(
         p_actor_user_id,
@@ -8446,6 +8596,50 @@ end;
     exception when others then null; end;
   end loop;
 
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:STAGE_08B_COMPONENT_RESOLUTION_SUMMARY',
+      jsonb_build_object(
+        'stage', v_stage,
+        'component_resolutions_supplied', v_component_resolutions_supplied,
+        'component_resolutions_type', v_component_resolutions_input_type,
+        'component_resolution_input_entry_count', v_component_resolution_input_entry_count,
+        'component_resolution_candidate_count', v_component_resolution_candidate_count,
+        'component_resolution_rows_parsed', v_component_resolution_rows_parsed,
+        'component_resolution_apply_candidate_count', v_component_resolution_apply_candidate_count,
+        'component_resolution_rows_applied', v_component_resolution_rows_applied,
+        'component_resolution_rows_skipped', v_component_resolution_rows_skipped
+      ),
+      'pay_create_draft_batch',
+      'pay_date:'||p_pay_date::text,
+      null, null, null, null, null
+    );
+  exception when others then null; end;
+
+  if v_component_resolutions_supplied and v_component_resolution_rows_parsed > 0 and v_component_resolution_rows_applied = 0 then
+    begin
+      perform public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:ERROR_COMPONENT_RESOLUTIONS_ZERO_APPLIED_ROWS',
+        jsonb_build_object(
+          'stage', v_stage,
+          'component_resolutions_type', v_component_resolutions_input_type,
+          'component_resolution_input_entry_count', v_component_resolution_input_entry_count,
+          'component_resolution_candidate_count', v_component_resolution_candidate_count,
+          'component_resolution_rows_parsed', v_component_resolution_rows_parsed,
+          'component_resolution_apply_candidate_count', v_component_resolution_apply_candidate_count,
+          'component_resolution_rows_applied', v_component_resolution_rows_applied,
+          'error', 'component_resolutions parsed but zero rows applied'
+        ),
+        'pay_create_draft_batch',
+        'pay_date:'||p_pay_date::text,
+        null, null, null, null, null
+      );
+    exception when others then null; end;
+
+    raise exception 'component_resolutions parsed but zero rows applied';
+  end if;
 
   v_stage := 'STAGE_08C_RESYNC_OVERPAYMENTS_POST_RESOLUTION';
 
