@@ -1086,8 +1086,10 @@ begin
     raise exception 'preview_decisions_json must be a jsonb object';
   end if;
 
-  if jsonb_typeof(coalesce(v_preview_decisions_json->'component_resolutions', '{}'::jsonb)) = 'object' then
+  if jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'object' then
     v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '{}'::jsonb);
+  elsif jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'array' then
+    v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '[]'::jsonb);
   else
     v_component_resolutions := '{}'::jsonb;
   end if;
@@ -1145,18 +1147,46 @@ begin
             limit 50
           ) k
         ),
+        'component_resolution_shape', coalesce(jsonb_typeof(v_component_resolutions), 'null'),
         'component_resolution_keys_sample', (
-          select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
-          from (
-            select e.key
-            from jsonb_each(v_component_resolutions) e
-            order by e.key
-            limit 50
-          ) k
+          case
+            when jsonb_typeof(v_component_resolutions) = 'object' then (
+              select coalesce(jsonb_agg(k.key_text order by k.key_text), '[]'::jsonb)
+              from (
+                select e.key as key_text
+                from jsonb_each(v_component_resolutions) e
+                order by e.key
+                limit 50
+              ) k
+            )
+            when jsonb_typeof(v_component_resolutions) = 'array' then (
+              select coalesce(jsonb_agg(k.key_text order by k.ord), '[]'::jsonb)
+              from (
+                select
+                  coalesce(
+                    nullif(btrim(coalesce(a.value->>'candidate_id','')), ''),
+                    nullif(btrim(coalesce(a.value->>'finance_component_id','')), ''),
+                    '#' || a.ord::text
+                  ) as key_text,
+                  a.ord
+                from jsonb_array_elements(v_component_resolutions) with ordinality as a(value, ord)
+                where jsonb_typeof(a.value) = 'object'
+                order by a.ord
+                limit 50
+              ) k
+            )
+            else '[]'::jsonb
+          end
         ),
         'component_resolution_count', (
-          select count(*)::int
-          from jsonb_each(v_component_resolutions) e
+          case
+            when jsonb_typeof(v_component_resolutions) = 'object' then (
+              select count(*)::int
+              from jsonb_each(v_component_resolutions) e
+            )
+            when jsonb_typeof(v_component_resolutions) = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
+            else 0
+          end
         ),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
@@ -1367,9 +1397,16 @@ begin
         'paye_pay_batch_id', coalesce(v_paye_pay_batch_id::text, null),
         'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
         'paye_overpayment_sync', v_paye_overpayment_sync,
+        'component_resolution_shape', coalesce(jsonb_typeof(v_component_resolutions), 'null'),
         'component_resolution_count', (
-          select count(*)::int
-          from jsonb_each(v_component_resolutions) e
+          case
+            when jsonb_typeof(v_component_resolutions) = 'object' then (
+              select count(*)::int
+              from jsonb_each(v_component_resolutions) e
+            )
+            when jsonb_typeof(v_component_resolutions) = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
+            else 0
+          end
         ),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
