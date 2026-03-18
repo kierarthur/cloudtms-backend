@@ -3715,6 +3715,7 @@ begin;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3872,7 +3873,9 @@ begin
       s.id as snooze_id,
       s.candidate_id,
       s.timesheet_id,
+      s.booking_id,
       s.segment_id,
+      s.segment_stable_key,
       s.source_ref,
       upper(coalesce(s.snooze_kind,'')) as snooze_kind,
       s.snooze_until_date,
@@ -4034,6 +4037,9 @@ eligible_tsfin as (
       tf.timesheet_id,
       tf.candidate_id,
       tf.client_id,
+      ts.booking_id as ts_booking_id,
+      coalesce(tf.role, con.role, ts.job_title_norm) as ts_role,
+      coalesce(tf.band, con.band, ts.band) as ts_band,
 
       ts.week_ending_date as ts_week_ending_date,
       cl.name as ts_client_name,
@@ -4171,6 +4177,9 @@ umb_map as (
       e.timesheet_id,
       e.tsfin_id,
       e.client_id,
+      e.ts_booking_id,
+      e.ts_role,
+      e.ts_band,
       e.ts_week_ending_date,
       e.ts_client_name,
       e.ts_pay_method,
@@ -4205,7 +4214,34 @@ umb_map as (
               'charge_rate', coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric),
               'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean, false),
               'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), ''),
-              'date', nullif(btrim(coalesce(seg->>'date','')), '')
+              'date', nullif(btrim(coalesce(seg->>'date','')), ''),
+              'segment_key', nullif(btrim(coalesce(seg->>'segment_key','')), ''),
+              'segment_stable_key', coalesce(
+                nullif(btrim(coalesce(seg->>'segment_stable_key','')), ''),
+                nullif(btrim(coalesce(seg->>'date','')), ''),
+                nullif(btrim(coalesce(seg->>'ref_num','')), ''),
+                nullif(btrim(coalesce(seg->>'segment_key','')), ''),
+                nullif(btrim(coalesce(seg->>'segment_id','')), '')
+              ),
+              'start_utc', nullif(btrim(coalesce(seg->>'start_utc','')), ''),
+              'end_utc', nullif(btrim(coalesce(seg->>'end_utc','')), ''),
+              'start', case
+                when nullif(btrim(coalesce(seg->>'start','')), '') is not null then nullif(btrim(coalesce(seg->>'start','')), '')
+                when nullif(btrim(coalesce(seg->>'start_utc','')), '') is not null then to_char(((seg->>'start_utc')::timestamptz at time zone 'Europe/London'), 'HH24:MI')
+                else null
+              end,
+              'end', case
+                when nullif(btrim(coalesce(seg->>'end','')), '') is not null then nullif(btrim(coalesce(seg->>'end','')), '')
+                when nullif(btrim(coalesce(seg->>'end_utc','')), '') is not null then to_char(((seg->>'end_utc')::timestamptz at time zone 'Europe/London'), 'HH24:MI')
+                else null
+              end,
+              'break_start', nullif(btrim(coalesce(seg->>'break_start','')), ''),
+              'break_end', nullif(btrim(coalesce(seg->>'break_end','')), ''),
+              'break_mins', coalesce(nullif(seg->>'break_mins','')::numeric, nullif(seg->>'break_minutes','')::numeric),
+              'breaks', case when jsonb_typeof(seg->'breaks') = 'array' then seg->'breaks' else '[]'::jsonb end,
+              'client_name', e.ts_client_name,
+              'role', e.ts_role,
+              'band', e.ts_band
             )
           ), '[]'::jsonb)
           from jsonb_array_elements(e.invoice_breakdown_json->'segments') seg
@@ -4221,7 +4257,21 @@ umb_map as (
             'rate', case when coalesce(e.total_hours,0) > 0 then round(coalesce(e.total_pay_ex_vat,0) / e.total_hours, 6) else null end,
             'charge_rate', case when coalesce(e.total_hours,0) > 0 then round(coalesce(e.total_charge_ex_vat,0) / e.total_hours, 6) else null end,
             'exclude_from_pay', false,
-            'ref_num', nullif(btrim(coalesce(e.reference_number,'')), '')
+            'ref_num', nullif(btrim(coalesce(e.reference_number,'')), ''),
+            'date', null,
+            'segment_key', ('ts:' || e.timesheet_id::text),
+            'segment_stable_key', ('timesheet:' || coalesce(e.ts_booking_id, e.timesheet_id::text)),
+            'start_utc', null,
+            'end_utc', null,
+            'start', null,
+            'end', null,
+            'break_start', null,
+            'break_end', null,
+            'break_mins', null,
+            'breaks', '[]'::jsonb,
+            'client_name', e.ts_client_name,
+            'role', e.ts_role,
+            'band', e.ts_band
           )
         )
       end as current_segments_json,
@@ -4286,6 +4336,9 @@ umb_map as (
       t.candidate_id,
       t.timesheet_id,
       t.client_id,
+      t.ts_booking_id,
+      t.ts_role,
+      t.ts_band,
       t.ts_week_ending_date,
       t.ts_client_name,
       t.ts_pay_method,
@@ -6759,14 +6812,31 @@ ts_itemised as (
     select
       s.candidate_id,
       s.timesheet_id,
+      s.booking_id,
       s.snooze_id,
       s.snooze_until_date,
       s.note
     from active_snoozes s
-    where s.timesheet_id is not null
+    where s.source_ref is null
       and s.segment_id is null
-      and s.source_ref is null
+      and s.segment_stable_key is null
       and s.snooze_kind = 'TIMESHEET_PAYMENT'
+  ),
+  active_segment_snoozes as (
+    select
+      s.candidate_id,
+      s.timesheet_id,
+      s.booking_id,
+      s.segment_id,
+      s.segment_stable_key,
+      s.snooze_kind,
+      s.snooze_id,
+      s.snooze_until_date,
+      s.note
+    from active_snoozes s
+    where s.source_ref is null
+      and s.segment_stable_key is not null
+      and s.snooze_kind in ('DO_NOT_PAY','BLOCKED_TIMESHEET')
   ),
   active_timesheet_payment_overrides as (
     select
@@ -7117,6 +7187,9 @@ ts_itemised as (
     select
       tcr.candidate_id,
       tcr.timesheet_id,
+      tb.ts_booking_id as booking_id,
+      tb.ts_role,
+      tb.ts_band,
       tcr.client_id,
       tcr.ts_client_name as client_name,
       tcr.ts_week_ending_date as week_ending_date,
@@ -7136,16 +7209,122 @@ ts_itemised as (
       round(coalesce(tcr.payment_amount_inc_vat, tcr.payment_amount, tcr.payment_amount_ex_vat, 0),2) as amount_display,
       coalesce(tcr.is_blocked, false) as case_is_blocked,
       coalesce(tcr.case_resolution_summary_json, '{}'::jsonb) as case_resolution_summary_json,
-      coalesce(tcr.case_components_json, '[]'::jsonb) as case_components_json
+      coalesce(tcr.case_components_json, '[]'::jsonb) as case_components_json,
+      coalesce((
+        select jsonb_agg(
+          jsonb_build_object(
+            'segment_id', nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), ''),
+            'segment_key', nullif(btrim(coalesce(cur_seg.seg->>'segment_key','')), ''),
+            'segment_stable_key', coalesce(
+              nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg->>'segment_key','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), '')
+            ),
+            'date', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''), nullif(btrim(coalesce(delta_seg.seg->>'work_date','')), '')),
+            'client_name', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'client_name','')), ''), tcr.ts_client_name),
+            'role', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'role','')), ''), tb.ts_role),
+            'band', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'band','')), ''), tb.ts_band),
+            'start', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'start','')), ''), nullif(btrim(coalesce(cur_seg.seg->>'start_hhmm','')), '')),
+            'finish', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'end','')), ''), nullif(btrim(coalesce(cur_seg.seg->>'end_hhmm','')), '')),
+            'start_utc', nullif(btrim(coalesce(cur_seg.seg->>'start_utc','')), ''),
+            'end_utc', nullif(btrim(coalesce(cur_seg.seg->>'end_utc','')), ''),
+            'break_start', nullif(btrim(coalesce(cur_seg.seg->>'break_start','')), ''),
+            'break_end', nullif(btrim(coalesce(cur_seg.seg->>'break_end','')), ''),
+            'break_mins', coalesce(nullif(cur_seg.seg->>'break_mins','')::numeric, nullif(cur_seg.seg->>'break_minutes','')::numeric),
+            'breaks', coalesce(cur_seg.seg->'breaks', '[]'::jsonb),
+            'ref_num', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), ''), nullif(btrim(coalesce(delta_seg.seg->>'ref_num','')), '')),
+            'pay_amount_ex_vat', round(coalesce(nullif(delta_seg.seg->>'delta_pay_ex_vat','')::numeric,0),2),
+            'snooze_identity', jsonb_build_object(
+              'identity_type', 'TIMESHEET_SEGMENT',
+              'timesheet_id', tcr.timesheet_id::text,
+              'booking_id', tb.ts_booking_id,
+              'segment_id', nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), ''),
+              'segment_stable_key', coalesce(
+                nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''),
+                nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')), ''),
+                nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
+                nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), ''),
+                nullif(btrim(coalesce(cur_seg.seg->>'segment_key','')), ''),
+                nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), '')
+              ),
+              'source_ref', null
+            ),
+            'snooze_state', case
+              when ass.snooze_id is null then jsonb_build_object('state','NONE')
+              when ass.snooze_until_date is null then jsonb_build_object(
+                'state', 'INDEFINITE_SNOOZED',
+                'snooze_id', ass.snooze_id::text,
+                'snooze_until_date', null,
+                'note', ass.note,
+                'snooze_kind', ass.snooze_kind
+              )
+              else jsonb_build_object(
+                'state', 'DATED_SNOOZED',
+                'snooze_id', ass.snooze_id::text,
+                'snooze_until_date', ass.snooze_until_date::text,
+                'note', ass.note,
+                'snooze_kind', ass.snooze_kind
+              )
+            end
+          )
+          order by
+            coalesce(nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''), nullif(btrim(coalesce(delta_seg.seg->>'work_date','')), '')) nulls last,
+            coalesce(nullif(btrim(coalesce(cur_seg.seg->>'start','')), ''), nullif(btrim(coalesce(cur_seg.seg->>'start_hhmm','')), '')) nulls last,
+            coalesce(nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''), nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')), '')) nulls last,
+            nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), '') nulls last
+        )
+        from jsonb_array_elements(coalesce(tcr.segment_deltas_json, '[]'::jsonb)) as delta_seg(seg)
+        left join lateral (
+          select seg.value as seg
+          from jsonb_array_elements(coalesce(tb.current_segments_json, '[]'::jsonb)) as seg(value)
+          where coalesce(
+                  nullif(btrim(coalesce(seg.value->>'segment_stable_key','')), ''),
+                  nullif(btrim(coalesce(seg.value->>'date','')), ''),
+                  nullif(btrim(coalesce(seg.value->>'ref_num','')), ''),
+                  nullif(btrim(coalesce(seg.value->>'segment_key','')), ''),
+                  nullif(btrim(coalesce(seg.value->>'segment_id','')), '')
+                ) is not distinct from coalesce(
+                  nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'work_date','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'ref_num','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'segment_key','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'segment_id','')), '')
+                )
+          order by 1
+          limit 1
+        ) cur_seg on true
+        left join active_segment_snoozes ass
+          on ass.candidate_id = tcr.candidate_id
+         and (
+           (ass.booking_id is not null and ass.booking_id = tb.ts_booking_id and ass.segment_stable_key is not distinct from coalesce(
+             nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''),
+             nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')), ''),
+             nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
+             nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), ''),
+             nullif(btrim(coalesce(cur_seg.seg->>'segment_key','')), ''),
+             nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), '')
+           ))
+           or (ass.booking_id is null and ass.timesheet_id = tcr.timesheet_id and ass.segment_id is not distinct from nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), ''))
+         )
+      ), '[]'::jsonb) as segment_rows_json
     from timesheet_case_rollup tcr
     join cand_payee cp
       on cp.candidate_id = tcr.candidate_id
+    join ts_baseline tb
+      on tb.timesheet_id = tcr.timesheet_id
+     and tb.candidate_id = tcr.candidate_id
     left join active_timesheet_payment_overrides ato
       on ato.timesheet_id = tcr.timesheet_id
      and ato.candidate_id = tcr.candidate_id
     left join active_timesheet_payment_snoozes ats
-      on ats.timesheet_id = tcr.timesheet_id
-     and ats.candidate_id = tcr.candidate_id
+      on ats.candidate_id = tcr.candidate_id
+     and (
+       (ats.booking_id is not null and ats.booking_id = tb.ts_booking_id)
+       or (ats.booking_id is null and ats.timesheet_id = tcr.timesheet_id)
+     )
     where round(coalesce(tcr.payment_amount_ex_vat,0),2) <> 0
       and not (ats.snooze_id is not null and ats.snooze_until_date is null)
   ),
@@ -7192,9 +7371,12 @@ ts_itemised as (
         'case_resolution_summary', ctl.case_resolution_summary_json,
         'case_components', ctl.case_components_json,
         'timesheet_id', ctl.timesheet_id::text,
+        'booking_id', ctl.booking_id,
         'client_id', case when ctl.client_id is null then null else ctl.client_id::text end,
         'client_name', ctl.client_name,
         'week_ending_date', case when ctl.week_ending_date is null then null else ctl.week_ending_date::text end,
+        'role', ctl.ts_role,
+        'band', ctl.ts_band,
         'linked_shift_date', null,
         'pay_channel', ctl.candidate_pay_method,
         'paye_treatment', case when ctl.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
@@ -7207,10 +7389,14 @@ ts_itemised as (
         'advanced_reason', ctl.override_reason,
         'is_excluded_from_allocation', (ctl.snooze_id is not null),
         'is_ready_for_draft', ctl.is_ready_for_draft,
+        'segment_rows', ctl.segment_rows_json,
+        'segment_count', jsonb_array_length(coalesce(ctl.segment_rows_json, '[]'::jsonb)),
         'snooze_identity', jsonb_build_object(
           'identity_type', 'TIMESHEET',
           'timesheet_id', ctl.timesheet_id::text,
+          'booking_id', ctl.booking_id,
           'segment_id', null,
+          'segment_stable_key', null,
           'source_ref', null
         ),
         'snooze_state', case
@@ -7826,6 +8012,9 @@ ts_itemised as (
   );
 end;
 $function$;
+
+
+
 
 
 
