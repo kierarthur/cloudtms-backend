@@ -3716,6 +3716,7 @@ begin;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -4479,6 +4480,7 @@ umb_map as (
     select
       b.candidate_id,
       b.timesheet_id,
+      b.ts_booking_id as booking_id,
 
       -- Representative segment_id (prefer current)
       coalesce(a.cur_segment_id, a.bas_segment_id) as segment_id,
@@ -4689,25 +4691,31 @@ umb_map as (
     select
       ss.candidate_id,
       ss.timesheet_id,
+      ss.booking_id,
       ss.segment_id,
+      ss.segment_stable_key,
       ss.ref_num,
       ss.delta_pay_ex_vat as blocked_delta_ex,
       sn.snooze_id,
       sn.snooze_until_date,
       sn.note
     from segment_status ss
-    left join active_snoozes sn
+    left join active_segment_snoozes sn
       on sn.candidate_id = ss.candidate_id
-     and sn.timesheet_id is not distinct from ss.timesheet_id
-     and sn.segment_id is not distinct from ss.segment_id
-     and sn.snooze_kind = 'BLOCKED'
+     and sn.snooze_kind = 'BLOCKED_TIMESHEET'
+     and (
+       (sn.booking_id is not null and ss.booking_id is not null and sn.booking_id = ss.booking_id and sn.segment_stable_key is not distinct from ss.segment_stable_key)
+       or (sn.booking_id is null and sn.timesheet_id is not distinct from ss.timesheet_id and sn.segment_id is not distinct from ss.segment_id)
+     )
     where ss.is_blocked = true
   ),
 blocked_items as (
     select
       b.candidate_id,
       b.timesheet_id,
+      b.booking_id,
       b.segment_id,
+      b.segment_stable_key,
       b.ref_num,
       b.blocked_delta_ex,
       b.snooze_id
@@ -4718,7 +4726,9 @@ blocked_items as (
     select
       b.candidate_id,
       b.timesheet_id,
+      b.booking_id,
       b.segment_id,
+      b.segment_stable_key,
       b.ref_num,
       b.blocked_delta_ex,
       b.snooze_id,
@@ -4732,25 +4742,31 @@ blocked_items as (
     select
       ss.candidate_id,
       ss.timesheet_id,
+      ss.booking_id,
       ss.segment_id,
+      ss.segment_stable_key,
       ss.ref_num as ref_num,
       ss.delta_pay_ex_vat as raw_delta_ex,
       sn.snooze_id,
       sn.snooze_until_date,
       sn.note
     from segment_status ss
-    left join active_snoozes sn
+    left join active_segment_snoozes sn
       on sn.candidate_id = ss.candidate_id
-     and sn.timesheet_id is not distinct from ss.timesheet_id
-     and sn.segment_id is not distinct from ss.segment_id
      and sn.snooze_kind = 'DO_NOT_PAY'
+     and (
+       (sn.booking_id is not null and ss.booking_id is not null and sn.booking_id = ss.booking_id and sn.segment_stable_key is not distinct from ss.segment_stable_key)
+       or (sn.booking_id is null and sn.timesheet_id is not distinct from ss.timesheet_id and sn.segment_id is not distinct from ss.segment_id)
+     )
     where ss.is_do_not_pay = true
   ),
   do_not_pay_items as (
     select
       d.candidate_id,
       d.timesheet_id,
+      d.booking_id,
       d.segment_id,
+      d.segment_stable_key,
       d.ref_num,
       d.raw_delta_ex,
       d.snooze_id
@@ -4762,7 +4778,9 @@ blocked_items as (
     select
       d.candidate_id,
       d.timesheet_id,
+      d.booking_id,
       d.segment_id,
+      d.segment_stable_key,
       d.ref_num,
       d.raw_delta_ex,
       d.snooze_id,
@@ -7850,7 +7868,9 @@ ts_itemised as (
             'snooze_identity', jsonb_build_object(
               'identity_type', 'TIMESHEET_SEGMENT',
               'timesheet_id', bi.timesheet_id::text,
+              'booking_id', bi.booking_id,
               'segment_id', bi.segment_id,
+              'segment_stable_key', bi.segment_stable_key,
               'source_ref', null
             ),
             'snooze_state', jsonb_build_object('state','NONE')
@@ -7878,7 +7898,9 @@ ts_itemised as (
             'snooze_identity', jsonb_build_object(
               'identity_type', 'TIMESHEET_SEGMENT',
               'timesheet_id', di.timesheet_id::text,
+              'booking_id', di.booking_id,
               'segment_id', di.segment_id,
+              'segment_stable_key', di.segment_stable_key,
               'source_ref', null
             ),
             'snooze_state', jsonb_build_object('state','NONE')
@@ -7908,7 +7930,9 @@ ts_itemised as (
             'snooze_identity', jsonb_build_object(
               'identity_type', 'TIMESHEET_SEGMENT',
               'timesheet_id', bs.timesheet_id::text,
+              'booking_id', bs.booking_id,
               'segment_id', bs.segment_id,
+              'segment_stable_key', bs.segment_stable_key,
               'source_ref', null
             ),
             'snooze_state', jsonb_build_object(
@@ -7938,7 +7962,9 @@ ts_itemised as (
             'snooze_identity', jsonb_build_object(
               'identity_type', 'TIMESHEET_SEGMENT',
               'timesheet_id', ds.timesheet_id::text,
+              'booking_id', ds.booking_id,
               'segment_id', ds.segment_id,
+              'segment_stable_key', ds.segment_stable_key,
               'source_ref', null
             ),
             'snooze_state', jsonb_build_object(
@@ -8012,6 +8038,7 @@ ts_itemised as (
   );
 end;
 $function$;
+
 
 
 
