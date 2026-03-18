@@ -14762,7 +14762,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       user_message = 'Banking rail is not configured for this environment.';
     } else if (rawU === 'HAS_HARD_BLOCKERS') {
       error_code = 'HAS_HARD_BLOCKERS';
-      user_message = 'This batch has hard blockers and cannot proceed until they are resolved.';
+      user_message = 'This batch has hard blockers and cannot proceed until the Blocked for Pay items are resolved.';
     } else if (raw) {
       user_message = raw;
     }
@@ -14833,7 +14833,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }
       const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
 
-      const msg = 'PREVIEW_GATE_NOT_SATISFIED: batch has hard blockers; rerun preview and resolve Review required items.';
+      const msg = 'PREVIEW_GATE_NOT_SATISFIED: batch has hard blockers; rerun preview and resolve Blocked for Pay items.';
       return withCORS(env, req, jsonResponse(400, {
         error: msg,
         message: msg,
@@ -15023,7 +15023,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
-
 async function handleBankingPaySnoozeUpsert(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -94110,9 +94109,6 @@ async function handleMailshotFieldsSeedFromSchema(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
-
-
 async function handleDocumentTemplatesUpsert(env, req, templateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -94183,6 +94179,242 @@ async function handleDocumentTemplatesUpsert(env, req, templateId) {
     return withCORS(env, req, badRequest('template_content_json must be an object'));
   }
 
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+  const isPlainObject = (v) => !!(v && typeof v === 'object' && !Array.isArray(v));
+  const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+
+  const failBadRequest = (message) => {
+    const err = new Error(String(message || 'Invalid request'));
+    err.__badRequest = true;
+    throw err;
+  };
+
+  const parseBooleanField = (obj, snakeKey, camelKey, path) => {
+    if (own(obj, snakeKey)) {
+      if (typeof obj[snakeKey] !== 'boolean') failBadRequest(`${path} must be boolean`);
+      return !!obj[snakeKey];
+    }
+    if (own(obj, camelKey)) {
+      if (typeof obj[camelKey] !== 'boolean') failBadRequest(`${path.replace(snakeKey, camelKey)} must be boolean`);
+      return !!obj[camelKey];
+    }
+    return false;
+  };
+
+  const parseOptionalNonNegativeInteger = (obj, snakeKey, camelKey, path) => {
+    const rawSnake = trimStr(obj && obj[snakeKey]);
+    const rawCamel = trimStr(obj && obj[camelKey]);
+
+    if (rawSnake) {
+      if (!/^\d+$/.test(rawSnake)) failBadRequest(`${path} must be non-negative integer`);
+      return Math.trunc(Number(rawSnake));
+    }
+    if (rawCamel) {
+      const camelPath = path.replace(snakeKey, camelKey);
+      if (!/^\d+$/.test(rawCamel)) failBadRequest(`${camelPath} must be non-negative integer`);
+      return Math.trunc(Number(rawCamel));
+    }
+    return null;
+  };
+
+  const sanitizeFilenameSegment = (name) => {
+    const base = trimStr(name)
+      .replace(/[/\\?%*:|"<>]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return base || 'attachment';
+  };
+
+  const decodeBase64Payload = (value, path) => {
+    const rawInput = trimStr(value);
+    if (!rawInput) failBadRequest(`${path}.r2_key required`);
+
+    let contentTypeFromDataUrl = '';
+    let base64Part = rawInput;
+
+    const dataUrlMatch = /^data:([^;,]+)?;base64,(.*)$/is.exec(rawInput);
+    if (dataUrlMatch) {
+      contentTypeFromDataUrl = trimStr(dataUrlMatch[1] || '');
+      base64Part = trimStr(dataUrlMatch[2] || '');
+    }
+
+    const cleanBase64 = base64Part.replace(/[\r\n\s]/g, '');
+    if (!cleanBase64) failBadRequest(`${path}.r2_key required`);
+
+    const padLen = (4 - (cleanBase64.length % 4)) % 4;
+    const paddedBase64 = cleanBase64 + '='.repeat(padLen);
+
+    let binary = '';
+    try {
+      binary = atob(paddedBase64);
+    } catch {
+      failBadRequest(`${path}.contentBase64 must be valid base64`);
+    }
+
+    const bytes = new Uint8Array(binary.length);
+    for (let idx = 0; idx < binary.length; idx += 1) {
+      bytes[idx] = binary.charCodeAt(idx);
+    }
+
+    return {
+      bytes,
+      contentTypeFromDataUrl
+    };
+  };
+
+  try {
+    if (own(templateContent, 'mailshot_attachments')) {
+      if (!isPlainObject(templateContent.mailshot_attachments)) {
+        return withCORS(env, req, badRequest('mailshot_attachments must be object'));
+      }
+
+      const bucket = env.DOCS_BUCKET || env.R2 || env.R2_BUCKET || env.FILES_BUCKET;
+      const attachmentCfg = templateContent.mailshot_attachments || {};
+
+      if (own(attachmentCfg, 'attachments') && !Array.isArray(attachmentCfg.attachments)) {
+        return withCORS(env, req, badRequest('mailshot_attachments.attachments must be array'));
+      }
+      if (own(attachmentCfg, 'template_files') && !Array.isArray(attachmentCfg.template_files)) {
+        return withCORS(env, req, badRequest('mailshot_attachments.template_files must be array'));
+      }
+      if (own(attachmentCfg, 'files') && !Array.isArray(attachmentCfg.files)) {
+        return withCORS(env, req, badRequest('mailshot_attachments.files must be array'));
+      }
+
+      const attachTimesheetPdf = parseBooleanField(
+        attachmentCfg,
+        'attach_authoritative_timesheet_pdf',
+        'attachAuthoritativeTimesheetPdf',
+        'mailshot_attachments.attach_authoritative_timesheet_pdf'
+      );
+      const attachInvoicePdf = parseBooleanField(
+        attachmentCfg,
+        'attach_authoritative_invoice_pdf',
+        'attachAuthoritativeInvoicePdf',
+        'mailshot_attachments.attach_authoritative_invoice_pdf'
+      );
+
+      const attachmentsRaw = Array.isArray(attachmentCfg.attachments) ? attachmentCfg.attachments : [];
+      const templateFilesRaw = Array.isArray(attachmentCfg.template_files) ? attachmentCfg.template_files : [];
+      const filesRaw = Array.isArray(attachmentCfg.files) ? attachmentCfg.files : [];
+      const totalInlineAttachmentItems = attachmentsRaw.length + templateFilesRaw.length + filesRaw.length;
+
+      if (outputType !== 'EMAIL' && totalInlineAttachmentItems > 0) {
+        return withCORS(env, req, badRequest('mailshot attachments are only supported for EMAIL templates'));
+      }
+
+      const normalizeAttachmentArray = async (items, arrayName) => {
+        const out = [];
+
+        for (let idx = 0; idx < items.length; idx += 1) {
+          const raw = items[idx];
+          const path = `mailshot_attachments.${arrayName}[${idx + 1}]`;
+
+          if (!isPlainObject(raw)) failBadRequest(`${path} must be object`);
+
+          const existingR2Key = trimStr(raw.r2_key ?? raw.r2Key ?? '');
+          const rawContentBase64 = trimStr(raw.contentBase64 ?? raw.content_base64 ?? '');
+          const filenameValue = trimStr(raw.filename ?? raw.file_name ?? raw.name ?? '');
+          const sourceValue = trimStr(raw.source ?? '');
+          const sourceLabelValue = trimStr(raw.source_label ?? raw.sourceLabel ?? '');
+          const readOnlyValue = parseBooleanField(raw, 'read_only', 'readOnly', `${path}.read_only`);
+          const sizeBytesValue = parseOptionalNonNegativeInteger(raw, 'size_bytes', 'sizeBytes', `${path}.size_bytes`);
+
+          let contentTypeValue = trimStr(raw.content_type ?? raw.contentType ?? '');
+          let normalizedR2Key = existingR2Key ? normalizeKey(existingR2Key) : '';
+
+          if (normalizedR2Key) {
+            if (!filenameValue) failBadRequest(`${path}.filename required`);
+
+            out.push({
+              r2_key: normalizedR2Key,
+              filename: filenameValue,
+              content_type: contentTypeValue || null,
+              source: sourceValue || null,
+              source_label: sourceLabelValue || null,
+              read_only: readOnlyValue,
+              size_bytes: sizeBytesValue
+            });
+            continue;
+          }
+
+          if (!rawContentBase64) {
+            failBadRequest(`${path}.r2_key required`);
+          }
+
+          if (!filenameValue) {
+            failBadRequest(`${path}.filename required`);
+          }
+
+          if (!bucket || typeof bucket.put !== 'function') {
+            throw new Error('Storage not configured for template attachments (expected DOCS_BUCKET, R2, R2_BUCKET, or FILES_BUCKET with put())');
+          }
+
+          const decoded = decodeBase64Payload(rawContentBase64, path);
+          if (!contentTypeValue) {
+            contentTypeValue = trimStr(decoded.contentTypeFromDataUrl || '') || 'application/octet-stream';
+          }
+
+          const sizeBytesFinal = sizeBytesValue == null ? decoded.bytes.byteLength : sizeBytesValue;
+          const safeFilename = sanitizeFilenameSegment(filenameValue);
+          const dayPart = new Date().toISOString().slice(0, 10);
+          const hashSeed = `${user.id}|${entityType}|${outputType}|${filenameValue}|${contentTypeValue}|${rawContentBase64}`;
+          const contentHash = await sha256Hex(hashSeed);
+          const generatedKey = normalizeKey(
+            `mailshot-template-attachments/${dayPart}/${user.id}/${contentHash}_${crypto.randomUUID()}_${safeFilename}`
+          );
+
+          await bucket.put(generatedKey, decoded.bytes, {
+            httpMetadata: { contentType: contentTypeValue || 'application/octet-stream' },
+            customMetadata: {
+              uploaded_by_user_id: String(user.id || ''),
+              entity_type: entityType,
+              output_type: outputType,
+              template_id: String(idFromPath || ''),
+              original_filename: filenameValue
+            }
+          });
+
+          out.push({
+            r2_key: generatedKey,
+            filename: filenameValue,
+            content_type: contentTypeValue || null,
+            source: sourceValue || 'template_upload',
+            source_label: sourceLabelValue || 'Uploaded with template',
+            read_only: readOnlyValue,
+            size_bytes: sizeBytesFinal
+          });
+        }
+
+        return out;
+      };
+
+      const attachmentsNorm = await normalizeAttachmentArray(attachmentsRaw, 'attachments');
+      const templateFilesNorm = await normalizeAttachmentArray(templateFilesRaw, 'template_files');
+      const filesNorm = await normalizeAttachmentArray(filesRaw, 'files');
+
+      templateContent = {
+        ...templateContent,
+        mailshot_attachments: {
+          ...attachmentCfg,
+          attach_authoritative_timesheet_pdf: attachTimesheetPdf,
+          attach_authoritative_invoice_pdf: attachInvoicePdf,
+          attachments: [...attachmentsNorm, ...templateFilesNorm, ...filesNorm]
+        }
+      };
+
+      delete templateContent.mailshot_attachments.template_files;
+      delete templateContent.mailshot_attachments.files;
+    }
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to normalize template attachments');
+    if (e && e.__badRequest) {
+      return withCORS(env, req, badRequest(msg));
+    }
+    return withCORS(env, req, serverError(msg));
+  }
+
   const p_template_id = idFromPath || null;
 
   try {
@@ -94198,7 +94430,6 @@ async function handleDocumentTemplatesUpsert(env, req, templateId) {
       p_actor_user_id: user.id
     });
 
-    // Normalize possible wrappers
     try {
       if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'document_templates_upsert')) {
@@ -94212,6 +94443,7 @@ async function handleDocumentTemplatesUpsert(env, req, templateId) {
     return withCORS(env, req, serverError(msg));
   }
 }
+
 
 async function handleDocumentTemplatesDuplicate(env, req, templateId) {
   const user = await requireUser(env, req, ['admin']);
