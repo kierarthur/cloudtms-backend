@@ -400,9 +400,6 @@ begin
 end;
 $function$;
 
-
-
-
 create or replace function public.mailshot_prepare(p_context_kind text, p_context_ids uuid[], p_output_type text, p_document_template_id uuid, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -452,6 +449,7 @@ declare
   v_template_content_json jsonb := '{}'::jsonb;
   v_template_attachment_cfg jsonb := '{}'::jsonb;
   v_row_attachment_instructions jsonb := '[]'::jsonb;
+  v_template_generic_attachment_instructions jsonb := '[]'::jsonb;
   v_attach_timesheet_pdf boolean := false;
   v_attach_invoice_pdf boolean := false;
 
@@ -578,6 +576,67 @@ begin
 
   v_attach_timesheet_pdf := coalesce((v_template_attachment_cfg->>'attach_authoritative_timesheet_pdf')::boolean, false);
   v_attach_invoice_pdf := coalesce((v_template_attachment_cfg->>'attach_authoritative_invoice_pdf')::boolean, false);
+
+  if v_output_type = 'EMAIL'
+     and jsonb_typeof(v_template_attachment_cfg->'attachments') = 'array' then
+    with template_attachment_src as (
+      select
+        jbe.ordinality as attachment_ord,
+        jsonb_strip_nulls(
+          jsonb_build_object(
+            'r2_key', nullif(btrim(coalesce(jbe.value->>'r2_key', jbe.value->>'r2Key', '')), ''),
+            'filename', nullif(btrim(coalesce(jbe.value->>'filename', jbe.value->>'file_name', jbe.value->>'name', '')), ''),
+            'content_type', coalesce(
+              nullif(btrim(coalesce(jbe.value->>'content_type', jbe.value->>'contentType', '')), ''),
+              'application/octet-stream'
+            ),
+            'source', nullif(btrim(coalesce(jbe.value->>'source', '')), ''),
+            'source_label', nullif(btrim(coalesce(jbe.value->>'source_label', jbe.value->>'sourceLabel', '')), ''),
+            'read_only', case
+              when jbe.value ? 'read_only' and jsonb_typeof(jbe.value->'read_only') = 'boolean'
+                then (jbe.value->>'read_only')::boolean
+              when jbe.value ? 'readOnly' and jsonb_typeof(jbe.value->'readOnly') = 'boolean'
+                then (jbe.value->>'readOnly')::boolean
+              else false
+            end,
+            'size_bytes', case
+              when nullif(btrim(coalesce(jbe.value->>'size_bytes', jbe.value->>'sizeBytes', '')), '') is not null
+                   and btrim(coalesce(jbe.value->>'size_bytes', jbe.value->>'sizeBytes', '')) ~ '^\d+$'
+                then (coalesce(jbe.value->>'size_bytes', jbe.value->>'sizeBytes'))::bigint
+              else null
+            end
+          )
+        ) as attachment_item,
+        nullif(btrim(coalesce(jbe.value->>'r2_key', jbe.value->>'r2Key', '')), '') as r2_key,
+        nullif(btrim(coalesce(jbe.value->>'filename', jbe.value->>'file_name', jbe.value->>'name', '')), '') as filename,
+        coalesce(
+          nullif(btrim(coalesce(jbe.value->>'content_type', jbe.value->>'contentType', '')), ''),
+          'application/octet-stream'
+        ) as content_type
+      from jsonb_array_elements(v_template_attachment_cfg->'attachments') with ordinality as jbe(value, ordinality)
+      where jsonb_typeof(jbe.value) = 'object'
+    ),
+    template_attachment_grp as (
+      select
+        min(tas.attachment_ord) as first_ord,
+        (array_agg(tas.attachment_item order by tas.attachment_ord))[1] as first_item
+      from template_attachment_src as tas
+      where tas.r2_key is not null
+        and tas.filename is not null
+      group by
+        tas.r2_key,
+        tas.filename,
+        tas.content_type
+    )
+    select coalesce(
+      jsonb_agg(tag.first_item order by tag.first_ord),
+      '[]'::jsonb
+    )
+      into v_template_generic_attachment_instructions
+    from template_attachment_grp as tag;
+  else
+    v_template_generic_attachment_instructions := '[]'::jsonb;
+  end if;
 
   create temporary table tmp_ctx(
     context_id uuid not null,
@@ -897,6 +956,64 @@ begin
       );
     end if;
 
+    if v_output_type = 'EMAIL' then
+      with row_attachment_src as (
+        select
+          jbe.ordinality as attachment_ord,
+          jbe.value as attachment_item,
+          nullif(btrim(coalesce(jbe.value->>'kind', '')), '') as kind,
+          nullif(btrim(coalesce(jbe.value->>'context_id', jbe.value->>'contextId', '')), '') as context_id,
+          nullif(btrim(coalesce(jbe.value->>'entity_type', jbe.value->>'entityType', '')), '') as entity_type,
+          nullif(btrim(coalesce(jbe.value->>'invoice_id', jbe.value->>'invoiceId', '')), '') as invoice_id,
+          nullif(btrim(coalesce(jbe.value->>'r2_key', jbe.value->>'r2Key', '')), '') as r2_key,
+          nullif(btrim(coalesce(jbe.value->>'filename', jbe.value->>'file_name', jbe.value->>'name', '')), '') as filename,
+          nullif(btrim(coalesce(jbe.value->>'content_type', jbe.value->>'contentType', '')), '') as content_type,
+          nullif(btrim(coalesce(jbe.value->>'source', '')), '') as source,
+          nullif(btrim(coalesce(jbe.value->>'source_label', jbe.value->>'sourceLabel', '')), '') as source_label,
+          case
+            when jbe.value ? 'read_only' and jsonb_typeof(jbe.value->'read_only') = 'boolean'
+              then (jbe.value->>'read_only')::boolean
+            when jbe.value ? 'readOnly' and jsonb_typeof(jbe.value->'readOnly') = 'boolean'
+              then (jbe.value->>'readOnly')::boolean
+            else false
+          end as read_only,
+          case
+            when nullif(btrim(coalesce(jbe.value->>'size_bytes', jbe.value->>'sizeBytes', '')), '') is not null
+                 and btrim(coalesce(jbe.value->>'size_bytes', jbe.value->>'sizeBytes', '')) ~ '^\d+$'
+              then (coalesce(jbe.value->>'size_bytes', jbe.value->>'sizeBytes'))::bigint
+            else null
+          end as size_bytes
+        from jsonb_array_elements(
+          coalesce(v_row_attachment_instructions, '[]'::jsonb) ||
+          coalesce(v_template_generic_attachment_instructions, '[]'::jsonb)
+        ) with ordinality as jbe(value, ordinality)
+        where jsonb_typeof(jbe.value) = 'object'
+      ),
+      row_attachment_grp as (
+        select
+          min(ras.attachment_ord) as first_ord,
+          (array_agg(ras.attachment_item order by ras.attachment_ord))[1] as first_item
+        from row_attachment_src as ras
+        where ras.kind is not null
+           or ras.invoice_id is not null
+           or ras.r2_key is not null
+        group by
+          ras.kind,
+          ras.context_id,
+          ras.entity_type,
+          ras.invoice_id,
+          ras.r2_key,
+          ras.filename,
+          ras.content_type
+      )
+      select coalesce(
+        jsonb_agg(rag.first_item order by rag.first_ord),
+        '[]'::jsonb
+      )
+        into v_row_attachment_instructions
+      from row_attachment_grp as rag;
+    end if;
+
     v_rows := v_rows || jsonb_build_array(
       jsonb_build_object(
         'context_id', v_ctx.context_id::text,
@@ -954,3 +1071,8 @@ begin
   );
 end;
 $function$;
+
+
+
+
+
