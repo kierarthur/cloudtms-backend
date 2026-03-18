@@ -15098,6 +15098,10 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     return withCORS(env, req, badRequest('TIMESHEET_PAYMENT snoozes must not provide source_ref'));
   }
 
+  if (snoozeKindNormalized === 'TIMESHEET_PAYMENT' && (segmentId || segmentStableKeyHint)) {
+    return withCORS(env, req, badRequest('TIMESHEET_PAYMENT snoozes must not provide segment_id or segment_stable_key; use a segment-level snooze kind instead'));
+  }
+
   const noteRaw = trimStr(body.note);
   const note = noteRaw ? noteRaw : null;
 
