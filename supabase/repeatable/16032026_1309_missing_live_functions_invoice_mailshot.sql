@@ -422,6 +422,7 @@ declare
   v_email_type text := null;
 
   v_rows jsonb := '[]'::jsonb;
+  v_prepare_attachment_instructions jsonb := '[]'::jsonb;
 
   v_ctx record;
   v_ctx_json jsonb;
@@ -434,13 +435,29 @@ declare
   v_to_value text;
   v_recipient_kind text;
   v_recipient_id uuid;
+  v_recipient_display_name text;
+  v_candidate_name text;
+  v_candidate_display_name text;
+  v_client_display_name text;
+  v_umbrella_display_name text;
 
   v_opt_ok boolean;
   v_skip_reason text;
 
   v_client_settings_json jsonb;
+  v_template_content_json jsonb := '{}'::jsonb;
+  v_template_attachment_cfg jsonb := '{}'::jsonb;
+  v_row_attachment_instructions jsonb := '[]'::jsonb;
+  v_attach_timesheet_pdf boolean := false;
+  v_attach_invoice_pdf boolean := false;
 
   v_sms_or_voice boolean := false;
+
+  v_requested_context_count integer := coalesce(array_length(p_context_ids,1),0);
+  v_resolved_context_count integer := 0;
+  v_returned_row_count integer := 0;
+  v_eligible_count integer := 0;
+  v_skipped_count integer := 0;
 begin
   if p_actor_user_id is null then
     raise exception 'actor_user_id required';
@@ -488,7 +505,7 @@ begin
   if p_document_template_id is not null then
     select dt.*
       into v_template
-    from public.document_templates dt
+    from public.document_templates as dt
     where dt.id = p_document_template_id;
 
     if not found then
@@ -508,6 +525,7 @@ begin
     v_selected_keys := coalesce(v_template.selected_field_keys, '{}'::text[]);
     v_email_type := v_template.email_type;
     v_to_field_key := nullif(btrim(coalesce(v_template.template_content_json->>'to_field_key','')), '');
+    v_template_content_json := coalesce(v_template.template_content_json, '{}'::jsonb);
   end if;
 
   if v_to_field_key is null then
@@ -536,6 +554,15 @@ begin
     end if;
   end if;
 
+  if jsonb_typeof(v_template_content_json->'mailshot_attachments') = 'object' then
+    v_template_attachment_cfg := coalesce(v_template_content_json->'mailshot_attachments', '{}'::jsonb);
+  else
+    v_template_attachment_cfg := '{}'::jsonb;
+  end if;
+
+  v_attach_timesheet_pdf := coalesce((v_template_attachment_cfg->>'attach_authoritative_timesheet_pdf')::boolean, false);
+  v_attach_invoice_pdf := coalesce((v_template_attachment_cfg->>'attach_authoritative_invoice_pdf')::boolean, false);
+
   create temporary table tmp_ctx(
     context_id uuid not null,
     ctx_json jsonb not null
@@ -550,8 +577,8 @@ begin
         'umbrella', case when u.id is null then null else to_jsonb(u) end,
         'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
       )
-    from public.candidates c
-    left join public.umbrellas u
+    from public.candidates as c
+    left join public.umbrellas as u
       on u.id = c.umbrella_id
     where c.id = any(p_context_ids);
   elsif v_entity_type = 'client' then
@@ -563,14 +590,14 @@ begin
         'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
         'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
       )
-    from public.clients cl
+    from public.clients as cl
     left join lateral (
       select cs1.*
-      from public.client_settings cs1
+      from public.client_settings as cs1
       where cs1.client_id = cl.id
       order by cs1.effective_from desc
       limit 1
-    ) cs on true
+    ) as cs on true
     where cl.id = any(p_context_ids);
   elsif v_entity_type = 'contract' then
     insert into tmp_ctx(context_id, ctx_json)
@@ -584,20 +611,20 @@ begin
         'umbrella', case when u.id is null then null else to_jsonb(u) end,
         'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
       )
-    from public.contracts ct
-    left join public.candidates c
+    from public.contracts as ct
+    left join public.candidates as c
       on c.id = ct.candidate_id
-    left join public.umbrellas u
+    left join public.umbrellas as u
       on u.id = c.umbrella_id
-    left join public.clients cl
+    left join public.clients as cl
       on cl.id = ct.client_id
     left join lateral (
       select cs1.*
-      from public.client_settings cs1
+      from public.client_settings as cs1
       where cs1.client_id = cl.id
       order by cs1.effective_from desc
       limit 1
-    ) cs on true
+    ) as cs on true
     where ct.id = any(p_context_ids);
   elsif v_entity_type = 'timesheet' then
     insert into tmp_ctx(context_id, ctx_json)
@@ -612,22 +639,22 @@ begin
         'umbrella', case when u.id is null then null else to_jsonb(u) end,
         'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
       )
-    from public.timesheets ts
-    left join public.contracts ct
+    from public.timesheets as ts
+    left join public.contracts as ct
       on ct.id = ts.contract_id
-    left join public.candidates c
+    left join public.candidates as c
       on c.id = ct.candidate_id
-    left join public.umbrellas u
+    left join public.umbrellas as u
       on u.id = c.umbrella_id
-    left join public.clients cl
+    left join public.clients as cl
       on cl.id = ct.client_id
     left join lateral (
       select cs1.*
-      from public.client_settings cs1
+      from public.client_settings as cs1
       where cs1.client_id = cl.id
       order by cs1.effective_from desc
       limit 1
-    ) cs on true
+    ) as cs on true
     where ts.timesheet_id = any(p_context_ids);
   elsif v_entity_type = 'invoice' then
     insert into tmp_ctx(context_id, ctx_json)
@@ -639,16 +666,16 @@ begin
         'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
         'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
       )
-    from public.invoices inv
-    left join public.clients cl
+    from public.invoices as inv
+    left join public.clients as cl
       on cl.id = inv.client_id
     left join lateral (
       select cs1.*
-      from public.client_settings cs1
+      from public.client_settings as cs1
       where cs1.client_id = cl.id
       order by cs1.effective_from desc
       limit 1
-    ) cs on true
+    ) as cs on true
     where inv.id = any(p_context_ids);
   elsif v_entity_type = 'umbrella' then
     insert into tmp_ctx(context_id, ctx_json)
@@ -658,17 +685,24 @@ begin
         'umbrella', to_jsonb(u),
         'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
       )
-    from public.umbrellas u
+    from public.umbrellas as u
     where u.id = any(p_context_ids);
   end if;
 
+  select count(*)
+    into v_resolved_context_count
+  from tmp_ctx as t;
+
   for v_ctx in
     select t.context_id, t.ctx_json
-    from tmp_ctx t
+    from tmp_ctx as t
     order by t.context_id::text
   loop
     v_ctx_json := v_ctx.ctx_json;
     v_field_values := '{}'::jsonb;
+    v_row_attachment_instructions := '[]'::jsonb;
+    v_candidate_name := null;
+    v_recipient_display_name := null;
 
     if v_selected_keys is not null and array_length(v_selected_keys,1) > 0 then
       foreach v_key in array v_selected_keys
@@ -679,7 +713,7 @@ begin
 
         select coalesce(nullif(btrim(coalesce(f.resolver_spec_json->>'path','')),''), v_key)
           into v_path
-        from public.mailshot_fields f
+        from public.mailshot_fields as f
         where f.field_key = v_key;
 
         if v_path is null then
@@ -730,6 +764,33 @@ begin
       v_recipient_id := nullif((v_ctx_json->'umbrella'->>'id'),'')::uuid;
     end if;
 
+    v_candidate_display_name := nullif(btrim(coalesce(v_ctx_json->'candidate'->>'display_name','')), '');
+    if v_candidate_display_name is null then
+      v_candidate_display_name := nullif(
+        btrim(
+          concat_ws(
+            ' ',
+            nullif(btrim(coalesce(v_ctx_json->'candidate'->>'first_name','')), ''),
+            nullif(btrim(coalesce(v_ctx_json->'candidate'->>'last_name','')), '')
+          )
+        ),
+        ''
+      );
+    end if;
+
+    v_client_display_name := nullif(btrim(coalesce(v_ctx_json->'client'->>'name','')), '');
+    v_umbrella_display_name := nullif(btrim(coalesce(v_ctx_json->'umbrella'->>'name','')), '');
+
+    v_candidate_name := v_candidate_display_name;
+
+    v_recipient_display_name :=
+      case v_recipient_kind
+        when 'candidate' then coalesce(v_candidate_display_name, v_to_value)
+        when 'client' then coalesce(v_client_display_name, v_to_value)
+        when 'umbrella' then coalesce(v_umbrella_display_name, v_to_value)
+        else coalesce(v_candidate_display_name, v_client_display_name, v_umbrella_display_name, v_to_value)
+      end;
+
     v_opt_ok := true;
     v_skip_reason := null;
 
@@ -774,6 +835,28 @@ begin
       end if;
     end if;
 
+    if v_output_type = 'EMAIL' and v_entity_type = 'timesheet' and v_attach_timesheet_pdf = true then
+      v_row_attachment_instructions := v_row_attachment_instructions || jsonb_build_array(
+        jsonb_build_object(
+          'kind', 'AUTHORITATIVE_TIMESHEET_PDF',
+          'context_id', v_ctx.context_id::text,
+          'entity_type', v_entity_type,
+          'filename', format('Timesheet_%s.pdf', v_ctx.context_id::text),
+          'content_type', 'application/pdf'
+        )
+      );
+    elsif v_output_type = 'EMAIL' and v_entity_type = 'invoice' and v_attach_invoice_pdf = true then
+      v_row_attachment_instructions := v_row_attachment_instructions || jsonb_build_array(
+        jsonb_build_object(
+          'kind', 'AUTHORITATIVE_INVOICE_PDF',
+          'context_id', v_ctx.context_id::text,
+          'entity_type', v_entity_type,
+          'filename', format('Invoice_%s.pdf', v_ctx.context_id::text),
+          'content_type', 'application/pdf'
+        )
+      );
+    end if;
+
     v_rows := v_rows || jsonb_build_array(
       jsonb_build_object(
         'context_id', v_ctx.context_id::text,
@@ -785,13 +868,24 @@ begin
         'to', v_to_value,
         'recipient_kind', v_recipient_kind,
         'recipient_id', case when v_recipient_id is null then null else v_recipient_id::text end,
+        'recipient_display_name', v_recipient_display_name,
+        'candidate_name', v_candidate_name,
         'eligible', v_opt_ok,
         'skip_reason', v_skip_reason,
         'field_values', v_field_values,
-        'template_content_json', case when v_has_template then v_template.template_content_json else '{}'::jsonb end,
-        'email_type', v_email_type
+        'template_content_json', case when v_has_template then v_template_content_json else '{}'::jsonb end,
+        'email_type', v_email_type,
+        'attachment_instructions', v_row_attachment_instructions,
+        'attachments', v_row_attachment_instructions
       )
     );
+
+    v_returned_row_count := v_returned_row_count + 1;
+    if v_opt_ok then
+      v_eligible_count := v_eligible_count + 1;
+    else
+      v_skipped_count := v_skipped_count + 1;
+    end if;
   end loop;
 
   return jsonb_build_object(
@@ -802,7 +896,22 @@ begin
     'document_template_id', case when p_document_template_id is null then null else p_document_template_id::text end,
     'selected_field_keys', to_jsonb(v_selected_keys),
     'to_field_key', v_to_field_key,
+    'requested_context_count', v_requested_context_count,
+    'resolved_context_count', v_resolved_context_count,
+    'returned_row_count', v_returned_row_count,
+    'eligible_count', v_eligible_count,
+    'skipped_count', v_skipped_count,
+    'prepare_counts', jsonb_build_object(
+      'requested_context_count', v_requested_context_count,
+      'resolved_context_count', v_resolved_context_count,
+      'returned_row_count', v_returned_row_count,
+      'eligible_count', v_eligible_count,
+      'skipped_count', v_skipped_count
+    ),
+    'attachment_instructions', v_prepare_attachment_instructions,
+    'attachments', v_prepare_attachment_instructions,
     'rows', v_rows
   );
 end;
 $function$;
+
