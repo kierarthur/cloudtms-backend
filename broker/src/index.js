@@ -12932,6 +12932,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
   const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
   if (!cutoffIso) return withCORS(env, req, badRequest('week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY'));
 
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+
   const previewDecisionsIn =
     (body.preview_decisions_json && typeof body.preview_decisions_json === 'object' && !Array.isArray(body.preview_decisions_json))
       ? body.preview_decisions_json
@@ -12973,8 +12977,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     ''
   ).trim();
 
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
   const normalizeUuidArray = (raw, label) => {
     if (!Array.isArray(raw)) return null;
     const out = [];
@@ -12987,6 +12989,26 @@ async function handleBankingPayCreateDraft(env, req, user) {
       out.push(s);
     }
     return out;
+  };
+
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const normalizeComponentResolutionsShape = (value) => {
+    if (Array.isArray(value)) {
+      const cloned = cloneJson(value);
+      return Array.isArray(cloned) ? cloned : null;
+    }
+    if (isPlainObject(value)) {
+      const cloned = cloneJson(value);
+      return (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) ? cloned : null;
+    }
+    return null;
   };
 
   const candidateId = candRaw ? candRaw : null;
@@ -13027,22 +13049,39 @@ async function handleBankingPayCreateDraft(env, req, user) {
       ? { ...previewDecisionsIn }
       : {};
 
-  const componentResolutionsIn =
-    (previewDecisions.component_resolutions && typeof previewDecisions.component_resolutions === 'object' && !Array.isArray(previewDecisions.component_resolutions))
-      ? previewDecisions.component_resolutions
-      : (
-        body.component_resolutions && typeof body.component_resolutions === 'object' && !Array.isArray(body.component_resolutions)
-          ? body.component_resolutions
-          : null
-      );
+  if (
+    body.component_resolutions != null &&
+    !Array.isArray(body.component_resolutions) &&
+    (typeof body.component_resolutions !== 'object' || body.component_resolutions === null)
+  ) {
+    return withCORS(env, req, badRequest('component_resolutions must be an array or object when provided'));
+  }
 
-  if (body.component_resolutions != null && (typeof body.component_resolutions !== 'object' || Array.isArray(body.component_resolutions))) {
-    return withCORS(env, req, badRequest('component_resolutions must be an object when provided'));
+  if (
+    previewDecisions.component_resolutions != null &&
+    !Array.isArray(previewDecisions.component_resolutions) &&
+    (typeof previewDecisions.component_resolutions !== 'object' || previewDecisions.component_resolutions === null)
+  ) {
+    return withCORS(env, req, badRequest('preview_decisions_json.component_resolutions must be an array or object when provided'));
   }
-  if (previewDecisions.component_resolutions != null && (typeof previewDecisions.component_resolutions !== 'object' || Array.isArray(previewDecisions.component_resolutions))) {
-    return withCORS(env, req, badRequest('preview_decisions_json.component_resolutions must be an object when provided'));
+
+  const componentResolutionsIn =
+    previewDecisions.component_resolutions != null
+      ? normalizeComponentResolutionsShape(previewDecisions.component_resolutions)
+      : (
+          body.component_resolutions != null
+            ? normalizeComponentResolutionsShape(body.component_resolutions)
+            : null
+        );
+
+  if (
+    (previewDecisions.component_resolutions != null && componentResolutionsIn == null) ||
+    (body.component_resolutions != null && componentResolutionsIn == null)
+  ) {
+    return withCORS(env, req, badRequest('component_resolutions must be a valid JSON array or object when provided'));
   }
-  if (componentResolutionsIn) {
+
+  if (componentResolutionsIn != null) {
     previewDecisions.component_resolutions = componentResolutionsIn;
   }
 
@@ -13289,6 +13328,141 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return { eligibleCandidateIds, timesheetIds: Array.from(timesheetIds), timesheetToCandidateId };
   };
 
+  const extractCaseStateEntries = (raw) => {
+    const out = [];
+
+    const pushValue = (value) => {
+      if (value == null) return;
+
+      if (Array.isArray(value)) {
+        for (const item of value) pushValue(item);
+        return;
+      }
+
+      if (typeof value !== 'object') return;
+
+      if (value.case && typeof value.case === 'object' && !Array.isArray(value.case)) {
+        out.push(value);
+        return;
+      }
+
+      const asCase = value.raw_case && typeof value.raw_case === 'object' && !Array.isArray(value.raw_case)
+        ? value.raw_case
+        : value;
+
+      const candidateIdLocal = String(
+        value.candidate_id ||
+        value.candidateId ||
+        asCase.candidate_id ||
+        ''
+      ).trim();
+
+      const financeCaseIdLocal = String(
+        value.finance_case_id ||
+        value.financeCaseId ||
+        asCase.finance_case_id ||
+        asCase.case_id ||
+        ''
+      ).trim();
+
+      const timesheetIdLocal = String(
+        value.linked_timesheet_id ||
+        value.linkedTimesheetId ||
+        value.timesheet_id ||
+        value.timesheetId ||
+        asCase.linked_timesheet_id ||
+        asCase.timesheet_id ||
+        ''
+      ).trim();
+
+      const caseKeyLocal = String(
+        value.case_key ||
+        value.caseKey ||
+        asCase.case_key ||
+        ''
+      ).trim();
+
+      if (candidateIdLocal || financeCaseIdLocal || timesheetIdLocal || caseKeyLocal) {
+        out.push(value);
+        return;
+      }
+
+      for (const nested of Object.values(value)) {
+        pushValue(nested);
+      }
+    };
+
+    pushValue(raw);
+    return out;
+  };
+
+  const collectDecisionAwareScope = (decisionsObj, includeCandidateIds) => {
+    const includeSetNorm = (() => {
+      if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
+      const s = new Set();
+      for (const x of includeCandidateIds) s.add(String(x));
+      return s;
+    })();
+
+    const hasSafeSnapshot = (
+      decisionsObj &&
+      typeof decisionsObj === 'object' &&
+      Object.prototype.hasOwnProperty.call(decisionsObj, 'safe_case_states') &&
+      decisionsObj.safe_case_states != null
+    );
+
+    const safeEntries = hasSafeSnapshot ? extractCaseStateEntries(decisionsObj.safe_case_states) : [];
+    const eligibleCandidateIds = new Set();
+    const timesheetIds = new Set();
+    const timesheetToCandidateId = new Map();
+
+    for (const entry of safeEntries) {
+      if (!entry || typeof entry !== 'object') continue;
+
+      const caseObj = (entry.case && typeof entry.case === 'object' && !Array.isArray(entry.case))
+        ? entry.case
+        : (
+            entry.raw_case && typeof entry.raw_case === 'object' && !Array.isArray(entry.raw_case)
+              ? entry.raw_case
+              : entry
+          );
+
+      const candId = String(
+        entry.candidate_id ||
+        entry.candidateId ||
+        caseObj.candidate_id ||
+        ''
+      ).trim();
+
+      if (!candId) continue;
+      if (includeSetNorm && !includeSetNorm.has(candId)) continue;
+
+      eligibleCandidateIds.add(candId);
+
+      const tid = String(
+        entry.linked_timesheet_id ||
+        entry.linkedTimesheetId ||
+        entry.timesheet_id ||
+        entry.timesheetId ||
+        caseObj.linked_timesheet_id ||
+        caseObj.timesheet_id ||
+        ''
+      ).trim();
+
+      if (tid && uuidRe.test(tid)) {
+        timesheetIds.add(tid);
+        if (!timesheetToCandidateId.has(tid)) timesheetToCandidateId.set(tid, candId);
+      }
+    }
+
+    return {
+      hasSafeSnapshot,
+      eligibleCandidateIds,
+      timesheetIds: Array.from(timesheetIds),
+      timesheetToCandidateId
+    };
+  };
+
   const chunk = (arr, n) => {
     const out = [];
     for (let i = 0; i < (arr?.length || 0); i += n) out.push(arr.slice(i, i + n));
@@ -13419,14 +13593,31 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
   try {
     const preview0 = await callPayPreview();
-    const eligibleCount = countEligibleCandidates(preview0, (Array.isArray(includeSet) ? includeSet : null));
 
-    if (eligibleCount <= 0) {
-      return withCORS(env, req, badRequest('Nothing eligible to draft; resolve Review required items and refresh preview.'));
+    const decisionAwareScope = collectDecisionAwareScope(previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+
+    const effectiveEligibleCandidateIds = decisionAwareScope.hasSafeSnapshot
+      ? decisionAwareScope.eligibleCandidateIds
+      : null;
+
+    const effectiveEligibleCount = decisionAwareScope.hasSafeSnapshot
+      ? decisionAwareScope.eligibleCandidateIds.size
+      : countEligibleCandidates(preview0, (Array.isArray(includeSet) ? includeSet : null));
+
+    if (effectiveEligibleCount <= 0) {
+      return withCORS(env, req, badRequest('Nothing is currently Ready to Pay for draft creation. Resolve Blocked for Pay items or refresh preview.'));
     }
 
-    const { timesheetIds: inScopeTimesheetIds, timesheetToCandidateId } =
+    const rawEligibleScope =
       collectEligibleTimesheetsForDraft(preview0, (Array.isArray(includeSet) ? includeSet : null));
+
+    const effectiveTimesheetToCandidateId = decisionAwareScope.hasSafeSnapshot
+      ? decisionAwareScope.timesheetToCandidateId
+      : rawEligibleScope.timesheetToCandidateId;
+
+    const inScopeTimesheetIds = decisionAwareScope.hasSafeSnapshot
+      ? decisionAwareScope.timesheetIds
+      : rawEligibleScope.timesheetIds;
 
     const uniqueInScopeIds = Array.isArray(inScopeTimesheetIds)
       ? Array.from(new Set(inScopeTimesheetIds.filter(x => uuidRe.test(String(x || '').trim()))))
@@ -13443,10 +13634,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
       return withCORS(env, req, new Response(
         JSON.stringify({
           error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
-          message: 'No timesheets were ready to draft (calculations still processing). Please try again shortly.',
+          message: 'No Ready to Pay timesheets were ready to draft because calculations are still processing. Please try again shortly.',
           excluded_timesheets: excludedTimesheetIdsFromDrain.map((tid) => ({
             timesheet_id: tid,
-            candidate_id: timesheetToCandidateId.get(tid) || null,
+            candidate_id: effectiveTimesheetToCandidateId.get(tid) || null,
             reason_summary: 'CALCULATIONS_STILL_PROCESSING'
           }))
         }),
@@ -13525,7 +13716,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       }
 
       outPayload.excluded_timesheets = excludedTimesheetIdsFromDrain.map((tid) => {
-        const cid = timesheetToCandidateId.get(tid) || null;
+        const cid = effectiveTimesheetToCandidateId.get(tid) || null;
 
         const rs = rowsByTimesheet.get(tid) || [];
         const reasons = Array.from(new Set(rs.map(x => String(x?.reason || '').trim()).filter(Boolean)));
@@ -14916,7 +15107,70 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const resolvedSnoozeId = String(
+      payloadObj.snooze_id ||
+      payloadObj.active_snooze_id ||
+      payloadObj.id ||
+      ''
+    ).trim();
+
+    const resolvedUntilIso =
+      parseIsoOrUkDateToIso(
+        payloadObj.snooze_until_date ||
+        payloadObj.active_snooze_until_date ||
+        untilIso ||
+        null
+      ) || null;
+
+    const snoozeMode =
+      String(
+        payloadObj.snooze_mode ||
+        (resolvedUntilIso ? 'DATED' : 'INDEFINITE')
+      ).trim().toUpperCase() || 'INDEFINITE';
+
+    const shouldRemainVisibleInLivePayWorkbench =
+      (typeof payloadObj.should_remain_visible_in_live_pay_workbench === 'boolean')
+        ? payloadObj.should_remain_visible_in_live_pay_workbench
+        : (snoozeMode === 'DATED');
+
+    const livePayBucket =
+      String(
+        payloadObj.live_pay_bucket ||
+        (shouldRemainVisibleInLivePayWorkbench ? 'BLOCKED_FOR_PAY' : 'LOANS_SNOOZES_ONLY')
+      ).trim().toUpperCase();
+
+    const activeSnooze =
+      (typeof payloadObj.active_snooze === 'boolean')
+        ? payloadObj.active_snooze
+        : true;
+
+    const canonical = {
+      ...payloadObj,
+      candidate_id: String(payloadObj.candidate_id || candidateId || '').trim(),
+      timesheet_id: (payloadObj.timesheet_id === null || payloadObj.timesheet_id === undefined)
+        ? timesheetId
+        : (String(payloadObj.timesheet_id || '').trim() || null),
+      segment_id: (payloadObj.segment_id === null || payloadObj.segment_id === undefined)
+        ? segmentId
+        : (String(payloadObj.segment_id || '').trim() || null),
+      source_ref: (payloadObj.source_ref === null || payloadObj.source_ref === undefined)
+        ? sourceRef
+        : (String(payloadObj.source_ref || '').trim() || null),
+      snooze_kind: String(payloadObj.snooze_kind || snoozeKindNormalized || '').trim().toUpperCase(),
+      snooze_id: resolvedSnoozeId || null,
+      active_snooze: activeSnooze,
+      snooze_until_date: resolvedUntilIso,
+      snooze_mode: snoozeMode,
+      should_remain_visible_in_live_pay_workbench: shouldRemainVisibleInLivePayWorkbench,
+      live_pay_bucket: livePayBucket,
+      note: (payloadObj.note === null || payloadObj.note === undefined)
+        ? note
+        : (String(payloadObj.note || '').trim() || null)
+    };
+
+    return withCORS(env, req, ok(canonical));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
@@ -22753,7 +23007,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
-
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -22804,7 +23057,32 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         return withCORS(env, req, serverError(`Planned delete failed: ${t}`));
       }
 
-      return withCORS(env, req, ok({ deleted: true, planned: true }));
+      return withCORS(env, req, ok({
+        deleted: true,
+        planned: true,
+        contract_week_id: weekId,
+        timesheet_id: null,
+        contract_week_status: (cw.status != null ? String(cw.status) : null),
+        reopened_submission_mode_snapshot: (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot) : null),
+        week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+        contract_week: {
+          id: weekId,
+          contract_id: cw.contract_id || null,
+          week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+          status: (cw.status != null ? String(cw.status) : null),
+          submission_mode_snapshot: (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot) : null),
+          timesheet_id: null
+        },
+        summary_row_hint: {
+          id: weekId,
+          contract_week_id: weekId,
+          timesheet_id: null,
+          contract_id: cw.contract_id || null,
+          week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+          status: (cw.status != null ? String(cw.status) : null),
+          submission_mode_snapshot: (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot) : null)
+        }
+      }));
     } catch (e) {
       return withCORS(env, req, serverError(`Planned delete failed: ${e?.message || String(e)}`));
     }
@@ -22917,6 +23195,51 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     }
   ).catch(() => {});
 
+  let reopenedContractWeek = null;
+  try {
+    reopenedContractWeek = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}` +
+        `&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,additional_seq,is_adjustment,planned_schedule_json,updated_at`
+    );
+  } catch {
+    reopenedContractWeek = null;
+  }
+
+  if (!reopenedContractWeek) {
+    reopenedContractWeek = {
+      id: weekId,
+      contract_id: cw.contract_id || null,
+      week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+      status: 'OPEN',
+      submission_mode_snapshot: reopenSnapshot,
+      timesheet_id: null,
+      additional_seq: Number(cw.additional_seq ?? 0) || 0,
+      is_adjustment: cw.is_adjustment === true,
+      planned_schedule_json: (cw.planned_schedule_json ?? null),
+      updated_at: nowIso()
+    };
+  }
+
+  const summaryRowHint = {
+    id: weekId,
+    contract_week_id: weekId,
+    timesheet_id: null,
+    contract_id: reopenedContractWeek.contract_id || cw.contract_id || null,
+    week_ending_date:
+      (reopenedContractWeek.week_ending_date != null
+        ? String(reopenedContractWeek.week_ending_date)
+        : (cw.week_ending_date != null ? String(cw.week_ending_date) : null)),
+    status:
+      (reopenedContractWeek.status != null
+        ? String(reopenedContractWeek.status)
+        : 'OPEN'),
+    submission_mode_snapshot:
+      (reopenedContractWeek.submission_mode_snapshot != null
+        ? String(reopenedContractWeek.submission_mode_snapshot)
+        : reopenSnapshot)
+  };
+
   // Audit
   try {
     await writeAudit(
@@ -22931,11 +23254,26 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   return withCORS(env, req, ok({
     deleted: true,
     planned: false,
+    contract_week_id: weekId,
+    timesheet_id: null,
+    contract_week_status:
+      (reopenedContractWeek.status != null
+        ? String(reopenedContractWeek.status)
+        : 'OPEN'),
+    reopened_submission_mode_snapshot:
+      (reopenedContractWeek.submission_mode_snapshot != null
+        ? String(reopenedContractWeek.submission_mode_snapshot)
+        : reopenSnapshot),
+    week_ending_date:
+      (reopenedContractWeek.week_ending_date != null
+        ? String(reopenedContractWeek.week_ending_date)
+        : (cw.week_ending_date != null ? String(cw.week_ending_date) : null)),
+    contract_week: reopenedContractWeek,
+    summary_row_hint: summaryRowHint,
     booking_id: bookingId,
     requested_timesheet_id: cw.timesheet_id,
     current_timesheet_id: currentTimesheetId,
-    was_stale: !!resolved?.was_stale,
-    reopened_submission_mode_snapshot: reopenSnapshot
+    was_stale: !!resolved?.was_stale
   }));
 }
 
@@ -27667,6 +28005,7 @@ async function handleMailshotRunsList(env, req) {
       const sentTotal = mailCounts.sent_total + commsCounts.sent_total;
       const deliveredTotal = mailCounts.delivered_total + commsCounts.delivered_total;
       const readTotal = mailCounts.read_total + commsCounts.read_total;
+      const successTotal = sentTotal + deliveredTotal + readTotal;
       const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
       const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
 
@@ -27678,6 +28017,7 @@ async function handleMailshotRunsList(env, req) {
         queued: pendingTotal,
         skipped: initialSkipped,
         failed: initialFailed + liveFailedTotal,
+        success: successTotal,
         blocking: blockingTotal,
         total_rows: totalRows,
         cancelable: cancelableTotal,
@@ -27714,6 +28054,7 @@ async function handleMailshotRunsList(env, req) {
           sent_total: sentTotal,
           delivered_total: deliveredTotal,
           read_total: readTotal,
+          success_total: successTotal,
           blocking_total: blockingTotal,
           cancelable_total: cancelableTotal
         },
@@ -27869,6 +28210,7 @@ async function handleMailshotRunGet(env, req, id) {
     const sentTotal = mailCounts.sent_total + commsCounts.sent_total;
     const deliveredTotal = mailCounts.delivered_total + commsCounts.delivered_total;
     const readTotal = mailCounts.read_total + commsCounts.read_total;
+    const successTotal = sentTotal + deliveredTotal + readTotal;
     const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
     const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
 
@@ -27880,6 +28222,7 @@ async function handleMailshotRunGet(env, req, id) {
       queued: pendingTotal,
       skipped: initialSkipped,
       failed: initialFailed + liveFailedTotal,
+      success: successTotal,
       blocking: blockingTotal,
       total_rows: totalRows,
       cancelable: cancelableTotal,
@@ -27920,6 +28263,7 @@ async function handleMailshotRunGet(env, req, id) {
           sent_total: sentTotal,
           delivered_total: deliveredTotal,
           read_total: readTotal,
+          success_total: successTotal,
           blocking_total: blockingTotal,
           cancelable_total: cancelableTotal,
           blocking_mail_sent: mailCounts.sent_total,
@@ -27961,7 +28305,6 @@ async function handleMailshotRunGet(env, req, id) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 
 
@@ -54157,10 +54500,27 @@ async function handleMailshotEnqueue(env, req) {
 async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const enc = encodeURIComponent;
 
-  const take = Math.max(
+  const toPositiveInt = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+  };
+
+  const maxPerCall = Math.max(
     1,
-    Math.min(Number(limit) || Number(env.EMAIL_DRAIN_LIMIT_DEFAULT) || DEFAULT_DRAIN_LIMIT, 100)
+    toPositiveInt(env.EMAIL_DRAIN_MAX_PER_CALL) || 200
   );
+  const maxCallsPerDrain = Math.max(
+    1,
+    toPositiveInt(env.EMAIL_DRAIN_MAX_CALLS_PER_DRAIN) || 25
+  );
+  const maxDrainJobs = Math.max(1, maxPerCall * maxCallsPerDrain);
+
+  const requestedTake =
+    toPositiveInt(limit) ||
+    toPositiveInt(env.EMAIL_DRAIN_LIMIT_DEFAULT) ||
+    maxDrainJobs;
+
+  const take = Math.max(1, Math.min(requestedTake, maxDrainJobs));
   const typeFilter = Array.isArray(types) && types.length ? types : null;
 
   let sent = 0;
@@ -54204,9 +54564,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return { picked: 0, sent: 0, failed: 0, deferred: 0, errors: [] };
   }
 
-  const BATCH_MAX = 25;
   const routeBuckets = new Map();
-  let queuedJobCount = 0;
 
   const addJobToBucket = (bucketKey, bucketChannel, rowId, payload) => {
     if (!routeBuckets.has(bucketKey)) {
@@ -54352,8 +54710,6 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   };
 
   for (const row of picked) {
-    if (queuedJobCount >= BATCH_MAX) break;
-
     try {
       const payload = await buildEmailPayloadFromOutboxRow(env, row);
       const rowType = String(row && row.type ? row.type : '').trim().toUpperCase();
@@ -54373,8 +54729,6 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       } else {
         addJobToBucket('finance', 'finance', row.id, payload);
       }
-
-      queuedJobCount += 1;
     } catch (e) {
       const msg = String(e?.message || e);
 
@@ -54411,15 +54765,27 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return { picked: picked.length, sent, failed, deferred, errors };
   }
 
+  let outboundCallCount = 0;
+
   for (const bucket of routeBuckets.values()) {
-    const batchPayload = { items: bucket.jobs };
-    const res = await postToPowerAutomate(env, batchPayload, bucket.channel);
-    await reconcileBatchResult(res, bucket.rowIds);
+    for (let start = 0; start < bucket.jobs.length; start += maxPerCall) {
+      if (outboundCallCount >= maxCallsPerDrain) break;
+
+      const batchJobs = bucket.jobs.slice(start, start + maxPerCall);
+      const batchRowIds = bucket.rowIds.slice(start, start + maxPerCall);
+      if (!batchJobs.length) continue;
+
+      const batchPayload = { items: batchJobs };
+      const res = await postToPowerAutomate(env, batchPayload, bucket.channel);
+      await reconcileBatchResult(res, batchRowIds);
+      outboundCallCount += 1;
+    }
+
+    if (outboundCallCount >= maxCallsPerDrain) break;
   }
 
   return { picked: picked.length, sent, failed, deferred, errors };
 }
-
 async function drainCommsOutboxOnce(env, { limit } = {}) {
   const enc = encodeURIComponent;
 
@@ -55430,6 +55796,11 @@ async function handleMailshotPrepare(env, req) {
   const normalizeAttachmentArray = (arr) => Array.isArray(arr)
     ? arr.filter(v => v && typeof v === 'object' && !Array.isArray(v))
     : [];
+  const toNonNegativeIntOrNull = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.trunc(n);
+  };
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   const singularContextKind = (v) => {
@@ -55500,6 +55871,8 @@ async function handleMailshotPrepare(env, req) {
       to: null,
       recipient_kind: null,
       recipient_id: null,
+      recipient_display_name: null,
+      candidate_name: null,
       eligible: false,
       skip_reason: String(skipReason || 'SKIPPED'),
       field_values: {},
@@ -55677,43 +56050,79 @@ async function handleMailshotPrepare(env, req) {
       normalized.output_type = normalized.output_type != null ? String(normalized.output_type).trim().toUpperCase() : outputType;
       normalized.document_template_id = normalized.document_template_id == null ? templateId : String(normalized.document_template_id);
 
-      normalized.selected_field_keys = Array.isArray(normalized.selected_field_keys)
-        ? normalized.selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
-        : [];
+      normalized.selected_field_keys = normalizeSelectedKeys(normalized.selected_field_keys);
 
       normalized.accepted_selected_field_keys = Array.isArray(normalized.accepted_selected_field_keys)
-        ? normalized.accepted_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+        ? normalizeSelectedKeys(normalized.accepted_selected_field_keys)
         : normalized.selected_field_keys;
 
       normalized.rejected_selected_field_keys = Array.isArray(normalized.rejected_selected_field_keys)
-        ? normalized.rejected_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
+        ? normalizeSelectedKeys(normalized.rejected_selected_field_keys)
         : [];
 
       normalized.rejected_selected_field_details = Array.isArray(normalized.rejected_selected_field_details)
         ? normalized.rejected_selected_field_details
         : [];
 
-      normalized.warnings = Array.isArray(normalized.warnings)
-        ? normalized.warnings.map((x) => String(x == null ? '' : x)).filter((x) => x.length > 0)
-        : [];
+      normalized.warnings = normalizeWarnings(normalized.warnings);
 
-      const topLevelAttachmentInstructions = Array.isArray(normalized.attachment_instructions)
-        ? normalized.attachment_instructions
-        : (Array.isArray(normalized.attachments) ? normalized.attachments : []);
+      const topLevelAttachmentInstructions = normalizeAttachmentArray(
+        Array.isArray(normalized.attachment_instructions)
+          ? normalized.attachment_instructions
+          : (Array.isArray(normalized.attachments) ? normalized.attachments : [])
+      );
 
       normalized.attachment_instructions = topLevelAttachmentInstructions;
-      normalized.attachments = Array.isArray(normalized.attachments)
-        ? normalized.attachments
-        : topLevelAttachmentInstructions;
+      normalized.attachments = topLevelAttachmentInstructions;
+
+      normalized.requested_context_count = toNonNegativeIntOrNull(normalized.requested_context_count);
+      normalized.resolved_context_count = toNonNegativeIntOrNull(normalized.resolved_context_count);
+      normalized.returned_row_count = toNonNegativeIntOrNull(normalized.returned_row_count);
+      normalized.eligible_count = toNonNegativeIntOrNull(normalized.eligible_count);
+      normalized.skipped_count = toNonNegativeIntOrNull(normalized.skipped_count);
+
+      const payloadPrepareCounts = (normalized.prepare_counts && typeof normalized.prepare_counts === 'object' && !Array.isArray(normalized.prepare_counts))
+        ? normalized.prepare_counts
+        : {};
+
+      normalized.prepare_counts = {
+        requested_context_count: toNonNegativeIntOrNull(
+          payloadPrepareCounts.requested_context_count != null
+            ? payloadPrepareCounts.requested_context_count
+            : normalized.requested_context_count
+        ),
+        resolved_context_count: toNonNegativeIntOrNull(
+          payloadPrepareCounts.resolved_context_count != null
+            ? payloadPrepareCounts.resolved_context_count
+            : normalized.resolved_context_count
+        ),
+        returned_row_count: toNonNegativeIntOrNull(
+          payloadPrepareCounts.returned_row_count != null
+            ? payloadPrepareCounts.returned_row_count
+            : normalized.returned_row_count
+        ),
+        eligible_count: toNonNegativeIntOrNull(
+          payloadPrepareCounts.eligible_count != null
+            ? payloadPrepareCounts.eligible_count
+            : normalized.eligible_count
+        ),
+        skipped_count: toNonNegativeIntOrNull(
+          payloadPrepareCounts.skipped_count != null
+            ? payloadPrepareCounts.skipped_count
+            : normalized.skipped_count
+        )
+      };
 
       normalized.rows = Array.isArray(normalized.rows) ? normalized.rows : [];
 
       normalized.rows = normalized.rows.map((row) => {
         const rawRow = (row && typeof row === 'object') ? row : {};
 
-        const rowAttachmentInstructions = Array.isArray(rawRow.attachment_instructions)
-          ? rawRow.attachment_instructions
-          : (Array.isArray(rawRow.attachments) ? rawRow.attachments : []);
+        const rowAttachmentInstructions = normalizeAttachmentArray(
+          Array.isArray(rawRow.attachment_instructions)
+            ? rawRow.attachment_instructions
+            : (Array.isArray(rawRow.attachments) ? rawRow.attachments : [])
+        );
 
         return {
           ...rawRow,
@@ -55726,6 +56135,8 @@ async function handleMailshotPrepare(env, req) {
           to: rawRow.to == null ? null : String(rawRow.to),
           recipient_kind: rawRow.recipient_kind == null ? null : String(rawRow.recipient_kind).trim().toLowerCase(),
           recipient_id: rawRow.recipient_id == null ? null : String(rawRow.recipient_id),
+          recipient_display_name: rawRow.recipient_display_name == null ? null : String(rawRow.recipient_display_name),
+          candidate_name: rawRow.candidate_name == null ? null : String(rawRow.candidate_name),
           eligible: rawRow.eligible == null ? false : !!rawRow.eligible,
           skip_reason: rawRow.skip_reason == null ? null : String(rawRow.skip_reason),
           field_values: rawRow.field_values && typeof rawRow.field_values === 'object' && !Array.isArray(rawRow.field_values)
@@ -55737,9 +56148,7 @@ async function handleMailshotPrepare(env, req) {
           email_type: rawRow.email_type == null ? null : String(rawRow.email_type).trim().toLowerCase(),
           warning_messages: normalizeWarnings(rawRow.warning_messages),
           attachment_instructions: rowAttachmentInstructions,
-          attachments: Array.isArray(rawRow.attachments)
-            ? rawRow.attachments
-            : rowAttachmentInstructions,
+          attachments: rowAttachmentInstructions,
           selected_row_id: rawRow.selected_row_id == null ? null : String(rawRow.selected_row_id)
         };
       });
@@ -55755,6 +56164,18 @@ async function handleMailshotPrepare(env, req) {
         warnings: [],
         attachment_instructions: [],
         attachments: [],
+        requested_context_count: 0,
+        resolved_context_count: 0,
+        returned_row_count: 0,
+        eligible_count: 0,
+        skipped_count: 0,
+        prepare_counts: {
+          requested_context_count: 0,
+          resolved_context_count: 0,
+          returned_row_count: 0,
+          eligible_count: 0,
+          skipped_count: 0
+        },
         rows: []
       };
     }
@@ -55766,20 +56187,34 @@ async function handleMailshotPrepare(env, req) {
 
     if (resolved.selectionEcho) {
       normalized.selection_scope = resolved.selectionEcho;
+      normalized.selection_echo = resolved.selectionEcho;
     }
     if (resolved.selectedCountContext) {
       normalized.selected_count_context = resolved.selectedCountContext;
     }
 
-    const eligibleCount = Array.isArray(normalized.rows)
-      ? normalized.rows.filter((row) => !!(row && row.eligible)).length
-      : 0;
-    const skippedCount = Array.isArray(normalized.rows)
-      ? normalized.rows.filter((row) => !(row && row.eligible)).length
-      : 0;
+    const finalRows = Array.isArray(normalized.rows) ? normalized.rows : [];
+    const eligibleCount = finalRows.filter((row) => !!(row && row.eligible)).length;
+    const skippedCount = finalRows.filter((row) => !(row && row.eligible)).length;
+    const returnedRowCount = finalRows.length;
 
+    if (normalized.requested_context_count == null) {
+      normalized.requested_context_count = ctxIdsClean.length;
+    }
+    if (normalized.resolved_context_count == null) {
+      normalized.resolved_context_count = ctxIdsClean.length;
+    }
+
+    normalized.returned_row_count = returnedRowCount;
     normalized.eligible_count = eligibleCount;
     normalized.skipped_count = skippedCount;
+    normalized.prepare_counts = {
+      requested_context_count: toNonNegativeIntOrNull(normalized.requested_context_count),
+      resolved_context_count: toNonNegativeIntOrNull(normalized.resolved_context_count),
+      returned_row_count: returnedRowCount,
+      eligible_count: eligibleCount,
+      skipped_count: skippedCount
+    };
 
     return withCORS(env, req, ok(normalized));
   } catch (e) {
@@ -55787,7 +56222,6 @@ async function handleMailshotPrepare(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 async function handleMailshotExport(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -83259,7 +83693,6 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
   }));
 }
 
-
 async function handleContractWeekManualAuthorise(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -83282,14 +83715,79 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
 
-  const cw = await sbGetOne(
+  let cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,timesheet_id`
   );
-  if (!cw?.timesheet_id) return withCORS(env, req, badRequest('No timesheet linked to this week'));
+  if (!cw?.id) return withCORS(env, req, notFound('Week not found'));
+
+  let linkedTimesheetId = cw?.timesheet_id ? String(cw.timesheet_id) : '';
+  let repairedLinkageFromExpected = false;
+
+  // ✅ stale-resolution path: re-read the week once in case FE just created the timesheet
+  if (!linkedTimesheetId) {
+    const cwReload = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,timesheet_id`
+    ).catch(() => null);
+
+    if (cwReload?.id) {
+      cw = cwReload;
+      linkedTimesheetId = cwReload?.timesheet_id ? String(cwReload.timesheet_id) : '';
+    }
+  }
+
+  // ✅ stale-resolution path: if the week still has no linked timesheet, try the FE expected/current id
+  if (!linkedTimesheetId && expected) {
+    const resolvedExpected = await resolveTimesheetToCurrent(env, expected).catch(() => null);
+    const expectedCurrentTimesheetId =
+      resolvedExpected?.current_timesheet_id ? String(resolvedExpected.current_timesheet_id) : '';
+
+    if (expectedCurrentTimesheetId) {
+      const expectedTsRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(expectedCurrentTimesheetId)}` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,contract_id`
+      ).catch(() => null);
+
+      const contractMatches =
+        !!expectedTsRow &&
+        (
+          !cw?.contract_id ||
+          !expectedTsRow?.contract_id ||
+          String(expectedTsRow.contract_id) === String(cw.contract_id)
+        );
+
+      if (contractMatches) {
+        linkedTimesheetId = expectedCurrentTimesheetId;
+        repairedLinkageFromExpected = true;
+      }
+    }
+  }
+
+  if (!linkedTimesheetId) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error: 'TIMESHEET_NOT_LINKED_YET',
+          contract_week_id: weekId,
+          current_timesheet_id: null,
+          expected_timesheet_id: expected || null
+        }),
+        {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    );
+  }
 
   // Resolve + guard
-  const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
+  const resolved = await resolveTimesheetToCurrent(env, linkedTimesheetId);
   const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
   if (!currentTimesheetId) return withCORS(env, req, notFound('Timesheet not found'));
 
@@ -83305,6 +83803,21 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
   }
 
   const now = nowIso();
+
+  // ✅ heal week linkage if we recovered via expected/current id
+  if (repairedLinkageFromExpected && String(cw?.timesheet_id || '') !== String(currentTimesheetId)) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: currentTimesheetId,
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
 
   // Load CURRENT TS + TSFIN (include QR fields for unsigned gating)
   const tsBefore = await sbGetOne(
@@ -83496,7 +84009,13 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
     }
   } catch {}
 
-  return withCORS(env, req, ok({ authorised: true, timesheet_id: currentTimesheetId, warnings }));
+  return withCORS(env, req, ok({
+    authorised: true,
+    timesheet_id: currentTimesheetId,
+    contract_week_id: weekId,
+    linkage_repaired_from_expected: repairedLinkageFromExpected,
+    warnings
+  }));
 }
 
 
