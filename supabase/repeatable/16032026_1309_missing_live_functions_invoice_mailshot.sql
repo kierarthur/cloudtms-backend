@@ -400,6 +400,9 @@ begin
 end;
 $function$;
 
+
+
+
 create or replace function public.mailshot_prepare(p_context_kind text, p_context_ids uuid[], p_output_type text, p_document_template_id uuid, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -440,6 +443,7 @@ declare
   v_candidate_display_name text;
   v_client_display_name text;
   v_umbrella_display_name text;
+  v_sender_display_name text;
 
   v_opt_ok boolean;
   v_skip_reason text;
@@ -480,6 +484,18 @@ begin
   end if;
 
   v_sms_or_voice := (v_output_type in ('SMS','VOICE'));
+
+  select
+    coalesce(
+      nullif(btrim(coalesce(tu.display_name, '')), ''),
+      nullif(btrim(coalesce(tu.email, '')), ''),
+      'CloudTMS user'
+    )
+  into v_sender_display_name
+  from public.tms_users as tu
+  where tu.id = p_actor_user_id;
+
+  v_sender_display_name := coalesce(nullif(btrim(coalesce(v_sender_display_name, '')), ''), 'CloudTMS user');
 
   v_entity_type :=
     case v_context_kind
@@ -575,7 +591,11 @@ begin
       jsonb_build_object(
         'candidate', to_jsonb(c),
         'umbrella', case when u.id is null then null else to_jsonb(u) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
+        'system', jsonb_build_object(
+          'today_ymd', v_today_uk::text,
+          'now_utc', v_now::text,
+          'sender_display_name', v_sender_display_name
+        )
       )
     from public.candidates as c
     left join public.umbrellas as u
@@ -588,7 +608,11 @@ begin
       jsonb_build_object(
         'client', to_jsonb(cl),
         'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
+        'system', jsonb_build_object(
+          'today_ymd', v_today_uk::text,
+          'now_utc', v_now::text,
+          'sender_display_name', v_sender_display_name
+        )
       )
     from public.clients as cl
     left join lateral (
@@ -609,7 +633,11 @@ begin
         'client', case when cl.id is null then null else to_jsonb(cl) end,
         'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
         'umbrella', case when u.id is null then null else to_jsonb(u) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
+        'system', jsonb_build_object(
+          'today_ymd', v_today_uk::text,
+          'now_utc', v_now::text,
+          'sender_display_name', v_sender_display_name
+        )
       )
     from public.contracts as ct
     left join public.candidates as c
@@ -637,7 +665,11 @@ begin
         'client', case when cl.id is null then null else to_jsonb(cl) end,
         'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
         'umbrella', case when u.id is null then null else to_jsonb(u) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
+        'system', jsonb_build_object(
+          'today_ymd', v_today_uk::text,
+          'now_utc', v_now::text,
+          'sender_display_name', v_sender_display_name
+        )
       )
     from public.timesheets as ts
     left join public.contracts as ct
@@ -664,7 +696,11 @@ begin
         'invoice', to_jsonb(inv),
         'client', case when cl.id is null then null else to_jsonb(cl) end,
         'client_settings', case when cs.id is null then null else to_jsonb(cs) end,
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
+        'system', jsonb_build_object(
+          'today_ymd', v_today_uk::text,
+          'now_utc', v_now::text,
+          'sender_display_name', v_sender_display_name
+        )
       )
     from public.invoices as inv
     left join public.clients as cl
@@ -683,7 +719,11 @@ begin
       u.id,
       jsonb_build_object(
         'umbrella', to_jsonb(u),
-        'system', jsonb_build_object('today_ymd', v_today_uk::text, 'now_utc', v_now::text)
+        'system', jsonb_build_object(
+          'today_ymd', v_today_uk::text,
+          'now_utc', v_now::text,
+          'sender_display_name', v_sender_display_name
+        )
       )
     from public.umbrellas as u
     where u.id = any(p_context_ids);
@@ -914,4 +954,3 @@ begin
   );
 end;
 $function$;
-
