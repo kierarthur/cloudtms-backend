@@ -3404,6 +3404,7 @@ begin;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3746,17 +3747,25 @@ eligible_tsfin as (
 
       tf.invoice_breakdown_json,
 
+      tf.total_hours,
       tf.total_pay_ex_vat,
+      tf.total_charge_ex_vat,
 
       -- ✅ Use TSFIN canonical totals for additional units
       tf.additional_pay_ex_vat,
+      tf.additional_charge_ex_vat,
       tf.additional_units_json,
 
       tf.expenses_pay_ex_vat,
+      tf.expenses_charge_ex_vat,
       tf.travel_pay_ex_vat,
+      tf.travel_charge_ex_vat,
       tf.accommodation_pay_ex_vat,
+      tf.accommodation_charge_ex_vat,
       tf.other_pay_ex_vat,
+      tf.other_charge_ex_vat,
       tf.mileage_pay_ex_vat,
+      tf.mileage_charge_ex_vat,
 
       -- Baseline snapshot (settled)
       tps.last_settled_snapshot_json,
@@ -3879,6 +3888,11 @@ umb_map as (
             jsonb_build_object(
               'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')), ''),
               'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
+              'charge_amount', round(coalesce(nullif(seg->>'charge_amount','')::numeric, nullif(seg->>'charge_ex_vat','')::numeric,0),2),
+              'units', coalesce(nullif(seg->>'units','')::numeric, nullif(seg->>'hours','')::numeric),
+              'hours', coalesce(nullif(seg->>'hours','')::numeric, nullif(seg->>'units','')::numeric),
+              'rate', coalesce(nullif(seg->>'rate','')::numeric, nullif(seg->>'pay_rate','')::numeric),
+              'charge_rate', coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric),
               'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean, false),
               'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), ''),
               'date', nullif(btrim(coalesce(seg->>'date','')), '')
@@ -3891,28 +3905,46 @@ umb_map as (
           jsonb_build_object(
             'segment_id', ('ts:' || e.timesheet_id::text),
             'pay_amount', round(coalesce(e.total_pay_ex_vat,0),2),
+            'charge_amount', round(coalesce(e.total_charge_ex_vat,0),2),
+            'units', e.total_hours,
+            'hours', e.total_hours,
+            'rate', case when coalesce(e.total_hours,0) > 0 then round(coalesce(e.total_pay_ex_vat,0) / e.total_hours, 6) else null end,
+            'charge_rate', case when coalesce(e.total_hours,0) > 0 then round(coalesce(e.total_charge_ex_vat,0) / e.total_hours, 6) else null end,
             'exclude_from_pay', false,
             'ref_num', nullif(btrim(coalesce(e.reference_number,'')), '')
           )
         )
       end as current_segments_json,
 
+      round(coalesce(e.total_hours,0),2) as total_hours,
+      round(coalesce(e.total_pay_ex_vat,0),2) as total_pay_ex_vat,
+      round(coalesce(e.total_charge_ex_vat,0),2) as total_charge_ex_vat,
+      coalesce(e.additional_units_json, '{}'::jsonb) as current_additional_units_json,
+
       case
         when e.invoice_breakdown_json is not null
          and jsonb_typeof(e.invoice_breakdown_json)='object'
          and upper(coalesce(e.invoice_breakdown_json->>'mode',''))='SEGMENTS'
         then round(coalesce(nullif(e.invoice_breakdown_json #>> '{additional,pay_ex_vat}','')::numeric,0),2)
-        else 0::numeric
+        else round(coalesce(e.additional_pay_ex_vat,0),2)
       end as current_additional_pay_ex_vat,
-
-      round(coalesce(e.total_pay_ex_vat,0),2) as total_pay_ex_vat,
-      coalesce(e.additional_units_json, '{}'::jsonb) as current_additional_units_json,
-
+      case
+        when e.invoice_breakdown_json is not null
+         and jsonb_typeof(e.invoice_breakdown_json)='object'
+         and upper(coalesce(e.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+        then round(coalesce(nullif(e.invoice_breakdown_json #>> '{additional,charge_ex_vat}','')::numeric,0),2)
+        else round(coalesce(e.additional_charge_ex_vat,0),2)
+      end as current_additional_charge_ex_vat,
       round(coalesce(e.expenses_pay_ex_vat,0),2) as current_expenses_pay_ex_vat,
+      round(coalesce(e.expenses_charge_ex_vat,0),2) as current_expenses_charge_ex_vat,
       round(coalesce(e.travel_pay_ex_vat,0),2) as current_travel_pay_ex_vat,
+      round(coalesce(e.travel_charge_ex_vat,0),2) as current_travel_charge_ex_vat,
       round(coalesce(e.accommodation_pay_ex_vat,0),2) as current_accommodation_pay_ex_vat,
+      round(coalesce(e.accommodation_charge_ex_vat,0),2) as current_accommodation_charge_ex_vat,
       round(coalesce(e.other_pay_ex_vat,0),2) as current_other_pay_ex_vat,
+      round(coalesce(e.other_charge_ex_vat,0),2) as current_other_charge_ex_vat,
       round(coalesce(e.mileage_pay_ex_vat,0),2) as current_mileage_pay_ex_vat,
+      round(coalesce(e.mileage_charge_ex_vat,0),2) as current_mileage_charge_ex_vat,
 
       coalesce(
         (
@@ -3967,14 +3999,22 @@ umb_map as (
       coalesce(t.current_segments_json, '[]'::jsonb) as current_segments_json,
       coalesce(t.current_adjustments_json, '[]'::jsonb) as current_adjustments_json,
 
+      t.total_hours,
       t.total_pay_ex_vat,
+      t.total_charge_ex_vat,
       t.current_additional_pay_ex_vat,
+      t.current_additional_charge_ex_vat,
       t.current_additional_units_json,
       t.current_expenses_pay_ex_vat,
+      t.current_expenses_charge_ex_vat,
       t.current_travel_pay_ex_vat,
+      t.current_travel_charge_ex_vat,
       t.current_accommodation_pay_ex_vat,
+      t.current_accommodation_charge_ex_vat,
       t.current_other_pay_ex_vat,
-      t.current_mileage_pay_ex_vat
+      t.current_other_charge_ex_vat,
+      t.current_mileage_pay_ex_vat,
+      t.current_mileage_charge_ex_vat
     from ts_current t
   ),
   segment_status as (
@@ -3991,6 +4031,10 @@ umb_map as (
         nullif(btrim(coalesce(seg->>'date','')),'') as work_date,
         coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
         round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2) as pay_amount_ex_vat,
+        round(coalesce(nullif(seg->>'charge_amount','')::numeric, nullif(seg->>'charge_ex_vat','')::numeric,0),2) as charge_amount_ex_vat,
+        coalesce(nullif(seg->>'units','')::numeric, nullif(seg->>'hours','')::numeric) as source_units,
+        coalesce(nullif(seg->>'rate','')::numeric, nullif(seg->>'pay_rate','')::numeric) as source_rate,
+        coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
         coalesce(
           nullif(btrim(coalesce(seg->>'date','')),''),
           nullif(btrim(coalesce(seg->>'ref_num','')),''),
@@ -4010,6 +4054,10 @@ umb_map as (
         nullif(btrim(coalesce(seg->>'date','')),'') as work_date,
         coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
         round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2) as pay_amount_ex_vat,
+        round(coalesce(nullif(seg->>'charge_amount','')::numeric, nullif(seg->>'charge_ex_vat','')::numeric,0),2) as charge_amount_ex_vat,
+        coalesce(nullif(seg->>'units','')::numeric, nullif(seg->>'hours','')::numeric) as source_units,
+        coalesce(nullif(seg->>'rate','')::numeric, nullif(seg->>'pay_rate','')::numeric) as source_rate,
+        coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
         coalesce(
           nullif(btrim(coalesce(seg->>'date','')),''),
           nullif(btrim(coalesce(seg->>'ref_num','')),''),
@@ -4048,9 +4096,14 @@ umb_map as (
         max(coalesce(cs.work_date, bs.work_date)) as work_date,
 
         bool_or(coalesce(cs.exclude_from_pay,false)) as cur_excluded,
+        max(cs.source_units) as cur_source_units,
+        max(cs.source_rate) as cur_source_rate,
+        max(cs.source_charge_rate) as cur_source_charge_rate,
 
         round(sum(case when cs.segment_stable_key = i.segment_stable_key then (case when coalesce(cs.exclude_from_pay,false) then 0 else coalesce(cs.pay_amount_ex_vat,0) end) else 0 end), 2) as cur_payable_ex_vat,
-        round(sum(case when bs.segment_stable_key = i.segment_stable_key then (case when coalesce(bs.exclude_from_pay,false) then 0 else coalesce(bs.pay_amount_ex_vat,0) end) else 0 end), 2) as bas_payable_ex_vat
+        round(sum(case when bs.segment_stable_key = i.segment_stable_key then (case when coalesce(bs.exclude_from_pay,false) then 0 else coalesce(bs.pay_amount_ex_vat,0) end) else 0 end), 2) as bas_payable_ex_vat,
+        round(sum(case when cs.segment_stable_key = i.segment_stable_key then (case when coalesce(cs.exclude_from_pay,false) then 0 else coalesce(cs.charge_amount_ex_vat,0) end) else 0 end), 2) as cur_charge_ex_vat,
+        round(sum(case when bs.segment_stable_key = i.segment_stable_key then (case when coalesce(bs.exclude_from_pay,false) then 0 else coalesce(bs.charge_amount_ex_vat,0) end) else 0 end), 2) as bas_charge_ex_vat
       from ids i
       left join cur_segments cs
         on cs.timesheet_id = i.timesheet_id
@@ -4073,12 +4126,20 @@ umb_map as (
       a.segment_stable_key as segment_stable_key,
       a.work_date as work_date,
       a.ref_num as ref_num,
+      a.cur_source_units as source_units,
+      a.cur_source_rate as source_rate,
+      a.cur_source_charge_rate as source_charge_rate,
 
       round(
         coalesce(a.cur_payable_ex_vat,0)
         - coalesce(a.bas_payable_ex_vat,0),
         2
       ) as raw_delta_before_reservation_ex,
+      round(
+        coalesce(a.cur_charge_ex_vat,0)
+        - coalesce(a.bas_charge_ex_vat,0),
+        2
+      ) as raw_delta_charge_ex_vat,
 
       -- Preview-base delta before active-batch reservation subtraction.
       -- This preserves the original row ordering/ordinality that draft rows were created from.
@@ -4172,6 +4233,52 @@ umb_map as (
         end,
         2
       ) as eff_delta_ex,
+
+      case
+        when round(
+          coalesce(a.cur_payable_ex_vat,0) - coalesce(a.bas_payable_ex_vat,0),
+          2
+        ) = 0 then round(coalesce(a.cur_charge_ex_vat,0) - coalesce(a.bas_charge_ex_vat,0), 2)
+        else round(
+          (coalesce(a.cur_charge_ex_vat,0) - coalesce(a.bas_charge_ex_vat,0))
+          * (
+              (
+                case
+                  when (
+                    coalesce(b.has_active_overpayment_case,false) = true
+                    and round(
+                      coalesce(a.cur_payable_ex_vat,0)
+                      - coalesce(a.bas_payable_ex_vat,0)
+                      - coalesce(rss.reserved_amount_ex_vat,0),
+                      2
+                    ) < 0
+                  )
+                  then 0
+                  when (
+                    b.require_reference_to_pay = true
+                    and coalesce(b.is_forced_advance,false) = false
+                    and a.cur_excluded = false
+                    and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
+                    and round(
+                      coalesce(a.cur_payable_ex_vat,0)
+                      - coalesce(a.bas_payable_ex_vat,0)
+                      - coalesce(rss.reserved_amount_ex_vat,0),
+                      2
+                    ) > 0
+                  )
+                  then 0
+                  else round(
+                    coalesce(a.cur_payable_ex_vat,0)
+                    - coalesce(a.bas_payable_ex_vat,0)
+                    - coalesce(rss.reserved_amount_ex_vat,0),
+                    2
+                  )
+                end
+              ) / nullif(round(coalesce(a.cur_payable_ex_vat,0) - coalesce(a.bas_payable_ex_vat,0), 2),0)
+            ),
+          2
+        )
+      end as eff_delta_charge_ex_vat,
 
       -- Flags (for UI/review)
       (
@@ -4368,7 +4475,35 @@ blocked_items as (
             'segment_stable_key', sse.segment_stable_key,
             'work_date', sse.work_date,
             'ref_num', sse.ref_num,
-            'delta_pay_ex_vat', sse.eff_delta_ex_after_reserved
+            'delta_pay_ex_vat', sse.eff_delta_ex_after_reserved,
+            'delta_charge_ex_vat', (
+              select ss.eff_delta_charge_ex_vat
+              from segment_status ss
+              where ss.timesheet_id = b.timesheet_id
+                and ss.segment_stable_key = sse.segment_stable_key
+              limit 1
+            ),
+            'source_units', (
+              select ss.source_units
+              from segment_status ss
+              where ss.timesheet_id = b.timesheet_id
+                and ss.segment_stable_key = sse.segment_stable_key
+              limit 1
+            ),
+            'source_rate', (
+              select ss.source_rate
+              from segment_status ss
+              where ss.timesheet_id = b.timesheet_id
+                and ss.segment_stable_key = sse.segment_stable_key
+              limit 1
+            ),
+            'source_charge_rate', (
+              select ss.source_charge_rate
+              from segment_status ss
+              where ss.timesheet_id = b.timesheet_id
+                and ss.segment_stable_key = sse.segment_stable_key
+              limit 1
+            )
           )
           order by sse.segment_stable_key nulls last, sse.segment_id nulls last
         )
@@ -4410,6 +4545,7 @@ blocked_items as (
         end,
         2
       ) as delta_additional_pay_ex_vat,
+      round(coalesce(b.current_additional_charge_ex_vat,0) - coalesce(nullif(b.base_json->>'additional_charge_ex_vat','')::numeric,0),2) as delta_additional_charge_ex_vat,
 
       -- ADDITIONAL (per code): best-effort from additional_units_json + baseline snapshot + reserved breakdowns
       coalesce((
@@ -4430,7 +4566,11 @@ blocked_items as (
                 0
               ),
               2
-            ) as amount_ex_vat
+            ) as amount_ex_vat,
+            round(coalesce(nullif(e.value->>'charge_ex_vat','')::numeric, nullif(e.value->>'charge_amount_ex_vat','')::numeric, nullif(e.value->>'charge_amount','')::numeric, (coalesce(nullif(e.value->>'units','')::numeric, nullif(e.value->>'units_week','')::numeric, 0) * coalesce(nullif(e.value->>'charge_rate','')::numeric, 0)), 0),2) as charge_amount_ex_vat,
+            coalesce(nullif(e.value->>'units','')::numeric, nullif(e.value->>'units_week','')::numeric) as source_units,
+            coalesce(nullif(e.value->>'rate','')::numeric, nullif(e.value->>'pay_rate','')::numeric) as source_rate,
+            coalesce(nullif(e.value->>'charge_rate','')::numeric, nullif(e.value->>'charge_unit_rate','')::numeric) as source_charge_rate
           from jsonb_each(case when jsonb_typeof(b.current_additional_units_json) = 'object' then b.current_additional_units_json else '{}'::jsonb end) e
           where jsonb_typeof(coalesce(b.current_additional_units_json,'{}'::jsonb)) = 'object'
             and nullif(btrim(coalesce(e.key,'')), '') is not null
@@ -4451,7 +4591,11 @@ blocked_items as (
                 0
               ),
               2
-            ) as amount_ex_vat
+            ) as amount_ex_vat,
+            round(coalesce(nullif(elem->>'charge_ex_vat','')::numeric, nullif(elem->>'charge_amount_ex_vat','')::numeric, nullif(elem->>'charge_amount','')::numeric, (coalesce(nullif(elem->>'units','')::numeric, nullif(elem->>'units_week','')::numeric, 0) * coalesce(nullif(elem->>'charge_rate','')::numeric, 0)), 0),2) as charge_amount_ex_vat,
+            coalesce(nullif(elem->>'units','')::numeric, nullif(elem->>'units_week','')::numeric) as source_units,
+            coalesce(nullif(elem->>'rate','')::numeric, nullif(elem->>'pay_rate','')::numeric) as source_rate,
+            coalesce(nullif(elem->>'charge_rate','')::numeric, nullif(elem->>'charge_unit_rate','')::numeric) as source_charge_rate
           from jsonb_array_elements(case when jsonb_typeof(b.current_additional_units_json) = 'array' then b.current_additional_units_json else '[]'::jsonb end) elem
           where jsonb_typeof(coalesce(b.current_additional_units_json,'[]'::jsonb)) = 'array'
             and nullif(btrim(coalesce(elem->>'code','')),'') is not null
@@ -4477,7 +4621,11 @@ blocked_items as (
                 0
               ),
               2
-            ) as amount_ex_vat
+            ) as amount_ex_vat,
+            round(coalesce(nullif(e.value->>'charge_ex_vat','')::numeric, nullif(e.value->>'charge_amount_ex_vat','')::numeric, nullif(e.value->>'charge_amount','')::numeric, (coalesce(nullif(e.value->>'units','')::numeric, nullif(e.value->>'units_week','')::numeric, 0) * coalesce(nullif(e.value->>'charge_rate','')::numeric, 0)), 0),2) as charge_amount_ex_vat,
+            coalesce(nullif(e.value->>'units','')::numeric, nullif(e.value->>'units_week','')::numeric) as source_units,
+            coalesce(nullif(e.value->>'rate','')::numeric, nullif(e.value->>'pay_rate','')::numeric) as source_rate,
+            coalesce(nullif(e.value->>'charge_rate','')::numeric, nullif(e.value->>'charge_unit_rate','')::numeric) as source_charge_rate
           from jsonb_each(case when jsonb_typeof(b.base_json->'additional_units_json') = 'object' then b.base_json->'additional_units_json' else '{}'::jsonb end) e
           where jsonb_typeof(coalesce(b.base_json->'additional_units_json','{}'::jsonb)) = 'object'
             and nullif(btrim(coalesce(e.key,'')), '') is not null
@@ -4498,7 +4646,11 @@ blocked_items as (
                 0
               ),
               2
-            ) as amount_ex_vat
+            ) as amount_ex_vat,
+            round(coalesce(nullif(elem->>'charge_ex_vat','')::numeric, nullif(elem->>'charge_amount_ex_vat','')::numeric, nullif(elem->>'charge_amount','')::numeric, (coalesce(nullif(elem->>'units','')::numeric, nullif(elem->>'units_week','')::numeric, 0) * coalesce(nullif(elem->>'charge_rate','')::numeric, 0)), 0),2) as charge_amount_ex_vat,
+            coalesce(nullif(elem->>'units','')::numeric, nullif(elem->>'units_week','')::numeric) as source_units,
+            coalesce(nullif(elem->>'rate','')::numeric, nullif(elem->>'pay_rate','')::numeric) as source_rate,
+            coalesce(nullif(elem->>'charge_rate','')::numeric, nullif(elem->>'charge_unit_rate','')::numeric) as source_charge_rate
           from jsonb_array_elements(case when jsonb_typeof(b.base_json->'additional_units_json') = 'array' then b.base_json->'additional_units_json' else '[]'::jsonb end) elem
           where jsonb_typeof(coalesce(b.base_json->'additional_units_json','[]'::jsonb)) = 'array'
             and nullif(btrim(coalesce(elem->>'code','')),'') is not null
@@ -4522,6 +4674,19 @@ blocked_items as (
         rows as (
           select
             i.code,
+            round(
+              coalesce((select sum(ca.amount_ex_vat) from cur_all ca where ca.code = i.code),0)
+              - coalesce((select sum(ba.amount_ex_vat) from bas_all ba where ba.code = i.code),0),
+              2
+            ) as raw_delta_amount_ex_vat,
+            round(
+              coalesce((select sum(ca.charge_amount_ex_vat) from cur_all ca where ca.code = i.code),0)
+              - coalesce((select sum(ba.charge_amount_ex_vat) from bas_all ba where ba.code = i.code),0),
+              2
+            ) as raw_delta_charge_ex_vat,
+            coalesce((select max(ca.source_units) from cur_all ca where ca.code = i.code),(select max(ba.source_units) from bas_all ba where ba.code = i.code)) as source_units,
+            coalesce((select max(ca.source_rate) from cur_all ca where ca.code = i.code),(select max(ba.source_rate) from bas_all ba where ba.code = i.code)) as source_rate,
+            coalesce((select max(ca.source_charge_rate) from cur_all ca where ca.code = i.code),(select max(ba.source_charge_rate) from bas_all ba where ba.code = i.code)) as source_charge_rate,
             case
               when (
                 coalesce(b.has_active_overpayment_case,false) = true
@@ -4546,7 +4711,11 @@ blocked_items as (
           jsonb_agg(
             jsonb_build_object(
               'code', r.code,
-              'delta_pay_ex_vat', r.delta_amount_ex_vat
+              'delta_pay_ex_vat', r.delta_amount_ex_vat,
+              'delta_charge_ex_vat', case when coalesce(r.raw_delta_amount_ex_vat,0) = 0 then r.raw_delta_charge_ex_vat else round(r.raw_delta_charge_ex_vat * (r.delta_amount_ex_vat / nullif(r.raw_delta_amount_ex_vat,0)), 2) end,
+              'source_units', r.source_units,
+              'source_rate', r.source_rate,
+              'source_charge_rate', r.source_charge_rate
             )
             order by r.code
           ) filter (where r.delta_amount_ex_vat <> 0),
@@ -4589,6 +4758,7 @@ blocked_items as (
         end,
         2
       ) as delta_expenses_pay_ex_vat,
+      round(coalesce(b.current_expenses_charge_ex_vat,0) - coalesce(nullif(b.base_json #>> '{expenses,expenses_charge_ex_vat}','')::numeric,0),2) as delta_expenses_charge_ex_vat,
 
       round(
         case
@@ -4623,6 +4793,7 @@ blocked_items as (
         end,
         2
       ) as delta_travel_pay_ex_vat,
+      round(coalesce(b.current_travel_charge_ex_vat,0) - coalesce(nullif(b.base_json #>> '{expenses,travel_charge_ex_vat}','')::numeric,0),2) as delta_travel_charge_ex_vat,
 
       round(
         case
@@ -4657,6 +4828,7 @@ blocked_items as (
         end,
         2
       ) as delta_accommodation_pay_ex_vat,
+      round(coalesce(b.current_accommodation_charge_ex_vat,0) - coalesce(nullif(b.base_json #>> '{expenses,accommodation_charge_ex_vat}','')::numeric,0),2) as delta_accommodation_charge_ex_vat,
 
       round(
         case
@@ -4691,6 +4863,7 @@ blocked_items as (
         end,
         2
       ) as delta_other_pay_ex_vat,
+      round(coalesce(b.current_other_charge_ex_vat,0) - coalesce(nullif(b.base_json #>> '{expenses,other_charge_ex_vat}','')::numeric,0),2) as delta_other_charge_ex_vat,
 
       round(
         case
@@ -4725,6 +4898,7 @@ blocked_items as (
         end,
         2
       ) as delta_mileage_pay_ex_vat,
+      round(coalesce(b.current_mileage_charge_ex_vat,0) - coalesce(nullif(b.base_json #>> '{expenses,mileage_charge_ex_vat}','')::numeric,0),2) as delta_mileage_charge_ex_vat,
 
       -- ADJUSTMENTS: outstanding = current - baseline - reserved (source_ref='adj:<id>')
       coalesce((
@@ -5050,6 +5224,10 @@ ts_itemised as (
       ) as component_key_value,
       'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum as classification,
       round(coalesce(nullif(seg->>'delta_pay_ex_vat','')::numeric, 0), 2) as component_amount_ex_vat,
+      round(coalesce(nullif(seg->>'delta_charge_ex_vat','')::numeric, 0), 2) as source_charge_ex_vat,
+      coalesce(nullif(seg->>'source_units','')::numeric, nullif(seg->>'hours','')::numeric) as source_units,
+      coalesce(nullif(seg->>'source_rate','')::numeric, nullif(seg->>'rate','')::numeric) as source_rate,
+      coalesce(nullif(seg->>'source_charge_rate','')::numeric, nullif(seg->>'charge_rate','')::numeric) as source_charge_rate,
       upper(coalesce(d.ts_pay_method, '')) as source_pay_method,
       upper(coalesce(d.cand_pay_method, '')) as current_target_pay_method,
       jsonb_strip_nulls(
@@ -5059,7 +5237,12 @@ ts_itemised as (
           'segment_key', nullif(btrim(coalesce(seg->>'segment_key','')), ''),
           'segment_stable_key', nullif(btrim(coalesce(seg->>'segment_stable_key','')), ''),
           'work_date', nullif(btrim(coalesce(seg->>'work_date','')), ''),
-          'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), '')
+          'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')), ''),
+          'source_units', coalesce(nullif(seg->>'source_units','')::numeric, nullif(seg->>'hours','')::numeric),
+          'source_rate', coalesce(nullif(seg->>'source_rate','')::numeric, nullif(seg->>'rate','')::numeric),
+          'source_charge_rate', coalesce(nullif(seg->>'source_charge_rate','')::numeric, nullif(seg->>'charge_rate','')::numeric),
+          'source_charge_ex_vat', round(coalesce(nullif(seg->>'delta_charge_ex_vat','')::numeric, 0), 2),
+          'source_pay_ex_vat', round(coalesce(nullif(seg->>'delta_pay_ex_vat','')::numeric, 0), 2)
         )
       ) as source_basis_json,
       public.pay_finance_component_fingerprint(
@@ -5116,12 +5299,21 @@ ts_itemised as (
       coalesce(nullif(btrim(coalesce(au->>'code','')), ''), 'TOTAL') as component_key_value,
       'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum as classification,
       round(coalesce(nullif(au->>'delta_pay_ex_vat','')::numeric, 0), 2) as component_amount_ex_vat,
+      round(coalesce(nullif(au->>'delta_charge_ex_vat','')::numeric, 0), 2) as source_charge_ex_vat,
+      nullif(au->>'source_units','')::numeric as source_units,
+      nullif(au->>'source_rate','')::numeric as source_rate,
+      nullif(au->>'source_charge_rate','')::numeric as source_charge_rate,
       upper(coalesce(d.ts_pay_method, '')) as source_pay_method,
       upper(coalesce(d.cand_pay_method, '')) as current_target_pay_method,
       jsonb_strip_nulls(
         jsonb_build_object(
           'timesheet_id', d.timesheet_id::text,
-          'additional_code', coalesce(nullif(btrim(coalesce(au->>'code','')), ''), 'TOTAL')
+          'additional_code', coalesce(nullif(btrim(coalesce(au->>'code','')), ''), 'TOTAL'),
+          'source_units', nullif(au->>'source_units','')::numeric,
+          'source_rate', nullif(au->>'source_rate','')::numeric,
+          'source_charge_rate', nullif(au->>'source_charge_rate','')::numeric,
+          'source_charge_ex_vat', round(coalesce(nullif(au->>'delta_charge_ex_vat','')::numeric, 0), 2),
+          'source_pay_ex_vat', round(coalesce(nullif(au->>'delta_pay_ex_vat','')::numeric, 0), 2)
         )
       ) as source_basis_json,
       public.pay_finance_component_fingerprint(
@@ -5173,12 +5365,17 @@ ts_itemised as (
       coalesce(nullif(btrim(coalesce(adj->>'adj_id','')), ''), 'TOTAL') as component_key_value,
       'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum as classification,
       round(coalesce(nullif(adj->>'delta_pay_ex_vat','')::numeric, 0), 2) as component_amount_ex_vat,
+      null::numeric as source_charge_ex_vat,
+      null::numeric as source_units,
+      null::numeric as source_rate,
+      null::numeric as source_charge_rate,
       upper(coalesce(d.ts_pay_method, '')) as source_pay_method,
       upper(coalesce(d.cand_pay_method, '')) as current_target_pay_method,
       jsonb_strip_nulls(
         jsonb_build_object(
           'timesheet_id', d.timesheet_id::text,
-          'adjustment_id', nullif(btrim(coalesce(adj->>'adj_id','')), '')
+          'adjustment_id', nullif(btrim(coalesce(adj->>'adj_id','')), ''),
+          'source_pay_ex_vat', round(coalesce(nullif(adj->>'delta_pay_ex_vat','')::numeric, 0), 2)
         )
       ) as source_basis_json,
       public.pay_finance_component_fingerprint(
@@ -5224,12 +5421,32 @@ ts_itemised as (
       x.component_key_value,
       'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum as classification,
       x.component_amount_ex_vat,
+      case x.component_key_value
+        when 'EXPENSES' then round(coalesce(d.delta_expenses_charge_ex_vat,0),2)
+        when 'TRAVEL' then round(coalesce(d.delta_travel_charge_ex_vat,0),2)
+        when 'ACCOMMODATION' then round(coalesce(d.delta_accommodation_charge_ex_vat,0),2)
+        when 'OTHER' then round(coalesce(d.delta_other_charge_ex_vat,0),2)
+        when 'MILEAGE' then round(coalesce(d.delta_mileage_charge_ex_vat,0),2)
+        else null::numeric
+      end as source_charge_ex_vat,
+      null::numeric as source_units,
+      null::numeric as source_rate,
+      null::numeric as source_charge_rate,
       upper(coalesce(d.ts_pay_method, '')) as source_pay_method,
       upper(coalesce(d.cand_pay_method, '')) as current_target_pay_method,
       jsonb_strip_nulls(
         jsonb_build_object(
           'timesheet_id', d.timesheet_id::text,
-          'expense_code', x.component_key_value
+          'expense_code', x.component_key_value,
+          'source_charge_ex_vat', case x.component_key_value
+            when 'EXPENSES' then round(coalesce(d.delta_expenses_charge_ex_vat,0),2)
+            when 'TRAVEL' then round(coalesce(d.delta_travel_charge_ex_vat,0),2)
+            when 'ACCOMMODATION' then round(coalesce(d.delta_accommodation_charge_ex_vat,0),2)
+            when 'OTHER' then round(coalesce(d.delta_other_charge_ex_vat,0),2)
+            when 'MILEAGE' then round(coalesce(d.delta_mileage_charge_ex_vat,0),2)
+            else null::numeric
+          end,
+          'source_pay_ex_vat', x.component_amount_ex_vat
         )
       ) as source_basis_json,
       public.pay_finance_component_fingerprint(
@@ -5281,6 +5498,10 @@ ts_itemised as (
       tcr.component_key_value,
       tcr.classification,
       tcr.component_amount_ex_vat,
+      tcr.source_charge_ex_vat,
+      tcr.source_units,
+      tcr.source_rate,
+      tcr.source_charge_rate,
       tcr.source_pay_method,
       tcr.current_target_pay_method,
       tcr.source_basis_json,
@@ -5346,12 +5567,147 @@ ts_itemised as (
       tmr.component_key_value,
       tmr.classification,
       tmr.component_amount_ex_vat,
+      tmr.source_charge_ex_vat,
+      tmr.source_units,
+      tmr.source_rate,
+      tmr.source_charge_rate,
       tmr.source_pay_method,
       tmr.current_target_pay_method,
       tmr.source_basis_json,
       tmr.component_fingerprint
     from timesheet_component_match_rows tmr
     where tmr.matched_finance_component_id is null
+  ),
+  transient_timesheet_component_review_rows as (
+    select
+      ttr.candidate_id,
+      ttr.timesheet_id,
+      ttr.client_id,
+      ttr.ts_week_ending_date,
+      ttr.ts_client_name,
+      ttr.ts_pay_method,
+      ttr.cand_pay_method,
+      ttr.cand_tms_ref,
+      ttr.cand_display_name,
+      ttr.cand_umbrella_id,
+      ttr.umb_enabled,
+      ttr.umb_vat_chargeable,
+      ttr.cand_bank_hash,
+      ttr.umb_bank_hash,
+      ttr.source_family_key,
+      ttr.component_key_type,
+      ttr.component_key_value,
+      ttr.classification,
+      ttr.component_amount_ex_vat,
+      ttr.source_charge_ex_vat,
+      ttr.source_units,
+      ttr.source_rate,
+      ttr.source_charge_rate,
+      ttr.source_pay_method,
+      ttr.current_target_pay_method,
+      ttr.source_basis_json,
+      ttr.component_fingerprint,
+      (
+        ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        and ttr.source_pay_method in ('PAYE','UMBRELLA')
+        and ttr.current_target_pay_method in ('PAYE','UMBRELLA')
+        and ttr.current_target_pay_method <> ''
+        and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,''))
+      ) as has_suggested_resolution,
+      case
+        when ttr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'NO_SUGGESTION_AVAILABLE'
+        when upper(coalesce(ttr.source_pay_method,'')) is not distinct from upper(coalesce(ttr.current_target_pay_method,'')) then 'NO_SUGGESTION_AVAILABLE'
+        else 'FRESH_SUGGESTION'
+      end as suggestion_provenance,
+      (
+        ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        and ttr.source_pay_method in ('PAYE','UMBRELLA')
+        and ttr.current_target_pay_method in ('PAYE','UMBRELLA')
+        and ttr.current_target_pay_method <> ''
+        and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,''))
+      ) as is_fresh_suggested_resolution,
+      false as is_reusable_saved_resolution,
+      false as is_stale_saved_resolution,
+      case
+        when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+         and ttr.source_pay_method in ('PAYE','UMBRELLA')
+         and ttr.current_target_pay_method in ('PAYE','UMBRELLA')
+         and ttr.current_target_pay_method <> ''
+         and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,''))
+        then jsonb_strip_nulls(
+          jsonb_build_object(
+            'resolution_mode', 'SUGGESTED_EQUIVALENT_BASIS',
+            'target_pay_method', ttr.current_target_pay_method,
+            'applied_basis_source_amount_ex_vat', round(coalesce(ttr.component_amount_ex_vat,0),2),
+            'relevant_erni_pct', round(v_erni_pct,6),
+            'vat_rate_pct', round(v_vat_rate_pct,6),
+            'umbrella_vat_chargeable', coalesce(ttr.umb_vat_chargeable,false),
+            'target_units', case when ttr.source_units is not null then round(ttr.source_units,6) else null end,
+            'suggested_target_rate', case when ttr.source_units is not null and ttr.source_units <> 0 then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0) / ttr.source_units, 6) else null end,
+            'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT'
+          )
+        )
+        else null::jsonb
+      end as suggested_resolution_payload_json,
+      case
+        when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+         and ttr.source_pay_method in ('PAYE','UMBRELLA')
+         and ttr.current_target_pay_method in ('PAYE','UMBRELLA')
+         and ttr.current_target_pay_method <> ''
+         and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,''))
+        then jsonb_strip_nulls(
+          jsonb_build_object(
+            'target_pay_method', ttr.current_target_pay_method,
+            'target_amount_ex_vat', round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2),
+            'target_amount_vat', round(coalesce((ttrs.target_amounts_json->>'vat')::numeric,0),2),
+            'target_amount_inc_vat', round(coalesce((ttrs.target_amounts_json->>'inc')::numeric,0),2),
+            'basis_source_amount_ex_vat', round(coalesce(ttr.component_amount_ex_vat,0),2),
+            'applied_basis_source_amount_ex_vat', round(coalesce(ttr.component_amount_ex_vat,0),2),
+            'relevant_erni_pct', round(v_erni_pct,6),
+            'vat_rate_pct', round(v_vat_rate_pct,6),
+            'umbrella_vat_chargeable', coalesce(ttr.umb_vat_chargeable,false),
+            'target_units', case when ttr.source_units is not null then round(ttr.source_units,6) else null end,
+            'replacement_rate', case when ttr.source_units is not null and ttr.source_units <> 0 then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0) / ttr.source_units, 6) else null end,
+            'target_amount_ex_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0) / ttr.component_amount_ex_vat, 10) else null end,
+            'target_amount_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(coalesce((ttrs.target_amounts_json->>'vat')::numeric,0) / ttr.component_amount_ex_vat, 10) else null end,
+            'target_amount_inc_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(coalesce((ttrs.target_amounts_json->>'inc')::numeric,0) / ttr.component_amount_ex_vat, 10) else null end,
+            'target_units_per_source_ex_vat', case when ttr.source_units is not null and coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(ttr.source_units / ttr.component_amount_ex_vat, 10) else null end,
+            'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT',
+            'source_pay_ex_vat', round(coalesce(ttr.component_amount_ex_vat,0),2),
+            'source_charge_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat,2) end,
+            'source_margin_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end,
+            'target_pay_ex_vat', round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2),
+            'target_charge_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat,2) end,
+            'target_margin_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) end,
+            'margin_delta_ex_vat', case when ttr.source_charge_ex_vat is null then null else round((ttr.source_charge_ex_vat - coalesce((ttrs.target_amounts_json->>'ex')::numeric,0)) - (ttr.source_charge_ex_vat - ttr.component_amount_ex_vat),2) end
+          )
+        )
+        else null::jsonb
+      end as suggested_resolution_result_json,
+      round(coalesce(ttr.component_amount_ex_vat,0),2) as source_pay_ex_vat,
+      case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat,2) end as source_charge_component_ex_vat,
+      case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end as source_margin_ex_vat,
+      case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttrs.target_amounts_json is not null then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) else null end as target_pay_ex_vat,
+      case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null then round(ttr.source_charge_ex_vat,2) else null end as target_charge_ex_vat,
+      case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then round(ttr.source_charge_ex_vat - coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) else null end as target_margin_ex_vat,
+      case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then round((ttr.source_charge_ex_vat - coalesce((ttrs.target_amounts_json->>'ex')::numeric,0)) - (ttr.source_charge_ex_vat - ttr.component_amount_ex_vat),2) else null end as margin_delta_ex_vat,
+      case
+        when ttr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'Fixed reimbursements are not channel-converted and do not participate in suggested-rates review.'
+        when upper(coalesce(ttr.source_pay_method,'')) is not distinct from upper(coalesce(ttr.current_target_pay_method,'')) then 'No suggested rates are required because this taxable component already aligns with the current target pay method.'
+        else 'This suggestion converts the taxable component to a target-side equivalent while leaving fixed reimbursements unchanged.'
+      end as suggestion_explanation_text
+    from transient_timesheet_component_rows ttr
+    left join lateral (
+      select
+        case
+          when ttr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then null::jsonb
+          when ttr.source_pay_method = 'PAYE' and ttr.current_target_pay_method = 'UMBRELLA' then public._pay_convert_paye_to_umbrella(ttr.component_amount_ex_vat, v_erni_pct, v_vat_rate_pct, coalesce(ttr.umb_vat_chargeable,false))
+          when ttr.source_pay_method = 'UMBRELLA' and ttr.current_target_pay_method = 'PAYE' then jsonb_build_object('ex', public._pay_convert_umbrella_to_paye_ex(ttr.component_amount_ex_vat, v_erni_pct), 'vat', 0, 'inc', public._pay_convert_umbrella_to_paye_ex(ttr.component_amount_ex_vat, v_erni_pct))
+          when ttr.current_target_pay_method = 'PAYE' then jsonb_build_object('ex', round(coalesce(ttr.component_amount_ex_vat,0),2), 'vat', 0, 'inc', round(coalesce(ttr.component_amount_ex_vat,0),2))
+          when ttr.current_target_pay_method = 'UMBRELLA' then public._pay_umbrella_vat_calc(ttr.component_amount_ex_vat, v_vat_rate_pct, coalesce(ttr.umb_vat_chargeable,false))
+          else null::jsonb
+        end as target_amounts_json
+    ) ttrs on true
   ),
   timesheet_case_rollup as (
     select
@@ -5480,6 +5836,25 @@ ts_itemised as (
             'saved_resolution_mode', null,
             'saved_resolution_payload_json', null,
             'saved_resolution_result_json', null,
+            'has_suggested_resolution', tcr.has_suggested_resolution,
+            'suggestion_provenance', tcr.suggestion_provenance,
+            'is_fresh_suggested_resolution', tcr.is_fresh_suggested_resolution,
+            'is_reusable_saved_resolution', tcr.is_reusable_saved_resolution,
+            'is_stale_saved_resolution', tcr.is_stale_saved_resolution,
+            'suggested_resolution_payload_json', tcr.suggested_resolution_payload_json,
+            'suggested_resolution_result_json', tcr.suggested_resolution_result_json,
+            'source_units', tcr.source_units,
+            'target_units', tcr.source_units,
+            'source_rate', tcr.source_rate,
+            'target_rate', case when tcr.source_units is not null and tcr.source_units <> 0 and tcr.target_pay_ex_vat is not null then round(tcr.target_pay_ex_vat / tcr.source_units, 6) else null end,
+            'source_pay_ex_vat', tcr.source_pay_ex_vat,
+            'source_charge_ex_vat', tcr.source_charge_component_ex_vat,
+            'source_margin_ex_vat', tcr.source_margin_ex_vat,
+            'target_pay_ex_vat', tcr.target_pay_ex_vat,
+            'target_charge_ex_vat', tcr.target_charge_ex_vat,
+            'target_margin_ex_vat', tcr.target_margin_ex_vat,
+            'margin_delta_ex_vat', tcr.margin_delta_ex_vat,
+            'suggestion_explanation_text', tcr.suggestion_explanation_text,
             'component_fingerprint', tcr.component_fingerprint,
             'is_resolution_stale', false,
             'stale_reason', null,
@@ -5490,7 +5865,7 @@ ts_itemised as (
         ),
         '[]'::jsonb
       ) as case_components_json
-    from transient_timesheet_component_rows tcr
+    from transient_timesheet_component_review_rows tcr
     left join ts_deltas td
       on td.timesheet_id = tcr.timesheet_id
      and td.candidate_id = tcr.candidate_id
@@ -6123,6 +6498,7 @@ ts_itemised as (
       pfc.classification,
       upper(coalesce(pfc.source_pay_method, '')) as source_pay_method,
       upper(coalesce(cp.cand_pay_method, '')) as current_target_pay_method,
+      cp.umb_vat_chargeable,
       pfc.source_basis_json,
       round(coalesce(pfc.source_amount, 0), 2) as source_amount,
       round(coalesce(pfc.remaining_source_amount, 0), 2) as remaining_source_amount,
@@ -6159,6 +6535,134 @@ ts_itemised as (
     where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','UNDERPAYMENT')
       and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
       and coalesce(vfcr.outstanding_amount,0) > 0
+  ),
+  finance_case_component_review_rows as (
+    select
+      fccr.finance_case_id,
+      fccr.candidate_id,
+      fccr.finance_component_id,
+      fccr.source_family_key,
+      fccr.component_key_type,
+      fccr.component_key_value,
+      fccr.classification,
+      fccr.source_pay_method,
+      fccr.current_target_pay_method,
+      fccr.umb_vat_chargeable,
+      fccr.source_basis_json,
+      fccr.source_amount,
+      fccr.remaining_source_amount,
+      nullif(fccr.source_basis_json->>'source_units','')::numeric as source_units,
+      nullif(fccr.source_basis_json->>'source_rate','')::numeric as source_rate,
+      nullif(fccr.source_basis_json->>'source_charge_rate','')::numeric as source_charge_rate,
+      coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) as source_charge_ex_vat,
+      fccr.saved_target_pay_method,
+      fccr.saved_resolution_mode,
+      fccr.saved_resolution_payload_json,
+      fccr.saved_resolution_result_json,
+      fccr.resolution_fingerprint,
+      fccr.is_resolution_stale,
+      fccr.stale_reason,
+      fccr.current_component_fingerprint,
+      (
+        fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        and fccr.source_pay_method in ('PAYE','UMBRELLA')
+        and fccr.current_target_pay_method in ('PAYE','UMBRELLA')
+        and fccr.current_target_pay_method <> ''
+      ) as has_suggested_resolution,
+      case
+        when fccr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'NO_SUGGESTION_AVAILABLE'
+        when fccr.saved_resolution_mode is not null and coalesce(fccr.is_resolution_stale,false) = false and upper(coalesce(fccr.saved_target_pay_method,'')) = upper(coalesce(fccr.current_target_pay_method,'')) and (fccr.resolution_fingerprint is null or fccr.resolution_fingerprint is not distinct from fccr.current_component_fingerprint) then 'REUSABLE_SAVED_RESOLUTION'
+        when fccr.saved_resolution_mode is not null then 'STALE_SAVED_RESOLUTION'
+        else 'FRESH_SUGGESTION'
+      end as suggestion_provenance,
+      (
+        fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        and fccr.source_pay_method in ('PAYE','UMBRELLA')
+        and fccr.current_target_pay_method in ('PAYE','UMBRELLA')
+        and fccr.current_target_pay_method <> ''
+        and fccr.saved_resolution_mode is null
+      ) as is_fresh_suggested_resolution,
+      (
+        fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        and fccr.saved_resolution_mode is not null
+        and coalesce(fccr.is_resolution_stale,false) = false
+        and upper(coalesce(fccr.saved_target_pay_method,'')) = upper(coalesce(fccr.current_target_pay_method,''))
+        and (fccr.resolution_fingerprint is null or fccr.resolution_fingerprint is not distinct from fccr.current_component_fingerprint)
+      ) as is_reusable_saved_resolution,
+      (
+        fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        and fccr.saved_resolution_mode is not null
+        and (
+          coalesce(fccr.is_resolution_stale,false) = true
+          or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(fccr.current_target_pay_method,''))
+          or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint)
+        )
+      ) as is_stale_saved_resolution,
+      case
+        when fccr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then null::jsonb
+        when fccr.saved_resolution_mode is not null and coalesce(fccr.is_resolution_stale,false) = false and upper(coalesce(fccr.saved_target_pay_method,'')) = upper(coalesce(fccr.current_target_pay_method,'')) and (fccr.resolution_fingerprint is null or fccr.resolution_fingerprint is not distinct from fccr.current_component_fingerprint)
+          then fccr.saved_resolution_payload_json
+        else jsonb_strip_nulls(jsonb_build_object(
+          'resolution_mode', 'SUGGESTED_EQUIVALENT_BASIS',
+          'target_pay_method', fccr.current_target_pay_method,
+          'applied_basis_source_amount_ex_vat', round(coalesce(fccr.source_amount,0),2),
+          'relevant_erni_pct', round(v_erni_pct,6),
+          'vat_rate_pct', round(v_vat_rate_pct,6),
+          'umbrella_vat_chargeable', coalesce(fccr.umb_vat_chargeable,false),
+          'target_units', case when nullif(fccr.source_basis_json->>'source_units','') is not null then round(nullif(fccr.source_basis_json->>'source_units','')::numeric,6) else null end,
+          'suggested_target_rate', case when nullif(fccr.source_basis_json->>'source_units','') is not null and nullif(fccr.source_basis_json->>'source_units','')::numeric <> 0 then round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0) / (nullif(fccr.source_basis_json->>'source_units','')::numeric), 6) else null end,
+          'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT'
+        ))
+      end as suggested_resolution_payload_json,
+      case
+        when fccr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then null::jsonb
+        when fccr.saved_resolution_mode is not null and coalesce(fccr.is_resolution_stale,false) = false and upper(coalesce(fccr.saved_target_pay_method,'')) = upper(coalesce(fccr.current_target_pay_method,'')) and (fccr.resolution_fingerprint is null or fccr.resolution_fingerprint is not distinct from fccr.current_component_fingerprint)
+          then fccr.saved_resolution_result_json
+        else jsonb_strip_nulls(jsonb_build_object(
+          'target_pay_method', fccr.current_target_pay_method,
+          'target_amount_ex_vat', round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0),2),
+          'target_amount_vat', round(coalesce((fcsr.target_amounts_json->>'vat')::numeric,0),2),
+          'target_amount_inc_vat', round(coalesce((fcsr.target_amounts_json->>'inc')::numeric,0),2),
+          'basis_source_amount_ex_vat', round(coalesce(fccr.source_amount,0),2),
+          'applied_basis_source_amount_ex_vat', round(coalesce(fccr.source_amount,0),2),
+          'relevant_erni_pct', round(v_erni_pct,6),
+          'vat_rate_pct', round(v_vat_rate_pct,6),
+          'umbrella_vat_chargeable', coalesce(fccr.umb_vat_chargeable,false),
+          'target_units', case when nullif(fccr.source_basis_json->>'source_units','') is not null then round(nullif(fccr.source_basis_json->>'source_units','')::numeric,6) else null end,
+          'replacement_rate', case when nullif(fccr.source_basis_json->>'source_units','') is not null and nullif(fccr.source_basis_json->>'source_units','')::numeric <> 0 then round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0) / (nullif(fccr.source_basis_json->>'source_units','')::numeric), 6) else null end,
+          'target_amount_ex_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0) / fccr.source_amount, 10) else null end,
+          'target_amount_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(coalesce((fcsr.target_amounts_json->>'vat')::numeric,0) / fccr.source_amount, 10) else null end,
+          'target_amount_inc_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(coalesce((fcsr.target_amounts_json->>'inc')::numeric,0) / fccr.source_amount, 10) else null end,
+          'target_units_per_source_ex_vat', case when nullif(fccr.source_basis_json->>'source_units','') is not null and coalesce(fccr.source_amount,0) <> 0 then round((nullif(fccr.source_basis_json->>'source_units','')::numeric) / fccr.source_amount, 10) else null end,
+          'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT',
+          'source_pay_ex_vat', round(coalesce(fccr.source_amount,0),2),
+          'source_charge_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round(coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric),2) end,
+          'source_margin_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round(coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - fccr.source_amount,2) end,
+          'target_pay_ex_vat', round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0),2),
+          'target_charge_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round(coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric),2) end,
+          'target_margin_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round(coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - coalesce((fcsr.target_amounts_json->>'ex')::numeric,0),2) end,
+          'margin_delta_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round((coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - coalesce((fcsr.target_amounts_json->>'ex')::numeric,0)) - (coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - fccr.source_amount),2) end
+        ))
+      end as suggested_resolution_result_json,
+      case
+        when fccr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'Fixed reimbursements are not channel-converted and do not participate in suggested-rates review.'
+        when fccr.saved_resolution_mode is not null and coalesce(fccr.is_resolution_stale,false) = false and upper(coalesce(fccr.saved_target_pay_method,'')) = upper(coalesce(fccr.current_target_pay_method,'')) and (fccr.resolution_fingerprint is null or fccr.resolution_fingerprint is not distinct from fccr.current_component_fingerprint) then 'This component already has a reusable saved resolution for the current target pay method.'
+        when fccr.saved_resolution_mode is not null then 'A stale saved resolution exists for this component. The suggested rates below reflect the current target pay method.'
+        when fccr.source_pay_method <> fccr.current_target_pay_method then 'This suggestion converts the taxable component to a target-side equivalent while leaving fixed reimbursements unchanged.'
+        else 'This suggestion preserves equivalent basis using the current target pay method.'
+      end as suggestion_explanation_text
+    from finance_case_component_rows fccr
+    left join lateral (
+      select
+        case
+          when fccr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then null::jsonb
+          when fccr.source_pay_method = 'PAYE' and fccr.current_target_pay_method = 'UMBRELLA' then public._pay_convert_paye_to_umbrella(fccr.source_amount, v_erni_pct, v_vat_rate_pct, coalesce(fccr.umb_vat_chargeable,false))
+          when fccr.source_pay_method = 'UMBRELLA' and fccr.current_target_pay_method = 'PAYE' then jsonb_build_object('ex', public._pay_convert_umbrella_to_paye_ex(fccr.source_amount, v_erni_pct), 'vat', 0, 'inc', public._pay_convert_umbrella_to_paye_ex(fccr.source_amount, v_erni_pct))
+          when fccr.current_target_pay_method = 'PAYE' then jsonb_build_object('ex', round(coalesce(fccr.source_amount,0),2), 'vat', 0, 'inc', round(coalesce(fccr.source_amount,0),2))
+          when fccr.current_target_pay_method = 'UMBRELLA' then public._pay_umbrella_vat_calc(fccr.source_amount, v_vat_rate_pct, coalesce(fccr.umb_vat_chargeable,false))
+          else null::jsonb
+        end as target_amounts_json
+    ) fcsr on true
   ),
   finance_case_resolution_rollup as (
     select
@@ -6230,6 +6734,25 @@ ts_itemised as (
             'saved_resolution_mode', case when fccr.saved_resolution_mode is null then null else fccr.saved_resolution_mode::text end,
             'saved_resolution_payload_json', fccr.saved_resolution_payload_json,
             'saved_resolution_result_json', fccr.saved_resolution_result_json,
+            'has_suggested_resolution', fccr.has_suggested_resolution,
+            'suggestion_provenance', fccr.suggestion_provenance,
+            'is_fresh_suggested_resolution', fccr.is_fresh_suggested_resolution,
+            'is_reusable_saved_resolution', fccr.is_reusable_saved_resolution,
+            'is_stale_saved_resolution', fccr.is_stale_saved_resolution,
+            'suggested_resolution_payload_json', fccr.suggested_resolution_payload_json,
+            'suggested_resolution_result_json', fccr.suggested_resolution_result_json,
+            'source_units', fccr.source_units,
+            'target_units', case when nullif(fccr.suggested_resolution_result_json->>'target_units','') is not null then (fccr.suggested_resolution_result_json->>'target_units')::numeric else fccr.source_units end,
+            'source_rate', fccr.source_rate,
+            'target_rate', coalesce(nullif(fccr.suggested_resolution_result_json->>'replacement_rate','')::numeric, nullif(fccr.suggested_resolution_payload_json->>'suggested_target_rate','')::numeric),
+            'source_pay_ex_vat', round(coalesce(fccr.source_amount,0),2),
+            'source_charge_ex_vat', fccr.source_charge_ex_vat,
+            'source_margin_ex_vat', case when fccr.source_charge_ex_vat is null then null else round(fccr.source_charge_ex_vat - fccr.source_amount,2) end,
+            'target_pay_ex_vat', nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','')::numeric,
+            'target_charge_ex_vat', fccr.source_charge_ex_vat,
+            'target_margin_ex_vat', case when fccr.source_charge_ex_vat is null or nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','') is null then null else round(fccr.source_charge_ex_vat - (fccr.suggested_resolution_result_json->>'target_amount_ex_vat')::numeric,2) end,
+            'margin_delta_ex_vat', nullif(fccr.suggested_resolution_result_json->>'margin_delta_ex_vat','')::numeric,
+            'suggestion_explanation_text', fccr.suggestion_explanation_text,
             'component_fingerprint', fccr.current_component_fingerprint,
             'is_resolution_stale', (fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))),
             'stale_reason', case when fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) then 'TARGET_PAY_METHOD_CHANGED' when fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint then 'COMPONENT_BASIS_CHANGED' else fccr.stale_reason end,
@@ -6245,7 +6768,7 @@ ts_itemised as (
       on cp.candidate_id = vfcr.candidate_id
     left join finance_case_repaid_wtd fcrw
       on fcrw.finance_case_id = vfcr.finance_case_id
-    left join finance_case_component_rows fccr
+    left join finance_case_component_review_rows fccr
       on fccr.finance_case_id = vfcr.finance_case_id
     where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','UNDERPAYMENT')
       and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
@@ -6993,6 +7516,8 @@ ts_itemised as (
   );
 end;
 $function$;
+
+
 
 
 
