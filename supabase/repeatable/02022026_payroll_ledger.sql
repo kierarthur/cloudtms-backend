@@ -3716,7 +3716,6 @@ begin;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3887,6 +3886,49 @@ begin
         s.snooze_until_date is null
         or s.snooze_until_date >= p_pay_date
       )
+  ),
+  active_timesheet_payment_snoozes as (
+    select
+      s.candidate_id,
+      s.timesheet_id,
+      s.booking_id,
+      s.snooze_id,
+      s.snooze_until_date,
+      s.note
+    from active_snoozes s
+    where s.source_ref is null
+      and s.segment_id is null
+      and s.segment_stable_key is null
+      and s.snooze_kind = 'TIMESHEET_PAYMENT'
+  ),
+  active_segment_snoozes as (
+    select
+      s.candidate_id,
+      s.timesheet_id,
+      s.booking_id,
+      s.segment_id,
+      s.segment_stable_key,
+      s.snooze_kind,
+      s.snooze_id,
+      s.snooze_until_date,
+      s.note
+    from active_snoozes s
+    where s.source_ref is null
+      and s.segment_stable_key is not null
+      and s.snooze_kind in ('DO_NOT_PAY','BLOCKED_TIMESHEET')
+  ),
+  active_timesheet_payment_overrides as (
+    select
+      tpo.timesheet_id,
+      tpo.candidate_id,
+      tpo.id as override_id,
+      tpo.reason as override_reason,
+      tpo.created_at_utc
+    from public.timesheet_payment_overrides tpo
+    where tpo.cleared_at_utc is null
+      and tpo.consumed_at_utc is null
+      and tpo.consumed_by_pay_batch_id is null
+      and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
   ),
   force_include as (
     select distinct
@@ -6825,49 +6867,6 @@ ts_itemised as (
         )::int as review_required_count
       from cand_payee cp
     ) cr
-  ),
-  active_timesheet_payment_snoozes as (
-    select
-      s.candidate_id,
-      s.timesheet_id,
-      s.booking_id,
-      s.snooze_id,
-      s.snooze_until_date,
-      s.note
-    from active_snoozes s
-    where s.source_ref is null
-      and s.segment_id is null
-      and s.segment_stable_key is null
-      and s.snooze_kind = 'TIMESHEET_PAYMENT'
-  ),
-  active_segment_snoozes as (
-    select
-      s.candidate_id,
-      s.timesheet_id,
-      s.booking_id,
-      s.segment_id,
-      s.segment_stable_key,
-      s.snooze_kind,
-      s.snooze_id,
-      s.snooze_until_date,
-      s.note
-    from active_snoozes s
-    where s.source_ref is null
-      and s.segment_stable_key is not null
-      and s.snooze_kind in ('DO_NOT_PAY','BLOCKED_TIMESHEET')
-  ),
-  active_timesheet_payment_overrides as (
-    select
-      tpo.timesheet_id,
-      tpo.candidate_id,
-      tpo.id as override_id,
-      tpo.reason as override_reason,
-      tpo.created_at_utc
-    from public.timesheet_payment_overrides tpo
-    where tpo.cleared_at_utc is null
-      and tpo.consumed_at_utc is null
-      and tpo.consumed_by_pay_batch_id is null
-      and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
   ),
   finance_case_repaid_wtd as (
     select
