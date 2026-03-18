@@ -15031,22 +15031,28 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const trimStr = (v) => String(v == null ? '' : v).trim();
 
-  const candidateId = String(body.candidate_id || body.candidateId || '').trim();
+  const candidateId = trimStr(body.candidate_id || body.candidateId);
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
 
-  const timesheetIdRaw = (body.timesheet_id === null || body.timesheet_id === undefined) ? '' : String(body.timesheet_id).trim();
-  const timesheetId = timesheetIdRaw ? timesheetIdRaw : null;
-  if (timesheetId && !uuidRe.test(timesheetId)) return withCORS(env, req, badRequest('timesheet_id must be a UUID (or null)'));
+  const timesheetIdRaw = trimStr(body.timesheet_id);
+  const timesheetIdAlt = trimStr(body.timesheetId);
+  const timesheetId = timesheetIdRaw || timesheetIdAlt || null;
+  if (timesheetId && !uuidRe.test(timesheetId)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID (or null)'));
+  }
 
-  const segmentIdRaw = (body.segment_id === null || body.segment_id === undefined) ? '' : String(body.segment_id).trim();
-  const segmentId = segmentIdRaw ? segmentIdRaw : null;
+  // Advisory only: the installed pay_snooze_upsert(...) derives stable identity
+  // server-side from the current timesheet / segment and does not accept these
+  // fields as authoritative RPC parameters.
+  const bookingIdHint = trimStr(body.booking_id || body.bookingId) || null;
+  const segmentId = trimStr(body.segment_id || body.segmentId) || null;
+  const segmentStableKeyHint = trimStr(body.segment_stable_key || body.segmentStableKey) || null;
+  const sourceRef = trimStr(body.source_ref || body.sourceRef) || null;
 
-  const sourceRefRaw = (body.source_ref === null || body.source_ref === undefined) ? '' : String(body.source_ref).trim();
-  const sourceRef = sourceRefRaw ? sourceRefRaw : null;
-
-  const snoozeKindInput = String(body.snooze_kind || body.snoozeKind || 'DO_NOT_PAY').trim().toUpperCase();
+  const snoozeKindInput = trimStr(body.snooze_kind || body.snoozeKind || 'DO_NOT_PAY').toUpperCase();
   const snoozeKindAliases = {
     BLOCKED: 'BLOCKED_TIMESHEET',
     LOAN_REPAYMENT: 'PAYMENT_ADVANCE_REPAYMENT'
@@ -15070,11 +15076,33 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     );
   }
 
-  const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
+  if (bookingIdHint && !timesheetId) {
+    return withCORS(env, req, badRequest('booking_id requires timesheet_id'));
+  }
+
+  if (segmentStableKeyHint && !timesheetId) {
+    return withCORS(env, req, badRequest('segment_stable_key requires timesheet_id'));
+  }
+
+  if (sourceRef) {
+    if (timesheetId || segmentId || segmentStableKeyHint || bookingIdHint) {
+      return withCORS(env, req, badRequest('source_ref snoozes must not also provide timesheet/segment identity fields'));
+    }
+  } else {
+    if (!timesheetId) {
+      return withCORS(env, req, badRequest('timesheet_id is required for timesheet/segment snoozes'));
+    }
+  }
+
+  if (snoozeKindNormalized === 'TIMESHEET_PAYMENT' && sourceRef) {
+    return withCORS(env, req, badRequest('TIMESHEET_PAYMENT snoozes must not provide source_ref'));
+  }
+
+  const noteRaw = trimStr(body.note);
   const note = noteRaw ? noteRaw : null;
 
   const parseIsoOrUkDateToIso = (raw) => {
-    const s = String(raw || '').trim();
+    const s = trimStr(raw);
     if (!s) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
     const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -15082,9 +15110,29 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     return null;
   };
 
-  const untilRaw = (body.snooze_until_date === null || body.snooze_until_date === undefined) ? '' : String(body.snooze_until_date).trim();
-  const untilIso = untilRaw ? parseIsoOrUkDateToIso(untilRaw) : null;
-  if (untilRaw && !untilIso) return withCORS(env, req, badRequest('snooze_until_date must be YYYY-MM-DD, DD/MM/YYYY, or null'));
+  const untilRaw = trimStr(body.snooze_until_date);
+  const untilRawAlt = trimStr(body.snoozeUntilDate);
+  const untilInput = untilRaw || untilRawAlt || '';
+  const untilIso = untilInput ? parseIsoOrUkDateToIso(untilInput) : null;
+  if (untilInput && !untilIso) {
+    return withCORS(env, req, badRequest('snooze_until_date must be YYYY-MM-DD, DD/MM/YYYY, or null'));
+  }
+
+  const fetchStoredSnoozeById = async (snoozeId) => {
+    const id = trimStr(snoozeId);
+    if (!id || !uuidRe.test(id)) return null;
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?id=eq.${encodeURIComponent(id)}` +
+          `&select=id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,source_ref,snooze_kind,snooze_until_date,note,cleared_at_utc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
 
   try {
     const rpcRes = await sbRpc(env, 'pay_snooze_upsert', {
@@ -15108,26 +15156,28 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
 
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
 
-    const resolvedSnoozeId = String(
+    const resolvedSnoozeId = trimStr(
       payloadObj.snooze_id ||
       payloadObj.active_snooze_id ||
-      payloadObj.id ||
-      ''
-    ).trim();
+      payloadObj.id
+    );
+
+    const storedRow = resolvedSnoozeId ? await fetchStoredSnoozeById(resolvedSnoozeId) : null;
 
     const resolvedUntilIso =
       parseIsoOrUkDateToIso(
         payloadObj.snooze_until_date ||
         payloadObj.active_snooze_until_date ||
+        (storedRow && storedRow.snooze_until_date) ||
         untilIso ||
         null
       ) || null;
 
     const snoozeMode =
-      String(
+      trimStr(
         payloadObj.snooze_mode ||
         (resolvedUntilIso ? 'DATED' : 'INDEFINITE')
-      ).trim().toUpperCase() || 'INDEFINITE';
+      ).toUpperCase() || 'INDEFINITE';
 
     const shouldRemainVisibleInLivePayWorkbench =
       (typeof payloadObj.should_remain_visible_in_live_pay_workbench === 'boolean')
@@ -15135,10 +15185,10 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
         : (snoozeMode === 'DATED');
 
     const livePayBucket =
-      String(
+      trimStr(
         payloadObj.live_pay_bucket ||
         (shouldRemainVisibleInLivePayWorkbench ? 'BLOCKED_FOR_PAY' : 'LOANS_SNOOZES_ONLY')
-      ).trim().toUpperCase();
+      ).toUpperCase();
 
     const activeSnooze =
       (typeof payloadObj.active_snooze === 'boolean')
@@ -15147,26 +15197,38 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
 
     const canonical = {
       ...payloadObj,
-      candidate_id: String(payloadObj.candidate_id || candidateId || '').trim(),
-      timesheet_id: (payloadObj.timesheet_id === null || payloadObj.timesheet_id === undefined)
-        ? timesheetId
-        : (String(payloadObj.timesheet_id || '').trim() || null),
-      segment_id: (payloadObj.segment_id === null || payloadObj.segment_id === undefined)
-        ? segmentId
-        : (String(payloadObj.segment_id || '').trim() || null),
-      source_ref: (payloadObj.source_ref === null || payloadObj.source_ref === undefined)
-        ? sourceRef
-        : (String(payloadObj.source_ref || '').trim() || null),
-      snooze_kind: String(payloadObj.snooze_kind || snoozeKindNormalized || '').trim().toUpperCase(),
+      candidate_id: trimStr((storedRow && storedRow.candidate_id) || payloadObj.candidate_id || candidateId || ''),
+      timesheet_id: (() => {
+        const v = trimStr((storedRow && storedRow.timesheet_id) || payloadObj.timesheet_id || timesheetId || '');
+        return v || null;
+      })(),
+      booking_id: (() => {
+        const v = trimStr((storedRow && storedRow.booking_id) || payloadObj.booking_id || '');
+        return v || null;
+      })(),
+      segment_id: (() => {
+        const v = trimStr((storedRow && storedRow.segment_id) || payloadObj.segment_id || segmentId || '');
+        return v || null;
+      })(),
+      segment_stable_key: (() => {
+        const v = trimStr((storedRow && storedRow.segment_stable_key) || payloadObj.segment_stable_key || '');
+        return v || null;
+      })(),
+      source_ref: (() => {
+        const v = trimStr((storedRow && storedRow.source_ref) || payloadObj.source_ref || sourceRef || '');
+        return v || null;
+      })(),
+      snooze_kind: trimStr((storedRow && storedRow.snooze_kind) || payloadObj.snooze_kind || snoozeKindNormalized || '').toUpperCase(),
       snooze_id: resolvedSnoozeId || null,
       active_snooze: activeSnooze,
       snooze_until_date: resolvedUntilIso,
       snooze_mode: snoozeMode,
       should_remain_visible_in_live_pay_workbench: shouldRemainVisibleInLivePayWorkbench,
-      live_pay_bucket: livePayBucket,
-      note: (payloadObj.note === null || payloadObj.note === undefined)
-        ? note
-        : (String(payloadObj.note || '').trim() || null)
+      live_pay_bucket: livePayBucket || (snoozeMode === 'DATED' ? 'BLOCKED_FOR_PAY' : 'LOANS_SNOOZES_ONLY'),
+      note: (() => {
+        const v = trimStr((storedRow && storedRow.note) || payloadObj.note || note || '');
+        return v || null;
+      })()
     };
 
     return withCORS(env, req, ok(canonical));
@@ -15174,39 +15236,165 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
+  const enc = encodeURIComponent;
 
-async function handleBankingPaySnoozeClear(env, req, user) {
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const idIn = String(timesheetId || '').trim();
+  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(idIn)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
 
-  const snoozeId = String(body.snooze_id || body.snoozeId || '').trim();
-  if (!snoozeId) return withCORS(env, req, badRequest('snooze_id is required'));
-  if (!uuidRe.test(snoozeId)) return withCORS(env, req, badRequest('snooze_id must be a UUID'));
+  const trimStr = (v) => String(v == null ? '' : v).trim();
 
-  try {
-    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
-      p_snooze_id: snoozeId,
-      p_actor_user_id: user.id
-    });
-
+  const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
       if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_snooze_clear')) {
-        payload = payload.pay_snooze_clear;
-      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
     } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  const fetchPayState = async (currentTimesheetId) => {
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: currentTimesheetId,
+        p_actor_user_id: user.id
+      });
+      return unwrapRpc(ps0, 'timesheet_pay_state');
+    } catch {
+      return null;
+    }
+  };
+
+  let resolved = null;
+  try {
+    resolved = await resolveTimesheetToCurrent(env, idIn);
   } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
+  }
+
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id).trim();
+  const currentBookingId = trimStr(resolved.booking_id);
+
+  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let tsfin = null;
+  try {
+    tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
+    );
+  } catch {
+    tsfin = null;
+  }
+
+  const candidateId = (tsfin?.candidate_id != null && trimStr(tsfin.candidate_id)) ? trimStr(tsfin.candidate_id) : null;
+
+  const fetchWholeTimesheetSnoozeByBooking = async () => {
+    if (!currentBookingId || !candidateId) return null;
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&booking_id=eq.${enc(currentBookingId)}` +
+          `&segment_id=is.null` +
+          `&segment_stable_key=is.null` +
+          `&source_ref=is.null` +
+          `&snooze_kind=eq.TIMESHEET_PAYMENT` +
+          `&cleared_at_utc=is.null` +
+          `&select=id,timesheet_id,booking_id,candidate_id,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc` +
+          `&order=created_at_utc.desc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchWholeTimesheetSnoozeByTimesheet = async () => {
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&segment_id=is.null` +
+          `&segment_stable_key=is.null` +
+          `&source_ref=is.null` +
+          `&snooze_kind=eq.TIMESHEET_PAYMENT` +
+          `&cleared_at_utc=is.null` +
+          `&select=id,timesheet_id,booking_id,candidate_id,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc` +
+          `&order=created_at_utc.desc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  let activeSnooze = await fetchWholeTimesheetSnoozeByBooking();
+  if (!activeSnooze || !activeSnooze.id) {
+    activeSnooze = await fetchWholeTimesheetSnoozeByTimesheet();
+  }
+
+  if (!activeSnooze || !activeSnooze.id) {
+    const payState = await fetchPayState(currentTimesheetId);
+    return withCORS(env, req, ok({
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      booking_id: currentBookingId || null,
+      candidate_id: candidateId || null,
+      already_cleared: true,
+      pay_state: payState
+    }));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
+      p_snooze_id: String(activeSnooze.id).trim(),
+      p_actor_user_id: user.id
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_snooze_clear');
+    const payState = await fetchPayState(currentTimesheetId);
+
+    return withCORS(env, req, ok({
+      ...((payload && typeof payload === 'object') ? payload : {}),
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      booking_id: currentBookingId || trimStr(activeSnooze.booking_id) || null,
+      candidate_id: candidateId || trimStr(activeSnooze.candidate_id) || null,
+      pay_state: payState
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear timesheet payment snooze')));
   }
 }
+
 
 async function handleBankingBankNameCheckSetOverride(env, req, user) {
   let body = null;
@@ -16753,133 +16941,7 @@ async function handleTimesheetUnadvancePayment(env, req, timesheetId) {
   }
 }
 
-async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
-  const enc = encodeURIComponent;
 
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const idIn = String(timesheetId || '').trim();
-  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!uuidRe.test(idIn)) {
-    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
-  }
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
-  };
-
-  const fetchPayState = async (currentTimesheetId) => {
-    try {
-      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
-        p_timesheet_id: currentTimesheetId,
-        p_actor_user_id: user.id
-      });
-      return unwrapRpc(ps0, 'timesheet_pay_state');
-    } catch {
-      return null;
-    }
-  };
-
-  let resolved = null;
-  try {
-    resolved = await resolveTimesheetToCurrent(env, idIn);
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
-  }
-
-  if (!resolved || !resolved.current_timesheet_id) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
-
-  if (!resolved.booking_id) {
-    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
-  }
-
-  const currentTimesheetId = String(resolved.current_timesheet_id);
-  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  let tsfin = null;
-  try {
-    tsfin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,candidate_id,client_id` +
-        `&limit=1`
-    );
-  } catch {
-    tsfin = null;
-  }
-
-  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
-
-  let activeSnooze = null;
-  try {
-    activeSnooze = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&segment_id=is.null` +
-        `&source_ref=is.null` +
-        `&snooze_kind=eq.TIMESHEET_PAYMENT` +
-        `&cleared_at_utc=is.null` +
-        `&select=id,timesheet_id,candidate_id,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc` +
-        `&order=created_at_utc.desc` +
-        `&limit=1`
-    );
-  } catch {
-    activeSnooze = null;
-  }
-
-  if (!activeSnooze || !activeSnooze.id) {
-    const payState = await fetchPayState(currentTimesheetId);
-    return withCORS(env, req, ok({
-      ok: true,
-      timesheet_id: currentTimesheetId,
-      candidate_id: candidateId || null,
-      already_cleared: true,
-      pay_state: payState
-    }));
-  }
-
-  try {
-    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
-      p_snooze_id: String(activeSnooze.id).trim(),
-      p_actor_user_id: user.id
-    });
-
-    const payload = unwrapRpc(rpcRes, 'pay_snooze_clear');
-    const payState = await fetchPayState(currentTimesheetId);
-
-    return withCORS(env, req, ok({
-      ...((payload && typeof payload === 'object') ? payload : {}),
-      ok: true,
-      timesheet_id: currentTimesheetId,
-      candidate_id: candidateId || null,
-      pay_state: payState
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear timesheet payment snooze')));
-  }
-}
 async function handleTimesheetSnoozePayment(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -21546,9 +21608,82 @@ async function handleTimesheetDetails(env, req, timesheetId) {
           snooze_note:
             (payState.snooze_note != null && String(payState.snooze_note).trim())
               ? String(payState.snooze_note).trim()
-              : null
+              : null,
+          segment_snoozes: Array.isArray(payState.segment_snoozes)
+            ? payState.segment_snoozes
+                .filter((row) => row && typeof row === 'object' && !Array.isArray(row))
+                .map((row) => ({
+                  ...row,
+                  snooze_id:
+                    (row.snooze_id != null && String(row.snooze_id).trim())
+                      ? String(row.snooze_id).trim()
+                      : null,
+                  candidate_id:
+                    (row.candidate_id != null && String(row.candidate_id).trim())
+                      ? String(row.candidate_id).trim()
+                      : null,
+                  timesheet_id:
+                    (row.timesheet_id != null && String(row.timesheet_id).trim())
+                      ? String(row.timesheet_id).trim()
+                      : null,
+                  booking_id:
+                    (row.booking_id != null && String(row.booking_id).trim())
+                      ? String(row.booking_id).trim()
+                      : null,
+                  segment_id:
+                    (row.segment_id != null && String(row.segment_id).trim())
+                      ? String(row.segment_id).trim()
+                      : null,
+                  segment_stable_key:
+                    (row.segment_stable_key != null && String(row.segment_stable_key).trim())
+                      ? String(row.segment_stable_key).trim()
+                      : null,
+                  snooze_kind:
+                    (row.snooze_kind != null && String(row.snooze_kind).trim())
+                      ? String(row.snooze_kind).trim()
+                      : null,
+                  snooze_until_date:
+                    (row.snooze_until_date != null && String(row.snooze_until_date).trim())
+                      ? String(row.snooze_until_date).trim()
+                      : null,
+                  note:
+                    (row.note != null && String(row.note).trim())
+                      ? String(row.note).trim()
+                      : null,
+                  snooze_note:
+                    (row.snooze_note != null && String(row.snooze_note).trim())
+                      ? String(row.snooze_note).trim()
+                      : ((row.note != null && String(row.note).trim())
+                          ? String(row.note).trim()
+                          : null),
+                  date:
+                    (row.date != null && String(row.date).trim())
+                      ? String(row.date).trim()
+                      : null,
+                  work_date:
+                    (row.work_date != null && String(row.work_date).trim())
+                      ? String(row.work_date).trim()
+                      : ((row.date != null && String(row.date).trim())
+                          ? String(row.date).trim()
+                          : null),
+                  ref_num:
+                    (row.ref_num != null && String(row.ref_num).trim())
+                      ? String(row.ref_num).trim()
+                      : null,
+                  snooze_state:
+                    (row.snooze_state != null && String(row.snooze_state).trim())
+                      ? String(row.snooze_state).trim()
+                      : (((row.snooze_until_date != null && String(row.snooze_until_date).trim()))
+                          ? 'DATED_SNOOZED'
+                          : 'INDEFINITE_SNOOZED')
+                }))
+            : []
         }
       : null;
+
+    const segmentSnoozesOut = (payStateOut && Array.isArray(payStateOut.segment_snoozes))
+      ? payStateOut.segment_snoozes
+      : [];
 
     // ─────────────────────────────────────────────────────────────
     // Contract-resolved EFFECTIVE flags (source of truth = v_timesheets_summary)
@@ -21956,6 +22091,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       evidence: [],
 
       pay_state: payStateOut,
+      segment_snoozes: segmentSnoozesOut,
       is_advanced: !!(payStateOut && payStateOut.is_advanced === true),
       can_unadvance: !!(payStateOut && payStateOut.can_unadvance === true),
       advanced_consumed_by_batch_id:
@@ -21983,7 +22119,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
-
 
 async function handleTimesheetUnauthorise(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -23006,12 +23141,14 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
+
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
 
   const enc = encodeURIComponent;
+  const trimStr = (v) => String(v || '').trim();
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -23024,7 +23161,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, notFound('Week not found'));
   }
 
-  // ✅ HARD BLOCK: this endpoint must NEVER operate on adjustment weeks (prevents orphan adjustment contract_weeks)
   const cwAdditionalSeq = Number(cw.additional_seq ?? 0) || 0;
   const cwIsAdjustment = cw.is_adjustment === true;
   if (cwIsAdjustment || cwAdditionalSeq > 0) {
@@ -23035,8 +23171,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     );
   }
 
-  // ✅ planned-only delete (no timesheet_id) → SQL RPC contract_week_delete_planned(...)
-  // (No expected_timesheet_id required here; if the week has gained a timesheet_id, it will go down the guarded branch below.)
   if (!cw.timesheet_id) {
     try {
       const rpcRes = await fetch(
@@ -23087,18 +23221,15 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     }
   }
 
-  // ✅ Guarded delete for a week that currently has a timesheet
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
-  // Resolve CW-linked timesheet to CURRENT
   const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
   if (!resolved?.current_timesheet_id) {
     return withCORS(env, req, serverError('Failed to resolve current timesheet for contract week'));
   }
   const currentTimesheetId = String(resolved.current_timesheet_id);
 
-  // Guard mismatch → 409 moved
   if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
       env,
@@ -23110,14 +23241,11 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     );
   }
 
-  // booking_id is required to delete the whole rotation series safely
   if (!resolved.booking_id) {
     return withCORS(env, req, serverError('Failed to resolve booking_id for contract week timesheet'));
   }
   const bookingId = String(resolved.booking_id);
 
-  // ✅ Determine submission_mode_snapshot to restore on the reopened planned week.
-  // Prefer CURRENT timesheet submission_mode (before deletion), else fall back to existing CW snapshot, else MANUAL.
   let reopenSnapshot = '';
   try {
     const tsRow = await sbGetOne(
@@ -23132,7 +23260,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   }
   if (reopenSnapshot !== 'ELECTRONIC') reopenSnapshot = 'MANUAL';
 
-  // Fetch all timesheet_ids in this booking_id series
   const { rows: tsRowsAll } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -23141,7 +23268,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   );
   const allIds = (tsRowsAll || []).map(r => r.timesheet_id).filter(Boolean);
 
-  // Guard: no current TSFIN in this series may be paid or invoiced
   if (allIds.length) {
     const inList = allIds.map(x => `"${String(x).replace(/"/g, '')}"`).join(',');
     const { rows: finRows } = await sbFetch(
@@ -23161,7 +23287,125 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     }
   }
 
-  // Delete all timesheet rows in the series
+  const collectActiveTimesheetSnoozes = async (bookingIdArg, timesheetIdsArg) => {
+    const merged = new Map();
+    const baseSelect = 'id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,snooze_kind';
+    const seriesIds = Array.isArray(timesheetIdsArg)
+      ? timesheetIdsArg.map(x => trimStr(x)).filter(Boolean)
+      : [];
+
+    const collect = async (url) => {
+      try {
+        const { rows: fetchedRows } = await sbFetch(env, url);
+        for (const row of (Array.isArray(fetchedRows) ? fetchedRows : [])) {
+          const id = trimStr(row?.id);
+          if (!id) continue;
+          merged.set(id, row);
+        }
+      } catch {}
+    };
+
+    if (bookingIdArg) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?booking_id=eq.${enc(String(bookingIdArg))}` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    if (seriesIds.length) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=in.(${seriesIds.map(enc).join(',')})` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    return Array.from(merged.values());
+  };
+
+  const clearCollectedSnoozes = async (snoozeRows, clearReason) => {
+    const clearedIds = [];
+    const failedIds = [];
+
+    for (const snoozeRow of (Array.isArray(snoozeRows) ? snoozeRows : [])) {
+      const snoozeId = trimStr(snoozeRow?.id);
+      if (!snoozeId) continue;
+
+      let cleared = false;
+
+      try {
+        await sbRpc(env, 'pay_snooze_clear', {
+          p_snooze_id: snoozeId,
+          p_actor_user_id: user.id
+        });
+        cleared = true;
+      } catch {}
+
+      if (!cleared) {
+        const now = nowIso();
+        try {
+          const patchRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({
+                cleared_at_utc: now,
+                cleared_by_user_id: user.id,
+                updated_at_utc: now,
+                updated_by_user_id: user.id
+              })
+            }
+          );
+
+          if (!patchRes.ok) {
+            const txt = await patchRes.text().catch(() => '');
+            throw new Error(txt || `Failed to clear snooze ${snoozeId}`);
+          }
+
+          try {
+            await writeAudit(
+              env,
+              user,
+              'SNOOZE_CLEARED',
+              {
+                snooze_id: snoozeId,
+                booking_id: bookingIdArg || null,
+                timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+                segment_id: trimStr(snoozeRow?.segment_id) || null,
+                segment_stable_key: trimStr(snoozeRow?.segment_stable_key) || null,
+                snooze_kind: trimStr(snoozeRow?.snooze_kind) || null,
+                clear_reason: clearReason || null
+              },
+              {
+                entity: 'pay_item_snoozes',
+                subject_id: snoozeId,
+                req,
+                reason: clearReason || null
+              }
+            );
+          } catch {}
+
+          cleared = true;
+        } catch {}
+      }
+
+      if (cleared) clearedIds.push(snoozeId);
+      else failedIds.push(snoozeId);
+    }
+
+    return { clearedIds, failedIds };
+  };
+
+  const snoozesToClear = await collectActiveTimesheetSnoozes(bookingId, allIds);
+
   const delTs = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?booking_id=eq.${enc(bookingId)}`,
     { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
@@ -23170,7 +23414,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, serverError(await delTs.text()));
   }
 
-  // Delete TSFIN rows for those timesheet_ids (avoid orphan snapshots)
   if (allIds.length) {
     const inList = allIds.map(x => `"${String(x).replace(/"/g, '')}"`).join(',');
     await fetch(
@@ -23179,7 +23422,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     ).catch(() => {});
   }
 
-  // Reset week to OPEN (+ restore snapshot mode)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
     {
@@ -23193,6 +23435,11 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       })
     }
   ).catch(() => {});
+
+  const snoozeClearResult = await clearCollectedSnoozes(
+    snoozesToClear,
+    'TIMESHEET_DELETED_NOT_REQUIRED'
+  );
 
   let reopenedContractWeek = null;
   try {
@@ -23239,13 +23486,19 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         : reopenSnapshot)
   };
 
-  // Audit
   try {
     await writeAudit(
       env,
       user,
       'CONTRACT_WEEK_TIMESHEET_DELETED',
-      { contract_week_id: weekId, booking_id: bookingId, timesheet_id: currentTimesheetId, reopened_submission_mode_snapshot: reopenSnapshot },
+      {
+        contract_week_id: weekId,
+        booking_id: bookingId,
+        timesheet_id: currentTimesheetId,
+        reopened_submission_mode_snapshot: reopenSnapshot,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
+      },
       { entity: 'contract_weeks', subject_id: weekId, req }
     );
   } catch {}
@@ -23272,11 +23525,11 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     booking_id: bookingId,
     requested_timesheet_id: cw.timesheet_id,
     current_timesheet_id: currentTimesheetId,
-    was_stale: !!resolved?.was_stale
+    was_stale: !!resolved?.was_stale,
+    cleared_snooze_ids: snoozeClearResult.clearedIds,
+    snooze_clear_failed_ids: snoozeClearResult.failedIds
   }));
 }
-
-
 async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -27644,17 +27897,52 @@ async function handleTimesheetsSubmitWeekly(env, req) {
 async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
   const enc = encodeURIComponent;
   const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+  const trimStr = (v) => String(v || '').trim();
   const bucket = env.R2_BUCKET || env.R2;
 
   if (!bookingId || !String(bookingId).trim()) {
     return { ok: false, reason: 'booking_id missing' };
   }
 
-  // If bucket isn't configured, we can still clean DB evidence rows/keys,
-  // but we cannot actually reclaim R2 space.
+  const parseJsonObject = (value) => {
+    if (value && typeof value === 'object') return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return (parsed && typeof parsed === 'object') ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const deriveSegmentStableKey = (seg) => {
+    const src = (seg && typeof seg === 'object') ? seg : {};
+    const candidates = [
+      src.segment_stable_key,
+      src.date,
+      src.ref_num,
+      src.segment_key,
+      src.segment_id
+    ];
+    for (const candidate of candidates) {
+      const s = trimStr(candidate);
+      if (s) return s;
+    }
+    return '';
+  };
+
+  const parseSortMillis = (row) => {
+    const updated = Date.parse(String(row?.updated_at_utc || ''));
+    if (Number.isFinite(updated)) return updated;
+    const created = Date.parse(String(row?.created_at_utc || ''));
+    if (Number.isFinite(created)) return created;
+    return 0;
+  };
+
   const canR2 = !!(bucket && typeof bucket.delete === 'function');
 
-  // 1) Load all versions for this booking_id
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -27666,10 +27954,18 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
 
   const rows = Array.isArray(tsRows) ? tsRows : [];
   if (rows.length <= 1) {
-    return { ok: true, booking_id: String(bookingId), purged_timesheet_ids: [], deleted_keys: 0, deleted_evidence_rows: 0 };
+    return {
+      ok: true,
+      booking_id: String(bookingId),
+      purged_timesheet_ids: [],
+      deleted_keys: 0,
+      deleted_evidence_rows: 0,
+      rebound_snooze_ids: [],
+      cleared_snooze_ids: [],
+      failed_snooze_ids: []
+    };
   }
 
-  // 2) Identify keep set
   const keep = new Set();
 
   let currentId = null;
@@ -27689,7 +27985,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     }
 
     if (r?.is_current === false) {
-      // most recent non-current safety net (highest version)
       if (!keepMostRecentNonCurrent) {
         keepMostRecentNonCurrent = id;
         keep.add(id);
@@ -27698,7 +27993,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
       const status = String(r?.status || '').toUpperCase();
       const hasScan = !!r?.qr_scanned_at;
 
-      // matches your SQL restore selectors: status='REVOKED' + scan null vs not null
       if (status === 'REVOKED') {
         if (!hasScan && !keepPendingRevoked) {
           keepPendingRevoked = id;
@@ -27710,7 +28004,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
         }
       }
 
-      // electronic restore safety: authorised_at_server exists on a non-current version
       if (!keepElectronicNonCurrent && r?.authorised_at_server) {
         keepElectronicNonCurrent = id;
         keep.add(id);
@@ -27718,12 +28011,10 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     }
   }
 
-  // If somehow no current id was found, do not purge (avoid accidental wipe)
   if (!currentId) {
     return { ok: false, booking_id: String(bookingId), reason: 'no current timesheet found for booking_id' };
   }
 
-  // 3) Determine purge candidates (all other non-current)
   const purgeRows = rows
     .filter(r => r?.is_current === false)
     .filter(r => {
@@ -27732,13 +28023,277 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     });
 
   if (!purgeRows.length) {
-    return { ok: true, booking_id: String(bookingId), purged_timesheet_ids: [], deleted_keys: 0, deleted_evidence_rows: 0 };
+    return {
+      ok: true,
+      booking_id: String(bookingId),
+      purged_timesheet_ids: [],
+      deleted_keys: 0,
+      deleted_evidence_rows: 0,
+      rebound_snooze_ids: [],
+      cleared_snooze_ids: [],
+      failed_snooze_ids: []
+    };
   }
+
+  const allSeriesIds = rows
+    .map(r => trimStr(r?.timesheet_id))
+    .filter(Boolean);
 
   const purgeIds = purgeRows.map(r => String(r.timesheet_id));
   const purgeIdsParam = purgeIds.map(enc).join(',');
 
-  // 4) Gather R2 keys to delete (dedupe)
+  let currentTsfin = null;
+  try {
+    currentTsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,invoice_breakdown_json` +
+        `&limit=1`
+    );
+  } catch {
+    currentTsfin = null;
+  }
+
+  const currentSegmentMap = new Map();
+  try {
+    const invoiceBreakdown = parseJsonObject(currentTsfin?.invoice_breakdown_json);
+    const segments = Array.isArray(invoiceBreakdown?.segments) ? invoiceBreakdown.segments : [];
+    for (const seg of segments) {
+      if (!seg || typeof seg !== 'object') continue;
+      const stableKey = deriveSegmentStableKey(seg);
+      if (!stableKey || currentSegmentMap.has(stableKey)) continue;
+      currentSegmentMap.set(stableKey, {
+        segment_id: trimStr(seg.segment_id) || null,
+        segment_stable_key: stableKey
+      });
+    }
+  } catch {}
+
+  const fetchActiveTimesheetSnoozes = async () => {
+    const merged = new Map();
+    const baseSelect =
+      'id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc';
+
+    const collect = async (url) => {
+      try {
+        const { rows: fetchedRows } = await sbFetch(env, url);
+        for (const row of (Array.isArray(fetchedRows) ? fetchedRows : [])) {
+          const id = trimStr(row?.id);
+          if (!id) continue;
+          merged.set(id, row);
+        }
+      } catch {}
+    };
+
+    await collect(
+      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+        `?booking_id=eq.${enc(String(bookingId))}` +
+        `&source_ref=is.null` +
+        `&cleared_at_utc=is.null` +
+        `&select=${baseSelect}` +
+        `&limit=2000`
+    );
+
+    if (allSeriesIds.length) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=in.(${allSeriesIds.map(enc).join(',')})` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    return Array.from(merged.values()).sort((a, b) => {
+      const diff = parseSortMillis(b) - parseSortMillis(a);
+      if (diff !== 0) return diff;
+      return String(b?.id || '').localeCompare(String(a?.id || ''));
+    });
+  };
+
+  const writeSystemAudit = async (action, snoozeId, details, reason) => {
+    try {
+      await writeAudit(
+        env,
+        null,
+        action,
+        details,
+        {
+          entity: 'pay_item_snoozes',
+          subject_id: snoozeId,
+          reason: reason || null
+        }
+      );
+    } catch {}
+  };
+
+  const clearActiveSnoozeDirect = async (snoozeRow, reason) => {
+    const snoozeId = trimStr(snoozeRow?.id);
+    if (!snoozeId) return false;
+
+    const now = nowIso();
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          cleared_at_utc: now,
+          cleared_by_user_id: null,
+          updated_at_utc: now,
+          updated_by_user_id: null
+        })
+      }
+    );
+
+    if (!patchRes.ok) {
+      const txt = await patchRes.text().catch(() => '');
+      throw new Error(txt || `Failed to clear snooze ${snoozeId}`);
+    }
+
+    await writeSystemAudit(
+      'SNOOZE_CLEARED',
+      snoozeId,
+      {
+        snooze_id: snoozeId,
+        booking_id: String(bookingId),
+        current_timesheet_id: currentId,
+        previous_timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+        snooze_kind: trimStr(snoozeRow?.snooze_kind) || null,
+        segment_id: trimStr(snoozeRow?.segment_id) || null,
+        segment_stable_key: trimStr(snoozeRow?.segment_stable_key) || null,
+        clear_reason: reason || null
+      },
+      reason || null
+    );
+
+    return true;
+  };
+
+  const rebindActiveSnooze = async (snoozeRow, targetTimesheetId, targetSegmentId, targetSegmentStableKey) => {
+    const snoozeId = trimStr(snoozeRow?.id);
+    if (!snoozeId) return false;
+
+    const now = nowIso();
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: targetTimesheetId || null,
+          booking_id: String(bookingId),
+          segment_id: targetSegmentId || null,
+          segment_stable_key: targetSegmentStableKey || null,
+          updated_at_utc: now,
+          updated_by_user_id: null
+        })
+      }
+    );
+
+    if (!patchRes.ok) {
+      const txt = await patchRes.text().catch(() => '');
+      throw new Error(txt || `Failed to rebind snooze ${snoozeId}`);
+    }
+
+    await writeSystemAudit(
+      'SNOOZE_REBOUND_TO_CURRENT_TIMESHEET',
+      snoozeId,
+      {
+        snooze_id: snoozeId,
+        booking_id: String(bookingId),
+        previous_timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+        current_timesheet_id: targetTimesheetId || null,
+        previous_segment_id: trimStr(snoozeRow?.segment_id) || null,
+        current_segment_id: targetSegmentId || null,
+        segment_stable_key: targetSegmentStableKey || null,
+        snooze_kind: trimStr(snoozeRow?.snooze_kind) || null
+      },
+      'ROTATED_TO_CURRENT_TIMESHEET'
+    );
+
+    return true;
+  };
+
+  const activeSnoozes = await fetchActiveTimesheetSnoozes();
+  const reboundSnoozeIds = [];
+  const clearedSnoozeIds = [];
+  const failedSnoozeIds = [];
+
+  const groupKeepers = new Map();
+
+  for (const snoozeRow of activeSnoozes) {
+    const snoozeId = trimStr(snoozeRow?.id);
+    const candidateId = trimStr(snoozeRow?.candidate_id);
+    const snoozeKind = trimStr(snoozeRow?.snooze_kind).toUpperCase();
+    const stableKey = trimStr(snoozeRow?.segment_stable_key) || trimStr(snoozeRow?.segment_id);
+    const isSegmentSnooze = !!stableKey;
+
+    const groupKey = isSegmentSnooze
+      ? `${candidateId}::${snoozeKind}::SEGMENT::${stableKey}`
+      : `${candidateId}::${snoozeKind}::WHOLE_TIMESHEET`;
+
+    if (!groupKeepers.has(groupKey)) {
+      groupKeepers.set(groupKey, snoozeRow);
+      continue;
+    }
+
+    try {
+      await clearActiveSnoozeDirect(snoozeRow, 'SUPERSEDED_DUPLICATE_ON_ROTATION');
+      clearedSnoozeIds.push(snoozeId);
+    } catch {
+      failedSnoozeIds.push(snoozeId);
+    }
+  }
+
+  for (const snoozeRow of groupKeepers.values()) {
+    const snoozeId = trimStr(snoozeRow?.id);
+    const stableKey = trimStr(snoozeRow?.segment_stable_key) || trimStr(snoozeRow?.segment_id);
+    const isSegmentSnooze = !!stableKey;
+
+    try {
+      if (!isSegmentSnooze) {
+        const needsRebind =
+          trimStr(snoozeRow?.timesheet_id) !== String(currentId) ||
+          trimStr(snoozeRow?.booking_id) !== String(bookingId) ||
+          trimStr(snoozeRow?.segment_id) !== '' ||
+          trimStr(snoozeRow?.segment_stable_key) !== '';
+
+        if (needsRebind) {
+          await rebindActiveSnooze(snoozeRow, String(currentId), null, null);
+          reboundSnoozeIds.push(snoozeId);
+        }
+        continue;
+      }
+
+      const currentSeg = currentSegmentMap.get(stableKey);
+      if (!currentSeg) {
+        await clearActiveSnoozeDirect(snoozeRow, 'SEGMENT_MISSING_AFTER_ROTATION');
+        clearedSnoozeIds.push(snoozeId);
+        continue;
+      }
+
+      const targetSegmentId = trimStr(currentSeg.segment_id) || null;
+      const targetStableKey = trimStr(currentSeg.segment_stable_key) || stableKey;
+
+      const needsRebind =
+        trimStr(snoozeRow?.timesheet_id) !== String(currentId) ||
+        trimStr(snoozeRow?.booking_id) !== String(bookingId) ||
+        trimStr(snoozeRow?.segment_id) !== trimStr(targetSegmentId || '') ||
+        trimStr(snoozeRow?.segment_stable_key) !== trimStr(targetStableKey || '');
+
+      if (needsRebind) {
+        await rebindActiveSnooze(snoozeRow, String(currentId), targetSegmentId, targetStableKey);
+        reboundSnoozeIds.push(snoozeId);
+      }
+    } catch {
+      failedSnoozeIds.push(snoozeId);
+    }
+  }
+
   const keysToDelete = new Set();
 
   for (const r of purgeRows) {
@@ -27753,7 +28308,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     if (qrKey && qrKey !== canonical && qrKey !== manualKey) keysToDelete.add(qrKey);
   }
 
-  // 5) Load and delete timesheet_evidence rows for purged versions, and delete their storage keys
   let evidenceRows = [];
   try {
     const { rows: evRows } = await sbFetch(
@@ -27773,7 +28327,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     if (k) keysToDelete.add(k);
   }
 
-  // 6) Best-effort delete R2 keys
   let deletedKeys = 0;
   let failedKeys = 0;
 
@@ -27791,8 +28344,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     }
   }
 
-  // 7) Delete evidence DB rows (so they don’t show up anywhere)
-  // (Even if R2 delete failed, removing DB rows avoids UI dangling pointers.)
   let deletedEvidenceRows = 0;
   try {
     const delEvRes = await fetch(
@@ -27802,7 +28353,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     if (delEvRes.ok) deletedEvidenceRows = evidenceRows.length;
   } catch {}
 
-  // 8) Null out blob pointers on those old timesheets (safety)
   try {
     const now = nowIso();
     await fetch(
@@ -27827,9 +28377,13 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     deleted_keys: deletedKeys,
     failed_keys: failedKeys,
     deleted_evidence_rows: deletedEvidenceRows,
+    rebound_snooze_ids: reboundSnoozeIds,
+    cleared_snooze_ids: clearedSnoozeIds,
+    failed_snooze_ids: failedSnoozeIds,
     r2_configured: canR2
   };
 }
+
 
 async function handleMailshotRunsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -33041,25 +33595,25 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
 
   return withCORS(env, req, ok({ ok:true, safe_end: safeEnd, clamped }));
 }
+
+
 async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
   const enc = encodeURIComponent;
+  const trimStr = (v) => String(v || '').trim();
 
-  // ✅ Guarded write: require expected_timesheet_id in JSON body
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
-  // ✅ stale-safe resolve
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
   if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
   const currentTimesheetId = String(resolved.current_timesheet_id);
 
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
   if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
       env,
@@ -33071,8 +33625,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     );
   }
 
-  // Guard: current TSFIN must not be paid or invoiced (and respect other hard locks defensively)
-  // ✅ NOTE: schema-aligned columns only (locked_by_invoice_id, locked_at_utc, paid_at_utc)
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -33091,7 +33643,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     if (hardLocked) return withCORS(env, req, badRequest('Cannot delete: invoiced or paid'));
   }
 
-  // Load current timesheet row (classification + existence check)
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -33104,6 +33655,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   const scopeUpper = String(ts.sheet_scope || '').trim().toUpperCase();
   const isWeekly = scopeUpper === 'WEEKLY';
   const isAdjustment = ts.is_adjustment === true;
+  const bookingId = trimStr(ts.booking_id) || trimStr(resolved.booking_id) || '';
 
   const originUpper = String(ts.adjustment_origin || '').trim().toUpperCase();
   const hasCorrectionId = ts.correction_id != null && String(ts.correction_id).trim() !== '';
@@ -33119,7 +33671,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       hasCorrectionKind
     );
 
-  // 1) Import-derived child adjustment → refuse
   if (isImportDerivedChild) {
     return withCORS(
       env,
@@ -33130,7 +33681,137 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     );
   }
 
-  // 2) Weekly parent → call timesheet_weekly_chain_delete_apply
+  const collectActiveTimesheetSnoozes = async (bookingIdArg, timesheetIdsArg) => {
+    const merged = new Map();
+    const baseSelect = 'id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,snooze_kind';
+    const seriesIds = Array.isArray(timesheetIdsArg)
+      ? timesheetIdsArg.map(x => trimStr(x)).filter(Boolean)
+      : [];
+
+    const collect = async (url) => {
+      try {
+        const { rows: fetchedRows } = await sbFetch(env, url);
+        for (const row of (Array.isArray(fetchedRows) ? fetchedRows : [])) {
+          const id = trimStr(row?.id);
+          if (!id) continue;
+          merged.set(id, row);
+        }
+      } catch {}
+    };
+
+    if (bookingIdArg) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?booking_id=eq.${enc(String(bookingIdArg))}` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    if (seriesIds.length) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=in.(${seriesIds.map(enc).join(',')})` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    return Array.from(merged.values());
+  };
+
+  const clearCollectedSnoozes = async (snoozeRows, clearReason) => {
+    const clearedIds = [];
+    const failedIds = [];
+
+    for (const snoozeRow of (Array.isArray(snoozeRows) ? snoozeRows : [])) {
+      const snoozeId = trimStr(snoozeRow?.id);
+      if (!snoozeId) continue;
+
+      let cleared = false;
+
+      try {
+        await sbRpc(env, 'pay_snooze_clear', {
+          p_snooze_id: snoozeId,
+          p_actor_user_id: user.id
+        });
+        cleared = true;
+      } catch {}
+
+      if (!cleared) {
+        const now = nowIso();
+        try {
+          const patchRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({
+                cleared_at_utc: now,
+                cleared_by_user_id: user.id,
+                updated_at_utc: now,
+                updated_by_user_id: user.id
+              })
+            }
+          );
+
+          if (!patchRes.ok) {
+            const txt = await patchRes.text().catch(() => '');
+            throw new Error(txt || `Failed to clear snooze ${snoozeId}`);
+          }
+
+          try {
+            await writeAudit(
+              env,
+              user,
+              'SNOOZE_CLEARED',
+              {
+                snooze_id: snoozeId,
+                booking_id: bookingId || null,
+                timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+                segment_id: trimStr(snoozeRow?.segment_id) || null,
+                segment_stable_key: trimStr(snoozeRow?.segment_stable_key) || null,
+                snooze_kind: trimStr(snoozeRow?.snooze_kind) || null,
+                clear_reason: clearReason || null
+              },
+              {
+                entity: 'pay_item_snoozes',
+                subject_id: snoozeId,
+                req,
+                reason: clearReason || null
+              }
+            );
+          } catch {}
+
+          cleared = true;
+        } catch {}
+      }
+
+      if (cleared) clearedIds.push(snoozeId);
+      else failedIds.push(snoozeId);
+    }
+
+    return { clearedIds, failedIds };
+  };
+
+  const weeklySeriesIds = bookingId
+    ? (await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?booking_id=eq.${enc(bookingId)}` +
+          `&select=timesheet_id`
+      )).rows?.map(r => r?.timesheet_id).filter(Boolean) || []
+    : [currentTimesheetId];
+
+  const snoozesToClear = await collectActiveTimesheetSnoozes(
+    bookingId || null,
+    weeklySeriesIds.length ? weeklySeriesIds : [currentTimesheetId]
+  );
+
   if (isWeekly && !isAdjustment) {
     try {
       const rpcRes = await sbRpc(env, 'timesheet_weekly_chain_delete_apply', {
@@ -33143,13 +33824,23 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         (rpcRes && typeof rpcRes === 'object' && Object.prototype.hasOwnProperty.call(rpcRes, 'data')) ? rpcRes.data :
         rpcRes;
 
-      // Audit (best-effort, keep existing behaviour)
+      const snoozeClearResult = await clearCollectedSnoozes(
+        snoozesToClear,
+        'TIMESHEET_DELETED_NOT_REQUIRED'
+      );
+
       try {
         await writeAudit(
           env,
           user,
           'TIMESHEET_DELETED',
-          { kind: 'WEEKLY_CHAIN_DELETE_PARENT', timesheet_id: currentTimesheetId, result: rpcOut },
+          {
+            kind: 'WEEKLY_CHAIN_DELETE_PARENT',
+            timesheet_id: currentTimesheetId,
+            result: rpcOut,
+            cleared_snooze_ids: snoozeClearResult.clearedIds,
+            snooze_clear_failed_ids: snoozeClearResult.failedIds
+          },
           { entity: 'timesheets', subject_id: currentTimesheetId, req }
         );
       } catch (e) {
@@ -33163,7 +33854,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         timesheet_id: currentTimesheetId,
         current_timesheet_id: currentTimesheetId,
         requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-        was_stale: !!resolved.was_stale
+        was_stale: !!resolved.was_stale,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
       }));
     } catch (e) {
       const msg = e?.message ? String(e.message) : String(e || 'Delete failed');
@@ -33172,7 +33865,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   }
 
-  // 3) Manual weekly adjustment → call timesheet_weekly_manual_adjustment_delete_apply
   if (isWeekly && isAdjustment) {
     try {
       const rpcRes = await sbRpc(env, 'timesheet_weekly_manual_adjustment_delete_apply', {
@@ -33185,13 +33877,23 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         (rpcRes && typeof rpcRes === 'object' && Object.prototype.hasOwnProperty.call(rpcRes, 'data')) ? rpcRes.data :
         rpcRes;
 
-      // Audit (best-effort, keep existing behaviour)
+      const snoozeClearResult = await clearCollectedSnoozes(
+        snoozesToClear,
+        'TIMESHEET_DELETED_NOT_REQUIRED'
+      );
+
       try {
         await writeAudit(
           env,
           user,
           'TIMESHEET_DELETED',
-          { kind: 'WEEKLY_MANUAL_ADJUSTMENT_DELETE', timesheet_id: currentTimesheetId, result: rpcOut },
+          {
+            kind: 'WEEKLY_MANUAL_ADJUSTMENT_DELETE',
+            timesheet_id: currentTimesheetId,
+            result: rpcOut,
+            cleared_snooze_ids: snoozeClearResult.clearedIds,
+            snooze_clear_failed_ids: snoozeClearResult.failedIds
+          },
           { entity: 'timesheets', subject_id: currentTimesheetId, req }
         );
       } catch (e) {
@@ -33205,7 +33907,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         timesheet_id: currentTimesheetId,
         current_timesheet_id: currentTimesheetId,
         requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-        was_stale: !!resolved.was_stale
+        was_stale: !!resolved.was_stale,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
       }));
     } catch (e) {
       const msg = e?.message ? String(e.message) : String(e || 'Delete failed');
@@ -33214,8 +33918,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   }
 
-  // 4) Daily/other → keep existing delete behaviour unchanged
-  // Confirm the timesheet row exists (chain/version record)
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -33225,7 +33927,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   const versions = tsRows || [];
   if (!versions.length) return withCORS(env, req, notFound('Timesheet not found'));
 
-  // Unlink any contract_weeks that point at this timesheet_id (defensive)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -33239,7 +33940,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Unlink any nhsp_shifts that point at this timesheet_id (defensive)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -33252,7 +33952,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Delete validations (defensive cleanup)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheet_validations?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -33261,7 +33960,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Delete TSFIN snapshots (avoid orphaned financials)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -33270,7 +33968,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Delete timesheet row (current version id)
   const del = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -33280,13 +33977,22 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   );
   if (!del.ok) return withCORS(env, req, serverError(await del.text()));
 
-  // Audit
+  const snoozeClearResult = await clearCollectedSnoozes(
+    snoozesToClear,
+    'TIMESHEET_DELETED_NOT_REQUIRED'
+  );
+
   try {
     await writeAudit(
       env,
       user,
       'TIMESHEET_DELETED',
-      { kind: 'STANDARD_DELETE', timesheet_id: currentTimesheetId },
+      {
+        kind: 'STANDARD_DELETE',
+        timesheet_id: currentTimesheetId,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
+      },
       { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
   } catch (e) {
@@ -33299,10 +34005,11 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     timesheet_id: currentTimesheetId,
     current_timesheet_id: currentTimesheetId,
     requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-    was_stale: !!resolved.was_stale
+    was_stale: !!resolved.was_stale,
+    cleared_snooze_ids: snoozeClearResult.clearedIds,
+    snooze_clear_failed_ids: snoozeClearResult.failedIds
   }));
 }
-
 
 // ----------------------------------------------------------------------------
 // E) Funnel & Prechecks (read-only views)
