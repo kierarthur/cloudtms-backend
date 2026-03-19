@@ -944,7 +944,6 @@ begin
   from filtered;
 end;
 $$;
-
 create or replace function public.candidate_list_ids(p_filters jsonb)
 returns table (
   id uuid
@@ -966,8 +965,8 @@ declare
   v_created_to timestamptz := null;
   v_updated_from timestamptz := null;
   v_updated_to timestamptz := null;
-  v_job_title_contains text := null;
-  v_primary_job_title_contains text := null;
+  v_job_title_role_ids uuid[] := null;
+  v_job_title_primary_only boolean := false;
   v_prof_reg_number text := null;
   v_prof_reg_type text := null;
   v_dob date := null;
@@ -999,8 +998,6 @@ begin
   v_notes := nullif(btrim(coalesce(p_filters->>'notes', '')), '');
   v_pay_method := nullif(upper(btrim(coalesce(p_filters->>'pay_method', ''))), '');
   v_active := nullif(lower(btrim(coalesce(p_filters->>'active', ''))), '');
-  v_job_title_contains := nullif(btrim(coalesce(p_filters->>'job_title_contains', '')), '');
-  v_primary_job_title_contains := nullif(btrim(coalesce(p_filters->>'primary_job_title_contains', '')), '');
   v_prof_reg_number := nullif(btrim(coalesce(p_filters->>'prof_reg_number', '')), '');
   v_prof_reg_type := nullif(upper(btrim(coalesce(p_filters->>'prof_reg_type', ''))), '');
   v_gender := nullif(btrim(coalesce(p_filters->>'gender', '')), '');
@@ -1055,23 +1052,64 @@ begin
   end;
 
   begin
+    if p_filters ? 'job_title_role_ids' then
+      if jsonb_typeof(p_filters->'job_title_role_ids') = 'array' then
+        select array_agg(s_role_id)
+        into v_job_title_role_ids
+        from (
+          select distinct nullif(btrim(e.value), '')::uuid as s_role_id
+          from jsonb_array_elements_text(p_filters->'job_title_role_ids') as e(value)
+          where nullif(btrim(e.value), '') is not null
+        ) s;
+      elsif nullif(btrim(coalesce(p_filters->>'job_title_role_ids', '')), '') is not null then
+        select array_agg(s_role_id)
+        into v_job_title_role_ids
+        from (
+          select distinct nullif(btrim(x), '')::uuid as s_role_id
+          from unnest(regexp_split_to_array(p_filters->>'job_title_role_ids', '\s*,\s*')) as u(x)
+          where nullif(btrim(x), '') is not null
+        ) s;
+      end if;
+    end if;
+  exception when others then
+    v_job_title_role_ids := null;
+  end;
+
+  begin
+    if p_filters ? 'job_title_primary_only' then
+      v_job_title_primary_only := case lower(btrim(coalesce(p_filters->>'job_title_primary_only', '')))
+        when 'true' then true
+        when '1' then true
+        when 'yes' then true
+        when 'y' then true
+        when 'on' then true
+        else false
+      end;
+    else
+      v_job_title_primary_only := false;
+    end if;
+  exception when others then
+    v_job_title_primary_only := false;
+  end;
+
+  begin
     if p_filters ? 'ids' then
       if jsonb_typeof(p_filters->'ids') = 'array' then
-        select array_agg(val::uuid)
+        select array_agg(s_id)
         into v_ids
         from (
-          select distinct nullif(btrim(e.value), '') as val
+          select distinct nullif(btrim(e.value), '')::uuid as s_id
           from jsonb_array_elements_text(p_filters->'ids') as e(value)
-        ) s
-        where s.val is not null;
+          where nullif(btrim(e.value), '') is not null
+        ) s;
       elsif nullif(btrim(coalesce(p_filters->>'ids', '')), '') is not null then
-        select array_agg(val::uuid)
+        select array_agg(s_id)
         into v_ids
         from (
-          select distinct nullif(btrim(x), '') as val
+          select distinct nullif(btrim(x), '')::uuid as s_id
           from unnest(regexp_split_to_array(p_filters->>'ids', '\s*,\s*')) as u(x)
-        ) s
-        where s.val is not null;
+          where nullif(btrim(x), '') is not null
+        ) s;
       end if;
     end if;
   exception when others then
@@ -1081,21 +1119,21 @@ begin
   begin
     if p_filters ? 'roles_any' then
       if jsonb_typeof(p_filters->'roles_any') = 'array' then
-        select array_agg(val)
+        select array_agg(s_val)
         into v_roles_any
         from (
-          select distinct upper(nullif(btrim(e.value), '')) as val
+          select distinct upper(nullif(btrim(e.value), '')) as s_val
           from jsonb_array_elements_text(p_filters->'roles_any') as e(value)
         ) s
-        where s.val is not null;
+        where s.s_val is not null;
       elsif nullif(btrim(coalesce(p_filters->>'roles_any', '')), '') is not null then
-        select array_agg(val)
+        select array_agg(s_val)
         into v_roles_any
         from (
-          select distinct upper(nullif(btrim(x), '')) as val
+          select distinct upper(nullif(btrim(x), '')) as s_val
           from unnest(regexp_split_to_array(p_filters->>'roles_any', '\s*,\s*')) as u(x)
         ) s
-        where s.val is not null;
+        where s.s_val is not null;
       end if;
     end if;
   exception when others then
@@ -1105,21 +1143,21 @@ begin
   begin
     if p_filters ? 'roles_all' then
       if jsonb_typeof(p_filters->'roles_all') = 'array' then
-        select array_agg(val)
+        select array_agg(s_val)
         into v_roles_all
         from (
-          select distinct upper(nullif(btrim(e.value), '')) as val
+          select distinct upper(nullif(btrim(e.value), '')) as s_val
           from jsonb_array_elements_text(p_filters->'roles_all') as e(value)
         ) s
-        where s.val is not null;
+        where s.s_val is not null;
       elsif nullif(btrim(coalesce(p_filters->>'roles_all', '')), '') is not null then
-        select array_agg(val)
+        select array_agg(s_val)
         into v_roles_all
         from (
-          select distinct upper(nullif(btrim(x), '')) as val
+          select distinct upper(nullif(btrim(x), '')) as s_val
           from unnest(regexp_split_to_array(p_filters->>'roles_all', '\s*,\s*')) as u(x)
         ) s
-        where s.val is not null;
+        where s.s_val is not null;
       end if;
     end if;
   exception when others then
@@ -1170,8 +1208,17 @@ begin
       and (v_created_to is null or csa.created_at <= v_created_to)
       and (v_updated_from is null or csa.updated_at >= v_updated_from)
       and (v_updated_to is null or csa.updated_at <= v_updated_to)
-      and (v_primary_job_title_contains is null or csa.primary_job_title ilike ('%' || v_primary_job_title_contains || '%'))
-      and (v_job_title_contains is null or csa.job_titles_display ilike ('%' || v_job_title_contains || '%'))
+      and (
+        v_job_title_role_ids is null
+        or (
+          v_job_title_primary_only = true
+          and csa.primary_job_title_id = any(v_job_title_role_ids)
+        )
+        or (
+          v_job_title_primary_only = false
+          and coalesce(csa.job_title_ids, '{}'::uuid[]) && v_job_title_role_ids
+        )
+      )
       and (v_prof_reg_number is null or csa.prof_reg_number ilike ('%' || v_prof_reg_number || '%'))
       and (v_prof_reg_type is null or upper(coalesce(csa.prof_reg_type::text, '')) = v_prof_reg_type)
       and (v_dob is null or csa.date_of_birth = v_dob)
@@ -1246,7 +1293,6 @@ begin
   order by filtered.id;
 end;
 $$;
-
 
 create or replace function public.client_list_ids(p_filters jsonb)
 returns table (
