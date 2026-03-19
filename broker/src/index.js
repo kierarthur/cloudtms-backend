@@ -30855,7 +30855,7 @@ async function handleBankingFinanceCaseAudit(env, req, user, financeCaseId) {
 }
 
 async function sbRpcAllRows(env, fn, args, opts) {
-  const url = `${env.SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(fn)}`;
+  const baseUrl = `${env.SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(fn)}`;
 
   const pageSize =
     (opts && Number.isFinite(Number(opts.pageSize)) && Number(opts.pageSize) > 0)
@@ -30885,15 +30885,15 @@ async function sbRpcAllRows(env, fn, args, opts) {
 
   try {
     while (true) {
-      const end = start + pageSize - 1;
+      const requestUrl = new URL(baseUrl);
+      requestUrl.searchParams.set('limit', String(pageSize));
+      requestUrl.searchParams.set('offset', String(start));
 
-      const res = await fetch(url, {
+      const res = await fetch(requestUrl.toString(), {
         method: 'POST',
         headers: {
           ...sbHeaders(env),
-          Prefer: 'count=exact',
-          'Range-Unit': 'items',
-          Range: `${start}-${end}`
+          Prefer: 'count=exact'
         },
         body: JSON.stringify(args || {}),
         signal: controller ? controller.signal : undefined
@@ -30923,13 +30923,13 @@ async function sbRpcAllRows(env, fn, args, opts) {
         }
       }
 
-      if (total != null) {
-        if (out.length >= total) break;
-      } else if (rows.length < pageSize) {
+      if (rows.length === 0) {
         break;
       }
 
-      if (rows.length === 0) {
+      if (total != null) {
+        if (out.length >= total) break;
+      } else if (rows.length < pageSize) {
         break;
       }
 
@@ -30950,7 +30950,6 @@ async function sbRpcAllRows(env, fn, args, opts) {
     if (t) clearTimeout(t);
   }
 }
-
 
 async function openOutboxDetailModal(rowOrRef) {
   const trimStr = (v) => String(v == null ? '' : v).trim();
