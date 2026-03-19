@@ -14730,7 +14730,6 @@ end;
 $$;
 
 
-
 create or replace function public.pay_loans_snoozes_list(
   p_candidate_id uuid default null::uuid,
   p_client_id uuid default null::uuid,
@@ -15028,10 +15027,10 @@ begin
       nullif(btrim(coalesce(seg_item.value->>'segment_id', '')), '') as segment_id,
       coalesce(
         nullif(btrim(coalesce(seg_item.value->>'segment_stable_key', '')), ''),
-        nullif(btrim(coalesce(seg_item.value->>'date', '')), ''),
-        nullif(btrim(coalesce(seg_item.value->>'ref_num', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'segment_id', '')), ''),
         nullif(btrim(coalesce(seg_item.value->>'segment_key', '')), ''),
-        nullif(btrim(coalesce(seg_item.value->>'segment_id', '')), '')
+        nullif(btrim(coalesce(seg_item.value->>'date', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'ref_num', '')), '')
       ) as segment_stable_key,
       nullif(btrim(coalesce(seg_item.value->>'date', '')), '') as work_date,
       coalesce(nullif(btrim(coalesce(seg_item.value->>'client_name', '')), ''), ctc.client_name) as client_name,
@@ -15188,7 +15187,13 @@ begin
     left join current_timesheet_segments cts
       on cts.current_timesheet_id = ctc.current_timesheet_id
      and pss.segment_stable_key is not null
-     and cts.segment_stable_key = pss.segment_stable_key
+     and (
+       cts.segment_stable_key = pss.segment_stable_key
+       or (
+         pss.stored_segment_id is not null
+         and cts.segment_id = pss.stored_segment_id
+       )
+     )
     left join current_timesheet_segment_groups ctsg
       on ctsg.current_timesheet_id = ctc.current_timesheet_id
   ),
