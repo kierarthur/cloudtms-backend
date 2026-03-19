@@ -70091,7 +70091,8 @@ async function handleFilesDownload(env, req) {
       'files/',                     // evidence uploads
       'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
       'docs-pdf/',
-      'Assets/', 'assets/'
+      'Assets/', 'assets/',
+      'mailshot-template-attachments/'
     ];
     if (!ALLOWED_PREFIXES.some(p => key.startsWith(p))) {
       if (LOG) console.warn('[FILES][DL] deny: prefix', { key });
@@ -70193,7 +70194,6 @@ async function handleFilesDownload(env, req) {
     return withCORS(env, req, serverError("Failed to download file"));
   }
 }
-
 
 // ====================== TIMESHEETS FINANCE PREVIEW ======================
 /**
