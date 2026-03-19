@@ -29604,7 +29604,6 @@ function renderOutboxTable(content, rows) {
   updateSelectionUi();
 }
 
-
 async function handleBankingFinanceLoansSnoozesList(env, req, user) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -29767,6 +29766,7 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
           can_resume: canResume,
           can_write_off: canWriteOff,
           can_snooze: canSnooze,
+          can_unsnooze: canClearSnooze,
           can_clear_snooze: canClearSnooze,
           can_edit_snooze: canEditSnooze,
           can_open_audit: true
@@ -29774,13 +29774,17 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
       };
     });
 
-    const timesheetSnoozes = timesheetSnoozesIn.map((row) => ({
-      ...row,
-      action_flags: {
-        can_clear_snooze: !row?.cleared_at_utc,
-        can_open_audit: false
-      }
-    }));
+    const timesheetSnoozes = timesheetSnoozesIn.map((row) => {
+      const canClearSnooze = !row?.cleared_at_utc;
+      return {
+        ...row,
+        action_flags: {
+          can_unsnooze: canClearSnooze,
+          can_clear_snooze: canClearSnooze,
+          can_open_audit: false
+        }
+      };
+    });
 
     return withCORS(env, req, ok({
       ...((payload && typeof payload === 'object') ? payload : {}),
@@ -55056,9 +55060,12 @@ async function limitOrLinkAttachments(env, { payload }) {
   const newPayload = { ...payload, attachments: kept, htmlBody, body };
   return { payload: newPayload, trimmed: true };
 }
+
 async function handleMailshotEnqueue(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
