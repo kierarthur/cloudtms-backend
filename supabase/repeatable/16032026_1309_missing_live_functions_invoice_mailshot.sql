@@ -425,6 +425,7 @@ declare
   v_prepare_attachment_instructions jsonb := '[]'::jsonb;
 
   v_ctx record;
+  v_field record;
   v_ctx_json jsonb;
   v_field_values jsonb;
   v_key text;
@@ -638,9 +639,48 @@ begin
     v_template_generic_attachment_instructions := '[]'::jsonb;
   end if;
 
+  drop table if exists tmp_selected_fields;
+  create temporary table tmp_selected_fields(
+    field_ord integer not null,
+    field_key text not null,
+    path_text text not null,
+    path_arr text[] not null
+  ) on commit drop;
+
+  if v_selected_keys is not null and array_length(v_selected_keys,1) > 0 then
+    insert into tmp_selected_fields(field_ord, field_key, path_text, path_arr)
+    select
+      src.field_ord,
+      src.field_key,
+      src.path_text,
+      string_to_array(src.path_text, '.') as path_arr
+    from (
+      select
+        key_src.ord::integer as field_ord,
+        key_src.field_key,
+        coalesce(
+          nullif(btrim(coalesce(mf.resolver_spec_json->>'path','')), ''),
+          key_src.field_key
+        ) as path_text
+      from unnest(v_selected_keys) with ordinality as key_src(field_key, ord)
+      left join public.mailshot_fields as mf
+        on mf.field_key = key_src.field_key
+      where key_src.field_key is not null
+        and length(btrim(key_src.field_key)) > 0
+    ) as src;
+  end if;
+
+  drop table if exists tmp_ctx;
   create temporary table tmp_ctx(
     context_id uuid not null,
     ctx_json jsonb not null
+  ) on commit drop;
+
+  drop table if exists tmp_prepared_rows;
+  create temporary table tmp_prepared_rows(
+    row_ord bigserial primary key,
+    eligible boolean not null,
+    payload jsonb not null
   ) on commit drop;
 
   if v_entity_type = 'candidate' then
@@ -803,23 +843,15 @@ begin
     v_candidate_name := null;
     v_recipient_display_name := null;
 
-    if v_selected_keys is not null and array_length(v_selected_keys,1) > 0 then
-      foreach v_key in array v_selected_keys
+    if exists (select 1 from tmp_selected_fields) then
+      for v_field in
+        select tsf.field_key, tsf.path_text, tsf.path_arr
+        from tmp_selected_fields as tsf
+        order by tsf.field_ord
       loop
-        if v_key is null or length(btrim(v_key)) = 0 then
-          continue;
-        end if;
-
-        select coalesce(nullif(btrim(coalesce(f.resolver_spec_json->>'path','')),''), v_key)
-          into v_path
-        from public.mailshot_fields as f
-        where f.field_key = v_key;
-
-        if v_path is null then
-          v_path := v_key;
-        end if;
-
-        v_path_arr := string_to_array(v_path, '.');
+        v_key := v_field.field_key;
+        v_path := v_field.path_text;
+        v_path_arr := v_field.path_arr;
 
         if v_path_arr is null or array_length(v_path_arr,1) = 0 then
           v_val := null;
@@ -1014,7 +1046,9 @@ begin
       from row_attachment_grp as rag;
     end if;
 
-    v_rows := v_rows || jsonb_build_array(
+    insert into tmp_prepared_rows(eligible, payload)
+    values (
+      v_opt_ok,
       jsonb_build_object(
         'context_id', v_ctx.context_id::text,
         'context_kind', v_context_kind,
@@ -1036,14 +1070,19 @@ begin
         'attachments', v_row_attachment_instructions
       )
     );
-
-    v_returned_row_count := v_returned_row_count + 1;
-    if v_opt_ok then
-      v_eligible_count := v_eligible_count + 1;
-    else
-      v_skipped_count := v_skipped_count + 1;
-    end if;
   end loop;
+
+  select
+    coalesce(jsonb_agg(tpr.payload order by tpr.row_ord), '[]'::jsonb),
+    count(*)::integer,
+    count(*) filter (where tpr.eligible)::integer,
+    count(*) filter (where not tpr.eligible)::integer
+  into
+    v_rows,
+    v_returned_row_count,
+    v_eligible_count,
+    v_skipped_count
+  from tmp_prepared_rows as tpr;
 
   return jsonb_build_object(
     'ok', true,
