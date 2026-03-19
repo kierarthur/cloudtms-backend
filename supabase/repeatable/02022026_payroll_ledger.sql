@@ -3715,7 +3715,6 @@ begin;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3907,14 +3906,14 @@ begin
       s.timesheet_id,
       s.booking_id,
       s.segment_id,
-      s.segment_stable_key,
+      coalesce(s.segment_stable_key, s.segment_id) as segment_stable_key,
       s.snooze_kind,
       s.snooze_id,
       s.snooze_until_date,
       s.note
     from active_snoozes s
     where s.source_ref is null
-      and s.segment_stable_key is not null
+      and (s.segment_stable_key is not null or s.segment_id is not null)
       and s.snooze_kind in ('DO_NOT_PAY','BLOCKED_TIMESHEET')
   ),
   active_timesheet_payment_overrides as (
@@ -4007,9 +4006,11 @@ begin
       rbi.timesheet_id,
       rbi.segment_id_norm as segment_id_norm,
       coalesce(
+        nullif(btrim(coalesce(seg->>'segment_stable_key','')),''),
+        nullif(btrim(coalesce(seg->>'segment_id','')),''),
+        nullif(btrim(coalesce(seg->>'segment_key','')),''),
         nullif(btrim(coalesce(seg->>'date','')),''),
-        nullif(btrim(coalesce(seg->>'ref_num','')),''),
-        nullif(btrim(coalesce(seg->>'segment_id','')),'')
+        nullif(btrim(coalesce(seg->>'ref_num','')),'')
       ) as segment_stable_key
     from reserved_batch_items rbi
     join public.pay_batch_timesheet_snapshots pbts
@@ -4239,7 +4240,7 @@ umb_map as (
       coalesce(um.umb_enabled,false) as umb_enabled,
       um.umb_bank_hash,
 
-      -- ✅ segments include ref_num (key = ref_num)
+      -- ✅ segments retain stable segment identity for preview/snooze matching
       case
         when e.invoice_breakdown_json is not null
          and jsonb_typeof(e.invoice_breakdown_json) = 'object'
@@ -4261,10 +4262,10 @@ umb_map as (
               'segment_key', nullif(btrim(coalesce(seg->>'segment_key','')), ''),
               'segment_stable_key', coalesce(
                 nullif(btrim(coalesce(seg->>'segment_stable_key','')), ''),
-                nullif(btrim(coalesce(seg->>'date','')), ''),
-                nullif(btrim(coalesce(seg->>'ref_num','')), ''),
+                nullif(btrim(coalesce(seg->>'segment_id','')), ''),
                 nullif(btrim(coalesce(seg->>'segment_key','')), ''),
-                nullif(btrim(coalesce(seg->>'segment_id','')), '')
+                nullif(btrim(coalesce(seg->>'date','')), ''),
+                nullif(btrim(coalesce(seg->>'ref_num','')), '')
               ),
               'start_utc', nullif(btrim(coalesce(seg->>'start_utc','')), ''),
               'end_utc', nullif(btrim(coalesce(seg->>'end_utc','')), ''),
@@ -4425,7 +4426,7 @@ umb_map as (
   ),
   segment_status as (
     -- Stable-key segment reconciliation:
-    -- key = work_date (preferred) from snapshot/TSFIN, falling back to ref_num then segment_id.
+    -- key = segment_stable_key first, then segment_id, then legacy segment_key/date/ref_num fallbacks.
     -- Outstanding = current_truth - baseline_paid - reserved(active batches)
     with
     cur_segments as (
@@ -4442,9 +4443,11 @@ umb_map as (
         coalesce(nullif(seg->>'rate','')::numeric, nullif(seg->>'pay_rate','')::numeric) as source_rate,
         coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
         coalesce(
+          nullif(btrim(coalesce(seg->>'segment_stable_key','')),''),
+          nullif(btrim(coalesce(seg->>'segment_id','')),''),
+          nullif(btrim(coalesce(seg->>'segment_key','')),''),
           nullif(btrim(coalesce(seg->>'date','')),''),
-          nullif(btrim(coalesce(seg->>'ref_num','')),''),
-          nullif(btrim(coalesce(seg->>'segment_id','')),'')
+          nullif(btrim(coalesce(seg->>'ref_num','')),'')
         ) as segment_stable_key
       from ts_baseline b
       join lateral jsonb_array_elements(coalesce(b.current_segments_json,'[]'::jsonb)) seg on true
@@ -4465,9 +4468,11 @@ umb_map as (
         coalesce(nullif(seg->>'rate','')::numeric, nullif(seg->>'pay_rate','')::numeric) as source_rate,
         coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
         coalesce(
+          nullif(btrim(coalesce(seg->>'segment_stable_key','')),''),
+          nullif(btrim(coalesce(seg->>'segment_id','')),''),
+          nullif(btrim(coalesce(seg->>'segment_key','')),''),
           nullif(btrim(coalesce(seg->>'date','')),''),
-          nullif(btrim(coalesce(seg->>'ref_num','')),''),
-          nullif(btrim(coalesce(seg->>'segment_id','')),'')
+          nullif(btrim(coalesce(seg->>'ref_num','')),'')
         ) as segment_stable_key
       from ts_baseline b
       join lateral jsonb_array_elements(coalesce(b.base_json->'segments','[]'::jsonb)) seg on true
@@ -5638,11 +5643,11 @@ ts_itemised as (
         else 'TS_TOTAL'::text
       end as component_key_type,
       coalesce(
-        nullif(btrim(coalesce(seg->>'work_date','')), ''),
         nullif(btrim(coalesce(seg->>'segment_stable_key','')), ''),
-        nullif(btrim(coalesce(seg->>'ref_num','')), ''),
-        nullif(btrim(coalesce(seg->>'segment_key','')), ''),
         nullif(btrim(coalesce(seg->>'segment_id','')), ''),
+        nullif(btrim(coalesce(seg->>'segment_key','')), ''),
+        nullif(btrim(coalesce(seg->>'work_date','')), ''),
+        nullif(btrim(coalesce(seg->>'ref_num','')), ''),
         d.timesheet_id::text
       ) as component_key_value,
       'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum as classification,
@@ -5672,11 +5677,11 @@ ts_itemised as (
         ('timesheet:' || d.timesheet_id::text),
         case when nullif(btrim(coalesce(seg->>'work_date','')), '') is not null then 'TS_DAY' else 'TS_TOTAL' end,
         coalesce(
-          nullif(btrim(coalesce(seg->>'work_date','')), ''),
           nullif(btrim(coalesce(seg->>'segment_stable_key','')), ''),
-          nullif(btrim(coalesce(seg->>'ref_num','')), ''),
-          nullif(btrim(coalesce(seg->>'segment_key','')), ''),
           nullif(btrim(coalesce(seg->>'segment_id','')), ''),
+          nullif(btrim(coalesce(seg->>'segment_key','')), ''),
+          nullif(btrim(coalesce(seg->>'work_date','')), ''),
+          nullif(btrim(coalesce(seg->>'ref_num','')), ''),
           d.timesheet_id::text
         ),
         'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
@@ -6172,11 +6177,11 @@ ts_itemised as (
             'segment_id', nullif(btrim(coalesce(tcr.source_basis_json->>'segment_id','')), ''),
             'segment_key', nullif(btrim(coalesce(tcr.source_basis_json->>'segment_key','')), ''),
             'segment_stable_key', coalesce(
-              nullif(btrim(coalesce(tcr.source_basis_json->>'work_date','')), ''),
               nullif(btrim(coalesce(tcr.source_basis_json->>'segment_stable_key','')), ''),
-              nullif(btrim(coalesce(tcr.source_basis_json->>'ref_num','')), ''),
-              nullif(btrim(coalesce(tcr.source_basis_json->>'segment_key','')), ''),
               nullif(btrim(coalesce(tcr.source_basis_json->>'segment_id','')), ''),
+              nullif(btrim(coalesce(tcr.source_basis_json->>'segment_key','')), ''),
+              nullif(btrim(coalesce(tcr.source_basis_json->>'work_date','')), ''),
+              nullif(btrim(coalesce(tcr.source_basis_json->>'ref_num','')), ''),
               tcr.timesheet_id::text
             ),
             'work_date', nullif(btrim(coalesce(tcr.source_basis_json->>'work_date','')), ''),
@@ -6184,11 +6189,11 @@ ts_itemised as (
             'delta_pay_ex_vat', round(coalesce(tcr.component_amount_ex_vat,0),2)
           )
           order by coalesce(
-            nullif(btrim(coalesce(tcr.source_basis_json->>'work_date','')), ''),
             nullif(btrim(coalesce(tcr.source_basis_json->>'segment_stable_key','')), ''),
-            nullif(btrim(coalesce(tcr.source_basis_json->>'ref_num','')), ''),
-            nullif(btrim(coalesce(tcr.source_basis_json->>'segment_key','')), ''),
             nullif(btrim(coalesce(tcr.source_basis_json->>'segment_id','')), ''),
+            nullif(btrim(coalesce(tcr.source_basis_json->>'segment_key','')), ''),
+            nullif(btrim(coalesce(tcr.source_basis_json->>'work_date','')), ''),
+            nullif(btrim(coalesce(tcr.source_basis_json->>'ref_num','')), ''),
             tcr.timesheet_id::text
           )
         ) filter (where tcr.component_key_type in ('TS_DAY','TS_TOTAL')),
@@ -7211,6 +7216,7 @@ ts_itemised as (
       tcr.ts_client_name as client_name,
       tcr.ts_week_ending_date as week_ending_date,
       tcr.ts_pay_method as source_pay_method,
+      tcr.umb_vat_chargeable,
       cp.cand_pay_method as candidate_pay_method,
       cp.cand_tms_ref,
       cp.cand_display_name,
@@ -7235,10 +7241,10 @@ ts_itemised as (
             'segment_stable_key', coalesce(
               nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''),
               nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')), ''),
-              nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
-              nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), ''),
               nullif(btrim(coalesce(cur_seg.seg->>'segment_key','')), ''),
-              nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), '')
+              nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
+              nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), '')
             ),
             'date', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''), nullif(btrim(coalesce(delta_seg.seg->>'work_date','')), '')),
             'client_name', coalesce(nullif(btrim(coalesce(cur_seg.seg->>'client_name','')), ''), tcr.ts_client_name),
@@ -7262,10 +7268,10 @@ ts_itemised as (
               'segment_stable_key', coalesce(
                 nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''),
                 nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')), ''),
-                nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
-                nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), ''),
+                nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), ''),
                 nullif(btrim(coalesce(cur_seg.seg->>'segment_key','')), ''),
-                nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), '')
+                nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
+                nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), '')
               ),
               'source_ref', null
             ),
@@ -7299,16 +7305,16 @@ ts_itemised as (
           from jsonb_array_elements(coalesce(tb.current_segments_json, '[]'::jsonb)) as seg(value)
           where coalesce(
                   nullif(btrim(coalesce(seg.value->>'segment_stable_key','')), ''),
-                  nullif(btrim(coalesce(seg.value->>'date','')), ''),
-                  nullif(btrim(coalesce(seg.value->>'ref_num','')), ''),
+                  nullif(btrim(coalesce(seg.value->>'segment_id','')), ''),
                   nullif(btrim(coalesce(seg.value->>'segment_key','')), ''),
-                  nullif(btrim(coalesce(seg.value->>'segment_id','')), '')
+                  nullif(btrim(coalesce(seg.value->>'date','')), ''),
+                  nullif(btrim(coalesce(seg.value->>'ref_num','')), '')
                 ) is not distinct from coalesce(
                   nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''),
-                  nullif(btrim(coalesce(delta_seg.seg->>'work_date','')), ''),
-                  nullif(btrim(coalesce(delta_seg.seg->>'ref_num','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'segment_id','')), ''),
                   nullif(btrim(coalesce(delta_seg.seg->>'segment_key','')), ''),
-                  nullif(btrim(coalesce(delta_seg.seg->>'segment_id','')), '')
+                  nullif(btrim(coalesce(delta_seg.seg->>'work_date','')), ''),
+                  nullif(btrim(coalesce(delta_seg.seg->>'ref_num','')), '')
                 )
           order by 1
           limit 1
@@ -7319,10 +7325,10 @@ ts_itemised as (
            (ass.booking_id is not null and ass.booking_id = tb.ts_booking_id and ass.segment_stable_key is not distinct from coalesce(
              nullif(btrim(coalesce(delta_seg.seg->>'segment_stable_key','')), ''),
              nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')), ''),
-             nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
-             nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), ''),
+             nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), ''),
              nullif(btrim(coalesce(cur_seg.seg->>'segment_key','')), ''),
-             nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), '')
+             nullif(btrim(coalesce(cur_seg.seg->>'date','')), ''),
+             nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')), '')
            ))
            or (ass.booking_id is null and ass.timesheet_id = tcr.timesheet_id and ass.segment_id is not distinct from nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), ''))
          )
@@ -7344,6 +7350,711 @@ ts_itemised as (
      )
     where round(coalesce(tcr.payment_amount_ex_vat,0),2) <> 0
       and not (ats.snooze_id is not null and ats.snooze_until_date is null)
+  ),
+  timesheet_active_segment_snooze_meta as (
+    select
+      ctl.candidate_id,
+      ctl.timesheet_id,
+      ctl.booking_id,
+      count(*)::int as active_segment_snooze_count,
+      count(*) filter (where ass.snooze_until_date is not null)::int as active_segment_dated_snooze_count,
+      count(*) filter (where ass.snooze_until_date is null)::int as active_segment_indefinite_snooze_count
+    from canonical_timesheet_lines ctl
+    join active_segment_snoozes ass
+      on ass.candidate_id = ctl.candidate_id
+     and (
+       (ass.booking_id is not null and ctl.booking_id is not null and ass.booking_id = ctl.booking_id)
+       or (ass.booking_id is null and ass.timesheet_id = ctl.timesheet_id)
+     )
+    group by ctl.candidate_id, ctl.timesheet_id, ctl.booking_id
+  ),
+  canonical_timesheet_segment_rows as (
+    select
+      ctl.candidate_id,
+      ctl.timesheet_id,
+      ctl.booking_id,
+      cur_seg_norm.seg_ord,
+      cur_seg_norm.segment_id,
+      cur_seg_norm.segment_key,
+      cur_seg_norm.segment_stable_key,
+      cur_seg_norm.segment_date,
+      cur_seg_norm.client_name,
+      cur_seg_norm.role,
+      cur_seg_norm.band,
+      cur_seg_norm.start_hhmm,
+      cur_seg_norm.finish_hhmm,
+      cur_seg_norm.start_utc,
+      cur_seg_norm.end_utc,
+      cur_seg_norm.break_start,
+      cur_seg_norm.break_end,
+      cur_seg_norm.break_mins,
+      cur_seg_norm.breaks,
+      coalesce(cur_seg_norm.ref_num, ss_match.ref_num) as ref_num,
+      round(
+        case
+          when ass_match.snooze_id is not null then coalesce(ss_match.delta_pay_ex_vat, ss_match.eff_delta_ex, 0)
+          when coalesce(ss_match.is_blocked, false) = true or coalesce(ss_match.is_do_not_pay, false) = true then coalesce(ss_match.delta_pay_ex_vat, 0)
+          else coalesce(ss_match.eff_delta_ex, 0)
+        end,
+        2
+      ) as presentation_amount_ex_vat,
+      round(coalesce(ss_match.delta_pay_ex_vat, 0), 2) as raw_delta_ex_vat,
+      round(coalesce(ss_match.eff_delta_ex, 0), 2) as effective_delta_ex_vat,
+      coalesce(ss_match.is_blocked, false) as status_is_blocked,
+      coalesce(ss_match.is_do_not_pay, false) as status_is_do_not_pay,
+      ass_match.snooze_id as segment_snooze_id,
+      ass_match.snooze_until_date as segment_snooze_until_date,
+      ass_match.note as segment_snooze_note,
+      ass_match.snooze_kind as segment_snooze_kind,
+      case
+        when ass_match.snooze_id is not null and ass_match.snooze_until_date is null then 'HIDDEN_INDEFINITE'
+        when ass_match.snooze_id is not null then 'BLOCKED_VISIBLE'
+        when coalesce(ss_match.is_blocked, false) = true or coalesce(ss_match.is_do_not_pay, false) = true then 'BLOCKED_VISIBLE'
+        when round(coalesce(ss_match.eff_delta_ex, 0), 2) <> 0 then 'READY'
+        else 'IGNORED'
+      end as presentation_segment_state,
+      jsonb_build_object(
+        'timesheet_id', ctl.timesheet_id::text,
+        'booking_id', ctl.booking_id,
+        'segment_id', cur_seg_norm.segment_id,
+        'segment_key', cur_seg_norm.segment_key,
+        'segment_stable_key', cur_seg_norm.segment_stable_key,
+        'date', cur_seg_norm.segment_date,
+        'client_name', cur_seg_norm.client_name,
+        'role', cur_seg_norm.role,
+        'band', cur_seg_norm.band,
+        'start', cur_seg_norm.start_hhmm,
+        'finish', cur_seg_norm.finish_hhmm,
+        'start_utc', cur_seg_norm.start_utc,
+        'end_utc', cur_seg_norm.end_utc,
+        'break_start', cur_seg_norm.break_start,
+        'break_end', cur_seg_norm.break_end,
+        'break_mins', cur_seg_norm.break_mins,
+        'breaks', cur_seg_norm.breaks,
+        'ref_num', coalesce(cur_seg_norm.ref_num, ss_match.ref_num),
+        'pay_amount_ex_vat', round(
+          case
+            when ass_match.snooze_id is not null then coalesce(ss_match.delta_pay_ex_vat, ss_match.eff_delta_ex, 0)
+            when coalesce(ss_match.is_blocked, false) = true or coalesce(ss_match.is_do_not_pay, false) = true then coalesce(ss_match.delta_pay_ex_vat, 0)
+            else coalesce(ss_match.eff_delta_ex, 0)
+          end,
+          2
+        ),
+        'raw_delta_ex_vat', round(coalesce(ss_match.delta_pay_ex_vat, 0), 2),
+        'effective_delta_ex_vat', round(coalesce(ss_match.eff_delta_ex, 0), 2),
+        'is_blocked', coalesce(ss_match.is_blocked, false),
+        'is_do_not_pay', coalesce(ss_match.is_do_not_pay, false),
+        'presentation_segment_state', case
+          when ass_match.snooze_id is not null and ass_match.snooze_until_date is null then 'HIDDEN_INDEFINITE'
+          when ass_match.snooze_id is not null then 'BLOCKED_VISIBLE'
+          when coalesce(ss_match.is_blocked, false) = true or coalesce(ss_match.is_do_not_pay, false) = true then 'BLOCKED_VISIBLE'
+          when round(coalesce(ss_match.eff_delta_ex, 0), 2) <> 0 then 'READY'
+          else 'IGNORED'
+        end,
+        'is_ready_segment', (
+          ass_match.snooze_id is null
+          and coalesce(ss_match.is_blocked, false) = false
+          and coalesce(ss_match.is_do_not_pay, false) = false
+          and round(coalesce(ss_match.eff_delta_ex, 0), 2) <> 0
+        ),
+        'is_blocked_visible_segment', (
+          (ass_match.snooze_id is not null and ass_match.snooze_until_date is not null)
+          or coalesce(ss_match.is_blocked, false) = true
+          or coalesce(ss_match.is_do_not_pay, false) = true
+        ),
+        'is_hidden_indefinite_segment', (ass_match.snooze_id is not null and ass_match.snooze_until_date is null),
+        'snooze_identity', jsonb_build_object(
+          'identity_type', 'TIMESHEET_SEGMENT',
+          'timesheet_id', ctl.timesheet_id::text,
+          'booking_id', ctl.booking_id,
+          'segment_id', cur_seg_norm.segment_id,
+          'segment_stable_key', cur_seg_norm.segment_stable_key,
+          'source_ref', null
+        ),
+        'snooze_state', case
+          when ass_match.snooze_id is null then jsonb_build_object('state', 'NONE')
+          when ass_match.snooze_until_date is null then jsonb_build_object(
+            'state', 'INDEFINITE_SNOOZED',
+            'snooze_id', ass_match.snooze_id::text,
+            'snooze_until_date', null,
+            'note', ass_match.note,
+            'snooze_kind', ass_match.snooze_kind
+          )
+          else jsonb_build_object(
+            'state', 'DATED_SNOOZED',
+            'snooze_id', ass_match.snooze_id::text,
+            'snooze_until_date', ass_match.snooze_until_date::text,
+            'note', ass_match.note,
+            'snooze_kind', ass_match.snooze_kind
+          )
+        end
+      ) as segment_base_json
+    from canonical_timesheet_lines ctl
+    join ts_baseline tb
+      on tb.timesheet_id = ctl.timesheet_id
+     and tb.candidate_id = ctl.candidate_id
+    cross join lateral jsonb_array_elements(coalesce(tb.current_segments_json, '[]'::jsonb)) with ordinality as cur_seg(seg_json, seg_ord)
+    cross join lateral (
+      select
+        cur_seg.seg_ord,
+        nullif(btrim(coalesce(cur_seg.seg_json->>'segment_id','')), '') as segment_id,
+        nullif(btrim(coalesce(cur_seg.seg_json->>'segment_key','')), '') as segment_key,
+        coalesce(
+          nullif(btrim(coalesce(cur_seg.seg_json->>'segment_stable_key','')), ''),
+          nullif(btrim(coalesce(cur_seg.seg_json->>'segment_id','')), ''),
+          nullif(btrim(coalesce(cur_seg.seg_json->>'segment_key','')), ''),
+          nullif(btrim(coalesce(cur_seg.seg_json->>'date','')), ''),
+          nullif(btrim(coalesce(cur_seg.seg_json->>'ref_num','')), '')
+        ) as segment_stable_key,
+        nullif(btrim(coalesce(cur_seg.seg_json->>'date','')), '') as segment_date,
+        coalesce(nullif(btrim(coalesce(cur_seg.seg_json->>'client_name','')), ''), ctl.client_name) as client_name,
+        coalesce(nullif(btrim(coalesce(cur_seg.seg_json->>'role','')), ''), ctl.ts_role) as role,
+        coalesce(nullif(btrim(coalesce(cur_seg.seg_json->>'band','')), ''), ctl.ts_band) as band,
+        coalesce(nullif(btrim(coalesce(cur_seg.seg_json->>'start','')), ''), nullif(btrim(coalesce(cur_seg.seg_json->>'start_hhmm','')), '')) as start_hhmm,
+        coalesce(nullif(btrim(coalesce(cur_seg.seg_json->>'end','')), ''), nullif(btrim(coalesce(cur_seg.seg_json->>'end_hhmm','')), '')) as finish_hhmm,
+        nullif(btrim(coalesce(cur_seg.seg_json->>'start_utc','')), '') as start_utc,
+        nullif(btrim(coalesce(cur_seg.seg_json->>'end_utc','')), '') as end_utc,
+        nullif(btrim(coalesce(cur_seg.seg_json->>'break_start','')), '') as break_start,
+        nullif(btrim(coalesce(cur_seg.seg_json->>'break_end','')), '') as break_end,
+        coalesce(nullif(cur_seg.seg_json->>'break_mins','')::numeric, nullif(cur_seg.seg_json->>'break_minutes','')::numeric) as break_mins,
+        case when jsonb_typeof(cur_seg.seg_json->'breaks') = 'array' then cur_seg.seg_json->'breaks' else '[]'::jsonb end as breaks,
+        nullif(btrim(coalesce(cur_seg.seg_json->>'ref_num','')), '') as ref_num
+    ) cur_seg_norm
+    left join lateral (
+      select
+        ss.segment_id,
+        ss.segment_stable_key,
+        ss.ref_num,
+        ss.work_date,
+        ss.delta_pay_ex_vat,
+        ss.eff_delta_ex,
+        ss.is_blocked,
+        ss.is_do_not_pay
+      from segment_status ss
+      where ss.candidate_id = ctl.candidate_id
+        and ss.timesheet_id = ctl.timesheet_id
+        and (
+          (cur_seg_norm.segment_stable_key is not null and ss.segment_stable_key is not distinct from cur_seg_norm.segment_stable_key)
+          or (
+            cur_seg_norm.segment_stable_key is null
+            and cur_seg_norm.segment_id is not null
+            and ss.segment_id is not distinct from cur_seg_norm.segment_id
+          )
+        )
+      order by
+        case
+          when cur_seg_norm.segment_stable_key is not null
+           and ss.segment_stable_key is not distinct from cur_seg_norm.segment_stable_key
+          then 0 else 1
+        end,
+        case
+          when cur_seg_norm.segment_id is not null
+           and ss.segment_id is not distinct from cur_seg_norm.segment_id
+          then 0 else 1
+        end,
+        ss.segment_stable_key nulls last,
+        ss.segment_id nulls last
+      limit 1
+    ) ss_match on true
+    left join lateral (
+      select
+        ass.snooze_id,
+        ass.snooze_until_date,
+        ass.note,
+        ass.snooze_kind,
+        ass.segment_id,
+        ass.segment_stable_key
+      from active_segment_snoozes ass
+      where ass.candidate_id = ctl.candidate_id
+        and (
+          (
+            ass.booking_id is not null
+            and ctl.booking_id is not null
+            and ass.booking_id = ctl.booking_id
+            and (
+              (cur_seg_norm.segment_stable_key is not null and ass.segment_stable_key is not distinct from cur_seg_norm.segment_stable_key)
+              or (
+                cur_seg_norm.segment_stable_key is null
+                and cur_seg_norm.segment_id is not null
+                and ass.segment_id is not distinct from cur_seg_norm.segment_id
+              )
+            )
+          )
+          or (
+            ass.booking_id is null
+            and ass.timesheet_id = ctl.timesheet_id
+            and (
+              (cur_seg_norm.segment_stable_key is not null and ass.segment_stable_key is not distinct from cur_seg_norm.segment_stable_key)
+              or (
+                cur_seg_norm.segment_stable_key is null
+                and cur_seg_norm.segment_id is not null
+                and ass.segment_id is not distinct from cur_seg_norm.segment_id
+              )
+            )
+          )
+        )
+      order by
+        case when ass.segment_stable_key is not null then 0 else 1 end,
+        ass.snooze_id
+      limit 1
+    ) ass_match on true
+    where (
+      ass_match.snooze_id is not null
+      or coalesce(ss_match.is_blocked, false) = true
+      or coalesce(ss_match.is_do_not_pay, false) = true
+      or round(coalesce(ss_match.eff_delta_ex, 0), 2) <> 0
+      or round(coalesce(ss_match.delta_pay_ex_vat, 0), 2) <> 0
+    )
+  ),
+  canonical_timesheet_segment_rollup as (
+    select
+      ctl.candidate_id,
+      ctl.timesheet_id,
+      ctl.booking_id,
+      coalesce(tasm.active_segment_snooze_count, 0) as active_segment_snooze_count,
+      coalesce(tasm.active_segment_dated_snooze_count, 0) as active_segment_dated_snooze_count,
+      coalesce(tasm.active_segment_indefinite_snooze_count, 0) as active_segment_indefinite_snooze_count,
+      count(*) filter (where ctsr.presentation_segment_state in ('READY', 'BLOCKED_VISIBLE', 'HIDDEN_INDEFINITE'))::int as total_segment_count,
+      count(*) filter (where ctsr.presentation_segment_state = 'READY')::int as ready_segment_count,
+      count(*) filter (where ctsr.presentation_segment_state = 'BLOCKED_VISIBLE')::int as blocked_visible_segment_count,
+      count(*) filter (where ctsr.presentation_segment_state = 'HIDDEN_INDEFINITE')::int as hidden_indefinite_segment_count,
+      round(coalesce(sum(case when ctsr.presentation_segment_state = 'READY' then ctsr.presentation_amount_ex_vat else 0 end), 0), 2) as ready_segment_amount_ex_vat,
+      round(coalesce(sum(case when ctsr.presentation_segment_state = 'BLOCKED_VISIBLE' then ctsr.presentation_amount_ex_vat else 0 end), 0), 2) as blocked_visible_segment_amount_ex_vat,
+      round(coalesce(sum(case when ctsr.presentation_segment_state = 'HIDDEN_INDEFINITE' then ctsr.presentation_amount_ex_vat else 0 end), 0), 2) as hidden_indefinite_segment_amount_ex_vat,
+      coalesce(
+        jsonb_agg(
+          ctsr.segment_base_json || jsonb_build_object(
+            'presentation_section', 'READY_TO_PAY',
+            'presentation_role', 'CHILD',
+            'presentation_parent_line_id', ctl.timesheet_id::text,
+            'has_active_timesheet_snooze', (ctl.snooze_id is not null),
+            'has_active_segment_snoozes', (coalesce(tasm.active_segment_snooze_count, 0) > 0),
+            'active_segment_snooze_count', coalesce(tasm.active_segment_snooze_count, 0),
+            'active_segment_dated_snooze_count', coalesce(tasm.active_segment_dated_snooze_count, 0),
+            'active_segment_indefinite_snooze_count', coalesce(tasm.active_segment_indefinite_snooze_count, 0),
+            'whole_timesheet_snooze_action_blocked', (coalesce(tasm.active_segment_snooze_count, 0) > 0),
+            'whole_timesheet_snooze_action_block_reason', case when coalesce(tasm.active_segment_snooze_count, 0) > 0 then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
+            'segment_snooze_action_blocked', (ctl.snooze_id is not null),
+            'segment_snooze_action_block_reason', case when ctl.snooze_id is not null then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end
+          )
+          order by ctsr.seg_ord
+        ) filter (where ctsr.presentation_segment_state = 'READY'),
+        '[]'::jsonb
+      ) as ready_segment_rows_json,
+      coalesce(
+        jsonb_agg(
+          ctsr.segment_base_json || jsonb_build_object(
+            'presentation_section', 'BLOCKED_FOR_PAY',
+            'presentation_role', 'CHILD',
+            'presentation_parent_line_id', ctl.timesheet_id::text,
+            'has_active_timesheet_snooze', (ctl.snooze_id is not null),
+            'has_active_segment_snoozes', (coalesce(tasm.active_segment_snooze_count, 0) > 0),
+            'active_segment_snooze_count', coalesce(tasm.active_segment_snooze_count, 0),
+            'active_segment_dated_snooze_count', coalesce(tasm.active_segment_dated_snooze_count, 0),
+            'active_segment_indefinite_snooze_count', coalesce(tasm.active_segment_indefinite_snooze_count, 0),
+            'whole_timesheet_snooze_action_blocked', (coalesce(tasm.active_segment_snooze_count, 0) > 0),
+            'whole_timesheet_snooze_action_block_reason', case when coalesce(tasm.active_segment_snooze_count, 0) > 0 then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
+            'segment_snooze_action_blocked', (ctl.snooze_id is not null),
+            'segment_snooze_action_block_reason', case when ctl.snooze_id is not null then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end
+          )
+          order by ctsr.seg_ord
+        ) filter (where ctsr.presentation_segment_state = 'BLOCKED_VISIBLE'),
+        '[]'::jsonb
+      ) as blocked_visible_segment_rows_json,
+      coalesce(
+        jsonb_agg(
+          ctsr.segment_base_json || jsonb_build_object(
+            'presentation_section', 'BLOCKED_FOR_PAY',
+            'presentation_role', 'CHILD',
+            'presentation_parent_line_id', ctl.timesheet_id::text,
+            'has_active_timesheet_snooze', (ctl.snooze_id is not null),
+            'has_active_segment_snoozes', (coalesce(tasm.active_segment_snooze_count, 0) > 0),
+            'active_segment_snooze_count', coalesce(tasm.active_segment_snooze_count, 0),
+            'active_segment_dated_snooze_count', coalesce(tasm.active_segment_dated_snooze_count, 0),
+            'active_segment_indefinite_snooze_count', coalesce(tasm.active_segment_indefinite_snooze_count, 0),
+            'whole_timesheet_snooze_action_blocked', (coalesce(tasm.active_segment_snooze_count, 0) > 0),
+            'whole_timesheet_snooze_action_block_reason', case when coalesce(tasm.active_segment_snooze_count, 0) > 0 then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
+            'segment_snooze_action_blocked', (ctl.snooze_id is not null),
+            'segment_snooze_action_block_reason', case when ctl.snooze_id is not null then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end
+          )
+          order by ctsr.seg_ord
+        ) filter (where ctsr.presentation_segment_state in ('READY', 'BLOCKED_VISIBLE')),
+        '[]'::jsonb
+      ) as visible_segment_rows_json
+    from canonical_timesheet_lines ctl
+    left join timesheet_active_segment_snooze_meta tasm
+      on tasm.candidate_id = ctl.candidate_id
+     and tasm.timesheet_id = ctl.timesheet_id
+     and tasm.booking_id is not distinct from ctl.booking_id
+    left join canonical_timesheet_segment_rows ctsr
+      on ctsr.candidate_id = ctl.candidate_id
+     and ctsr.timesheet_id = ctl.timesheet_id
+    group by
+      ctl.candidate_id,
+      ctl.timesheet_id,
+      ctl.booking_id,
+      ctl.snooze_id,
+      tasm.active_segment_snooze_count,
+      tasm.active_segment_dated_snooze_count,
+      tasm.active_segment_indefinite_snooze_count
+  ),
+  canonical_timesheet_presentation_seed as (
+    select
+      ctl.candidate_id,
+      ctl.timesheet_id,
+      ctl.booking_id,
+      ctl.ts_role,
+      ctl.ts_band,
+      ctl.client_id,
+      ctl.client_name,
+      ctl.week_ending_date,
+      ctl.source_pay_method,
+      ctl.umb_vat_chargeable,
+      ctl.candidate_pay_method,
+      ctl.cand_tms_ref,
+      ctl.cand_display_name,
+      ctl.payee_entity_kind,
+      ctl.payee_entity_id,
+      ctl.is_ready_for_draft,
+      ctl.override_id,
+      ctl.override_reason,
+      ctl.snooze_id,
+      ctl.snooze_until_date,
+      ctl.snooze_note,
+      ctl.amount_ex_vat,
+      ctl.amount_display,
+      ctl.case_is_blocked,
+      ctl.case_resolution_summary_json,
+      ctl.case_components_json,
+      coalesce(ctsr.total_segment_count, 0) as total_segment_count,
+      coalesce(ctsr.ready_segment_count, 0) as ready_segment_count,
+      coalesce(ctsr.blocked_visible_segment_count, 0) as blocked_visible_segment_count,
+      coalesce(ctsr.hidden_indefinite_segment_count, 0) as hidden_indefinite_segment_count,
+      coalesce(ctsr.active_segment_snooze_count, 0) as active_segment_snooze_count,
+      coalesce(ctsr.active_segment_dated_snooze_count, 0) as active_segment_dated_snooze_count,
+      coalesce(ctsr.active_segment_indefinite_snooze_count, 0) as active_segment_indefinite_snooze_count,
+      coalesce(ctsr.ready_segment_amount_ex_vat, 0) as ready_segment_amount_ex_vat,
+      coalesce(ctsr.blocked_visible_segment_amount_ex_vat, 0) as blocked_visible_segment_amount_ex_vat,
+      coalesce(ctsr.hidden_indefinite_segment_amount_ex_vat, 0) as hidden_indefinite_segment_amount_ex_vat,
+      coalesce(ctsr.ready_segment_rows_json, '[]'::jsonb) as ready_segment_rows_json,
+      coalesce(ctsr.blocked_visible_segment_rows_json, '[]'::jsonb) as blocked_visible_segment_rows_json,
+      coalesce(ctsr.visible_segment_rows_json, '[]'::jsonb) as visible_segment_rows_json,
+      round(
+        coalesce(ctl.amount_ex_vat, 0)
+        - coalesce(ctsr.ready_segment_amount_ex_vat, 0)
+        - coalesce(ctsr.blocked_visible_segment_amount_ex_vat, 0)
+        - coalesce(ctsr.hidden_indefinite_segment_amount_ex_vat, 0),
+        2
+      ) as non_segment_amount_ex_vat,
+      (ctl.snooze_id is not null) as has_active_timesheet_snooze,
+      (coalesce(ctsr.active_segment_snooze_count, 0) > 0) as has_active_segment_snoozes
+    from canonical_timesheet_lines ctl
+    left join canonical_timesheet_segment_rollup ctsr
+      on ctsr.candidate_id = ctl.candidate_id
+     and ctsr.timesheet_id = ctl.timesheet_id
+     and ctsr.booking_id is not distinct from ctl.booking_id
+  ),
+  canonical_timesheet_presentation_state as (
+    select
+      ctps.*,
+      round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) as ready_section_amount_ex_vat,
+      round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0), 2) as blocked_section_amount_ex_vat,
+      round(
+        case
+          when ctps.source_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2), v_vat_rate_pct, ctps.umb_vat_chargeable)->>'inc')::numeric
+          else round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2)
+        end,
+        2
+      ) as ready_section_amount_display,
+      round(
+        case
+          when ctps.source_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0), 2), v_vat_rate_pct, ctps.umb_vat_chargeable)->>'inc')::numeric
+          else round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0), 2)
+        end,
+        2
+      ) as blocked_section_amount_display,
+      (
+        round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
+        or coalesce(ctps.ready_segment_count, 0) > 0
+      ) as has_ready_presentation,
+      (
+        ctps.has_active_timesheet_snooze = true
+        or ctps.case_is_blocked = true
+        or coalesce(ctps.blocked_visible_segment_count, 0) > 0
+      ) as has_blocked_presentation,
+      (
+        ctps.has_active_timesheet_snooze = false
+        and ctps.case_is_blocked = false
+        and (
+          round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
+          or coalesce(ctps.ready_segment_count, 0) > 0
+        )
+        and coalesce(ctps.blocked_visible_segment_count, 0) > 0
+      ) as is_partially_ready,
+      (
+        ctps.has_active_timesheet_snooze = false
+        and ctps.case_is_blocked = false
+        and (
+          round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
+          or coalesce(ctps.ready_segment_count, 0) > 0
+        )
+        and coalesce(ctps.blocked_visible_segment_count, 0) > 0
+      ) as is_partially_blocked
+    from canonical_timesheet_presentation_seed ctps
+  ),
+  canonical_timesheet_presentation_rows as (
+    select
+      ctpp.candidate_id,
+      jsonb_build_object(
+        'line_id', case
+          when ctpp.is_partially_ready then (ctpp.timesheet_id::text || ':01:ready')
+          else ctpp.timesheet_id::text
+        end,
+        'candidate_id', ctpp.candidate_id::text,
+        'tms_ref', ctpp.cand_tms_ref,
+        'display_name', ctpp.cand_display_name,
+        'line_type', 'TIMESHEET_PAYMENT',
+        'finance_case_id', null,
+        'case_key', ('timesheet:' || ctpp.timesheet_id::text),
+        'case_type', 'TIMESHEET_PAYMENT',
+        'case_is_blocked', ctpp.case_is_blocked,
+        'case_resolution_summary', ctpp.case_resolution_summary_json,
+        'case_components', ctpp.case_components_json,
+        'timesheet_id', ctpp.timesheet_id::text,
+        'booking_id', ctpp.booking_id,
+        'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
+        'client_name', ctpp.client_name,
+        'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
+        'role', ctpp.ts_role,
+        'band', ctpp.ts_band,
+        'linked_shift_date', null,
+        'pay_channel', ctpp.candidate_pay_method,
+        'paye_treatment', case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
+        'route_type', 'NORMAL_PAYMENT',
+        'adjustment_comment', null,
+        'amount_ex_vat', ctpp.ready_section_amount_ex_vat,
+        'amount_display', ctpp.ready_section_amount_display,
+        'is_advanced', (ctpp.override_id is not null),
+        'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
+        'advanced_reason', ctpp.override_reason,
+        'is_excluded_from_allocation', false,
+        'is_ready_for_draft', ctpp.is_ready_for_draft,
+        'segment_rows', ctpp.ready_segment_rows_json,
+        'segment_count', jsonb_array_length(coalesce(ctpp.ready_segment_rows_json, '[]'::jsonb)),
+        'presentation_section', 'READY_TO_PAY',
+        'presentation_role', 'PARENT',
+        'presentation_line_id', case
+          when ctpp.is_partially_ready then (ctpp.timesheet_id::text || ':01:ready')
+          else ctpp.timesheet_id::text
+        end,
+        'presentation_parent_line_id', ctpp.timesheet_id::text,
+        'real_business_timesheet_id', ctpp.timesheet_id::text,
+        'total_segment_count', ctpp.total_segment_count,
+        'ready_segment_count', ctpp.ready_segment_count,
+        'blocked_visible_segment_count', ctpp.blocked_visible_segment_count,
+        'hidden_indefinite_segment_count', ctpp.hidden_indefinite_segment_count,
+        'is_partially_ready', ctpp.is_partially_ready,
+        'is_partially_blocked', ctpp.is_partially_blocked,
+        'section_amount_ex_vat', ctpp.ready_section_amount_ex_vat,
+        'section_amount_display', ctpp.ready_section_amount_display,
+        'section_segment_rows', ctpp.ready_segment_rows_json,
+        'section_segment_count', jsonb_array_length(coalesce(ctpp.ready_segment_rows_json, '[]'::jsonb)),
+        'section_non_segment_amount_ex_vat', ctpp.non_segment_amount_ex_vat,
+        'has_active_timesheet_snooze', ctpp.has_active_timesheet_snooze,
+        'has_active_segment_snoozes', ctpp.has_active_segment_snoozes,
+        'active_segment_snooze_count', ctpp.active_segment_snooze_count,
+        'active_segment_dated_snooze_count', ctpp.active_segment_dated_snooze_count,
+        'active_segment_indefinite_snooze_count', ctpp.active_segment_indefinite_snooze_count,
+        'whole_timesheet_snooze_action_blocked', ctpp.has_active_segment_snoozes,
+        'whole_timesheet_snooze_action_block_reason', case when ctpp.has_active_segment_snoozes then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
+        'segment_snooze_action_blocked', ctpp.has_active_timesheet_snooze,
+        'segment_snooze_action_block_reason', case when ctpp.has_active_timesheet_snooze then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end,
+        'presentation_reason', case
+          when ctpp.is_partially_ready then 'PARTIAL_READY_TO_PAY'
+          when ctpp.hidden_indefinite_segment_count > 0 then 'READY_WITH_HIDDEN_INDEFINITE_SEGMENTS'
+          else 'READY_TO_PAY'
+        end,
+        'presentation_advisory_text', case
+          when ctpp.is_partially_ready then 'Some segments are blocked'
+          when ctpp.hidden_indefinite_segment_count > 0 then 'Some segments are snoozed indefinitely'
+          else null
+        end,
+        'snooze_identity', jsonb_build_object(
+          'identity_type', 'TIMESHEET',
+          'timesheet_id', ctpp.timesheet_id::text,
+          'booking_id', ctpp.booking_id,
+          'segment_id', null,
+          'segment_stable_key', null,
+          'source_ref', null
+        ),
+        'snooze_state', case
+          when ctpp.snooze_id is null then jsonb_build_object('state', 'NONE')
+          else jsonb_build_object(
+            'state', 'DATED_SNOOZED',
+            'snooze_id', ctpp.snooze_id::text,
+            'snooze_until_date', ctpp.snooze_until_date::text,
+            'note', ctpp.snooze_note
+          )
+        end
+      ) as line_json,
+      ctpp.candidate_pay_method as pay_channel,
+      case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
+      ctpp.ready_section_amount_ex_vat as amount_ex_vat,
+      false as is_excluded_from_allocation
+    from canonical_timesheet_presentation_state ctpp
+    where ctpp.has_active_timesheet_snooze = false
+      and ctpp.case_is_blocked = false
+      and ctpp.has_ready_presentation = true
+
+    union all
+
+    select
+      ctpp.candidate_id,
+      jsonb_build_object(
+        'line_id', case
+          when ctpp.has_active_timesheet_snooze = false
+           and ctpp.case_is_blocked = false
+           and ctpp.has_ready_presentation = true
+           and ctpp.blocked_visible_segment_count > 0
+          then (ctpp.timesheet_id::text || ':02:blocked')
+          else ctpp.timesheet_id::text
+        end,
+        'candidate_id', ctpp.candidate_id::text,
+        'tms_ref', ctpp.cand_tms_ref,
+        'display_name', ctpp.cand_display_name,
+        'line_type', 'TIMESHEET_PAYMENT',
+        'finance_case_id', null,
+        'case_key', ('timesheet:' || ctpp.timesheet_id::text),
+        'case_type', 'TIMESHEET_PAYMENT',
+        'case_is_blocked', ctpp.case_is_blocked,
+        'case_resolution_summary', ctpp.case_resolution_summary_json,
+        'case_components', ctpp.case_components_json,
+        'timesheet_id', ctpp.timesheet_id::text,
+        'booking_id', ctpp.booking_id,
+        'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
+        'client_name', ctpp.client_name,
+        'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
+        'role', ctpp.ts_role,
+        'band', ctpp.ts_band,
+        'linked_shift_date', null,
+        'pay_channel', ctpp.candidate_pay_method,
+        'paye_treatment', case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
+        'route_type', 'NORMAL_PAYMENT',
+        'adjustment_comment', null,
+        'amount_ex_vat', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
+          else ctpp.blocked_section_amount_ex_vat
+        end,
+        'amount_display', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_display
+          else ctpp.blocked_section_amount_display
+        end,
+        'is_advanced', (ctpp.override_id is not null),
+        'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
+        'advanced_reason', ctpp.override_reason,
+        'is_excluded_from_allocation', (ctpp.has_active_timesheet_snooze = true),
+        'is_ready_for_draft', case
+          when ctpp.has_active_timesheet_snooze = true then ctpp.is_ready_for_draft
+          when ctpp.case_is_blocked = true then ctpp.is_ready_for_draft
+          else false
+        end,
+        'segment_rows', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.visible_segment_rows_json
+          else ctpp.blocked_visible_segment_rows_json
+        end,
+        'segment_count', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
+          else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
+        end,
+        'presentation_section', 'BLOCKED_FOR_PAY',
+        'presentation_role', 'PARENT',
+        'presentation_line_id', case
+          when ctpp.has_active_timesheet_snooze = false
+           and ctpp.case_is_blocked = false
+           and ctpp.has_ready_presentation = true
+           and ctpp.blocked_visible_segment_count > 0
+          then (ctpp.timesheet_id::text || ':02:blocked')
+          else ctpp.timesheet_id::text
+        end,
+        'presentation_parent_line_id', ctpp.timesheet_id::text,
+        'real_business_timesheet_id', ctpp.timesheet_id::text,
+        'total_segment_count', ctpp.total_segment_count,
+        'ready_segment_count', ctpp.ready_segment_count,
+        'blocked_visible_segment_count', ctpp.blocked_visible_segment_count,
+        'hidden_indefinite_segment_count', ctpp.hidden_indefinite_segment_count,
+        'is_partially_ready', ctpp.is_partially_ready,
+        'is_partially_blocked', ctpp.is_partially_blocked,
+        'section_amount_ex_vat', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
+          else ctpp.blocked_section_amount_ex_vat
+        end,
+        'section_amount_display', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_display
+          else ctpp.blocked_section_amount_display
+        end,
+        'section_segment_rows', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.visible_segment_rows_json
+          else ctpp.blocked_visible_segment_rows_json
+        end,
+        'section_segment_count', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
+          else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
+        end,
+        'section_non_segment_amount_ex_vat', case
+          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.non_segment_amount_ex_vat
+          else 0
+        end,
+        'has_active_timesheet_snooze', ctpp.has_active_timesheet_snooze,
+        'has_active_segment_snoozes', ctpp.has_active_segment_snoozes,
+        'active_segment_snooze_count', ctpp.active_segment_snooze_count,
+        'active_segment_dated_snooze_count', ctpp.active_segment_dated_snooze_count,
+        'active_segment_indefinite_snooze_count', ctpp.active_segment_indefinite_snooze_count,
+        'whole_timesheet_snooze_action_blocked', ctpp.has_active_segment_snoozes,
+        'whole_timesheet_snooze_action_block_reason', case when ctpp.has_active_segment_snoozes then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
+        'segment_snooze_action_blocked', ctpp.has_active_timesheet_snooze,
+        'segment_snooze_action_block_reason', case when ctpp.has_active_timesheet_snooze then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end,
+        'presentation_reason', case
+          when ctpp.has_active_timesheet_snooze = true then 'WHOLE_TIMESHEET_SNOOZED'
+          when ctpp.case_is_blocked = true then 'CASE_BLOCKED'
+          when ctpp.is_partially_blocked then 'PARTIAL_BLOCKED_FOR_PAY'
+          else 'BLOCKED_FOR_PAY'
+        end,
+        'presentation_advisory_text', case
+          when ctpp.is_partially_blocked then 'Some segments are ready to pay'
+          else null
+        end,
+        'snooze_identity', jsonb_build_object(
+          'identity_type', 'TIMESHEET',
+          'timesheet_id', ctpp.timesheet_id::text,
+          'booking_id', ctpp.booking_id,
+          'segment_id', null,
+          'segment_stable_key', null,
+          'source_ref', null
+        ),
+        'snooze_state', case
+          when ctpp.snooze_id is null then jsonb_build_object('state', 'NONE')
+          else jsonb_build_object(
+            'state', 'DATED_SNOOZED',
+            'snooze_id', ctpp.snooze_id::text,
+            'snooze_until_date', ctpp.snooze_until_date::text,
+            'note', ctpp.snooze_note
+          )
+        end
+      ) as line_json,
+      ctpp.candidate_pay_method as pay_channel,
+      case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
+      case
+        when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
+        else ctpp.blocked_section_amount_ex_vat
+      end as amount_ex_vat,
+      (ctpp.has_active_timesheet_snooze = true) as is_excluded_from_allocation
+    from canonical_timesheet_presentation_state ctpp
+    where ctpp.has_blocked_presentation = true
+      and (
+        ctpp.has_active_timesheet_snooze = true
+        or ctpp.case_is_blocked = true
+        or ctpp.blocked_visible_segment_count > 0
+      )
   ),
   finance_case_lines as (
     select
@@ -7374,63 +8085,13 @@ ts_itemised as (
   ),
   canonical_preview_lines as (
     select
-      ctl.candidate_id,
-      jsonb_build_object(
-        'line_id', ctl.timesheet_id::text,
-        'candidate_id', ctl.candidate_id::text,
-        'tms_ref', ctl.cand_tms_ref,
-        'display_name', ctl.cand_display_name,
-        'line_type', 'TIMESHEET_PAYMENT',
-        'finance_case_id', null,
-        'case_key', ('timesheet:' || ctl.timesheet_id::text),
-        'case_type', 'TIMESHEET_PAYMENT',
-        'case_is_blocked', ctl.case_is_blocked,
-        'case_resolution_summary', ctl.case_resolution_summary_json,
-        'case_components', ctl.case_components_json,
-        'timesheet_id', ctl.timesheet_id::text,
-        'booking_id', ctl.booking_id,
-        'client_id', case when ctl.client_id is null then null else ctl.client_id::text end,
-        'client_name', ctl.client_name,
-        'week_ending_date', case when ctl.week_ending_date is null then null else ctl.week_ending_date::text end,
-        'role', ctl.ts_role,
-        'band', ctl.ts_band,
-        'linked_shift_date', null,
-        'pay_channel', ctl.candidate_pay_method,
-        'paye_treatment', case when ctl.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
-        'route_type', 'NORMAL_PAYMENT',
-        'adjustment_comment', null,
-        'amount_ex_vat', ctl.amount_ex_vat,
-        'amount_display', ctl.amount_display,
-        'is_advanced', (ctl.override_id is not null),
-        'advanced_override_id', case when ctl.override_id is null then null else ctl.override_id::text end,
-        'advanced_reason', ctl.override_reason,
-        'is_excluded_from_allocation', (ctl.snooze_id is not null),
-        'is_ready_for_draft', ctl.is_ready_for_draft,
-        'segment_rows', ctl.segment_rows_json,
-        'segment_count', jsonb_array_length(coalesce(ctl.segment_rows_json, '[]'::jsonb)),
-        'snooze_identity', jsonb_build_object(
-          'identity_type', 'TIMESHEET',
-          'timesheet_id', ctl.timesheet_id::text,
-          'booking_id', ctl.booking_id,
-          'segment_id', null,
-          'segment_stable_key', null,
-          'source_ref', null
-        ),
-        'snooze_state', case
-          when ctl.snooze_id is null then jsonb_build_object('state','NONE')
-          else jsonb_build_object(
-            'state', 'DATED_SNOOZED',
-            'snooze_id', ctl.snooze_id::text,
-            'snooze_until_date', ctl.snooze_until_date::text,
-            'note', ctl.snooze_note
-          )
-        end
-      ) as line_json,
-      ctl.candidate_pay_method as pay_channel,
-      case when ctl.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
-      ctl.amount_ex_vat,
-      (ctl.snooze_id is not null) as is_excluded_from_allocation
-    from canonical_timesheet_lines ctl
+      ctpr.candidate_id,
+      ctpr.line_json,
+      ctpr.pay_channel,
+      ctpr.paye_treatment,
+      ctpr.amount_ex_vat,
+      ctpr.is_excluded_from_allocation
+    from canonical_timesheet_presentation_rows ctpr
 
     union all
 
@@ -7508,6 +8169,87 @@ ts_itemised as (
       (fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null) as is_excluded_from_allocation
     from finance_case_lines fcl
     where fcl.due_amount_ex_vat > 0
+  ),
+  candidate_preview_timesheet_rollup as (
+    select
+      ctpp.candidate_id,
+      round(
+        coalesce(sum(case when ctpp.has_active_timesheet_snooze = false and ctpp.case_is_blocked = false and ctpp.has_ready_presentation = true then ctpp.ready_section_amount_ex_vat else 0 end), 0),
+        2
+      ) as ready_timesheet_total_ex_vat,
+      count(*) filter (
+        where ctpp.has_blocked_presentation = true
+      )::int as blocked_timesheet_preview_count,
+      count(*) filter (
+        where ctpp.has_active_timesheet_snooze = false
+          and ctpp.case_is_blocked = false
+          and ctpp.has_ready_presentation = true
+      )::int as ready_timesheet_preview_count,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'timesheet_id', ctpp.timesheet_id::text,
+            'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
+            'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
+            'client_name', ctpp.client_name,
+            'payment_amount_ex_vat', ctpp.ready_section_amount_ex_vat,
+            'payment_amount_inc_vat', ctpp.ready_section_amount_display,
+            'payment_amount', ctpp.ready_section_amount_display,
+            'source_pay_method', ctpp.source_pay_method,
+            'candidate_pay_method', ctpp.candidate_pay_method,
+            'segment_deltas', (
+              select coalesce(
+                jsonb_agg(
+                  jsonb_build_object(
+                    'segment_id', rs->>'segment_id',
+                    'segment_key', rs->>'segment_key',
+                    'segment_stable_key', rs->>'segment_stable_key',
+                    'work_date', rs->>'date',
+                    'ref_num', rs->>'ref_num',
+                    'delta_pay_ex_vat', round(coalesce(nullif(rs->>'pay_amount_ex_vat','')::numeric, 0), 2),
+                    'raw_delta_ex_vat', round(coalesce(nullif(rs->>'raw_delta_ex_vat','')::numeric, 0), 2),
+                    'effective_delta_ex_vat', round(coalesce(nullif(rs->>'effective_delta_ex_vat','')::numeric, 0), 2)
+                  )
+                  order by
+                    nullif(btrim(coalesce(rs->>'date','')), '') nulls last,
+                    nullif(btrim(coalesce(rs->>'start','')), '') nulls last,
+                    nullif(btrim(coalesce(rs->>'segment_stable_key','')), '') nulls last,
+                    nullif(btrim(coalesce(rs->>'segment_id','')), '') nulls last
+                ),
+                '[]'::jsonb
+              )
+              from jsonb_array_elements(coalesce(ctpp.ready_segment_rows_json, '[]'::jsonb)) rs
+            ),
+            'adjustment_deltas', coalesce(tcr.adjustment_deltas_json, '[]'::jsonb),
+            'delta_additional_pay_ex_vat', coalesce(tcr.delta_additional_pay_ex_vat, 0),
+            'additional_unit_deltas', coalesce(tcr.additional_unit_deltas_json, '[]'::jsonb),
+            'reservation_overrun_detected', coalesce(tcr.reservation_overrun_detected, false),
+            'delta_expenses_pay_ex_vat', coalesce(tcr.delta_expenses_pay_ex_vat, 0),
+            'delta_travel_pay_ex_vat', coalesce(tcr.delta_travel_pay_ex_vat, 0),
+            'delta_accommodation_pay_ex_vat', coalesce(tcr.delta_accommodation_pay_ex_vat, 0),
+            'delta_other_pay_ex_vat', coalesce(tcr.delta_other_pay_ex_vat, 0),
+            'delta_mileage_pay_ex_vat', coalesce(tcr.delta_mileage_pay_ex_vat, 0),
+            'case_key', ('timesheet:' || ctpp.timesheet_id::text),
+            'case_resolution_summary', coalesce(ctpp.case_resolution_summary_json, '{}'::jsonb),
+            'components', coalesce(ctpp.case_components_json, '[]'::jsonb),
+            'presentation_section', 'READY_TO_PAY',
+            'presentation_role', 'PARENT',
+            'total_segment_count', ctpp.total_segment_count,
+            'ready_segment_count', ctpp.ready_segment_count,
+            'blocked_visible_segment_count', ctpp.blocked_visible_segment_count,
+            'hidden_indefinite_segment_count', ctpp.hidden_indefinite_segment_count,
+            'is_partially_ready', ctpp.is_partially_ready,
+            'is_partially_blocked', ctpp.is_partially_blocked
+          )
+          order by ctpp.week_ending_date, ctpp.client_name, ctpp.timesheet_id
+        ) filter (where ctpp.has_active_timesheet_snooze = false and ctpp.case_is_blocked = false and ctpp.has_ready_presentation = true and round(coalesce(ctpp.ready_section_amount_ex_vat,0),2) <> 0),
+        '[]'::jsonb
+      ) as ready_timesheets_itemisation
+    from canonical_timesheet_presentation_state ctpp
+    left join timesheet_case_rollup tcr
+      on tcr.timesheet_id = ctpp.timesheet_id
+     and tcr.candidate_id = ctpp.candidate_id
+    group by ctpp.candidate_id
   ),
   candidate_case_states_flat as (
     select
@@ -7630,15 +8372,20 @@ ts_itemised as (
           case when
             (
               (
-                coalesce(ce.non_mismatch_total_ex,0) <> 0
+                coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
                 or coalesce(ce.mismatch_source_paye_ex,0) <> 0
                 or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
                 or coalesce(fct.finance_due_total_ex_vat,0) <> 0
+                or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
+                or coalesce(ce.blocked_count,0) > 0
+                or coalesce(ce.do_not_pay_count,0) > 0
+                or coalesce(ccs.blocked_case_count,0) > 0
               )
               and ce.is_ready_for_draft = true
               and coalesce(ce.blocked_count,0) = 0
               and coalesce(ce.do_not_pay_count,0) = 0
               and coalesce(ccs.blocked_case_count,0) = 0
+              and coalesce(cptr.blocked_timesheet_preview_count,0) = 0
             )
           then 1 else 0 end
         )::int as ready_count,
@@ -7646,16 +8393,21 @@ ts_itemised as (
           case when
             (
               (
-                coalesce(ce.non_mismatch_total_ex,0) <> 0
+                coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
                 or coalesce(ce.mismatch_source_paye_ex,0) <> 0
                 or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
                 or coalesce(fct.finance_due_total_ex_vat,0) <> 0
+                or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
+                or coalesce(ce.blocked_count,0) > 0
+                or coalesce(ce.do_not_pay_count,0) > 0
+                or coalesce(ccs.blocked_case_count,0) > 0
               )
               and (
                 coalesce(ccs.blocked_case_count,0) > 0
                 or jsonb_array_length(ce.blockers) > 0
                 or coalesce(ce.blocked_count,0) > 0
                 or coalesce(ce.do_not_pay_count,0) > 0
+                or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
               )
             )
           then 1 else 0 end
@@ -7665,6 +8417,8 @@ ts_itemised as (
         on ccs.candidate_id = ce.candidate_id
       left join finance_candidate_totals fct
         on fct.candidate_id = ce.candidate_id
+      left join candidate_preview_timesheet_rollup cptr
+        on cptr.candidate_id = ce.candidate_id
     ) cr
   ),
   paye_summary_breakdown_json as (
@@ -7706,13 +8460,19 @@ ts_itemised as (
             'do_not_pay_count', ce.do_not_pay_count,
             'blocked_case_count', coalesce(ccs.blocked_case_count, 0),
             'safe_case_count', coalesce(ccs.safe_case_count, 0),
+            'preview_blocked_timesheet_count', coalesce(cptr.blocked_timesheet_preview_count, 0),
+            'preview_ready_timesheet_count', coalesce(cptr.ready_timesheet_preview_count, 0),
             'case_resolution_states', coalesce(ccs.case_resolution_states, '[]'::jsonb),
             'has_any_delta',
-              (coalesce(ce.non_mismatch_total_ex,0) <> 0
+              (coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
                or coalesce(ce.mismatch_source_paye_ex,0) <> 0
                or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
-               or coalesce(fct.finance_due_total_ex_vat,0) <> 0),
-            'gross_preview_ex_vat_non_mismatch', ce.non_mismatch_total_ex,
+               or coalesce(fct.finance_due_total_ex_vat,0) <> 0
+               or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
+               or coalesce(ce.blocked_count,0) > 0
+               or coalesce(ce.do_not_pay_count,0) > 0
+               or coalesce(ccs.blocked_case_count,0) > 0),
+            'gross_preview_ex_vat_non_mismatch', coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),
             'finance_due_total_ex_vat', coalesce(fct.finance_due_total_ex_vat,0),
             'finance_safe_due_total_ex_vat', coalesce(fct.finance_safe_due_total_ex_vat,0),
             'finance_blocked_due_total_ex_vat', coalesce(fct.finance_blocked_due_total_ex_vat,0),
@@ -7735,7 +8495,24 @@ ts_itemised as (
             'loan_due_this_week', ce.loan_due_this_week,
             'loan_repaid_wtd', ce.loan_repaid_wtd,
             'min_take_home_wtd', ce.min_take_home_wtd,
-            'max_possible_loan_take_this_run', ce.max_possible_loan_take_this_run,
+            'max_possible_loan_take_this_run',
+              round(
+                case
+                  when ce.cand_pay_method = 'UMBRELLA' then
+                    least(
+                      greatest(coalesce(ce.loan_due_this_week,0) - coalesce(ce.loan_repaid_wtd,0),0),
+                      greatest(
+                        least(
+                          (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0))),
+                          (coalesce((select pwb.paid_wtd_before from paid_wtd_before pwb where pwb.candidate_id = ce.candidate_id limit 1),0) + (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0)))) - coalesce(ce.min_take_home_wtd,0)
+                        ),
+                        0
+                      )
+                    )
+                  else null
+                end,
+                2
+              ),
             'paye_net_status', ce.paye_net_status,
             'loan', jsonb_build_object(
               'pay_week_start', v_week_start::text,
@@ -7744,12 +8521,49 @@ ts_itemised as (
               'loan_due_this_week', ce.loan_due_this_week,
               'loan_repaid_wtd', ce.loan_repaid_wtd,
               'min_take_home_wtd', ce.min_take_home_wtd,
-              'max_possible_loan_take_this_run', ce.max_possible_loan_take_this_run,
+              'max_possible_loan_take_this_run',
+                round(
+                  case
+                    when ce.cand_pay_method = 'UMBRELLA' then
+                      least(
+                        greatest(coalesce(ce.loan_due_this_week,0) - coalesce(ce.loan_repaid_wtd,0),0),
+                        greatest(
+                          least(
+                            (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0))),
+                            (coalesce((select pwb.paid_wtd_before from paid_wtd_before pwb where pwb.candidate_id = ce.candidate_id limit 1),0) + (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0)))) - coalesce(ce.min_take_home_wtd,0)
+                          ),
+                          0
+                        )
+                      )
+                    else null
+                  end,
+                  2
+                ),
               'paye_net_status', ce.paye_net_status,
-              'cap_fields', jsonb_build_object('min_take_home', ce.min_take_home_wtd, 'max_deduction', ce.max_possible_loan_take_this_run)
+              'cap_fields', jsonb_build_object(
+                'min_take_home', ce.min_take_home_wtd,
+                'max_deduction',
+                  round(
+                    case
+                      when ce.cand_pay_method = 'UMBRELLA' then
+                        least(
+                          greatest(coalesce(ce.loan_due_this_week,0) - coalesce(ce.loan_repaid_wtd,0),0),
+                          greatest(
+                            least(
+                              (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0))),
+                              (coalesce((select pwb.paid_wtd_before from paid_wtd_before pwb where pwb.candidate_id = ce.candidate_id limit 1),0) + (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0)))) - coalesce(ce.min_take_home_wtd,0)
+                            ),
+                            0
+                          )
+                        )
+                      else null
+                    end,
+                    2
+                  )
+              )
             ),
             'computed_net_bank_amount_non_mismatch', null,
-            'itemisation', ce.timesheets_itemisation
+            'itemisation', coalesce(cptr.ready_timesheets_itemisation, ce.timesheets_itemisation)
           )
           order by ce.cand_display_name nulls last, ce.cand_tms_ref nulls last, ce.candidate_id
         )
@@ -7758,6 +8572,8 @@ ts_itemised as (
           on ccs.candidate_id = ce.candidate_id
         left join finance_candidate_totals fct
           on fct.candidate_id = ce.candidate_id
+        left join candidate_preview_timesheet_rollup cptr
+          on cptr.candidate_id = ce.candidate_id
         where ce.cand_pay_method = 'PAYE'
       ),
       '[]'::jsonb
@@ -7792,13 +8608,19 @@ ts_itemised as (
             'do_not_pay_count', ce.do_not_pay_count,
             'blocked_case_count', coalesce(ccs.blocked_case_count, 0),
             'safe_case_count', coalesce(ccs.safe_case_count, 0),
+            'preview_blocked_timesheet_count', coalesce(cptr.blocked_timesheet_preview_count, 0),
+            'preview_ready_timesheet_count', coalesce(cptr.ready_timesheet_preview_count, 0),
             'case_resolution_states', coalesce(ccs.case_resolution_states, '[]'::jsonb),
             'has_any_delta',
-              (coalesce(ce.non_mismatch_total_ex,0) <> 0
+              (coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
                or coalesce(ce.mismatch_source_paye_ex,0) <> 0
                or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
-               or coalesce(fct.finance_due_total_ex_vat,0) <> 0),
-            'gross_preview_ex_vat_non_mismatch', ce.non_mismatch_total_ex,
+               or coalesce(fct.finance_due_total_ex_vat,0) <> 0
+               or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
+               or coalesce(ce.blocked_count,0) > 0
+               or coalesce(ce.do_not_pay_count,0) > 0
+               or coalesce(ccs.blocked_case_count,0) > 0),
+            'gross_preview_ex_vat_non_mismatch', coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),
             'finance_due_total_ex_vat', coalesce(fct.finance_due_total_ex_vat,0),
             'finance_safe_due_total_ex_vat', coalesce(fct.finance_safe_due_total_ex_vat,0),
             'finance_blocked_due_total_ex_vat', coalesce(fct.finance_blocked_due_total_ex_vat,0),
@@ -7821,7 +8643,24 @@ ts_itemised as (
             'loan_due_this_week', ce.loan_due_this_week,
             'loan_repaid_wtd', ce.loan_repaid_wtd,
             'min_take_home_wtd', ce.min_take_home_wtd,
-            'max_possible_loan_take_this_run', ce.max_possible_loan_take_this_run,
+            'max_possible_loan_take_this_run',
+              round(
+                case
+                  when ce.cand_pay_method = 'UMBRELLA' then
+                    least(
+                      greatest(coalesce(ce.loan_due_this_week,0) - coalesce(ce.loan_repaid_wtd,0),0),
+                      greatest(
+                        least(
+                          (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0))),
+                          (coalesce((select pwb.paid_wtd_before from paid_wtd_before pwb where pwb.candidate_id = ce.candidate_id limit 1),0) + (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0)))) - coalesce(ce.min_take_home_wtd,0)
+                        ),
+                        0
+                      )
+                    )
+                  else null
+                end,
+                2
+              ),
             'paye_net_status', ce.paye_net_status,
             'loan', jsonb_build_object(
               'pay_week_start', v_week_start::text,
@@ -7830,13 +8669,50 @@ ts_itemised as (
               'loan_due_this_week', ce.loan_due_this_week,
               'loan_repaid_wtd', ce.loan_repaid_wtd,
               'min_take_home_wtd', ce.min_take_home_wtd,
-              'max_possible_loan_take_this_run', ce.max_possible_loan_take_this_run,
+              'max_possible_loan_take_this_run',
+                round(
+                  case
+                    when ce.cand_pay_method = 'UMBRELLA' then
+                      least(
+                        greatest(coalesce(ce.loan_due_this_week,0) - coalesce(ce.loan_repaid_wtd,0),0),
+                        greatest(
+                          least(
+                            (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0))),
+                            (coalesce((select pwb.paid_wtd_before from paid_wtd_before pwb where pwb.candidate_id = ce.candidate_id limit 1),0) + (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0)))) - coalesce(ce.min_take_home_wtd,0)
+                          ),
+                          0
+                        )
+                      )
+                    else null
+                  end,
+                  2
+                ),
               'paye_net_status', ce.paye_net_status,
-              'cap_fields', jsonb_build_object('min_take_home', ce.min_take_home_wtd, 'max_deduction', ce.max_possible_loan_take_this_run)
+              'cap_fields', jsonb_build_object(
+                'min_take_home', ce.min_take_home_wtd,
+                'max_deduction',
+                  round(
+                    case
+                      when ce.cand_pay_method = 'UMBRELLA' then
+                        least(
+                          greatest(coalesce(ce.loan_due_this_week,0) - coalesce(ce.loan_repaid_wtd,0),0),
+                          greatest(
+                            least(
+                              (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0))),
+                              (coalesce((select pwb.paid_wtd_before from paid_wtd_before pwb where pwb.candidate_id = ce.candidate_id limit 1),0) + (greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0) - least(coalesce(ce.overpayment_balance_remaining,0), greatest(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),0)))) - coalesce(ce.min_take_home_wtd,0)
+                            ),
+                            0
+                          )
+                        )
+                      else null
+                    end,
+                    2
+                  )
+              )
             ),
             'computed_net_bank_amount_non_mismatch',
-              (public._pay_umbrella_vat_calc(ce.non_mismatch_total_ex, v_vat_rate_pct, ce.umb_vat_chargeable)->>'inc')::numeric,
-            'itemisation', ce.timesheets_itemisation
+              (public._pay_umbrella_vat_calc(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0), v_vat_rate_pct, ce.umb_vat_chargeable)->>'inc')::numeric,
+            'itemisation', coalesce(cptr.ready_timesheets_itemisation, ce.timesheets_itemisation)
           )
           order by ce.cand_display_name nulls last, ce.cand_tms_ref nulls last, ce.candidate_id
         )
@@ -7845,6 +8721,8 @@ ts_itemised as (
           on ccs.candidate_id = ce.candidate_id
         left join finance_candidate_totals fct
           on fct.candidate_id = ce.candidate_id
+        left join candidate_preview_timesheet_rollup cptr
+          on cptr.candidate_id = ce.candidate_id
         where ce.cand_pay_method <> 'PAYE'
       ),
       '[]'::jsonb
@@ -7912,71 +8790,135 @@ ts_itemised as (
     ),
     coalesce(
       (
-        select jsonb_agg(x)
+        select jsonb_agg(x order by x->>'candidate_id', coalesce(x->>'timesheet_id',''), coalesce(x->>'finance_case_id',''), coalesce(x->>'segment_id',''))
         from (
           select jsonb_build_object(
-            'kind', 'BLOCKED',
-            'candidate_id', bs.candidate_id::text,
-            'timesheet_id', bs.timesheet_id::text,
-            'segment_id', bs.segment_id,
-            'ref_num', bs.ref_num,
-            'blocked_delta_ex_vat', bs.blocked_delta_ex,
-            'line_type', 'BLOCKED_TIMESHEET',
+            'kind', case when ctsr.segment_snooze_kind = 'DO_NOT_PAY' then 'DO_NOT_PAY' else 'BLOCKED' end,
+            'candidate_id', ctsr.candidate_id::text,
+            'timesheet_id', ctsr.timesheet_id::text,
+            'segment_id', ctsr.segment_id,
+            'ref_num', ctsr.ref_num,
+            'amount_ex_vat', ctsr.presentation_amount_ex_vat,
+            'raw_delta_ex_vat', ctsr.raw_delta_ex_vat,
+            'effective_delta_ex_vat', ctsr.effective_delta_ex_vat,
+            'blocked_delta_ex_vat', ctsr.presentation_amount_ex_vat,
+            'line_type', case when ctsr.segment_snooze_kind = 'DO_NOT_PAY' then 'DO_NOT_PAY' else 'BLOCKED_TIMESHEET' end,
             'finance_case_id', null,
             'paye_treatment', null,
             'route_type', 'NORMAL_PAYMENT',
             'adjustment_comment', null,
             'snooze_identity', jsonb_build_object(
               'identity_type', 'TIMESHEET_SEGMENT',
-              'timesheet_id', bs.timesheet_id::text,
-              'booking_id', bs.booking_id,
-              'segment_id', bs.segment_id,
-              'segment_stable_key', bs.segment_stable_key,
+              'timesheet_id', ctsr.timesheet_id::text,
+              'booking_id', ctsr.booking_id,
+              'segment_id', ctsr.segment_id,
+              'segment_stable_key', ctsr.segment_stable_key,
               'source_ref', null
             ),
             'snooze_state', jsonb_build_object(
               'state', 'DATED_SNOOZED',
-              'snooze_id', bs.snooze_id::text,
-              'snooze_until_date', case when bs.snooze_until_date is null then null else bs.snooze_until_date::text end,
-              'note', bs.note
+              'snooze_id', ctsr.segment_snooze_id::text,
+              'snooze_until_date', ctsr.segment_snooze_until_date::text,
+              'note', ctsr.segment_snooze_note,
+              'snooze_kind', ctsr.segment_snooze_kind
             ),
-            'snooze_id', bs.snooze_id::text,
-            'snooze_until_date', case when bs.snooze_until_date is null then null else bs.snooze_until_date::text end,
-            'note', bs.note
+            'snooze_id', ctsr.segment_snooze_id::text,
+            'snooze_until_date', ctsr.segment_snooze_until_date::text,
+            'note', ctsr.segment_snooze_note
           ) as x
-          from blocked_items_snoozed bs
+          from canonical_timesheet_segment_rows ctsr
+          where ctsr.segment_snooze_id is not null
+            and ctsr.segment_snooze_until_date is not null
+
           union all
+
           select jsonb_build_object(
-            'kind', 'DO_NOT_PAY',
-            'candidate_id', ds.candidate_id::text,
-            'timesheet_id', ds.timesheet_id::text,
-            'segment_id', ds.segment_id,
-            'ref_num', ds.ref_num,
-            'raw_delta_ex_vat', ds.raw_delta_ex,
-            'line_type', 'DO_NOT_PAY',
+            'kind', 'TIMESHEET_PAYMENT',
+            'candidate_id', ctl.candidate_id::text,
+            'timesheet_id', ctl.timesheet_id::text,
+            'segment_id', null,
+            'ref_num', null,
+            'amount_ex_vat', ctl.amount_ex_vat,
+            'raw_delta_ex_vat', ctl.amount_ex_vat,
+            'effective_delta_ex_vat', ctl.amount_ex_vat,
+            'blocked_delta_ex_vat', ctl.amount_ex_vat,
+            'line_type', 'TIMESHEET_PAYMENT',
             'finance_case_id', null,
-            'paye_treatment', null,
+            'paye_treatment', case when ctl.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
             'route_type', 'NORMAL_PAYMENT',
             'adjustment_comment', null,
             'snooze_identity', jsonb_build_object(
-              'identity_type', 'TIMESHEET_SEGMENT',
-              'timesheet_id', ds.timesheet_id::text,
-              'booking_id', ds.booking_id,
-              'segment_id', ds.segment_id,
-              'segment_stable_key', ds.segment_stable_key,
+              'identity_type', 'TIMESHEET',
+              'timesheet_id', ctl.timesheet_id::text,
+              'booking_id', ctl.booking_id,
+              'segment_id', null,
+              'segment_stable_key', null,
               'source_ref', null
             ),
             'snooze_state', jsonb_build_object(
               'state', 'DATED_SNOOZED',
-              'snooze_id', ds.snooze_id::text,
-              'snooze_until_date', case when ds.snooze_until_date is null then null else ds.snooze_until_date::text end,
-              'note', ds.note
+              'snooze_id', ctl.snooze_id::text,
+              'snooze_until_date', ctl.snooze_until_date::text,
+              'note', ctl.snooze_note
             ),
-            'snooze_id', ds.snooze_id::text,
-            'snooze_until_date', case when ds.snooze_until_date is null then null else ds.snooze_until_date::text end,
-            'note', ds.note
+            'snooze_id', ctl.snooze_id::text,
+            'snooze_until_date', ctl.snooze_until_date::text,
+            'note', ctl.snooze_note
           ) as x
-          from do_not_pay_items_snoozed ds
+          from canonical_timesheet_lines ctl
+          where ctl.snooze_id is not null
+            and ctl.snooze_until_date is not null
+
+          union all
+
+          select jsonb_build_object(
+            'kind', fcl.case_type::text,
+            'candidate_id', fcl.candidate_id::text,
+            'timesheet_id', case when fcl.linked_timesheet_id is null then null else fcl.linked_timesheet_id::text end,
+            'segment_id', null,
+            'ref_num', null,
+            'amount_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
+            'raw_delta_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
+            'effective_delta_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
+            'blocked_delta_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
+            'line_type', case
+              when fcl.case_type = 'PAYMENT_ADVANCE' then 'PAYMENT_ADVANCE_REPAYMENT'
+              when fcl.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
+              when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+              when fcl.case_type = 'UNDERPAYMENT' then 'UNDERPAYMENT_PAYMENT'
+              else fcl.case_type::text
+            end,
+            'finance_case_id', fcl.finance_case_id::text,
+            'paye_treatment', case
+              when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'PAYMENT_ADVANCE' then 'NET_DEDUCT'
+              when fcl.candidate_pay_method = 'PAYE' and fcl.case_type in ('OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') then 'GROSS_DEDUCT'
+              when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'UNDERPAYMENT' then 'GROSS_ADD'
+              else 'NONE'
+            end,
+            'route_type', 'NORMAL_PAYMENT',
+            'adjustment_comment', fcl.adjustment_comment,
+            'snooze_identity', jsonb_build_object(
+              'identity_type', 'FINANCE_CASE',
+              'timesheet_id', null,
+              'booking_id', null,
+              'segment_id', null,
+              'segment_stable_key', null,
+              'source_ref', ('advance:' || fcl.finance_case_id::text)
+            ),
+            'snooze_state', jsonb_build_object(
+              'state', 'DATED_SNOOZED',
+              'snooze_id', fcl.active_snooze_id::text,
+              'snooze_until_date', fcl.active_snooze_until_date::text,
+              'note', fcl.active_snooze_note
+            ),
+            'snooze_id', fcl.active_snooze_id::text,
+            'snooze_until_date', fcl.active_snooze_until_date::text,
+            'note', fcl.active_snooze_note
+          ) as x
+          from finance_case_lines fcl
+          where fcl.active_snooze_id is not null
+            and fcl.active_snooze_until_date is not null
+            and fcl.due_amount_ex_vat > 0
         ) u
       ),
       '[]'::jsonb
@@ -8037,6 +8979,8 @@ ts_itemised as (
   );
 end;
 $function$;
+
+
 
 
 
