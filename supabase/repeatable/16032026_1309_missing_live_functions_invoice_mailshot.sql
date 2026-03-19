@@ -400,6 +400,8 @@ begin
 end;
 $function$;
 
+
+
 create or replace function public.mailshot_prepare(p_context_kind text, p_context_ids uuid[], p_output_type text, p_document_template_id uuid, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -1110,6 +1112,7 @@ begin
   );
 end;
 $function$;
+
 
 
 
