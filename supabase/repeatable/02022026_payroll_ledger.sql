@@ -3816,6 +3816,7 @@ begin;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -7906,97 +7907,107 @@ ts_itemised as (
   canonical_timesheet_presentation_rows as (
     select
       ctpp.candidate_id,
-      jsonb_build_object(
-        'line_id', case
-          when ctpp.is_partially_ready then (ctpp.timesheet_id::text || ':01:ready')
-          else ctpp.timesheet_id::text
-        end,
-        'candidate_id', ctpp.candidate_id::text,
-        'tms_ref', ctpp.cand_tms_ref,
-        'display_name', ctpp.cand_display_name,
-        'line_type', 'TIMESHEET_PAYMENT',
-        'finance_case_id', null,
-        'case_key', ('timesheet:' || ctpp.timesheet_id::text),
-        'case_type', 'TIMESHEET_PAYMENT',
-        'case_is_blocked', ctpp.case_is_blocked,
-        'case_resolution_summary', ctpp.case_resolution_summary_json,
-        'case_components', ctpp.case_components_json,
-        'timesheet_id', ctpp.timesheet_id::text,
-        'booking_id', ctpp.booking_id,
-        'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
-        'client_name', ctpp.client_name,
-        'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
-        'role', ctpp.ts_role,
-        'band', ctpp.ts_band,
-        'linked_shift_date', null,
-        'pay_channel', ctpp.candidate_pay_method,
-        'paye_treatment', case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
-        'route_type', 'NORMAL_PAYMENT',
-        'adjustment_comment', null,
-        'amount_ex_vat', ctpp.ready_section_amount_ex_vat,
-        'amount_display', ctpp.ready_section_amount_display,
-        'is_advanced', (ctpp.override_id is not null),
-        'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
-        'advanced_reason', ctpp.override_reason,
-        'is_excluded_from_allocation', false,
-        'is_ready_for_draft', ctpp.is_ready_for_draft,
-        'segment_rows', ctpp.ready_segment_rows_json,
-        'segment_count', jsonb_array_length(coalesce(ctpp.ready_segment_rows_json, '[]'::jsonb)),
-        'presentation_section', 'READY_TO_PAY',
-        'presentation_role', 'PARENT',
-        'presentation_line_id', case
-          when ctpp.is_partially_ready then (ctpp.timesheet_id::text || ':01:ready')
-          else ctpp.timesheet_id::text
-        end,
-        'presentation_parent_line_id', ctpp.timesheet_id::text,
-        'real_business_timesheet_id', ctpp.timesheet_id::text,
-        'total_segment_count', ctpp.total_segment_count,
-        'ready_segment_count', ctpp.ready_segment_count,
-        'blocked_visible_segment_count', ctpp.blocked_visible_segment_count,
-        'hidden_indefinite_segment_count', ctpp.hidden_indefinite_segment_count,
-        'is_partially_ready', ctpp.is_partially_ready,
-        'is_partially_blocked', ctpp.is_partially_blocked,
-        'section_amount_ex_vat', ctpp.ready_section_amount_ex_vat,
-        'section_amount_display', ctpp.ready_section_amount_display,
-        'section_segment_rows', ctpp.ready_segment_rows_json,
-        'section_segment_count', jsonb_array_length(coalesce(ctpp.ready_segment_rows_json, '[]'::jsonb)),
-        'section_non_segment_amount_ex_vat', ctpp.non_segment_amount_ex_vat,
-        'has_active_timesheet_snooze', ctpp.has_active_timesheet_snooze,
-        'has_active_segment_snoozes', ctpp.has_active_segment_snoozes,
-        'active_segment_snooze_count', ctpp.active_segment_snooze_count,
-        'active_segment_dated_snooze_count', ctpp.active_segment_dated_snooze_count,
-        'active_segment_indefinite_snooze_count', ctpp.active_segment_indefinite_snooze_count,
-        'whole_timesheet_snooze_action_blocked', ctpp.has_active_segment_snoozes,
-        'whole_timesheet_snooze_action_block_reason', case when ctpp.has_active_segment_snoozes then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
-        'segment_snooze_action_blocked', ctpp.has_active_timesheet_snooze,
-        'segment_snooze_action_block_reason', case when ctpp.has_active_timesheet_snooze then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end,
-        'presentation_reason', case
-          when ctpp.is_partially_ready then 'PARTIAL_READY_TO_PAY'
-          when ctpp.hidden_indefinite_segment_count > 0 then 'READY_WITH_HIDDEN_INDEFINITE_SEGMENTS'
-          else 'READY_TO_PAY'
-        end,
-        'presentation_advisory_text', case
-          when ctpp.is_partially_ready then 'Some segments are blocked'
-          when ctpp.hidden_indefinite_segment_count > 0 then 'Some segments are snoozed indefinitely'
-          else null
-        end,
-        'snooze_identity', jsonb_build_object(
-          'identity_type', 'TIMESHEET',
+      (
+        jsonb_build_object(
+          'line_id', case
+            when ctpp.is_partially_ready then (ctpp.timesheet_id::text || ':01:ready')
+            else ctpp.timesheet_id::text
+          end,
+          'candidate_id', ctpp.candidate_id::text,
+          'tms_ref', ctpp.cand_tms_ref,
+          'display_name', ctpp.cand_display_name,
+          'line_type', 'TIMESHEET_PAYMENT',
+          'finance_case_id', null,
+          'case_key', ('timesheet:' || ctpp.timesheet_id::text),
+          'case_type', 'TIMESHEET_PAYMENT',
+          'case_is_blocked', ctpp.case_is_blocked,
+          'case_resolution_summary', ctpp.case_resolution_summary_json,
+          'case_components', ctpp.case_components_json,
           'timesheet_id', ctpp.timesheet_id::text,
           'booking_id', ctpp.booking_id,
-          'segment_id', null,
-          'segment_stable_key', null,
-          'source_ref', null
-        ),
-        'snooze_state', case
-          when ctpp.snooze_id is null then jsonb_build_object('state', 'NONE')
-          else jsonb_build_object(
-            'state', 'DATED_SNOOZED',
-            'snooze_id', ctpp.snooze_id::text,
-            'snooze_until_date', ctpp.snooze_until_date::text,
-            'note', ctpp.snooze_note
-          )
-        end
+          'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
+          'client_name', ctpp.client_name,
+          'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
+          'role', ctpp.ts_role,
+          'band', ctpp.ts_band,
+          'linked_shift_date', null,
+          'pay_channel', ctpp.candidate_pay_method,
+          'paye_treatment', case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
+          'route_type', 'NORMAL_PAYMENT',
+          'adjustment_comment', null
+        )
+        || jsonb_build_object(
+          'amount_ex_vat', ctpp.ready_section_amount_ex_vat,
+          'amount_display', ctpp.ready_section_amount_display,
+          'is_advanced', (ctpp.override_id is not null),
+          'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
+          'advanced_reason', ctpp.override_reason,
+          'is_excluded_from_allocation', false,
+          'is_ready_for_draft', ctpp.is_ready_for_draft,
+          'segment_rows', ctpp.ready_segment_rows_json,
+          'segment_count', jsonb_array_length(coalesce(ctpp.ready_segment_rows_json, '[]'::jsonb))
+        )
+        || jsonb_build_object(
+          'presentation_section', 'READY_TO_PAY',
+          'presentation_role', 'PARENT',
+          'presentation_line_id', case
+            when ctpp.is_partially_ready then (ctpp.timesheet_id::text || ':01:ready')
+            else ctpp.timesheet_id::text
+          end,
+          'presentation_parent_line_id', ctpp.timesheet_id::text,
+          'real_business_timesheet_id', ctpp.timesheet_id::text,
+          'total_segment_count', ctpp.total_segment_count,
+          'ready_segment_count', ctpp.ready_segment_count,
+          'blocked_visible_segment_count', ctpp.blocked_visible_segment_count,
+          'hidden_indefinite_segment_count', ctpp.hidden_indefinite_segment_count,
+          'is_partially_ready', ctpp.is_partially_ready,
+          'is_partially_blocked', ctpp.is_partially_blocked,
+          'section_amount_ex_vat', ctpp.ready_section_amount_ex_vat,
+          'section_amount_display', ctpp.ready_section_amount_display,
+          'section_segment_rows', ctpp.ready_segment_rows_json,
+          'section_segment_count', jsonb_array_length(coalesce(ctpp.ready_segment_rows_json, '[]'::jsonb)),
+          'section_non_segment_amount_ex_vat', ctpp.non_segment_amount_ex_vat
+        )
+        || jsonb_build_object(
+          'has_active_timesheet_snooze', ctpp.has_active_timesheet_snooze,
+          'has_active_segment_snoozes', ctpp.has_active_segment_snoozes,
+          'active_segment_snooze_count', ctpp.active_segment_snooze_count,
+          'active_segment_dated_snooze_count', ctpp.active_segment_dated_snooze_count,
+          'active_segment_indefinite_snooze_count', ctpp.active_segment_indefinite_snooze_count,
+          'whole_timesheet_snooze_action_blocked', ctpp.has_active_segment_snoozes,
+          'whole_timesheet_snooze_action_block_reason', case when ctpp.has_active_segment_snoozes then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
+          'segment_snooze_action_blocked', ctpp.has_active_timesheet_snooze,
+          'segment_snooze_action_block_reason', case when ctpp.has_active_timesheet_snooze then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end,
+          'presentation_reason', case
+            when ctpp.is_partially_ready then 'PARTIAL_READY_TO_PAY'
+            when ctpp.hidden_indefinite_segment_count > 0 then 'READY_WITH_HIDDEN_INDEFINITE_SEGMENTS'
+            else 'READY_TO_PAY'
+          end,
+          'presentation_advisory_text', case
+            when ctpp.is_partially_ready then 'Some segments are blocked'
+            when ctpp.hidden_indefinite_segment_count > 0 then 'Some segments are snoozed indefinitely'
+            else null
+          end
+        )
+        || jsonb_build_object(
+          'snooze_identity', jsonb_build_object(
+            'identity_type', 'TIMESHEET',
+            'timesheet_id', ctpp.timesheet_id::text,
+            'booking_id', ctpp.booking_id,
+            'segment_id', null,
+            'segment_stable_key', null,
+            'source_ref', null
+          ),
+          'snooze_state', case
+            when ctpp.snooze_id is null then jsonb_build_object('state', 'NONE')
+            else jsonb_build_object(
+              'state', 'DATED_SNOOZED',
+              'snooze_id', ctpp.snooze_id::text,
+              'snooze_until_date', ctpp.snooze_until_date::text,
+              'note', ctpp.snooze_note
+            )
+          end
+        )
       ) as line_json,
       ctpp.candidate_pay_method as pay_channel,
       case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
@@ -8011,136 +8022,146 @@ ts_itemised as (
 
     select
       ctpp.candidate_id,
-      jsonb_build_object(
-        'line_id', case
-          when ctpp.has_active_timesheet_snooze = false
-           and ctpp.case_is_blocked = false
-           and ctpp.has_ready_presentation = true
-           and ctpp.blocked_visible_segment_count > 0
-          then (ctpp.timesheet_id::text || ':02:blocked')
-          else ctpp.timesheet_id::text
-        end,
-        'candidate_id', ctpp.candidate_id::text,
-        'tms_ref', ctpp.cand_tms_ref,
-        'display_name', ctpp.cand_display_name,
-        'line_type', 'TIMESHEET_PAYMENT',
-        'finance_case_id', null,
-        'case_key', ('timesheet:' || ctpp.timesheet_id::text),
-        'case_type', 'TIMESHEET_PAYMENT',
-        'case_is_blocked', ctpp.case_is_blocked,
-        'case_resolution_summary', ctpp.case_resolution_summary_json,
-        'case_components', ctpp.case_components_json,
-        'timesheet_id', ctpp.timesheet_id::text,
-        'booking_id', ctpp.booking_id,
-        'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
-        'client_name', ctpp.client_name,
-        'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
-        'role', ctpp.ts_role,
-        'band', ctpp.ts_band,
-        'linked_shift_date', null,
-        'pay_channel', ctpp.candidate_pay_method,
-        'paye_treatment', case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
-        'route_type', 'NORMAL_PAYMENT',
-        'adjustment_comment', null,
-        'amount_ex_vat', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
-          else ctpp.blocked_section_amount_ex_vat
-        end,
-        'amount_display', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_display
-          else ctpp.blocked_section_amount_display
-        end,
-        'is_advanced', (ctpp.override_id is not null),
-        'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
-        'advanced_reason', ctpp.override_reason,
-        'is_excluded_from_allocation', (ctpp.has_active_timesheet_snooze = true),
-        'is_ready_for_draft', case
-          when ctpp.has_active_timesheet_snooze = true then ctpp.is_ready_for_draft
-          when ctpp.case_is_blocked = true then ctpp.is_ready_for_draft
-          else false
-        end,
-        'segment_rows', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.visible_segment_rows_json
-          else ctpp.blocked_visible_segment_rows_json
-        end,
-        'segment_count', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
-          else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
-        end,
-        'presentation_section', 'BLOCKED_FOR_PAY',
-        'presentation_role', 'PARENT',
-        'presentation_line_id', case
-          when ctpp.has_active_timesheet_snooze = false
-           and ctpp.case_is_blocked = false
-           and ctpp.has_ready_presentation = true
-           and ctpp.blocked_visible_segment_count > 0
-          then (ctpp.timesheet_id::text || ':02:blocked')
-          else ctpp.timesheet_id::text
-        end,
-        'presentation_parent_line_id', ctpp.timesheet_id::text,
-        'real_business_timesheet_id', ctpp.timesheet_id::text,
-        'total_segment_count', ctpp.total_segment_count,
-        'ready_segment_count', ctpp.ready_segment_count,
-        'blocked_visible_segment_count', ctpp.blocked_visible_segment_count,
-        'hidden_indefinite_segment_count', ctpp.hidden_indefinite_segment_count,
-        'is_partially_ready', ctpp.is_partially_ready,
-        'is_partially_blocked', ctpp.is_partially_blocked,
-        'section_amount_ex_vat', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
-          else ctpp.blocked_section_amount_ex_vat
-        end,
-        'section_amount_display', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_display
-          else ctpp.blocked_section_amount_display
-        end,
-        'section_segment_rows', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.visible_segment_rows_json
-          else ctpp.blocked_visible_segment_rows_json
-        end,
-        'section_segment_count', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
-          else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
-        end,
-        'section_non_segment_amount_ex_vat', case
-          when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.non_segment_amount_ex_vat
-          else 0
-        end,
-        'has_active_timesheet_snooze', ctpp.has_active_timesheet_snooze,
-        'has_active_segment_snoozes', ctpp.has_active_segment_snoozes,
-        'active_segment_snooze_count', ctpp.active_segment_snooze_count,
-        'active_segment_dated_snooze_count', ctpp.active_segment_dated_snooze_count,
-        'active_segment_indefinite_snooze_count', ctpp.active_segment_indefinite_snooze_count,
-        'whole_timesheet_snooze_action_blocked', ctpp.has_active_segment_snoozes,
-        'whole_timesheet_snooze_action_block_reason', case when ctpp.has_active_segment_snoozes then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
-        'segment_snooze_action_blocked', ctpp.has_active_timesheet_snooze,
-        'segment_snooze_action_block_reason', case when ctpp.has_active_timesheet_snooze then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end,
-        'presentation_reason', case
-          when ctpp.has_active_timesheet_snooze = true then 'WHOLE_TIMESHEET_SNOOZED'
-          when ctpp.case_is_blocked = true then 'CASE_BLOCKED'
-          when ctpp.is_partially_blocked then 'PARTIAL_BLOCKED_FOR_PAY'
-          else 'BLOCKED_FOR_PAY'
-        end,
-        'presentation_advisory_text', case
-          when ctpp.is_partially_blocked then 'Some segments are ready to pay'
-          else null
-        end,
-        'snooze_identity', jsonb_build_object(
-          'identity_type', 'TIMESHEET',
+      (
+        jsonb_build_object(
+          'line_id', case
+            when ctpp.has_active_timesheet_snooze = false
+             and ctpp.case_is_blocked = false
+             and ctpp.has_ready_presentation = true
+             and ctpp.blocked_visible_segment_count > 0
+            then (ctpp.timesheet_id::text || ':02:blocked')
+            else ctpp.timesheet_id::text
+          end,
+          'candidate_id', ctpp.candidate_id::text,
+          'tms_ref', ctpp.cand_tms_ref,
+          'display_name', ctpp.cand_display_name,
+          'line_type', 'TIMESHEET_PAYMENT',
+          'finance_case_id', null,
+          'case_key', ('timesheet:' || ctpp.timesheet_id::text),
+          'case_type', 'TIMESHEET_PAYMENT',
+          'case_is_blocked', ctpp.case_is_blocked,
+          'case_resolution_summary', ctpp.case_resolution_summary_json,
+          'case_components', ctpp.case_components_json,
           'timesheet_id', ctpp.timesheet_id::text,
           'booking_id', ctpp.booking_id,
-          'segment_id', null,
-          'segment_stable_key', null,
-          'source_ref', null
-        ),
-        'snooze_state', case
-          when ctpp.snooze_id is null then jsonb_build_object('state', 'NONE')
-          else jsonb_build_object(
-            'state', 'DATED_SNOOZED',
-            'snooze_id', ctpp.snooze_id::text,
-            'snooze_until_date', ctpp.snooze_until_date::text,
-            'note', ctpp.snooze_note
-          )
-        end
+          'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
+          'client_name', ctpp.client_name,
+          'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
+          'role', ctpp.ts_role,
+          'band', ctpp.ts_band,
+          'linked_shift_date', null,
+          'pay_channel', ctpp.candidate_pay_method,
+          'paye_treatment', case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
+          'route_type', 'NORMAL_PAYMENT',
+          'adjustment_comment', null
+        )
+        || jsonb_build_object(
+          'amount_ex_vat', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
+            else ctpp.blocked_section_amount_ex_vat
+          end,
+          'amount_display', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_display
+            else ctpp.blocked_section_amount_display
+          end,
+          'is_advanced', (ctpp.override_id is not null),
+          'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
+          'advanced_reason', ctpp.override_reason,
+          'is_excluded_from_allocation', (ctpp.has_active_timesheet_snooze = true),
+          'is_ready_for_draft', case
+            when ctpp.has_active_timesheet_snooze = true then ctpp.is_ready_for_draft
+            when ctpp.case_is_blocked = true then ctpp.is_ready_for_draft
+            else false
+          end,
+          'segment_rows', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.visible_segment_rows_json
+            else ctpp.blocked_visible_segment_rows_json
+          end,
+          'segment_count', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
+            else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
+          end
+        )
+        || jsonb_build_object(
+          'presentation_section', 'BLOCKED_FOR_PAY',
+          'presentation_role', 'PARENT',
+          'presentation_line_id', case
+            when ctpp.has_active_timesheet_snooze = false
+             and ctpp.case_is_blocked = false
+             and ctpp.has_ready_presentation = true
+             and ctpp.blocked_visible_segment_count > 0
+            then (ctpp.timesheet_id::text || ':02:blocked')
+            else ctpp.timesheet_id::text
+          end,
+          'presentation_parent_line_id', ctpp.timesheet_id::text,
+          'real_business_timesheet_id', ctpp.timesheet_id::text,
+          'total_segment_count', ctpp.total_segment_count,
+          'ready_segment_count', ctpp.ready_segment_count,
+          'blocked_visible_segment_count', ctpp.blocked_visible_segment_count,
+          'hidden_indefinite_segment_count', ctpp.hidden_indefinite_segment_count,
+          'is_partially_ready', ctpp.is_partially_ready,
+          'is_partially_blocked', ctpp.is_partially_blocked,
+          'section_amount_ex_vat', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
+            else ctpp.blocked_section_amount_ex_vat
+          end,
+          'section_amount_display', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_display
+            else ctpp.blocked_section_amount_display
+          end,
+          'section_segment_rows', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.visible_segment_rows_json
+            else ctpp.blocked_visible_segment_rows_json
+          end,
+          'section_segment_count', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
+            else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
+          end,
+          'section_non_segment_amount_ex_vat', case
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.non_segment_amount_ex_vat
+            else 0
+          end
+        )
+        || jsonb_build_object(
+          'has_active_timesheet_snooze', ctpp.has_active_timesheet_snooze,
+          'has_active_segment_snoozes', ctpp.has_active_segment_snoozes,
+          'active_segment_snooze_count', ctpp.active_segment_snooze_count,
+          'active_segment_dated_snooze_count', ctpp.active_segment_dated_snooze_count,
+          'active_segment_indefinite_snooze_count', ctpp.active_segment_indefinite_snooze_count,
+          'whole_timesheet_snooze_action_blocked', ctpp.has_active_segment_snoozes,
+          'whole_timesheet_snooze_action_block_reason', case when ctpp.has_active_segment_snoozes then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
+          'segment_snooze_action_blocked', ctpp.has_active_timesheet_snooze,
+          'segment_snooze_action_block_reason', case when ctpp.has_active_timesheet_snooze then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end,
+          'presentation_reason', case
+            when ctpp.has_active_timesheet_snooze = true then 'WHOLE_TIMESHEET_SNOOZED'
+            when ctpp.case_is_blocked = true then 'CASE_BLOCKED'
+            when ctpp.is_partially_blocked then 'PARTIAL_BLOCKED_FOR_PAY'
+            else 'BLOCKED_FOR_PAY'
+          end,
+          'presentation_advisory_text', case
+            when ctpp.is_partially_blocked then 'Some segments are ready to pay'
+            else null
+          end
+        )
+        || jsonb_build_object(
+          'snooze_identity', jsonb_build_object(
+            'identity_type', 'TIMESHEET',
+            'timesheet_id', ctpp.timesheet_id::text,
+            'booking_id', ctpp.booking_id,
+            'segment_id', null,
+            'segment_stable_key', null,
+            'source_ref', null
+          ),
+          'snooze_state', case
+            when ctpp.snooze_id is null then jsonb_build_object('state', 'NONE')
+            else jsonb_build_object(
+              'state', 'DATED_SNOOZED',
+              'snooze_id', ctpp.snooze_id::text,
+              'snooze_until_date', ctpp.snooze_until_date::text,
+              'note', ctpp.snooze_note
+            )
+          end
+        )
       ) as line_json,
       ctpp.candidate_pay_method as pay_channel,
       case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
@@ -9080,6 +9101,11 @@ ts_itemised as (
   );
 end;
 $function$;
+
+
+
+
+
 
 
 
