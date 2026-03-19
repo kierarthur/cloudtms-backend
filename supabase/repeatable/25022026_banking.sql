@@ -14809,12 +14809,36 @@ begin
       vfcr.active_snooze_note,
       vfcr.active_snooze_created_at_utc,
       vfcr.active_snooze_updated_at_utc,
-      coalesce(vfcr.is_mixed_case, false) as is_mixed_case,
-      coalesce(vfcr.open_taxable_count, 0) as open_taxable_count,
-      coalesce(vfcr.open_reimbursement_count, 0) as open_reimbursement_count,
-      coalesce(vfcr.unresolved_taxable_count, 0) as unresolved_taxable_count,
-      coalesce(vfcr.stale_count, 0) as stale_count,
-      coalesce(vfcr.component_resolution_summary_json, '{}'::jsonb) as component_resolution_summary_json,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then false
+        else coalesce(vfcr.is_mixed_case, false)
+      end as is_mixed_case,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 0
+        else coalesce(vfcr.open_taxable_count, 0)
+      end as open_taxable_count,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 0
+        else coalesce(vfcr.open_reimbursement_count, 0)
+      end as open_reimbursement_count,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 0
+        else coalesce(vfcr.unresolved_taxable_count, 0)
+      end as unresolved_taxable_count,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 0
+        else coalesce(vfcr.stale_count, 0)
+      end as stale_count,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then jsonb_build_object(
+          'open_taxable_count', 0,
+          'open_reimbursement_count', 0,
+          'unresolved_taxable_count', 0,
+          'stale_count', 0,
+          'is_mixed_case', false
+        )
+        else coalesce(vfcr.component_resolution_summary_json, '{}'::jsonb)
+      end as component_resolution_summary_json,
       case
         when vfcr.case_type = 'PAYMENT_ADVANCE' then 'Payment Advance'
         when vfcr.case_type = 'OVERPAYMENT' then 'Overpayment'
@@ -14829,11 +14853,13 @@ begin
         else 'DATED_SNOOZE'
       end as snooze_state,
       case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 'READY'
         when coalesce(vfcr.unresolved_taxable_count, 0) > 0 and coalesce(vfcr.stale_count, 0) > 0 then 'BLOCKED_STALE_TAXABLE_COMPONENTS'
         when coalesce(vfcr.unresolved_taxable_count, 0) > 0 then 'BLOCKED_UNRESOLVED_TAXABLE_COMPONENTS'
         else 'READY'
       end as blocked_state,
       case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then null
         when coalesce(vfcr.unresolved_taxable_count, 0) > 0 and coalesce(vfcr.stale_count, 0) > 0 then 'One or more taxable components are stale and must be re-resolved before the case can proceed.'
         when coalesce(vfcr.unresolved_taxable_count, 0) > 0 then 'One or more taxable components are unresolved and must be resolved before the case can proceed.'
         else null
@@ -15395,7 +15421,6 @@ begin
   );
 end;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_build(
   p_pay_batch_id uuid
@@ -17595,6 +17620,359 @@ $function$;
 
 
 
+
+
+create or replace function public.pay_finance_case_restructure(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_weekly_due numeric,
+  p_weeks_total int,
+  p_start_week_start date,
+  p_minimum_earnings_threshold numeric default null,
+  p_take_home_floor_override numeric default null,
+  p_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_case public.pay_advances%rowtype;
+  v_before_json jsonb := '{}'::jsonb;
+  v_after_json jsonb := '{}'::jsonb;
+  v_new_schedule_json jsonb := '[]'::jsonb;
+  v_new_next_due_week_start date := null;
+  v_required_weeks int := 0;
+  v_remaining_amount numeric(12,2);
+  v_component_remaining_amount numeric(12,2) := 0;
+  v_open_component_count integer := 0;
+  v_new_weekly_due numeric(12,2);
+  v_new_weeks_total int;
+  v_new_start_week_start date;
+  v_new_minimum_earnings_threshold numeric(12,2);
+  v_new_take_home_floor_override numeric(12,2);
+  v_new_note text;
+  v_schedule_input_mode text := null;
+  v_has_weekly_due_input boolean := false;
+  v_has_weeks_total_input boolean := false;
+begin
+  if p_finance_case_id is null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','FINANCE_CASE_ID_REQUIRED',
+      'message','pay_finance_case_restructure: finance_case_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','ACTOR_USER_ID_REQUIRED',
+      'message','pay_finance_case_restructure: actor_user_id is required'
+    )::text;
+  end if;
+
+  if p_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','START_WEEK_START_REQUIRED',
+      'message','pay_finance_case_restructure: start_week_start is required'
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','START_WEEK_START_NOT_MONDAY',
+      'message','pay_finance_case_restructure: start_week_start must be a Monday (week start)',
+      'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','MINIMUM_EARNINGS_THRESHOLD_INVALID',
+      'message','pay_finance_case_restructure: minimum_earnings_threshold must be >= 0'
+    )::text;
+  end if;
+
+  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','TAKE_HOME_FLOOR_INVALID',
+      'message','pay_finance_case_restructure: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id
+    and pa.case_type in ('PAYMENT_ADVANCE'::public.pay_finance_case_type_enum, 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum)
+  for update;
+
+  if v_case.id is null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','FINANCE_CASE_NOT_FOUND',
+      'message','pay_finance_case_restructure: repayable finance case not found or not eligible for restructure',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if coalesce(v_case.write_off_reason,'') <> '' or v_case.written_off_at_utc is not null then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','FINANCE_CASE_WRITTEN_OFF',
+      'message','pay_finance_case_restructure: written-off finance cases cannot be restructured',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if v_case.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','FINANCE_CASE_NOT_REPAYABLE',
+      'message','pay_finance_case_restructure: manual credit adjustments are not repayable and cannot be restructured',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  select
+    round(coalesce(sum(pfc.remaining_source_amount), 0), 2)::numeric(12,2),
+    count(*)::integer
+  into
+    v_component_remaining_amount,
+    v_open_component_count
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.closed_at_utc is null;
+
+  v_remaining_amount := case
+    when v_open_component_count > 0 then v_component_remaining_amount
+    else round(coalesce(v_case.outstanding_amount,0),2)
+  end;
+
+  if v_remaining_amount <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','NO_OUTSTANDING_BALANCE',
+      'message','pay_finance_case_restructure: finance case has no outstanding balance to restructure',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
+  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
+
+  if not v_has_weekly_due_input and not v_has_weeks_total_input then
+    if p_weekly_due is not null and round(p_weekly_due,2) <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error','PAY_FINANCE_CASE_RESTRUCTURE',
+        'code','WEEKLY_DUE_INVALID',
+        'message','pay_finance_case_restructure: weekly_due must be > 0 when provided'
+      )::text;
+    end if;
+
+    if p_weeks_total is not null and p_weeks_total < 1 then
+      raise exception '%', jsonb_build_object(
+        'error','PAY_FINANCE_CASE_RESTRUCTURE',
+        'code','WEEKS_TOTAL_INVALID',
+        'message','pay_finance_case_restructure: weeks_total must be >= 1 when provided'
+      )::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','REPAYMENT_INPUT_REQUIRED',
+      'message','pay_finance_case_restructure: supply either weekly_due or weeks_total'
+    )::text;
+  end if;
+
+  if v_has_weekly_due_input and v_has_weeks_total_input then
+    v_schedule_input_mode := 'LEGACY_BOTH';
+    v_new_weekly_due := round(p_weekly_due,2);
+    v_new_weeks_total := p_weeks_total;
+  elsif v_has_weeks_total_input then
+    v_schedule_input_mode := 'BY_WEEKS';
+    v_new_weeks_total := p_weeks_total;
+    v_new_weekly_due := round((ceil((v_remaining_amount / v_new_weeks_total) * 100) / 100), 2);
+  else
+    v_schedule_input_mode := 'BY_WEEKLY_DUE';
+    v_new_weekly_due := round(p_weekly_due,2);
+    v_new_weeks_total := greatest(ceil(v_remaining_amount / v_new_weekly_due)::int, 1);
+  end if;
+
+  if v_new_weekly_due is null or v_new_weekly_due <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','WEEKLY_DUE_INVALID',
+      'message','pay_finance_case_restructure: normalized weekly_due must be > 0'
+    )::text;
+  end if;
+
+  if v_new_weeks_total is null or v_new_weeks_total < 1 then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','WEEKS_TOTAL_INVALID',
+      'message','pay_finance_case_restructure: normalized weeks_total must be >= 1'
+    )::text;
+  end if;
+
+  v_new_start_week_start := p_start_week_start;
+  v_new_minimum_earnings_threshold := case when p_minimum_earnings_threshold is null then v_case.minimum_earnings_threshold else round(p_minimum_earnings_threshold,2) end;
+  v_new_take_home_floor_override := case when p_take_home_floor_override is null then v_case.take_home_floor_override else round(p_take_home_floor_override,2) end;
+  v_new_note := case when p_note is null then v_case.notes else nullif(btrim(coalesce(p_note,'')), '') end;
+
+  v_required_weeks := greatest(ceil(v_remaining_amount / v_new_weekly_due)::int, 1);
+  if v_new_weeks_total < v_required_weeks then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','WEEKS_TOTAL_TOO_SHORT',
+      'message','pay_finance_case_restructure: repayment schedule does not cover the remaining outstanding balance',
+      'required_weeks', v_required_weeks,
+      'weeks_total', v_new_weeks_total,
+      'outstanding_amount', v_remaining_amount
+    )::text;
+  end if;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'week_start', (v_new_start_week_start + (gs.i * 7))::date,
+        'amount', round(
+          -least(
+            v_new_weekly_due,
+            greatest(v_remaining_amount - (v_new_weekly_due * gs.i), 0)
+          ),
+          2
+        )
+      )
+      order by (v_new_start_week_start + (gs.i * 7))::date asc
+    ),
+    '[]'::jsonb
+  )
+  into v_new_schedule_json
+  from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs(i);
+
+  select min(x.week_start)
+  into v_new_next_due_week_start
+  from (
+    select
+      (v_new_start_week_start + (gs2.i * 7))::date as week_start,
+      round(
+        -least(
+          v_new_weekly_due,
+          greatest(v_remaining_amount - (v_new_weekly_due * gs2.i), 0)
+        ),
+        2
+      )::numeric as amt
+    from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs2(i)
+  ) x
+  where x.amt < 0;
+
+  v_before_json := jsonb_build_object(
+    'case_type', v_case.case_type::text,
+    'status', v_case.status::text,
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'component_remaining_amount', v_component_remaining_amount,
+    'open_component_count', v_open_component_count,
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'notes', v_case.notes
+  );
+
+  update public.pay_advances pa
+  set
+    outstanding_amount = v_remaining_amount,
+    schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
+    weekly_due = v_new_weekly_due,
+    weeks_total = v_new_weeks_total,
+    start_week_start = v_new_start_week_start,
+    next_due_week_start = v_new_next_due_week_start,
+    minimum_earnings_threshold = v_new_minimum_earnings_threshold,
+    take_home_floor_override = v_new_take_home_floor_override,
+    notes = v_new_note,
+    updated_at = v_now_utc
+  where pa.id = p_finance_case_id;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id;
+
+  v_after_json := jsonb_build_object(
+    'case_type', v_case.case_type::text,
+    'status', v_case.status::text,
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'component_remaining_amount', v_component_remaining_amount,
+    'open_component_count', v_open_component_count,
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'notes', v_case.notes,
+    'schedule_input_mode', v_schedule_input_mode
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    null::uuid,
+    'RESTRUCTURED',
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    v_before_json,
+    v_after_json,
+    null::text,
+    'Finance case repayment terms restructured'
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'case_type', v_case.case_type::text,
+    'schedule_input_mode', v_schedule_input_mode,
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'component_remaining_amount', v_component_remaining_amount,
+    'open_component_count', v_open_component_count,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb)
+  );
+end;
+$$;
+
+
+
+
 create or replace function public.pay_payment_advance_create(
   p_candidate_id uuid,
   p_principal_amount numeric,
@@ -18014,7 +18392,7 @@ begin
     v_source_family_key,
     'CASE_TOTAL',
     'TOTAL',
-    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
     v_candidate.pay_method,
     v_component_source_basis_json,
     v_principal_amount_norm,
@@ -18041,7 +18419,7 @@ begin
     'source_family_key', v_source_family_key,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'classification', 'NET_PAY_FIXED_RECOVERY',
     'source_pay_method', v_candidate.pay_method,
     'target_pay_method', v_candidate.pay_method,
     'source_basis_json', v_component_source_basis_json,
@@ -18051,7 +18429,7 @@ begin
       p_source_family_key => v_source_family_key,
       p_component_key_type => 'CASE_TOTAL',
       p_component_key_value => 'TOTAL',
-      p_classification => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      p_classification => 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
       p_source_pay_method => v_candidate.pay_method,
       p_current_target_pay_method => v_candidate.pay_method,
       p_source_basis_json => v_component_source_basis_json,
@@ -18186,7 +18564,7 @@ begin
     v_component_snapshot_json,
     'CASE_TOTAL',
     'TOTAL',
-    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
     v_component_source_basis_json,
     v_candidate.pay_method,
     v_candidate.pay_method,
@@ -18288,7 +18666,7 @@ begin
     null::jsonb,
     v_component_snapshot_json,
     'PAYMENT_ADVANCE_COMPONENT_CREATE',
-    'Created taxable finance component for Payment Advance principal'
+    'Created net-fixed finance component for Payment Advance principal'
   );
 
   if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
@@ -18358,7 +18736,7 @@ begin
     'source_family_key', v_source_family_key,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'classification', 'NET_PAY_FIXED_RECOVERY',
     'source_pay_method', v_candidate.pay_method,
     'source_amount', v_principal_amount_norm,
     'remaining_source_amount', v_principal_amount_norm,
@@ -18394,358 +18772,6 @@ begin
   );
 end;
 $$;
-
-
-
-
-create or replace function public.pay_finance_case_restructure(
-  p_finance_case_id uuid,
-  p_actor_user_id uuid,
-  p_weekly_due numeric,
-  p_weeks_total int,
-  p_start_week_start date,
-  p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null,
-  p_note text default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_case public.pay_advances%rowtype;
-  v_before_json jsonb := '{}'::jsonb;
-  v_after_json jsonb := '{}'::jsonb;
-  v_new_schedule_json jsonb := '[]'::jsonb;
-  v_new_next_due_week_start date := null;
-  v_required_weeks int := 0;
-  v_remaining_amount numeric(12,2);
-  v_component_remaining_amount numeric(12,2) := 0;
-  v_open_component_count integer := 0;
-  v_new_weekly_due numeric(12,2);
-  v_new_weeks_total int;
-  v_new_start_week_start date;
-  v_new_minimum_earnings_threshold numeric(12,2);
-  v_new_take_home_floor_override numeric(12,2);
-  v_new_note text;
-  v_schedule_input_mode text := null;
-  v_has_weekly_due_input boolean := false;
-  v_has_weeks_total_input boolean := false;
-begin
-  if p_finance_case_id is null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','FINANCE_CASE_ID_REQUIRED',
-      'message','pay_finance_case_restructure: finance_case_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','ACTOR_USER_ID_REQUIRED',
-      'message','pay_finance_case_restructure: actor_user_id is required'
-    )::text;
-  end if;
-
-  if p_start_week_start is null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','START_WEEK_START_REQUIRED',
-      'message','pay_finance_case_restructure: start_week_start is required'
-    )::text;
-  end if;
-
-  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','START_WEEK_START_NOT_MONDAY',
-      'message','pay_finance_case_restructure: start_week_start must be a Monday (week start)',
-      'start_week_start', p_start_week_start::text
-    )::text;
-  end if;
-
-  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','MINIMUM_EARNINGS_THRESHOLD_INVALID',
-      'message','pay_finance_case_restructure: minimum_earnings_threshold must be >= 0'
-    )::text;
-  end if;
-
-  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','TAKE_HOME_FLOOR_INVALID',
-      'message','pay_finance_case_restructure: take_home_floor_override must be >= 0'
-    )::text;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id
-    and pa.case_type in ('PAYMENT_ADVANCE'::public.pay_finance_case_type_enum, 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum)
-  for update;
-
-  if v_case.id is null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','FINANCE_CASE_NOT_FOUND',
-      'message','pay_finance_case_restructure: repayable finance case not found or not eligible for restructure',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  if coalesce(v_case.write_off_reason,'') <> '' or v_case.written_off_at_utc is not null then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','FINANCE_CASE_WRITTEN_OFF',
-      'message','pay_finance_case_restructure: written-off finance cases cannot be restructured',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  if v_case.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','FINANCE_CASE_NOT_REPAYABLE',
-      'message','pay_finance_case_restructure: manual credit adjustments are not repayable and cannot be restructured',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  select
-    round(coalesce(sum(pfc.remaining_source_amount), 0), 2)::numeric(12,2),
-    count(*)::integer
-  into
-    v_component_remaining_amount,
-    v_open_component_count
-  from public.pay_finance_case_components pfc
-  where pfc.finance_case_id = p_finance_case_id
-    and pfc.closed_at_utc is null;
-
-  v_remaining_amount := case
-    when v_open_component_count > 0 then v_component_remaining_amount
-    else round(coalesce(v_case.outstanding_amount,0),2)
-  end;
-
-  if v_remaining_amount <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','NO_OUTSTANDING_BALANCE',
-      'message','pay_finance_case_restructure: finance case has no outstanding balance to restructure',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
-  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
-
-  if not v_has_weekly_due_input and not v_has_weeks_total_input then
-    if p_weekly_due is not null and round(p_weekly_due,2) <= 0 then
-      raise exception '%', jsonb_build_object(
-        'error','PAY_FINANCE_CASE_RESTRUCTURE',
-        'code','WEEKLY_DUE_INVALID',
-        'message','pay_finance_case_restructure: weekly_due must be > 0 when provided'
-      )::text;
-    end if;
-
-    if p_weeks_total is not null and p_weeks_total < 1 then
-      raise exception '%', jsonb_build_object(
-        'error','PAY_FINANCE_CASE_RESTRUCTURE',
-        'code','WEEKS_TOTAL_INVALID',
-        'message','pay_finance_case_restructure: weeks_total must be >= 1 when provided'
-      )::text;
-    end if;
-
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','REPAYMENT_INPUT_REQUIRED',
-      'message','pay_finance_case_restructure: supply either weekly_due or weeks_total'
-    )::text;
-  end if;
-
-  if v_has_weekly_due_input and v_has_weeks_total_input then
-    v_schedule_input_mode := 'LEGACY_BOTH';
-    v_new_weekly_due := round(p_weekly_due,2);
-    v_new_weeks_total := p_weeks_total;
-  elsif v_has_weeks_total_input then
-    v_schedule_input_mode := 'BY_WEEKS';
-    v_new_weeks_total := p_weeks_total;
-    v_new_weekly_due := round((ceil((v_remaining_amount / v_new_weeks_total) * 100) / 100), 2);
-  else
-    v_schedule_input_mode := 'BY_WEEKLY_DUE';
-    v_new_weekly_due := round(p_weekly_due,2);
-    v_new_weeks_total := greatest(ceil(v_remaining_amount / v_new_weekly_due)::int, 1);
-  end if;
-
-  if v_new_weekly_due is null or v_new_weekly_due <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','WEEKLY_DUE_INVALID',
-      'message','pay_finance_case_restructure: normalized weekly_due must be > 0'
-    )::text;
-  end if;
-
-  if v_new_weeks_total is null or v_new_weeks_total < 1 then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','WEEKS_TOTAL_INVALID',
-      'message','pay_finance_case_restructure: normalized weeks_total must be >= 1'
-    )::text;
-  end if;
-
-  v_new_start_week_start := p_start_week_start;
-  v_new_minimum_earnings_threshold := case when p_minimum_earnings_threshold is null then v_case.minimum_earnings_threshold else round(p_minimum_earnings_threshold,2) end;
-  v_new_take_home_floor_override := case when p_take_home_floor_override is null then v_case.take_home_floor_override else round(p_take_home_floor_override,2) end;
-  v_new_note := case when p_note is null then v_case.notes else nullif(btrim(coalesce(p_note,'')), '') end;
-
-  v_required_weeks := greatest(ceil(v_remaining_amount / v_new_weekly_due)::int, 1);
-  if v_new_weeks_total < v_required_weeks then
-    raise exception '%', jsonb_build_object(
-      'error','PAY_FINANCE_CASE_RESTRUCTURE',
-      'code','WEEKS_TOTAL_TOO_SHORT',
-      'message','pay_finance_case_restructure: repayment schedule does not cover the remaining outstanding balance',
-      'required_weeks', v_required_weeks,
-      'weeks_total', v_new_weeks_total,
-      'outstanding_amount', v_remaining_amount
-    )::text;
-  end if;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'week_start', (v_new_start_week_start + (gs.i * 7))::date,
-        'amount', round(
-          -least(
-            v_new_weekly_due,
-            greatest(v_remaining_amount - (v_new_weekly_due * gs.i), 0)
-          ),
-          2
-        )
-      )
-      order by (v_new_start_week_start + (gs.i * 7))::date asc
-    ),
-    '[]'::jsonb
-  )
-  into v_new_schedule_json
-  from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs(i);
-
-  select min(x.week_start)
-  into v_new_next_due_week_start
-  from (
-    select
-      (v_new_start_week_start + (gs2.i * 7))::date as week_start,
-      round(
-        -least(
-          v_new_weekly_due,
-          greatest(v_remaining_amount - (v_new_weekly_due * gs2.i), 0)
-        ),
-        2
-      )::numeric as amt
-    from generate_series(0, greatest(v_new_weeks_total,1) - 1) as gs2(i)
-  ) x
-  where x.amt < 0;
-
-  v_before_json := jsonb_build_object(
-    'case_type', v_case.case_type::text,
-    'status', v_case.status::text,
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'component_remaining_amount', v_component_remaining_amount,
-    'open_component_count', v_open_component_count,
-    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override,
-    'notes', v_case.notes
-  );
-
-  update public.pay_advances pa
-  set
-    outstanding_amount = v_remaining_amount,
-    schedule_json = coalesce(v_new_schedule_json,'[]'::jsonb),
-    weekly_due = v_new_weekly_due,
-    weeks_total = v_new_weeks_total,
-    start_week_start = v_new_start_week_start,
-    next_due_week_start = v_new_next_due_week_start,
-    minimum_earnings_threshold = v_new_minimum_earnings_threshold,
-    take_home_floor_override = v_new_take_home_floor_override,
-    notes = v_new_note,
-    updated_at = v_now_utc
-  where pa.id = p_finance_case_id;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id;
-
-  v_after_json := jsonb_build_object(
-    'case_type', v_case.case_type::text,
-    'status', v_case.status::text,
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'component_remaining_amount', v_component_remaining_amount,
-    'open_component_count', v_open_component_count,
-    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override,
-    'notes', v_case.notes,
-    'schedule_input_mode', v_schedule_input_mode
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    finance_component_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    p_finance_case_id,
-    null::uuid,
-    'RESTRUCTURED',
-    v_now_utc,
-    p_actor_user_id,
-    null::uuid,
-    v_before_json,
-    v_after_json,
-    null::text,
-    'Finance case repayment terms restructured'
-  );
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', p_finance_case_id::text,
-    'case_type', v_case.case_type::text,
-    'schedule_input_mode', v_schedule_input_mode,
-    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
-    'weeks_total', v_case.weeks_total,
-    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
-    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
-    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
-    'component_remaining_amount', v_component_remaining_amount,
-    'open_component_count', v_open_component_count,
-    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override,
-    'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb)
-  );
-end;
-$$;
-
 
 create or replace function public.pay_payment_advance_update(
   p_finance_case_id uuid,
@@ -19114,7 +19140,7 @@ begin
       v_source_family_key,
       'CASE_TOTAL',
       'TOTAL',
-      'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
       v_candidate_pay_method,
       v_component_source_basis_json,
       v_new_principal,
@@ -19136,14 +19162,7 @@ begin
     returning * into v_component;
   end if;
 
-  v_component_has_saved_resolution := (
-    v_component.saved_target_pay_method is not null
-    or v_component.saved_resolution_mode is not null
-    or v_component.saved_resolution_payload_json is not null
-    or v_component.saved_resolution_result_json is not null
-    or v_component.resolution_fingerprint is not null
-    or v_component.is_resolution_stale = true
-  );
+  v_component_has_saved_resolution := false;
 
   if v_can_edit_payout_details then
     v_component_remaining_amount := v_new_principal;
@@ -19151,13 +19170,8 @@ begin
     v_component_remaining_amount := round(coalesce(v_case.outstanding_amount,0),2);
   end if;
 
-  if v_has_principal_change and v_component_has_saved_resolution then
-    v_component_mark_stale := true;
-    v_component_stale_reason := 'COMPONENT_BASIS_CHANGED';
-  else
-    v_component_mark_stale := coalesce(v_component.is_resolution_stale, false);
-    v_component_stale_reason := v_component.stale_reason;
-  end if;
+  v_component_mark_stale := false;
+  v_component_stale_reason := null;
 
   v_component_before_json := jsonb_build_object(
     'finance_component_id', v_component.id::text,
@@ -19177,13 +19191,18 @@ begin
     candidate_id = v_case.candidate_id,
     client_id = v_case.client_id,
     linked_timesheet_id = v_case.linked_timesheet_id,
-    classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    classification = 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
     source_pay_method = v_candidate_pay_method,
     source_basis_json = v_component_source_basis_json,
     source_amount = v_new_principal,
     remaining_source_amount = v_component_remaining_amount,
-    is_resolution_stale = v_component_mark_stale,
-    stale_reason = v_component_stale_reason,
+    saved_target_pay_method = null,
+    saved_resolution_mode = null,
+    saved_resolution_payload_json = null,
+    saved_resolution_result_json = null,
+    resolution_fingerprint = null,
+    is_resolution_stale = false,
+    stale_reason = null,
     allocation_priority_group = 0,
     allocation_priority_order = 0,
     updated_at_utc = v_now_utc
@@ -19241,7 +19260,7 @@ begin
       'source_family_key', v_source_family_key,
       'component_key_type', 'CASE_TOTAL',
       'component_key_value', 'TOTAL',
-      'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+      'classification', 'NET_PAY_FIXED_RECOVERY',
       'source_pay_method', v_candidate_pay_method,
       'target_pay_method', v_candidate_pay_method,
       'source_basis_json', v_component_source_basis_json,
@@ -19255,7 +19274,7 @@ begin
         p_source_family_key => v_source_family_key,
         p_component_key_type => 'CASE_TOTAL',
         p_component_key_value => 'TOTAL',
-        p_classification => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+        p_classification => 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
         p_source_pay_method => v_candidate_pay_method,
         p_current_target_pay_method => v_candidate_pay_method,
         p_source_basis_json => v_component_source_basis_json,
@@ -19279,7 +19298,7 @@ begin
           frozen_component_snapshot_json = v_component_snapshot_json,
           frozen_component_key_type = 'CASE_TOTAL',
           frozen_component_key_value = 'TOTAL',
-          frozen_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+          frozen_component_classification = 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
           frozen_source_basis_json = v_component_source_basis_json,
           frozen_source_pay_method = v_candidate_pay_method,
           frozen_target_pay_method = v_candidate_pay_method,
@@ -19374,14 +19393,14 @@ begin
   values (
     p_finance_case_id,
     v_finance_component_id,
-    case when v_has_principal_change and v_component_has_saved_resolution then 'COMPONENT_STALE' else 'COMPONENT_UPDATED' end,
+    'COMPONENT_UPDATED',
     v_now_utc,
     p_actor_user_id,
     case when v_batch.id is null then null else v_batch.id end,
     v_component_before_json,
     v_component_after_json,
-    case when v_has_principal_change and v_component_has_saved_resolution then 'PAYMENT_ADVANCE_COMPONENT_BASIS_CHANGED' else 'PAYMENT_ADVANCE_COMPONENT_UPDATED' end,
-    case when v_has_principal_change and v_component_has_saved_resolution then 'Updated Payment Advance component and marked saved taxable resolution stale because principal/source basis changed' else 'Updated Payment Advance component state' end
+    'PAYMENT_ADVANCE_COMPONENT_UPDATED',
+    'Updated Payment Advance net-fixed component state'
   );
 
   v_component_summary_json := jsonb_build_object(
@@ -19389,7 +19408,7 @@ begin
     'source_family_key', v_source_family_key,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'classification', 'NET_PAY_FIXED_RECOVERY',
     'source_pay_method', v_component_after.source_pay_method,
     'source_amount', round(coalesce(v_component_after.source_amount,0),2),
     'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount,0),2),
@@ -19424,6 +19443,8 @@ begin
   );
 end;
 $$;
+
+
 
 
 create or replace function public.pay_manual_debt_adjustment_create(
