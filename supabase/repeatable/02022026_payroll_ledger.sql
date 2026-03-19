@@ -2738,6 +2738,7 @@ DECLARE
 
   v_finance_case_id uuid := NULL;
   v_event_type text := NULL;
+  v_conflict_snooze_id uuid := NULL;
 BEGIN
   IF p_candidate_id IS NULL THEN
     RAISE EXCEPTION 'candidate_id is required';
@@ -2961,6 +2962,106 @@ BEGIN
     ELSE
       v_segment_stable_key := NULL;
       v_effective_segment_id := NULL;
+    END IF;
+  END IF;
+
+  IF v_source_ref IS NULL THEN
+    IF v_kind = 'TIMESHEET_PAYMENT' THEN
+      SELECT s.id
+      INTO v_conflict_snooze_id
+      FROM public.pay_item_snoozes s
+      WHERE s.candidate_id = p_candidate_id
+        AND s.source_ref IS NULL
+        AND s.cleared_at_utc IS NULL
+        AND upper(coalesce(s.snooze_kind, '')) IN ('DO_NOT_PAY', 'BLOCKED_TIMESHEET')
+        AND coalesce(
+              nullif(btrim(coalesce(s.segment_stable_key, '')), ''),
+              nullif(btrim(coalesce(s.segment_id, '')), '')
+            ) IS NOT NULL
+        AND (
+          (
+            v_booking_id IS NOT NULL
+            AND (
+              s.booking_id IS NOT DISTINCT FROM v_booking_id
+              OR (
+                s.booking_id IS NULL
+                AND (
+                  s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+                  OR s.timesheet_id IS NOT DISTINCT FROM v_effective_timesheet_id
+                )
+              )
+            )
+          )
+          OR
+          (
+            v_booking_id IS NULL
+            AND (
+              s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+              OR s.timesheet_id IS NOT DISTINCT FROM v_effective_timesheet_id
+            )
+          )
+        )
+      ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
+      LIMIT 1;
+
+      IF v_conflict_snooze_id IS NOT NULL THEN
+        RAISE EXCEPTION '%', 'SEGMENT_SNOOZES_ALREADY_EXIST'
+          USING DETAIL = jsonb_build_object(
+            'error_code', 'SEGMENT_SNOOZES_ALREADY_EXIST',
+            'candidate_id', p_candidate_id::text,
+            'timesheet_id', coalesce(v_effective_timesheet_id, p_timesheet_id)::text,
+            'booking_id', v_booking_id,
+            'conflict_snooze_id', v_conflict_snooze_id::text
+          )::text;
+      END IF;
+    ELSIF coalesce(v_effective_segment_id, v_segment_stable_key, v_segment_id_input) IS NOT NULL THEN
+      SELECT s.id
+      INTO v_conflict_snooze_id
+      FROM public.pay_item_snoozes s
+      WHERE s.candidate_id = p_candidate_id
+        AND s.source_ref IS NULL
+        AND s.cleared_at_utc IS NULL
+        AND upper(coalesce(s.snooze_kind, '')) = 'TIMESHEET_PAYMENT'
+        AND s.segment_id IS NULL
+        AND s.segment_stable_key IS NULL
+        AND (
+          (
+            v_booking_id IS NOT NULL
+            AND (
+              s.booking_id IS NOT DISTINCT FROM v_booking_id
+              OR (
+                s.booking_id IS NULL
+                AND (
+                  s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+                  OR s.timesheet_id IS NOT DISTINCT FROM v_effective_timesheet_id
+                )
+              )
+            )
+          )
+          OR
+          (
+            v_booking_id IS NULL
+            AND (
+              s.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+              OR s.timesheet_id IS NOT DISTINCT FROM v_effective_timesheet_id
+            )
+          )
+        )
+      ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
+      LIMIT 1;
+
+      IF v_conflict_snooze_id IS NOT NULL THEN
+        RAISE EXCEPTION '%', 'WHOLE_TIMESHEET_ALREADY_SNOOZED'
+          USING DETAIL = jsonb_build_object(
+            'error_code', 'WHOLE_TIMESHEET_ALREADY_SNOOZED',
+            'candidate_id', p_candidate_id::text,
+            'timesheet_id', coalesce(v_effective_timesheet_id, p_timesheet_id)::text,
+            'booking_id', v_booking_id,
+            'segment_id', coalesce(v_effective_segment_id, v_segment_id_input),
+            'segment_stable_key', v_segment_stable_key,
+            'conflict_snooze_id', v_conflict_snooze_id::text
+          )::text;
+      END IF;
     END IF;
   END IF;
 
