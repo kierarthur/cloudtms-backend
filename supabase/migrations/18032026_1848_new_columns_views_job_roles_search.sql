@@ -61,7 +61,10 @@ select
         end
     ) as job_title_ids,
     coalesce(
-        min(cjt_primary.job_title_id),
+        (
+            array_agg(distinct cjt_primary.job_title_id order by cjt_primary.job_title_id)
+                filter (where cjt_primary.job_title_id is not null)
+        )[1],
         c.job_title_id
     ) as primary_job_title_id
 from public.candidates c
