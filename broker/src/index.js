@@ -2438,11 +2438,7 @@ async function resolveSummarySelection(section, filters, selectionMode, included
     throw new Error('unsupported_section');
   }
 
-  const rpcResult = await sbRpc(env, rpcName, { p_filters: effectiveFilters });
-  const rows = Array.isArray(rpcResult)
-    ? rpcResult
-    : ((rpcResult && typeof rpcResult === 'object' && Array.isArray(rpcResult.rows)) ? rpcResult.rows : (rpcResult == null ? [] : [rpcResult]));
-
+  const rows = await sbRpcAllRows(env, rpcName, { p_filters: effectiveFilters }, { pageSize: 1000 });
   const membershipRowIds = normalizeIdArray(
     rows.map((row) => {
       if (row == null) return '';
@@ -15033,6 +15029,132 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimStr = (v) => String(v == null ? '' : v).trim();
 
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    let bodyOut = '';
+    try {
+      bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' });
+    } catch {
+      bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize error payload' });
+    }
+    return new Response(bodyOut, { status, headers });
+  };
+
+  const safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      if (ej && typeof ej === 'object') {
+        if (ej.detail && typeof ej.detail === 'object') return ej.detail;
+        if (typeof ej.detail === 'string') {
+          const parsedDetail = safeJsonParse(ej.detail);
+          if (parsedDetail && typeof parsedDetail === 'object') return parsedDetail;
+        }
+        if (typeof ej.message === 'string') {
+          const t = ej.message.trim();
+          if (t.startsWith('{') && t.endsWith('}')) {
+            const parsedMessage = safeJsonParse(t);
+            if (parsedMessage && typeof parsedMessage === 'object') return parsedMessage;
+          }
+          const i1 = t.indexOf('{');
+          const i2 = t.lastIndexOf('}');
+          if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+            const parsedSlice = safeJsonParse(t.slice(i1, i2 + 1));
+            if (parsedSlice && typeof parsedSlice === 'object') return parsedSlice;
+          }
+          if (/^[A-Z0-9_]+$/.test(t)) return { error_code: t, message: t };
+        }
+        if (typeof ej.code === 'string' && /^[A-Z0-9_]+$/.test(ej.code)) {
+          return { error_code: ej.code, message: ej.code };
+        }
+      }
+
+      if (e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object') {
+          if (envObj.detail && typeof envObj.detail === 'object') return envObj.detail;
+          if (typeof envObj.detail === 'string') {
+            const parsedDetail = safeJsonParse(envObj.detail);
+            if (parsedDetail && typeof parsedDetail === 'object') return parsedDetail;
+          }
+          if (typeof envObj.message === 'string') {
+            const t = envObj.message.trim();
+            if (t.startsWith('{') && t.endsWith('}')) {
+              const parsedMessage = safeJsonParse(t);
+              if (parsedMessage && typeof parsedMessage === 'object') return parsedMessage;
+            }
+            const i1 = t.indexOf('{');
+            const i2 = t.lastIndexOf('}');
+            if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+              const parsedSlice = safeJsonParse(t.slice(i1, i2 + 1));
+              if (parsedSlice && typeof parsedSlice === 'object') return parsedSlice;
+            }
+            if (/^[A-Z0-9_]+$/.test(t)) return { error_code: t, message: t };
+          }
+          if (typeof envObj.code === 'string' && /^[A-Z0-9_]+$/.test(envObj.code)) {
+            return { error_code: envObj.code, message: envObj.code };
+          }
+        }
+      }
+
+      if (e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message.trim();
+        if (m.startsWith('{') && m.endsWith('}')) {
+          const parsedMessage = safeJsonParse(m);
+          if (parsedMessage && typeof parsedMessage === 'object') return parsedMessage;
+        }
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const parsedSlice = safeJsonParse(m.slice(i1, i2 + 1));
+          if (parsedSlice && typeof parsedSlice === 'object') return parsedSlice;
+        }
+        if (/^[A-Z0-9_]+$/.test(m)) return { error_code: m, message: m };
+      }
+    } catch {}
+    return null;
+  };
+
+  const normalizeConflictPayload = (payload) => {
+    const src = (payload && typeof payload === 'object') ? payload : null;
+    if (!src) return null;
+
+    const rawCode = trimStr(
+      src.error_code ||
+      src.code ||
+      src.error ||
+      src.message
+    ).toUpperCase();
+
+    if (rawCode !== 'WHOLE_TIMESHEET_ALREADY_SNOOZED' && rawCode !== 'SEGMENT_SNOOZES_ALREADY_EXIST') {
+      return null;
+    }
+
+    const defaultMessage =
+      rawCode === 'WHOLE_TIMESHEET_ALREADY_SNOOZED'
+        ? 'The whole timesheet is already snoozed. Unsnooze it first if you want to snooze a specific shift.'
+        : 'Specific shifts are already snoozed on this timesheet. Unsnooze them first if you want to snooze the whole timesheet.';
+
+    return {
+      ok: false,
+      conflict: true,
+      error: rawCode,
+      error_code: rawCode,
+      message: trimStr(src.user_message || src.message) || defaultMessage,
+      candidate_id: trimStr(src.candidate_id) || null,
+      timesheet_id: trimStr(src.timesheet_id) || null,
+      booking_id: trimStr(src.booking_id) || null,
+      segment_id: trimStr(src.segment_id) || null,
+      segment_stable_key: trimStr(src.segment_stable_key) || null,
+      conflict_snooze_id: trimStr(src.conflict_snooze_id) || null
+    };
+  };
+
   const candidateId = trimStr(body.candidate_id || body.candidateId);
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
@@ -15237,6 +15359,10 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
 
     return withCORS(env, req, ok(canonical));
   } catch (e) {
+    const conflictPayload = normalizeConflictPayload(extractDbRaisedJson(e));
+    if (conflictPayload) {
+      return withCORS(env, req, jsonResponse(409, conflictPayload));
+    }
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
@@ -30728,7 +30854,102 @@ async function handleBankingFinanceCaseAudit(env, req, user, financeCaseId) {
   }
 }
 
+async function sbRpcAllRows(env, fn, args, opts) {
+  const url = `${env.SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(fn)}`;
 
+  const pageSize =
+    (opts && Number.isFinite(Number(opts.pageSize)) && Number(opts.pageSize) > 0)
+      ? Math.trunc(Number(opts.pageSize))
+      : 1000;
+
+  const timeoutMs =
+    (opts && Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0)
+      ? Number(opts.timeoutMs)
+      : null;
+
+  const controller = timeoutMs ? new AbortController() : null;
+  const t = timeoutMs ? setTimeout(() => {
+    try { controller.abort(new Error(`RPC ${fn} timed out after ${timeoutMs}ms`)); } catch {}
+  }, timeoutMs) : null;
+
+  const normalizeRows = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (payload && typeof payload === 'object' && Array.isArray(payload.rows)) return payload.rows;
+    if (payload == null) return [];
+    return [payload];
+  };
+
+  let start = 0;
+  let total = null;
+  const out = [];
+
+  try {
+    while (true) {
+      const end = start + pageSize - 1;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          ...sbHeaders(env),
+          Prefer: 'count=exact',
+          'Range-Unit': 'items',
+          Range: `${start}-${end}`
+        },
+        body: JSON.stringify(args || {}),
+        signal: controller ? controller.signal : undefined
+      });
+
+      const txt = await res.text().catch(() => '');
+      let json = null;
+      try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
+
+      if (!res.ok) {
+        const err = new Error(`RPC ${fn} failed ${res.status}: ${txt}`);
+        err.status = res.status;
+        err.body = txt;
+        err.json = json;
+        throw err;
+      }
+
+      const rows = normalizeRows(json);
+      out.push(...rows);
+
+      const contentRange = String(res.headers.get('content-range') || '').trim();
+      const m = contentRange && /\/(\d+)$/.exec(contentRange);
+      if (m) {
+        const parsedTotal = Number(m[1]);
+        if (Number.isFinite(parsedTotal) && parsedTotal >= 0) {
+          total = Math.trunc(parsedTotal);
+        }
+      }
+
+      if (total != null) {
+        if (out.length >= total) break;
+      } else if (rows.length < pageSize) {
+        break;
+      }
+
+      if (rows.length === 0) {
+        break;
+      }
+
+      start += rows.length;
+    }
+
+    return out;
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || /timed out/i.test(String(e.message || '')))) {
+      const err = new Error(`RPC ${fn} failed 408: ${timeoutMs ? `timeout after ${timeoutMs}ms` : 'timeout'}`);
+      err.status = 408;
+      err.body = '';
+      err.json = null;
+      throw err;
+    }
+    throw e;
+  } finally {
+    if (t) clearTimeout(t);
+  }
+}
 
 
 async function openOutboxDetailModal(rowOrRef) {
@@ -55709,7 +55930,6 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
 
 
 
-
 async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
   const enc = encodeURIComponent;
 
@@ -55740,7 +55960,6 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     if (!s) return '';
     if (s.startsWith('+')) s = s.slice(1);
     s = s.replace(/[^\d]/g, '');
-    // UK convenience: 07xxxxxxxxx -> 44xxxxxxxxxx
     if (s.length === 11 && s.startsWith('07')) s = '44' + s.slice(1);
     return s;
   };
@@ -55826,22 +56045,32 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
 
   if (!baseUrlRaw) {
     const msg = 'WATI_CONFIG_MISSING';
+    const detail = {
+      error: msg,
+      missing_field: 'base_url',
+      missing_config_path: 'settings_defaults.comms_adaptors_json.wati.base_url'
+    };
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      await patchFailure(r.id, msg, detail);
       report.failed += 1;
-      report.errors.push({ id: r.id, error: msg });
+      report.errors.push({ id: r.id, error: msg, missing_field: 'base_url', missing_config_path: 'settings_defaults.comms_adaptors_json.wati.base_url' });
     }
     return report;
   }
 
   if (!bearerRaw) {
     const msg = 'WATI_API_TOKEN_MISSING';
+    const detail = {
+      error: msg,
+      missing_field: 'WATI_API_TOKEN',
+      missing_config_path: 'env.WATI_API_TOKEN'
+    };
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      await patchFailure(r.id, msg, detail);
       report.failed += 1;
-      report.errors.push({ id: r.id, error: msg });
+      report.errors.push({ id: r.id, error: msg, missing_field: 'WATI_API_TOKEN', missing_config_path: 'env.WATI_API_TOKEN' });
     }
     return report;
   }
@@ -56026,7 +56255,6 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
 
   return report;
 }
-
 
 async function sendViaClicksendSmsBulk(env, csCfg, rows) {
   const enc = encodeURIComponent;
@@ -56470,7 +56698,6 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
 
   return report;
 }
-
 async function handleMailshotPrepare(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -56690,6 +56917,32 @@ async function handleMailshotPrepare(env, req) {
 
     const summarySelectedCount = summaryRowIds.length;
     const actionableContextCount = contextIds.length;
+
+    if (selectionMode === 'all_filtered' && membershipTotal != null) {
+      const expectedSummarySelectedCount = Math.max(0, membershipTotal - excludedIds.length);
+      if (summarySelectedCount !== expectedSummarySelectedCount) {
+        throw new Error(`SELECTION_RESOLUTION_INCOMPLETE: expected ${expectedSummarySelectedCount} summary rows, got ${summarySelectedCount}`);
+      }
+    }
+
+    if (selectionMode === 'explicit') {
+      const expectedExplicitSelectedCount = includedIds.length;
+      const explicitResolvedCount = actionableContextCount + skippedRows.length;
+      if (explicitResolvedCount !== expectedExplicitSelectedCount) {
+        throw new Error(`SELECTION_RESOLUTION_INCOMPLETE: expected ${expectedExplicitSelectedCount} selected rows, got ${explicitResolvedCount}`);
+      }
+    }
+
+    if (sectionKey !== 'timesheets') {
+      if (actionableContextCount !== summarySelectedCount) {
+        throw new Error(`SELECTION_CONTEXT_RESOLUTION_MISMATCH: expected ${summarySelectedCount} actionable contexts, got ${actionableContextCount}`);
+      }
+    } else if (selectionMode === 'all_filtered') {
+      const timesheetResolvedCount = actionableContextCount + skippedRows.length;
+      if (timesheetResolvedCount !== summarySelectedCount) {
+        throw new Error(`SELECTION_CONTEXT_RESOLUTION_MISMATCH: expected ${summarySelectedCount} resolved timesheet rows, got ${timesheetResolvedCount}`);
+      }
+    }
 
     const selectionEcho = {
       section: sectionKey,
@@ -56932,6 +57185,7 @@ async function handleMailshotPrepare(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
+
 
 async function handleMailshotExport(env, req) {
   const user = await requireUser(env, req, ['admin']);
