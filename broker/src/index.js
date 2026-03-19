@@ -56739,6 +56739,45 @@ async function handleMailshotPrepare(env, req) {
   };
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+  const dedupePlainObjectArray = (arr) => {
+    const out = [];
+    const seen = new Set();
+    (Array.isArray(arr) ? arr : []).forEach((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return;
+      let signature = '';
+      try {
+        signature = JSON.stringify(item);
+      } catch {
+        signature = '';
+      }
+      if (!signature || seen.has(signature)) return;
+      seen.add(signature);
+      out.push(item);
+    });
+    return out;
+  };
+
+  const addNullableInts = (...vals) => {
+    let hasValue = false;
+    let total = 0;
+    vals.forEach((value) => {
+      const normalized = toNonNegativeIntOrNull(value);
+      if (normalized == null) return;
+      hasValue = true;
+      total += normalized;
+    });
+    return hasValue ? total : null;
+  };
+
+  const chunkArray = (arr, size) => {
+    const out = [];
+    const pageSize = Math.max(1, Math.trunc(Number(size) || 1));
+    for (let i = 0; i < arr.length; i += pageSize) {
+      out.push(arr.slice(i, i + pageSize));
+    }
+    return out;
+  };
+
   const singularContextKind = (v) => {
     const s = trimStr(v).toLowerCase();
     if (s === 'candidates' || s === 'candidate') return 'candidate';
@@ -56796,6 +56835,13 @@ async function handleMailshotPrepare(env, req) {
     templateId = t;
   }
 
+  const prepareBatchSize = (() => {
+    const raw = body.prepare_batch_size ?? body.prepareBatchSize ?? 250;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return 250;
+    return Math.max(25, Math.min(500, Math.trunc(n)));
+  })();
+
   const makeSkippedRow = (selectedRowId, skipReason, extra = {}) => {
     return {
       context_id: null,
@@ -56820,6 +56866,221 @@ async function handleMailshotPrepare(env, req) {
       selected_row_id: selectedRowId == null ? null : String(selectedRowId),
       ...extra
     };
+  };
+
+  const normalizePreparePayload = (payloadInput) => {
+    const payload = (payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)) ? payloadInput : {};
+
+    const normalized = { ...payload };
+
+    normalized.context_kind = normalized.context_kind != null ? singularContextKind(normalized.context_kind) || contextKind : contextKind;
+    normalized.output_type = normalized.output_type != null ? String(normalized.output_type).trim().toUpperCase() : outputType;
+    normalized.document_template_id = normalized.document_template_id == null ? templateId : String(normalized.document_template_id);
+
+    normalized.selected_field_keys = normalizeSelectedKeys(normalized.selected_field_keys);
+
+    normalized.accepted_selected_field_keys = Array.isArray(normalized.accepted_selected_field_keys)
+      ? normalizeSelectedKeys(normalized.accepted_selected_field_keys)
+      : normalized.selected_field_keys;
+
+    normalized.rejected_selected_field_keys = Array.isArray(normalized.rejected_selected_field_keys)
+      ? normalizeSelectedKeys(normalized.rejected_selected_field_keys)
+      : [];
+
+    normalized.rejected_selected_field_details = Array.isArray(normalized.rejected_selected_field_details)
+      ? dedupePlainObjectArray(normalized.rejected_selected_field_details)
+      : [];
+
+    normalized.warnings = normalizeWarnings(normalized.warnings);
+
+    const topLevelAttachmentInstructions = normalizeAttachmentArray(
+      Array.isArray(normalized.attachment_instructions)
+        ? normalized.attachment_instructions
+        : (Array.isArray(normalized.attachments) ? normalized.attachments : [])
+    );
+
+    normalized.attachment_instructions = dedupePlainObjectArray(topLevelAttachmentInstructions);
+    normalized.attachments = normalized.attachment_instructions;
+
+    normalized.requested_context_count = toNonNegativeIntOrNull(normalized.requested_context_count);
+    normalized.resolved_context_count = toNonNegativeIntOrNull(normalized.resolved_context_count);
+    normalized.returned_row_count = toNonNegativeIntOrNull(normalized.returned_row_count);
+    normalized.eligible_count = toNonNegativeIntOrNull(normalized.eligible_count);
+    normalized.skipped_count = toNonNegativeIntOrNull(normalized.skipped_count);
+
+    const payloadPrepareCounts = (normalized.prepare_counts && typeof normalized.prepare_counts === 'object' && !Array.isArray(normalized.prepare_counts))
+      ? normalized.prepare_counts
+      : {};
+
+    normalized.prepare_counts = {
+      requested_context_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.requested_context_count != null
+          ? payloadPrepareCounts.requested_context_count
+          : normalized.requested_context_count
+      ),
+      resolved_context_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.resolved_context_count != null
+          ? payloadPrepareCounts.resolved_context_count
+          : normalized.resolved_context_count
+      ),
+      returned_row_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.returned_row_count != null
+          ? payloadPrepareCounts.returned_row_count
+          : normalized.returned_row_count
+      ),
+      eligible_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.eligible_count != null
+          ? payloadPrepareCounts.eligible_count
+          : normalized.eligible_count
+      ),
+      skipped_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.skipped_count != null
+          ? payloadPrepareCounts.skipped_count
+          : normalized.skipped_count
+      )
+    };
+
+    normalized.rows = Array.isArray(normalized.rows) ? normalized.rows : [];
+
+    normalized.rows = normalized.rows.map((row) => {
+      const rawRow = (row && typeof row === 'object') ? row : {};
+
+      const rowAttachmentInstructions = normalizeAttachmentArray(
+        Array.isArray(rawRow.attachment_instructions)
+          ? rawRow.attachment_instructions
+          : (Array.isArray(rawRow.attachments) ? rawRow.attachments : [])
+      );
+
+      return {
+        ...rawRow,
+        context_id: rawRow.context_id == null ? null : String(rawRow.context_id),
+        context_kind: rawRow.context_kind != null ? singularContextKind(rawRow.context_kind) || normalized.context_kind : normalized.context_kind,
+        entity_type: rawRow.entity_type == null ? null : String(rawRow.entity_type).trim().toLowerCase(),
+        output_type: rawRow.output_type != null ? String(rawRow.output_type).trim().toUpperCase() : normalized.output_type,
+        document_template_id: rawRow.document_template_id == null ? normalized.document_template_id : String(rawRow.document_template_id),
+        to_field_key: rawRow.to_field_key == null ? null : String(rawRow.to_field_key),
+        to: rawRow.to == null ? null : String(rawRow.to),
+        recipient_kind: rawRow.recipient_kind == null ? null : String(rawRow.recipient_kind).trim().toLowerCase(),
+        recipient_id: rawRow.recipient_id == null ? null : String(rawRow.recipient_id),
+        recipient_display_name: rawRow.recipient_display_name == null ? null : String(rawRow.recipient_display_name),
+        candidate_name: rawRow.candidate_name == null ? null : String(rawRow.candidate_name),
+        eligible: rawRow.eligible == null ? false : !!rawRow.eligible,
+        skip_reason: rawRow.skip_reason == null ? null : String(rawRow.skip_reason),
+        field_values: rawRow.field_values && typeof rawRow.field_values === 'object' && !Array.isArray(rawRow.field_values)
+          ? rawRow.field_values
+          : {},
+        template_content_json: rawRow.template_content_json && typeof rawRow.template_content_json === 'object' && !Array.isArray(rawRow.template_content_json)
+          ? rawRow.template_content_json
+          : {},
+        email_type: rawRow.email_type == null ? null : String(rawRow.email_type).trim().toLowerCase(),
+        warning_messages: normalizeWarnings(rawRow.warning_messages),
+        attachment_instructions: dedupePlainObjectArray(rowAttachmentInstructions),
+        attachments: dedupePlainObjectArray(rowAttachmentInstructions),
+        selected_row_id: rawRow.selected_row_id == null ? null : String(rawRow.selected_row_id)
+      };
+    });
+
+    return normalized;
+  };
+
+  const mergePreparedPayloads = (payloads) => {
+    const chunks = Array.isArray(payloads) ? payloads.filter((x) => x && typeof x === 'object' && !Array.isArray(x)) : [];
+    if (!chunks.length) {
+      return {
+        context_kind: contextKind,
+        output_type: outputType,
+        document_template_id: templateId,
+        selected_field_keys: [],
+        accepted_selected_field_keys: [],
+        rejected_selected_field_keys: [],
+        rejected_selected_field_details: [],
+        warnings: [],
+        attachment_instructions: [],
+        attachments: [],
+        requested_context_count: 0,
+        resolved_context_count: 0,
+        returned_row_count: 0,
+        eligible_count: 0,
+        skipped_count: 0,
+        prepare_counts: {
+          requested_context_count: 0,
+          resolved_context_count: 0,
+          returned_row_count: 0,
+          eligible_count: 0,
+          skipped_count: 0
+        },
+        rows: []
+      };
+    }
+
+    const first = clonePlain(chunks[0]);
+    const merged = {
+      ...first,
+      rows: Array.isArray(first.rows) ? first.rows.slice() : [],
+      warnings: normalizeWarnings(first.warnings),
+      selected_field_keys: normalizeSelectedKeys(first.selected_field_keys),
+      accepted_selected_field_keys: normalizeSelectedKeys(first.accepted_selected_field_keys),
+      rejected_selected_field_keys: normalizeSelectedKeys(first.rejected_selected_field_keys),
+      rejected_selected_field_details: dedupePlainObjectArray(first.rejected_selected_field_details),
+      attachment_instructions: dedupePlainObjectArray(first.attachment_instructions),
+      attachments: dedupePlainObjectArray(first.attachments),
+      prepare_counts: {
+        requested_context_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.requested_context_count),
+        resolved_context_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.resolved_context_count),
+        returned_row_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.returned_row_count),
+        eligible_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.eligible_count),
+        skipped_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.skipped_count)
+      }
+    };
+
+    merged.requested_context_count = toNonNegativeIntOrNull(first.requested_context_count);
+    merged.resolved_context_count = toNonNegativeIntOrNull(first.resolved_context_count);
+    merged.returned_row_count = toNonNegativeIntOrNull(first.returned_row_count);
+    merged.eligible_count = toNonNegativeIntOrNull(first.eligible_count);
+    merged.skipped_count = toNonNegativeIntOrNull(first.skipped_count);
+
+    for (let i = 1; i < chunks.length; i += 1) {
+      const chunk = chunks[i];
+
+      merged.rows = merged.rows.concat(Array.isArray(chunk.rows) ? chunk.rows : []);
+      merged.warnings = Array.from(new Set(merged.warnings.concat(normalizeWarnings(chunk.warnings))));
+      merged.selected_field_keys = normalizeSelectedKeys(merged.selected_field_keys.concat(normalizeSelectedKeys(chunk.selected_field_keys)));
+      merged.accepted_selected_field_keys = normalizeSelectedKeys(merged.accepted_selected_field_keys.concat(normalizeSelectedKeys(chunk.accepted_selected_field_keys)));
+      merged.rejected_selected_field_keys = normalizeSelectedKeys(merged.rejected_selected_field_keys.concat(normalizeSelectedKeys(chunk.rejected_selected_field_keys)));
+      merged.rejected_selected_field_details = dedupePlainObjectArray(
+        merged.rejected_selected_field_details.concat(
+          Array.isArray(chunk.rejected_selected_field_details) ? chunk.rejected_selected_field_details : []
+        )
+      );
+      merged.attachment_instructions = dedupePlainObjectArray(
+        merged.attachment_instructions.concat(
+          normalizeAttachmentArray(chunk.attachment_instructions).length
+            ? normalizeAttachmentArray(chunk.attachment_instructions)
+            : normalizeAttachmentArray(chunk.attachments)
+        )
+      );
+      merged.attachments = merged.attachment_instructions;
+
+      merged.requested_context_count = addNullableInts(merged.requested_context_count, chunk.requested_context_count);
+      merged.resolved_context_count = addNullableInts(merged.resolved_context_count, chunk.resolved_context_count);
+      merged.returned_row_count = addNullableInts(merged.returned_row_count, chunk.returned_row_count);
+      merged.eligible_count = addNullableInts(merged.eligible_count, chunk.eligible_count);
+      merged.skipped_count = addNullableInts(merged.skipped_count, chunk.skipped_count);
+
+      const chunkPrepareCounts = (chunk.prepare_counts && typeof chunk.prepare_counts === 'object' && !Array.isArray(chunk.prepare_counts))
+        ? chunk.prepare_counts
+        : {};
+
+      merged.prepare_counts = {
+        requested_context_count: addNullableInts(merged.prepare_counts.requested_context_count, chunkPrepareCounts.requested_context_count),
+        resolved_context_count: addNullableInts(merged.prepare_counts.resolved_context_count, chunkPrepareCounts.resolved_context_count),
+        returned_row_count: addNullableInts(merged.prepare_counts.returned_row_count, chunkPrepareCounts.returned_row_count),
+        eligible_count: addNullableInts(merged.prepare_counts.eligible_count, chunkPrepareCounts.eligible_count),
+        skipped_count: addNullableInts(merged.prepare_counts.skipped_count, chunkPrepareCounts.skipped_count)
+      };
+    }
+
+    return merged;
   };
 
   const selectionScope = (body.selection_scope && typeof body.selection_scope === 'object' && !Array.isArray(body.selection_scope))
@@ -56989,131 +57250,36 @@ async function handleMailshotPrepare(env, req) {
     let normalized = null;
 
     if (ctxIdsClean.length > 0) {
-      let payload = await sbRpc(env, 'mailshot_prepare', {
-        p_context_kind: contextKind,
-        p_context_ids: ctxIdsClean,
-        p_output_type: outputType,
-        p_document_template_id: templateId,
-        p_actor_user_id: user.id
-      });
+      const contextIdChunks = chunkArray(ctxIdsClean, prepareBatchSize);
+      const normalizedChunkPayloads = [];
 
-      try {
-        if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-        if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_prepare')) payload = payload.mailshot_prepare;
-      } catch {}
+      for (let chunkIndex = 0; chunkIndex < contextIdChunks.length; chunkIndex += 1) {
+        const contextIdChunk = contextIdChunks[chunkIndex];
 
-      if (!(payload && typeof payload === 'object')) {
-        return withCORS(env, req, ok({ ok: true, result: payload }));
+        let payload = await sbRpc(env, 'mailshot_prepare', {
+          p_context_kind: contextKind,
+          p_context_ids: contextIdChunk,
+          p_output_type: outputType,
+          p_document_template_id: templateId,
+          p_actor_user_id: user.id
+        });
+
+        try {
+          if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+          if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_prepare')) payload = payload.mailshot_prepare;
+        } catch {}
+
+        if (!(payload && typeof payload === 'object')) {
+          if (contextIdChunks.length === 1) {
+            return withCORS(env, req, ok({ ok: true, result: payload }));
+          }
+          throw new Error(`MAILSHOT_PREPARE_BATCH_INVALID: chunk ${chunkIndex + 1} of ${contextIdChunks.length} did not return an object payload`);
+        }
+
+        normalizedChunkPayloads.push(normalizePreparePayload(payload));
       }
 
-      normalized = { ...payload };
-
-      normalized.context_kind = normalized.context_kind != null ? singularContextKind(normalized.context_kind) || contextKind : contextKind;
-      normalized.output_type = normalized.output_type != null ? String(normalized.output_type).trim().toUpperCase() : outputType;
-      normalized.document_template_id = normalized.document_template_id == null ? templateId : String(normalized.document_template_id);
-
-      normalized.selected_field_keys = normalizeSelectedKeys(normalized.selected_field_keys);
-
-      normalized.accepted_selected_field_keys = Array.isArray(normalized.accepted_selected_field_keys)
-        ? normalizeSelectedKeys(normalized.accepted_selected_field_keys)
-        : normalized.selected_field_keys;
-
-      normalized.rejected_selected_field_keys = Array.isArray(normalized.rejected_selected_field_keys)
-        ? normalizeSelectedKeys(normalized.rejected_selected_field_keys)
-        : [];
-
-      normalized.rejected_selected_field_details = Array.isArray(normalized.rejected_selected_field_details)
-        ? normalized.rejected_selected_field_details
-        : [];
-
-      normalized.warnings = normalizeWarnings(normalized.warnings);
-
-      const topLevelAttachmentInstructions = normalizeAttachmentArray(
-        Array.isArray(normalized.attachment_instructions)
-          ? normalized.attachment_instructions
-          : (Array.isArray(normalized.attachments) ? normalized.attachments : [])
-      );
-
-      normalized.attachment_instructions = topLevelAttachmentInstructions;
-      normalized.attachments = topLevelAttachmentInstructions;
-
-      normalized.requested_context_count = toNonNegativeIntOrNull(normalized.requested_context_count);
-      normalized.resolved_context_count = toNonNegativeIntOrNull(normalized.resolved_context_count);
-      normalized.returned_row_count = toNonNegativeIntOrNull(normalized.returned_row_count);
-      normalized.eligible_count = toNonNegativeIntOrNull(normalized.eligible_count);
-      normalized.skipped_count = toNonNegativeIntOrNull(normalized.skipped_count);
-
-      const payloadPrepareCounts = (normalized.prepare_counts && typeof normalized.prepare_counts === 'object' && !Array.isArray(normalized.prepare_counts))
-        ? normalized.prepare_counts
-        : {};
-
-      normalized.prepare_counts = {
-        requested_context_count: toNonNegativeIntOrNull(
-          payloadPrepareCounts.requested_context_count != null
-            ? payloadPrepareCounts.requested_context_count
-            : normalized.requested_context_count
-        ),
-        resolved_context_count: toNonNegativeIntOrNull(
-          payloadPrepareCounts.resolved_context_count != null
-            ? payloadPrepareCounts.resolved_context_count
-            : normalized.resolved_context_count
-        ),
-        returned_row_count: toNonNegativeIntOrNull(
-          payloadPrepareCounts.returned_row_count != null
-            ? payloadPrepareCounts.returned_row_count
-            : normalized.returned_row_count
-        ),
-        eligible_count: toNonNegativeIntOrNull(
-          payloadPrepareCounts.eligible_count != null
-            ? payloadPrepareCounts.eligible_count
-            : normalized.eligible_count
-        ),
-        skipped_count: toNonNegativeIntOrNull(
-          payloadPrepareCounts.skipped_count != null
-            ? payloadPrepareCounts.skipped_count
-            : normalized.skipped_count
-        )
-      };
-
-      normalized.rows = Array.isArray(normalized.rows) ? normalized.rows : [];
-
-      normalized.rows = normalized.rows.map((row) => {
-        const rawRow = (row && typeof row === 'object') ? row : {};
-
-        const rowAttachmentInstructions = normalizeAttachmentArray(
-          Array.isArray(rawRow.attachment_instructions)
-            ? rawRow.attachment_instructions
-            : (Array.isArray(rawRow.attachments) ? rawRow.attachments : [])
-        );
-
-        return {
-          ...rawRow,
-          context_id: rawRow.context_id == null ? null : String(rawRow.context_id),
-          context_kind: rawRow.context_kind != null ? singularContextKind(rawRow.context_kind) || normalized.context_kind : normalized.context_kind,
-          entity_type: rawRow.entity_type == null ? null : String(rawRow.entity_type).trim().toLowerCase(),
-          output_type: rawRow.output_type != null ? String(rawRow.output_type).trim().toUpperCase() : normalized.output_type,
-          document_template_id: rawRow.document_template_id == null ? normalized.document_template_id : String(rawRow.document_template_id),
-          to_field_key: rawRow.to_field_key == null ? null : String(rawRow.to_field_key),
-          to: rawRow.to == null ? null : String(rawRow.to),
-          recipient_kind: rawRow.recipient_kind == null ? null : String(rawRow.recipient_kind).trim().toLowerCase(),
-          recipient_id: rawRow.recipient_id == null ? null : String(rawRow.recipient_id),
-          recipient_display_name: rawRow.recipient_display_name == null ? null : String(rawRow.recipient_display_name),
-          candidate_name: rawRow.candidate_name == null ? null : String(rawRow.candidate_name),
-          eligible: rawRow.eligible == null ? false : !!rawRow.eligible,
-          skip_reason: rawRow.skip_reason == null ? null : String(rawRow.skip_reason),
-          field_values: rawRow.field_values && typeof rawRow.field_values === 'object' && !Array.isArray(rawRow.field_values)
-            ? rawRow.field_values
-            : {},
-          template_content_json: rawRow.template_content_json && typeof rawRow.template_content_json === 'object' && !Array.isArray(rawRow.template_content_json)
-            ? rawRow.template_content_json
-            : {},
-          email_type: rawRow.email_type == null ? null : String(rawRow.email_type).trim().toLowerCase(),
-          warning_messages: normalizeWarnings(rawRow.warning_messages),
-          attachment_instructions: rowAttachmentInstructions,
-          attachments: rowAttachmentInstructions,
-          selected_row_id: rawRow.selected_row_id == null ? null : String(rawRow.selected_row_id)
-        };
-      });
+      normalized = mergePreparedPayloads(normalizedChunkPayloads);
     } else {
       normalized = {
         context_kind: contextKind,
@@ -57184,7 +57350,6 @@ async function handleMailshotPrepare(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 async function handleMailshotExport(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -59819,16 +59984,26 @@ function buildCandidateSummaryFilterSpec(input = {}) {
 
   const normalizeIdArray = (arr) => Array.from(new Set(
     (Array.isArray(arr) ? arr : [])
+      .flatMap(v => Array.isArray(v) ? v : String(v == null ? '' : v).split(','))
       .map(v => trimStr(v))
       .filter(Boolean)
   ));
 
   const normalizeUpperTokenArray = (arr) => Array.from(new Set(
     (Array.isArray(arr) ? arr : [])
-      .flatMap(v => String(v == null ? '' : v).split(','))
+      .flatMap(v => Array.isArray(v) ? v : String(v == null ? '' : v).split(','))
       .map(v => trimStr(v).toUpperCase())
       .filter(Boolean)
   ));
+
+  const normalizeBool = (v) => {
+    if (v === true || v === false) return v;
+    const raw = trimStr(v).toLowerCase();
+    if (!raw) return null;
+    if (raw === 'true' || raw === '1' || raw === 'yes' || raw === 'y' || raw === 'on') return true;
+    if (raw === 'false' || raw === '0' || raw === 'no' || raw === 'n' || raw === 'off') return false;
+    return null;
+  };
 
   const clonePlain = (value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -59885,8 +60060,10 @@ function buildCandidateSummaryFilterSpec(input = {}) {
   const updatedFrom = trimStr(getOne('updated_from')) || null;
   const updatedTo = trimStr(getOne('updated_to')) || null;
 
-  const jobTitleContains = trimStr(getOne('job_title_contains')) || null;
-  const primaryJobTitleContains = trimStr(getOne('primary_job_title_contains')) || null;
+  const jobTitleIncludeNodeIds = normalizeIdArray(getAll('job_title_include_node_ids'));
+  const jobTitleExcludeNodeIds = normalizeIdArray(getAll('job_title_exclude_node_ids'));
+  const jobTitleRoleIds = normalizeIdArray(getAll('job_title_role_ids'));
+  const jobTitlePrimaryOnly = normalizeBool(getOne('job_title_primary_only'));
 
   const profRegNumber = trimStr(getOne('prof_reg_number')) || null;
   const profRegTypeRaw = trimStr(getOne('prof_reg_type')) || null;
@@ -59938,8 +60115,12 @@ function buildCandidateSummaryFilterSpec(input = {}) {
   if (createdTo) out.created_to = createdTo;
   if (updatedFrom) out.updated_from = updatedFrom;
   if (updatedTo) out.updated_to = updatedTo;
-  if (jobTitleContains) out.job_title_contains = jobTitleContains;
-  if (primaryJobTitleContains) out.primary_job_title_contains = primaryJobTitleContains;
+  if (jobTitleRoleIds.length) {
+    out.job_title_include_node_ids = jobTitleIncludeNodeIds;
+    out.job_title_exclude_node_ids = jobTitleExcludeNodeIds;
+    out.job_title_role_ids = jobTitleRoleIds;
+    out.job_title_primary_only = !!jobTitlePrimaryOnly;
+  }
   if (profRegNumber) out.prof_reg_number = profRegNumber;
   if (profRegType) out.prof_reg_type = profRegType;
   if (dob) out.dob = dob;
@@ -59959,7 +60140,6 @@ function buildCandidateSummaryFilterSpec(input = {}) {
 
   return clonePlain(out);
 }
-
 function buildClientSummaryFilterSpec(input = {}) {
   const trimStr = (v) => String(v == null ? '' : v).trim();
 
@@ -68034,7 +68214,6 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // ======================================
 
 
-
 async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -68081,8 +68260,8 @@ async function handleSearchCandidates(env, req) {
   const createdFrom = spec.created_from || null;
   const createdTo = spec.created_to || null;
   const notesExact = spec.notes || null;
-  const jobTitleContainsAll = spec.job_title_contains || null;
-  const primaryJobTitleContains = spec.primary_job_title_contains || null;
+  const jobTitleRoleIds = Array.isArray(spec.job_title_role_ids) ? spec.job_title_role_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
+  const jobTitlePrimaryOnly = !!spec.job_title_primary_only;
   const profRegNumber = spec.prof_reg_number || null;
   const profRegType = spec.prof_reg_type || null;
   const dobExact = spec.dob || null;
@@ -68241,11 +68420,12 @@ async function handleSearchCandidates(env, req) {
     if (createdFrom) api += `&created_at=gte.${enc(createdFrom)}`;
     if (createdTo) api += `&created_at=lte.${enc(createdTo)}`;
 
-    if (primaryJobTitleContains) {
-      api += `&primary_job_title=ilike.*${enc(primaryJobTitleContains)}*`;
-    }
-    if (jobTitleContainsAll) {
-      api += `&job_titles_display=ilike.*${enc(jobTitleContainsAll)}*`;
+    if (jobTitleRoleIds.length) {
+      if (jobTitlePrimaryOnly) {
+        api += `&primary_job_title_id=${enc(`in.(${jobTitleRoleIds.join(',')})`)}`;
+      } else {
+        api += `&job_title_ids=${enc(`ov.{${jobTitleRoleIds.join(',')}}`)}`;
+      }
     }
 
     if (profRegNumber) {
