@@ -12600,10 +12600,10 @@ BEGIN
       nullif(btrim(COALESCE(seg.value->>'date','')), '') AS component_date,
       coalesce(
         nullif(btrim(COALESCE(seg.value->>'segment_stable_key','')), ''),
-        nullif(btrim(COALESCE(seg.value->>'date','')), ''),
-        nullif(btrim(COALESCE(seg.value->>'ref_num','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'segment_id','')), ''),
         nullif(btrim(COALESCE(seg.value->>'segment_key','')), ''),
-        nullif(btrim(COALESCE(seg.value->>'segment_id','')), '')
+        nullif(btrim(COALESCE(seg.value->>'ref_num','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'date','')), '')
       ) AS component_stable_key,
       nullif(btrim(COALESCE(seg.value->>'ref_num','')), '') AS component_ref_num,
       COALESCE(NULLIF(seg.value->>'exclude_from_pay','')::boolean, false) AS is_on_hold
@@ -12712,7 +12712,7 @@ BEGIN
       ON s.candidate_id = tn.candidate_id
      AND s.source_ref IS NULL
      AND s.cleared_at_utc IS NULL
-     AND upper(COALESCE(s.snooze_kind,'')) = 'TIMESHEET_PAYMENT'
+     AND upper(COALESCE(s.snooze_kind,'')) IN ('DO_NOT_PAY', 'BLOCKED_TIMESHEET')
      AND (s.snooze_until_date IS NULL OR s.snooze_until_date >= v_today_uk)
      AND coalesce(
            nullif(btrim(COALESCE(s.segment_stable_key,'')), ''),
@@ -12748,9 +12748,22 @@ BEGIN
     FROM segment_components sc
     JOIN active_segment_snoozes_source ass
       ON (
-        (ass.booking_id IS NOT NULL AND ass.segment_stable_key IS NOT DISTINCT FROM sc.component_stable_key)
+        (
+          ass.booking_id IS NOT NULL
+          AND (
+            ass.segment_stable_key IS NOT DISTINCT FROM sc.component_stable_key
+            OR ass.segment_id IS NOT DISTINCT FROM sc.component_id
+          )
+        )
         OR
-        (ass.booking_id IS NULL AND ass.timesheet_id IS NOT DISTINCT FROM p_timesheet_id AND ass.segment_id IS NOT DISTINCT FROM sc.component_id)
+        (
+          ass.booking_id IS NULL
+          AND ass.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+          AND (
+            ass.segment_id IS NOT DISTINCT FROM sc.component_id
+            OR ass.segment_stable_key IS NOT DISTINCT FROM sc.component_stable_key
+          )
+        )
       )
   ),
   active_segment_snoozes AS (
