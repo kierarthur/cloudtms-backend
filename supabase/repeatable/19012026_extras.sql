@@ -5204,3 +5204,1151 @@ BEGIN
   );
 END;
 $$;
+
+
+create or replace function public.summary_typeahead_lookup(
+  p_section text,
+  p_filters jsonb default '{}'::jsonb,
+  p_sort_key text default null,
+  p_sort_dir text default 'asc',
+  p_prefix text default null,
+  p_page_size integer default null
+)
+returns table(
+  row_id text,
+  ordinal_index bigint,
+  target_page integer,
+  matched_value text,
+  dataset_key text
+)
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_section text := lower(btrim(coalesce(p_section, '')));
+  v_sort_key text := lower(btrim(coalesce(p_sort_key, '')));
+  v_sort_dir text := case when lower(btrim(coalesce(p_sort_dir, ''))) = 'desc' then 'desc' else 'asc' end;
+  v_prefix text := lower(btrim(coalesce(p_prefix, '')));
+  v_prefix_like text := null;
+  v_dataset_key text := md5(jsonb_build_object('section', lower(btrim(coalesce(p_section, ''))), 'filters', coalesce(p_filters, '{}'::jsonb))::text);
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
+
+  v_ids text[] := null;
+  v_q text := null;
+  v_active boolean := null;
+  v_enabled boolean := null;
+  v_client_id uuid := null;
+  v_candidate_id uuid := null;
+  v_route_type text := null;
+  v_sheet_scope text := null;
+  v_issues_filter text := null;
+  v_contract_status text := null;
+  v_role text := null;
+  v_band text := null;
+  v_status_list text[] := null;
+  v_issued_from date := null;
+  v_issued_to date := null;
+  v_week_ending_from date := null;
+  v_week_ending_to date := null;
+begin
+  if p_filters is null then
+    p_filters := '{}'::jsonb;
+  end if;
+
+  if v_section = '' or v_sort_key = '' or v_prefix = '' then
+    return;
+  end if;
+
+  v_prefix_like :=
+    replace(
+      replace(
+        replace(v_prefix, E'\\', E'\\\\'),
+        '%',
+        E'\\%'
+      ),
+      '_',
+      E'\\_'
+    ) || '%';
+
+  begin
+    if p_filters ? 'ids' then
+      if jsonb_typeof(p_filters->'ids') = 'array' then
+        select array_agg(s.val order by s.val)
+        into v_ids
+        from (
+          select distinct nullif(btrim(e.value), '') as val
+          from jsonb_array_elements_text(p_filters->'ids') as e(value)
+        ) as s
+        where s.val is not null;
+      elsif nullif(btrim(coalesce(p_filters->>'ids', '')), '') is not null then
+        select array_agg(s.val order by s.val)
+        into v_ids
+        from (
+          select distinct nullif(btrim(x), '') as val
+          from unnest(regexp_split_to_array(p_filters->>'ids', '\s*,\s*')) as u(x)
+        ) as s
+        where s.val is not null;
+      end if;
+    end if;
+  exception when others then
+    v_ids := null;
+  end;
+
+  v_q := nullif(
+    btrim(
+      coalesce(
+        p_filters->>'q',
+        p_filters->>'name',
+        ''
+      )
+    ),
+    ''
+  );
+
+  if lower(coalesce(p_filters->>'active', '')) in ('true', 'false') then
+    v_active := (lower(p_filters->>'active') = 'true');
+  end if;
+
+  if lower(coalesce(p_filters->>'enabled', '')) in ('true', 'false') then
+    v_enabled := (lower(p_filters->>'enabled') = 'true');
+  end if;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'client_id', '')), '') is not null then
+      v_client_id := (p_filters->>'client_id')::uuid;
+    end if;
+  exception when others then
+    v_client_id := null;
+  end;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'candidate_id', '')), '') is not null then
+      v_candidate_id := (p_filters->>'candidate_id')::uuid;
+    end if;
+  exception when others then
+    v_candidate_id := null;
+  end;
+
+  v_route_type := upper(nullif(btrim(coalesce(p_filters->>'route_type', '')), ''));
+  if v_route_type = 'ALL' then v_route_type := null; end if;
+
+  v_sheet_scope := upper(nullif(btrim(coalesce(p_filters->>'sheet_scope', '')), ''));
+  if v_sheet_scope = 'ALL' then v_sheet_scope := null; end if;
+
+  v_issues_filter := upper(nullif(btrim(coalesce(p_filters->>'issues_filter', '')), ''));
+  if v_issues_filter = 'ALL' then v_issues_filter := null; end if;
+
+  v_contract_status := upper(nullif(btrim(coalesce(p_filters->>'status', '')), ''));
+  if v_contract_status = 'ALL' then v_contract_status := null; end if;
+
+  v_role := nullif(btrim(coalesce(p_filters->>'role', '')), '');
+  v_band := nullif(btrim(coalesce(p_filters->>'band', '')), '');
+
+  begin
+    if p_filters ? 'status' then
+      if jsonb_typeof(p_filters->'status') = 'array' then
+        select array_agg(s.val order by s.val)
+        into v_status_list
+        from (
+          select distinct upper(nullif(btrim(e.value), '')) as val
+          from jsonb_array_elements_text(p_filters->'status') as e(value)
+        ) as s
+        where s.val is not null
+          and s.val <> 'ALL';
+      elsif nullif(btrim(coalesce(p_filters->>'status', '')), '') is not null then
+        select array_agg(s.val order by s.val)
+        into v_status_list
+        from (
+          select distinct upper(nullif(btrim(x), '')) as val
+          from unnest(regexp_split_to_array(p_filters->>'status', '\s*,\s*')) as u(x)
+        ) as s
+        where s.val is not null
+          and s.val <> 'ALL';
+      end if;
+    end if;
+  exception when others then
+    v_status_list := null;
+  end;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'issued_from', '')), '') is not null then
+      v_issued_from := (p_filters->>'issued_from')::date;
+    end if;
+  exception when others then
+    v_issued_from := null;
+  end;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'issued_to', '')), '') is not null then
+      v_issued_to := (p_filters->>'issued_to')::date;
+    end if;
+  exception when others then
+    v_issued_to := null;
+  end;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'week_ending_from', '')), '') is not null then
+      v_week_ending_from := (p_filters->>'week_ending_from')::date;
+    end if;
+  exception when others then
+    v_week_ending_from := null;
+  end;
+
+  begin
+    if nullif(btrim(coalesce(p_filters->>'week_ending_to', '')), '') is not null then
+      v_week_ending_to := (p_filters->>'week_ending_to')::date;
+    end if;
+  exception when others then
+    v_week_ending_to := null;
+  end;
+
+  if v_section = 'candidates' then
+    return query
+    with filtered_rows as (
+      select
+        csa.id::text as row_id_text,
+        case
+          when v_sort_key = 'first_name' then coalesce(csa.first_name, '')
+          when v_sort_key = 'last_name' then coalesce(csa.last_name, '')
+          when v_sort_key = 'display_name' then coalesce(csa.display_name, '')
+          when v_sort_key = 'email' then coalesce(csa.email, '')
+          when v_sort_key = 'phone' then coalesce(csa.phone, '')
+          when v_sort_key = 'tms_ref' then coalesce(csa.tms_ref, '')
+          when v_sort_key = '__tms_ref' then coalesce(csa.tms_ref, '')
+          when v_sort_key = 'job_titles_display' then coalesce(csa.job_titles_display, '')
+          when v_sort_key = 'primary_job_title' then coalesce(csa.primary_job_title, '')
+          when v_sort_key = 'pay_method' then coalesce(csa.pay_method, '')
+          when v_sort_key = 'postcode' then coalesce(csa.postcode, '')
+          when v_sort_key = 'town_city' then coalesce(csa.town_city, '')
+          when v_sort_key = 'umbrella_name' then coalesce(csa.umbrella_name, '')
+          when v_sort_key = 'created_at' then coalesce(csa.created_at::text, '')
+          when v_sort_key = 'updated_at' then coalesce(csa.updated_at::text, '')
+          when v_sort_key = 'active' then case when csa.active then 'true' else 'false' end
+          else coalesce(csa.last_name, coalesce(csa.display_name, ''))
+        end as matched_value_text,
+        csa.first_name,
+        csa.last_name,
+        csa.display_name,
+        csa.email,
+        csa.phone,
+        csa.tms_ref,
+        csa.tms_ref_num,
+        csa.job_titles_display,
+        csa.primary_job_title,
+        csa.pay_method,
+        csa.postcode,
+        csa.town_city,
+        csa.umbrella_name,
+        csa.created_at,
+        csa.updated_at,
+        csa.active
+      from public.candidates_summary_activity as csa
+      where (v_ids is null or csa.id::text = any(v_ids))
+        and (v_q is null or (
+          coalesce(csa.first_name, '') ilike ('%' || v_q || '%')
+          or coalesce(csa.last_name, '') ilike ('%' || v_q || '%')
+          or coalesce(csa.display_name, '') ilike ('%' || v_q || '%')
+          or coalesce(csa.email, '') ilike ('%' || v_q || '%')
+          or coalesce(csa.phone, '') ilike ('%' || v_q || '%')
+          or coalesce(csa.tms_ref, '') ilike ('%' || v_q || '%')
+          or coalesce(csa.job_titles_display, '') ilike ('%' || v_q || '%')
+        ))
+        and (v_active is null or csa.active is not distinct from v_active)
+    ),
+    prefixed_rows as (
+      select
+        fr.*
+      from filtered_rows as fr
+      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
+    ),
+    ranked_rows as (
+      select
+        pr.row_id_text,
+        pr.matched_value_text,
+        row_number() over (
+          order by
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then pr.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then pr.updated_at end desc nulls last,
+
+            case when v_sort_key = 'active' and v_sort_dir = 'asc' then case when pr.active then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'active' and v_sort_dir = 'desc' then case when pr.active then 1 else 0 end end desc nulls last,
+
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then pr.tms_ref_num end asc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then pr.tms_ref_num end desc nulls last,
+
+            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then lower(coalesce(pr.first_name, '')) end asc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then lower(coalesce(pr.first_name, '')) end desc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then lower(coalesce(pr.last_name, '')) end asc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then lower(coalesce(pr.last_name, '')) end desc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then lower(coalesce(pr.display_name, '')) end asc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then lower(coalesce(pr.display_name, '')) end desc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'asc' then lower(coalesce(pr.email, '')) end asc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'desc' then lower(coalesce(pr.email, '')) end desc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then lower(coalesce(pr.phone, '')) end asc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then lower(coalesce(pr.phone, '')) end desc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then lower(coalesce(pr.tms_ref, '')) end asc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then lower(coalesce(pr.tms_ref, '')) end desc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then lower(coalesce(pr.job_titles_display, '')) end asc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then lower(coalesce(pr.job_titles_display, '')) end desc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then lower(coalesce(pr.primary_job_title, '')) end asc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then lower(coalesce(pr.primary_job_title, '')) end desc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then lower(coalesce(pr.pay_method, '')) end asc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then lower(coalesce(pr.pay_method, '')) end desc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then lower(coalesce(pr.postcode, '')) end asc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then lower(coalesce(pr.postcode, '')) end desc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then lower(coalesce(pr.town_city, '')) end asc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then lower(coalesce(pr.town_city, '')) end desc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then lower(coalesce(pr.umbrella_name, '')) end asc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then lower(coalesce(pr.umbrella_name, '')) end desc nulls last,
+
+            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
+            pr.row_id_text asc
+        ) - 1 as rn
+      from prefixed_rows as pr
+    )
+    select
+      rr.row_id_text as row_id,
+      rr.rn as ordinal_index,
+      case
+        when p_page_size is null or p_page_size < 1 then 1
+        else floor((rr.rn)::numeric / p_page_size)::int + 1
+      end as target_page,
+      rr.matched_value_text as matched_value,
+      v_dataset_key as dataset_key
+    from ranked_rows as rr
+    order by rr.rn
+    limit 1;
+
+    return;
+  end if;
+
+  if v_section = 'clients' then
+    return query
+    with filtered_rows as (
+      select
+        cli.id::text as row_id_text,
+        case
+          when v_sort_key = 'cli_ref' then coalesce(cli.cli_ref, '')
+          when v_sort_key = 'name' then coalesce(cli.name, '')
+          when v_sort_key = 'invoice_address' then coalesce(cli.invoice_address, '')
+          when v_sort_key = 'primary_invoice_email' then coalesce(cli.primary_invoice_email, '')
+          when v_sort_key = 'ap_phone' then coalesce(cli.ap_phone, '')
+          when v_sort_key = 'vat_chargeable' then case when cli.vat_chargeable then 'true' else 'false' end
+          when v_sort_key = 'payment_terms_days' then coalesce(cli.payment_terms_days::text, '')
+          when v_sort_key = 'mileage_charge_rate' then coalesce(cli.mileage_charge_rate::text, '')
+          when v_sort_key = 'ts_queries_email' then coalesce(cli.ts_queries_email, '')
+          when v_sort_key = 'created_at' then coalesce(cli.created_at::text, '')
+          when v_sort_key = 'updated_at' then coalesce(cli.updated_at::text, '')
+          when v_sort_key = 'contact_title' then coalesce(cli.contact_title, '')
+          when v_sort_key = 'contact_known_as' then coalesce(cli.contact_known_as, '')
+          when v_sort_key = 'contact_forename' then coalesce(cli.contact_forename, '')
+          when v_sort_key = 'contact_surname' then coalesce(cli.contact_surname, '')
+          when v_sort_key = 'contact_job_title' then coalesce(cli.contact_job_title, '')
+          when v_sort_key = 'contact_tel' then coalesce(cli.contact_tel, '')
+          when v_sort_key = 'contact_mobile' then coalesce(cli.contact_mobile, '')
+          when v_sort_key = 'contact_email' then coalesce(cli.contact_email, '')
+          when v_sort_key = 'website' then coalesce(cli.website, '')
+          when v_sort_key = 'notes' then coalesce(cli.notes, '')
+          when v_sort_key = 'rev' then coalesce(cli.rev::text, '')
+          else coalesce(cli.name, '')
+        end as matched_value_text,
+        cli.cli_ref,
+        cli.name,
+        cli.invoice_address,
+        cli.primary_invoice_email,
+        cli.ap_phone,
+        cli.vat_chargeable,
+        cli.payment_terms_days,
+        cli.mileage_charge_rate,
+        cli.ts_queries_email,
+        cli.created_at,
+        cli.updated_at,
+        cli.contact_title,
+        cli.contact_known_as,
+        cli.contact_forename,
+        cli.contact_surname,
+        cli.contact_job_title,
+        cli.contact_tel,
+        cli.contact_mobile,
+        cli.contact_email,
+        cli.website,
+        cli.notes,
+        cli.rev
+      from public.clients as cli
+      where (v_ids is null or cli.id::text = any(v_ids))
+        and (v_q is null or (
+          coalesce(cli.name, '') ilike ('%' || v_q || '%')
+          or coalesce(cli.cli_ref, '') ilike ('%' || v_q || '%')
+          or coalesce(cli.primary_invoice_email, '') ilike ('%' || v_q || '%')
+          or coalesce(cli.invoice_address, '') ilike ('%' || v_q || '%')
+          or coalesce(cli.ap_phone, '') ilike ('%' || v_q || '%')
+          or coalesce(cli.contact_forename, '') ilike ('%' || v_q || '%')
+          or coalesce(cli.contact_surname, '') ilike ('%' || v_q || '%')
+          or coalesce(cli.contact_email, '') ilike ('%' || v_q || '%')
+        ))
+    ),
+    prefixed_rows as (
+      select
+        fr.*
+      from filtered_rows as fr
+      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
+    ),
+    ranked_rows as (
+      select
+        pr.row_id_text,
+        pr.matched_value_text,
+        row_number() over (
+          order by
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then pr.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then pr.updated_at end desc nulls last,
+            case when v_sort_key = 'payment_terms_days' and v_sort_dir = 'asc' then pr.payment_terms_days end asc nulls last,
+            case when v_sort_key = 'payment_terms_days' and v_sort_dir = 'desc' then pr.payment_terms_days end desc nulls last,
+            case when v_sort_key = 'mileage_charge_rate' and v_sort_dir = 'asc' then pr.mileage_charge_rate end asc nulls last,
+            case when v_sort_key = 'mileage_charge_rate' and v_sort_dir = 'desc' then pr.mileage_charge_rate end desc nulls last,
+            case when v_sort_key = 'rev' and v_sort_dir = 'asc' then pr.rev end asc nulls last,
+            case when v_sort_key = 'rev' and v_sort_dir = 'desc' then pr.rev end desc nulls last,
+            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'asc' then case when pr.vat_chargeable then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'desc' then case when pr.vat_chargeable then 1 else 0 end end desc nulls last,
+
+            case when v_sort_key = 'cli_ref' and v_sort_dir = 'asc' then lower(coalesce(pr.cli_ref, '')) end asc nulls last,
+            case when v_sort_key = 'cli_ref' and v_sort_dir = 'desc' then lower(coalesce(pr.cli_ref, '')) end desc nulls last,
+            case when v_sort_key = 'name' and v_sort_dir = 'asc' then lower(coalesce(pr.name, '')) end asc nulls last,
+            case when v_sort_key = 'name' and v_sort_dir = 'desc' then lower(coalesce(pr.name, '')) end desc nulls last,
+            case when v_sort_key = 'invoice_address' and v_sort_dir = 'asc' then lower(coalesce(pr.invoice_address, '')) end asc nulls last,
+            case when v_sort_key = 'invoice_address' and v_sort_dir = 'desc' then lower(coalesce(pr.invoice_address, '')) end desc nulls last,
+            case when v_sort_key = 'primary_invoice_email' and v_sort_dir = 'asc' then lower(coalesce(pr.primary_invoice_email, '')) end asc nulls last,
+            case when v_sort_key = 'primary_invoice_email' and v_sort_dir = 'desc' then lower(coalesce(pr.primary_invoice_email, '')) end desc nulls last,
+            case when v_sort_key = 'ap_phone' and v_sort_dir = 'asc' then lower(coalesce(pr.ap_phone, '')) end asc nulls last,
+            case when v_sort_key = 'ap_phone' and v_sort_dir = 'desc' then lower(coalesce(pr.ap_phone, '')) end desc nulls last,
+            case when v_sort_key = 'ts_queries_email' and v_sort_dir = 'asc' then lower(coalesce(pr.ts_queries_email, '')) end asc nulls last,
+            case when v_sort_key = 'ts_queries_email' and v_sort_dir = 'desc' then lower(coalesce(pr.ts_queries_email, '')) end desc nulls last,
+            case when v_sort_key = 'contact_title' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_title, '')) end asc nulls last,
+            case when v_sort_key = 'contact_title' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_title, '')) end desc nulls last,
+            case when v_sort_key = 'contact_known_as' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_known_as, '')) end asc nulls last,
+            case when v_sort_key = 'contact_known_as' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_known_as, '')) end desc nulls last,
+            case when v_sort_key = 'contact_forename' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_forename, '')) end asc nulls last,
+            case when v_sort_key = 'contact_forename' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_forename, '')) end desc nulls last,
+            case when v_sort_key = 'contact_surname' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_surname, '')) end asc nulls last,
+            case when v_sort_key = 'contact_surname' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_surname, '')) end desc nulls last,
+            case when v_sort_key = 'contact_job_title' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_job_title, '')) end asc nulls last,
+            case when v_sort_key = 'contact_job_title' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_job_title, '')) end desc nulls last,
+            case when v_sort_key = 'contact_tel' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_tel, '')) end asc nulls last,
+            case when v_sort_key = 'contact_tel' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_tel, '')) end desc nulls last,
+            case when v_sort_key = 'contact_mobile' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_mobile, '')) end asc nulls last,
+            case when v_sort_key = 'contact_mobile' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_mobile, '')) end desc nulls last,
+            case when v_sort_key = 'contact_email' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_email, '')) end asc nulls last,
+            case when v_sort_key = 'contact_email' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_email, '')) end desc nulls last,
+            case when v_sort_key = 'website' and v_sort_dir = 'asc' then lower(coalesce(pr.website, '')) end asc nulls last,
+            case when v_sort_key = 'website' and v_sort_dir = 'desc' then lower(coalesce(pr.website, '')) end desc nulls last,
+            case when v_sort_key = 'notes' and v_sort_dir = 'asc' then lower(coalesce(pr.notes, '')) end asc nulls last,
+            case when v_sort_key = 'notes' and v_sort_dir = 'desc' then lower(coalesce(pr.notes, '')) end desc nulls last,
+
+            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
+            pr.row_id_text asc
+        ) - 1 as rn
+      from prefixed_rows as pr
+    )
+    select
+      rr.row_id_text as row_id,
+      rr.rn as ordinal_index,
+      case
+        when p_page_size is null or p_page_size < 1 then 1
+        else floor((rr.rn)::numeric / p_page_size)::int + 1
+      end as target_page,
+      rr.matched_value_text as matched_value,
+      v_dataset_key as dataset_key
+    from ranked_rows as rr
+    order by rr.rn
+    limit 1;
+
+    return;
+  end if;
+
+  if v_section = 'umbrellas' then
+    return query
+    with filtered_rows as (
+      select
+        umb.id::text as row_id_text,
+        case
+          when v_sort_key = 'name' then coalesce(umb.name, '')
+          when v_sort_key = 'email' then coalesce(umb.remittance_email, '')
+          when v_sort_key = 'remittance_email' then coalesce(umb.remittance_email, '')
+          when v_sort_key = 'bank_name' then coalesce(umb.bank_name, '')
+          when v_sort_key = 'sort_code' then coalesce(umb.sort_code, '')
+          when v_sort_key = 'account_number' then coalesce(umb.account_number, '')
+          when v_sort_key = 'vat_chargeable' then case when umb.vat_chargeable then 'true' else 'false' end
+          when v_sort_key = 'active' then case when umb.enabled then 'true' else 'false' end
+          when v_sort_key = 'enabled' then case when umb.enabled then 'true' else 'false' end
+          when v_sort_key = 'created_at' then coalesce(umb.created_at::text, '')
+          when v_sort_key = 'updated_at' then coalesce(umb.updated_at::text, '')
+          when v_sort_key = 'company_number' then coalesce(umb.company_number, '')
+          when v_sort_key = 'address_line1' then coalesce(umb.address_line1, '')
+          when v_sort_key = 'address_line2' then coalesce(umb.address_line2, '')
+          when v_sort_key = 'address_line3' then coalesce(umb.address_line3, '')
+          when v_sort_key = 'town_city' then coalesce(umb.town_city, '')
+          when v_sort_key = 'county' then coalesce(umb.county, '')
+          when v_sort_key = 'postcode' then coalesce(umb.postcode, '')
+          when v_sort_key = 'country' then coalesce(umb.country, '')
+          else coalesce(umb.name, '')
+        end as matched_value_text,
+        umb.name,
+        umb.remittance_email,
+        umb.bank_name,
+        umb.sort_code,
+        umb.account_number,
+        umb.vat_chargeable,
+        umb.enabled,
+        umb.created_at,
+        umb.updated_at,
+        umb.company_number,
+        umb.address_line1,
+        umb.address_line2,
+        umb.address_line3,
+        umb.town_city,
+        umb.county,
+        umb.postcode,
+        umb.country
+      from public.umbrellas as umb
+      where (v_ids is null or umb.id::text = any(v_ids))
+        and (v_q is null or (
+          coalesce(umb.name, '') ilike ('%' || v_q || '%')
+          or coalesce(umb.remittance_email, '') ilike ('%' || v_q || '%')
+          or coalesce(umb.bank_name, '') ilike ('%' || v_q || '%')
+          or coalesce(umb.sort_code, '') ilike ('%' || v_q || '%')
+          or coalesce(umb.account_number, '') ilike ('%' || v_q || '%')
+          or coalesce(umb.company_number, '') ilike ('%' || v_q || '%')
+        ))
+        and (v_enabled is null or umb.enabled is not distinct from v_enabled)
+    ),
+    prefixed_rows as (
+      select
+        fr.*
+      from filtered_rows as fr
+      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
+    ),
+    ranked_rows as (
+      select
+        pr.row_id_text,
+        pr.matched_value_text,
+        row_number() over (
+          order by
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then pr.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then pr.updated_at end desc nulls last,
+            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'asc' then case when pr.vat_chargeable then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'desc' then case when pr.vat_chargeable then 1 else 0 end end desc nulls last,
+            case when (v_sort_key = 'enabled' or v_sort_key = 'active') and v_sort_dir = 'asc' then case when pr.enabled then 1 else 0 end end asc nulls last,
+            case when (v_sort_key = 'enabled' or v_sort_key = 'active') and v_sort_dir = 'desc' then case when pr.enabled then 1 else 0 end end desc nulls last,
+
+            case when v_sort_key = 'name' and v_sort_dir = 'asc' then lower(coalesce(pr.name, '')) end asc nulls last,
+            case when v_sort_key = 'name' and v_sort_dir = 'desc' then lower(coalesce(pr.name, '')) end desc nulls last,
+            case when (v_sort_key = 'email' or v_sort_key = 'remittance_email') and v_sort_dir = 'asc' then lower(coalesce(pr.remittance_email, '')) end asc nulls last,
+            case when (v_sort_key = 'email' or v_sort_key = 'remittance_email') and v_sort_dir = 'desc' then lower(coalesce(pr.remittance_email, '')) end desc nulls last,
+            case when v_sort_key = 'bank_name' and v_sort_dir = 'asc' then lower(coalesce(pr.bank_name, '')) end asc nulls last,
+            case when v_sort_key = 'bank_name' and v_sort_dir = 'desc' then lower(coalesce(pr.bank_name, '')) end desc nulls last,
+            case when v_sort_key = 'sort_code' and v_sort_dir = 'asc' then lower(coalesce(pr.sort_code, '')) end asc nulls last,
+            case when v_sort_key = 'sort_code' and v_sort_dir = 'desc' then lower(coalesce(pr.sort_code, '')) end desc nulls last,
+            case when v_sort_key = 'account_number' and v_sort_dir = 'asc' then lower(coalesce(pr.account_number, '')) end asc nulls last,
+            case when v_sort_key = 'account_number' and v_sort_dir = 'desc' then lower(coalesce(pr.account_number, '')) end desc nulls last,
+            case when v_sort_key = 'company_number' and v_sort_dir = 'asc' then lower(coalesce(pr.company_number, '')) end asc nulls last,
+            case when v_sort_key = 'company_number' and v_sort_dir = 'desc' then lower(coalesce(pr.company_number, '')) end desc nulls last,
+            case when v_sort_key = 'address_line1' and v_sort_dir = 'asc' then lower(coalesce(pr.address_line1, '')) end asc nulls last,
+            case when v_sort_key = 'address_line1' and v_sort_dir = 'desc' then lower(coalesce(pr.address_line1, '')) end desc nulls last,
+            case when v_sort_key = 'address_line2' and v_sort_dir = 'asc' then lower(coalesce(pr.address_line2, '')) end asc nulls last,
+            case when v_sort_key = 'address_line2' and v_sort_dir = 'desc' then lower(coalesce(pr.address_line2, '')) end desc nulls last,
+            case when v_sort_key = 'address_line3' and v_sort_dir = 'asc' then lower(coalesce(pr.address_line3, '')) end asc nulls last,
+            case when v_sort_key = 'address_line3' and v_sort_dir = 'desc' then lower(coalesce(pr.address_line3, '')) end desc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then lower(coalesce(pr.town_city, '')) end asc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then lower(coalesce(pr.town_city, '')) end desc nulls last,
+            case when v_sort_key = 'county' and v_sort_dir = 'asc' then lower(coalesce(pr.county, '')) end asc nulls last,
+            case when v_sort_key = 'county' and v_sort_dir = 'desc' then lower(coalesce(pr.county, '')) end desc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then lower(coalesce(pr.postcode, '')) end asc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then lower(coalesce(pr.postcode, '')) end desc nulls last,
+            case when v_sort_key = 'country' and v_sort_dir = 'asc' then lower(coalesce(pr.country, '')) end asc nulls last,
+            case when v_sort_key = 'country' and v_sort_dir = 'desc' then lower(coalesce(pr.country, '')) end desc nulls last,
+
+            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
+            pr.row_id_text asc
+        ) - 1 as rn
+      from prefixed_rows as pr
+    )
+    select
+      rr.row_id_text as row_id,
+      rr.rn as ordinal_index,
+      case
+        when p_page_size is null or p_page_size < 1 then 1
+        else floor((rr.rn)::numeric / p_page_size)::int + 1
+      end as target_page,
+      rr.matched_value_text as matched_value,
+      v_dataset_key as dataset_key
+    from ranked_rows as rr
+    order by rr.rn
+    limit 1;
+
+    return;
+  end if;
+
+  if v_section = 'contracts' then
+    return query
+    with filtered_rows as (
+      select
+        ctr.id::text as row_id_text,
+        case
+          when v_sort_key = 'candidate_display' then coalesce(cand.display_name, '')
+          when v_sort_key = 'client_name' then coalesce(cli.name, '')
+          when v_sort_key = 'role' then coalesce(ctr.role, '')
+          when v_sort_key = 'band' then coalesce(ctr.band, '')
+          when v_sort_key = 'display_site' then coalesce(ctr.display_site, '')
+          when v_sort_key = 'ward_hint' then coalesce(ctr.ward_hint, '')
+          when v_sort_key = 'start_date' then coalesce(ctr.start_date::text, '')
+          when v_sort_key = 'end_date' then coalesce(ctr.end_date::text, '')
+          when v_sort_key = 'pay_method_snapshot' then coalesce(ctr.pay_method_snapshot, '')
+          when v_sort_key = 'default_submission_mode' then coalesce(ctr.default_submission_mode, '')
+          when v_sort_key = 'week_ending_weekday_snapshot' then coalesce(ctr.week_ending_weekday_snapshot::text, '')
+          when v_sort_key = 'auto_invoice' then case when ctr.auto_invoice then 'true' else 'false' end
+          when v_sort_key = 'require_reference_to_pay' then case when ctr.require_reference_to_pay then 'true' else 'false' end
+          when v_sort_key = 'require_reference_to_invoice' then case when ctr.require_reference_to_invoice then 'true' else 'false' end
+          when v_sort_key = 'created_at' then coalesce(ctr.created_at::text, '')
+          when v_sort_key = 'updated_at' then coalesce(ctr.updated_at::text, '')
+          else coalesce(cand.display_name, coalesce(cli.name, coalesce(ctr.role, '')))
+        end as matched_value_text,
+        cand.display_name as candidate_display,
+        cli.name as client_name,
+        ctr.role,
+        ctr.band,
+        ctr.display_site,
+        ctr.ward_hint,
+        ctr.start_date,
+        ctr.end_date,
+        ctr.pay_method_snapshot,
+        ctr.default_submission_mode,
+        ctr.week_ending_weekday_snapshot,
+        ctr.auto_invoice,
+        ctr.require_reference_to_pay,
+        ctr.require_reference_to_invoice,
+        ctr.created_at,
+        ctr.updated_at,
+        ctr.candidate_id
+      from public.contracts as ctr
+      left join public.candidates as cand
+        on cand.id = ctr.candidate_id
+      left join public.clients as cli
+        on cli.id = ctr.client_id
+      where (v_ids is null or ctr.id::text = any(v_ids))
+        and (v_client_id is null or ctr.client_id = v_client_id)
+        and (v_candidate_id is null or ctr.candidate_id = v_candidate_id)
+        and (v_role is null or ctr.role = v_role)
+        and (v_band is null or ctr.band = v_band)
+        and (
+          v_contract_status is null
+          or (
+            v_contract_status = 'ACTIVE'
+            and ctr.candidate_id is not null
+            and ctr.start_date <= v_today_uk
+            and (ctr.end_date is null or ctr.end_date >= v_today_uk)
+          )
+          or (
+            v_contract_status = 'UNASSIGNED'
+            and ctr.candidate_id is null
+            and ctr.start_date <= v_today_uk
+            and (ctr.end_date is null or ctr.end_date >= v_today_uk)
+          )
+          or (
+            v_contract_status = 'COMPLETED'
+            and ctr.end_date is not null
+            and ctr.end_date < v_today_uk
+          )
+        )
+        and (v_q is null or (
+          coalesce(cli.name, '') ilike ('%' || v_q || '%')
+          or coalesce(cand.display_name, '') ilike ('%' || v_q || '%')
+          or coalesce(cand.first_name, '') ilike ('%' || v_q || '%')
+          or coalesce(cand.last_name, '') ilike ('%' || v_q || '%')
+          or coalesce(ctr.role, '') ilike ('%' || v_q || '%')
+          or coalesce(ctr.band, '') ilike ('%' || v_q || '%')
+          or coalesce(ctr.display_site, '') ilike ('%' || v_q || '%')
+          or coalesce(ctr.ward_hint, '') ilike ('%' || v_q || '%')
+        ))
+    ),
+    prefixed_rows as (
+      select
+        fr.*
+      from filtered_rows as fr
+      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
+    ),
+    ranked_rows as (
+      select
+        pr.row_id_text,
+        pr.matched_value_text,
+        row_number() over (
+          order by
+            case when v_sort_key = 'start_date' and v_sort_dir = 'asc' then pr.start_date end asc nulls last,
+            case when v_sort_key = 'start_date' and v_sort_dir = 'desc' then pr.start_date end desc nulls last,
+            case when v_sort_key = 'end_date' and v_sort_dir = 'asc' then pr.end_date end asc nulls last,
+            case when v_sort_key = 'end_date' and v_sort_dir = 'desc' then pr.end_date end desc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then pr.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then pr.updated_at end desc nulls last,
+            case when v_sort_key = 'week_ending_weekday_snapshot' and v_sort_dir = 'asc' then pr.week_ending_weekday_snapshot end asc nulls last,
+            case when v_sort_key = 'week_ending_weekday_snapshot' and v_sort_dir = 'desc' then pr.week_ending_weekday_snapshot end desc nulls last,
+            case when v_sort_key = 'auto_invoice' and v_sort_dir = 'asc' then case when pr.auto_invoice then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'auto_invoice' and v_sort_dir = 'desc' then case when pr.auto_invoice then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'require_reference_to_pay' and v_sort_dir = 'asc' then case when pr.require_reference_to_pay then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'require_reference_to_pay' and v_sort_dir = 'desc' then case when pr.require_reference_to_pay then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'require_reference_to_invoice' and v_sort_dir = 'asc' then case when pr.require_reference_to_invoice then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'require_reference_to_invoice' and v_sort_dir = 'desc' then case when pr.require_reference_to_invoice then 1 else 0 end end desc nulls last,
+
+            case when v_sort_key = 'candidate_display' and v_sort_dir = 'asc' then lower(coalesce(pr.candidate_display, '')) end asc nulls last,
+            case when v_sort_key = 'candidate_display' and v_sort_dir = 'desc' then lower(coalesce(pr.candidate_display, '')) end desc nulls last,
+            case when v_sort_key = 'client_name' and v_sort_dir = 'asc' then lower(coalesce(pr.client_name, '')) end asc nulls last,
+            case when v_sort_key = 'client_name' and v_sort_dir = 'desc' then lower(coalesce(pr.client_name, '')) end desc nulls last,
+            case when v_sort_key = 'role' and v_sort_dir = 'asc' then lower(coalesce(pr.role, '')) end asc nulls last,
+            case when v_sort_key = 'role' and v_sort_dir = 'desc' then lower(coalesce(pr.role, '')) end desc nulls last,
+            case when v_sort_key = 'band' and v_sort_dir = 'asc' then lower(coalesce(pr.band, '')) end asc nulls last,
+            case when v_sort_key = 'band' and v_sort_dir = 'desc' then lower(coalesce(pr.band, '')) end desc nulls last,
+            case when v_sort_key = 'display_site' and v_sort_dir = 'asc' then lower(coalesce(pr.display_site, '')) end asc nulls last,
+            case when v_sort_key = 'display_site' and v_sort_dir = 'desc' then lower(coalesce(pr.display_site, '')) end desc nulls last,
+            case when v_sort_key = 'ward_hint' and v_sort_dir = 'asc' then lower(coalesce(pr.ward_hint, '')) end asc nulls last,
+            case when v_sort_key = 'ward_hint' and v_sort_dir = 'desc' then lower(coalesce(pr.ward_hint, '')) end desc nulls last,
+            case when v_sort_key = 'pay_method_snapshot' and v_sort_dir = 'asc' then lower(coalesce(pr.pay_method_snapshot, '')) end asc nulls last,
+            case when v_sort_key = 'pay_method_snapshot' and v_sort_dir = 'desc' then lower(coalesce(pr.pay_method_snapshot, '')) end desc nulls last,
+            case when v_sort_key = 'default_submission_mode' and v_sort_dir = 'asc' then lower(coalesce(pr.default_submission_mode, '')) end asc nulls last,
+            case when v_sort_key = 'default_submission_mode' and v_sort_dir = 'desc' then lower(coalesce(pr.default_submission_mode, '')) end desc nulls last,
+
+            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
+            pr.row_id_text asc
+        ) - 1 as rn
+      from prefixed_rows as pr
+    )
+    select
+      rr.row_id_text as row_id,
+      rr.rn as ordinal_index,
+      case
+        when p_page_size is null or p_page_size < 1 then 1
+        else floor((rr.rn)::numeric / p_page_size)::int + 1
+      end as target_page,
+      rr.matched_value_text as matched_value,
+      v_dataset_key as dataset_key
+    from ranked_rows as rr
+    order by rr.rn
+    limit 1;
+
+    return;
+  end if;
+
+  if v_section = 'timesheets' then
+    return query
+    with filtered_rows as (
+      select
+        coalesce(vts.timesheet_id::text, vts.contract_week_id::text) as row_id_text,
+        case
+          when v_sort_key = 'booking_id' then coalesce(vts.booking_id, '')
+          when v_sort_key = 'candidate_name' then coalesce(vts.candidate_name, '')
+          when v_sort_key = 'client_name' then coalesce(vts.client_name, '')
+          when v_sort_key = 'hospital_norm' then coalesce(vts.hospital_norm, '')
+          when v_sort_key = 'week_ending_date' then coalesce(vts.week_ending_date::text, '')
+          when v_sort_key = 'route_display' then coalesce(vts.route_display, '')
+          when v_sort_key = 'route_type' then coalesce(vts.route_type, '')
+          when v_sort_key = 'tools_stage' then coalesce(vts.tools_stage, '')
+          when v_sort_key = 'processing_status_display' then coalesce(vts.processing_status_display, '')
+          when v_sort_key = 'total_hours' then coalesce(vts.total_hours::text, '')
+          when v_sort_key = 'total_pay_ex_vat' then coalesce(vts.total_pay_ex_vat::text, '')
+          when v_sort_key = 'total_charge_ex_vat' then coalesce(vts.total_charge_ex_vat::text, '')
+          when v_sort_key = 'margin_ex_vat' then coalesce(vts.margin_ex_vat::text, '')
+          when v_sort_key = 'pay_paid_at_utc' then coalesce(vts.pay_paid_at_utc::text, '')
+          else coalesce(vts.candidate_name, coalesce(vts.client_name, coalesce(vts.booking_id, '')))
+        end as matched_value_text,
+        vts.booking_id,
+        vts.candidate_name,
+        vts.client_name,
+        vts.hospital_norm,
+        vts.week_ending_date,
+        vts.route_display,
+        vts.route_type,
+        vts.tools_stage,
+        vts.processing_status_display,
+        vts.total_hours,
+        vts.total_pay_ex_vat,
+        vts.total_charge_ex_vat,
+        vts.margin_ex_vat,
+        vts.pay_paid_at_utc
+      from public.v_timesheets_summary as vts
+      where (
+          v_ids is null
+          or vts.timesheet_id::text = any(v_ids)
+          or vts.contract_week_id::text = any(v_ids)
+        )
+        and (v_client_id is null or vts.client_id = v_client_id)
+        and (v_candidate_id is null or vts.candidate_id = v_candidate_id)
+        and (
+          v_q is null
+          or coalesce(vts.candidate_name, '') ilike ('%' || v_q || '%')
+          or coalesce(vts.client_name, '') ilike ('%' || v_q || '%')
+          or coalesce(vts.booking_id, '') ilike ('%' || v_q || '%')
+          or coalesce(vts.occupant_key_norm, '') ilike ('%' || v_q || '%')
+          or coalesce(vts.hospital_norm, '') ilike ('%' || v_q || '%')
+        )
+        and (
+          v_route_type is null
+          or (
+            v_route_type = 'ELECTRONIC'
+            and upper(coalesce(vts.route_type, '')) in ('DAILY_ELECTRONIC', 'WEEKLY_ELECTRONIC')
+          )
+          or (
+            v_route_type = 'MANUAL'
+            and upper(coalesce(vts.route_type, '')) in ('DAILY_MANUAL', 'WEEKLY_MANUAL')
+          )
+          or (
+            v_route_type = 'NHSP'
+            and upper(coalesce(vts.route_type, '')) in ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
+          )
+          or (
+            v_route_type = 'HEALTHROSTER'
+            and upper(coalesce(vts.route_type, '')) = 'WEEKLY_HEALTHROSTER'
+          )
+          or (
+            v_route_type = 'QR'
+            and coalesce(vts.is_qr, false) = true
+          )
+          or upper(coalesce(vts.route_type, '')) = v_route_type
+        )
+        and (
+          v_sheet_scope is null
+          or upper(coalesce(vts.sheet_scope, '')) = v_sheet_scope
+        )
+        and (
+          v_issues_filter is null
+          or (
+            v_issues_filter = 'NO_MATCH_ID'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'NO MATCH TO CANDIDATE/CLIENT'
+            )
+          )
+          or (
+            v_issues_filter = 'RATE_MISSING'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'RATE MISSING'
+            )
+          )
+          or (
+            v_issues_filter = 'PAY_CHAN_MISS'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'PAY CHANNEL MISSING'
+            )
+          )
+          or (
+            v_issues_filter = 'AWAITING_HR_VALIDATION'
+            and (
+              upper(coalesce(vts.tools_stage, '')) = 'AWAITING_HR_VALIDATION'
+              or exists (
+                select 1
+                from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+                where upper(coalesce(ic.code, '')) = 'AWAITING HR VALIDATION'
+              )
+            )
+          )
+          or (
+            v_issues_filter = 'HR_HOURS_MISMATCH'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'HOURS MISMATCH (HEALTHROSTER)'
+            )
+          )
+          or (
+            v_issues_filter = 'HR_HOURS_MISSING'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'HR HOURS MISSING'
+            )
+          )
+          or (
+            v_issues_filter = 'DUPLICATE_CONTRACTS'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'DUPLICATE CONTRACTS'
+            )
+          )
+          or (
+            v_issues_filter = 'TIMESHEET_EVIDENCE'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'TIMESHEET EVIDENCE MISSING'
+            )
+          )
+          or (
+            v_issues_filter = 'EXPENSES_EVIDENCE'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'EXPENSES EVIDENCE MISSING'
+            )
+          )
+          or (
+            v_issues_filter = 'MILEAGE_EVIDENCE'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'MILEAGE EVIDENCE MISSING'
+            )
+          )
+          or (
+            v_issues_filter = 'REFERENCE_MISSING'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'REFERENCE MISSING'
+            )
+          )
+          or (
+            v_issues_filter = 'REFS_PDF_INVALID'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'REFS - TIMESHEET PDF INVALID'
+            )
+          )
+          or (
+            v_issues_filter = 'VALIDATION'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'VALIDATION'
+            )
+          )
+          or (
+            v_issues_filter = 'ON_HOLD'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'ON HOLD'
+            )
+          )
+          or (
+            v_issues_filter = 'AUTHORISATION'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'AWAITING AUTHORISATION'
+            )
+          )
+          or (
+            v_issues_filter = 'QR_NOT_ISSUED'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'QR NOT ISSUED'
+            )
+          )
+          or (
+            v_issues_filter = 'QR_AWAITING_SIGNATURE'
+            and exists (
+              select 1
+              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
+              where upper(coalesce(ic.code, '')) = 'QR AWAITING SIGNATURE'
+            )
+          )
+        )
+    ),
+    prefixed_rows as (
+      select
+        fr.*
+      from filtered_rows as fr
+      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
+    ),
+    ranked_rows as (
+      select
+        pr.row_id_text,
+        pr.matched_value_text,
+        row_number() over (
+          order by
+            case when v_sort_key = 'week_ending_date' and v_sort_dir = 'asc' then pr.week_ending_date end asc nulls last,
+            case when v_sort_key = 'week_ending_date' and v_sort_dir = 'desc' then pr.week_ending_date end desc nulls last,
+            case when v_sort_key = 'total_hours' and v_sort_dir = 'asc' then pr.total_hours end asc nulls last,
+            case when v_sort_key = 'total_hours' and v_sort_dir = 'desc' then pr.total_hours end desc nulls last,
+            case when v_sort_key = 'total_pay_ex_vat' and v_sort_dir = 'asc' then pr.total_pay_ex_vat end asc nulls last,
+            case when v_sort_key = 'total_pay_ex_vat' and v_sort_dir = 'desc' then pr.total_pay_ex_vat end desc nulls last,
+            case when v_sort_key = 'total_charge_ex_vat' and v_sort_dir = 'asc' then pr.total_charge_ex_vat end asc nulls last,
+            case when v_sort_key = 'total_charge_ex_vat' and v_sort_dir = 'desc' then pr.total_charge_ex_vat end desc nulls last,
+            case when v_sort_key = 'margin_ex_vat' and v_sort_dir = 'asc' then pr.margin_ex_vat end asc nulls last,
+            case when v_sort_key = 'margin_ex_vat' and v_sort_dir = 'desc' then pr.margin_ex_vat end desc nulls last,
+            case when v_sort_key = 'pay_paid_at_utc' and v_sort_dir = 'asc' then pr.pay_paid_at_utc end asc nulls last,
+            case when v_sort_key = 'pay_paid_at_utc' and v_sort_dir = 'desc' then pr.pay_paid_at_utc end desc nulls last,
+
+            case when v_sort_key = 'booking_id' and v_sort_dir = 'asc' then lower(coalesce(pr.booking_id, '')) end asc nulls last,
+            case when v_sort_key = 'booking_id' and v_sort_dir = 'desc' then lower(coalesce(pr.booking_id, '')) end desc nulls last,
+            case when v_sort_key = 'candidate_name' and v_sort_dir = 'asc' then lower(coalesce(pr.candidate_name, '')) end asc nulls last,
+            case when v_sort_key = 'candidate_name' and v_sort_dir = 'desc' then lower(coalesce(pr.candidate_name, '')) end desc nulls last,
+            case when v_sort_key = 'client_name' and v_sort_dir = 'asc' then lower(coalesce(pr.client_name, '')) end asc nulls last,
+            case when v_sort_key = 'client_name' and v_sort_dir = 'desc' then lower(coalesce(pr.client_name, '')) end desc nulls last,
+            case when v_sort_key = 'hospital_norm' and v_sort_dir = 'asc' then lower(coalesce(pr.hospital_norm, '')) end asc nulls last,
+            case when v_sort_key = 'hospital_norm' and v_sort_dir = 'desc' then lower(coalesce(pr.hospital_norm, '')) end desc nulls last,
+            case when v_sort_key = 'route_display' and v_sort_dir = 'asc' then lower(coalesce(pr.route_display, '')) end asc nulls last,
+            case when v_sort_key = 'route_display' and v_sort_dir = 'desc' then lower(coalesce(pr.route_display, '')) end desc nulls last,
+            case when v_sort_key = 'route_type' and v_sort_dir = 'asc' then lower(coalesce(pr.route_type, '')) end asc nulls last,
+            case when v_sort_key = 'route_type' and v_sort_dir = 'desc' then lower(coalesce(pr.route_type, '')) end desc nulls last,
+            case when v_sort_key = 'tools_stage' and v_sort_dir = 'asc' then lower(coalesce(pr.tools_stage, '')) end asc nulls last,
+            case when v_sort_key = 'tools_stage' and v_sort_dir = 'desc' then lower(coalesce(pr.tools_stage, '')) end desc nulls last,
+            case when v_sort_key = 'processing_status_display' and v_sort_dir = 'asc' then lower(coalesce(pr.processing_status_display, '')) end asc nulls last,
+            case when v_sort_key = 'processing_status_display' and v_sort_dir = 'desc' then lower(coalesce(pr.processing_status_display, '')) end desc nulls last,
+
+            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
+            pr.row_id_text asc
+        ) - 1 as rn
+      from prefixed_rows as pr
+    )
+    select
+      rr.row_id_text as row_id,
+      rr.rn as ordinal_index,
+      case
+        when p_page_size is null or p_page_size < 1 then 1
+        else floor((rr.rn)::numeric / p_page_size)::int + 1
+      end as target_page,
+      rr.matched_value_text as matched_value,
+      v_dataset_key as dataset_key
+    from ranked_rows as rr
+    order by rr.rn
+    limit 1;
+
+    return;
+  end if;
+
+  if v_section = 'invoices' then
+    return query
+    with filtered_rows as (
+      select
+        inv.id::text as row_id_text,
+        case
+          when v_sort_key = 'invoice_no' then coalesce(inv.invoice_no, '')
+          when v_sort_key = 'status' then coalesce(inv.status::text, '')
+          when v_sort_key = 'status_date_utc' then coalesce(inv.status_date_utc::text, '')
+          when v_sort_key = 'issued_at_utc' then coalesce(inv.issued_at_utc::text, '')
+          when v_sort_key = 'due_at_utc' then coalesce(inv.due_at_utc::text, '')
+          when v_sort_key = 'paid_at_utc' then coalesce(inv.paid_at_utc::text, '')
+          when v_sort_key = 'subtotal_ex_vat' then coalesce(inv.subtotal_ex_vat::text, '')
+          when v_sort_key = 'vat_amount' then coalesce(inv.vat_amount::text, '')
+          when v_sort_key = 'total_inc_vat' then coalesce(inv.total_inc_vat::text, '')
+          when v_sort_key = 'created_at' then coalesce(inv.created_at::text, '')
+          else coalesce(inv.invoice_no, '')
+        end as matched_value_text,
+        inv.invoice_no,
+        inv.status,
+        inv.status_date_utc,
+        inv.issued_at_utc,
+        inv.due_at_utc,
+        inv.paid_at_utc,
+        inv.subtotal_ex_vat,
+        inv.vat_amount,
+        inv.total_inc_vat,
+        inv.created_at
+      from public.invoices as inv
+      where (v_ids is null or inv.id::text = any(v_ids))
+        and (
+          v_status_list is null
+          or upper(coalesce(inv.status::text, '')) = any(v_status_list)
+        )
+        and (
+          v_q is null
+          or coalesce(inv.invoice_no, '') ilike ('%' || v_q || '%')
+        )
+        and (
+          v_issued_from is null
+          or (inv.issued_at_utc at time zone 'Europe/London')::date >= v_issued_from
+        )
+        and (
+          v_issued_to is null
+          or (inv.issued_at_utc at time zone 'Europe/London')::date <= v_issued_to
+        )
+        and (
+          (v_week_ending_from is null and v_week_ending_to is null)
+          or exists (
+            select 1
+            from public.invoice_lines as il
+            join public.timesheets as ts
+              on ts.timesheet_id = il.timesheet_id
+            where il.invoice_id = inv.id
+              and (v_week_ending_from is null or ts.week_ending_date >= v_week_ending_from)
+              and (v_week_ending_to is null or ts.week_ending_date <= v_week_ending_to)
+          )
+        )
+    ),
+    prefixed_rows as (
+      select
+        fr.*
+      from filtered_rows as fr
+      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
+    ),
+    ranked_rows as (
+      select
+        pr.row_id_text,
+        pr.matched_value_text,
+        row_number() over (
+          order by
+            case when v_sort_key = 'issued_at_utc' and v_sort_dir = 'asc' then pr.issued_at_utc end asc nulls last,
+            case when v_sort_key = 'issued_at_utc' and v_sort_dir = 'desc' then pr.issued_at_utc end desc nulls last,
+            case when v_sort_key = 'due_at_utc' and v_sort_dir = 'asc' then pr.due_at_utc end asc nulls last,
+            case when v_sort_key = 'due_at_utc' and v_sort_dir = 'desc' then pr.due_at_utc end desc nulls last,
+            case when v_sort_key = 'paid_at_utc' and v_sort_dir = 'asc' then pr.paid_at_utc end asc nulls last,
+            case when v_sort_key = 'paid_at_utc' and v_sort_dir = 'desc' then pr.paid_at_utc end desc nulls last,
+            case when v_sort_key = 'status_date_utc' and v_sort_dir = 'asc' then pr.status_date_utc end asc nulls last,
+            case when v_sort_key = 'status_date_utc' and v_sort_dir = 'desc' then pr.status_date_utc end desc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
+            case when v_sort_key = 'subtotal_ex_vat' and v_sort_dir = 'asc' then pr.subtotal_ex_vat end asc nulls last,
+            case when v_sort_key = 'subtotal_ex_vat' and v_sort_dir = 'desc' then pr.subtotal_ex_vat end desc nulls last,
+            case when v_sort_key = 'vat_amount' and v_sort_dir = 'asc' then pr.vat_amount end asc nulls last,
+            case when v_sort_key = 'vat_amount' and v_sort_dir = 'desc' then pr.vat_amount end desc nulls last,
+            case when v_sort_key = 'total_inc_vat' and v_sort_dir = 'asc' then pr.total_inc_vat end asc nulls last,
+            case when v_sort_key = 'total_inc_vat' and v_sort_dir = 'desc' then pr.total_inc_vat end desc nulls last,
+
+            case when v_sort_key = 'invoice_no' and v_sort_dir = 'asc' then lower(coalesce(pr.invoice_no, '')) end asc nulls last,
+            case when v_sort_key = 'invoice_no' and v_sort_dir = 'desc' then lower(coalesce(pr.invoice_no, '')) end desc nulls last,
+            case when v_sort_key = 'status' and v_sort_dir = 'asc' then lower(coalesce(pr.status::text, '')) end asc nulls last,
+            case when v_sort_key = 'status' and v_sort_dir = 'desc' then lower(coalesce(pr.status::text, '')) end desc nulls last,
+
+            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
+            pr.row_id_text asc
+        ) - 1 as rn
+      from prefixed_rows as pr
+    )
+    select
+      rr.row_id_text as row_id,
+      rr.rn as ordinal_index,
+      case
+        when p_page_size is null or p_page_size < 1 then 1
+        else floor((rr.rn)::numeric / p_page_size)::int + 1
+      end as target_page,
+      rr.matched_value_text as matched_value,
+      v_dataset_key as dataset_key
+    from ranked_rows as rr
+    order by rr.rn
+    limit 1;
+
+    return;
+  end if;
+
+  return;
+end
+$function$;
