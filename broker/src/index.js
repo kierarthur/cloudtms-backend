@@ -15524,7 +15524,145 @@ async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear timesheet payment snooze')));
   }
 }
+async function handleBankingPaySnoozeClear(env, req, user) {
+  const authUser = user || await requireUser(env, req, ['admin']);
+  if (!authUser) return withCORS(env, req, unauthorized());
 
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const snoozeId = trimStr(body.snooze_id || body.snoozeId);
+  if (!snoozeId) {
+    return withCORS(env, req, badRequest('snooze_id is required'));
+  }
+  if (!uuidRe.test(snoozeId)) {
+    return withCORS(env, req, badRequest('snooze_id must be a UUID'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const fetchPayState = async (currentTimesheetId) => {
+    const tsId = trimStr(currentTimesheetId);
+    if (!tsId || !uuidRe.test(tsId)) return null;
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: tsId,
+        p_actor_user_id: authUser.id
+      });
+      return unwrapRpc(ps0, 'timesheet_pay_state');
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchStoredSnoozeById = async (id) => {
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?id=eq.${enc(id)}` +
+          `&select=id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,source_ref,snooze_kind,snooze_until_date,note,cleared_at_utc,created_at_utc,updated_at_utc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  const storedRow = await fetchStoredSnoozeById(snoozeId);
+
+  if (!storedRow) {
+    return withCORS(env, req, ok({
+      ok: true,
+      snooze_id: snoozeId,
+      already_cleared: true,
+      cleared: true,
+      candidate_id: null,
+      timesheet_id: null,
+      booking_id: null,
+      segment_id: null,
+      segment_stable_key: null,
+      source_ref: null,
+      snooze_kind: null,
+      snooze_until_date: null,
+      note: null,
+      pay_state: null
+    }));
+  }
+
+  if (storedRow.cleared_at_utc) {
+    const payState = await fetchPayState(storedRow.timesheet_id);
+    return withCORS(env, req, ok({
+      ok: true,
+      snooze_id: trimStr(storedRow.id) || snoozeId,
+      already_cleared: true,
+      cleared: true,
+      candidate_id: trimStr(storedRow.candidate_id) || null,
+      timesheet_id: trimStr(storedRow.timesheet_id) || null,
+      booking_id: trimStr(storedRow.booking_id) || null,
+      segment_id: trimStr(storedRow.segment_id) || null,
+      segment_stable_key: trimStr(storedRow.segment_stable_key) || null,
+      source_ref: trimStr(storedRow.source_ref) || null,
+      snooze_kind: trimStr(storedRow.snooze_kind).toUpperCase() || null,
+      snooze_until_date: trimStr(storedRow.snooze_until_date) || null,
+      note: trimStr(storedRow.note) || null,
+      pay_state: payState
+    }));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
+      p_snooze_id: snoozeId,
+      p_actor_user_id: authUser.id
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_snooze_clear');
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const payState = await fetchPayState(storedRow.timesheet_id);
+
+    return withCORS(env, req, ok({
+      ...payloadObj,
+      ok: true,
+      snooze_id: trimStr(payloadObj.snooze_id || storedRow.id || snoozeId) || snoozeId,
+      already_cleared: false,
+      cleared: true,
+      candidate_id: trimStr(payloadObj.candidate_id || storedRow.candidate_id) || null,
+      timesheet_id: trimStr(payloadObj.timesheet_id || storedRow.timesheet_id) || null,
+      booking_id: trimStr(payloadObj.booking_id || storedRow.booking_id) || null,
+      segment_id: trimStr(payloadObj.segment_id || storedRow.segment_id) || null,
+      segment_stable_key: trimStr(payloadObj.segment_stable_key || storedRow.segment_stable_key) || null,
+      source_ref: trimStr(payloadObj.source_ref || storedRow.source_ref) || null,
+      snooze_kind: trimStr(payloadObj.snooze_kind || storedRow.snooze_kind).toUpperCase() || null,
+      snooze_until_date: trimStr(payloadObj.snooze_until_date || storedRow.snooze_until_date) || null,
+      note: trimStr(
+        Object.prototype.hasOwnProperty.call(payloadObj, 'note')
+          ? payloadObj.note
+          : storedRow.note
+      ) || null,
+      pay_state: payState
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear snooze')));
+  }
+}
 
 async function handleBankingBankNameCheckSetOverride(env, req, user) {
   let body = null;
@@ -54450,22 +54588,116 @@ async function buildHealthRosterPdf(env, invoiceId) {
     let body;
     try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-    const section   = (body?.section || '').trim();
-    const name      = (body?.name || '').trim();
-    const filters   = body?.filters || {};
-    const selection = body?.selection; // may be undefined or an object
+    const section   = String(body?.section || '').trim();
+    const name      = String(body?.name || '').trim();
+    const filters   = body?.filters ?? {};
+    const selection = body?.selection;
     const isDefault = !!body?.is_default;
     const isShared  = !!body?.is_shared;
     const kindRaw   = (body?.kind ?? 'search');
     const kind      = String(kindRaw).trim().toLowerCase();
 
-    // ⬅️ include 'selection' kind
     const KIND_ALLOWED = new Set(['search','report','dashboard','selection']);
+
+    const clonePlain = (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch {
+        const out = {};
+        Object.keys(value).forEach((key) => {
+          out[key] = value[key];
+        });
+        return out;
+      }
+    };
+
+    const normalizeIdArray = (value) => Array.from(new Set(
+      (Array.isArray(value) ? value : [])
+        .map((v) => String(v == null ? '' : v).trim())
+        .filter(Boolean)
+    ));
+
+    const normalizeExplicitSelectionPayload = (rawSelection, effectiveSection) => {
+      if (!rawSelection || typeof rawSelection !== 'object' || Array.isArray(rawSelection)) {
+        throw new Error('selection must be an object for kind=selection');
+      }
+
+      const selectionSection = String(rawSelection.section || '').trim();
+      if (selectionSection && selectionSection !== effectiveSection) {
+        throw new Error('selection.section must match section');
+      }
+
+      const rawMode = String(rawSelection.mode || rawSelection.selection_mode || '').trim().toLowerCase();
+      if (rawMode === 'all_filtered') {
+        throw new Error('selection presets must be stored as explicit ids only');
+      }
+
+      const explicitIds = normalizeIdArray(
+        Array.isArray(rawSelection.resolved_ids)
+          ? rawSelection.resolved_ids
+          : (Array.isArray(rawSelection.included_ids)
+              ? rawSelection.included_ids
+              : (Array.isArray(rawSelection.ids) ? rawSelection.ids : []))
+      );
+
+      if (!explicitIds.length) {
+        throw new Error('selection must contain at least one explicit row id');
+      }
+
+      const excludedIds = normalizeIdArray(rawSelection.excluded_ids);
+      if (excludedIds.length) {
+        throw new Error('selection.excluded_ids must be empty for kind=selection');
+      }
+
+      const selectionFilters =
+        (rawSelection.filters && typeof rawSelection.filters === 'object' && !Array.isArray(rawSelection.filters))
+          ? clonePlain(rawSelection.filters)
+          : ((rawSelection.effective_filters && typeof rawSelection.effective_filters === 'object' && !Array.isArray(rawSelection.effective_filters))
+              ? clonePlain(rawSelection.effective_filters)
+              : {});
+
+      const datasetKey = String(rawSelection.dataset_key || rawSelection.fingerprint || '').trim();
+
+      const normalized = {
+        section: effectiveSection,
+        dataset_key: datasetKey,
+        fingerprint: datasetKey,
+        mode: 'explicit',
+        included_ids: explicitIds.slice(),
+        excluded_ids: [],
+        ids: explicitIds.slice(),
+        resolved_ids: explicitIds.slice(),
+        membership_total: explicitIds.length
+      };
+
+      if (Object.keys(selectionFilters).length) {
+        normalized.filters = clonePlain(selectionFilters);
+        normalized.effective_filters = clonePlain(selectionFilters);
+      }
+
+      return normalized;
+    };
 
     if (!section) return withCORS(env, req, badRequest('section is required'));
     if (!name)    return withCORS(env, req, badRequest('name is required'));
-    if (typeof filters !== 'object') return withCORS(env, req, badRequest('filters must be an object'));
-    if (!KIND_ALLOWED.has(kind))     return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
+    if (!filters || typeof filters !== 'object' || Array.isArray(filters)) {
+      return withCORS(env, req, badRequest('filters must be an object'));
+    }
+    if (!KIND_ALLOWED.has(kind)) {
+      return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
+    }
+
+    let selectionToStore = undefined;
+    if (kind === 'selection') {
+      try {
+        selectionToStore = normalizeExplicitSelectionPayload(selection, section);
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid selection payload')));
+      }
+    } else if (typeof selection === 'object' && selection && !Array.isArray(selection)) {
+      selectionToStore = selection;
+    }
 
     if (isDefault) {
       await fetch(
@@ -54474,7 +54706,11 @@ async function buildHealthRosterPdf(env, invoiceId) {
         `&section=eq.${enc(section)}` +
         `&kind=eq.${enc(kind)}` +
         `&is_default=eq.true`,
-        { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({ is_default: false })
+        }
       );
     }
 
@@ -54483,8 +54719,8 @@ async function buildHealthRosterPdf(env, invoiceId) {
       section,
       kind,
       name,
-      filters_json: filters,                          // for searches
-      ...(typeof selection === 'object' ? { selection_json: selection } : {}), // for selections
+      filters_json: filters,
+      ...(selectionToStore !== undefined ? { selection_json: selectionToStore } : {}),
       is_default: isDefault,
       is_shared: isShared
     };
@@ -54506,13 +54742,13 @@ async function buildHealthRosterPdf(env, invoiceId) {
   }
 }
 
- async function handleReportPresetsUpdate(env, req, routeId) {
+async function handleReportPresetsUpdate(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   try {
-    const urlObj  = new URL(req.url);
-    const qsId    = urlObj.searchParams.get('id');
+    const urlObj = new URL(req.url);
+    const qsId = urlObj.searchParams.get('id');
     let body;
     try { body = await parseJSONBody(req); } catch { body = {}; }
 
@@ -54521,38 +54757,157 @@ async function buildHealthRosterPdf(env, invoiceId) {
 
     const { rows: existingRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,kind,is_default&id=eq.${enc(id)}`
+      `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,kind,is_default,selection_json&id=eq.${enc(id)}`
     );
     const existing = existingRows?.[0];
     if (!existing) return withCORS(env, req, notFound('Preset not found'));
     if (existing.user_id !== user.id) return withCORS(env, req, unauthorized());
 
-    // ⬅️ include 'selection' kind
     const KIND_ALLOWED = new Set(['search','report','dashboard','selection']);
 
-    const patch = {};
-    if (typeof body.name === 'string')    patch.name = body.name.trim();
-    if (typeof body.section === 'string') patch.section = body.section.trim();
-    if (body.filters && typeof body.filters === 'object') patch.filters_json = body.filters;
+    const clonePlain = (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch {
+        const out = {};
+        Object.keys(value).forEach((key) => {
+          out[key] = value[key];
+        });
+        return out;
+      }
+    };
 
-    // allow updating/clearing selection
-    if ('selection' in body) {
-      if (body.selection === null) patch.selection_json = null;
-      else if (typeof body.selection === 'object') patch.selection_json = body.selection;
-      else return withCORS(env, req, badRequest('selection must be an object or null'));
+    const normalizeIdArray = (value) => Array.from(new Set(
+      (Array.isArray(value) ? value : [])
+        .map((v) => String(v == null ? '' : v).trim())
+        .filter(Boolean)
+    ));
+
+    const normalizeExplicitSelectionPayload = (rawSelection, effectiveSection) => {
+      if (!rawSelection || typeof rawSelection !== 'object' || Array.isArray(rawSelection)) {
+        throw new Error('selection must be an explicit selection object for kind=selection');
+      }
+
+      const selectionSection = String(rawSelection.section || '').trim();
+      if (selectionSection && selectionSection !== effectiveSection) {
+        throw new Error('selection.section must match section');
+      }
+
+      const rawMode = String(rawSelection.mode || rawSelection.selection_mode || '').trim().toLowerCase();
+      if (rawMode === 'all_filtered') {
+        throw new Error('selection presets must be stored as explicit ids only');
+      }
+
+      const explicitIds = normalizeIdArray(
+        Array.isArray(rawSelection.resolved_ids)
+          ? rawSelection.resolved_ids
+          : (Array.isArray(rawSelection.included_ids)
+              ? rawSelection.included_ids
+              : (Array.isArray(rawSelection.ids) ? rawSelection.ids : []))
+      );
+
+      if (!explicitIds.length) {
+        throw new Error('selection must contain at least one explicit row id');
+      }
+
+      const excludedIds = normalizeIdArray(rawSelection.excluded_ids);
+      if (excludedIds.length) {
+        throw new Error('selection.excluded_ids must be empty for kind=selection');
+      }
+
+      const selectionFilters =
+        (rawSelection.filters && typeof rawSelection.filters === 'object' && !Array.isArray(rawSelection.filters))
+          ? clonePlain(rawSelection.filters)
+          : ((rawSelection.effective_filters && typeof rawSelection.effective_filters === 'object' && !Array.isArray(rawSelection.effective_filters))
+              ? clonePlain(rawSelection.effective_filters)
+              : {});
+
+      const datasetKey = String(rawSelection.dataset_key || rawSelection.fingerprint || '').trim();
+
+      const normalized = {
+        section: effectiveSection,
+        dataset_key: datasetKey,
+        fingerprint: datasetKey,
+        mode: 'explicit',
+        included_ids: explicitIds.slice(),
+        excluded_ids: [],
+        ids: explicitIds.slice(),
+        resolved_ids: explicitIds.slice(),
+        membership_total: explicitIds.length
+      };
+
+      if (Object.keys(selectionFilters).length) {
+        normalized.filters = clonePlain(selectionFilters);
+        normalized.effective_filters = clonePlain(selectionFilters);
+      }
+
+      return normalized;
+    };
+
+    const patch = {};
+
+    if ('name' in body) {
+      if (typeof body.name !== 'string') return withCORS(env, req, badRequest('name must be a string'));
+      patch.name = body.name.trim();
     }
 
-    if (typeof body.is_shared === 'boolean')  patch.is_shared = body.is_shared;
+    if ('section' in body) {
+      if (typeof body.section !== 'string') return withCORS(env, req, badRequest('section must be a string'));
+      patch.section = body.section.trim();
+    }
+
+    if ('filters' in body) {
+      if (!body.filters || typeof body.filters !== 'object' || Array.isArray(body.filters)) {
+        return withCORS(env, req, badRequest('filters must be an object'));
+      }
+      patch.filters_json = body.filters;
+    }
+
+    if (typeof body.is_shared === 'boolean') patch.is_shared = body.is_shared;
     if (typeof body.is_default === 'boolean') patch.is_default = body.is_default;
+
     if (typeof body.kind === 'string') {
       const k = body.kind.trim().toLowerCase();
-      if (!KIND_ALLOWED.has(k)) return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
+      if (!KIND_ALLOWED.has(k)) {
+        return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
+      }
       patch.kind = k;
     }
 
+    const effectiveSection = String(
+      (typeof patch.section === 'string' && patch.section.trim()) ||
+      existing.section ||
+      ''
+    ).trim();
+
+    const effectiveKind = String(
+      (typeof patch.kind === 'string' && patch.kind.trim()) ||
+      existing.kind ||
+      ''
+    ).trim().toLowerCase();
+
+    if (effectiveKind === 'selection' && existing.kind !== 'selection' && !('selection' in body)) {
+      return withCORS(env, req, badRequest('selection is required when changing kind to selection'));
+    }
+
+    if ('selection' in body) {
+      if (effectiveKind === 'selection') {
+        try {
+          patch.selection_json = normalizeExplicitSelectionPayload(body.selection, effectiveSection);
+        } catch (e) {
+          return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid selection payload')));
+        }
+      } else {
+        if (body.selection === null) patch.selection_json = null;
+        else if (typeof body.selection === 'object' && body.selection && !Array.isArray(body.selection)) patch.selection_json = body.selection;
+        else return withCORS(env, req, badRequest('selection must be an object or null'));
+      }
+    }
+
     if (patch.is_default === true) {
-      const sectionEff = patch.section || existing.section;
-      const kindEff    = patch.kind    || existing.kind;
+      const sectionEff = effectiveSection || existing.section;
+      const kindEff = effectiveKind || existing.kind;
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/report_presets` +
         `?user_id=eq.${enc(user.id)}` +
@@ -54560,7 +54915,11 @@ async function buildHealthRosterPdf(env, invoiceId) {
         `&kind=eq.${enc(kindEff)}` +
         `&is_default=eq.true` +
         `&id=neq.${enc(id)}`,
-        { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({ is_default: false })
+        }
       );
     }
 
@@ -54568,7 +54927,11 @@ async function buildHealthRosterPdf(env, invoiceId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/report_presets?id=eq.${enc(id)}`,
       true,
-      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify(patch)
+      }
     );
 
     return withCORS(env, req, ok({ row: rows?.[0] || null }));
@@ -54576,6 +54939,165 @@ async function buildHealthRosterPdf(env, invoiceId) {
     return withCORS(env, req, serverError('Failed to update report preset'));
   }
 }
+
+async function handleSummaryTypeAheadLookup(env, req, section) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  try {
+    let body;
+    try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+    const trimStr = (v) => String(v == null ? '' : v).trim();
+
+    const clonePlain = (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch {
+        const out = {};
+        Object.keys(value).forEach((key) => {
+          out[key] = value[key];
+        });
+        return out;
+      }
+    };
+
+    const sectionFromRoute = trimStr(section).toLowerCase();
+    const sectionFromBody = trimStr(body?.section).toLowerCase();
+
+    const normalizeSection = (rawSection) => {
+      const s = trimStr(rawSection).toLowerCase();
+      if (s === 'candidate' || s === 'candidates') return 'candidates';
+      if (s === 'client' || s === 'clients') return 'clients';
+      if (s === 'contract' || s === 'contracts') return 'contracts';
+      if (s === 'timesheet' || s === 'timesheets') return 'timesheets';
+      if (s === 'invoice' || s === 'invoices') return 'invoices';
+      if (s === 'umbrella' || s === 'umbrellas') return 'umbrellas';
+      return '';
+    };
+
+    const routeSectionKey = normalizeSection(sectionFromRoute);
+    const bodySectionKey = normalizeSection(sectionFromBody);
+
+    if (routeSectionKey && bodySectionKey && routeSectionKey !== bodySectionKey) {
+      return withCORS(env, req, badRequest('section in route must match section in body'));
+    }
+
+    const sectionKey = routeSectionKey || bodySectionKey;
+    if (!sectionKey) {
+      return withCORS(env, req, badRequest('section is required'));
+    }
+
+    const rawFilters =
+      (body?.effective_filters && typeof body.effective_filters === 'object' && !Array.isArray(body.effective_filters))
+        ? body.effective_filters
+        : ((body?.filters && typeof body.filters === 'object' && !Array.isArray(body.filters))
+            ? body.filters
+            : {});
+
+    const sortKey = trimStr(body?.sort_key);
+    const sortDir = trimStr(body?.sort_dir).toLowerCase() === 'desc' ? 'desc' : 'asc';
+    const prefix = trimStr(body?.prefix);
+    const datasetKey = trimStr(body?.dataset_key);
+
+    if (!sortKey) {
+      return withCORS(env, req, badRequest('sort_key is required'));
+    }
+
+    if (!prefix) {
+      return withCORS(env, req, badRequest('prefix is required'));
+    }
+
+    const pageSizeRaw = body?.page_size;
+    const pageSize =
+      (String(pageSizeRaw || '').trim().toUpperCase() === 'ALL')
+        ? 'ALL'
+        : Number(pageSizeRaw);
+
+    if (pageSize !== 'ALL' && (!Number.isFinite(pageSize) || pageSize < 1)) {
+      return withCORS(env, req, badRequest('page_size must be a positive integer or ALL'));
+    }
+
+    const normalizeFiltersBySection = (targetSection, sourceFilters) => {
+      const clean = clonePlain(sourceFilters);
+      if (targetSection === 'candidates') return buildCandidateSummaryFilterSpec(clean);
+      if (targetSection === 'clients') return buildClientSummaryFilterSpec(clean);
+      if (targetSection === 'umbrellas') return buildUmbrellaSummaryFilterSpec(clean);
+      if (targetSection === 'contracts') return buildContractSummaryFilterSpec(clean);
+      if (targetSection === 'timesheets') return buildTimesheetSummaryFilterSpec(clean);
+      if (targetSection === 'invoices') return buildInvoiceSummaryFilterSpec(clean);
+      return clean;
+    };
+
+    const normalizedFilters = normalizeFiltersBySection(sectionKey, rawFilters);
+
+    const rpcRes = await sbRpc(env, 'summary_typeahead_lookup', {
+      p_section: sectionKey,
+      p_filters: normalizedFilters,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir,
+      p_prefix: prefix,
+      p_page_size: (pageSize === 'ALL') ? null : Number(pageSize)
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'summary_typeahead_lookup')) {
+        payload = payload.summary_typeahead_lookup;
+      }
+      if (payload && typeof payload === 'object' && Array.isArray(payload.rows) && payload.rows.length === 1) {
+        payload = payload.rows[0];
+      }
+    } catch {}
+
+    const target = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const rowId = trimStr(
+      target.row_id ??
+      target.id ??
+      target.target_row_id ??
+      ''
+    );
+
+    const ordinalIndexRaw = Number(
+      target.ordinal_index ??
+      target.ordinal ??
+      target.row_ordinal ??
+      null
+    );
+
+    const targetPageRaw = Number(
+      target.target_page ??
+      target.page ??
+      null
+    );
+
+    const computedTargetPage = (() => {
+      if (pageSize === 'ALL') return 1;
+      if (Number.isFinite(targetPageRaw) && targetPageRaw >= 1) return Math.max(1, targetPageRaw);
+      if (Number.isFinite(ordinalIndexRaw) && ordinalIndexRaw >= 0) {
+        return Math.floor(ordinalIndexRaw / Number(pageSize)) + 1;
+      }
+      return 1;
+    })();
+
+    return withCORS(env, req, ok({
+      row_id: rowId || null,
+      ordinal_index: (Number.isFinite(ordinalIndexRaw) && ordinalIndexRaw >= 0) ? ordinalIndexRaw : null,
+      target_page: rowId ? computedTargetPage : ((pageSize === 'ALL') ? 1 : null),
+      matched_value: trimStr(target.matched_value ?? target.value ?? ''),
+      dataset_key: trimStr(target.dataset_key || datasetKey || ''),
+      section: sectionKey
+    }));
+  } catch (err) {
+    return withCORS(env, req, serverError('Failed to resolve summary type-ahead target'));
+  }
+}
+
 
 
  async function handleReportPresetsDelete(env, req, routeId) {
