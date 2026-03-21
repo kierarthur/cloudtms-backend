@@ -99301,7 +99301,10 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
         const clientDetails = matchPath(p, '/api/clients/:id/details');
         if (clientDetails && req.method === 'GET')                          return handleGetClient(env, req, clientDetails.id);
       }
-
+{
+  const m = matchPath(p, '/api/summary-typeahead/:section');
+  if (m && req.method === 'POST') return handleSummaryTypeAheadLookup(env, req, m.section);
+}
 {
   const m = matchPath(p, '/api/summary-membership/:section');
   if (m && req.method === 'POST') return handleSummaryMembership(env, req, m.section);
