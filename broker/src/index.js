@@ -54999,7 +54999,7 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
     const sortKey = trimStr(body?.sort_key);
     const sortDir = trimStr(body?.sort_dir).toLowerCase() === 'desc' ? 'desc' : 'asc';
     const prefix = trimStr(body?.prefix);
-    const datasetKey = trimStr(body?.dataset_key);
+    const requestDatasetKey = trimStr(body?.dataset_key);
 
     if (!sortKey) {
       return withCORS(env, req, badRequest('sort_key is required'));
@@ -55076,28 +55076,33 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       null
     );
 
+    const hasValidOrdinal = Number.isFinite(ordinalIndexRaw) && ordinalIndexRaw >= 0;
+    const hasValidTargetPage = Number.isFinite(targetPageRaw) && targetPageRaw >= 1;
+
     const computedTargetPage = (() => {
+      if (!rowId) return null;
       if (pageSize === 'ALL') return 1;
-      if (Number.isFinite(targetPageRaw) && targetPageRaw >= 1) return Math.max(1, targetPageRaw);
-      if (Number.isFinite(ordinalIndexRaw) && ordinalIndexRaw >= 0) {
+      if (hasValidTargetPage) return Math.max(1, targetPageRaw);
+      if (hasValidOrdinal) {
         return Math.floor(ordinalIndexRaw / Number(pageSize)) + 1;
       }
-      return 1;
+      return null;
     })();
 
+    const responseDatasetKey = trimStr(requestDatasetKey || target.dataset_key || '');
+
     return withCORS(env, req, ok({
-      row_id: rowId || null,
-      ordinal_index: (Number.isFinite(ordinalIndexRaw) && ordinalIndexRaw >= 0) ? ordinalIndexRaw : null,
-      target_page: rowId ? computedTargetPage : ((pageSize === 'ALL') ? 1 : null),
+      row_id: (rowId && computedTargetPage !== null) ? rowId : null,
+      ordinal_index: hasValidOrdinal ? ordinalIndexRaw : null,
+      target_page: (rowId && computedTargetPage !== null) ? computedTargetPage : ((pageSize === 'ALL') ? 1 : null),
       matched_value: trimStr(target.matched_value ?? target.value ?? ''),
-      dataset_key: trimStr(target.dataset_key || datasetKey || ''),
+      dataset_key: responseDatasetKey,
       section: sectionKey
     }));
   } catch (err) {
     return withCORS(env, req, serverError('Failed to resolve summary type-ahead target'));
   }
 }
-
 
 
  async function handleReportPresetsDelete(env, req, routeId) {
