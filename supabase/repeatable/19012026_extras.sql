@@ -5205,7 +5205,6 @@ BEGIN
 END;
 $$;
 
-
 create or replace function public.summary_typeahead_lookup(
   p_section text,
   p_filters jsonb default '{}'::jsonb,
@@ -5456,71 +5455,73 @@ begin
         ))
         and (v_active is null or csa.active is not distinct from v_active)
     ),
-    prefixed_rows as (
-      select
-        fr.*
-      from filtered_rows as fr
-      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
-    ),
     ranked_rows as (
       select
-        pr.row_id_text,
-        pr.matched_value_text,
+        fr.row_id_text,
+        fr.matched_value_text,
         row_number() over (
           order by
-            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
-            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then pr.updated_at end asc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then pr.updated_at end desc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then fr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then fr.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then fr.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then fr.updated_at end desc nulls last,
 
-            case when v_sort_key = 'active' and v_sort_dir = 'asc' then case when pr.active then 1 else 0 end end asc nulls last,
-            case when v_sort_key = 'active' and v_sort_dir = 'desc' then case when pr.active then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'active' and v_sort_dir = 'asc' then case when fr.active then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'active' and v_sort_dir = 'desc' then case when fr.active then 1 else 0 end end desc nulls last,
 
-            case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then pr.tms_ref_num end asc nulls last,
-            case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then pr.tms_ref_num end desc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then fr.tms_ref_num end asc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then fr.tms_ref_num end desc nulls last,
 
-            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then lower(coalesce(pr.first_name, '')) end asc nulls last,
-            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then lower(coalesce(pr.first_name, '')) end desc nulls last,
-            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then lower(coalesce(pr.last_name, '')) end asc nulls last,
-            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then lower(coalesce(pr.last_name, '')) end desc nulls last,
-            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then lower(coalesce(pr.display_name, '')) end asc nulls last,
-            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then lower(coalesce(pr.display_name, '')) end desc nulls last,
-            case when v_sort_key = 'email' and v_sort_dir = 'asc' then lower(coalesce(pr.email, '')) end asc nulls last,
-            case when v_sort_key = 'email' and v_sort_dir = 'desc' then lower(coalesce(pr.email, '')) end desc nulls last,
-            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then lower(coalesce(pr.phone, '')) end asc nulls last,
-            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then lower(coalesce(pr.phone, '')) end desc nulls last,
-            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then lower(coalesce(pr.tms_ref, '')) end asc nulls last,
-            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then lower(coalesce(pr.tms_ref, '')) end desc nulls last,
-            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then lower(coalesce(pr.job_titles_display, '')) end asc nulls last,
-            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then lower(coalesce(pr.job_titles_display, '')) end desc nulls last,
-            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then lower(coalesce(pr.primary_job_title, '')) end asc nulls last,
-            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then lower(coalesce(pr.primary_job_title, '')) end desc nulls last,
-            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then lower(coalesce(pr.pay_method, '')) end asc nulls last,
-            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then lower(coalesce(pr.pay_method, '')) end desc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then lower(coalesce(pr.postcode, '')) end asc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then lower(coalesce(pr.postcode, '')) end desc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then lower(coalesce(pr.town_city, '')) end asc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then lower(coalesce(pr.town_city, '')) end desc nulls last,
-            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then lower(coalesce(pr.umbrella_name, '')) end asc nulls last,
-            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then lower(coalesce(pr.umbrella_name, '')) end desc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then lower(coalesce(fr.first_name, '')) end asc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then lower(coalesce(fr.first_name, '')) end desc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then lower(coalesce(fr.last_name, '')) end asc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then lower(coalesce(fr.last_name, '')) end desc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then lower(coalesce(fr.display_name, '')) end asc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then lower(coalesce(fr.display_name, '')) end desc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'asc' then lower(coalesce(fr.email, '')) end asc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'desc' then lower(coalesce(fr.email, '')) end desc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then lower(coalesce(fr.phone, '')) end asc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then lower(coalesce(fr.phone, '')) end desc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then lower(coalesce(fr.tms_ref, '')) end asc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then lower(coalesce(fr.tms_ref, '')) end desc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then lower(coalesce(fr.job_titles_display, '')) end asc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then lower(coalesce(fr.job_titles_display, '')) end desc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then lower(coalesce(fr.primary_job_title, '')) end asc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then lower(coalesce(fr.primary_job_title, '')) end desc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then lower(coalesce(fr.pay_method, '')) end asc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then lower(coalesce(fr.pay_method, '')) end desc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then lower(coalesce(fr.postcode, '')) end asc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then lower(coalesce(fr.postcode, '')) end desc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then lower(coalesce(fr.town_city, '')) end asc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then lower(coalesce(fr.town_city, '')) end desc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then lower(coalesce(fr.umbrella_name, '')) end asc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then lower(coalesce(fr.umbrella_name, '')) end desc nulls last,
 
-            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
-            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
-            pr.row_id_text asc
+            case when v_sort_dir = 'asc' then lower(coalesce(fr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(fr.matched_value_text, '')) end desc nulls last,
+            fr.row_id_text asc
         ) - 1 as rn
-      from prefixed_rows as pr
+      from filtered_rows as fr
+    ),
+    prefixed_rows as (
+      select
+        rr.row_id_text,
+        rr.matched_value_text,
+        rr.rn
+      from ranked_rows as rr
+      where lower(coalesce(rr.matched_value_text, '')) like v_prefix_like escape '\'
     )
     select
-      rr.row_id_text as row_id,
-      rr.rn as ordinal_index,
+      pr.row_id_text as row_id,
+      pr.rn as ordinal_index,
       case
         when p_page_size is null or p_page_size < 1 then 1
-        else floor((rr.rn)::numeric / p_page_size)::int + 1
+        else floor((pr.rn)::numeric / p_page_size)::int + 1
       end as target_page,
-      rr.matched_value_text as matched_value,
+      pr.matched_value_text as matched_value,
       v_dataset_key as dataset_key
-    from ranked_rows as rr
-    order by rr.rn
+    from prefixed_rows as pr
+    order by pr.rn
     limit 1;
 
     return;
@@ -5591,81 +5592,83 @@ begin
           or coalesce(cli.contact_email, '') ilike ('%' || v_q || '%')
         ))
     ),
-    prefixed_rows as (
-      select
-        fr.*
-      from filtered_rows as fr
-      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
-    ),
     ranked_rows as (
       select
-        pr.row_id_text,
-        pr.matched_value_text,
+        fr.row_id_text,
+        fr.matched_value_text,
         row_number() over (
           order by
-            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
-            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then pr.updated_at end asc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then pr.updated_at end desc nulls last,
-            case when v_sort_key = 'payment_terms_days' and v_sort_dir = 'asc' then pr.payment_terms_days end asc nulls last,
-            case when v_sort_key = 'payment_terms_days' and v_sort_dir = 'desc' then pr.payment_terms_days end desc nulls last,
-            case when v_sort_key = 'mileage_charge_rate' and v_sort_dir = 'asc' then pr.mileage_charge_rate end asc nulls last,
-            case when v_sort_key = 'mileage_charge_rate' and v_sort_dir = 'desc' then pr.mileage_charge_rate end desc nulls last,
-            case when v_sort_key = 'rev' and v_sort_dir = 'asc' then pr.rev end asc nulls last,
-            case when v_sort_key = 'rev' and v_sort_dir = 'desc' then pr.rev end desc nulls last,
-            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'asc' then case when pr.vat_chargeable then 1 else 0 end end asc nulls last,
-            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'desc' then case when pr.vat_chargeable then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then fr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then fr.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then fr.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then fr.updated_at end desc nulls last,
+            case when v_sort_key = 'payment_terms_days' and v_sort_dir = 'asc' then fr.payment_terms_days end asc nulls last,
+            case when v_sort_key = 'payment_terms_days' and v_sort_dir = 'desc' then fr.payment_terms_days end desc nulls last,
+            case when v_sort_key = 'mileage_charge_rate' and v_sort_dir = 'asc' then fr.mileage_charge_rate end asc nulls last,
+            case when v_sort_key = 'mileage_charge_rate' and v_sort_dir = 'desc' then fr.mileage_charge_rate end desc nulls last,
+            case when v_sort_key = 'rev' and v_sort_dir = 'asc' then fr.rev end asc nulls last,
+            case when v_sort_key = 'rev' and v_sort_dir = 'desc' then fr.rev end desc nulls last,
+            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'asc' then case when fr.vat_chargeable then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'desc' then case when fr.vat_chargeable then 1 else 0 end end desc nulls last,
 
-            case when v_sort_key = 'cli_ref' and v_sort_dir = 'asc' then lower(coalesce(pr.cli_ref, '')) end asc nulls last,
-            case when v_sort_key = 'cli_ref' and v_sort_dir = 'desc' then lower(coalesce(pr.cli_ref, '')) end desc nulls last,
-            case when v_sort_key = 'name' and v_sort_dir = 'asc' then lower(coalesce(pr.name, '')) end asc nulls last,
-            case when v_sort_key = 'name' and v_sort_dir = 'desc' then lower(coalesce(pr.name, '')) end desc nulls last,
-            case when v_sort_key = 'invoice_address' and v_sort_dir = 'asc' then lower(coalesce(pr.invoice_address, '')) end asc nulls last,
-            case when v_sort_key = 'invoice_address' and v_sort_dir = 'desc' then lower(coalesce(pr.invoice_address, '')) end desc nulls last,
-            case when v_sort_key = 'primary_invoice_email' and v_sort_dir = 'asc' then lower(coalesce(pr.primary_invoice_email, '')) end asc nulls last,
-            case when v_sort_key = 'primary_invoice_email' and v_sort_dir = 'desc' then lower(coalesce(pr.primary_invoice_email, '')) end desc nulls last,
-            case when v_sort_key = 'ap_phone' and v_sort_dir = 'asc' then lower(coalesce(pr.ap_phone, '')) end asc nulls last,
-            case when v_sort_key = 'ap_phone' and v_sort_dir = 'desc' then lower(coalesce(pr.ap_phone, '')) end desc nulls last,
-            case when v_sort_key = 'ts_queries_email' and v_sort_dir = 'asc' then lower(coalesce(pr.ts_queries_email, '')) end asc nulls last,
-            case when v_sort_key = 'ts_queries_email' and v_sort_dir = 'desc' then lower(coalesce(pr.ts_queries_email, '')) end desc nulls last,
-            case when v_sort_key = 'contact_title' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_title, '')) end asc nulls last,
-            case when v_sort_key = 'contact_title' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_title, '')) end desc nulls last,
-            case when v_sort_key = 'contact_known_as' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_known_as, '')) end asc nulls last,
-            case when v_sort_key = 'contact_known_as' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_known_as, '')) end desc nulls last,
-            case when v_sort_key = 'contact_forename' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_forename, '')) end asc nulls last,
-            case when v_sort_key = 'contact_forename' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_forename, '')) end desc nulls last,
-            case when v_sort_key = 'contact_surname' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_surname, '')) end asc nulls last,
-            case when v_sort_key = 'contact_surname' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_surname, '')) end desc nulls last,
-            case when v_sort_key = 'contact_job_title' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_job_title, '')) end asc nulls last,
-            case when v_sort_key = 'contact_job_title' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_job_title, '')) end desc nulls last,
-            case when v_sort_key = 'contact_tel' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_tel, '')) end asc nulls last,
-            case when v_sort_key = 'contact_tel' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_tel, '')) end desc nulls last,
-            case when v_sort_key = 'contact_mobile' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_mobile, '')) end asc nulls last,
-            case when v_sort_key = 'contact_mobile' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_mobile, '')) end desc nulls last,
-            case when v_sort_key = 'contact_email' and v_sort_dir = 'asc' then lower(coalesce(pr.contact_email, '')) end asc nulls last,
-            case when v_sort_key = 'contact_email' and v_sort_dir = 'desc' then lower(coalesce(pr.contact_email, '')) end desc nulls last,
-            case when v_sort_key = 'website' and v_sort_dir = 'asc' then lower(coalesce(pr.website, '')) end asc nulls last,
-            case when v_sort_key = 'website' and v_sort_dir = 'desc' then lower(coalesce(pr.website, '')) end desc nulls last,
-            case when v_sort_key = 'notes' and v_sort_dir = 'asc' then lower(coalesce(pr.notes, '')) end asc nulls last,
-            case when v_sort_key = 'notes' and v_sort_dir = 'desc' then lower(coalesce(pr.notes, '')) end desc nulls last,
+            case when v_sort_key = 'cli_ref' and v_sort_dir = 'asc' then lower(coalesce(fr.cli_ref, '')) end asc nulls last,
+            case when v_sort_key = 'cli_ref' and v_sort_dir = 'desc' then lower(coalesce(fr.cli_ref, '')) end desc nulls last,
+            case when v_sort_key = 'name' and v_sort_dir = 'asc' then lower(coalesce(fr.name, '')) end asc nulls last,
+            case when v_sort_key = 'name' and v_sort_dir = 'desc' then lower(coalesce(fr.name, '')) end desc nulls last,
+            case when v_sort_key = 'invoice_address' and v_sort_dir = 'asc' then lower(coalesce(fr.invoice_address, '')) end asc nulls last,
+            case when v_sort_key = 'invoice_address' and v_sort_dir = 'desc' then lower(coalesce(fr.invoice_address, '')) end desc nulls last,
+            case when v_sort_key = 'primary_invoice_email' and v_sort_dir = 'asc' then lower(coalesce(fr.primary_invoice_email, '')) end asc nulls last,
+            case when v_sort_key = 'primary_invoice_email' and v_sort_dir = 'desc' then lower(coalesce(fr.primary_invoice_email, '')) end desc nulls last,
+            case when v_sort_key = 'ap_phone' and v_sort_dir = 'asc' then lower(coalesce(fr.ap_phone, '')) end asc nulls last,
+            case when v_sort_key = 'ap_phone' and v_sort_dir = 'desc' then lower(coalesce(fr.ap_phone, '')) end desc nulls last,
+            case when v_sort_key = 'ts_queries_email' and v_sort_dir = 'asc' then lower(coalesce(fr.ts_queries_email, '')) end asc nulls last,
+            case when v_sort_key = 'ts_queries_email' and v_sort_dir = 'desc' then lower(coalesce(fr.ts_queries_email, '')) end desc nulls last,
+            case when v_sort_key = 'contact_title' and v_sort_dir = 'asc' then lower(coalesce(fr.contact_title, '')) end asc nulls last,
+            case when v_sort_key = 'contact_title' and v_sort_dir = 'desc' then lower(coalesce(fr.contact_title, '')) end desc nulls last,
+            case when v_sort_key = 'contact_known_as' and v_sort_dir = 'asc' then lower(coalesce(fr.contact_known_as, '')) end asc nulls last,
+            case when v_sort_key = 'contact_known_as' and v_sort_dir = 'desc' then lower(coalesce(fr.contact_known_as, '')) end desc nulls last,
+            case when v_sort_key = 'contact_forename' and v_sort_dir = 'asc' then lower(coalesce(fr.contact_forename, '')) end asc nulls last,
+            case when v_sort_key = 'contact_forename' and v_sort_dir = 'desc' then lower(coalesce(fr.contact_forename, '')) end desc nulls last,
+            case when v_sort_key = 'contact_surname' and v_sort_dir = 'asc' then lower(coalesce(fr.contact_surname, '')) end asc nulls last,
+            case when v_sort_key = 'contact_surname' and v_sort_dir = 'desc' then lower(coalesce(fr.contact_surname, '')) end desc nulls last,
+            case when v_sort_key = 'contact_job_title' and v_sort_dir = 'asc' then lower(coalesce(fr.contact_job_title, '')) end asc nulls last,
+            case when v_sort_key = 'contact_job_title' and v_sort_dir = 'desc' then lower(coalesce(fr.contact_job_title, '')) end desc nulls last,
+            case when v_sort_key = 'contact_tel' and v_sort_dir = 'asc' then lower(coalesce(fr.contact_tel, '')) end asc nulls last,
+            case when v_sort_key = 'contact_tel' and v_sort_dir = 'desc' then lower(coalesce(fr.contact_tel, '')) end desc nulls last,
+            case when v_sort_key = 'contact_mobile' and v_sort_dir = 'asc' then lower(coalesce(fr.contact_mobile, '')) end asc nulls last,
+            case when v_sort_key = 'contact_mobile' and v_sort_dir = 'desc' then lower(coalesce(fr.contact_mobile, '')) end desc nulls last,
+            case when v_sort_key = 'contact_email' and v_sort_dir = 'asc' then lower(coalesce(fr.contact_email, '')) end asc nulls last,
+            case when v_sort_key = 'contact_email' and v_sort_dir = 'desc' then lower(coalesce(fr.contact_email, '')) end desc nulls last,
+            case when v_sort_key = 'website' and v_sort_dir = 'asc' then lower(coalesce(fr.website, '')) end asc nulls last,
+            case when v_sort_key = 'website' and v_sort_dir = 'desc' then lower(coalesce(fr.website, '')) end desc nulls last,
+            case when v_sort_key = 'notes' and v_sort_dir = 'asc' then lower(coalesce(fr.notes, '')) end asc nulls last,
+            case when v_sort_key = 'notes' and v_sort_dir = 'desc' then lower(coalesce(fr.notes, '')) end desc nulls last,
 
-            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
-            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
-            pr.row_id_text asc
+            case when v_sort_dir = 'asc' then lower(coalesce(fr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(fr.matched_value_text, '')) end desc nulls last,
+            fr.row_id_text asc
         ) - 1 as rn
-      from prefixed_rows as pr
+      from filtered_rows as fr
+    ),
+    prefixed_rows as (
+      select
+        rr.row_id_text,
+        rr.matched_value_text,
+        rr.rn
+      from ranked_rows as rr
+      where lower(coalesce(rr.matched_value_text, '')) like v_prefix_like escape '\'
     )
     select
-      rr.row_id_text as row_id,
-      rr.rn as ordinal_index,
+      pr.row_id_text as row_id,
+      pr.rn as ordinal_index,
       case
         when p_page_size is null or p_page_size < 1 then 1
-        else floor((rr.rn)::numeric / p_page_size)::int + 1
+        else floor((pr.rn)::numeric / p_page_size)::int + 1
       end as target_page,
-      rr.matched_value_text as matched_value,
+      pr.matched_value_text as matched_value,
       v_dataset_key as dataset_key
-    from ranked_rows as rr
-    order by rr.rn
+    from prefixed_rows as pr
+    order by pr.rn
     limit 1;
 
     return;
@@ -5727,71 +5730,73 @@ begin
         ))
         and (v_enabled is null or umb.enabled is not distinct from v_enabled)
     ),
-    prefixed_rows as (
-      select
-        fr.*
-      from filtered_rows as fr
-      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
-    ),
     ranked_rows as (
       select
-        pr.row_id_text,
-        pr.matched_value_text,
+        fr.row_id_text,
+        fr.matched_value_text,
         row_number() over (
           order by
-            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
-            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then pr.updated_at end asc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then pr.updated_at end desc nulls last,
-            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'asc' then case when pr.vat_chargeable then 1 else 0 end end asc nulls last,
-            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'desc' then case when pr.vat_chargeable then 1 else 0 end end desc nulls last,
-            case when (v_sort_key = 'enabled' or v_sort_key = 'active') and v_sort_dir = 'asc' then case when pr.enabled then 1 else 0 end end asc nulls last,
-            case when (v_sort_key = 'enabled' or v_sort_key = 'active') and v_sort_dir = 'desc' then case when pr.enabled then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then fr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then fr.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then fr.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then fr.updated_at end desc nulls last,
+            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'asc' then case when fr.vat_chargeable then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'vat_chargeable' and v_sort_dir = 'desc' then case when fr.vat_chargeable then 1 else 0 end end desc nulls last,
+            case when (v_sort_key = 'enabled' or v_sort_key = 'active') and v_sort_dir = 'asc' then case when fr.enabled then 1 else 0 end end asc nulls last,
+            case when (v_sort_key = 'enabled' or v_sort_key = 'active') and v_sort_dir = 'desc' then case when fr.enabled then 1 else 0 end end desc nulls last,
 
-            case when v_sort_key = 'name' and v_sort_dir = 'asc' then lower(coalesce(pr.name, '')) end asc nulls last,
-            case when v_sort_key = 'name' and v_sort_dir = 'desc' then lower(coalesce(pr.name, '')) end desc nulls last,
-            case when (v_sort_key = 'email' or v_sort_key = 'remittance_email') and v_sort_dir = 'asc' then lower(coalesce(pr.remittance_email, '')) end asc nulls last,
-            case when (v_sort_key = 'email' or v_sort_key = 'remittance_email') and v_sort_dir = 'desc' then lower(coalesce(pr.remittance_email, '')) end desc nulls last,
-            case when v_sort_key = 'bank_name' and v_sort_dir = 'asc' then lower(coalesce(pr.bank_name, '')) end asc nulls last,
-            case when v_sort_key = 'bank_name' and v_sort_dir = 'desc' then lower(coalesce(pr.bank_name, '')) end desc nulls last,
-            case when v_sort_key = 'sort_code' and v_sort_dir = 'asc' then lower(coalesce(pr.sort_code, '')) end asc nulls last,
-            case when v_sort_key = 'sort_code' and v_sort_dir = 'desc' then lower(coalesce(pr.sort_code, '')) end desc nulls last,
-            case when v_sort_key = 'account_number' and v_sort_dir = 'asc' then lower(coalesce(pr.account_number, '')) end asc nulls last,
-            case when v_sort_key = 'account_number' and v_sort_dir = 'desc' then lower(coalesce(pr.account_number, '')) end desc nulls last,
-            case when v_sort_key = 'company_number' and v_sort_dir = 'asc' then lower(coalesce(pr.company_number, '')) end asc nulls last,
-            case when v_sort_key = 'company_number' and v_sort_dir = 'desc' then lower(coalesce(pr.company_number, '')) end desc nulls last,
-            case when v_sort_key = 'address_line1' and v_sort_dir = 'asc' then lower(coalesce(pr.address_line1, '')) end asc nulls last,
-            case when v_sort_key = 'address_line1' and v_sort_dir = 'desc' then lower(coalesce(pr.address_line1, '')) end desc nulls last,
-            case when v_sort_key = 'address_line2' and v_sort_dir = 'asc' then lower(coalesce(pr.address_line2, '')) end asc nulls last,
-            case when v_sort_key = 'address_line2' and v_sort_dir = 'desc' then lower(coalesce(pr.address_line2, '')) end desc nulls last,
-            case when v_sort_key = 'address_line3' and v_sort_dir = 'asc' then lower(coalesce(pr.address_line3, '')) end asc nulls last,
-            case when v_sort_key = 'address_line3' and v_sort_dir = 'desc' then lower(coalesce(pr.address_line3, '')) end desc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then lower(coalesce(pr.town_city, '')) end asc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then lower(coalesce(pr.town_city, '')) end desc nulls last,
-            case when v_sort_key = 'county' and v_sort_dir = 'asc' then lower(coalesce(pr.county, '')) end asc nulls last,
-            case when v_sort_key = 'county' and v_sort_dir = 'desc' then lower(coalesce(pr.county, '')) end desc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then lower(coalesce(pr.postcode, '')) end asc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then lower(coalesce(pr.postcode, '')) end desc nulls last,
-            case when v_sort_key = 'country' and v_sort_dir = 'asc' then lower(coalesce(pr.country, '')) end asc nulls last,
-            case when v_sort_key = 'country' and v_sort_dir = 'desc' then lower(coalesce(pr.country, '')) end desc nulls last,
+            case when v_sort_key = 'name' and v_sort_dir = 'asc' then lower(coalesce(fr.name, '')) end asc nulls last,
+            case when v_sort_key = 'name' and v_sort_dir = 'desc' then lower(coalesce(fr.name, '')) end desc nulls last,
+            case when (v_sort_key = 'email' or v_sort_key = 'remittance_email') and v_sort_dir = 'asc' then lower(coalesce(fr.remittance_email, '')) end asc nulls last,
+            case when (v_sort_key = 'email' or v_sort_key = 'remittance_email') and v_sort_dir = 'desc' then lower(coalesce(fr.remittance_email, '')) end desc nulls last,
+            case when v_sort_key = 'bank_name' and v_sort_dir = 'asc' then lower(coalesce(fr.bank_name, '')) end asc nulls last,
+            case when v_sort_key = 'bank_name' and v_sort_dir = 'desc' then lower(coalesce(fr.bank_name, '')) end desc nulls last,
+            case when v_sort_key = 'sort_code' and v_sort_dir = 'asc' then lower(coalesce(fr.sort_code, '')) end asc nulls last,
+            case when v_sort_key = 'sort_code' and v_sort_dir = 'desc' then lower(coalesce(fr.sort_code, '')) end desc nulls last,
+            case when v_sort_key = 'account_number' and v_sort_dir = 'asc' then lower(coalesce(fr.account_number, '')) end asc nulls last,
+            case when v_sort_key = 'account_number' and v_sort_dir = 'desc' then lower(coalesce(fr.account_number, '')) end desc nulls last,
+            case when v_sort_key = 'company_number' and v_sort_dir = 'asc' then lower(coalesce(fr.company_number, '')) end asc nulls last,
+            case when v_sort_key = 'company_number' and v_sort_dir = 'desc' then lower(coalesce(fr.company_number, '')) end desc nulls last,
+            case when v_sort_key = 'address_line1' and v_sort_dir = 'asc' then lower(coalesce(fr.address_line1, '')) end asc nulls last,
+            case when v_sort_key = 'address_line1' and v_sort_dir = 'desc' then lower(coalesce(fr.address_line1, '')) end desc nulls last,
+            case when v_sort_key = 'address_line2' and v_sort_dir = 'asc' then lower(coalesce(fr.address_line2, '')) end asc nulls last,
+            case when v_sort_key = 'address_line2' and v_sort_dir = 'desc' then lower(coalesce(fr.address_line2, '')) end desc nulls last,
+            case when v_sort_key = 'address_line3' and v_sort_dir = 'asc' then lower(coalesce(fr.address_line3, '')) end asc nulls last,
+            case when v_sort_key = 'address_line3' and v_sort_dir = 'desc' then lower(coalesce(fr.address_line3, '')) end desc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then lower(coalesce(fr.town_city, '')) end asc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then lower(coalesce(fr.town_city, '')) end desc nulls last,
+            case when v_sort_key = 'county' and v_sort_dir = 'asc' then lower(coalesce(fr.county, '')) end asc nulls last,
+            case when v_sort_key = 'county' and v_sort_dir = 'desc' then lower(coalesce(fr.county, '')) end desc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then lower(coalesce(fr.postcode, '')) end asc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then lower(coalesce(fr.postcode, '')) end desc nulls last,
+            case when v_sort_key = 'country' and v_sort_dir = 'asc' then lower(coalesce(fr.country, '')) end asc nulls last,
+            case when v_sort_key = 'country' and v_sort_dir = 'desc' then lower(coalesce(fr.country, '')) end desc nulls last,
 
-            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
-            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
-            pr.row_id_text asc
+            case when v_sort_dir = 'asc' then lower(coalesce(fr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(fr.matched_value_text, '')) end desc nulls last,
+            fr.row_id_text asc
         ) - 1 as rn
-      from prefixed_rows as pr
+      from filtered_rows as fr
+    ),
+    prefixed_rows as (
+      select
+        rr.row_id_text,
+        rr.matched_value_text,
+        rr.rn
+      from ranked_rows as rr
+      where lower(coalesce(rr.matched_value_text, '')) like v_prefix_like escape '\'
     )
     select
-      rr.row_id_text as row_id,
-      rr.rn as ordinal_index,
+      pr.row_id_text as row_id,
+      pr.rn as ordinal_index,
       case
         when p_page_size is null or p_page_size < 1 then 1
-        else floor((rr.rn)::numeric / p_page_size)::int + 1
+        else floor((pr.rn)::numeric / p_page_size)::int + 1
       end as target_page,
-      rr.matched_value_text as matched_value,
+      pr.matched_value_text as matched_value,
       v_dataset_key as dataset_key
-    from ranked_rows as rr
-    order by rr.rn
+    from prefixed_rows as pr
+    order by pr.rn
     limit 1;
 
     return;
@@ -5879,69 +5884,71 @@ begin
           or coalesce(ctr.ward_hint, '') ilike ('%' || v_q || '%')
         ))
     ),
-    prefixed_rows as (
-      select
-        fr.*
-      from filtered_rows as fr
-      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
-    ),
     ranked_rows as (
       select
-        pr.row_id_text,
-        pr.matched_value_text,
+        fr.row_id_text,
+        fr.matched_value_text,
         row_number() over (
           order by
-            case when v_sort_key = 'start_date' and v_sort_dir = 'asc' then pr.start_date end asc nulls last,
-            case when v_sort_key = 'start_date' and v_sort_dir = 'desc' then pr.start_date end desc nulls last,
-            case when v_sort_key = 'end_date' and v_sort_dir = 'asc' then pr.end_date end asc nulls last,
-            case when v_sort_key = 'end_date' and v_sort_dir = 'desc' then pr.end_date end desc nulls last,
-            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
-            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then pr.updated_at end asc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then pr.updated_at end desc nulls last,
-            case when v_sort_key = 'week_ending_weekday_snapshot' and v_sort_dir = 'asc' then pr.week_ending_weekday_snapshot end asc nulls last,
-            case when v_sort_key = 'week_ending_weekday_snapshot' and v_sort_dir = 'desc' then pr.week_ending_weekday_snapshot end desc nulls last,
-            case when v_sort_key = 'auto_invoice' and v_sort_dir = 'asc' then case when pr.auto_invoice then 1 else 0 end end asc nulls last,
-            case when v_sort_key = 'auto_invoice' and v_sort_dir = 'desc' then case when pr.auto_invoice then 1 else 0 end end desc nulls last,
-            case when v_sort_key = 'require_reference_to_pay' and v_sort_dir = 'asc' then case when pr.require_reference_to_pay then 1 else 0 end end asc nulls last,
-            case when v_sort_key = 'require_reference_to_pay' and v_sort_dir = 'desc' then case when pr.require_reference_to_pay then 1 else 0 end end desc nulls last,
-            case when v_sort_key = 'require_reference_to_invoice' and v_sort_dir = 'asc' then case when pr.require_reference_to_invoice then 1 else 0 end end asc nulls last,
-            case when v_sort_key = 'require_reference_to_invoice' and v_sort_dir = 'desc' then case when pr.require_reference_to_invoice then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'start_date' and v_sort_dir = 'asc' then fr.start_date end asc nulls last,
+            case when v_sort_key = 'start_date' and v_sort_dir = 'desc' then fr.start_date end desc nulls last,
+            case when v_sort_key = 'end_date' and v_sort_dir = 'asc' then fr.end_date end asc nulls last,
+            case when v_sort_key = 'end_date' and v_sort_dir = 'desc' then fr.end_date end desc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then fr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then fr.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then fr.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then fr.updated_at end desc nulls last,
+            case when v_sort_key = 'week_ending_weekday_snapshot' and v_sort_dir = 'asc' then fr.week_ending_weekday_snapshot end asc nulls last,
+            case when v_sort_key = 'week_ending_weekday_snapshot' and v_sort_dir = 'desc' then fr.week_ending_weekday_snapshot end desc nulls last,
+            case when v_sort_key = 'auto_invoice' and v_sort_dir = 'asc' then case when fr.auto_invoice then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'auto_invoice' and v_sort_dir = 'desc' then case when fr.auto_invoice then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'require_reference_to_pay' and v_sort_dir = 'asc' then case when fr.require_reference_to_pay then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'require_reference_to_pay' and v_sort_dir = 'desc' then case when fr.require_reference_to_pay then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'require_reference_to_invoice' and v_sort_dir = 'asc' then case when fr.require_reference_to_invoice then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'require_reference_to_invoice' and v_sort_dir = 'desc' then case when fr.require_reference_to_invoice then 1 else 0 end end desc nulls last,
 
-            case when v_sort_key = 'candidate_display' and v_sort_dir = 'asc' then lower(coalesce(pr.candidate_display, '')) end asc nulls last,
-            case when v_sort_key = 'candidate_display' and v_sort_dir = 'desc' then lower(coalesce(pr.candidate_display, '')) end desc nulls last,
-            case when v_sort_key = 'client_name' and v_sort_dir = 'asc' then lower(coalesce(pr.client_name, '')) end asc nulls last,
-            case when v_sort_key = 'client_name' and v_sort_dir = 'desc' then lower(coalesce(pr.client_name, '')) end desc nulls last,
-            case when v_sort_key = 'role' and v_sort_dir = 'asc' then lower(coalesce(pr.role, '')) end asc nulls last,
-            case when v_sort_key = 'role' and v_sort_dir = 'desc' then lower(coalesce(pr.role, '')) end desc nulls last,
-            case when v_sort_key = 'band' and v_sort_dir = 'asc' then lower(coalesce(pr.band, '')) end asc nulls last,
-            case when v_sort_key = 'band' and v_sort_dir = 'desc' then lower(coalesce(pr.band, '')) end desc nulls last,
-            case when v_sort_key = 'display_site' and v_sort_dir = 'asc' then lower(coalesce(pr.display_site, '')) end asc nulls last,
-            case when v_sort_key = 'display_site' and v_sort_dir = 'desc' then lower(coalesce(pr.display_site, '')) end desc nulls last,
-            case when v_sort_key = 'ward_hint' and v_sort_dir = 'asc' then lower(coalesce(pr.ward_hint, '')) end asc nulls last,
-            case when v_sort_key = 'ward_hint' and v_sort_dir = 'desc' then lower(coalesce(pr.ward_hint, '')) end desc nulls last,
-            case when v_sort_key = 'pay_method_snapshot' and v_sort_dir = 'asc' then lower(coalesce(pr.pay_method_snapshot, '')) end asc nulls last,
-            case when v_sort_key = 'pay_method_snapshot' and v_sort_dir = 'desc' then lower(coalesce(pr.pay_method_snapshot, '')) end desc nulls last,
-            case when v_sort_key = 'default_submission_mode' and v_sort_dir = 'asc' then lower(coalesce(pr.default_submission_mode, '')) end asc nulls last,
-            case when v_sort_key = 'default_submission_mode' and v_sort_dir = 'desc' then lower(coalesce(pr.default_submission_mode, '')) end desc nulls last,
+            case when v_sort_key = 'candidate_display' and v_sort_dir = 'asc' then lower(coalesce(fr.candidate_display, '')) end asc nulls last,
+            case when v_sort_key = 'candidate_display' and v_sort_dir = 'desc' then lower(coalesce(fr.candidate_display, '')) end desc nulls last,
+            case when v_sort_key = 'client_name' and v_sort_dir = 'asc' then lower(coalesce(fr.client_name, '')) end asc nulls last,
+            case when v_sort_key = 'client_name' and v_sort_dir = 'desc' then lower(coalesce(fr.client_name, '')) end desc nulls last,
+            case when v_sort_key = 'role' and v_sort_dir = 'asc' then lower(coalesce(fr.role, '')) end asc nulls last,
+            case when v_sort_key = 'role' and v_sort_dir = 'desc' then lower(coalesce(fr.role, '')) end desc nulls last,
+            case when v_sort_key = 'band' and v_sort_dir = 'asc' then lower(coalesce(fr.band, '')) end asc nulls last,
+            case when v_sort_key = 'band' and v_sort_dir = 'desc' then lower(coalesce(fr.band, '')) end desc nulls last,
+            case when v_sort_key = 'display_site' and v_sort_dir = 'asc' then lower(coalesce(fr.display_site, '')) end asc nulls last,
+            case when v_sort_key = 'display_site' and v_sort_dir = 'desc' then lower(coalesce(fr.display_site, '')) end desc nulls last,
+            case when v_sort_key = 'ward_hint' and v_sort_dir = 'asc' then lower(coalesce(fr.ward_hint, '')) end asc nulls last,
+            case when v_sort_key = 'ward_hint' and v_sort_dir = 'desc' then lower(coalesce(fr.ward_hint, '')) end desc nulls last,
+            case when v_sort_key = 'pay_method_snapshot' and v_sort_dir = 'asc' then lower(coalesce(fr.pay_method_snapshot, '')) end asc nulls last,
+            case when v_sort_key = 'pay_method_snapshot' and v_sort_dir = 'desc' then lower(coalesce(fr.pay_method_snapshot, '')) end desc nulls last,
+            case when v_sort_key = 'default_submission_mode' and v_sort_dir = 'asc' then lower(coalesce(fr.default_submission_mode, '')) end asc nulls last,
+            case when v_sort_key = 'default_submission_mode' and v_sort_dir = 'desc' then lower(coalesce(fr.default_submission_mode, '')) end desc nulls last,
 
-            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
-            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
-            pr.row_id_text asc
+            case when v_sort_dir = 'asc' then lower(coalesce(fr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(fr.matched_value_text, '')) end desc nulls last,
+            fr.row_id_text asc
         ) - 1 as rn
-      from prefixed_rows as pr
+      from filtered_rows as fr
+    ),
+    prefixed_rows as (
+      select
+        rr.row_id_text,
+        rr.matched_value_text,
+        rr.rn
+      from ranked_rows as rr
+      where lower(coalesce(rr.matched_value_text, '')) like v_prefix_like escape '\'
     )
     select
-      rr.row_id_text as row_id,
-      rr.rn as ordinal_index,
+      pr.row_id_text as row_id,
+      pr.rn as ordinal_index,
       case
         when p_page_size is null or p_page_size < 1 then 1
-        else floor((rr.rn)::numeric / p_page_size)::int + 1
+        else floor((pr.rn)::numeric / p_page_size)::int + 1
       end as target_page,
-      rr.matched_value_text as matched_value,
+      pr.matched_value_text as matched_value,
       v_dataset_key as dataset_key
-    from ranked_rows as rr
-    order by rr.rn
+    from prefixed_rows as pr
+    order by pr.rn
     limit 1;
 
     return;
@@ -6170,65 +6177,67 @@ begin
           )
         )
     ),
-    prefixed_rows as (
-      select
-        fr.*
-      from filtered_rows as fr
-      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
-    ),
     ranked_rows as (
       select
-        pr.row_id_text,
-        pr.matched_value_text,
+        fr.row_id_text,
+        fr.matched_value_text,
         row_number() over (
           order by
-            case when v_sort_key = 'week_ending_date' and v_sort_dir = 'asc' then pr.week_ending_date end asc nulls last,
-            case when v_sort_key = 'week_ending_date' and v_sort_dir = 'desc' then pr.week_ending_date end desc nulls last,
-            case when v_sort_key = 'total_hours' and v_sort_dir = 'asc' then pr.total_hours end asc nulls last,
-            case when v_sort_key = 'total_hours' and v_sort_dir = 'desc' then pr.total_hours end desc nulls last,
-            case when v_sort_key = 'total_pay_ex_vat' and v_sort_dir = 'asc' then pr.total_pay_ex_vat end asc nulls last,
-            case when v_sort_key = 'total_pay_ex_vat' and v_sort_dir = 'desc' then pr.total_pay_ex_vat end desc nulls last,
-            case when v_sort_key = 'total_charge_ex_vat' and v_sort_dir = 'asc' then pr.total_charge_ex_vat end asc nulls last,
-            case when v_sort_key = 'total_charge_ex_vat' and v_sort_dir = 'desc' then pr.total_charge_ex_vat end desc nulls last,
-            case when v_sort_key = 'margin_ex_vat' and v_sort_dir = 'asc' then pr.margin_ex_vat end asc nulls last,
-            case when v_sort_key = 'margin_ex_vat' and v_sort_dir = 'desc' then pr.margin_ex_vat end desc nulls last,
-            case when v_sort_key = 'pay_paid_at_utc' and v_sort_dir = 'asc' then pr.pay_paid_at_utc end asc nulls last,
-            case when v_sort_key = 'pay_paid_at_utc' and v_sort_dir = 'desc' then pr.pay_paid_at_utc end desc nulls last,
+            case when v_sort_key = 'week_ending_date' and v_sort_dir = 'asc' then fr.week_ending_date end asc nulls last,
+            case when v_sort_key = 'week_ending_date' and v_sort_dir = 'desc' then fr.week_ending_date end desc nulls last,
+            case when v_sort_key = 'total_hours' and v_sort_dir = 'asc' then fr.total_hours end asc nulls last,
+            case when v_sort_key = 'total_hours' and v_sort_dir = 'desc' then fr.total_hours end desc nulls last,
+            case when v_sort_key = 'total_pay_ex_vat' and v_sort_dir = 'asc' then fr.total_pay_ex_vat end asc nulls last,
+            case when v_sort_key = 'total_pay_ex_vat' and v_sort_dir = 'desc' then fr.total_pay_ex_vat end desc nulls last,
+            case when v_sort_key = 'total_charge_ex_vat' and v_sort_dir = 'asc' then fr.total_charge_ex_vat end asc nulls last,
+            case when v_sort_key = 'total_charge_ex_vat' and v_sort_dir = 'desc' then fr.total_charge_ex_vat end desc nulls last,
+            case when v_sort_key = 'margin_ex_vat' and v_sort_dir = 'asc' then fr.margin_ex_vat end asc nulls last,
+            case when v_sort_key = 'margin_ex_vat' and v_sort_dir = 'desc' then fr.margin_ex_vat end desc nulls last,
+            case when v_sort_key = 'pay_paid_at_utc' and v_sort_dir = 'asc' then fr.pay_paid_at_utc end asc nulls last,
+            case when v_sort_key = 'pay_paid_at_utc' and v_sort_dir = 'desc' then fr.pay_paid_at_utc end desc nulls last,
 
-            case when v_sort_key = 'booking_id' and v_sort_dir = 'asc' then lower(coalesce(pr.booking_id, '')) end asc nulls last,
-            case when v_sort_key = 'booking_id' and v_sort_dir = 'desc' then lower(coalesce(pr.booking_id, '')) end desc nulls last,
-            case when v_sort_key = 'candidate_name' and v_sort_dir = 'asc' then lower(coalesce(pr.candidate_name, '')) end asc nulls last,
-            case when v_sort_key = 'candidate_name' and v_sort_dir = 'desc' then lower(coalesce(pr.candidate_name, '')) end desc nulls last,
-            case when v_sort_key = 'client_name' and v_sort_dir = 'asc' then lower(coalesce(pr.client_name, '')) end asc nulls last,
-            case when v_sort_key = 'client_name' and v_sort_dir = 'desc' then lower(coalesce(pr.client_name, '')) end desc nulls last,
-            case when v_sort_key = 'hospital_norm' and v_sort_dir = 'asc' then lower(coalesce(pr.hospital_norm, '')) end asc nulls last,
-            case when v_sort_key = 'hospital_norm' and v_sort_dir = 'desc' then lower(coalesce(pr.hospital_norm, '')) end desc nulls last,
-            case when v_sort_key = 'route_display' and v_sort_dir = 'asc' then lower(coalesce(pr.route_display, '')) end asc nulls last,
-            case when v_sort_key = 'route_display' and v_sort_dir = 'desc' then lower(coalesce(pr.route_display, '')) end desc nulls last,
-            case when v_sort_key = 'route_type' and v_sort_dir = 'asc' then lower(coalesce(pr.route_type, '')) end asc nulls last,
-            case when v_sort_key = 'route_type' and v_sort_dir = 'desc' then lower(coalesce(pr.route_type, '')) end desc nulls last,
-            case when v_sort_key = 'tools_stage' and v_sort_dir = 'asc' then lower(coalesce(pr.tools_stage, '')) end asc nulls last,
-            case when v_sort_key = 'tools_stage' and v_sort_dir = 'desc' then lower(coalesce(pr.tools_stage, '')) end desc nulls last,
-            case when v_sort_key = 'processing_status_display' and v_sort_dir = 'asc' then lower(coalesce(pr.processing_status_display, '')) end asc nulls last,
-            case when v_sort_key = 'processing_status_display' and v_sort_dir = 'desc' then lower(coalesce(pr.processing_status_display, '')) end desc nulls last,
+            case when v_sort_key = 'booking_id' and v_sort_dir = 'asc' then lower(coalesce(fr.booking_id, '')) end asc nulls last,
+            case when v_sort_key = 'booking_id' and v_sort_dir = 'desc' then lower(coalesce(fr.booking_id, '')) end desc nulls last,
+            case when v_sort_key = 'candidate_name' and v_sort_dir = 'asc' then lower(coalesce(fr.candidate_name, '')) end asc nulls last,
+            case when v_sort_key = 'candidate_name' and v_sort_dir = 'desc' then lower(coalesce(fr.candidate_name, '')) end desc nulls last,
+            case when v_sort_key = 'client_name' and v_sort_dir = 'asc' then lower(coalesce(fr.client_name, '')) end asc nulls last,
+            case when v_sort_key = 'client_name' and v_sort_dir = 'desc' then lower(coalesce(fr.client_name, '')) end desc nulls last,
+            case when v_sort_key = 'hospital_norm' and v_sort_dir = 'asc' then lower(coalesce(fr.hospital_norm, '')) end asc nulls last,
+            case when v_sort_key = 'hospital_norm' and v_sort_dir = 'desc' then lower(coalesce(fr.hospital_norm, '')) end desc nulls last,
+            case when v_sort_key = 'route_display' and v_sort_dir = 'asc' then lower(coalesce(fr.route_display, '')) end asc nulls last,
+            case when v_sort_key = 'route_display' and v_sort_dir = 'desc' then lower(coalesce(fr.route_display, '')) end desc nulls last,
+            case when v_sort_key = 'route_type' and v_sort_dir = 'asc' then lower(coalesce(fr.route_type, '')) end asc nulls last,
+            case when v_sort_key = 'route_type' and v_sort_dir = 'desc' then lower(coalesce(fr.route_type, '')) end desc nulls last,
+            case when v_sort_key = 'tools_stage' and v_sort_dir = 'asc' then lower(coalesce(fr.tools_stage, '')) end asc nulls last,
+            case when v_sort_key = 'tools_stage' and v_sort_dir = 'desc' then lower(coalesce(fr.tools_stage, '')) end desc nulls last,
+            case when v_sort_key = 'processing_status_display' and v_sort_dir = 'asc' then lower(coalesce(fr.processing_status_display, '')) end asc nulls last,
+            case when v_sort_key = 'processing_status_display' and v_sort_dir = 'desc' then lower(coalesce(fr.processing_status_display, '')) end desc nulls last,
 
-            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
-            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
-            pr.row_id_text asc
+            case when v_sort_dir = 'asc' then lower(coalesce(fr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(fr.matched_value_text, '')) end desc nulls last,
+            fr.row_id_text asc
         ) - 1 as rn
-      from prefixed_rows as pr
+      from filtered_rows as fr
+    ),
+    prefixed_rows as (
+      select
+        rr.row_id_text,
+        rr.matched_value_text,
+        rr.rn
+      from ranked_rows as rr
+      where lower(coalesce(rr.matched_value_text, '')) like v_prefix_like escape '\'
     )
     select
-      rr.row_id_text as row_id,
-      rr.rn as ordinal_index,
+      pr.row_id_text as row_id,
+      pr.rn as ordinal_index,
       case
         when p_page_size is null or p_page_size < 1 then 1
-        else floor((rr.rn)::numeric / p_page_size)::int + 1
+        else floor((pr.rn)::numeric / p_page_size)::int + 1
       end as target_page,
-      rr.matched_value_text as matched_value,
+      pr.matched_value_text as matched_value,
       v_dataset_key as dataset_key
-    from ranked_rows as rr
-    order by rr.rn
+    from prefixed_rows as pr
+    order by pr.rn
     limit 1;
 
     return;
@@ -6293,57 +6302,59 @@ begin
           )
         )
     ),
-    prefixed_rows as (
-      select
-        fr.*
-      from filtered_rows as fr
-      where lower(coalesce(fr.matched_value_text, '')) like v_prefix_like escape '\'
-    ),
     ranked_rows as (
       select
-        pr.row_id_text,
-        pr.matched_value_text,
+        fr.row_id_text,
+        fr.matched_value_text,
         row_number() over (
           order by
-            case when v_sort_key = 'issued_at_utc' and v_sort_dir = 'asc' then pr.issued_at_utc end asc nulls last,
-            case when v_sort_key = 'issued_at_utc' and v_sort_dir = 'desc' then pr.issued_at_utc end desc nulls last,
-            case when v_sort_key = 'due_at_utc' and v_sort_dir = 'asc' then pr.due_at_utc end asc nulls last,
-            case when v_sort_key = 'due_at_utc' and v_sort_dir = 'desc' then pr.due_at_utc end desc nulls last,
-            case when v_sort_key = 'paid_at_utc' and v_sort_dir = 'asc' then pr.paid_at_utc end asc nulls last,
-            case when v_sort_key = 'paid_at_utc' and v_sort_dir = 'desc' then pr.paid_at_utc end desc nulls last,
-            case when v_sort_key = 'status_date_utc' and v_sort_dir = 'asc' then pr.status_date_utc end asc nulls last,
-            case when v_sort_key = 'status_date_utc' and v_sort_dir = 'desc' then pr.status_date_utc end desc nulls last,
-            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then pr.created_at end asc nulls last,
-            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then pr.created_at end desc nulls last,
-            case when v_sort_key = 'subtotal_ex_vat' and v_sort_dir = 'asc' then pr.subtotal_ex_vat end asc nulls last,
-            case when v_sort_key = 'subtotal_ex_vat' and v_sort_dir = 'desc' then pr.subtotal_ex_vat end desc nulls last,
-            case when v_sort_key = 'vat_amount' and v_sort_dir = 'asc' then pr.vat_amount end asc nulls last,
-            case when v_sort_key = 'vat_amount' and v_sort_dir = 'desc' then pr.vat_amount end desc nulls last,
-            case when v_sort_key = 'total_inc_vat' and v_sort_dir = 'asc' then pr.total_inc_vat end asc nulls last,
-            case when v_sort_key = 'total_inc_vat' and v_sort_dir = 'desc' then pr.total_inc_vat end desc nulls last,
+            case when v_sort_key = 'issued_at_utc' and v_sort_dir = 'asc' then fr.issued_at_utc end asc nulls last,
+            case when v_sort_key = 'issued_at_utc' and v_sort_dir = 'desc' then fr.issued_at_utc end desc nulls last,
+            case when v_sort_key = 'due_at_utc' and v_sort_dir = 'asc' then fr.due_at_utc end asc nulls last,
+            case when v_sort_key = 'due_at_utc' and v_sort_dir = 'desc' then fr.due_at_utc end desc nulls last,
+            case when v_sort_key = 'paid_at_utc' and v_sort_dir = 'asc' then fr.paid_at_utc end asc nulls last,
+            case when v_sort_key = 'paid_at_utc' and v_sort_dir = 'desc' then fr.paid_at_utc end desc nulls last,
+            case when v_sort_key = 'status_date_utc' and v_sort_dir = 'asc' then fr.status_date_utc end asc nulls last,
+            case when v_sort_key = 'status_date_utc' and v_sort_dir = 'desc' then fr.status_date_utc end desc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then fr.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then fr.created_at end desc nulls last,
+            case when v_sort_key = 'subtotal_ex_vat' and v_sort_dir = 'asc' then fr.subtotal_ex_vat end asc nulls last,
+            case when v_sort_key = 'subtotal_ex_vat' and v_sort_dir = 'desc' then fr.subtotal_ex_vat end desc nulls last,
+            case when v_sort_key = 'vat_amount' and v_sort_dir = 'asc' then fr.vat_amount end asc nulls last,
+            case when v_sort_key = 'vat_amount' and v_sort_dir = 'desc' then fr.vat_amount end desc nulls last,
+            case when v_sort_key = 'total_inc_vat' and v_sort_dir = 'asc' then fr.total_inc_vat end asc nulls last,
+            case when v_sort_key = 'total_inc_vat' and v_sort_dir = 'desc' then fr.total_inc_vat end desc nulls last,
 
-            case when v_sort_key = 'invoice_no' and v_sort_dir = 'asc' then lower(coalesce(pr.invoice_no, '')) end asc nulls last,
-            case when v_sort_key = 'invoice_no' and v_sort_dir = 'desc' then lower(coalesce(pr.invoice_no, '')) end desc nulls last,
-            case when v_sort_key = 'status' and v_sort_dir = 'asc' then lower(coalesce(pr.status::text, '')) end asc nulls last,
-            case when v_sort_key = 'status' and v_sort_dir = 'desc' then lower(coalesce(pr.status::text, '')) end desc nulls last,
+            case when v_sort_key = 'invoice_no' and v_sort_dir = 'asc' then lower(coalesce(fr.invoice_no, '')) end asc nulls last,
+            case when v_sort_key = 'invoice_no' and v_sort_dir = 'desc' then lower(coalesce(fr.invoice_no, '')) end desc nulls last,
+            case when v_sort_key = 'status' and v_sort_dir = 'asc' then lower(coalesce(fr.status::text, '')) end asc nulls last,
+            case when v_sort_key = 'status' and v_sort_dir = 'desc' then lower(coalesce(fr.status::text, '')) end desc nulls last,
 
-            case when v_sort_dir = 'asc' then lower(coalesce(pr.matched_value_text, '')) end asc nulls last,
-            case when v_sort_dir = 'desc' then lower(coalesce(pr.matched_value_text, '')) end desc nulls last,
-            pr.row_id_text asc
+            case when v_sort_dir = 'asc' then lower(coalesce(fr.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(fr.matched_value_text, '')) end desc nulls last,
+            fr.row_id_text asc
         ) - 1 as rn
-      from prefixed_rows as pr
+      from filtered_rows as fr
+    ),
+    prefixed_rows as (
+      select
+        rr.row_id_text,
+        rr.matched_value_text,
+        rr.rn
+      from ranked_rows as rr
+      where lower(coalesce(rr.matched_value_text, '')) like v_prefix_like escape '\'
     )
     select
-      rr.row_id_text as row_id,
-      rr.rn as ordinal_index,
+      pr.row_id_text as row_id,
+      pr.rn as ordinal_index,
       case
         when p_page_size is null or p_page_size < 1 then 1
-        else floor((rr.rn)::numeric / p_page_size)::int + 1
+        else floor((pr.rn)::numeric / p_page_size)::int + 1
       end as target_page,
-      rr.matched_value_text as matched_value,
+      pr.matched_value_text as matched_value,
       v_dataset_key as dataset_key
-    from ranked_rows as rr
-    order by rr.rn
+    from prefixed_rows as pr
+    order by pr.rn
     limit 1;
 
     return;
