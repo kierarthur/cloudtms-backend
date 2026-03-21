@@ -17972,7 +17972,6 @@ $$;
 
 
 
-
 create or replace function public.pay_payment_advance_create(
   p_candidate_id uuid,
   p_principal_amount numeric,
@@ -17982,7 +17981,11 @@ create or replace function public.pay_payment_advance_create(
   p_actor_user_id uuid,
   p_note text default null,
   p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
+  p_take_home_floor_override numeric default null,
+  p_beneficiary_name text default null,
+  p_sort_code text default null,
+  p_account_number text default null,
+  p_bank_details_note text default null
 )
 returns jsonb
 language plpgsql
@@ -18000,9 +18003,6 @@ declare
   v_next_due date := null;
 
   v_finance_case_id uuid := null;
-  v_pay_batch_id uuid := null;
-  v_pay_batch_candidate_id uuid := null;
-  v_pay_batch_item_id uuid := null;
   v_finance_component_id uuid := null;
 
   v_warnings jsonb := '[]'::jsonb;
@@ -18031,6 +18031,25 @@ declare
   v_component_source_basis_json jsonb := '{}'::jsonb;
   v_component_snapshot_json jsonb := '{}'::jsonb;
   v_component_summary_json jsonb := '{}'::jsonb;
+
+  v_taxability public.pay_finance_taxability_enum := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_oneoff_required boolean := false;
+
+  v_beneficiary_name_norm text := null;
+  v_sort_code_norm text := null;
+  v_account_number_norm text := null;
+  v_oneoff_bank_hash text := null;
+  v_oneoff_before jsonb := null;
+  v_oneoff_after jsonb := null;
+
+  v_readiness_entity_kind text := 'CANDIDATE';
+  v_readiness_entity_id uuid := null;
+  v_readiness_bank_hash text := null;
+  v_readiness_payee_name text := null;
+  v_readiness_sort_code text := null;
+  v_readiness_account_number text := null;
+  v_readiness_account_type text := null;
 begin
   if p_candidate_id is null then
     raise exception '%', jsonb_build_object(
@@ -18225,6 +18244,85 @@ begin
 
   v_pay_channel := v_candidate.pay_method;
 
+  if v_pay_channel = 'PAYE' then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := false;
+
+    if nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+       or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+       or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+       or nullif(btrim(coalesce(p_bank_details_note,'')), '') is not null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'ONEOFF_BANK_DETAILS_NOT_ALLOWED_FOR_PAYE',
+        'message', 'pay_payment_advance_create: one-off bank fields are not allowed for PAYE loan payouts',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    v_readiness_bank_hash := nullif(btrim(coalesce(v_candidate.bank_details_hash,'')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce(v_candidate.account_holder, v_candidate.display_name, concat_ws(' ', v_candidate.first_name, v_candidate.last_name))), '');
+    v_readiness_sort_code := v_candidate.sort_code;
+    v_readiness_account_number := v_candidate.account_number;
+    v_readiness_account_type := 'Personal';
+  else
+    v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := true;
+
+    v_beneficiary_name_norm := nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), '');
+    v_sort_code_norm := case
+      when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+      else null
+    end;
+    v_account_number_norm := nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), '');
+
+    if v_beneficiary_name_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'BENEFICIARY_NAME_REQUIRED',
+        'message', 'pay_payment_advance_create: beneficiary_name is required for umbrella loan payouts',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    if v_sort_code_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'SORT_CODE_REQUIRED',
+        'message', 'pay_payment_advance_create: valid sort_code is required for umbrella loan payouts',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    if v_account_number_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'ACCOUNT_NUMBER_REQUIRED',
+        'message', 'pay_payment_advance_create: valid account_number is required for umbrella loan payouts',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    v_oneoff_bank_hash := public._bank_hash(v_sort_code_norm, v_account_number_norm, v_beneficiary_name_norm);
+    if v_oneoff_bank_hash is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'BANK_DETAILS_HASH_FAILED',
+        'message', 'pay_payment_advance_create: unable to derive bank_details_hash for umbrella loan payout bank details',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    v_readiness_bank_hash := v_oneoff_bank_hash;
+    v_readiness_payee_name := v_beneficiary_name_norm;
+    v_readiness_sort_code := v_sort_code_norm;
+    v_readiness_account_number := v_account_number_norm;
+    v_readiness_account_type := 'Personal';
+  end if;
+
   v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
   v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
   v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
@@ -18300,7 +18398,10 @@ begin
     written_off_by_user_id,
     write_off_reason,
     cleared_at_utc,
-    cleared_by_user_id
+    cleared_by_user_id,
+    taxability,
+    routing_kind,
+    oneoff_bank_details_required
   )
   values (
     p_candidate_id,
@@ -18336,9 +18437,61 @@ begin
     null::uuid,
     null::text,
     null::timestamptz,
-    null::uuid
+    null::uuid,
+    v_taxability,
+    v_routing_kind,
+    v_oneoff_required
   )
   returning id into v_finance_case_id;
+
+  if v_pay_channel = 'UMBRELLA' then
+    insert into public.pay_finance_case_oneoff_payout_bank_details(
+      finance_case_id,
+      candidate_id,
+      beneficiary_name,
+      sort_code,
+      account_number,
+      bank_details_hash,
+      note,
+      created_at_utc,
+      created_by_user_id,
+      updated_at_utc,
+      updated_by_user_id
+    )
+    values (
+      v_finance_case_id,
+      p_candidate_id,
+      v_beneficiary_name_norm,
+      v_sort_code_norm,
+      v_account_number_norm,
+      v_oneoff_bank_hash,
+      nullif(btrim(coalesce(p_bank_details_note,'')), ''),
+      v_now_utc,
+      p_actor_user_id,
+      v_now_utc,
+      p_actor_user_id
+    );
+
+    v_oneoff_after := jsonb_build_object(
+      'finance_case_id', v_finance_case_id::text,
+      'candidate_id', p_candidate_id::text,
+      'beneficiary_name', v_beneficiary_name_norm,
+      'sort_code_masked', case when v_sort_code_norm is null then null else 'XX-XX-' || right(v_sort_code_norm, 2) end,
+      'account_number_masked', case when v_account_number_norm is null then null else lpad(right(v_account_number_norm, 4), length(v_account_number_norm), '*') end,
+      'bank_details_hash', v_oneoff_bank_hash,
+      'note', nullif(btrim(coalesce(p_bank_details_note,'')), '')
+    );
+
+    perform public._audit_insert(
+      'finance_case',
+      v_finance_case_id::text,
+      'ONEOFF_BANK_DETAILS_CREATED',
+      v_oneoff_before,
+      v_oneoff_after,
+      'ONE_OFF_PAYOUT_BANK_DETAILS',
+      p_actor_user_id
+    );
+  end if;
 
   v_source_family_key := 'case:' || v_finance_case_id::text;
   v_component_source_basis_json := jsonb_strip_nulls(
@@ -18392,7 +18545,7 @@ begin
     v_source_family_key,
     'CASE_TOTAL',
     'TOTAL',
-    'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
+    'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
     v_candidate.pay_method,
     v_component_source_basis_json,
     v_principal_amount_norm,
@@ -18419,7 +18572,7 @@ begin
     'source_family_key', v_source_family_key,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'NET_PAY_FIXED_RECOVERY',
+    'classification', 'REIMBURSEMENT_GROSS_FIXED',
     'source_pay_method', v_candidate.pay_method,
     'target_pay_method', v_candidate.pay_method,
     'source_basis_json', v_component_source_basis_json,
@@ -18429,180 +18582,13 @@ begin
       p_source_family_key => v_source_family_key,
       p_component_key_type => 'CASE_TOTAL',
       p_component_key_value => 'TOTAL',
-      p_classification => 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
+      p_classification => 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
       p_source_pay_method => v_candidate.pay_method,
       p_current_target_pay_method => v_candidate.pay_method,
       p_source_basis_json => v_component_source_basis_json,
       p_source_amount => v_principal_amount_norm,
       p_relevant_erni_pct => null,
       p_target_basis_json => jsonb_build_object('current_target_pay_method', v_candidate.pay_method)
-    )
-  );
-
-  insert into public.pay_batches(
-    pay_date,
-    created_at_utc,
-    created_by_user_id,
-    status,
-    banking_system_snapshot,
-    external_paye_system_snapshot,
-    rail_provider_snapshot,
-    rail_env_snapshot,
-    batch_kind_fixed
-  )
-  values (
-    v_pay_date,
-    v_now_utc,
-    p_actor_user_id,
-    'DRAFT',
-    v_settings.banking_system,
-    v_settings.external_paye_system,
-    v_settings.rail_provider_default,
-    v_settings.rail_env_default,
-    'LOANS'
-  )
-  returning id into v_pay_batch_id;
-
-  update public.pay_advances pa
-  set payout_pay_batch_id = v_pay_batch_id,
-      updated_at = v_now_utc
-  where pa.id = v_finance_case_id;
-
-  insert into public.pay_batch_candidates(
-    pay_batch_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    paye_state,
-    mismatch_settlement_choice,
-    gross_preview,
-    net_bank_amount,
-    debt_created,
-    loan_repayment_taken,
-    overpayment_recovery_taken,
-    awaiting_net_amount,
-    updated_at
-  )
-  values (
-    v_pay_batch_id,
-    p_candidate_id,
-    v_candidate.tms_ref,
-    v_candidate.display_name,
-    null,
-    null,
-    v_principal_amount_norm,
-    v_principal_amount_norm,
-    0,
-    0,
-    0,
-    false,
-    v_now_utc
-  )
-  returning id into v_pay_batch_candidate_id;
-
-  insert into public.pay_batch_items(
-    pay_batch_candidate_id,
-    item_type,
-    timesheet_id,
-    segment_key,
-    source_ref,
-    description,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    pay_channel,
-    umbrella_id,
-    bank_reference,
-    pay_bank_transfer_id,
-    repayment_week_start,
-    is_voided,
-    is_mismatch,
-    created_at,
-    updated_at,
-    finance_case_id,
-    reservation_id,
-    paye_treatment,
-    finance_component_id,
-    frozen_component_snapshot_json,
-    frozen_component_key_type,
-    frozen_component_key_value,
-    frozen_component_classification,
-    frozen_source_basis_json,
-    frozen_source_pay_method,
-    frozen_target_pay_method,
-    frozen_resolution_mode,
-    frozen_resolution_payload_json,
-    frozen_resolution_result_json,
-    frozen_source_amount,
-    frozen_target_amount_ex_vat,
-    frozen_target_amount_vat,
-    frozen_target_amount_inc_vat
-  )
-  values (
-    v_pay_batch_candidate_id,
-    'LOAN_PAYOUT',
-    null::uuid,
-    null::text,
-    ('advance:' || v_finance_case_id::text),
-    'Payment Advance',
-    v_principal_amount_norm,
-    0,
-    v_principal_amount_norm,
-    v_pay_channel,
-    case when v_pay_channel = 'UMBRELLA' then v_candidate.umbrella_id else null::uuid end,
-    null::text,
-    null::uuid,
-    null::date,
-    false,
-    false,
-    v_now_utc,
-    v_now_utc,
-    v_finance_case_id,
-    null::uuid,
-    v_paye_treatment,
-    v_finance_component_id,
-    v_component_snapshot_json,
-    'CASE_TOTAL',
-    'TOTAL',
-    'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
-    v_component_source_basis_json,
-    v_candidate.pay_method,
-    v_candidate.pay_method,
-    null,
-    null,
-    null,
-    v_principal_amount_norm,
-    v_principal_amount_norm,
-    0,
-    v_principal_amount_norm
-  )
-  returning id into v_pay_batch_item_id;
-
-  insert into public.pay_batch_item_breakdowns(
-    pay_batch_item_id,
-    line_kind,
-    bucket_code,
-    unit_name,
-    units,
-    rate,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    meta_json
-  )
-  values (
-    v_pay_batch_item_id,
-    'LOAN_PAYOUT',
-    null,
-    'Payment Advance',
-    null::numeric,
-    null::numeric,
-    v_principal_amount_norm,
-    0,
-    v_principal_amount_norm,
-    jsonb_build_object(
-      'case_type', 'PAYMENT_ADVANCE',
-      'worker_label', 'Payment Advance'
     )
   );
 
@@ -18624,7 +18610,7 @@ begin
     'CREATED',
     v_now_utc,
     p_actor_user_id,
-    v_pay_batch_id,
+    null::uuid,
     null::jsonb,
     jsonb_build_object(
       'case_type', 'PAYMENT_ADVANCE',
@@ -18634,8 +18620,11 @@ begin
       'weeks_total', v_weeks_total_norm,
       'start_week_start', p_start_week_start::text,
       'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
-      'payout_pay_batch_id', v_pay_batch_id::text,
+      'payout_pay_batch_id', null,
       'payout_status', 'PENDING',
+      'taxability', v_taxability::text,
+      'routing_kind', v_routing_kind::text,
+      'oneoff_bank_details_required', v_oneoff_required,
       'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
       'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
       'schedule_input_mode', v_schedule_input_mode
@@ -18662,18 +18651,20 @@ begin
     'COMPONENT_CREATED',
     v_now_utc,
     p_actor_user_id,
-    v_pay_batch_id,
+    null::uuid,
     null::jsonb,
     v_component_snapshot_json,
     'PAYMENT_ADVANCE_COMPONENT_CREATE',
-    'Created net-fixed finance component for Payment Advance principal'
+    'Created non-taxable fixed finance component for Payment Advance principal'
   );
 
-  if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
+  if v_readiness_bank_hash is null or btrim(coalesce(v_readiness_bank_hash,'')) = '' then
     v_warnings := v_warnings || jsonb_build_array(
       jsonb_build_object(
         'code', 'BLOCKED_BANK_DETAILS',
-        'message', 'Candidate bank details are missing; batch can be created but will be blocked at prepare/schedule until bank details are present.',
+        'message', case when v_pay_channel = 'PAYE'
+                        then 'Candidate bank details are missing; the loan payout will appear as Blocked for Pay until bank details are present.'
+                        else 'One-off payout bank details are missing or incomplete; the loan payout will appear as Blocked for Pay until valid bank details are present.' end,
         'candidate_id', p_candidate_id::text
       )
     );
@@ -18681,23 +18672,23 @@ begin
     if v_need_name_check = true then
       select
         coalesce(bnc.status, 'UNVERIFIED') as status,
-        (bnc.override_reason is not null and bnc.override_hash = v_candidate.bank_details_hash) as has_override
+        (bnc.override_reason is not null and bnc.override_hash = v_readiness_bank_hash) as has_override
       into
         v_bnc_status,
         v_bnc_has_override
       from public.bank_name_checks bnc
       where bnc.rail_provider = v_settings.rail_provider_default
         and bnc.rail_env = v_settings.rail_env_default
-        and bnc.entity_kind = 'CANDIDATE'
+        and bnc.entity_kind = v_readiness_entity_kind
         and bnc.entity_id = p_candidate_id
-        and bnc.bank_details_hash = v_candidate.bank_details_hash
+        and bnc.bank_details_hash = v_readiness_bank_hash
       limit 1;
 
       if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
         v_warnings := v_warnings || jsonb_build_array(
           jsonb_build_object(
             'code', 'BLOCKED_NAME_CHECK',
-            'message', 'Name check has not passed (or override missing) for candidate bank details; scheduling/execution may be blocked until resolved.',
+            'message', 'Name check has not passed (or override missing) for the payout destination; the loan payout will appear as Blocked for Pay until resolved.',
             'candidate_id', p_candidate_id::text,
             'rail_provider', v_settings.rail_provider_default,
             'rail_env', v_settings.rail_env_default
@@ -18712,16 +18703,16 @@ begin
       from public.bank_payee_map bpm
       where bpm.rail_provider = v_settings.rail_provider_default
         and bpm.rail_env = v_settings.rail_env_default
-        and bpm.entity_kind = 'CANDIDATE'
+        and bpm.entity_kind = v_readiness_entity_kind
         and bpm.entity_id = p_candidate_id
-        and bpm.bank_details_hash = v_candidate.bank_details_hash
+        and bpm.bank_details_hash = v_readiness_bank_hash
       limit 1;
 
       if coalesce(v_bpm_present,false) = false then
         v_warnings := v_warnings || jsonb_build_array(
           jsonb_build_object(
             'code', 'BLOCKED_NO_PAYEE_MAP',
-            'message', 'Payee map is missing for candidate bank details on this rail; scheduling/execution may be blocked until payee mapping exists.',
+            'message', 'Payee map is missing for the payout destination on this rail; the loan payout will appear as Blocked for Pay until payee mapping exists.',
             'candidate_id', p_candidate_id::text,
             'rail_provider', v_settings.rail_provider_default,
             'rail_env', v_settings.rail_env_default
@@ -18736,7 +18727,7 @@ begin
     'source_family_key', v_source_family_key,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'NET_PAY_FIXED_RECOVERY',
+    'classification', 'REIMBURSEMENT_GROSS_FIXED',
     'source_pay_method', v_candidate.pay_method,
     'source_amount', v_principal_amount_norm,
     'remaining_source_amount', v_principal_amount_norm,
@@ -18751,9 +18742,9 @@ begin
     'ok', true,
     'finance_case_id', v_finance_case_id::text,
     'advance_id', v_finance_case_id::text,
-    'pay_batch_id', v_pay_batch_id::text,
+    'pay_batch_id', null,
     'pay_date', v_pay_date::text,
-    'batch_kind_fixed', 'LOANS',
+    'batch_kind_fixed', null,
     'case_type', 'PAYMENT_ADVANCE',
     'worker_label', 'Payment Advance',
     'repayment_label', 'Payment Advance Repayment',
@@ -18766,12 +18757,19 @@ begin
     'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
     'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
     'schedule_json', coalesce(v_schedule_json,'[]'::jsonb),
+    'taxability', v_taxability::text,
+    'routing_kind', v_routing_kind::text,
+    'oneoff_bank_details_required', v_oneoff_required,
+    'oneoff_bank_details_present', case when v_pay_channel = 'UMBRELLA' then true else false end,
+    'bank_details_hash', v_readiness_bank_hash,
+    'beneficiary_name', case when v_pay_channel = 'UMBRELLA' then v_beneficiary_name_norm else null end,
     'finance_component_id', v_finance_component_id::text,
     'component_summary', v_component_summary_json,
     'warnings', v_warnings
   );
 end;
 $$;
+
 
 create or replace function public.pay_payment_advance_update(
   p_finance_case_id uuid,
@@ -18782,7 +18780,12 @@ create or replace function public.pay_payment_advance_update(
   p_start_week_start date default null,
   p_note text default null,
   p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
+  p_take_home_floor_override numeric default null,
+  p_beneficiary_name text default null,
+  p_sort_code text default null,
+  p_account_number text default null,
+  p_bank_details_note text default null,
+  p_remove_oneoff_bank_details boolean default false
 )
 returns jsonb
 language plpgsql
@@ -18795,6 +18798,7 @@ declare
   v_batch public.pay_batches%rowtype;
   v_has_batch boolean := false;
   v_is_committed boolean := false;
+  v_has_newflow_draft_item boolean := false;
 
   v_new_principal numeric(12,2);
   v_new_weekly_due numeric(12,2);
@@ -18827,13 +18831,35 @@ declare
   v_component_source_basis_json jsonb := '{}'::jsonb;
   v_component_snapshot_json jsonb := '{}'::jsonb;
   v_component_summary_json jsonb := '{}'::jsonb;
-  v_component_has_saved_resolution boolean := false;
-  v_component_mark_stale boolean := false;
-  v_component_stale_reason text := null;
   v_component_remaining_amount numeric(12,2) := 0;
   v_source_family_key text := null;
 
   v_candidate_pay_method text := null;
+  v_taxability public.pay_finance_taxability_enum := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_oneoff_required boolean := false;
+
+  v_existing_oneoff public.pay_finance_case_oneoff_payout_bank_details%rowtype;
+  v_oneoff_before jsonb := null;
+  v_oneoff_after jsonb := null;
+  v_beneficiary_name_norm text := null;
+  v_sort_code_norm text := null;
+  v_account_number_norm text := null;
+  v_oneoff_bank_hash text := null;
+  v_oneoff_change_requested boolean := false;
+
+  v_readiness_bank_hash text := null;
+  v_readiness_payee_name text := null;
+
+  v_settings record;
+  v_provider text := null;
+  v_env text := null;
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+  v_bnc_status text := null;
+  v_bnc_has_override boolean := false;
+  v_bpm_present boolean := false;
+  v_warnings jsonb := '[]'::jsonb;
 begin
   if p_finance_case_id is null then
     raise exception '%', jsonb_build_object(
@@ -18873,6 +18899,17 @@ begin
   where c.id = v_case.candidate_id
   limit 1;
 
+  if v_candidate_pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_payment_advance_update: candidate pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'pay_method', v_candidate_pay_method
+    )::text;
+  end if;
+
   if v_case.payout_pay_batch_id is not null then
     select pb.*
     into v_batch
@@ -18892,7 +18929,47 @@ begin
     v_is_committed := false;
   end if;
 
-  v_can_edit_payout_details := (v_is_committed = false);
+  select exists (
+    select 1
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbi.source_ref = ('advance:' || p_finance_case_id::text)
+      and pbi.item_type = 'LOAN_PAYOUT'
+      and pbi.is_voided = false
+      and pb.cancelled_at_utc is null
+      and upper(coalesce(pb.status,'')) <> 'CANCELLED'
+  ) into v_has_newflow_draft_item;
+
+  if v_has_batch then
+    v_can_edit_payout_details := (v_is_committed = false);
+  else
+    v_can_edit_payout_details := (v_has_newflow_draft_item = false);
+  end if;
+
+  select *
+  into v_existing_oneoff
+  from public.pay_finance_case_oneoff_payout_bank_details d
+  where d.finance_case_id = p_finance_case_id
+  for update;
+
+  v_before_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'notes', v_case.notes,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'schedule_input_mode', null,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', v_case.oneoff_bank_details_required
+  );
 
   v_new_principal := coalesce(round(p_principal_amount,2), round(coalesce(v_case.original_amount,0),2));
   v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
@@ -18917,13 +18994,12 @@ begin
 
   v_has_principal_change := round(v_new_principal,2) <> round(coalesce(v_case.original_amount,0),2);
 
-  if v_is_committed and v_has_principal_change then
+  if (not v_can_edit_payout_details) and v_has_principal_change then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'PAYOUT_ALREADY_COMMITTED',
-      'message', 'pay_payment_advance_update: payout details can only be edited before commit; after commit only future repayment terms may be changed',
-      'finance_case_id', p_finance_case_id::text,
-      'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end
+      'code', 'PAYOUT_ALREADY_DRAFTED_OR_COMMITTED',
+      'message', 'pay_payment_advance_update: payout principal can only be edited while the item is Not processed yet',
+      'finance_case_id', p_finance_case_id::text
     )::text;
   end if;
 
@@ -19038,6 +19114,283 @@ begin
     )::text;
   end if;
 
+  if v_candidate_pay_method = 'PAYE' then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := false;
+
+    if nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+       or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+       or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+       or nullif(btrim(coalesce(p_bank_details_note,'')), '') is not null
+       or coalesce(p_remove_oneoff_bank_details, false) = true then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+        'code', 'ONEOFF_BANK_DETAILS_NOT_ALLOWED_FOR_PAYE',
+        'message', 'pay_payment_advance_update: one-off bank fields are not allowed for PAYE loan payouts',
+        'finance_case_id', p_finance_case_id::text
+      )::text;
+    end if;
+
+    if v_existing_oneoff.finance_case_id is not null then
+      v_oneoff_before := jsonb_build_object(
+        'finance_case_id', p_finance_case_id::text,
+        'candidate_id', v_case.candidate_id::text,
+        'beneficiary_name', v_existing_oneoff.beneficiary_name,
+        'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+        'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+        'bank_details_hash', v_existing_oneoff.bank_details_hash,
+        'note', v_existing_oneoff.note
+      );
+
+      delete from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id;
+
+      select *
+      into v_existing_oneoff
+      from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id;
+
+      perform public._audit_insert(
+        'finance_case',
+        p_finance_case_id::text,
+        'ONEOFF_BANK_DETAILS_REMOVED',
+        v_oneoff_before,
+        null::jsonb,
+        'PAY_METHOD_NOW_PAYE',
+        p_actor_user_id
+      );
+    end if;
+
+    v_readiness_bank_hash := nullif(btrim(coalesce((select c.bank_details_hash from public.candidates c where c.id = v_case.candidate_id limit 1), '')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce((select c.account_holder from public.candidates c where c.id = v_case.candidate_id limit 1), (select c.display_name from public.candidates c where c.id = v_case.candidate_id limit 1))), '');
+  else
+    v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := true;
+
+    v_oneoff_change_requested := (
+      nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+      or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+      or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+      or p_bank_details_note is not null
+      or coalesce(p_remove_oneoff_bank_details, false) = true
+    );
+
+    if v_oneoff_change_requested and not v_can_edit_payout_details then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+        'code', 'ONEOFF_BANK_DETAILS_LOCKED',
+        'message', 'pay_payment_advance_update: one-off bank details can only be edited while the item is Not processed yet',
+        'finance_case_id', p_finance_case_id::text
+      )::text;
+    end if;
+
+    if coalesce(p_remove_oneoff_bank_details, false) = true then
+      if v_existing_oneoff.finance_case_id is not null then
+        v_oneoff_before := jsonb_build_object(
+          'finance_case_id', p_finance_case_id::text,
+          'candidate_id', v_case.candidate_id::text,
+          'beneficiary_name', v_existing_oneoff.beneficiary_name,
+          'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+          'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+          'bank_details_hash', v_existing_oneoff.bank_details_hash,
+          'note', v_existing_oneoff.note
+        );
+
+        delete from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        select *
+        into v_existing_oneoff
+        from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        perform public._audit_insert(
+          'finance_case',
+          p_finance_case_id::text,
+          'ONEOFF_BANK_DETAILS_REMOVED',
+          v_oneoff_before,
+          null::jsonb,
+          'ONE_OFF_PAYOUT_BANK_DETAILS',
+          p_actor_user_id
+        );
+      end if;
+
+      v_readiness_bank_hash := null;
+      v_readiness_payee_name := null;
+    else
+      if v_existing_oneoff.finance_case_id is not null then
+        v_beneficiary_name_norm := coalesce(
+          nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), ''),
+          v_existing_oneoff.beneficiary_name
+        );
+        v_sort_code_norm := coalesce(
+          case
+            when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+            else null
+          end,
+          v_existing_oneoff.sort_code
+        );
+        v_account_number_norm := coalesce(
+          nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), ''),
+          v_existing_oneoff.account_number
+        );
+      else
+        v_beneficiary_name_norm := nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), '');
+        v_sort_code_norm := case
+          when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+          else null
+        end;
+        v_account_number_norm := nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), '');
+      end if;
+
+      if v_beneficiary_name_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+          'code', 'BENEFICIARY_NAME_REQUIRED',
+          'message', 'pay_payment_advance_update: beneficiary_name is required for umbrella loan payouts',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_sort_code_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+          'code', 'SORT_CODE_REQUIRED',
+          'message', 'pay_payment_advance_update: valid sort_code is required for umbrella loan payouts',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_account_number_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+          'code', 'ACCOUNT_NUMBER_REQUIRED',
+          'message', 'pay_payment_advance_update: valid account_number is required for umbrella loan payouts',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      v_oneoff_bank_hash := public._bank_hash(v_sort_code_norm, v_account_number_norm, v_beneficiary_name_norm);
+      if v_oneoff_bank_hash is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+          'code', 'BANK_DETAILS_HASH_FAILED',
+          'message', 'pay_payment_advance_update: unable to derive bank_details_hash for umbrella loan payout bank details',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_can_edit_payout_details then
+        v_oneoff_before := case
+          when v_existing_oneoff.finance_case_id is null then null
+          else jsonb_build_object(
+            'finance_case_id', p_finance_case_id::text,
+            'candidate_id', v_case.candidate_id::text,
+            'beneficiary_name', v_existing_oneoff.beneficiary_name,
+            'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+            'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+            'bank_details_hash', v_existing_oneoff.bank_details_hash,
+            'note', v_existing_oneoff.note
+          )
+        end;
+
+        insert into public.pay_finance_case_oneoff_payout_bank_details(
+          finance_case_id,
+          candidate_id,
+          beneficiary_name,
+          sort_code,
+          account_number,
+          bank_details_hash,
+          note,
+          created_at_utc,
+          created_by_user_id,
+          updated_at_utc,
+          updated_by_user_id
+        )
+        values (
+          p_finance_case_id,
+          v_case.candidate_id,
+          v_beneficiary_name_norm,
+          v_sort_code_norm,
+          v_account_number_norm,
+          v_oneoff_bank_hash,
+          case when p_bank_details_note is null then coalesce(v_existing_oneoff.note, null) else nullif(btrim(coalesce(p_bank_details_note,'')), '') end,
+          v_now_utc,
+          p_actor_user_id,
+          v_now_utc,
+          p_actor_user_id
+        )
+        on conflict (finance_case_id) do update
+        set candidate_id = excluded.candidate_id,
+            beneficiary_name = excluded.beneficiary_name,
+            sort_code = excluded.sort_code,
+            account_number = excluded.account_number,
+            bank_details_hash = excluded.bank_details_hash,
+            note = excluded.note,
+            updated_at_utc = excluded.updated_at_utc,
+            updated_by_user_id = excluded.updated_by_user_id;
+
+        select *
+        into v_existing_oneoff
+        from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        v_oneoff_after := jsonb_build_object(
+          'finance_case_id', p_finance_case_id::text,
+          'candidate_id', v_case.candidate_id::text,
+          'beneficiary_name', v_existing_oneoff.beneficiary_name,
+          'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+          'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+          'bank_details_hash', v_existing_oneoff.bank_details_hash,
+          'note', v_existing_oneoff.note
+        );
+
+        perform public._audit_insert(
+          'finance_case',
+          p_finance_case_id::text,
+          case when v_oneoff_before is null then 'ONEOFF_BANK_DETAILS_CREATED' else 'ONEOFF_BANK_DETAILS_UPDATED' end,
+          v_oneoff_before,
+          v_oneoff_after,
+          'ONE_OFF_PAYOUT_BANK_DETAILS',
+          p_actor_user_id
+        );
+      end if;
+
+      v_readiness_bank_hash := v_oneoff_bank_hash;
+      v_readiness_payee_name := v_beneficiary_name_norm;
+    end if;
+  end if;
+
+  select
+    sd.banking_system,
+    sd.external_paye_system,
+    sd.rail_provider_default,
+    sd.rail_env_default,
+    sd.rail_supports_name_check
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'SETTINGS_DEFAULTS_MISSING',
+      'message', 'pay_payment_advance_update: settings_defaults missing required banking defaults (id=1)'
+    )::text;
+  end if;
+
+  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
+  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
+  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
+  v_requires_payee_map := (v_provider <> 'CSV');
+
   select
     coalesce(
       jsonb_agg(
@@ -19140,7 +19493,7 @@ begin
       v_source_family_key,
       'CASE_TOTAL',
       'TOTAL',
-      'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
+      'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
       v_candidate_pay_method,
       v_component_source_basis_json,
       v_new_principal,
@@ -19162,16 +19515,11 @@ begin
     returning * into v_component;
   end if;
 
-  v_component_has_saved_resolution := false;
-
   if v_can_edit_payout_details then
     v_component_remaining_amount := v_new_principal;
   else
     v_component_remaining_amount := round(coalesce(v_case.outstanding_amount,0),2);
   end if;
-
-  v_component_mark_stale := false;
-  v_component_stale_reason := null;
 
   v_component_before_json := jsonb_build_object(
     'finance_component_id', v_component.id::text,
@@ -19191,7 +19539,7 @@ begin
     candidate_id = v_case.candidate_id,
     client_id = v_case.client_id,
     linked_timesheet_id = v_case.linked_timesheet_id,
-    classification = 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
+    classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
     source_pay_method = v_candidate_pay_method,
     source_basis_json = v_component_source_basis_json,
     source_amount = v_new_principal,
@@ -19223,7 +19571,10 @@ begin
     start_week_start = v_new_start_week_start,
     minimum_earnings_threshold = v_new_minimum_earnings_threshold,
     take_home_floor_override = v_new_take_home_floor_override,
-    updated_at = v_now_utc
+    updated_at = v_now_utc,
+    taxability = v_taxability,
+    routing_kind = v_routing_kind,
+    oneoff_bank_details_required = v_oneoff_required
   where pa.id = p_finance_case_id;
 
   if v_can_edit_payout_details and v_has_batch then
@@ -19260,7 +19611,7 @@ begin
       'source_family_key', v_source_family_key,
       'component_key_type', 'CASE_TOTAL',
       'component_key_value', 'TOTAL',
-      'classification', 'NET_PAY_FIXED_RECOVERY',
+      'classification', 'REIMBURSEMENT_GROSS_FIXED',
       'source_pay_method', v_candidate_pay_method,
       'target_pay_method', v_candidate_pay_method,
       'source_basis_json', v_component_source_basis_json,
@@ -19274,7 +19625,7 @@ begin
         p_source_family_key => v_source_family_key,
         p_component_key_type => 'CASE_TOTAL',
         p_component_key_value => 'TOTAL',
-        p_classification => 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
+        p_classification => 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
         p_source_pay_method => v_candidate_pay_method,
         p_current_target_pay_method => v_candidate_pay_method,
         p_source_basis_json => v_component_source_basis_json,
@@ -19298,7 +19649,7 @@ begin
           frozen_component_snapshot_json = v_component_snapshot_json,
           frozen_component_key_type = 'CASE_TOTAL',
           frozen_component_key_value = 'TOTAL',
-          frozen_component_classification = 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
+          frozen_component_classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
           frozen_source_basis_json = v_component_source_basis_json,
           frozen_source_pay_method = v_candidate_pay_method,
           frozen_target_pay_method = v_candidate_pay_method,
@@ -19308,7 +19659,26 @@ begin
           frozen_source_amount = v_new_principal,
           frozen_target_amount_ex_vat = v_new_principal,
           frozen_target_amount_vat = 0,
-          frozen_target_amount_inc_vat = v_new_principal
+          frozen_target_amount_inc_vat = v_new_principal,
+          payout_instruction_snapshot_json = case
+            when v_candidate_pay_method = 'UMBRELLA' and v_existing_oneoff.finance_case_id is not null then
+              jsonb_build_object(
+                'taxability', 'NON_TAXABLE',
+                'routing_kind', 'ONE_OFF_SPECIFIED_BANK_ACCOUNT',
+                'destination_label', 'one-off specified bank account',
+                'pay_channel', 'UMBRELLA',
+                'payee_entity_kind', 'CANDIDATE',
+                'payee_entity_id', v_case.candidate_id::text,
+                'beneficiary_name', v_existing_oneoff.beneficiary_name,
+                'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+                'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+                'bank_details_hash', v_existing_oneoff.bank_details_hash,
+                'bank_details_note', v_existing_oneoff.note,
+                'appears_on_umbrella_remittance', false,
+                'generates_candidate_payment_advice', true
+              )
+            else null
+          end
       where pbi.id = v_batch_item_id;
 
       update public.pay_batch_item_breakdowns pbib
@@ -19329,6 +19699,81 @@ begin
   from public.pay_advances pa
   where pa.id = p_finance_case_id;
 
+  if v_candidate_pay_method = 'PAYE' then
+    v_readiness_bank_hash := nullif(btrim(coalesce((select c.bank_details_hash from public.candidates c where c.id = v_case.candidate_id limit 1), '')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce((select c.account_holder from public.candidates c where c.id = v_case.candidate_id limit 1), (select c.display_name from public.candidates c where c.id = v_case.candidate_id limit 1))), '');
+  elsif v_existing_oneoff.finance_case_id is not null then
+    v_readiness_bank_hash := nullif(btrim(coalesce(v_existing_oneoff.bank_details_hash,'')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce(v_existing_oneoff.beneficiary_name,'')), '');
+  else
+    v_readiness_bank_hash := null;
+    v_readiness_payee_name := null;
+  end if;
+
+  if v_readiness_bank_hash is null or btrim(coalesce(v_readiness_bank_hash,'')) = '' then
+    v_warnings := v_warnings || jsonb_build_array(
+      jsonb_build_object(
+        'code', 'BLOCKED_BANK_DETAILS',
+        'message', case when v_candidate_pay_method = 'PAYE'
+                        then 'Candidate bank details are missing; the loan payout will appear as Blocked for Pay until bank details are present.'
+                        else 'One-off payout bank details are missing or incomplete; the loan payout will appear as Blocked for Pay until valid bank details are present.' end,
+        'candidate_id', v_case.candidate_id::text
+      )
+    );
+  else
+    if v_need_name_check = true then
+      select
+        coalesce(bnc.status, 'UNVERIFIED') as status,
+        (bnc.override_reason is not null and bnc.override_hash = v_readiness_bank_hash) as has_override
+      into
+        v_bnc_status,
+        v_bnc_has_override
+      from public.bank_name_checks bnc
+      where bnc.rail_provider = v_settings.rail_provider_default
+        and bnc.rail_env = v_settings.rail_env_default
+        and bnc.entity_kind = 'CANDIDATE'
+        and bnc.entity_id = v_case.candidate_id
+        and bnc.bank_details_hash = v_readiness_bank_hash
+      limit 1;
+
+      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NAME_CHECK',
+            'message', 'Name check has not passed (or override missing) for the payout destination; the loan payout will appear as Blocked for Pay until resolved.',
+            'candidate_id', v_case.candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+
+    if v_requires_payee_map = true then
+      select (bpm.payee_id is not null) as present
+      into v_bpm_present
+      from public.bank_payee_map bpm
+      where bpm.rail_provider = v_settings.rail_provider_default
+        and bpm.rail_env = v_settings.rail_env_default
+        and bpm.entity_kind = 'CANDIDATE'
+        and bpm.entity_id = v_case.candidate_id
+        and bpm.bank_details_hash = v_readiness_bank_hash
+      limit 1;
+
+      if coalesce(v_bpm_present,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NO_PAYEE_MAP',
+            'message', 'Payee map is missing for the payout destination on this rail; the loan payout will appear as Blocked for Pay until payee mapping exists.',
+            'candidate_id', v_case.candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+  end if;
+
   v_after_json := jsonb_build_object(
     'original_amount', round(coalesce(v_case.original_amount,0),2),
     'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
@@ -19339,7 +19784,10 @@ begin
     'notes', v_case.notes,
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
-    'schedule_input_mode', v_schedule_input_mode
+    'schedule_input_mode', v_schedule_input_mode,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', v_case.oneoff_bank_details_required
   );
 
   v_component_after_json := jsonb_build_object(
@@ -19375,7 +19823,7 @@ begin
     v_before_json,
     v_after_json,
     null::text,
-    case when v_can_edit_payout_details then 'Payment Advance payout details updated before commit' else 'Payment Advance future repayment terms updated after commit' end
+    case when v_can_edit_payout_details then 'Payment Advance payout details updated while Not processed yet' else 'Payment Advance future repayment terms updated after draft/commit' end
   );
 
   insert into public.pay_finance_case_events(
@@ -19400,7 +19848,7 @@ begin
     v_component_before_json,
     v_component_after_json,
     'PAYMENT_ADVANCE_COMPONENT_UPDATED',
-    'Updated Payment Advance net-fixed component state'
+    'Updated Payment Advance non-taxable fixed component state'
   );
 
   v_component_summary_json := jsonb_build_object(
@@ -19408,7 +19856,7 @@ begin
     'source_family_key', v_source_family_key,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'NET_PAY_FIXED_RECOVERY',
+    'classification', 'REIMBURSEMENT_GROSS_FIXED',
     'source_pay_method', v_component_after.source_pay_method,
     'source_amount', round(coalesce(v_component_after.source_amount,0),2),
     'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount,0),2),
@@ -19438,12 +19886,22 @@ begin
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
     'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', v_case.oneoff_bank_details_required,
+    'oneoff_bank_details_present', exists(
+      select 1
+      from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id
+    ),
+    'bank_details_hash', v_readiness_bank_hash,
+    'beneficiary_name', case when v_existing_oneoff.finance_case_id is null then null else v_existing_oneoff.beneficiary_name end,
     'finance_component_id', v_finance_component_id::text,
-    'component_summary', v_component_summary_json
+    'component_summary', v_component_summary_json,
+    'warnings', v_warnings
   );
 end;
 $$;
-
 
 
 
