@@ -19904,8 +19904,20 @@ end;
 $$;
 
 
+DROP FUNCTION IF EXISTS public.pay_manual_debt_adjustment_create(
+  uuid,
+  numeric,
+  numeric,
+  int,
+  date,
+  uuid,
+  text,
+  text,
+  numeric,
+  numeric
+);
 
-create or replace function public.pay_manual_debt_adjustment_create(
+CREATE OR REPLACE FUNCTION public.pay_manual_debt_adjustment_create(
   p_candidate_id uuid,
   p_amount numeric,
   p_weekly_due numeric,
@@ -19915,7 +19927,8 @@ create or replace function public.pay_manual_debt_adjustment_create(
   p_adjustment_comment text,
   p_note text default null,
   p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
+  p_take_home_floor_override numeric default null,
+  p_taxability text default null
 )
 returns jsonb
 language plpgsql
@@ -19938,9 +19951,15 @@ declare
   v_has_weekly_due_input boolean := false;
   v_has_weeks_total_input boolean := false;
 
+  v_taxability public.pay_finance_taxability_enum := null;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_component_classification public.pay_finance_component_classification_enum := null;
+  v_paye_treatment text := 'NONE';
+  v_oneoff_required boolean := false;
+
   v_component_source_basis_json jsonb := '{}'::jsonb;
-  v_component_resolution_payload_json jsonb := '{}'::jsonb;
-  v_component_resolution_result_json jsonb := '{}'::jsonb;
+  v_component_resolution_payload_json jsonb := null;
+  v_component_resolution_result_json jsonb := null;
   v_component_resolution_fingerprint text := null;
   v_component_summary_json jsonb := '{}'::jsonb;
 begin
@@ -20006,6 +20025,25 @@ begin
       'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
       'code', 'TAKE_HOME_FLOOR_INVALID',
       'message', 'pay_manual_debt_adjustment_create: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  if p_taxability is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'TAXABILITY_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_create: taxability is required'
+    )::text;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'TAXABLE' then
+    v_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'NON_TAXABLE' then
+    v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  else
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'TAXABILITY_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: taxability must be TAXABLE or NON_TAXABLE',
+      'taxability', p_taxability
     )::text;
   end if;
 
@@ -20107,6 +20145,34 @@ begin
     )::text;
   end if;
 
+  if v_candidate.pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: candidate pay_method must be PAYE or UMBRELLA',
+      'candidate_id', p_candidate_id::text,
+      'pay_method', v_candidate.pay_method
+    )::text;
+  end if;
+
+  if v_candidate.pay_method = 'PAYE' and v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'GROSS_DEDUCT';
+  elsif v_candidate.pay_method = 'PAYE' and v_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NET_DEDUCT';
+  elsif v_candidate.pay_method = 'UMBRELLA' and v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+  else
+    v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+  end if;
+
   select
     coalesce(
       jsonb_agg(
@@ -20177,7 +20243,10 @@ begin
     written_off_by_user_id,
     write_off_reason,
     cleared_at_utc,
-    cleared_by_user_id
+    cleared_by_user_id,
+    taxability,
+    routing_kind,
+    oneoff_bank_details_required
   )
   values (
     p_candidate_id,
@@ -20213,41 +20282,64 @@ begin
     null::uuid,
     null::text,
     null::timestamptz,
-    null::uuid
+    null::uuid,
+    v_taxability,
+    v_routing_kind,
+    false
   )
   returning id into v_finance_case_id;
 
-  v_component_source_basis_json := jsonb_build_object(
-    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
-    'amount', v_amount_norm
+  v_component_source_basis_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+      'amount', v_amount_norm,
+      'taxability', v_taxability::text,
+      'routing_kind', v_routing_kind::text,
+      'paye_treatment', v_paye_treatment,
+      'weekly_due', v_weekly_due_norm,
+      'weeks_total', v_weeks_total_norm,
+      'start_week_start', p_start_week_start::text,
+      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+      'schedule_json', coalesce(v_schedule_json, '[]'::jsonb),
+      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+      'note', nullif(btrim(coalesce(p_note,'')), '')
+    )
   );
 
-  v_component_resolution_payload_json := jsonb_build_object(
-    'same_channel', true,
-    'target_amount', v_amount_norm,
-    'target_pay_method', v_candidate.pay_method
-  );
+  if v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+    v_component_resolution_payload_json := jsonb_build_object(
+      'same_channel', true,
+      'target_amount', v_amount_norm,
+      'target_pay_method', v_candidate.pay_method
+    );
 
-  v_component_resolution_result_json := jsonb_build_object(
-    'target_amount', v_amount_norm,
-    'target_amount_ex_vat', v_amount_norm,
-    'target_amount_vat', 0,
-    'target_amount_inc_vat', v_amount_norm,
-    'target_pay_method', v_candidate.pay_method
-  );
+    v_component_resolution_result_json := jsonb_build_object(
+      'target_amount', v_amount_norm,
+      'target_amount_ex_vat', v_amount_norm,
+      'target_amount_vat', 0,
+      'target_amount_inc_vat', v_amount_norm,
+      'target_pay_method', v_candidate.pay_method
+    );
 
-  v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
-    p_source_family_key         => 'case:' || v_finance_case_id::text,
-    p_component_key_type        => 'CASE_TOTAL',
-    p_component_key_value       => 'TOTAL',
-    p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-    p_source_pay_method         => v_candidate.pay_method,
-    p_current_target_pay_method => v_candidate.pay_method,
-    p_source_basis_json         => v_component_source_basis_json,
-    p_source_amount             => v_amount_norm,
-    p_relevant_erni_pct         => null::numeric,
-    p_target_basis_json         => jsonb_build_object('same_channel', true)
-  );
+    v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+      p_source_family_key         => 'case:' || v_finance_case_id::text,
+      p_component_key_type        => 'CASE_TOTAL',
+      p_component_key_value       => 'TOTAL',
+      p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      p_source_pay_method         => v_candidate.pay_method,
+      p_current_target_pay_method => v_candidate.pay_method,
+      p_source_basis_json         => v_component_source_basis_json,
+      p_source_amount             => v_amount_norm,
+      p_relevant_erni_pct         => null::numeric,
+      p_target_basis_json         => jsonb_build_object('same_channel', true)
+    );
+  else
+    v_component_resolution_payload_json := null;
+    v_component_resolution_result_json := null;
+    v_component_resolution_fingerprint := null;
+  end if;
 
   insert into public.pay_finance_case_components(
     finance_case_id,
@@ -20284,13 +20376,21 @@ begin
     'case:' || v_finance_case_id::text,
     'CASE_TOTAL',
     'TOTAL',
-    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    v_component_classification,
     v_candidate.pay_method,
     v_component_source_basis_json,
     v_amount_norm,
     v_amount_norm,
-    v_candidate.pay_method,
-    'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
+    case
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then v_candidate.pay_method
+      else null
+    end,
+    case
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
+      else null
+    end,
     v_component_resolution_payload_json,
     v_component_resolution_result_json,
     v_component_resolution_fingerprint,
@@ -20300,7 +20400,11 @@ begin
     0,
     v_now_utc,
     v_now_utc,
-    v_now_utc,
+    case
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then v_now_utc
+      else null::timestamptz
+    end,
     null::timestamptz
   )
   returning id into v_finance_component_id;
@@ -20310,13 +20414,16 @@ begin
     'source_family_key', 'case:' || v_finance_case_id::text,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'classification', v_component_classification::text,
     'source_pay_method', v_candidate.pay_method,
-    'saved_target_pay_method', v_candidate.pay_method,
-    'saved_resolution_mode', 'MANUAL_AMOUNT',
+    'saved_target_pay_method', case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then v_candidate.pay_method else null end,
+    'saved_resolution_mode', case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'MANUAL_AMOUNT' else null end,
     'source_amount', v_amount_norm,
     'remaining_source_amount', v_amount_norm,
-    'is_resolution_stale', false
+    'is_resolution_stale', false,
+    'taxability', v_taxability::text,
+    'routing_kind', v_routing_kind::text,
+    'paye_treatment', v_paye_treatment
   );
 
   insert into public.pay_finance_case_events(
@@ -20348,7 +20455,10 @@ begin
       'start_week_start', p_start_week_start::text,
       'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
       'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-      'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end,
+      'paye_treatment', v_paye_treatment,
+      'taxability', v_taxability::text,
+      'routing_kind', v_routing_kind::text,
+      'oneoff_bank_details_required', false,
       'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
       'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
       'schedule_input_mode', v_schedule_input_mode,
@@ -20380,7 +20490,11 @@ begin
     null::jsonb,
     v_component_summary_json,
     'MANUAL_DEBT_ADJUSTMENT_CREATE',
-    'Created taxable total component for manual debt adjustment'
+    case
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'Created taxable total component for manual debt adjustment'
+      else 'Created non-taxable fixed recovery component for manual debt adjustment'
+    end
   );
 
   return jsonb_build_object(
@@ -20390,7 +20504,7 @@ begin
     'case_type', 'MANUAL_DEBT_ADJUSTMENT',
     'worker_label', 'Manual debt adjustment',
     'recovery_label', 'Manual debt adjustment recovery',
-    'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end,
+    'paye_treatment', v_paye_treatment,
     'schedule_input_mode', v_schedule_input_mode,
     'amount', v_amount_norm,
     'outstanding_amount', v_amount_norm,
@@ -20401,11 +20515,28 @@ begin
     'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
     'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
     'schedule_json', coalesce(v_schedule_json,'[]'::jsonb),
+    'taxability', v_taxability::text,
+    'routing_kind', v_routing_kind::text,
+    'oneoff_bank_details_required', false,
     'component_summary', v_component_summary_json
   );
 end;
 $$;
-create or replace function public.pay_manual_debt_adjustment_update(
+
+DROP FUNCTION IF EXISTS public.pay_manual_debt_adjustment_update(
+  uuid,
+  uuid,
+  numeric,
+  numeric,
+  int,
+  date,
+  text,
+  text,
+  numeric,
+  numeric
+);
+
+CREATE OR REPLACE FUNCTION public.pay_manual_debt_adjustment_update(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
   p_amount numeric default null,
@@ -20415,7 +20546,8 @@ create or replace function public.pay_manual_debt_adjustment_update(
   p_adjustment_comment text default null,
   p_note text default null,
   p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
+  p_take_home_floor_override numeric default null,
+  p_taxability text default null
 )
 returns jsonb
 language plpgsql
@@ -20438,6 +20570,15 @@ declare
   v_component_is_resolution_stale boolean := false;
   v_component_stale_reason text := null;
   v_source_basis_changed boolean := false;
+
+  v_current_taxability public.pay_finance_taxability_enum := null;
+  v_requested_taxability public.pay_finance_taxability_enum := null;
+  v_current_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_requested_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_component_classification public.pay_finance_component_classification_enum := null;
+  v_paye_treatment text := 'NONE';
+  v_taxability_changed boolean := false;
+  v_has_active_batch_item boolean := false;
 
   v_new_original_amount numeric(12,2);
   v_new_outstanding_amount numeric(12,2);
@@ -20499,6 +20640,17 @@ begin
   where c.id = v_case.candidate_id
   limit 1;
 
+  if v_candidate_pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: candidate pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'pay_method', v_candidate_pay_method
+    )::text;
+  end if;
+
   if p_adjustment_comment is not null and nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
@@ -20554,6 +20706,96 @@ begin
       'code', 'START_WEEK_START_NOT_MONDAY',
       'message', 'pay_manual_debt_adjustment_update: start_week_start must be a Monday (week start)',
       'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  select pfc.*
+  into v_component
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.closed_at_utc is null
+    and pfc.component_key_type = 'CASE_TOTAL'
+    and pfc.component_key_value = 'TOTAL'
+  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
+  limit 1
+  for update;
+
+  v_has_component := (v_component.id is not null);
+
+  v_current_taxability := coalesce(
+    v_case.taxability,
+    case
+      when v_has_component and v_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'TAXABLE'::public.pay_finance_taxability_enum
+      else 'NON_TAXABLE'::public.pay_finance_taxability_enum
+    end
+  );
+
+  if p_taxability is null then
+    v_requested_taxability := v_current_taxability;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'TAXABLE' then
+    v_requested_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'NON_TAXABLE' then
+    v_requested_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  else
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'TAXABILITY_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: taxability must be TAXABLE or NON_TAXABLE when provided',
+      'taxability', p_taxability
+    )::text;
+  end if;
+
+  if v_case.routing_kind is not null then
+    v_current_routing_kind := v_case.routing_kind;
+  elsif v_candidate_pay_method = 'UMBRELLA' then
+    v_current_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+  else
+    v_current_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+  end if;
+
+  if v_candidate_pay_method = 'PAYE' and v_requested_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'GROSS_DEDUCT';
+  elsif v_candidate_pay_method = 'PAYE' and v_requested_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NET_DEDUCT';
+  elsif v_candidate_pay_method = 'UMBRELLA' and v_requested_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+  else
+    v_requested_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+  end if;
+
+  v_taxability_changed := v_current_taxability is distinct from v_requested_taxability;
+
+  select exists (
+    select 1
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbi.source_ref = ('advance:' || p_finance_case_id::text)
+      and pbi.item_type = 'MANUAL_DEBT_RECOVERY'
+      and pbi.is_voided = false
+      and pb.cancelled_at_utc is null
+      and upper(coalesce(pb.status,'')) <> 'CANCELLED'
+  ) into v_has_active_batch_item;
+
+  if v_taxability_changed and v_has_active_batch_item then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'TAXABILITY_LOCKED_AFTER_DRAFT',
+      'message', 'pay_manual_debt_adjustment_update: taxability cannot be changed once a manual debt recovery is drafted or later',
+      'finance_case_id', p_finance_case_id::text,
+      'current_taxability', v_current_taxability::text,
+      'requested_taxability', v_requested_taxability::text
     )::text;
   end if;
 
@@ -20685,22 +20927,23 @@ begin
   ) x
   where x.amt < 0;
 
-  select pfc.*
-  into v_component
-  from public.pay_finance_case_components pfc
-  where pfc.finance_case_id = p_finance_case_id
-    and pfc.closed_at_utc is null
-    and pfc.component_key_type = 'CASE_TOTAL'
-    and pfc.component_key_value = 'TOTAL'
-  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
-  limit 1
-  for update;
-
-  v_has_component := (v_component.id is not null);
-
-  v_component_source_basis_json := jsonb_build_object(
-    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
-    'amount', v_new_original_amount
+  v_component_source_basis_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+      'amount', v_new_original_amount,
+      'taxability', v_requested_taxability::text,
+      'routing_kind', v_requested_routing_kind::text,
+      'paye_treatment', v_paye_treatment,
+      'weekly_due', v_new_weekly_due,
+      'weeks_total', v_new_weeks_total,
+      'start_week_start', v_new_start_week_start::text,
+      'next_due_week_start', case when v_new_next_due is null then null else v_new_next_due::text end,
+      'schedule_json', coalesce(v_new_schedule_json, '[]'::jsonb),
+      'minimum_earnings_threshold', v_new_minimum_earnings_threshold,
+      'take_home_floor_override', v_new_take_home_floor_override,
+      'adjustment_comment', v_new_adjustment_comment,
+      'note', v_new_notes
+    )
   );
 
   v_before_json := jsonb_build_object(
@@ -20713,7 +20956,9 @@ begin
     'adjustment_comment', v_case.adjustment_comment,
     'notes', v_case.notes,
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end
   );
 
   update public.pay_advances pa
@@ -20728,12 +20973,16 @@ begin
       notes = v_new_notes,
       minimum_earnings_threshold = v_new_minimum_earnings_threshold,
       take_home_floor_override = v_new_take_home_floor_override,
-      updated_at = v_now_utc
+      updated_at = v_now_utc,
+      taxability = v_requested_taxability,
+      routing_kind = v_requested_routing_kind,
+      oneoff_bank_details_required = false
   where pa.id = p_finance_case_id;
 
   if v_has_component then
     v_component_before_json := jsonb_build_object(
       'finance_component_id', v_component.id::text,
+      'classification', v_component.classification::text,
       'source_amount', round(coalesce(v_component.source_amount,0),2),
       'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
       'source_pay_method', v_component.source_pay_method,
@@ -20748,39 +20997,111 @@ begin
     v_source_basis_changed := (
       round(coalesce(v_component.source_amount,0),2) is distinct from round(coalesce(v_new_original_amount,0),2)
       or v_component.source_basis_json is distinct from v_component_source_basis_json
+      or v_component.classification is distinct from v_component_classification
+      or coalesce(v_component.source_pay_method,'') is distinct from coalesce(v_candidate_pay_method,'')
     );
 
-    if v_source_basis_changed then
-      v_component_is_resolution_stale := (
-        v_component.saved_target_pay_method is not null
-        or v_component.saved_resolution_mode is not null
-        or v_component.saved_resolution_payload_json is not null
-        or v_component.saved_resolution_result_json is not null
-        or v_component.resolution_fingerprint is not null
-        or v_component.is_resolution_stale = true
+    if v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+      v_component_resolution_payload_json := jsonb_build_object(
+        'same_channel', true,
+        'target_amount', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
       );
 
-      if v_component_is_resolution_stale then
-        v_component_stale_reason := 'COMPONENT_BASIS_CHANGED';
-      else
-        v_component_stale_reason := null;
-      end if;
+      v_component_resolution_result_json := jsonb_build_object(
+        'target_amount', v_new_original_amount,
+        'target_amount_ex_vat', v_new_original_amount,
+        'target_amount_vat', 0,
+        'target_amount_inc_vat', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
+      );
+
+      v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+        p_source_family_key         => 'case:' || p_finance_case_id::text,
+        p_component_key_type        => 'CASE_TOTAL',
+        p_component_key_value       => 'TOTAL',
+        p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+        p_source_pay_method         => v_candidate_pay_method,
+        p_current_target_pay_method => v_candidate_pay_method,
+        p_source_basis_json         => v_component_source_basis_json,
+        p_source_amount             => v_new_original_amount,
+        p_relevant_erni_pct         => null::numeric,
+        p_target_basis_json         => jsonb_build_object('same_channel', true)
+      );
+
+      v_component_is_resolution_stale := false;
+      v_component_stale_reason := null;
     else
-      v_component_is_resolution_stale := coalesce(v_component.is_resolution_stale,false);
-      v_component_stale_reason := v_component.stale_reason;
+      v_component_resolution_payload_json := null;
+      v_component_resolution_result_json := null;
+      v_component_resolution_fingerprint := null;
+      v_component_is_resolution_stale := false;
+      v_component_stale_reason := null;
     end if;
 
     update public.pay_finance_case_components pfc
-    set
-      source_basis_json = v_component_source_basis_json,
-      source_amount = v_new_original_amount,
-      remaining_source_amount = v_new_outstanding_amount,
-      is_resolution_stale = v_component_is_resolution_stale,
-      stale_reason = v_component_stale_reason,
-      updated_at_utc = v_now_utc
+    set classification = v_component_classification,
+        source_pay_method = v_candidate_pay_method,
+        source_basis_json = v_component_source_basis_json,
+        source_amount = v_new_original_amount,
+        remaining_source_amount = v_new_outstanding_amount,
+        saved_target_pay_method = case
+          when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          then v_candidate_pay_method
+          else null
+        end,
+        saved_resolution_mode = case
+          when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          then 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
+          else null
+        end,
+        saved_resolution_payload_json = v_component_resolution_payload_json,
+        saved_resolution_result_json = v_component_resolution_result_json,
+        resolution_fingerprint = v_component_resolution_fingerprint,
+        is_resolution_stale = v_component_is_resolution_stale,
+        stale_reason = v_component_stale_reason,
+        updated_at_utc = v_now_utc,
+        resolved_at_utc = case
+          when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          then v_now_utc
+          else null::timestamptz
+        end
     where pfc.id = v_component.id
     returning pfc.* into v_component;
   else
+    if v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+      v_component_resolution_payload_json := jsonb_build_object(
+        'same_channel', true,
+        'target_amount', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
+      );
+
+      v_component_resolution_result_json := jsonb_build_object(
+        'target_amount', v_new_original_amount,
+        'target_amount_ex_vat', v_new_original_amount,
+        'target_amount_vat', 0,
+        'target_amount_inc_vat', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
+      );
+
+      v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+        p_source_family_key         => 'case:' || p_finance_case_id::text,
+        p_component_key_type        => 'CASE_TOTAL',
+        p_component_key_value       => 'TOTAL',
+        p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+        p_source_pay_method         => v_candidate_pay_method,
+        p_current_target_pay_method => v_candidate_pay_method,
+        p_source_basis_json         => v_component_source_basis_json,
+        p_source_amount             => v_new_original_amount,
+        p_relevant_erni_pct         => null::numeric,
+        p_target_basis_json         => jsonb_build_object('same_channel', true)
+      );
+    else
+      v_component_resolution_payload_json := null;
+      v_component_resolution_result_json := null;
+      v_component_resolution_fingerprint := null;
+    end if;
+
     insert into public.pay_finance_case_components(
       finance_case_id,
       candidate_id,
@@ -20816,44 +21137,35 @@ begin
       'case:' || p_finance_case_id::text,
       'CASE_TOTAL',
       'TOTAL',
-      'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      v_component_classification,
       v_candidate_pay_method,
       v_component_source_basis_json,
       v_new_original_amount,
       v_new_outstanding_amount,
-      v_candidate_pay_method,
-      'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
-      jsonb_build_object(
-        'same_channel', true,
-        'target_amount', v_new_original_amount,
-        'target_pay_method', v_candidate_pay_method
-      ),
-      jsonb_build_object(
-        'target_amount', v_new_original_amount,
-        'target_amount_ex_vat', v_new_original_amount,
-        'target_amount_vat', 0,
-        'target_amount_inc_vat', v_new_original_amount,
-        'target_pay_method', v_candidate_pay_method
-      ),
-      public.pay_finance_component_fingerprint(
-        p_source_family_key         => 'case:' || p_finance_case_id::text,
-        p_component_key_type        => 'CASE_TOTAL',
-        p_component_key_value       => 'TOTAL',
-        p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-        p_source_pay_method         => v_candidate_pay_method,
-        p_current_target_pay_method => v_candidate_pay_method,
-        p_source_basis_json         => v_component_source_basis_json,
-        p_source_amount             => v_new_original_amount,
-        p_relevant_erni_pct         => null::numeric,
-        p_target_basis_json         => jsonb_build_object('same_channel', true)
-      ),
+      case
+        when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        then v_candidate_pay_method
+        else null
+      end,
+      case
+        when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        then 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
+        else null
+      end,
+      v_component_resolution_payload_json,
+      v_component_resolution_result_json,
+      v_component_resolution_fingerprint,
       false,
       null::text,
       0,
       0,
       v_now_utc,
       v_now_utc,
-      v_now_utc,
+      case
+        when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        then v_now_utc
+        else null::timestamptz
+      end,
       null::timestamptz
     )
     returning * into v_component;
@@ -20868,6 +21180,7 @@ begin
 
   v_component_after_json := jsonb_build_object(
     'finance_component_id', v_component.id::text,
+    'classification', v_component.classification::text,
     'source_amount', round(coalesce(v_component.source_amount,0),2),
     'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
     'source_pay_method', v_component.source_pay_method,
@@ -20891,6 +21204,8 @@ begin
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
     'schedule_input_mode', v_schedule_input_mode,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
     'component_summary', v_component_after_json
   );
 
@@ -20942,9 +21257,15 @@ begin
     v_component_after_json,
     case when v_source_basis_changed then 'COMPONENT_BASIS_CHANGED' else null::text end,
     case
-      when v_component_created then 'Created taxable total component for manual debt adjustment update'
-      when v_source_basis_changed then 'Updated taxable total component and marked saved resolution stale only because source basis changed'
-      else 'Updated taxable total component for manual debt adjustment without changing source basis'
+      when v_component_created and v_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'Created taxable total component for manual debt adjustment update'
+      when v_component_created
+      then 'Created non-taxable fixed recovery component for manual debt adjustment update'
+      when v_source_basis_changed and v_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'Updated taxable total component for manual debt adjustment'
+      when v_source_basis_changed
+      then 'Updated non-taxable fixed recovery component for manual debt adjustment'
+      else 'Updated manual debt adjustment component'
     end
   );
 
@@ -20960,7 +21281,10 @@ begin
     'source_amount', round(coalesce(v_component.source_amount,0),2),
     'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
     'is_resolution_stale', v_component.is_resolution_stale,
-    'stale_reason', v_component.stale_reason
+    'stale_reason', v_component.stale_reason,
+    'taxability', v_requested_taxability::text,
+    'routing_kind', v_requested_routing_kind::text,
+    'paye_treatment', v_paye_treatment
   );
 
   return jsonb_build_object(
@@ -20970,6 +21294,7 @@ begin
     'case_type', 'MANUAL_DEBT_ADJUSTMENT',
     'worker_label', 'Manual debt adjustment',
     'recovery_label', 'Manual debt adjustment recovery',
+    'paye_treatment', v_paye_treatment,
     'schedule_input_mode', v_schedule_input_mode,
     'original_amount', round(coalesce(v_case.original_amount,0),2),
     'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
@@ -20980,10 +21305,14 @@ begin
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
     'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', false,
     'component_summary', v_component_summary_json
   );
 end;
 $$;
+
 
 create or replace function public.pay_manual_credit_adjustment_create(
   p_candidate_id uuid,
