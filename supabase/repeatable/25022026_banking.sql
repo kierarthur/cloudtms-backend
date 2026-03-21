@@ -21718,6 +21718,7 @@ declare
   v_component_resolution_payload_json jsonb := null;
   v_component_resolution_result_json jsonb := null;
   v_component_resolution_fingerprint text := null;
+  v_component_snapshot_json jsonb := '{}'::jsonb;
   v_component_summary_json jsonb := '{}'::jsonb;
   v_component_changed boolean := false;
   v_component_classification public.pay_finance_component_classification_enum := null;
