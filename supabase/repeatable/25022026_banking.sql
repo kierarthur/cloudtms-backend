@@ -10320,6 +10320,10 @@ end;
 $function$;
 
 
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -12035,7 +12039,11 @@ begin
 
   ---------------------------------------------------------------------------
   -- PAYE_NET_CHANGED: diff[] must include candidate net deltas (and net/awaiting drift)
-  -- Only PAYMENT_ADVANCE repayment remains a net-side deduction.
+  -- PAYE net-side effects now include:
+  --   * LOAN_PAYOUT (NET_ADD)
+  --   * MANUAL_CREDIT_PAYOUT when non-taxable (NET_ADD)
+  --   * MANUAL_DEBT_RECOVERY / LOAN_REPAYMENT when non-taxable (NET_DEDUCT)
+  -- Taxable manual adjustments remain gross-side and must not be counted here.
   ---------------------------------------------------------------------------
   if v_scope = 'PAYE' and coalesce(v_batch_kind_fixed,'') <> 'LOANS' then
     insert into pg_temp.tmp_fresh_paye_net_diffs (
@@ -12052,8 +12060,7 @@ begin
         pbc.id as pay_batch_candidate_id,
         pbc.candidate_id,
         coalesce(pbc.awaiting_net_amount,false) as awaiting_net_amount,
-        round(coalesce(pbc.net_bank_amount,0),2)::numeric(12,2) as net_bank_amount_ex,
-        round(coalesce(pbc.loan_repayment_taken,0),2)::numeric(12,2) as loan_repayment_taken_ex
+        round(coalesce(pbc.net_bank_amount,0),2)::numeric(12,2) as net_bank_amount_ex
       from public.pay_batch_candidates pbc
       where pbc.pay_batch_id = p_pay_batch_id
     ),
@@ -12065,35 +12072,70 @@ begin
       left join public.pay_batch_paye_net_inputs pni
         on pni.pay_batch_candidate_id = c.pay_batch_candidate_id
     ),
-    net_ded_present as (
+    net_side_effects as (
       select
         c.pay_batch_candidate_id,
+        round(
+          coalesce(sum(
+            case
+              when pbi.is_voided = false
+               and upper(coalesce(pbi.paye_treatment,'')) = 'NET_ADD'
+                then coalesce(pbi.amount_ex_vat, 0)
+              else 0
+            end
+          ), 0),
+          2
+        )::numeric(12,2) as net_additions_ex,
+        round(
+          coalesce(sum(
+            case
+              when pbi.is_voided = false
+               and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT'
+                then abs(coalesce(pbi.amount_ex_vat, 0))
+              else 0
+            end
+          ), 0),
+          2
+        )::numeric(12,2) as net_deductions_ex,
         exists(
           select 1
-          from public.pay_batch_items pbi
-          where pbi.pay_batch_candidate_id = c.pay_batch_candidate_id
-            and pbi.is_voided = false
-            and pbi.item_type = 'LOAN_REPAYMENT'
-        ) as has_net_deductions
+          from public.pay_batch_items pbi_chk
+          where pbi_chk.pay_batch_candidate_id = c.pay_batch_candidate_id
+            and pbi_chk.is_voided = false
+            and upper(coalesce(pbi_chk.paye_treatment,'')) in ('NET_ADD','NET_DEDUCT')
+        ) as has_net_side_items
       from cand c
+      left join public.pay_batch_items pbi
+        on pbi.pay_batch_candidate_id = c.pay_batch_candidate_id
+      group by c.pay_batch_candidate_id
     )
     select
       c.candidate_id,
       'PAYE_NET' as key_type,
       ('candidate:' || c.candidate_id::text) as key_value,
       ni.net_amount::numeric(12,2) as expected_ex,
-      round(c.net_bank_amount_ex + c.loan_repayment_taken_ex, 2)::numeric(12,2) as actual_ex,
+      round(
+        c.net_bank_amount_ex
+        - coalesce(nse.net_additions_ex, 0)
+        + coalesce(nse.net_deductions_ex, 0),
+        2
+      )::numeric(12,2) as actual_ex,
       4 as ord
     from cand c
     left join net_inp ni
       on ni.pay_batch_candidate_id = c.pay_batch_candidate_id
-    join net_ded_present ndp
-      on ndp.pay_batch_candidate_id = c.pay_batch_candidate_id
+    join net_side_effects nse
+      on nse.pay_batch_candidate_id = c.pay_batch_candidate_id
     where c.awaiting_net_amount <> (ni.net_amount is null)
-       or ((ni.net_amount is null) and ndp.has_net_deductions = true)
+       or ((ni.net_amount is null) and nse.has_net_side_items = true)
        or (
             ni.net_amount is not null
-        and round(ni.net_amount,2) <> round(c.net_bank_amount_ex + c.loan_repayment_taken_ex, 2)
+        and round(ni.net_amount,2) <> round(
+              c.net_bank_amount_ex
+              - coalesce(nse.net_additions_ex, 0)
+              + coalesce(nse.net_deductions_ex, 0),
+              2
+            )
        );
 
     select count(*)::int
