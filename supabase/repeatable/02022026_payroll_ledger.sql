@@ -3813,10 +3813,6 @@ begin;
 
 
 
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -6419,12 +6415,22 @@ ts_itemised as (
       on c.id = vfcr.candidate_id
     left join public.umbrellas u
       on u.id = c.umbrella_id
-    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','UNDERPAYMENT')
+    where vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
       and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
       and coalesce(vfcr.outstanding_amount,0) > 0
-      and (vfcr.case_type <> 'PAYMENT_ADVANCE' or upper(coalesce(vfcr.payout_status::text,'')) = 'PAID')
-      and (vfcr.case_type in ('OVERPAYMENT','UNDERPAYMENT') or vfcr.next_due_week_start is null or vfcr.next_due_week_start <= v_week_start)
       and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
+      and (
+        (vfcr.case_type = 'PAYMENT_ADVANCE' and (
+          upper(coalesce(vfcr.payout_status::text,'')) <> 'PAID'
+          or vfcr.next_due_week_start is null
+          or vfcr.next_due_week_start <= v_week_start
+        ))
+        or (vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT' and (
+          vfcr.next_due_week_start is null
+          or vfcr.next_due_week_start <= v_week_start
+        ))
+        or vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
+      )
       and (p_candidate_id is null or vfcr.candidate_id = p_candidate_id)
       and (p_client_id is null or vfcr.client_id = p_client_id)
   ),
@@ -6991,6 +6997,161 @@ ts_itemised as (
       and upper(coalesce(pb.status::text,'')) <> 'CANCELLED'
     group by nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid
   ),
+  finance_case_payee_readiness as (
+    select
+      f0.finance_case_id,
+      f0.payee_entity_kind,
+      f0.payee_entity_id,
+      f0.bank_details_hash,
+      f0.beneficiary_name,
+      f0.sort_code,
+      f0.account_number,
+      case
+        when f0.account_number is null or btrim(coalesce(f0.account_number,'')) = '' then null
+        else lpad(right(f0.account_number, 4), greatest(length(f0.account_number), 4), '*')
+      end as masked_bank_account,
+      coalesce(bnc.status, 'UNVERIFIED') as name_check_status,
+      (bnc.override_reason is not null and bnc.override_hash = f0.bank_details_hash) as name_check_has_override,
+      (bpm.payee_id is not null) as payee_map_present,
+      (
+        f0.payee_entity_id is null
+        or f0.bank_details_hash is null
+        or btrim(coalesce(f0.bank_details_hash,'')) = ''
+        or nullif(btrim(coalesce(f0.beneficiary_name,'')), '') is null
+        or nullif(btrim(coalesce(f0.sort_code,'')), '') is null
+        or nullif(btrim(coalesce(f0.account_number,'')), '') is null
+      ) as is_missing_bank_details,
+      (
+        v_need_name_check = true
+        and not (
+          f0.payee_entity_id is null
+          or f0.bank_details_hash is null
+          or btrim(coalesce(f0.bank_details_hash,'')) = ''
+          or nullif(btrim(coalesce(f0.beneficiary_name,'')), '') is null
+          or nullif(btrim(coalesce(f0.sort_code,'')), '') is null
+          or nullif(btrim(coalesce(f0.account_number,'')), '') is null
+        )
+        and coalesce(bnc.status, 'UNVERIFIED') <> 'PASS'
+        and not (bnc.override_reason is not null and bnc.override_hash = f0.bank_details_hash)
+      ) as is_name_check_blocked,
+      (
+        v_requires_payee_map = true
+        and not (
+          f0.payee_entity_id is null
+          or f0.bank_details_hash is null
+          or btrim(coalesce(f0.bank_details_hash,'')) = ''
+          or nullif(btrim(coalesce(f0.beneficiary_name,'')), '') is null
+          or nullif(btrim(coalesce(f0.sort_code,'')), '') is null
+          or nullif(btrim(coalesce(f0.account_number,'')), '') is null
+        )
+        and bpm.payee_id is null
+      ) as is_payee_map_blocked,
+      (
+        (case
+          when (
+            f0.payee_entity_id is null
+            or f0.bank_details_hash is null
+            or btrim(coalesce(f0.bank_details_hash,'')) = ''
+            or nullif(btrim(coalesce(f0.beneficiary_name,'')), '') is null
+            or nullif(btrim(coalesce(f0.sort_code,'')), '') is null
+            or nullif(btrim(coalesce(f0.account_number,'')), '') is null
+          )
+          then jsonb_build_array('BLOCKED_BANK_DETAILS')
+          else '[]'::jsonb
+        end)
+        ||
+        (case
+          when (
+            v_need_name_check = true
+            and not (
+              f0.payee_entity_id is null
+              or f0.bank_details_hash is null
+              or btrim(coalesce(f0.bank_details_hash,'')) = ''
+              or nullif(btrim(coalesce(f0.beneficiary_name,'')), '') is null
+              or nullif(btrim(coalesce(f0.sort_code,'')), '') is null
+              or nullif(btrim(coalesce(f0.account_number,'')), '') is null
+            )
+            and coalesce(bnc.status, 'UNVERIFIED') <> 'PASS'
+            and not (bnc.override_reason is not null and bnc.override_hash = f0.bank_details_hash)
+          )
+          then jsonb_build_array('BLOCKED_NAME_CHECK')
+          else '[]'::jsonb
+        end)
+        ||
+        (case
+          when (
+            v_requires_payee_map = true
+            and not (
+              f0.payee_entity_id is null
+              or f0.bank_details_hash is null
+              or btrim(coalesce(f0.bank_details_hash,'')) = ''
+              or nullif(btrim(coalesce(f0.beneficiary_name,'')), '') is null
+              or nullif(btrim(coalesce(f0.sort_code,'')), '') is null
+              or nullif(btrim(coalesce(f0.account_number,'')), '') is null
+            )
+            and bpm.payee_id is null
+          )
+          then jsonb_build_array('BLOCKED_NO_PAYEE_MAP')
+          else '[]'::jsonb
+        end)
+      ) as blocked_reason_codes
+    from (
+      select
+        vfcr.finance_case_id,
+        case
+          when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then 'UMBRELLA'
+          else 'CANDIDATE'
+        end as payee_entity_kind,
+        case
+          when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then c.umbrella_id
+          else vfcr.candidate_id
+        end as payee_entity_id,
+        case
+          when vfcr.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum then obd.bank_details_hash
+          when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then u.bank_details_hash
+          else c.bank_details_hash
+        end as bank_details_hash,
+        case
+          when vfcr.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum then obd.beneficiary_name
+          when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then u.name
+          else coalesce(c.account_holder, c.display_name)
+        end as beneficiary_name,
+        case
+          when vfcr.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum then obd.sort_code
+          when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then u.sort_code
+          else c.sort_code
+        end as sort_code,
+        case
+          when vfcr.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum then obd.account_number
+          when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then u.account_number
+          else c.account_number
+        end as account_number
+      from public.v_finance_cases_register vfcr
+      join public.candidates c
+        on c.id = vfcr.candidate_id
+      left join public.umbrellas u
+        on u.id = c.umbrella_id
+      left join public.pay_finance_case_oneoff_payout_bank_details obd
+        on obd.finance_case_id = vfcr.finance_case_id
+      where vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
+        and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+        and coalesce(vfcr.outstanding_amount,0) > 0
+        and (p_candidate_id is null or vfcr.candidate_id = p_candidate_id)
+        and (p_client_id is null or vfcr.client_id = p_client_id)
+    ) f0
+    left join public.bank_name_checks bnc
+      on bnc.rail_provider = v_rail_provider_default
+     and bnc.rail_env = v_rail_env_default
+     and bnc.entity_kind = f0.payee_entity_kind
+     and bnc.entity_id = f0.payee_entity_id
+     and bnc.bank_details_hash is not distinct from f0.bank_details_hash
+    left join public.bank_payee_map bpm
+      on bpm.rail_provider = v_rail_provider_default
+     and bpm.rail_env = v_rail_env_default
+     and bpm.entity_kind = f0.payee_entity_kind
+     and bpm.entity_id = f0.payee_entity_id
+     and bpm.bank_details_hash is not distinct from f0.bank_details_hash
+  ),
   finance_case_component_rows as (
     select
       vfcr.finance_case_id,
@@ -7036,7 +7197,7 @@ ts_itemised as (
       on pfc.finance_case_id = vfcr.finance_case_id
      and pfc.closed_at_utc is null
      and coalesce(pfc.remaining_source_amount, 0) > 0
-    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','UNDERPAYMENT')
+    where vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
       and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
       and coalesce(vfcr.outstanding_amount,0) > 0
   ),
@@ -7169,143 +7330,303 @@ ts_itemised as (
     ) fcsr on true
   ),
   finance_case_resolution_rollup as (
+    with grouped as (
+      select
+        vfcr.finance_case_id,
+        vfcr.case_type,
+        vfcr.advance_kind,
+        vfcr.reason,
+        vfcr.candidate_id,
+        cp.cand_tms_ref,
+        cp.cand_display_name,
+        cp.cand_pay_method as candidate_pay_method,
+        fpr.payee_entity_kind,
+        fpr.payee_entity_id,
+        (jsonb_array_length(coalesce(fpr.blocked_reason_codes, '[]'::jsonb)) = 0) as candidate_ready_for_draft,
+        vfcr.client_id,
+        vfcr.client_name,
+        vfcr.linked_timesheet_id,
+        vfcr.linked_shift_date,
+        vfcr.adjustment_comment,
+        vfcr.next_due_week_start,
+        vfcr.active_snooze_id,
+        vfcr.active_snooze_kind,
+        vfcr.active_snooze_until_date,
+        vfcr.active_snooze_note,
+        vfcr.taxability,
+        vfcr.routing_kind,
+        vfcr.oneoff_bank_details_present,
+        vfcr.oneoff_bank_details_required,
+        vfcr.is_candidate_directed_oneoff_payout,
+        vfcr.appears_on_umbrella_remittance,
+        vfcr.generates_candidate_payment_advice,
+        vfcr.snooze_allowed,
+        vfcr.lifecycle_status_display,
+        fpr.bank_details_hash as payee_bank_hash,
+        fpr.beneficiary_name,
+        fpr.masked_bank_account,
+        coalesce(fpr.blocked_reason_codes, '[]'::jsonb) as payee_blocked_reason_codes,
+        case
+          when vfcr.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum then 'one-off specified bank account'
+          when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then 'umbrella company'
+          else 'normal PAYE route'
+        end as destination_label,
+        round(
+          greatest(
+            case
+              when vfcr.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID'
+                then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+                     - coalesce(fcrw.repaid_wtd_ex,0)
+                     - coalesce(vfcr.active_reserved_amount,0)
+              when vfcr.case_type = 'PAYMENT_ADVANCE'
+                then case
+                  when vfcr.lifecycle_status_display in ('Paid','Cancelled') then 0::numeric
+                  else coalesce(vfcr.original_amount,0) - coalesce(vfcr.active_reserved_amount,0)
+                end
+              when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+                then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+                     - coalesce(fcrw.repaid_wtd_ex,0)
+                     - coalesce(vfcr.active_reserved_amount,0)
+              when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
+                then case
+                  when vfcr.lifecycle_status_display in ('Paid','Cancelled') then 0::numeric
+                  else coalesce(vfcr.original_amount,0) - coalesce(vfcr.active_reserved_amount,0)
+                end
+              else 0::numeric
+            end,
+            0::numeric
+          ),
+          2
+        ) as due_amount_ex_vat,
+        coalesce(count(fccr.finance_component_id) filter (
+          where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        ), 0)::int as open_taxable_count,
+        coalesce(count(fccr.finance_component_id) filter (
+          where fccr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum
+        ), 0)::int as open_reimbursement_count,
+        coalesce(count(fccr.finance_component_id) filter (
+          where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and (
+              fccr.saved_target_pay_method is null
+              or fccr.saved_resolution_mode is null
+              or fccr.is_resolution_stale = true
+              or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,''))
+              or (
+                fccr.resolution_fingerprint is not null
+                and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint
+              )
+            )
+        ), 0)::int as unresolved_taxable_count,
+        coalesce(count(fccr.finance_component_id) filter (
+          where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and (
+              fccr.is_resolution_stale = true
+              or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,''))
+              or (
+                fccr.resolution_fingerprint is not null
+                and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint
+              )
+            )
+        ), 0)::int as stale_count,
+        (coalesce(count(fccr.finance_component_id) filter (
+          where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        ), 0) > 0
+         and
+         coalesce(count(fccr.finance_component_id) filter (
+          where fccr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum
+        ), 0) > 0) as is_mixed_case,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'finance_component_id', fccr.finance_component_id::text,
+              'source_family_key', fccr.source_family_key,
+              'component_key_type', fccr.component_key_type,
+              'component_key_value', fccr.component_key_value,
+              'classification', fccr.classification::text,
+              'source_pay_method', fccr.source_pay_method,
+              'current_target_pay_method', fccr.current_target_pay_method,
+              'source_amount', fccr.source_amount,
+              'remaining_source_amount', fccr.remaining_source_amount,
+              'source_basis_json', fccr.source_basis_json,
+              'saved_target_pay_method', fccr.saved_target_pay_method,
+              'saved_resolution_mode', case when fccr.saved_resolution_mode is null then null else fccr.saved_resolution_mode::text end,
+              'saved_resolution_payload_json', fccr.saved_resolution_payload_json,
+              'saved_resolution_result_json', fccr.saved_resolution_result_json,
+              'has_suggested_resolution', fccr.has_suggested_resolution,
+              'suggestion_provenance', fccr.suggestion_provenance,
+              'is_fresh_suggested_resolution', fccr.is_fresh_suggested_resolution,
+              'is_reusable_saved_resolution', fccr.is_reusable_saved_resolution,
+              'is_stale_saved_resolution', fccr.is_stale_saved_resolution,
+              'suggested_resolution_payload_json', fccr.suggested_resolution_payload_json,
+              'suggested_resolution_result_json', fccr.suggested_resolution_result_json,
+              'source_units', fccr.source_units,
+              'target_units', case when nullif(fccr.suggested_resolution_result_json->>'target_units','') is not null then (fccr.suggested_resolution_result_json->>'target_units')::numeric else fccr.source_units end,
+              'source_rate', fccr.source_rate,
+              'target_rate', coalesce(nullif(fccr.suggested_resolution_result_json->>'replacement_rate','')::numeric, nullif(fccr.suggested_resolution_payload_json->>'suggested_target_rate','')::numeric),
+              'source_pay_ex_vat', round(coalesce(fccr.source_amount,0),2),
+              'source_charge_ex_vat', fccr.source_charge_ex_vat,
+              'source_margin_ex_vat', case when fccr.source_charge_ex_vat is null then null else round(fccr.source_charge_ex_vat - fccr.source_amount,2) end,
+              'target_pay_ex_vat', nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','')::numeric,
+              'target_charge_ex_vat', fccr.source_charge_ex_vat,
+              'target_margin_ex_vat', case when fccr.source_charge_ex_vat is null or nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','') is null then null else round(fccr.source_charge_ex_vat - (fccr.suggested_resolution_result_json->>'target_amount_ex_vat')::numeric,2) end,
+              'margin_delta_ex_vat', nullif(fccr.suggested_resolution_result_json->>'margin_delta_ex_vat','')::numeric,
+              'suggestion_explanation_text', fccr.suggestion_explanation_text,
+              'component_fingerprint', fccr.current_component_fingerprint,
+              'is_resolution_stale', (fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))),
+              'stale_reason', case when fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) then 'TARGET_PAY_METHOD_CHANGED' when fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint then 'COMPONENT_BASIS_CHANGED' else fccr.stale_reason end,
+              'requires_resolution', (fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.saved_target_pay_method is null or fccr.saved_resolution_mode is null or fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))),
+              'resolution_state', case when fccr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum then 'FIXED' when (fccr.saved_target_pay_method is null or fccr.saved_resolution_mode is null) then 'REQUIRED' when (fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint)) then 'STALE' else 'RESOLVED' end
+            )
+            order by fccr.classification::text, fccr.component_key_type, fccr.component_key_value
+          ) filter (where fccr.finance_component_id is not null),
+          '[]'::jsonb
+        ) as case_components_json
+      from public.v_finance_cases_register vfcr
+      join cand_payee cp
+        on cp.candidate_id = vfcr.candidate_id
+      left join finance_case_repaid_wtd fcrw
+        on fcrw.finance_case_id = vfcr.finance_case_id
+      left join finance_case_component_review_rows fccr
+        on fccr.finance_case_id = vfcr.finance_case_id
+      left join finance_case_payee_readiness fpr
+        on fpr.finance_case_id = vfcr.finance_case_id
+      where vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
+        and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+        and coalesce(vfcr.outstanding_amount,0) > 0
+        and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
+        and (
+          (vfcr.case_type = 'PAYMENT_ADVANCE' and (
+            upper(coalesce(vfcr.payout_status::text,'')) <> 'PAID'
+            or vfcr.next_due_week_start is null
+            or vfcr.next_due_week_start <= v_week_start
+          ))
+          or (vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT' and (
+            vfcr.next_due_week_start is null
+            or vfcr.next_due_week_start <= v_week_start
+          ))
+          or vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
+        )
+      group by
+        vfcr.finance_case_id,
+        vfcr.case_type,
+        vfcr.advance_kind,
+        vfcr.reason,
+        vfcr.candidate_id,
+        cp.cand_tms_ref,
+        cp.cand_display_name,
+        cp.cand_pay_method,
+        fpr.payee_entity_kind,
+        fpr.payee_entity_id,
+        fpr.bank_details_hash,
+        fpr.beneficiary_name,
+        fpr.masked_bank_account,
+        fpr.blocked_reason_codes,
+        vfcr.client_id,
+        vfcr.client_name,
+        vfcr.linked_timesheet_id,
+        vfcr.linked_shift_date,
+        vfcr.adjustment_comment,
+        vfcr.next_due_week_start,
+        vfcr.active_snooze_id,
+        vfcr.active_snooze_kind,
+        vfcr.active_snooze_until_date,
+        vfcr.active_snooze_note,
+        vfcr.taxability,
+        vfcr.routing_kind,
+        vfcr.oneoff_bank_details_present,
+        vfcr.oneoff_bank_details_required,
+        vfcr.is_candidate_directed_oneoff_payout,
+        vfcr.appears_on_umbrella_remittance,
+        vfcr.generates_candidate_payment_advice,
+        vfcr.snooze_allowed,
+        vfcr.lifecycle_status_display,
+        vfcr.outstanding_amount,
+        vfcr.original_amount,
+        vfcr.weekly_due,
+        vfcr.active_reserved_amount,
+        vfcr.payout_status,
+        fcrw.repaid_wtd_ex
+    )
     select
-      vfcr.finance_case_id,
-      vfcr.case_type,
-      vfcr.advance_kind,
-      vfcr.reason,
-      vfcr.candidate_id,
-      cp.cand_tms_ref,
-      cp.cand_display_name,
-      cp.cand_pay_method as candidate_pay_method,
-      cp.payee_entity_kind,
-      cp.payee_entity_id,
-      cp.is_ready_for_draft as candidate_ready_for_draft,
-      vfcr.client_id,
-      vfcr.client_name,
-      vfcr.linked_timesheet_id,
-      vfcr.linked_shift_date,
-      vfcr.adjustment_comment,
-      vfcr.next_due_week_start,
-      vfcr.active_snooze_id,
-      vfcr.active_snooze_kind,
-      vfcr.active_snooze_until_date,
-      vfcr.active_snooze_note,
-      round(
-        greatest(
-          case
-            when vfcr.case_type = 'OVERPAYMENT' then coalesce(vfcr.outstanding_amount,0)
-            when vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT') then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
-            when vfcr.case_type = 'UNDERPAYMENT' then coalesce(vfcr.outstanding_amount,0)
-            else 0
-          end
-          - coalesce(fcrw.repaid_wtd_ex,0)
-          - coalesce(vfcr.active_reserved_amount,0),
-          0
-        ),
-        2
-      ) as due_amount_ex_vat,
-      coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum), 0)::int as open_taxable_count,
-      coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum), 0)::int as open_reimbursement_count,
-      coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.saved_target_pay_method is null or fccr.saved_resolution_mode is null or fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))), 0)::int as unresolved_taxable_count,
-      coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))), 0)::int as stale_count,
-      (coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum), 0) > 0 and coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum), 0) > 0) as is_mixed_case,
-      (coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.saved_target_pay_method is null or fccr.saved_resolution_mode is null or fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))), 0) > 0) as is_blocked,
+      g.finance_case_id,
+      g.case_type,
+      g.advance_kind,
+      g.reason,
+      g.candidate_id,
+      g.cand_tms_ref,
+      g.cand_display_name,
+      g.candidate_pay_method,
+      g.payee_entity_kind,
+      g.payee_entity_id,
+      g.candidate_ready_for_draft,
+      g.client_id,
+      g.client_name,
+      g.linked_timesheet_id,
+      g.linked_shift_date,
+      g.adjustment_comment,
+      g.next_due_week_start,
+      g.active_snooze_id,
+      g.active_snooze_kind,
+      g.active_snooze_until_date,
+      g.active_snooze_note,
+      g.taxability,
+      g.routing_kind,
+      g.oneoff_bank_details_present,
+      g.oneoff_bank_details_required,
+      g.is_candidate_directed_oneoff_payout,
+      g.appears_on_umbrella_remittance,
+      g.generates_candidate_payment_advice,
+      g.snooze_allowed,
+      g.lifecycle_status_display,
+      g.payee_bank_hash,
+      g.beneficiary_name,
+      g.masked_bank_account,
+      g.destination_label,
+      g.due_amount_ex_vat,
+      g.open_taxable_count,
+      g.open_reimbursement_count,
+      g.unresolved_taxable_count,
+      g.stale_count,
+      g.is_mixed_case,
+      (
+        g.unresolved_taxable_count > 0
+        or jsonb_array_length(coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)) > 0
+      ) as is_blocked,
+      (
+        coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)
+        ||
+        (case
+          when g.unresolved_taxable_count > 0 then jsonb_build_array('BLOCKED_TAXABLE_RESOLUTION')
+          else '[]'::jsonb
+        end)
+      ) as blocked_reason_codes,
       jsonb_build_object(
-        'case_key', ('finance:' || vfcr.finance_case_id::text),
-        'case_type', vfcr.case_type::text,
-        'is_mixed_case', (coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum), 0) > 0 and coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum), 0) > 0),
-        'open_taxable_count', coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum), 0),
-        'open_reimbursement_count', coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum), 0),
-        'unresolved_taxable_count', coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.saved_target_pay_method is null or fccr.saved_resolution_mode is null or fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))), 0),
-        'stale_count', coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))), 0),
-        'is_blocked', (coalesce(count(fccr.finance_component_id) filter (where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.saved_target_pay_method is null or fccr.saved_resolution_mode is null or fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))), 0) > 0)
+        'case_key', ('finance:' || g.finance_case_id::text),
+        'case_type', g.case_type::text,
+        'taxability', case when g.taxability is null then null else g.taxability::text end,
+        'routing_kind', case when g.routing_kind is null then null else g.routing_kind::text end,
+        'destination_label', g.destination_label,
+        'is_mixed_case', g.is_mixed_case,
+        'open_taxable_count', g.open_taxable_count,
+        'open_reimbursement_count', g.open_reimbursement_count,
+        'unresolved_taxable_count', g.unresolved_taxable_count,
+        'stale_count', g.stale_count,
+        'is_blocked', (
+          g.unresolved_taxable_count > 0
+          or jsonb_array_length(coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)) > 0
+        ),
+        'due_amount_ex_vat', g.due_amount_ex_vat,
+        'blocked_reason_codes', (
+          coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)
+          ||
+          (case
+            when g.unresolved_taxable_count > 0 then jsonb_build_array('BLOCKED_TAXABLE_RESOLUTION')
+            else '[]'::jsonb
+          end)
+        )
       ) as case_resolution_summary_json,
-      coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'finance_component_id', fccr.finance_component_id::text,
-            'source_family_key', fccr.source_family_key,
-            'component_key_type', fccr.component_key_type,
-            'component_key_value', fccr.component_key_value,
-            'classification', fccr.classification::text,
-            'source_pay_method', fccr.source_pay_method,
-            'current_target_pay_method', fccr.current_target_pay_method,
-            'source_amount', fccr.source_amount,
-            'remaining_source_amount', fccr.remaining_source_amount,
-            'source_basis_json', fccr.source_basis_json,
-            'saved_target_pay_method', fccr.saved_target_pay_method,
-            'saved_resolution_mode', case when fccr.saved_resolution_mode is null then null else fccr.saved_resolution_mode::text end,
-            'saved_resolution_payload_json', fccr.saved_resolution_payload_json,
-            'saved_resolution_result_json', fccr.saved_resolution_result_json,
-            'has_suggested_resolution', fccr.has_suggested_resolution,
-            'suggestion_provenance', fccr.suggestion_provenance,
-            'is_fresh_suggested_resolution', fccr.is_fresh_suggested_resolution,
-            'is_reusable_saved_resolution', fccr.is_reusable_saved_resolution,
-            'is_stale_saved_resolution', fccr.is_stale_saved_resolution,
-            'suggested_resolution_payload_json', fccr.suggested_resolution_payload_json,
-            'suggested_resolution_result_json', fccr.suggested_resolution_result_json,
-            'source_units', fccr.source_units,
-            'target_units', case when nullif(fccr.suggested_resolution_result_json->>'target_units','') is not null then (fccr.suggested_resolution_result_json->>'target_units')::numeric else fccr.source_units end,
-            'source_rate', fccr.source_rate,
-            'target_rate', coalesce(nullif(fccr.suggested_resolution_result_json->>'replacement_rate','')::numeric, nullif(fccr.suggested_resolution_payload_json->>'suggested_target_rate','')::numeric),
-            'source_pay_ex_vat', round(coalesce(fccr.source_amount,0),2),
-            'source_charge_ex_vat', fccr.source_charge_ex_vat,
-            'source_margin_ex_vat', case when fccr.source_charge_ex_vat is null then null else round(fccr.source_charge_ex_vat - fccr.source_amount,2) end,
-            'target_pay_ex_vat', nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','')::numeric,
-            'target_charge_ex_vat', fccr.source_charge_ex_vat,
-            'target_margin_ex_vat', case when fccr.source_charge_ex_vat is null or nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','') is null then null else round(fccr.source_charge_ex_vat - (fccr.suggested_resolution_result_json->>'target_amount_ex_vat')::numeric,2) end,
-            'margin_delta_ex_vat', nullif(fccr.suggested_resolution_result_json->>'margin_delta_ex_vat','')::numeric,
-            'suggestion_explanation_text', fccr.suggestion_explanation_text,
-            'component_fingerprint', fccr.current_component_fingerprint,
-            'is_resolution_stale', (fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))),
-            'stale_reason', case when fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) then 'TARGET_PAY_METHOD_CHANGED' when fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint then 'COMPONENT_BASIS_CHANGED' else fccr.stale_reason end,
-            'requires_resolution', (fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.saved_target_pay_method is null or fccr.saved_resolution_mode is null or fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))),
-            'resolution_state', case when fccr.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum then 'FIXED' when (fccr.saved_target_pay_method is null or fccr.saved_resolution_mode is null) then 'REQUIRED' when (fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint)) then 'STALE' else 'RESOLVED' end
-          )
-          order by fccr.classification::text, fccr.component_key_type, fccr.component_key_value
-        ) filter (where fccr.finance_component_id is not null),
-        '[]'::jsonb
-      ) as case_components_json
-    from public.v_finance_cases_register vfcr
-    join cand_payee cp
-      on cp.candidate_id = vfcr.candidate_id
-    left join finance_case_repaid_wtd fcrw
-      on fcrw.finance_case_id = vfcr.finance_case_id
-    left join finance_case_component_review_rows fccr
-      on fccr.finance_case_id = vfcr.finance_case_id
-    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','UNDERPAYMENT')
-      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
-      and coalesce(vfcr.outstanding_amount,0) > 0
-      and (vfcr.case_type <> 'PAYMENT_ADVANCE' or upper(coalesce(vfcr.payout_status::text,'')) = 'PAID')
-      and (vfcr.case_type in ('OVERPAYMENT','UNDERPAYMENT') or vfcr.next_due_week_start is null or vfcr.next_due_week_start <= v_week_start)
-      and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
-    group by
-      vfcr.finance_case_id,
-      vfcr.case_type,
-      vfcr.advance_kind,
-      vfcr.reason,
-      vfcr.candidate_id,
-      cp.cand_tms_ref,
-      cp.cand_display_name,
-      cp.cand_pay_method,
-      cp.payee_entity_kind,
-      cp.payee_entity_id,
-      cp.is_ready_for_draft,
-      vfcr.client_id,
-      vfcr.client_name,
-      vfcr.linked_timesheet_id,
-      vfcr.linked_shift_date,
-      vfcr.adjustment_comment,
-      vfcr.next_due_week_start,
-      vfcr.active_snooze_id,
-      vfcr.active_snooze_kind,
-      vfcr.active_snooze_until_date,
-      vfcr.active_snooze_note,
-      vfcr.outstanding_amount,
-      vfcr.weekly_due,
-      vfcr.active_reserved_amount,
-      fcrw.repaid_wtd_ex
+      g.case_components_json
+    from grouped g
   ),
   canonical_timesheet_lines as (
     select
@@ -8189,8 +8510,14 @@ ts_itemised as (
       fcrr.cand_display_name,
       fcrr.payee_entity_kind,
       fcrr.payee_entity_id,
-      (fcrr.candidate_ready_for_draft and fcrr.is_blocked = false) as is_ready_for_draft,
+      fcrr.candidate_ready_for_draft,
       fcrr.case_type,
+      fcrr.taxability,
+      fcrr.routing_kind,
+      fcrr.destination_label,
+      fcrr.beneficiary_name,
+      fcrr.masked_bank_account,
+      fcrr.payee_bank_hash,
       fcrr.adjustment_comment,
       fcrr.linked_timesheet_id,
       fcrr.linked_shift_date,
@@ -8201,14 +8528,102 @@ ts_itemised as (
       fcrr.active_snooze_note,
       fcrr.due_amount_ex_vat,
       fcrr.is_blocked as case_is_blocked,
+      (
+        coalesce(fcrr.blocked_reason_codes, '[]'::jsonb)
+        ||
+        (case
+          when fcrr.active_snooze_id is not null and fcrr.active_snooze_until_date is not null then jsonb_build_array('BLOCKED_DATED_SNOOZE')
+          else '[]'::jsonb
+        end)
+      ) as blocked_reason_codes,
       fcrr.case_resolution_summary_json,
-      fcrr.case_components_json
+      fcrr.case_components_json,
+      fcrr.oneoff_bank_details_present,
+      fcrr.is_candidate_directed_oneoff_payout,
+      fcrr.appears_on_umbrella_remittance,
+      fcrr.generates_candidate_payment_advice,
+      fcrr.snooze_allowed,
+      fcrr.lifecycle_status_display,
+      case
+        when fcrr.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(fcrr.lifecycle_status_display,'')) <> 'PAID' then 'LOAN_PAYOUT'
+        when fcrr.case_type = 'PAYMENT_ADVANCE' then 'PAYMENT_ADVANCE_REPAYMENT'
+        when fcrr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then 'MANUAL_CREDIT_ADJUSTMENT_PAYMENT'
+        when fcrr.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+        else fcrr.case_type::text
+      end as line_type,
+      case
+        when fcrr.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(fcrr.lifecycle_status_display,'')) <> 'PAID' then 'Loan payment'
+        when fcrr.case_type = 'PAYMENT_ADVANCE' then 'Loan repayment'
+        when fcrr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then 'Manual credit adjustment payment'
+        when fcrr.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual debt adjustment deduction'
+        else replace(fcrr.case_type::text, '_', ' ')
+      end as item_type_label,
+      case
+        when fcrr.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(fcrr.lifecycle_status_display,'')) <> 'PAID' then 'PAYMENT'
+        when fcrr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then 'PAYMENT'
+        else 'DEDUCTION'
+      end as item_direction,
+      case
+        when fcrr.candidate_pay_method = 'PAYE'
+         and fcrr.case_type = 'PAYMENT_ADVANCE'
+         and upper(coalesce(fcrr.lifecycle_status_display,'')) <> 'PAID'
+        then 'NET_ADD'
+        when fcrr.candidate_pay_method = 'PAYE'
+         and fcrr.case_type = 'PAYMENT_ADVANCE'
+        then 'NET_DEDUCT'
+        when fcrr.candidate_pay_method = 'PAYE'
+         and fcrr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
+         and fcrr.taxability = 'TAXABLE'::public.pay_finance_taxability_enum
+        then 'GROSS_ADD'
+        when fcrr.candidate_pay_method = 'PAYE'
+         and fcrr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
+         and fcrr.taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum
+        then 'NET_ADD'
+        when fcrr.candidate_pay_method = 'PAYE'
+         and fcrr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+         and fcrr.taxability = 'TAXABLE'::public.pay_finance_taxability_enum
+        then 'GROSS_DEDUCT'
+        when fcrr.candidate_pay_method = 'PAYE'
+         and fcrr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+         and fcrr.taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum
+        then 'NET_DEDUCT'
+        else 'NONE'
+      end as paye_treatment,
+      case
+        when fcrr.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(fcrr.lifecycle_status_display,'')) <> 'PAID' then round(coalesce(fcrr.due_amount_ex_vat,0),2)
+        when fcrr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then round(coalesce(fcrr.due_amount_ex_vat,0),2)
+        else round(-coalesce(fcrr.due_amount_ex_vat,0),2)
+      end as signed_amount_ex_vat,
+      case
+        when fcrr.active_snooze_id is not null and fcrr.active_snooze_until_date is not null then 'BLOCKED_FOR_PAY'
+        when fcrr.is_blocked then 'BLOCKED_FOR_PAY'
+        else 'READY_TO_PAY'
+      end as readiness_state,
+      (
+        fcrr.is_blocked = false
+        and not (fcrr.active_snooze_id is not null and fcrr.active_snooze_until_date is not null)
+        and round(coalesce(fcrr.due_amount_ex_vat,0),2) > 0
+      ) as draftable
     from finance_case_resolution_rollup fcrr
+    where round(coalesce(fcrr.due_amount_ex_vat,0),2) > 0
   ),
   canonical_preview_lines as (
     select
       ctpr.candidate_id,
-      ctpr.line_json,
+      (
+        ctpr.line_json
+        || jsonb_build_object(
+          'preview_row_id', coalesce(nullif(btrim(coalesce(ctpr.line_json->>'line_id','')), ''), md5(ctpr.line_json::text)),
+          'readiness_state', case
+            when upper(coalesce(ctpr.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY' then 'BLOCKED_FOR_PAY'
+            else 'READY_TO_PAY'
+          end,
+          'draftable', (
+            upper(coalesce(ctpr.line_json->>'presentation_section','')) = 'READY_TO_PAY'
+            and coalesce(nullif(ctpr.line_json->>'is_excluded_from_allocation','')::boolean, false) = false
+          )
+        )
+      ) as line_json,
       ctpr.pay_channel,
       ctpr.paye_treatment,
       ctpr.amount_ex_vat,
@@ -8220,17 +8635,14 @@ ts_itemised as (
     select
       fcl.candidate_id,
       jsonb_build_object(
-        'line_id', fcl.finance_case_id::text,
+        'preview_row_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
+        'line_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
         'candidate_id', fcl.candidate_id::text,
         'tms_ref', fcl.cand_tms_ref,
         'display_name', fcl.cand_display_name,
-        'line_type', case
-          when fcl.case_type = 'PAYMENT_ADVANCE' then 'PAYMENT_ADVANCE_REPAYMENT'::text
-          when fcl.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'::text
-          when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'::text
-          when fcl.case_type = 'UNDERPAYMENT' then 'UNDERPAYMENT_PAYMENT'::text
-          else fcl.case_type::text
-        end,
+        'line_type', fcl.line_type,
+        'item_type_label', fcl.item_type_label,
+        'item_direction', fcl.item_direction,
         'finance_case_id', fcl.finance_case_id::text,
         'case_key', ('finance:' || fcl.finance_case_id::text),
         'case_type', fcl.case_type::text,
@@ -8243,25 +8655,55 @@ ts_itemised as (
         'week_ending_date', null,
         'linked_shift_date', case when fcl.linked_shift_date is null then null else fcl.linked_shift_date::text end,
         'pay_channel', fcl.candidate_pay_method,
-        'paye_treatment', case
-          when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'PAYMENT_ADVANCE' then 'NET_DEDUCT'
-          when fcl.candidate_pay_method = 'PAYE' and fcl.case_type in ('OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') then 'GROSS_DEDUCT'
-          when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'UNDERPAYMENT' then 'GROSS_ADD'
-          else 'NONE'
-        end,
-        'route_type', 'NORMAL_PAYMENT',
+        'paye_treatment', fcl.paye_treatment,
+        'route_type', case when fcl.routing_kind is null then 'NORMAL_PAYMENT' else fcl.routing_kind::text end,
+        'routing_kind', case when fcl.routing_kind is null then null else fcl.routing_kind::text end,
+        'destination_label', fcl.destination_label,
+        'taxability', case when fcl.taxability is null then null else fcl.taxability::text end,
+        'beneficiary_name', fcl.beneficiary_name,
+        'masked_bank_account', fcl.masked_bank_account,
+        'bank_details_hash', fcl.payee_bank_hash,
+        'blocked_reason_codes', fcl.blocked_reason_codes,
+        'readiness_state', fcl.readiness_state,
+        'draftable', fcl.draftable,
+        'snooze_allowed', fcl.snooze_allowed,
+        'oneoff_bank_details_present', fcl.oneoff_bank_details_present,
+        'is_candidate_directed_oneoff_payout', fcl.is_candidate_directed_oneoff_payout,
+        'appears_on_umbrella_remittance', fcl.appears_on_umbrella_remittance,
+        'generates_candidate_payment_advice', fcl.generates_candidate_payment_advice,
         'adjustment_comment', fcl.adjustment_comment,
-        'amount_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
-        'amount_display', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
+        'amount_ex_vat', fcl.signed_amount_ex_vat,
+        'amount_display', fcl.signed_amount_ex_vat,
         'is_advanced', false,
         'advanced_override_id', null,
         'advanced_reason', null,
         'is_excluded_from_allocation', (fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null),
-        'is_ready_for_draft', fcl.is_ready_for_draft,
+        'is_ready_for_draft', fcl.draftable,
+        'presentation_section', case
+          when fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null then 'BLOCKED_FOR_PAY'
+          when fcl.case_is_blocked then 'BLOCKED_FOR_PAY'
+          else 'READY_TO_PAY'
+        end,
+        'presentation_role', 'PARENT',
+        'presentation_line_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
+        'presentation_parent_line_id', ('finance:' || fcl.finance_case_id::text),
+        'presentation_reason', case
+          when fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null then 'DATED_SNOOZE'
+          when fcl.case_is_blocked then 'CASE_BLOCKED'
+          else 'READY_TO_PAY'
+        end,
+        'source_ref', ('advance:' || fcl.finance_case_id::text),
+        'snooze_kind', case
+          when fcl.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(fcl.lifecycle_status_display,'')) = 'PAID' then 'PAYMENT_ADVANCE_REPAYMENT'
+          when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+          else ''
+        end,
         'snooze_identity', jsonb_build_object(
           'identity_type', 'FINANCE_CASE',
           'timesheet_id', null,
+          'booking_id', null,
           'segment_id', null,
+          'segment_stable_key', null,
           'source_ref', ('advance:' || fcl.finance_case_id::text)
         ),
         'snooze_state', case
@@ -8281,16 +8723,25 @@ ts_itemised as (
         end
       ) as line_json,
       fcl.candidate_pay_method as pay_channel,
-      case
-        when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'PAYMENT_ADVANCE' then 'NET_DEDUCT'
-        when fcl.candidate_pay_method = 'PAYE' and fcl.case_type in ('OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') then 'GROSS_DEDUCT'
-        when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'UNDERPAYMENT' then 'GROSS_ADD'
-        else 'NONE'
-      end as paye_treatment,
-      (case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else (-fcl.due_amount_ex_vat) end) as amount_ex_vat,
+      fcl.paye_treatment,
+      fcl.signed_amount_ex_vat as amount_ex_vat,
       (fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null) as is_excluded_from_allocation
     from finance_case_lines fcl
-    where fcl.due_amount_ex_vat > 0
+  ),
+  candidate_preview_line_rollup as (
+    select
+      cpl.candidate_id,
+      count(*) filter (
+        where coalesce(nullif(cpl.line_json->>'draftable','')::boolean, false) = true
+      )::int as ready_preview_line_count,
+      count(*) filter (
+        where upper(coalesce(cpl.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY'
+      )::int as blocked_preview_line_count,
+      bool_or(
+        coalesce(nullif(cpl.line_json->>'draftable','')::boolean, false) = true
+      ) as has_ready_preview_line
+    from canonical_preview_lines cpl
+    group by cpl.candidate_id
   ),
   candidate_preview_timesheet_rollup as (
     select
@@ -8425,6 +8876,11 @@ ts_itemised as (
         'next_due_week_start', case when fcrr.next_due_week_start is null then null else fcrr.next_due_week_start::text end,
         'case_type', fcrr.case_type::text,
         'candidate_pay_method', fcrr.candidate_pay_method,
+        'taxability', case when fcrr.taxability is null then null else fcrr.taxability::text end,
+        'routing_kind', case when fcrr.routing_kind is null then null else fcrr.routing_kind::text end,
+        'destination_label', fcrr.destination_label,
+        'blocked_reason_codes', fcrr.blocked_reason_codes,
+        'snooze_allowed', fcrr.snooze_allowed,
         'is_blocked', fcrr.is_blocked,
         'is_mixed_case', fcrr.is_mixed_case,
         'open_taxable_count', fcrr.open_taxable_count,
@@ -8503,7 +8959,7 @@ ts_itemised as (
                 or coalesce(ce.do_not_pay_count,0) > 0
                 or coalesce(ccs.blocked_case_count,0) > 0
               )
-              and ce.is_ready_for_draft = true
+              and coalesce(cplr.has_ready_preview_line, false) = true
               and coalesce(ce.blocked_count,0) = 0
               and coalesce(ce.do_not_pay_count,0) = 0
               and coalesce(ccs.blocked_case_count,0) = 0
@@ -8530,6 +8986,7 @@ ts_itemised as (
                 or coalesce(ce.blocked_count,0) > 0
                 or coalesce(ce.do_not_pay_count,0) > 0
                 or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
+                or coalesce(cplr.blocked_preview_line_count,0) > 0
               )
             )
           then 1 else 0 end
@@ -8541,12 +8998,15 @@ ts_itemised as (
         on fct.candidate_id = ce.candidate_id
       left join candidate_preview_timesheet_rollup cptr
         on cptr.candidate_id = ce.candidate_id
+      left join candidate_preview_line_rollup cplr
+        on cplr.candidate_id = ce.candidate_id
     ) cr
   ),
   paye_summary_breakdown_json as (
     select jsonb_build_object(
       'gross_side_additions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'GROSS_ADD' and cpl.is_excluded_from_allocation = false then greatest(cpl.amount_ex_vat,0) else 0 end),0),2),
       'gross_side_deductions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'GROSS_DEDUCT' and cpl.is_excluded_from_allocation = false then abs(cpl.amount_ex_vat) else 0 end),0),2),
+      'net_side_additions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'NET_ADD' and cpl.is_excluded_from_allocation = false then greatest(cpl.amount_ex_vat,0) else 0 end),0),2),
       'net_side_deductions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'NET_DEDUCT' and cpl.is_excluded_from_allocation = false then abs(cpl.amount_ex_vat) else 0 end),0),2)
     ) as payload
     from canonical_preview_lines cpl
@@ -8576,7 +9036,7 @@ ts_itemised as (
             'name_check_status', ce.payee_name_check_status,
             'name_check_has_override', ce.payee_name_check_has_override,
             'blockers', ce.blockers,
-            'is_ready_for_draft', ce.is_ready_for_draft,
+            'is_ready_for_draft', coalesce(cplr.has_ready_preview_line, false),
 
             'blocked_count', ce.blocked_count,
             'do_not_pay_count', ce.do_not_pay_count,
@@ -8696,6 +9156,8 @@ ts_itemised as (
           on fct.candidate_id = ce.candidate_id
         left join candidate_preview_timesheet_rollup cptr
           on cptr.candidate_id = ce.candidate_id
+        left join candidate_preview_line_rollup cplr
+          on cplr.candidate_id = ce.candidate_id
         where ce.cand_pay_method = 'PAYE'
       ),
       '[]'::jsonb
@@ -8724,7 +9186,7 @@ ts_itemised as (
             'name_check_status', ce.payee_name_check_status,
             'name_check_has_override', ce.payee_name_check_has_override,
             'blockers', ce.blockers,
-            'is_ready_for_draft', ce.is_ready_for_draft,
+            'is_ready_for_draft', coalesce(cplr.has_ready_preview_line, false),
 
             'blocked_count', ce.blocked_count,
             'do_not_pay_count', ce.do_not_pay_count,
@@ -8845,6 +9307,8 @@ ts_itemised as (
           on fct.candidate_id = ce.candidate_id
         left join candidate_preview_timesheet_rollup cptr
           on cptr.candidate_id = ce.candidate_id
+        left join candidate_preview_line_rollup cplr
+          on cplr.candidate_id = ce.candidate_id
         where ce.cand_pay_method <> 'PAYE'
       ),
       '[]'::jsonb
@@ -8999,24 +9463,13 @@ ts_itemised as (
             'timesheet_id', case when fcl.linked_timesheet_id is null then null else fcl.linked_timesheet_id::text end,
             'segment_id', null,
             'ref_num', null,
-            'amount_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
-            'raw_delta_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
-            'effective_delta_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
-            'blocked_delta_ex_vat', case when fcl.case_type = 'UNDERPAYMENT' then fcl.due_amount_ex_vat else -fcl.due_amount_ex_vat end,
-            'line_type', case
-              when fcl.case_type = 'PAYMENT_ADVANCE' then 'PAYMENT_ADVANCE_REPAYMENT'
-              when fcl.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
-              when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
-              when fcl.case_type = 'UNDERPAYMENT' then 'UNDERPAYMENT_PAYMENT'
-              else fcl.case_type::text
-            end,
+            'amount_ex_vat', fcl.signed_amount_ex_vat,
+            'raw_delta_ex_vat', fcl.signed_amount_ex_vat,
+            'effective_delta_ex_vat', fcl.signed_amount_ex_vat,
+            'blocked_delta_ex_vat', fcl.signed_amount_ex_vat,
+            'line_type', fcl.line_type,
             'finance_case_id', fcl.finance_case_id::text,
-            'paye_treatment', case
-              when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'PAYMENT_ADVANCE' then 'NET_DEDUCT'
-              when fcl.candidate_pay_method = 'PAYE' and fcl.case_type in ('OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') then 'GROSS_DEDUCT'
-              when fcl.candidate_pay_method = 'PAYE' and fcl.case_type = 'UNDERPAYMENT' then 'GROSS_ADD'
-              else 'NONE'
-            end,
+            'paye_treatment', fcl.paye_treatment,
             'route_type', 'NORMAL_PAYMENT',
             'adjustment_comment', fcl.adjustment_comment,
             'snooze_identity', jsonb_build_object(
@@ -9101,6 +9554,11 @@ ts_itemised as (
   );
 end;
 $function$;
+
+
+
+
+
 
 
 
