@@ -68796,7 +68796,9 @@ async function handleSearchCandidates(env, req) {
   const createdFrom = spec.created_from || null;
   const createdTo = spec.created_to || null;
   const notesExact = spec.notes || null;
-  const jobTitleRoleIds = Array.isArray(spec.job_title_role_ids) ? spec.job_title_roleIds?.map(String).map(s => s.trim()).filter(Boolean) : Array.isArray(spec.job_title_role_ids) ? spec.job_title_role_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
+  const jobTitleIncludeNodeIds = Array.isArray(spec.job_title_include_node_ids) ? spec.job_title_include_node_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
+  const jobTitleExcludeNodeIds = Array.isArray(spec.job_title_exclude_node_ids) ? spec.job_title_exclude_node_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
+  const jobTitleRoleIds = Array.isArray(spec.job_title_role_ids) ? spec.job_title_role_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
   const jobTitlePrimaryOnly = !!spec.job_title_primary_only;
   const profRegNumber = spec.prof_reg_number || null;
   const profRegType = spec.prof_reg_type || null;
@@ -69314,7 +69316,15 @@ async function handleSearchCandidates(env, req) {
         req,
         badRequest(
           `Supabase fetch failed: ${msg}`,
-          { order_by: (orderByParam || null), order_dir: orderDir, use_derived_secondary_job_titles_sort: useDerivedSecondaryJobTitlesSort }
+          {
+            order_by: (orderByParam || null),
+            order_dir: orderDir,
+            use_derived_secondary_job_titles_sort: useDerivedSecondaryJobTitlesSort,
+            job_title_include_node_ids: jobTitleIncludeNodeIds,
+            job_title_exclude_node_ids: jobTitleExcludeNodeIds,
+            job_title_role_ids: jobTitleRoleIds,
+            job_title_primary_only: jobTitlePrimaryOnly
+          }
         )
       );
     }
@@ -69397,7 +69407,6 @@ async function handleSearchCandidates(env, req) {
     count: respCount
   }));
 }
-
 async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
