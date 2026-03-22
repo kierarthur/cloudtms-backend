@@ -965,6 +965,8 @@ declare
   v_created_to timestamptz := null;
   v_updated_from timestamptz := null;
   v_updated_to timestamptz := null;
+  v_job_title_include_node_ids text[] := null;
+  v_job_title_exclude_node_ids text[] := null;
   v_job_title_role_ids uuid[] := null;
   v_job_title_primary_only boolean := false;
   v_prof_reg_number text := null;
@@ -1052,23 +1054,71 @@ begin
   end;
 
   begin
+    if p_filters ? 'job_title_include_node_ids' then
+      if jsonb_typeof(p_filters->'job_title_include_node_ids') = 'array' then
+        select array_agg(parsed.include_node_id_text order by parsed.include_node_id_text)
+        into v_job_title_include_node_ids
+        from (
+          select distinct nullif(btrim(include_nodes.value), '') as include_node_id_text
+          from jsonb_array_elements_text(p_filters->'job_title_include_node_ids') as include_nodes(value)
+          where nullif(btrim(include_nodes.value), '') is not null
+        ) as parsed;
+      elsif nullif(btrim(coalesce(p_filters->>'job_title_include_node_ids', '')), '') is not null then
+        select array_agg(parsed.include_node_id_text order by parsed.include_node_id_text)
+        into v_job_title_include_node_ids
+        from (
+          select distinct nullif(btrim(include_tokens.token), '') as include_node_id_text
+          from unnest(regexp_split_to_array(p_filters->>'job_title_include_node_ids', '\s*,\s*')) as include_tokens(token)
+          where nullif(btrim(include_tokens.token), '') is not null
+        ) as parsed;
+      end if;
+    end if;
+  exception when others then
+    v_job_title_include_node_ids := null;
+  end;
+
+  begin
+    if p_filters ? 'job_title_exclude_node_ids' then
+      if jsonb_typeof(p_filters->'job_title_exclude_node_ids') = 'array' then
+        select array_agg(parsed.exclude_node_id_text order by parsed.exclude_node_id_text)
+        into v_job_title_exclude_node_ids
+        from (
+          select distinct nullif(btrim(exclude_nodes.value), '') as exclude_node_id_text
+          from jsonb_array_elements_text(p_filters->'job_title_exclude_node_ids') as exclude_nodes(value)
+          where nullif(btrim(exclude_nodes.value), '') is not null
+        ) as parsed;
+      elsif nullif(btrim(coalesce(p_filters->>'job_title_exclude_node_ids', '')), '') is not null then
+        select array_agg(parsed.exclude_node_id_text order by parsed.exclude_node_id_text)
+        into v_job_title_exclude_node_ids
+        from (
+          select distinct nullif(btrim(exclude_tokens.token), '') as exclude_node_id_text
+          from unnest(regexp_split_to_array(p_filters->>'job_title_exclude_node_ids', '\s*,\s*')) as exclude_tokens(token)
+          where nullif(btrim(exclude_tokens.token), '') is not null
+        ) as parsed;
+      end if;
+    end if;
+  exception when others then
+    v_job_title_exclude_node_ids := null;
+  end;
+
+  begin
     if p_filters ? 'job_title_role_ids' then
       if jsonb_typeof(p_filters->'job_title_role_ids') = 'array' then
-        select array_agg(s_role_id)
+        select array_agg(parsed.role_id order by parsed.role_id)
         into v_job_title_role_ids
         from (
-          select distinct nullif(btrim(e.value), '')::uuid as s_role_id
-          from jsonb_array_elements_text(p_filters->'job_title_role_ids') as e(value)
-          where nullif(btrim(e.value), '') is not null
-        ) s;
+          select distinct nullif(btrim(role_nodes.value), '')::uuid as role_id
+          from jsonb_array_elements_text(p_filters->'job_title_role_ids') as role_nodes(value)
+          where nullif(btrim(role_nodes.value), '') is not null
+        ) as parsed;
       elsif nullif(btrim(coalesce(p_filters->>'job_title_role_ids', '')), '') is not null then
-        select array_agg(s_role_id)
+        select array_agg(parsed.role_id order by parsed.role_id)
         into v_job_title_role_ids
         from (
-          select distinct nullif(btrim(x), '')::uuid as s_role_id
-          from unnest(regexp_split_to_array(p_filters->>'job_title_role_ids', '\s*,\s*')) as u(x)
-          where nullif(btrim(x), '') is not null
-        ) s;
+          select distinct nullif(btrim(role_tokens.token), '')::uuid as role_id
+          from unnest(regexp_split_to_array(p_filters->>'job_title_role_ids', '\s*,\s*')) as role_tokens(token)
+          where nullif(btrim(role_tokens.token), '') is not null
+        ) as parsed;
       end if;
     end if;
   exception when others then
@@ -1095,21 +1145,21 @@ begin
   begin
     if p_filters ? 'ids' then
       if jsonb_typeof(p_filters->'ids') = 'array' then
-        select array_agg(s_id)
+        select array_agg(parsed.selected_id order by parsed.selected_id)
         into v_ids
         from (
-          select distinct nullif(btrim(e.value), '')::uuid as s_id
-          from jsonb_array_elements_text(p_filters->'ids') as e(value)
-          where nullif(btrim(e.value), '') is not null
-        ) s;
+          select distinct nullif(btrim(id_nodes.value), '')::uuid as selected_id
+          from jsonb_array_elements_text(p_filters->'ids') as id_nodes(value)
+          where nullif(btrim(id_nodes.value), '') is not null
+        ) as parsed;
       elsif nullif(btrim(coalesce(p_filters->>'ids', '')), '') is not null then
-        select array_agg(s_id)
+        select array_agg(parsed.selected_id order by parsed.selected_id)
         into v_ids
         from (
-          select distinct nullif(btrim(x), '')::uuid as s_id
-          from unnest(regexp_split_to_array(p_filters->>'ids', '\s*,\s*')) as u(x)
-          where nullif(btrim(x), '') is not null
-        ) s;
+          select distinct nullif(btrim(id_tokens.token), '')::uuid as selected_id
+          from unnest(regexp_split_to_array(p_filters->>'ids', '\s*,\s*')) as id_tokens(token)
+          where nullif(btrim(id_tokens.token), '') is not null
+        ) as parsed;
       end if;
     end if;
   exception when others then
@@ -1119,21 +1169,21 @@ begin
   begin
     if p_filters ? 'roles_any' then
       if jsonb_typeof(p_filters->'roles_any') = 'array' then
-        select array_agg(s_val)
+        select array_agg(parsed.role_code order by parsed.role_code)
         into v_roles_any
         from (
-          select distinct upper(nullif(btrim(e.value), '')) as s_val
-          from jsonb_array_elements_text(p_filters->'roles_any') as e(value)
-        ) s
-        where s.s_val is not null;
+          select distinct upper(nullif(btrim(role_any_nodes.value), '')) as role_code
+          from jsonb_array_elements_text(p_filters->'roles_any') as role_any_nodes(value)
+        ) as parsed
+        where parsed.role_code is not null;
       elsif nullif(btrim(coalesce(p_filters->>'roles_any', '')), '') is not null then
-        select array_agg(s_val)
+        select array_agg(parsed.role_code order by parsed.role_code)
         into v_roles_any
         from (
-          select distinct upper(nullif(btrim(x), '')) as s_val
-          from unnest(regexp_split_to_array(p_filters->>'roles_any', '\s*,\s*')) as u(x)
-        ) s
-        where s.s_val is not null;
+          select distinct upper(nullif(btrim(role_any_tokens.token), '')) as role_code
+          from unnest(regexp_split_to_array(p_filters->>'roles_any', '\s*,\s*')) as role_any_tokens(token)
+        ) as parsed
+        where parsed.role_code is not null;
       end if;
     end if;
   exception when others then
@@ -1143,21 +1193,21 @@ begin
   begin
     if p_filters ? 'roles_all' then
       if jsonb_typeof(p_filters->'roles_all') = 'array' then
-        select array_agg(s_val)
+        select array_agg(parsed.role_code order by parsed.role_code)
         into v_roles_all
         from (
-          select distinct upper(nullif(btrim(e.value), '')) as s_val
-          from jsonb_array_elements_text(p_filters->'roles_all') as e(value)
-        ) s
-        where s.s_val is not null;
+          select distinct upper(nullif(btrim(role_all_nodes.value), '')) as role_code
+          from jsonb_array_elements_text(p_filters->'roles_all') as role_all_nodes(value)
+        ) as parsed
+        where parsed.role_code is not null;
       elsif nullif(btrim(coalesce(p_filters->>'roles_all', '')), '') is not null then
-        select array_agg(s_val)
+        select array_agg(parsed.role_code order by parsed.role_code)
         into v_roles_all
         from (
-          select distinct upper(nullif(btrim(x), '')) as s_val
-          from unnest(regexp_split_to_array(p_filters->>'roles_all', '\s*,\s*')) as u(x)
-        ) s
-        where s.s_val is not null;
+          select distinct upper(nullif(btrim(role_all_tokens.token), '')) as role_code
+          from unnest(regexp_split_to_array(p_filters->>'roles_all', '\s*,\s*')) as role_all_tokens(token)
+        ) as parsed
+        where parsed.role_code is not null;
       end if;
     end if;
   exception when others then
@@ -1182,9 +1232,95 @@ begin
   end if;
 
   return query
-  with filtered as (
+  with recursive job_title_tree as (
+    select
+      root_job_titles.id,
+      root_job_titles.parent_id,
+      root_job_titles.is_role,
+      case
+        when root_job_titles.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then true
+        when root_job_titles.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then false
+        else false
+      end as checked,
+      case
+        when root_job_titles.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then 'included'
+        when root_job_titles.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then 'excluded'
+        else 'none'
+      end as inherited_mode
+    from public.default_job_titles as root_job_titles
+    where root_job_titles.parent_id is null
+       or not exists (
+         select 1
+         from public.default_job_titles as parent_job_titles
+         where parent_job_titles.id = root_job_titles.parent_id
+       )
+
+    union all
+
+    select
+      child_job_titles.id,
+      child_job_titles.parent_id,
+      child_job_titles.is_role,
+      case
+        when child_job_titles.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then true
+        when child_job_titles.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then false
+        when job_title_tree.inherited_mode = 'included' then true
+        when job_title_tree.inherited_mode = 'excluded' then false
+        else false
+      end as checked,
+      case
+        when child_job_titles.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then 'included'
+        when child_job_titles.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then 'excluded'
+        when job_title_tree.inherited_mode = 'included' then 'included'
+        when job_title_tree.inherited_mode = 'excluded' then 'excluded'
+        else 'none'
+      end as inherited_mode
+    from public.default_job_titles as child_job_titles
+    join job_title_tree
+      on job_title_tree.id = child_job_titles.parent_id
+  ),
+  tree_selected_roles as (
+    select distinct
+      job_title_tree.id as role_id
+    from job_title_tree
+    where job_title_tree.is_role = true
+      and job_title_tree.checked = true
+  ),
+  effective_role_ids as (
+    select distinct
+      tree_selected_roles.role_id
+    from tree_selected_roles
+    where (
+      coalesce(array_length(v_job_title_include_node_ids, 1), 0) > 0
+      or coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) > 0
+    )
+      and (
+        coalesce(array_length(v_job_title_role_ids, 1), 0) = 0
+        or tree_selected_roles.role_id = any(coalesce(v_job_title_role_ids, '{}'::uuid[]))
+      )
+
+    union
+
+    select distinct
+      direct_role_ids.role_id
+    from unnest(coalesce(v_job_title_role_ids, '{}'::uuid[])) as direct_role_ids(role_id)
+    where coalesce(array_length(v_job_title_include_node_ids, 1), 0) = 0
+      and coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) = 0
+      and coalesce(array_length(v_job_title_role_ids, 1), 0) > 0
+  ),
+  candidate_filter_flags as (
+    select
+      (
+        coalesce(array_length(v_job_title_include_node_ids, 1), 0) > 0
+        or coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) > 0
+        or coalesce(array_length(v_job_title_role_ids, 1), 0) > 0
+      ) as has_job_title_filter,
+      v_job_title_primary_only as primary_only
+  ),
+  filtered as (
     select csa.id
-    from public.candidates_summary_activity csa
+    from public.candidates_summary_activity as csa
+    cross join candidate_filter_flags as candidate_flags
     where (v_ids is null or csa.id = any(v_ids))
       and (v_first_name is null or csa.first_name ilike ('%' || v_first_name || '%'))
       and (v_last_name is null or csa.last_name ilike ('%' || v_last_name || '%'))
@@ -1209,14 +1345,30 @@ begin
       and (v_updated_from is null or csa.updated_at >= v_updated_from)
       and (v_updated_to is null or csa.updated_at <= v_updated_to)
       and (
-        v_job_title_role_ids is null
+        candidate_flags.has_job_title_filter = false
         or (
-          v_job_title_primary_only = true
-          and csa.primary_job_title_id = any(v_job_title_role_ids)
+          candidate_flags.primary_only = true
+          and exists (
+            select 1
+            from effective_role_ids as effective_roles
+            where effective_roles.role_id = csa.primary_job_title_id
+          )
         )
         or (
-          v_job_title_primary_only = false
-          and coalesce(csa.job_title_ids, '{}'::uuid[]) && v_job_title_role_ids
+          candidate_flags.primary_only = false
+          and (
+            exists (
+              select 1
+              from effective_role_ids as effective_roles
+              where effective_roles.role_id = csa.primary_job_title_id
+            )
+            or exists (
+              select 1
+              from unnest(coalesce(csa.job_title_ids, '{}'::uuid[])) as candidate_job_titles(job_title_id)
+              join effective_role_ids as effective_roles
+                on effective_roles.role_id = candidate_job_titles.job_title_id
+            )
+          )
         )
       )
       and (v_prof_reg_number is null or csa.prof_reg_number ilike ('%' || v_prof_reg_number || '%'))
@@ -1245,19 +1397,19 @@ begin
         v_roles_any is null
         or exists (
           select 1
-          from jsonb_array_elements(coalesce(csa.roles, '[]'::jsonb)) as j(elem)
-          where upper(coalesce(j.elem->>'code', '')) = any(v_roles_any)
+          from jsonb_array_elements(coalesce(csa.roles, '[]'::jsonb)) as roles_any_json(role_elem)
+          where upper(coalesce(roles_any_json.role_elem->>'code', '')) = any(v_roles_any)
         )
       )
       and (
         v_roles_all is null
         or not exists (
           select 1
-          from unnest(v_roles_all) as req(code)
+          from unnest(v_roles_all) as required_roles(required_code)
           where not exists (
             select 1
-            from jsonb_array_elements(coalesce(csa.roles, '[]'::jsonb)) as j(elem)
-            where upper(coalesce(j.elem->>'code', '')) = req.code
+            from jsonb_array_elements(coalesce(csa.roles, '[]'::jsonb)) as roles_all_json(role_elem)
+            where upper(coalesce(roles_all_json.role_elem->>'code', '')) = required_roles.required_code
           )
         )
       )
