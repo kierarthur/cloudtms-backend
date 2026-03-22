@@ -12491,8 +12491,6 @@ $function$;
 
 
 
-
-
 create or replace function public.pay_batch_export_csv_rows(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -12663,8 +12661,13 @@ begin
       pbi.timesheet_id as timesheet_id,
       pbi.segment_key as segment_key,
       pbi.source_ref as source_ref,
+      pbi.description as item_description,
       pbi.pay_channel as pay_channel,
       pbi.repayment_week_start as repayment_week_start,
+      pbi.finance_case_id as finance_case_id,
+      pbi.finance_component_id as finance_component_id,
+      pbi.paye_treatment as paye_treatment,
+      pbi.payout_instruction_snapshot_json as payout_instruction_snapshot_json,
 
       pbib.line_kind as line_kind,
       pbib.bucket_code as bucket_code,
@@ -12682,7 +12685,37 @@ begin
 
       nl.paye_net_amount as paye_net_amount,
 
-      segd.work_date as seg_work_date
+      segd.work_date as seg_work_date,
+
+      vfcr.case_type as finance_case_type,
+      vfcr.taxability as finance_taxability,
+      vfcr.routing_kind as finance_routing_kind,
+      vfcr.management_group as finance_management_group,
+      vfcr.lifecycle_status_display as finance_lifecycle_status_display,
+      vfcr.status as finance_status,
+      vfcr.payout_status as finance_payout_status,
+      vfcr.adjustment_comment as finance_adjustment_comment,
+      vfcr.notes as finance_notes,
+      vfcr.is_candidate_directed_oneoff_payout as is_candidate_directed_oneoff_payout,
+      vfcr.appears_on_umbrella_remittance as appears_on_umbrella_remittance,
+      vfcr.generates_candidate_payment_advice as generates_candidate_payment_advice,
+
+      case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_created_by_user_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_created_by_user_id','')), ''))::uuid
+        else null::uuid
+      end as bank_details_created_by_user_id,
+
+      case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_updated_by_user_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_updated_by_user_id','')), ''))::uuid
+        else null::uuid
+      end as bank_details_updated_by_user_id,
+
+      tuc.display_name as bank_details_created_by_display_name,
+      tuc.email as bank_details_created_by_email,
+      tuu.display_name as bank_details_updated_by_display_name,
+      tuu.email as bank_details_updated_by_email
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
@@ -12723,6 +12756,20 @@ begin
         and nullif(btrim(coalesce(seg->>'date','')),'') ~ '^\d{4}-\d{2}-\d{2}$'
       limit 1
     ) segd on true
+    left join public.v_finance_cases_register vfcr
+      on vfcr.finance_case_id = pbi.finance_case_id
+    left join public.tms_users tuc
+      on tuc.id = case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_created_by_user_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_created_by_user_id','')), ''))::uuid
+        else null::uuid
+      end
+    left join public.tms_users tuu
+      on tuu.id = case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_updated_by_user_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_updated_by_user_id','')), ''))::uuid
+        else null::uuid
+      end
     where pbi.item_type <> 'DEBT_CREATED'
       and pbi.is_voided = false
   ),
@@ -12748,6 +12795,8 @@ begin
       case
         when b.item_type = 'OVERPAYMENT_RECOVERY' then 900
         when b.item_type = 'LOAN_REPAYMENT' then 910
+        when b.item_type = 'LOAN_PAYOUT' then 920
+        when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 930
         else case upper(coalesce(b.line_kind,''))
           when 'TS_BUCKET' then 100
           when 'ADDITIONAL_UNIT' then 200
@@ -12766,94 +12815,175 @@ begin
       case
         when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
         when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+        when b.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+        when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
         else upper(coalesce(b.line_kind,''))
       end as line_kind,
 
-      jsonb_build_object(
-        'candidate_id', b.candidate_id::text,
-        'candidate_tms_ref', coalesce(
-          nullif(btrim(coalesce(b.candidate_tms_ref_snap,'')), ''),
-          nullif(btrim(coalesce(b.cand_tms_ref_live,'')), ''),
-          null
-        ),
-        'candidate_first_name', nullif(btrim(coalesce(b.cand_first_name,'')), ''),
-        'candidate_last_name', nullif(btrim(coalesce(b.cand_last_name,'')), ''),
-        'candidate_display_name', nullif(btrim(coalesce(b.candidate_display_name_snap,'')), ''),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'candidate_id', b.candidate_id::text,
+          'candidate_tms_ref', coalesce(
+            nullif(btrim(coalesce(b.candidate_tms_ref_snap,'')), ''),
+            nullif(btrim(coalesce(b.cand_tms_ref_live,'')), ''),
+            null
+          ),
+          'candidate_first_name', nullif(btrim(coalesce(b.cand_first_name,'')), ''),
+          'candidate_last_name', nullif(btrim(coalesce(b.cand_last_name,'')), ''),
+          'candidate_display_name', nullif(btrim(coalesce(b.candidate_display_name_snap,'')), ''),
 
-        'client_id', case when b.client_id is null then null else b.client_id::text end,
-        'client_name', b.client_name,
+          'client_id', case when b.client_id is null then null else b.client_id::text end,
+          'client_name', b.client_name,
 
-        'timesheet_id', case when b.timesheet_id is null then null else b.timesheet_id::text end,
-        'week_ending_date', case when b.week_ending_date is null then null else b.week_ending_date::text end,
-        'work_date', case
-          when b.seg_work_date is not null then b.seg_work_date::text
-          when b.week_ending_date is not null then b.week_ending_date::text
-          when b.repayment_week_start is not null then b.repayment_week_start::text
-          else null
-        end,
-        'reference_number', b.reference_number,
+          'timesheet_id', case when b.timesheet_id is null then null else b.timesheet_id::text end,
+          'week_ending_date', case when b.week_ending_date is null then null else b.week_ending_date::text end,
+          'work_date', case
+            when b.seg_work_date is not null then b.seg_work_date::text
+            when b.week_ending_date is not null then b.week_ending_date::text
+            when b.repayment_week_start is not null then b.repayment_week_start::text
+            else null
+          end,
+          'reference_number', b.reference_number,
 
-        'pay_channel', upper(coalesce(b.pay_channel,'')),
-        'item_type', b.item_type,
+          'pay_channel', upper(coalesce(b.pay_channel,'')),
+          'pay_method', upper(coalesce(b.pay_channel,'')),
+          'item_type', b.item_type,
+          'item_type_label', case
+            when b.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+            when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual credit adjustment payment'
+            when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual debt adjustment deduction'
+            when b.finance_case_type = 'OVERPAYMENT' and b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+            when b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            else null
+          end,
+          'payment_or_deduction', case
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 'DEDUCTION'
+            when b.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT') then 'PAYMENT'
+            when coalesce(b.amount_ex_vat, 0) < 0 then 'DEDUCTION'
+            when coalesce(b.amount_ex_vat, 0) > 0 then 'PAYMENT'
+            else 'ZERO'
+          end,
 
-        'line_kind', case
-          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-          when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
-          else b.line_kind
-        end,
-        'line_label', case
-          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
-          when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
-          when nullif(btrim(coalesce(b.unit_name,'')), '') is not null then b.unit_name
-          when nullif(btrim(coalesce(b.line_kind,'')), '') is not null then b.line_kind
-          else b.item_type
-        end,
-        'row_group', case
-          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 'DEDUCTION'
-          when b.timesheet_id is null then 'NON_TIMESHEET'
-          else 'TIMESHEET'
-        end,
-        'is_non_timesheet_line', (b.timesheet_id is null),
-        'bucket_code', b.bucket_code,
+          'finance_case_id', case when b.finance_case_id is null then null else b.finance_case_id::text end,
+          'finance_case_reference', case when b.finance_case_id is null then null else b.finance_case_id::text end,
+          'finance_component_id', case when b.finance_component_id is null then null else b.finance_component_id::text end,
+          'finance_case_type', case when b.finance_case_type is null then null else b.finance_case_type::text end,
+          'finance_management_group', b.finance_management_group,
+          'lifecycle_status', b.finance_lifecycle_status_display,
+          'finance_status', case when b.finance_status is null then null else b.finance_status::text end,
+          'finance_payout_status', case when b.finance_payout_status is null then null else b.finance_payout_status::text end,
 
-        'unit_name', b.unit_name,
-        'units', b.units,
-        'rate', b.rate,
+          'taxability', coalesce(
+            nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'taxability','')), ''),
+            case when b.finance_taxability is null then null else b.finance_taxability::text end
+          ),
+          'routing_kind', coalesce(
+            nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''),
+            case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end
+          ),
+          'payout_destination', coalesce(
+            nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'destination_label','')), ''),
+            case
+              when coalesce(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''), case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'one-off specified bank account'
+              when coalesce(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''), case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end) = 'UMBRELLA_COMPANY' then 'umbrella company'
+              when upper(coalesce(b.pay_channel,'')) = 'PAYE' then 'normal PAYE route'
+              else null
+            end
+          ),
+          'masked_bank_account', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'masked_bank_account','')), ''),
+          'masked_bank_account_paid_to', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'masked_bank_account','')), ''),
+          'beneficiary_name', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'beneficiary_name','')), ''),
+          'bank_details_hash', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'bank_details_hash','')), ''),
+          'bank_details_note', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'bank_details_note','')), ''),
+          'bank_details_created_by_user_id', case when b.bank_details_created_by_user_id is null then null else b.bank_details_created_by_user_id::text end,
+          'bank_details_created_by', coalesce(
+            nullif(btrim(coalesce(b.bank_details_created_by_display_name,'')), ''),
+            nullif(btrim(coalesce(b.bank_details_created_by_email,'')), ''),
+            case when b.bank_details_created_by_user_id is null then null else b.bank_details_created_by_user_id::text end
+          ),
+          'bank_details_updated_by_user_id', case when b.bank_details_updated_by_user_id is null then null else b.bank_details_updated_by_user_id::text end,
+          'bank_details_updated_by', coalesce(
+            nullif(btrim(coalesce(b.bank_details_updated_by_display_name,'')), ''),
+            nullif(btrim(coalesce(b.bank_details_updated_by_email,'')), ''),
+            case when b.bank_details_updated_by_user_id is null then null else b.bank_details_updated_by_user_id::text end
+          ),
+          'appears_on_umbrella_remittance', coalesce(b.appears_on_umbrella_remittance, false),
+          'generates_candidate_payment_advice', coalesce(b.generates_candidate_payment_advice, false),
+          'is_candidate_directed_oneoff_payout', coalesce(b.is_candidate_directed_oneoff_payout, false),
 
-        'amount_ex_vat', b.amount_ex_vat,
-        'amount_vat', b.amount_vat,
-        'amount_inc_vat', b.amount_inc_vat,
-        'signed_amount_ex_vat', b.amount_ex_vat,
-        'signed_amount_inc_vat', b.amount_inc_vat,
-        'amount_sign', case
-          when coalesce(b.amount_ex_vat, 0) < 0 then 'NEGATIVE'
-          when coalesce(b.amount_ex_vat, 0) > 0 then 'POSITIVE'
-          else 'ZERO'
-        end,
+          'line_kind', case
+            when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+            when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+            when b.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+            when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
+            else b.line_kind
+          end,
+          'line_label', case
+            when b.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+            when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual credit adjustment payment'
+            when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual debt adjustment deduction'
+            when b.finance_case_type = 'OVERPAYMENT' and b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+            when b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            when nullif(btrim(coalesce(b.unit_name,'')), '') is not null then b.unit_name
+            when nullif(btrim(coalesce(b.line_kind,'')), '') is not null then b.line_kind
+            else b.item_type
+          end,
+          'row_group', case
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 'DEDUCTION'
+            when b.timesheet_id is null then 'NON_TIMESHEET'
+            else 'TIMESHEET'
+          end,
+          'is_non_timesheet_line', (b.timesheet_id is null),
+          'bucket_code', b.bucket_code,
 
-        'is_overpayment_recovery', (b.item_type = 'OVERPAYMENT_RECOVERY'),
-        'is_loan_repayment', (b.item_type = 'LOAN_REPAYMENT'),
-        'deduction_kind', case
-          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-          when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
-          else null
-        end,
-        'deduction_amount_ex_vat', case
-          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_ex_vat,0)),2)
-          else null
-        end,
-        'deduction_amount_inc_vat', case
-          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_inc_vat,0)),2)
-          else null
-        end,
+          'unit_name', b.unit_name,
+          'units', b.units,
+          'rate', b.rate,
 
-        'paye_net_amount', case
-          when upper(coalesce(b.pay_channel,'')) = 'PAYE' then b.paye_net_amount
-          else null
-        end,
+          'amount_ex_vat', b.amount_ex_vat,
+          'amount_vat', b.amount_vat,
+          'amount_inc_vat', b.amount_inc_vat,
+          'signed_amount_ex_vat', b.amount_ex_vat,
+          'signed_amount_inc_vat', b.amount_inc_vat,
+          'amount_sign', case
+            when coalesce(b.amount_ex_vat, 0) < 0 then 'NEGATIVE'
+            when coalesce(b.amount_ex_vat, 0) > 0 then 'POSITIVE'
+            else 'ZERO'
+          end,
 
-        'source_ref', b.source_ref,
-        'repayment_week_start', case when b.repayment_week_start is null then null else b.repayment_week_start::text end
+          'is_overpayment_recovery', (b.item_type = 'OVERPAYMENT_RECOVERY'),
+          'is_loan_repayment', (b.item_type = 'LOAN_REPAYMENT'),
+          'deduction_kind', case
+            when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_ADJUSTMENT'
+            when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+            when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+            else null
+          end,
+          'deduction_amount_ex_vat', case
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_ex_vat,0)),2)
+            else null
+          end,
+          'deduction_amount_inc_vat', case
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_inc_vat,0)),2)
+            else null
+          end,
+
+          'paye_net_amount', case
+            when upper(coalesce(b.pay_channel,'')) = 'PAYE' then b.paye_net_amount
+            else null
+          end,
+          'paye_treatment', b.paye_treatment,
+
+          'adjustment_comment', b.finance_adjustment_comment,
+          'note', coalesce(b.finance_notes, b.item_description),
+          'comment_or_note', coalesce(b.finance_adjustment_comment, b.finance_notes, b.item_description),
+          'description', b.item_description,
+
+          'source_ref', b.source_ref,
+          'repayment_week_start', case when b.repayment_week_start is null then null else b.repayment_week_start::text end
+        )
       ) as row_json
     from base b
   )
@@ -12950,6 +13080,7 @@ begin
   );
 end;
 $$;
+
 
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
