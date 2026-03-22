@@ -26517,3 +26517,546 @@ END;
 $function$;
 
 
+DROP FUNCTION IF EXISTS public._pay_repayment_schedule_restore_after_snooze_clear(uuid,date);
+
+CREATE OR REPLACE FUNCTION public._pay_repayment_schedule_restore_after_snooze_clear(
+  p_finance_case_id uuid,
+  p_effective_from_date date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_case public.pay_advances%rowtype;
+  v_before_schedule_json jsonb := '[]'::jsonb;
+  v_after_schedule_json jsonb := '[]'::jsonb;
+  v_before_next_due_week_start date := null;
+  v_after_next_due_week_start date := null;
+  v_requested_week_start date := null;
+  v_current_operating_week_start date := null;
+  v_target_week_start date := null;
+  v_installment_count integer := 0;
+BEGIN
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: finance_case_id is required'
+    )::text;
+  END IF;
+
+  IF p_effective_from_date IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'EFFECTIVE_FROM_DATE_REQUIRED',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: effective_from_date is required'
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  IF v_case.case_type NOT IN (
+    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+    'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+  ) THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'CASE_TYPE_NOT_SNOOZEABLE',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: only repayment-type finance cases may be restored after snooze clear',
+      'finance_case_id', p_finance_case_id::text,
+      'case_type', v_case.case_type::text
+    )::text;
+  END IF;
+
+  v_before_schedule_json := coalesce(v_case.schedule_json, '[]'::jsonb);
+  v_before_next_due_week_start := v_case.next_due_week_start;
+  v_requested_week_start := public._pay_week_start_monday(p_effective_from_date);
+  v_current_operating_week_start := public._pay_week_start_monday((now() at time zone 'Europe/London')::date);
+
+  IF v_requested_week_start < v_current_operating_week_start THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'EFFECTIVE_FROM_DATE_BEFORE_NOW',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: effective_from_date cannot restore the repayment schedule earlier than the current operating week',
+      'finance_case_id', p_finance_case_id::text,
+      'requested_week_start', v_requested_week_start::text,
+      'current_operating_week_start', v_current_operating_week_start::text
+    )::text;
+  END IF;
+
+  v_target_week_start := v_requested_week_start;
+
+  WITH schedule_rows AS (
+    SELECT
+      row_number() OVER (ORDER BY (elem.value ->> 'week_start')::date ASC, elem.ordinality ASC) AS seq_no,
+      round(coalesce((elem.value ->> 'amount')::numeric, 0), 2) AS amount_value
+    FROM jsonb_array_elements(v_before_schedule_json) WITH ORDINALITY AS elem(value, ordinality)
+    WHERE coalesce((elem.value ->> 'amount')::numeric, 0) < 0
+  )
+  SELECT
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+          'amount', sr.amount_value
+        )
+        ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+      ),
+      '[]'::jsonb
+    ),
+    count(*)::integer
+  INTO v_after_schedule_json, v_installment_count
+  FROM schedule_rows AS sr;
+
+  v_after_next_due_week_start := CASE WHEN v_installment_count > 0 THEN v_target_week_start ELSE null END;
+
+  UPDATE public.pay_advances AS pa
+  SET schedule_json = v_after_schedule_json,
+      next_due_week_start = v_after_next_due_week_start,
+      updated_at = now()
+  WHERE pa.id = p_finance_case_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'schedule_before_restore_json', v_before_schedule_json,
+    'next_due_week_start_before_restore', case when v_before_next_due_week_start is null then null else v_before_next_due_week_start::text end,
+    'requested_week_start', v_requested_week_start::text,
+    'current_operating_week_start', v_current_operating_week_start::text,
+    'schedule_after_restore_json', v_after_schedule_json,
+    'next_due_week_start_after_restore', case when v_after_next_due_week_start is null then null else v_after_next_due_week_start::text end,
+    'installment_count', v_installment_count
+  );
+END;
+$function$;
+
+
+DROP FUNCTION IF EXISTS public._pay_repayment_schedule_rebase_for_snooze(uuid,date);
+
+CREATE OR REPLACE FUNCTION public._pay_repayment_schedule_rebase_for_snooze(
+  p_finance_case_id uuid,
+  p_snooze_until_date date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_case public.pay_advances%rowtype;
+  v_before_schedule_json jsonb := '[]'::jsonb;
+  v_after_schedule_json jsonb := '[]'::jsonb;
+  v_before_next_due_week_start date := null;
+  v_after_next_due_week_start date := null;
+  v_requested_week_start date := null;
+  v_target_week_start date := null;
+  v_installment_count integer := 0;
+BEGIN
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: finance_case_id is required'
+    )::text;
+  END IF;
+
+  IF p_snooze_until_date IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'SNOOZE_UNTIL_DATE_REQUIRED',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: snooze_until_date is required'
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  IF v_case.case_type NOT IN (
+    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+    'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+  ) THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'CASE_TYPE_NOT_SNOOZEABLE',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: only repayment-type finance cases may be rebased for snooze',
+      'finance_case_id', p_finance_case_id::text,
+      'case_type', v_case.case_type::text
+    )::text;
+  END IF;
+
+  v_before_schedule_json := coalesce(v_case.schedule_json, '[]'::jsonb);
+  v_before_next_due_week_start := v_case.next_due_week_start;
+  v_requested_week_start := public._pay_week_start_monday(p_snooze_until_date);
+
+  IF v_before_next_due_week_start IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'NEXT_DUE_MISSING',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: next_due_week_start is required on the finance case'
+    )::text;
+  END IF;
+
+  IF v_requested_week_start < v_before_next_due_week_start THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'SNOOZE_DATE_BEFORE_NEXT_DUE',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: snooze_until_date cannot move the repayment schedule earlier than the current next due week',
+      'finance_case_id', p_finance_case_id::text,
+      'current_next_due_week_start', v_before_next_due_week_start::text,
+      'requested_week_start', v_requested_week_start::text
+    )::text;
+  END IF;
+
+  v_target_week_start := CASE
+    WHEN v_requested_week_start = v_before_next_due_week_start THEN (v_before_next_due_week_start + 7)
+    ELSE v_requested_week_start
+  END;
+
+  WITH schedule_rows AS (
+    SELECT
+      row_number() OVER (ORDER BY (elem.value ->> 'week_start')::date ASC, elem.ordinality ASC) AS seq_no,
+      round(coalesce((elem.value ->> 'amount')::numeric, 0), 2) AS amount_value
+    FROM jsonb_array_elements(v_before_schedule_json) WITH ORDINALITY AS elem(value, ordinality)
+    WHERE coalesce((elem.value ->> 'amount')::numeric, 0) < 0
+  )
+  SELECT
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+          'amount', sr.amount_value
+        )
+        ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+      ),
+      '[]'::jsonb
+    ),
+    count(*)::integer
+  INTO v_after_schedule_json, v_installment_count
+  FROM schedule_rows AS sr;
+
+  v_after_next_due_week_start := CASE WHEN v_installment_count > 0 THEN v_target_week_start ELSE null END;
+
+  UPDATE public.pay_advances AS pa
+  SET schedule_json = v_after_schedule_json,
+      next_due_week_start = v_after_next_due_week_start,
+      updated_at = now()
+  WHERE pa.id = p_finance_case_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'schedule_before_snooze_json', v_before_schedule_json,
+    'next_due_week_start_before_snooze', case when v_before_next_due_week_start is null then null else v_before_next_due_week_start::text end,
+    'requested_week_start', v_requested_week_start::text,
+    'schedule_after_snooze_json', v_after_schedule_json,
+    'next_due_week_start_after_snooze', case when v_after_next_due_week_start is null then null else v_after_next_due_week_start::text end,
+    'installment_count', v_installment_count
+  );
+END;
+$function$;
+
+
+DROP FUNCTION IF EXISTS public._pay_finance_case_freeze_payout_instruction_to_batch_item(uuid,uuid);
+
+CREATE OR REPLACE FUNCTION public._pay_finance_case_freeze_payout_instruction_to_batch_item(
+  p_pay_batch_item_id uuid,
+  p_finance_case_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_item public.pay_batch_items%rowtype;
+  v_case public.pay_advances%rowtype;
+  v_candidate public.candidates%rowtype;
+  v_umbrella public.umbrellas%rowtype;
+  v_oneoff public.pay_finance_case_oneoff_payout_bank_details%rowtype;
+  v_component_classification public.pay_finance_component_classification_enum := null;
+  v_taxability public.pay_finance_taxability_enum := null;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_pay_method text := null;
+  v_pay_channel text := null;
+  v_destination_label text := null;
+  v_payee_entity_kind text := null;
+  v_payee_entity_id uuid := null;
+  v_beneficiary_name text := null;
+  v_masked_bank_account text := null;
+  v_bank_details_hash text := null;
+  v_bank_details_note text := null;
+  v_bank_details_created_by_user_id uuid := null;
+  v_bank_details_updated_by_user_id uuid := null;
+  v_is_candidate_directed_oneoff_payout boolean := false;
+  v_appears_on_umbrella_remittance boolean := false;
+  v_generates_candidate_payment_advice boolean := false;
+  v_snapshot jsonb := '{}'::jsonb;
+BEGIN
+  IF p_pay_batch_item_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'PAY_BATCH_ITEM_ID_REQUIRED',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: pay_batch_item_id is required'
+    )::text;
+  END IF;
+
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: finance_case_id is required'
+    )::text;
+  END IF;
+
+  SELECT pbi.*
+  INTO v_item
+  FROM public.pay_batch_items AS pbi
+  WHERE pbi.id = p_pay_batch_item_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_item.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'PAY_BATCH_ITEM_NOT_FOUND',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: pay batch item not found',
+      'pay_batch_item_id', p_pay_batch_item_id::text
+    )::text;
+  END IF;
+
+  IF v_item.finance_case_id IS NOT NULL AND v_item.finance_case_id <> p_finance_case_id THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'FINANCE_CASE_ID_MISMATCH',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: item finance_case_id does not match input finance_case_id',
+      'pay_batch_item_id', p_pay_batch_item_id::text,
+      'item_finance_case_id', v_item.finance_case_id::text,
+      'input_finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  LIMIT 1;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  SELECT c.*
+  INTO v_candidate
+  FROM public.candidates AS c
+  WHERE c.id = v_case.candidate_id
+  LIMIT 1;
+
+  IF v_candidate.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: candidate not found for finance case',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text
+    )::text;
+  END IF;
+
+  v_pay_method := upper(coalesce(v_candidate.pay_method, ''));
+  IF v_pay_method NOT IN ('PAYE', 'UMBRELLA') THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'PAY_METHOD_INVALID',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: candidate pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'pay_method', v_pay_method
+    )::text;
+  END IF;
+
+  IF v_candidate.umbrella_id IS NOT NULL THEN
+    SELECT u.*
+    INTO v_umbrella
+    FROM public.umbrellas AS u
+    WHERE u.id = v_candidate.umbrella_id
+    LIMIT 1;
+  END IF;
+
+  SELECT pfc.classification
+  INTO v_component_classification
+  FROM public.pay_finance_case_components AS pfc
+  WHERE pfc.finance_case_id = p_finance_case_id
+    AND pfc.component_key_type = 'CASE_TOTAL'
+    AND pfc.component_key_value = 'TOTAL'
+    AND pfc.closed_at_utc IS NULL
+  ORDER BY pfc.updated_at_utc DESC, pfc.created_at_utc DESC, pfc.id DESC
+  LIMIT 1;
+
+  v_taxability := v_case.taxability;
+  IF v_taxability IS NULL THEN
+    IF v_case.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum THEN
+      v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+    ELSIF v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum THEN
+      v_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+    ELSIF v_component_classification IN (
+      'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
+      'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum
+    ) THEN
+      v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+    END IF;
+  END IF;
+
+  v_routing_kind := v_case.routing_kind;
+  IF v_routing_kind IS NULL THEN
+    IF v_case.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSE
+        v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+      END IF;
+    ELSIF v_case.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSIF v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum THEN
+        v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+      ELSE
+        v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+      END IF;
+    ELSIF v_case.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSE
+        v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+      END IF;
+    ELSE
+      v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    END IF;
+  END IF;
+
+  v_pay_channel := v_pay_method;
+
+  IF v_routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum THEN
+    SELECT d.*
+    INTO v_oneoff
+    FROM public.pay_finance_case_oneoff_payout_bank_details AS d
+    WHERE d.finance_case_id = p_finance_case_id
+    LIMIT 1;
+
+    IF v_oneoff.finance_case_id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+        'code', 'ONEOFF_BANK_DETAILS_MISSING',
+        'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: one-off bank details are required for this finance case routing',
+        'finance_case_id', p_finance_case_id::text,
+        'routing_kind', v_routing_kind::text
+      )::text;
+    END IF;
+
+    v_destination_label := 'one-off specified bank account';
+    v_payee_entity_kind := 'CANDIDATE';
+    v_payee_entity_id := v_candidate.id;
+    v_beneficiary_name := v_oneoff.beneficiary_name;
+    v_bank_details_hash := v_oneoff.bank_details_hash;
+    v_bank_details_note := v_oneoff.note;
+    v_bank_details_created_by_user_id := v_oneoff.created_by_user_id;
+    v_bank_details_updated_by_user_id := v_oneoff.updated_by_user_id;
+    IF nullif(coalesce(v_oneoff.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_oneoff.account_number, 4), length(v_oneoff.account_number), '*');
+    END IF;
+    v_is_candidate_directed_oneoff_payout := true;
+    v_appears_on_umbrella_remittance := false;
+    v_generates_candidate_payment_advice := true;
+  ELSIF v_routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum THEN
+    v_destination_label := 'umbrella company';
+    v_payee_entity_kind := 'UMBRELLA';
+    v_payee_entity_id := v_candidate.umbrella_id;
+    v_beneficiary_name := nullif(btrim(coalesce(v_umbrella.name, '')), '');
+    v_bank_details_hash := v_umbrella.bank_details_hash;
+    IF nullif(coalesce(v_umbrella.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_umbrella.account_number, 4), length(v_umbrella.account_number), '*');
+    END IF;
+    v_is_candidate_directed_oneoff_payout := false;
+    v_appears_on_umbrella_remittance := true;
+    v_generates_candidate_payment_advice := false;
+  ELSE
+    v_destination_label := 'normal PAYE route';
+    v_payee_entity_kind := 'CANDIDATE';
+    v_payee_entity_id := v_candidate.id;
+    v_beneficiary_name := nullif(btrim(coalesce(v_candidate.account_holder, v_candidate.display_name, concat_ws(' ', v_candidate.first_name, v_candidate.last_name))), '');
+    v_bank_details_hash := v_candidate.bank_details_hash;
+    IF nullif(coalesce(v_candidate.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_candidate.account_number, 4), length(v_candidate.account_number), '*');
+    END IF;
+    v_is_candidate_directed_oneoff_payout := false;
+    v_appears_on_umbrella_remittance := false;
+    v_generates_candidate_payment_advice := false;
+  END IF;
+
+  v_snapshot := jsonb_strip_nulls(
+    jsonb_build_object(
+      'taxability', case when v_taxability is null then null else v_taxability::text end,
+      'routing_kind', case when v_routing_kind is null then null else v_routing_kind::text end,
+      'destination_label', v_destination_label,
+      'pay_channel', v_pay_channel,
+      'payee_entity_kind', v_payee_entity_kind,
+      'payee_entity_id', case when v_payee_entity_id is null then null else v_payee_entity_id::text end,
+      'beneficiary_name', v_beneficiary_name,
+      'masked_bank_account', v_masked_bank_account,
+      'bank_details_hash', v_bank_details_hash,
+      'bank_details_note', v_bank_details_note,
+      'bank_details_created_by_user_id', case when v_bank_details_created_by_user_id is null then null else v_bank_details_created_by_user_id::text end,
+      'bank_details_updated_by_user_id', case when v_bank_details_updated_by_user_id is null then null else v_bank_details_updated_by_user_id::text end,
+      'appears_on_umbrella_remittance', v_appears_on_umbrella_remittance,
+      'generates_candidate_payment_advice', v_generates_candidate_payment_advice,
+      'is_candidate_directed_oneoff_payout', v_is_candidate_directed_oneoff_payout,
+      'locked_at_draft', true,
+      'finance_case_id', p_finance_case_id::text,
+      'pay_batch_item_id', p_pay_batch_item_id::text
+    )
+  );
+
+  UPDATE public.pay_batch_items AS pbi
+  SET payout_instruction_snapshot_json = v_snapshot
+  WHERE pbi.id = p_pay_batch_item_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'pay_batch_item_id', p_pay_batch_item_id::text,
+    'finance_case_id', p_finance_case_id::text,
+    'payout_instruction_snapshot_json', v_snapshot
+  );
+END;
+$function$;
