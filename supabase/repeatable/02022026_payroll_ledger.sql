@@ -16321,6 +16321,8 @@ $$;
 
 
 
+
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -16617,6 +16619,31 @@ begin
 
   truncate table _tmp_pay_transfer_groups;
 
+  create temp table if not exists _tmp_pay_transfer_item_groups (
+    pay_batch_item_id uuid not null,
+    pay_channel text not null,
+    candidate_id uuid not null,
+    umbrella_id uuid null,
+    week_ending_bucket date null,
+    amount numeric not null,
+    currency text not null,
+    status text not null,
+    rail_state text null,
+    rail_meta_json jsonb null,
+    payment_reference text null,
+    payee_name text null,
+    sort_code text null,
+    account_number text null,
+    account_type text null,
+    bank_details_hash_snapshot text null,
+    payee_entity_kind text not null,
+    payee_entity_id uuid null,
+    transfer_group_key text not null,
+    grouping_mode_used text null
+  ) on commit drop;
+
+  truncate table _tmp_pay_transfer_item_groups;
+
   -- =========================================================
   -- LOANS groups: candidate_id only (one transfer per candidate)
   -- Payee is candidate (loan payout direct)
@@ -16736,9 +16763,145 @@ begin
   end if;
 
   -- =========================================================
-  -- PAYE groups: candidate_id only (one transfer per candidate)
+  -- PAYE groups: destination-aware grouping
+  -- Finance-derived rows must use payout_instruction_snapshot_json as
+  -- the authoritative source of routing/payee/bank-hash identity.
   -- =========================================================
   if v_do_paye = true then
+    insert into _tmp_pay_transfer_item_groups(
+      pay_batch_item_id,
+      pay_channel,
+      candidate_id,
+      umbrella_id,
+      week_ending_bucket,
+      amount,
+      currency,
+      status,
+      rail_state,
+      rail_meta_json,
+      payment_reference,
+      payee_name,
+      sort_code,
+      account_number,
+      account_type,
+      bank_details_hash_snapshot,
+      payee_entity_kind,
+      payee_entity_id,
+      transfer_group_key,
+      grouping_mode_used
+    )
+    with paye_item_rows as (
+      select
+        pbi_p.id as pay_batch_item_id,
+        'PAYE'::text as pay_channel,
+        pbc_p.candidate_id,
+        null::uuid as umbrella_id,
+        null::date as week_ending_bucket,
+        coalesce(pbi_p.amount_inc_vat, pbi_p.amount_ex_vat, 0)::numeric as item_amount,
+        pbi_p.item_type,
+        pbi_p.payout_instruction_snapshot_json,
+        c_p.account_holder,
+        c_p.display_name,
+        c_p.first_name,
+        c_p.last_name,
+        c_p.sort_code,
+        c_p.account_number,
+        c_p.bank_details_hash,
+        (pbi_p.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT')) as is_finance_item,
+        upper(coalesce(pbi_p.payout_instruction_snapshot_json->>'routing_kind', 'NORMAL_PAY_ROUTE')) as routing_kind_txt,
+        upper(coalesce(pbi_p.payout_instruction_snapshot_json->>'payee_entity_kind', 'CANDIDATE')) as payee_entity_kind_txt,
+        case
+          when nullif(pbi_p.payout_instruction_snapshot_json->>'payee_entity_id','') is null then null::uuid
+          else (pbi_p.payout_instruction_snapshot_json->>'payee_entity_id')::uuid
+        end as snapshot_payee_entity_id,
+        nullif(pbi_p.payout_instruction_snapshot_json->>'bank_details_hash','') as snapshot_bank_details_hash,
+        nullif(pbi_p.payout_instruction_snapshot_json->>'beneficiary_name','') as snapshot_beneficiary_name
+      from public.pay_batch_candidates pbc_p
+      join public.pay_batch_items pbi_p
+        on pbi_p.pay_batch_candidate_id = pbc_p.id
+       and pbi_p.pay_channel = 'PAYE'
+       and pbi_p.item_type <> 'DEBT_CREATED'
+       and coalesce(pbi_p.is_voided, false) = false
+      join public.candidates c_p
+        on c_p.id = pbc_p.candidate_id
+      where pbc_p.pay_batch_id = p_pay_batch_id
+    ),
+    paye_item_final as (
+      select
+        pir.pay_batch_item_id,
+        'PAYE'::text as pay_channel,
+        pir.candidate_id,
+        null::uuid as umbrella_id,
+        null::date as week_ending_bucket,
+        pir.item_amount as amount,
+        'GBP'::text as currency,
+        case
+          when pir.is_finance_item = true and pir.payout_instruction_snapshot_json is null then 'BLOCKED'
+          when pir.is_finance_item = true and upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' then 'BLOCKED'
+          when pir.is_finance_item = true and pir.payee_entity_kind_txt <> 'CANDIDATE' then 'BLOCKED'
+          when pir.is_finance_item = true and pir.snapshot_payee_entity_id is distinct from pir.candidate_id then 'BLOCKED'
+          when pir.is_finance_item = true and (pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '') then 'BLOCKED'
+          when pir.is_finance_item = true and pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash then 'BLOCKED'
+          when nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null then 'BLOCKED'
+          when length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6 then 'BLOCKED'
+          when nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null then 'BLOCKED'
+          else 'PENDING'
+        end as status,
+        case
+          when pir.is_finance_item = true and pir.payout_instruction_snapshot_json is null then 'BLOCKED_PAYOUT_INSTRUCTION_SNAPSHOT'
+          when pir.is_finance_item = true and (upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' or pir.payee_entity_kind_txt <> 'CANDIDATE' or pir.snapshot_payee_entity_id is distinct from pir.candidate_id) then 'BLOCKED_DESTINATION_INVALID'
+          when pir.is_finance_item = true and (pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '' or pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash) then 'BLOCKED_BANK_DETAILS'
+          when nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null or length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6 or nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null then 'BLOCKED_BANK_DETAILS'
+          else null
+        end as rail_state,
+        case
+          when pir.is_finance_item = true and pir.payout_instruction_snapshot_json is null then jsonb_build_object('reason_code', 'PAYOUT_INSTRUCTION_SNAPSHOT_MISSING')
+          when pir.is_finance_item = true and (upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' or pir.payee_entity_kind_txt <> 'CANDIDATE' or pir.snapshot_payee_entity_id is distinct from pir.candidate_id) then jsonb_build_object('reason_code', 'DESTINATION_INVALID')
+          when pir.is_finance_item = true and (pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '' or pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISMATCH')
+          when nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null or length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6 or nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null then jsonb_build_object('reason_code', 'BANK_DETAILS_MISSING')
+          else null
+        end as rail_meta_json,
+        ('Pay - week ' || v_tax_week::text) as payment_reference,
+        coalesce(pir.snapshot_beneficiary_name, nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '')) as payee_name,
+        case
+          when length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) = 6 then
+            substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+            substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+            substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+          else null
+        end as sort_code,
+        nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') as account_number,
+        'Personal'::text as account_type,
+        case when pir.is_finance_item = true then pir.snapshot_bank_details_hash else pir.bank_details_hash end as bank_details_hash_snapshot,
+        'CANDIDATE'::text as payee_entity_kind,
+        pir.candidate_id as payee_entity_id,
+        (pir.candidate_id::text || '|NORMAL_PAY_ROUTE|' || coalesce(case when pir.is_finance_item = true then pir.snapshot_bank_details_hash else pir.bank_details_hash end, '')) as transfer_group_key,
+        'CANDIDATE_DESTINATION'::text as grouping_mode_used
+      from paye_item_rows pir
+    )
+    select
+      pif.pay_batch_item_id,
+      pif.pay_channel,
+      pif.candidate_id,
+      pif.umbrella_id,
+      pif.week_ending_bucket,
+      pif.amount,
+      pif.currency,
+      pif.status,
+      pif.rail_state,
+      pif.rail_meta_json,
+      pif.payment_reference,
+      pif.payee_name,
+      pif.sort_code,
+      pif.account_number,
+      pif.account_type,
+      pif.bank_details_hash_snapshot,
+      pif.payee_entity_kind,
+      pif.payee_entity_id,
+      pif.transfer_group_key,
+      pif.grouping_mode_used
+    from paye_item_final pif;
+
     insert into _tmp_pay_transfer_groups(
       pay_channel,
       candidate_id,
@@ -16761,80 +16924,339 @@ begin
       grouping_mode_used
     )
     select
-      'PAYE'::text as pay_channel,
-      pbc.candidate_id,
-      null::uuid as umbrella_id,
+      tig.pay_channel,
+      min(tig.candidate_id) as candidate_id,
+      min(tig.umbrella_id) as umbrella_id,
       null::date as week_ending_bucket,
-      round(pbc.net_bank_amount, 2) as amount,
-      'GBP'::text as currency,
-
-      case
-        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED'
-        else 'PENDING'
-      end as status,
-
-      case
-        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED_BANK_DETAILS'
-        else null
-      end as rail_state,
-
-      case
-        when (sc_norm is null or acct_norm is null or payee_nm is null) then
-          jsonb_build_object(
-            'reason_code', 'BANK_DETAILS_MISSING',
-            'missing', (
-              select jsonb_agg(x.m)
-              from (
-                select 'sort_code'::text as m where sc_norm is null
-                union all
-                select 'account_number'::text where acct_norm is null
-                union all
-                select 'payee_name'::text where payee_nm is null
-              ) x
-            )
-          )
-        else null
-      end as rail_meta_json,
-
-      ('Pay - week ' || v_tax_week::text) as payment_reference,
-
-      payee_nm as payee_name,
-      sc_norm as sort_code,
-      acct_norm as account_number,
-      'Personal'::text as account_type,
-
-      c.bank_details_hash as bank_details_hash_snapshot,
-
-      'CANDIDATE'::text as payee_entity_kind,
-      pbc.candidate_id as payee_entity_id,
-
-      (pbc.candidate_id::text) as transfer_group_key,
-      'CANDIDATE'::text as grouping_mode_used
-    from public.pay_batch_candidates pbc
-    join public.candidates c
-      on c.id = pbc.candidate_id
-    join lateral (
-      select
-        nullif(btrim(coalesce(c.account_holder, c.display_name, concat_ws(' ', c.first_name, c.last_name))), '') as payee_nm,
-        case
-          when length(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g')) = 6 then
-            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
-            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
-            substr(regexp_replace(coalesce(c.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
-          else null
-        end as sc_norm,
-        nullif(regexp_replace(coalesce(c.account_number,''), '[^0-9]', '', 'g'), '') as acct_norm
-    ) b on true
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbc.paye_state is not null
-      and round(coalesce(pbc.net_bank_amount,0),2) > 0;
+      round(sum(tig.amount), 2) as amount,
+      max(tig.currency) as currency,
+      case when bool_or(tig.status = 'BLOCKED') then 'BLOCKED' else 'PENDING' end as status,
+      case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_state) else null end as rail_state,
+      case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_meta_json) else null end as rail_meta_json,
+      min(tig.payment_reference) as payment_reference,
+      min(tig.payee_name) as payee_name,
+      min(tig.sort_code) as sort_code,
+      min(tig.account_number) as account_number,
+      min(tig.account_type) as account_type,
+      min(tig.bank_details_hash_snapshot) as bank_details_hash_snapshot,
+      min(tig.payee_entity_kind) as payee_entity_kind,
+      min(tig.payee_entity_id) as payee_entity_id,
+      tig.transfer_group_key,
+      min(tig.grouping_mode_used) as grouping_mode_used
+    from _tmp_pay_transfer_item_groups tig
+    where tig.pay_channel = 'PAYE'
+      and round(greatest(tig.amount,0),2) > 0
+    group by tig.pay_channel, tig.transfer_group_key
+    having round(greatest(sum(tig.amount),0),2) > 0;
   end if;
 
   -- =========================================================
-  -- UMBRELLA groups: candidate_id + week_ending_bucket (default)
-  -- Payee is umbrella (funds go to umbrella)
+  -- UMBRELLA groups: destination-aware grouping
+  -- Finance-derived rows must use payout_instruction_snapshot_json as
+  -- the authoritative source of routing/payee/bank-hash identity.
   -- =========================================================
   if v_do_umbrella = true then
+    insert into _tmp_pay_transfer_item_groups(
+      pay_batch_item_id,
+      pay_channel,
+      candidate_id,
+      umbrella_id,
+      week_ending_bucket,
+      amount,
+      currency,
+      status,
+      rail_state,
+      rail_meta_json,
+      payment_reference,
+      payee_name,
+      sort_code,
+      account_number,
+      account_type,
+      bank_details_hash_snapshot,
+      payee_entity_kind,
+      payee_entity_id,
+      transfer_group_key,
+      grouping_mode_used
+    )
+    with umbrella_item_rows as (
+      select
+        pbi_u.id as pay_batch_item_id,
+        pbc_u.id as pay_batch_candidate_id,
+        'UMBRELLA'::text as pay_channel,
+        pbc_u.candidate_id,
+        coalesce(vts_u.week_ending_date, v_pay_week_end) as default_week_ending_bucket,
+        coalesce(pbi_u.amount_inc_vat, pbi_u.amount_ex_vat, 0)::numeric as item_amount,
+        pbi_u.finance_case_id,
+        pbi_u.item_type,
+        pbi_u.umbrella_id as item_umbrella_id,
+        pbi_u.payout_instruction_snapshot_json as payout_instruction_snapshot_json,
+        c_u.first_name as candidate_first_name,
+        c_u.last_name as candidate_last_name,
+        c_u.umbrella_id as candidate_umbrella_id
+      from public.pay_batch_candidates pbc_u
+      join public.pay_batch_items pbi_u
+        on pbi_u.pay_batch_candidate_id = pbc_u.id
+       and pbi_u.pay_channel = 'UMBRELLA'
+       and pbi_u.item_type <> 'DEBT_CREATED'
+       and coalesce(pbi_u.is_voided, false) = false
+      join public.candidates c_u
+        on c_u.id = pbc_u.candidate_id
+      left join public.v_timesheets_summary_base vts_u
+        on vts_u.timesheet_id = pbi_u.timesheet_id
+      where pbc_u.pay_batch_id = p_pay_batch_id
+    ),
+    umbrella_item_resolved as (
+      select
+        uir.pay_batch_item_id,
+        uir.pay_channel,
+        uir.candidate_id,
+        uir.default_week_ending_bucket,
+        uir.item_amount,
+        uir.finance_case_id,
+        uir.item_type,
+        uir.item_umbrella_id,
+        uir.payout_instruction_snapshot_json,
+        uir.candidate_first_name,
+        uir.candidate_last_name,
+        uir.candidate_umbrella_id,
+        (uir.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT')) as is_finance_item,
+        upper(coalesce(uir.payout_instruction_snapshot_json->>'routing_kind', 'UMBRELLA_COMPANY')) as routing_kind_txt,
+        upper(coalesce(uir.payout_instruction_snapshot_json->>'payee_entity_kind', 'UMBRELLA')) as payee_entity_kind_txt,
+        case
+          when nullif(uir.payout_instruction_snapshot_json->>'payee_entity_id','') is null then null::uuid
+          else (uir.payout_instruction_snapshot_json->>'payee_entity_id')::uuid
+        end as snapshot_payee_entity_id,
+        nullif(uir.payout_instruction_snapshot_json->>'bank_details_hash','') as snapshot_bank_details_hash,
+        nullif(uir.payout_instruction_snapshot_json->>'beneficiary_name','') as snapshot_beneficiary_name
+      from umbrella_item_rows uir
+    ),
+    umbrella_item_banks as (
+      select
+        ures.pay_batch_item_id,
+        ures.pay_channel,
+        ures.candidate_id,
+        ures.default_week_ending_bucket,
+        ures.item_amount,
+        ures.finance_case_id,
+        ures.item_type,
+        ures.payout_instruction_snapshot_json,
+        ures.is_finance_item,
+        ures.routing_kind_txt,
+        ures.payee_entity_kind_txt,
+        ures.snapshot_payee_entity_id,
+        ures.snapshot_bank_details_hash,
+        ures.snapshot_beneficiary_name,
+        ures.candidate_first_name,
+        ures.candidate_last_name,
+        case
+          when ures.is_finance_item = true and upper(coalesce(ures.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then null::uuid
+          when ures.is_finance_item = true and ures.payee_entity_kind_txt = 'UMBRELLA' then ures.snapshot_payee_entity_id
+          else coalesce(ures.item_umbrella_id, ures.candidate_umbrella_id)
+        end as resolved_umbrella_id,
+        oneoff.beneficiary_name as oneoff_beneficiary_name,
+        oneoff.sort_code as oneoff_sort_code_raw,
+        oneoff.account_number as oneoff_account_number_raw,
+        oneoff.bank_details_hash as oneoff_bank_details_hash,
+        umb.name as umbrella_payee_name,
+        umb.sort_code as umbrella_sort_code_raw,
+        umb.account_number as umbrella_account_number_raw,
+        umb.bank_details_hash as umbrella_bank_details_hash
+      from umbrella_item_resolved ures
+      left join public.pay_finance_case_oneoff_payout_bank_details oneoff
+        on oneoff.finance_case_id = ures.finance_case_id
+       and oneoff.bank_details_hash = ures.snapshot_bank_details_hash
+       and upper(coalesce(ures.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+      left join public.umbrellas umb
+        on umb.id = case
+                       when ures.is_finance_item = true and upper(coalesce(ures.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then ures.snapshot_payee_entity_id
+                       else coalesce(ures.item_umbrella_id, ures.candidate_umbrella_id)
+                    end
+       and (
+         ures.is_finance_item = false
+         or upper(coalesce(ures.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+         or umb.bank_details_hash = ures.snapshot_bank_details_hash
+       )
+    ),
+    umbrella_item_final as (
+      select
+        uib.pay_batch_item_id,
+        'UMBRELLA'::text as pay_channel,
+        uib.candidate_id,
+        case
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then null::uuid
+          else uib.resolved_umbrella_id
+        end as umbrella_id,
+        case
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then null::date
+          else uib.default_week_ending_bucket
+        end as week_ending_bucket,
+        uib.item_amount as amount,
+        'GBP'::text as currency,
+        case
+          when uib.is_finance_item = true and uib.payout_instruction_snapshot_json is null then 'BLOCKED'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.snapshot_bank_details_hash is null or uib.snapshot_payee_entity_id is null or nullif(btrim(coalesce(uib.snapshot_beneficiary_name,'')), '') is null) then 'BLOCKED'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.oneoff_bank_details_hash is null or uib.oneoff_bank_details_hash <> uib.snapshot_bank_details_hash
+                    or nullif(regexp_replace(coalesce(uib.oneoff_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.oneoff_account_number_raw,''), '[^0-9]', '', 'g'), '') is null) then 'BLOCKED'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.snapshot_payee_entity_id is null or uib.snapshot_bank_details_hash is null or uib.payee_entity_kind_txt <> 'UMBRELLA') then 'BLOCKED'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.resolved_umbrella_id is null or uib.umbrella_bank_details_hash is null or uib.umbrella_bank_details_hash <> uib.snapshot_bank_details_hash
+                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null) then 'BLOCKED'
+          when uib.is_finance_item = false and uib.resolved_umbrella_id is null then 'BLOCKED'
+          when uib.is_finance_item = false and (nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(btrim(coalesce(uib.umbrella_bank_details_hash,'')), '') is null) then 'BLOCKED'
+          else 'PENDING'
+        end as status,
+        case
+          when uib.is_finance_item = true and uib.payout_instruction_snapshot_json is null then 'BLOCKED_PAYOUT_INSTRUCTION_SNAPSHOT'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.snapshot_bank_details_hash is null or uib.snapshot_payee_entity_id is null or nullif(btrim(coalesce(uib.snapshot_beneficiary_name,'')), '') is null) then 'BLOCKED_DESTINATION_INVALID'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.oneoff_bank_details_hash is null or uib.oneoff_bank_details_hash <> uib.snapshot_bank_details_hash
+                    or nullif(regexp_replace(coalesce(uib.oneoff_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.oneoff_account_number_raw,''), '[^0-9]', '', 'g'), '') is null) then 'BLOCKED_BANK_DETAILS'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.snapshot_payee_entity_id is null or uib.snapshot_bank_details_hash is null or uib.payee_entity_kind_txt <> 'UMBRELLA') then 'BLOCKED_DESTINATION_INVALID'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.resolved_umbrella_id is null) then 'BLOCKED_UMBRELLA_MISSING'
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.umbrella_bank_details_hash is null or uib.umbrella_bank_details_hash <> uib.snapshot_bank_details_hash
+                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null) then 'BLOCKED_BANK_DETAILS'
+          when uib.is_finance_item = false and uib.resolved_umbrella_id is null then 'BLOCKED_UMBRELLA_MISSING'
+          when uib.is_finance_item = false and (nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(btrim(coalesce(uib.umbrella_bank_details_hash,'')), '') is null) then 'BLOCKED_BANK_DETAILS'
+          else null
+        end as rail_state,
+        case
+          when uib.is_finance_item = true and uib.payout_instruction_snapshot_json is null then jsonb_build_object('reason_code', 'PAYOUT_INSTRUCTION_SNAPSHOT_MISSING')
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.snapshot_bank_details_hash is null or uib.snapshot_payee_entity_id is null or nullif(btrim(coalesce(uib.snapshot_beneficiary_name,'')), '') is null) then jsonb_build_object('reason_code', 'DESTINATION_INVALID')
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.oneoff_bank_details_hash is null or uib.oneoff_bank_details_hash <> uib.snapshot_bank_details_hash
+                    or nullif(regexp_replace(coalesce(uib.oneoff_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.oneoff_account_number_raw,''), '[^0-9]', '', 'g'), '') is null) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISMATCH')
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.snapshot_payee_entity_id is null or uib.snapshot_bank_details_hash is null or uib.payee_entity_kind_txt <> 'UMBRELLA') then jsonb_build_object('reason_code', 'DESTINATION_INVALID')
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.resolved_umbrella_id is null) then jsonb_build_object('reason_code', 'UMBRELLA_MISSING')
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+               and (uib.umbrella_bank_details_hash is null or uib.umbrella_bank_details_hash <> uib.snapshot_bank_details_hash
+                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISMATCH')
+          when uib.is_finance_item = false and uib.resolved_umbrella_id is null then jsonb_build_object('reason_code', 'UMBRELLA_MISSING')
+          when uib.is_finance_item = false and (nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
+                    or nullif(btrim(coalesce(uib.umbrella_bank_details_hash,'')), '') is null) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISSING')
+          else null
+        end as rail_meta_json,
+        left(
+          btrim(concat_ws(' ', nullif(btrim(uib.candidate_last_name),''), nullif(btrim(uib.candidate_first_name),''))),
+          18
+        ) as payment_reference,
+        case
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            then uib.snapshot_beneficiary_name
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            then coalesce(uib.snapshot_beneficiary_name, nullif(btrim(coalesce(uib.umbrella_payee_name,'')), ''))
+          else nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '')
+        end as payee_name,
+        case
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then
+            case
+              when length(regexp_replace(coalesce(uib.oneoff_sort_code_raw,''), '[^0-9]', '', 'g')) = 6 then
+                substr(regexp_replace(coalesce(uib.oneoff_sort_code_raw,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+                substr(regexp_replace(coalesce(uib.oneoff_sort_code_raw,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+                substr(regexp_replace(coalesce(uib.oneoff_sort_code_raw,''), '[^0-9]', '', 'g'), 5, 2)
+              else null
+            end
+          else
+            case
+              when length(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g')) = 6 then
+                substr(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+                substr(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+                substr(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), 5, 2)
+              else null
+            end
+        end as sort_code,
+        case
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            then nullif(regexp_replace(coalesce(uib.oneoff_account_number_raw,''), '[^0-9]', '', 'g'), '')
+          else
+            nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '')
+        end as account_number,
+        case
+          when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'Personal'::text
+          else 'Business'::text
+        end as account_type,
+        case
+          when uib.is_finance_item = true then uib.snapshot_bank_details_hash
+          when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then uib.snapshot_bank_details_hash
+          else coalesce(uib.umbrella_bank_details_hash, uib.snapshot_bank_details_hash)
+        end as bank_details_hash_snapshot,
+        case
+          when uib.is_finance_item = true then uib.payee_entity_kind_txt
+          when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'CANDIDATE'::text
+          else 'UMBRELLA'::text
+        end as payee_entity_kind,
+        case
+          when uib.is_finance_item = true then case when uib.payee_entity_kind_txt = 'CANDIDATE' then uib.candidate_id else uib.snapshot_payee_entity_id end
+          when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then uib.candidate_id
+          else uib.resolved_umbrella_id
+        end as payee_entity_id,
+        case
+          when uib.is_finance_item = true then
+            uib.candidate_id::text || '|' || upper(coalesce(uib.routing_kind_txt,'')) || '|' || coalesce(uib.payee_entity_kind_txt,'') || '|' ||
+            coalesce(case when uib.payee_entity_kind_txt = 'CANDIDATE' then uib.candidate_id::text else uib.snapshot_payee_entity_id::text end, '') || '|' ||
+            coalesce(uib.snapshot_bank_details_hash, '')
+          when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then
+            uib.candidate_id::text || '|ONEOFF|' || coalesce(uib.snapshot_bank_details_hash, '')
+          else
+            uib.candidate_id::text || '|' || uib.default_week_ending_bucket::text || '|UMBRELLA|' || coalesce(uib.resolved_umbrella_id::text, '') || '|' || coalesce(uib.umbrella_bank_details_hash, '')
+        end as transfer_group_key,
+        case
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'CANDIDATE_DESTINATION'::text
+          when uib.is_finance_item = true then 'FINANCE_DESTINATION'::text
+          when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'CANDIDATE_DESTINATION'::text
+          else 'CANDIDATE_WEEK_DESTINATION'::text
+        end as grouping_mode_used
+      from umbrella_item_banks uib
+    )
+    select
+      uif.pay_batch_item_id,
+      uif.pay_channel,
+      uif.candidate_id,
+      uif.umbrella_id,
+      uif.week_ending_bucket,
+      uif.amount,
+      uif.currency,
+      uif.status,
+      uif.rail_state,
+      uif.rail_meta_json,
+      uif.payment_reference,
+      uif.payee_name,
+      uif.sort_code,
+      uif.account_number,
+      uif.account_type,
+      uif.bank_details_hash_snapshot,
+      uif.payee_entity_kind,
+      uif.payee_entity_id,
+      uif.transfer_group_key,
+      uif.grouping_mode_used
+    from umbrella_item_final uif;
+
     insert into _tmp_pay_transfer_groups(
       pay_channel,
       candidate_id,
@@ -16857,99 +17279,30 @@ begin
       grouping_mode_used
     )
     select
-      'UMBRELLA'::text as pay_channel,
-      pbc.candidate_id,
-      g.umb_id as umbrella_id,
-      g.wk_end as week_ending_bucket,
-      round(greatest(g.sum_amt,0),2) as amount,
-      'GBP'::text as currency,
-
-      case
-        when (g.umb_id is null) then 'BLOCKED'
-        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED'
-        else 'PENDING'
-      end as status,
-
-      case
-        when (g.umb_id is null) then 'BLOCKED_UMBRELLA_MISSING'
-        when (sc_norm is null or acct_norm is null or payee_nm is null) then 'BLOCKED_BANK_DETAILS'
-        else null
-      end as rail_state,
-
-      case
-        when (g.umb_id is null) then
-          jsonb_build_object('reason_code','UMBRELLA_MISSING')
-        when (sc_norm is null or acct_norm is null or payee_nm is null) then
-          jsonb_build_object(
-            'reason_code', 'BANK_DETAILS_MISSING',
-            'missing', (
-              select jsonb_agg(x.m)
-              from (
-                select 'sort_code'::text as m where sc_norm is null
-                union all
-                select 'account_number'::text where acct_norm is null
-                union all
-                select 'payee_name'::text where payee_nm is null
-              ) x
-            )
-          )
-        else null
-      end as rail_meta_json,
-
-      left(
-        btrim(concat_ws(' ', nullif(btrim(c.last_name),''), nullif(btrim(c.first_name),''))),
-        18
-      ) as payment_reference,
-
-      payee_nm as payee_name,
-      sc_norm as sort_code,
-      acct_norm as account_number,
-
-      'Business'::text as account_type,
-
-      u.bank_details_hash as bank_details_hash_snapshot,
-
-      case when g.umb_id is null then 'CANDIDATE' else 'UMBRELLA' end as payee_entity_kind,
-      case when g.umb_id is null then pbc.candidate_id else g.umb_id end as payee_entity_id,
-
-      (pbc.candidate_id::text || '|' || g.wk_end::text) as transfer_group_key,
-      'CANDIDATE_WEEK'::text as grouping_mode_used
-    from (
-      select
-        pbc0.id as pay_batch_candidate_id,
-        pbc0.candidate_id,
-        coalesce(vts.week_ending_date, v_pay_week_end) as wk_end,
-        nullif(min(pbi0.umbrella_id::text), '')::uuid as umb_id,
-        sum(coalesce(pbi0.amount_inc_vat,0)) as sum_amt
-      from public.pay_batch_candidates pbc0
-      join public.pay_batch_items pbi0
-        on pbi0.pay_batch_candidate_id = pbc0.id
-       and pbi0.pay_channel = 'UMBRELLA'
-       and pbi0.item_type <> 'DEBT_CREATED'
-      left join public.v_timesheets_summary_base vts
-        on vts.timesheet_id = pbi0.timesheet_id
-      where pbc0.pay_batch_id = p_pay_batch_id
-      group by pbc0.id, pbc0.candidate_id, coalesce(vts.week_ending_date, v_pay_week_end)
-      having round(greatest(sum(coalesce(pbi0.amount_inc_vat,0)),0),2) > 0
-    ) g
-    join public.pay_batch_candidates pbc
-      on pbc.id = g.pay_batch_candidate_id
-    join public.candidates c
-      on c.id = pbc.candidate_id
-    left join public.umbrellas u
-      on u.id = g.umb_id
-    join lateral (
-      select
-        nullif(btrim(coalesce(u.name,'')), '') as payee_nm,
-        case
-          when length(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g')) = 6 then
-            substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
-            substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
-            substr(regexp_replace(coalesce(u.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
-          else null
-        end as sc_norm,
-        nullif(regexp_replace(coalesce(u.account_number,''), '[^0-9]', '', 'g'), '') as acct_norm
-    ) b on true;
+      tig.pay_channel,
+      min(tig.candidate_id) as candidate_id,
+      min(tig.umbrella_id) as umbrella_id,
+      min(tig.week_ending_bucket) as week_ending_bucket,
+      round(sum(tig.amount), 2) as amount,
+      max(tig.currency) as currency,
+      case when bool_or(tig.status = 'BLOCKED') then 'BLOCKED' else 'PENDING' end as status,
+      case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_state) else null end as rail_state,
+      case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_meta_json) else null end as rail_meta_json,
+      min(tig.payment_reference) as payment_reference,
+      min(tig.payee_name) as payee_name,
+      min(tig.sort_code) as sort_code,
+      min(tig.account_number) as account_number,
+      min(tig.account_type) as account_type,
+      min(tig.bank_details_hash_snapshot) as bank_details_hash_snapshot,
+      min(tig.payee_entity_kind) as payee_entity_kind,
+      min(tig.payee_entity_id) as payee_entity_id,
+      tig.transfer_group_key,
+      min(tig.grouping_mode_used) as grouping_mode_used
+    from _tmp_pay_transfer_item_groups tig
+    where tig.pay_channel = 'UMBRELLA'
+      and round(greatest(tig.amount,0),2) > 0
+    group by tig.pay_channel, tig.transfer_group_key
+    having round(greatest(sum(tig.amount),0),2) > 0;
   end if;
 
   -- Clear old item→transfer links for executed scopes (rebuild coherently)
@@ -17078,39 +17431,24 @@ begin
   if v_do_paye = true then
     update public.pay_batch_items pbi_l
     set pay_bank_transfer_id = pbt_l.id
-    from public.pay_batch_candidates pbc_l
+    from _tmp_pay_transfer_item_groups tig_l
     join public.pay_bank_transfers pbt_l
       on pbt_l.pay_batch_id = p_pay_batch_id
      and pbt_l.pay_channel = 'PAYE'
-     and pbt_l.candidate_id = pbc_l.candidate_id
-     and pbt_l.transfer_group_key = (pbc_l.candidate_id::text)
-    where pbi_l.pay_batch_candidate_id = pbc_l.id
-      and pbc_l.pay_batch_id = p_pay_batch_id
-      and pbi_l.pay_channel = 'PAYE'
-      and pbi_l.item_type <> 'DEBT_CREATED';
+     and pbt_l.transfer_group_key = tig_l.transfer_group_key
+    where pbi_l.id = tig_l.pay_batch_item_id
+      and pbi_l.pay_batch_candidate_id is not null;
   end if;
-
   if v_do_umbrella = true then
     update public.pay_batch_items pbi_u
     set pay_bank_transfer_id = pbt_u.id
-    from public.pay_batch_candidates pbc_u
+    from _tmp_pay_transfer_item_groups tig_u
     join public.pay_bank_transfers pbt_u
       on pbt_u.pay_batch_id = p_pay_batch_id
      and pbt_u.pay_channel = 'UMBRELLA'
-     and pbt_u.candidate_id = pbc_u.candidate_id
-    where pbi_u.pay_batch_candidate_id = pbc_u.id
-      and pbc_u.pay_batch_id = p_pay_batch_id
-      and pbi_u.pay_channel = 'UMBRELLA'
-      and pbi_u.item_type <> 'DEBT_CREATED'
-      and pbt_u.week_ending_bucket = coalesce(
-            (
-              select vts_u.week_ending_date
-              from public.v_timesheets_summary_base vts_u
-              where vts_u.timesheet_id = pbi_u.timesheet_id
-              limit 1
-            ),
-            v_pay_week_end
-          );
+     and pbt_u.transfer_group_key = tig_u.transfer_group_key
+    where pbi_u.id = tig_u.pay_batch_item_id
+      and pbi_u.pay_batch_candidate_id is not null;
   end if;
 
   if v_do_loans = true then
@@ -17274,6 +17612,12 @@ begin
   );
 end;
 $$;
+
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
