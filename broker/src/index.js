@@ -54971,13 +54971,15 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
 
     const normalizeDatasetValue = (value) => {
       if (value === undefined) return undefined;
-      if (value === null) return null;
+      if (value === null) return undefined;
 
       if (Array.isArray(value)) {
         const arr = value
           .map(normalizeDatasetValue)
           .filter((v) => v !== undefined)
           .map((v) => (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v);
+
+        if (!arr.length) return undefined;
 
         return arr.sort((leftValue, rightValue) => {
           const leftJson = JSON.stringify(leftValue);
@@ -54994,10 +54996,15 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
           const normalized = normalizeDatasetValue(value[key]);
           if (normalized !== undefined) out[key] = normalized;
         });
-        return out;
+        return Object.keys(out).length ? out : undefined;
       }
 
-      if (typeof value === 'number' && !Number.isFinite(value)) return null;
+      if (typeof value === 'string') {
+        const s = trimStr(value);
+        return s ? s : undefined;
+      }
+
+      if (typeof value === 'number' && !Number.isFinite(value)) return undefined;
       return value;
     };
 
@@ -55068,6 +55075,21 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       return clean;
     };
 
+    const buildCanonicalDatasetKey = (targetSection, sourceFilters) => {
+      const normalizedSection = normalizeSection(targetSection) || sectionKey;
+      const normalizedSourceFilters = normalizeFiltersBySection(normalizedSection, sourceFilters);
+
+      if (Object.prototype.hasOwnProperty.call(normalizedSourceFilters, 'ids')) {
+        normalizedSourceFilters.ids = normalizeIdArray(normalizedSourceFilters.ids);
+        if (!normalizedSourceFilters.ids.length) delete normalizedSourceFilters.ids;
+      }
+
+      return JSON.stringify({
+        section: normalizedSection,
+        filters: normalizeDatasetValue(normalizedSourceFilters) || {}
+      });
+    };
+
     const normalizedFilters = normalizeFiltersBySection(sectionKey, rawFilters);
 
     if (Object.prototype.hasOwnProperty.call(normalizedFilters, 'ids')) {
@@ -55075,10 +55097,22 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       if (!normalizedFilters.ids.length) delete normalizedFilters.ids;
     }
 
-    const serverDatasetKey = JSON.stringify({
-      section: sectionKey,
-      filters: normalizeDatasetValue(normalizedFilters) || {}
-    });
+    const serverDatasetKey = buildCanonicalDatasetKey(sectionKey, normalizedFilters);
+
+    let normalizedRequestDatasetKey = '';
+    if (requestDatasetKey) {
+      try {
+        const parsedRequestKey = JSON.parse(requestDatasetKey);
+        const parsedSectionKey = normalizeSection(parsedRequestKey?.section) || sectionKey;
+        const parsedFilters =
+          (parsedRequestKey?.filters && typeof parsedRequestKey.filters === 'object' && !Array.isArray(parsedRequestKey.filters))
+            ? parsedRequestKey.filters
+            : {};
+        normalizedRequestDatasetKey = buildCanonicalDatasetKey(parsedSectionKey, parsedFilters);
+      } catch {
+        normalizedRequestDatasetKey = requestDatasetKey;
+      }
+    }
 
     const rpcRes = await sbRpc(env, 'summary_typeahead_lookup', {
       p_section: sectionKey,
@@ -55106,7 +55140,7 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
 
     const responseDatasetKey = serverDatasetKey;
 
-    if (requestDatasetKey && responseDatasetKey && requestDatasetKey !== responseDatasetKey) {
+    if (normalizedRequestDatasetKey && responseDatasetKey && normalizedRequestDatasetKey !== responseDatasetKey) {
       return withCORS(env, req, ok({
         row_id: null,
         ordinal_index: null,
