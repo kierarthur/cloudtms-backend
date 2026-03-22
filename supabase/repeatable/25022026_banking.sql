@@ -17099,7 +17099,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
   p_scope text,
@@ -17128,9 +17127,17 @@ declare
   v_candidate_id uuid;
   v_umbrella_id_text text;
   v_umbrella_id uuid;
+
   v_pruned_candidates jsonb := '[]'::jsonb;
   v_candidate_json jsonb;
+  v_candidate_work_json jsonb;
+  v_pruned_non_timesheet_lines jsonb := '[]'::jsonb;
+  v_pruned_transfers jsonb := '[]'::jsonb;
+  v_candidate_excluded_transfer_total numeric := 0;
+  v_job_excluded_transfer_total numeric := 0;
+  v_original_job_total numeric := 0;
   v_pruned_total_amount numeric := 0;
+  v_final_paid_amount numeric := 0;
 
   v_target_candidate_count integer := 0;
   v_ready_candidate_count integer := 0;
@@ -17166,9 +17173,59 @@ begin
     raise exception 'pay_remittance_queue_commit_stage: pay batch % not found.', p_pay_batch_id;
   end if;
 
-  if upper(coalesce(v_batch.batch_kind_fixed, '')) = 'LOANS' then
-    raise exception 'pay_remittance_queue_commit_stage: pay batch % is payout-only; use pay_finance_payout_notice_queue_commit_stage.', p_pay_batch_id;
-  end if;
+  drop table if exists pg_temp.tmp_commit_stage_excluded_finance_cases;
+  create temporary table pg_temp.tmp_commit_stage_excluded_finance_cases(
+    candidate_id uuid not null,
+    finance_case_id uuid not null,
+    primary key (candidate_id, finance_case_id)
+  ) on commit drop;
+
+  drop table if exists pg_temp.tmp_commit_stage_excluded_transfers;
+  create temporary table pg_temp.tmp_commit_stage_excluded_transfers(
+    transfer_id uuid primary key,
+    candidate_id uuid not null,
+    umbrella_id uuid null
+  ) on commit drop;
+
+  insert into pg_temp.tmp_commit_stage_excluded_finance_cases(
+    candidate_id,
+    finance_case_id
+  )
+  select distinct
+    pbc.candidate_id,
+    pbi.finance_case_id
+  from public.pay_batch_candidates pbc
+  join public.pay_batch_items pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.remittance_sent_at_utc is null
+    and coalesce(pbi.is_voided, false) = false
+    and pbi.finance_case_id is not null
+    and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+    and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+    and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+    and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+
+  insert into pg_temp.tmp_commit_stage_excluded_transfers(
+    transfer_id,
+    candidate_id,
+    umbrella_id
+  )
+  select distinct
+    pbi.pay_bank_transfer_id,
+    pbc.candidate_id,
+    pbi.umbrella_id
+  from public.pay_batch_candidates pbc
+  join public.pay_batch_items pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.remittance_sent_at_utc is null
+    and coalesce(pbi.is_voided, false) = false
+    and pbi.pay_bank_transfer_id is not null
+    and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+    and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+    and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+    and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on');
 
   drop table if exists pg_temp.tmp_commit_stage_target_candidates;
   create temporary table pg_temp.tmp_commit_stage_target_candidates(
@@ -17197,10 +17254,17 @@ begin
       from public.pay_batch_items pbi
       where pbi.pay_batch_candidate_id = pbc.id
         and coalesce(pbi.is_voided, false) = false
+        and pbi.item_type <> 'DEBT_CREATED'
         and (
-          v_scope = 'ALL'
-          or (v_scope = 'PAYE' and upper(coalesce(pbi.pay_channel, '')) = 'PAYE')
-          or (v_scope = 'UMBRELLA' and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA')
+          (v_scope = 'ALL' or v_scope = 'UMBRELLA')
+          and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA'
+        )
+        and not (
+          pbi.finance_case_id is not null
+          and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+          and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+          and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
         )
     );
 
@@ -17300,120 +17364,116 @@ begin
       nullif(btrim(coalesce(v_job #>> '{recipient,remittance_email}', '')), '')
     );
 
-    if v_job_kind in ('PAYE_REMITTANCE', 'CANDIDATE_UMBRELLA_COPY_REMITTANCE') then
-      v_candidate_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,candidate_id}', '')), '');
-      v_candidate_id := null;
+    if v_job_kind = 'UMBRELLA_REMITTANCE' then
+      v_umbrella_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,umbrella_id}', '')), '');
+      v_umbrella_id := null;
 
-      if v_candidate_id_text is not null then
+      if v_umbrella_id_text is not null then
         begin
-          v_candidate_id := v_candidate_id_text::uuid;
+          v_umbrella_id := v_umbrella_id_text::uuid;
         exception when invalid_text_representation then
-          v_candidate_id := null;
+          v_umbrella_id := null;
         end;
       end if;
 
-      if v_candidate_id is not null
-         and exists (
-           select 1
-           from pg_temp.tmp_commit_stage_target_candidates tc
-           where tc.candidate_id = v_candidate_id
-         ) then
-        v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
+      v_pruned_candidates := '[]'::jsonb;
+      v_job_excluded_transfer_total := 0;
 
-        insert into pg_temp.tmp_commit_stage_job_map(
-          candidate_id,
-          job_kind,
-          recipient_kind,
-          recipient_email,
-          umbrella_id
-        )
-        values (
-          v_candidate_id,
-          v_job_kind,
-          v_recipient_kind,
-          v_recipient_email,
-          null
-        );
-      end if;
+      for v_candidate_json in
+        select ca.value
+        from jsonb_array_elements(coalesce(v_job->'candidates', '[]'::jsonb)) as ca(value)
+      loop
+        v_candidate_id_text := nullif(btrim(coalesce(v_candidate_json->>'candidate_id', '')), '');
+        v_candidate_id := null;
 
-    elsif v_job_kind = 'UMBRELLA_REMITTANCE' then
-      select coalesce(
-        jsonb_agg(ca.value order by coalesce(ca.value->>'display_name', ''), coalesce(ca.value->>'tms_ref', ''), coalesce(ca.value->>'candidate_id', '')),
-        '[]'::jsonb
-      )
-      into v_pruned_candidates
-      from jsonb_array_elements(coalesce(v_job->'candidates', '[]'::jsonb)) as ca(value)
-      where nullif(btrim(coalesce(ca.value->>'candidate_id', '')), '') is not null
-        and exists (
-          select 1
-          from pg_temp.tmp_commit_stage_target_candidates tc
-          where tc.candidate_id::text = btrim(ca.value->>'candidate_id')
-        );
+        if v_candidate_id_text is not null then
+          begin
+            v_candidate_id := v_candidate_id_text::uuid;
+          exception when invalid_text_representation then
+            v_candidate_id := null;
+          end;
+        end if;
+
+        if v_candidate_id is not null
+           and exists (
+             select 1
+             from pg_temp.tmp_commit_stage_target_candidates tc
+             where tc.candidate_id = v_candidate_id
+           ) then
+          v_candidate_work_json := v_candidate_json;
+
+          select round(coalesce(sum(pbt.amount), 0), 2)
+          into v_candidate_excluded_transfer_total
+          from pg_temp.tmp_commit_stage_excluded_transfers et
+          join public.pay_bank_transfers pbt
+            on pbt.id = et.transfer_id
+          where et.candidate_id = v_candidate_id
+            and (
+              v_umbrella_id is null
+              or et.umbrella_id is null
+              or et.umbrella_id = v_umbrella_id
+            );
+
+          v_job_excluded_transfer_total := round(coalesce(v_job_excluded_transfer_total, 0) + coalesce(v_candidate_excluded_transfer_total, 0), 2);
+
+          select coalesce(jsonb_agg(nt.value order by nt.ord), '[]'::jsonb)
+          into v_pruned_non_timesheet_lines
+          from jsonb_array_elements(coalesce(v_candidate_json->'non_timesheet_lines', '[]'::jsonb)) with ordinality as nt(value, ord)
+          where not (
+            upper(coalesce(nt.value->>'internal_item_type', '')) in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and nullif(btrim(coalesce(nt.value->>'finance_case_id', '')), '') is not null
+            and exists (
+              select 1
+              from pg_temp.tmp_commit_stage_excluded_finance_cases ef
+              where ef.candidate_id = v_candidate_id
+                and ef.finance_case_id::text = btrim(nt.value->>'finance_case_id')
+            )
+          );
+
+          v_candidate_work_json := jsonb_set(v_candidate_work_json, '{non_timesheet_lines}', coalesce(v_pruned_non_timesheet_lines, '[]'::jsonb), true);
+
+          if jsonb_typeof(v_candidate_work_json->'totals') = 'object' then
+            if btrim(coalesce(v_candidate_work_json #>> '{totals,final_paid}', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' then
+              v_final_paid_amount := round(greatest((v_candidate_work_json #>> '{totals,final_paid}')::numeric - coalesce(v_candidate_excluded_transfer_total, 0), 0), 2);
+              v_candidate_work_json := jsonb_set(v_candidate_work_json, '{totals,final_paid}', to_jsonb(v_final_paid_amount), true);
+              if jsonb_typeof(v_candidate_work_json #> '{totals,deductions_summary}') = 'object' then
+                v_candidate_work_json := jsonb_set(v_candidate_work_json, '{totals,deductions_summary,final_payable}', to_jsonb(v_final_paid_amount), true);
+              end if;
+            end if;
+          end if;
+
+          v_pruned_candidates := v_pruned_candidates || jsonb_build_array(v_candidate_work_json);
+
+          insert into pg_temp.tmp_commit_stage_job_map(
+            candidate_id,
+            job_kind,
+            recipient_kind,
+            recipient_email,
+            umbrella_id
+          )
+          values (
+            v_candidate_id,
+            v_job_kind,
+            v_recipient_kind,
+            v_recipient_email,
+            v_umbrella_id
+          );
+        end if;
+      end loop;
 
       if jsonb_array_length(v_pruned_candidates) > 0 then
-        select round(
-                 coalesce(
-                   sum(
-                     coalesce(
-                       nullif(btrim(coalesce(pc.value #>> '{totals,final_paid}', '')), '')::numeric,
-                       0
-                     )
-                   ),
-                   0
-                 ),
-                 2
-               )
-        into v_pruned_total_amount
-        from jsonb_array_elements(v_pruned_candidates) as pc(value);
+        if btrim(coalesce(v_job #>> '{summary,total_amount}', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' then
+          v_original_job_total := (v_job #>> '{summary,total_amount}')::numeric;
+        else
+          v_original_job_total := 0;
+        end if;
+
+        v_pruned_total_amount := round(greatest(coalesce(v_original_job_total, 0) - coalesce(v_job_excluded_transfer_total, 0), 0), 2);
 
         v_work_job := jsonb_set(v_work_job, '{candidates}', v_pruned_candidates, true);
         v_work_job := jsonb_set(v_work_job, '{summary,total_amount}', to_jsonb(coalesce(v_pruned_total_amount, 0)), true);
 
         v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
-
-        v_umbrella_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,umbrella_id}', '')), '');
-        v_umbrella_id := null;
-
-        if v_umbrella_id_text is not null then
-          begin
-            v_umbrella_id := v_umbrella_id_text::uuid;
-          exception when invalid_text_representation then
-            v_umbrella_id := null;
-          end;
-        end if;
-
-        for v_candidate_json in
-          select pc.value
-          from jsonb_array_elements(v_pruned_candidates) as pc(value)
-        loop
-          v_candidate_id_text := nullif(btrim(coalesce(v_candidate_json->>'candidate_id', '')), '');
-          v_candidate_id := null;
-
-          if v_candidate_id_text is not null then
-            begin
-              v_candidate_id := v_candidate_id_text::uuid;
-            exception when invalid_text_representation then
-              v_candidate_id := null;
-            end;
-          end if;
-
-          if v_candidate_id is not null then
-            insert into pg_temp.tmp_commit_stage_job_map(
-              candidate_id,
-              job_kind,
-              recipient_kind,
-              recipient_email,
-              umbrella_id
-            )
-            values (
-              v_candidate_id,
-              v_job_kind,
-              v_recipient_kind,
-              v_recipient_email,
-              v_umbrella_id
-            );
-          end if;
-        end loop;
       end if;
     end if;
   end loop;
@@ -17562,6 +17622,7 @@ begin
   );
 end;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_queue_commit_stage(
   p_pay_batch_id uuid,
