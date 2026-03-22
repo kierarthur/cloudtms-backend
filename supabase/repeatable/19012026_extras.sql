@@ -5605,24 +5605,43 @@ begin
       select
         csa.id::text as row_id_text,
         case
-          when v_sort_key = 'first_name' then coalesce(csa.first_name, '')
-          when v_sort_key = 'last_name' then coalesce(csa.last_name, '')
-          when v_sort_key = 'display_name' then coalesce(csa.display_name, '')
-          when v_sort_key = 'email' then coalesce(csa.email, '')
-          when v_sort_key = 'phone' then coalesce(csa.phone, '')
-          when v_sort_key = 'tms_ref' then coalesce(csa.tms_ref, '')
-          when v_sort_key = '__tms_ref' then coalesce(csa.tms_ref, '')
-          when v_sort_key = 'job_titles_display' then coalesce(secsort.secondary_job_titles_sort_text, '')
-          when v_sort_key = 'primary_job_title' then coalesce(csa.primary_job_title, '')
-          when v_sort_key = 'pay_method' then coalesce(csa.pay_method, '')
-          when v_sort_key = 'postcode' then coalesce(csa.postcode, '')
-          when v_sort_key = 'town_city' then coalesce(csa.town_city, '')
-          when v_sort_key = 'umbrella_name' then coalesce(csa.umbrella_name, '')
+          when v_sort_key = 'first_name' then coalesce(btrim(csa.first_name), '')
+          when v_sort_key = 'last_name' then coalesce(btrim(csa.last_name), '')
+          when v_sort_key = 'display_name' then coalesce(btrim(csa.display_name), '')
+          when v_sort_key = 'email' then coalesce(btrim(csa.email), '')
+          when v_sort_key = 'phone' then coalesce(btrim(csa.phone), '')
+          when v_sort_key = 'tms_ref' then coalesce(btrim(csa.tms_ref), '')
+          when v_sort_key = '__tms_ref' then coalesce(btrim(csa.tms_ref), '')
+          when v_sort_key = 'job_titles_display' then coalesce(btrim(secsort.secondary_job_titles_sort_text), '')
+          when v_sort_key = 'primary_job_title' then coalesce(btrim(csa.primary_job_title), '')
+          when v_sort_key = 'pay_method' then coalesce(btrim(csa.pay_method), '')
+          when v_sort_key = 'postcode' then coalesce(btrim(csa.postcode), '')
+          when v_sort_key = 'town_city' then coalesce(btrim(csa.town_city), '')
+          when v_sort_key = 'umbrella_name' then coalesce(btrim(csa.umbrella_name), '')
           when v_sort_key = 'created_at' then coalesce(csa.created_at::text, '')
           when v_sort_key = 'updated_at' then coalesce(csa.updated_at::text, '')
           when v_sort_key = 'active' then case when csa.active then 'true' else 'false' end
-          else coalesce(csa.last_name, coalesce(csa.display_name, ''))
-        end as matched_value_text,
+          else coalesce(btrim(csa.last_name), coalesce(btrim(csa.display_name), ''))
+        end as sort_value_text,
+        case
+          when v_sort_key = 'first_name' then coalesce(btrim(csa.first_name), '')
+          when v_sort_key = 'last_name' then coalesce(btrim(csa.last_name), '')
+          when v_sort_key = 'display_name' then coalesce(btrim(csa.display_name), '')
+          when v_sort_key = 'email' then coalesce(btrim(csa.email), '')
+          when v_sort_key = 'phone' then coalesce(btrim(csa.phone), '')
+          when v_sort_key = 'tms_ref' then coalesce(btrim(csa.tms_ref), '')
+          when v_sort_key = '__tms_ref' then coalesce(btrim(csa.tms_ref), '')
+          when v_sort_key = 'job_titles_display' then coalesce(btrim(secsort.secondary_job_titles_sort_text), '')
+          when v_sort_key = 'primary_job_title' then coalesce(btrim(csa.primary_job_title), '')
+          when v_sort_key = 'pay_method' then coalesce(btrim(csa.pay_method), '')
+          when v_sort_key = 'postcode' then coalesce(btrim(csa.postcode), '')
+          when v_sort_key = 'town_city' then coalesce(btrim(csa.town_city), '')
+          when v_sort_key = 'umbrella_name' then coalesce(btrim(csa.umbrella_name), '')
+          when v_sort_key = 'created_at' then coalesce(csa.created_at::text, '')
+          when v_sort_key = 'updated_at' then coalesce(csa.updated_at::text, '')
+          when v_sort_key = 'active' then case when csa.active then 'true' else 'false' end
+          else coalesce(btrim(csa.last_name), coalesce(btrim(csa.display_name), ''))
+        end as matched_value_output_text,
         csa.first_name,
         csa.last_name,
         csa.display_name,
@@ -5700,7 +5719,8 @@ begin
     ranked_rows as (
       select
         filtered_rows.row_id_text,
-        filtered_rows.matched_value_text,
+        filtered_rows.sort_value_text,
+        filtered_rows.matched_value_output_text,
         row_number() over (
           order by
             case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then filtered_rows.created_at end asc nulls last,
@@ -5713,40 +5733,38 @@ begin
 
             case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then filtered_rows.tms_ref_num end asc nulls last,
             case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then filtered_rows.tms_ref_num end desc nulls last,
-            case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.tms_ref, '')), '') end asc nulls last,
-            case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.tms_ref, '')), '') end desc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.tms_ref), '')), '') end asc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.tms_ref), '')), '') end desc nulls last,
 
-            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.first_name, '')), '') end asc nulls last,
-            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.first_name, '')), '') end desc nulls last,
-            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.last_name, '')), '') end asc nulls last,
-            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.last_name, '')), '') end desc nulls last,
-            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.display_name, '')), '') end asc nulls last,
-            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.display_name, '')), '') end desc nulls last,
-            case when v_sort_key = 'email' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.email, '')), '') end asc nulls last,
-            case when v_sort_key = 'email' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.email, '')), '') end desc nulls last,
-            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.phone, '')), '') end asc nulls last,
-            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.phone, '')), '') end desc nulls last,
-            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.tms_ref, '')), '') end asc nulls last,
-            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.tms_ref, '')), '') end desc nulls last,
-            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.secondary_job_titles_sort_text, '')), '') end asc nulls last,
-            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.secondary_job_titles_sort_text, '')), '') end desc nulls last,
-            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.primary_job_title, '')), '') end asc nulls last,
-            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.primary_job_title, '')), '') end desc nulls last,
-            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.pay_method, '')), '') end asc nulls last,
-            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.pay_method, '')), '') end desc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.postcode, '')), '') end asc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.postcode, '')), '') end desc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.town_city, '')), '') end asc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.town_city, '')), '') end desc nulls last,
-            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.umbrella_name, '')), '') end asc nulls last,
-            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.umbrella_name, '')), '') end desc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.first_name), '')), '') end asc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.first_name), '')), '') end desc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.last_name), '')), '') end asc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.last_name), '')), '') end desc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.display_name), '')), '') end asc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.display_name), '')), '') end desc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.email), '')), '') end asc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.email), '')), '') end desc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.phone), '')), '') end asc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.phone), '')), '') end desc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.tms_ref), '')), '') end asc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.tms_ref), '')), '') end desc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.secondary_job_titles_sort_text), '')), '') end asc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.secondary_job_titles_sort_text), '')), '') end desc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.primary_job_title), '')), '') end asc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.primary_job_title), '')), '') end desc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.pay_method), '')), '') end asc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.pay_method), '')), '') end desc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.postcode), '')), '') end asc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.postcode), '')), '') end desc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.town_city), '')), '') end asc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.town_city), '')), '') end desc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(btrim(filtered_rows.umbrella_name), '')), '') end asc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(btrim(filtered_rows.umbrella_name), '')), '') end desc nulls last,
 
-            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(filtered_rows.last_name, '')), '') end asc nulls last,
-            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(filtered_rows.first_name, '')), '') end asc nulls last,
-            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(filtered_rows.display_name, '')), '') end asc nulls last,
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(btrim(filtered_rows.last_name), '')), '') end asc nulls last,
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(btrim(filtered_rows.first_name), '')), '') end asc nulls last,
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(btrim(filtered_rows.display_name), '')), '') end asc nulls last,
 
-            case when v_sort_dir = 'asc' then lower(coalesce(filtered_rows.matched_value_text, '')) end asc nulls last,
-            case when v_sort_dir = 'desc' then lower(coalesce(filtered_rows.matched_value_text, '')) end desc nulls last,
             filtered_rows.row_id_text asc
         ) - 1 as rn
       from filtered_rows
@@ -5754,10 +5772,10 @@ begin
     prefixed_rows as (
       select
         ranked_rows.row_id_text,
-        ranked_rows.matched_value_text,
+        ranked_rows.matched_value_output_text,
         ranked_rows.rn
       from ranked_rows
-      where lower(coalesce(ranked_rows.matched_value_text, '')) like v_prefix_like escape '\'
+      where lower(coalesce(ranked_rows.sort_value_text, '')) like v_prefix_like escape '\\'
     )
     select
       prefixed_rows.row_id_text as row_id,
@@ -5766,7 +5784,7 @@ begin
         when p_page_size is null or p_page_size < 1 then 1
         else floor((prefixed_rows.rn)::numeric / p_page_size)::int + 1
       end as target_page,
-      prefixed_rows.matched_value_text as matched_value,
+      prefixed_rows.matched_value_output_text as matched_value,
       coalesce(v_candidate_dataset_key, v_dataset_key) as dataset_key
     from prefixed_rows
     order by prefixed_rows.rn
