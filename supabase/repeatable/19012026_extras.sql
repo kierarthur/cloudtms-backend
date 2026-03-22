@@ -5415,7 +5415,7 @@ begin
           when v_sort_key = 'phone' then coalesce(csa.phone, '')
           when v_sort_key = 'tms_ref' then coalesce(csa.tms_ref, '')
           when v_sort_key = '__tms_ref' then coalesce(csa.tms_ref, '')
-          when v_sort_key = 'job_titles_display' then coalesce(csa.job_titles_display, '')
+          when v_sort_key = 'job_titles_display' then coalesce(secsort.secondary_job_titles_sort_text, '')
           when v_sort_key = 'primary_job_title' then coalesce(csa.primary_job_title, '')
           when v_sort_key = 'pay_method' then coalesce(csa.pay_method, '')
           when v_sort_key = 'postcode' then coalesce(csa.postcode, '')
@@ -5435,6 +5435,7 @@ begin
         csa.tms_ref_num,
         csa.job_titles_display,
         csa.primary_job_title,
+        coalesce(secsort.secondary_job_titles_sort_text, '') as secondary_job_titles_sort_text,
         csa.pay_method,
         csa.postcode,
         csa.town_city,
@@ -5443,6 +5444,19 @@ begin
         csa.updated_at,
         csa.active
       from public.candidates_summary_activity as csa
+      left join lateral (
+        select string_agg(sec.part, '; ' order by lower(sec.part), sec.part) as secondary_job_titles_sort_text
+        from (
+          select distinct btrim(split_part_item.part) as part
+          from regexp_split_to_table(coalesce(csa.job_titles_display, ''), '\s*;\s*') as split_part_item(part)
+          where nullif(btrim(split_part_item.part), '') is not null
+            and (
+              nullif(btrim(coalesce(csa.primary_job_title, '')), '') is null
+              or lower(btrim(split_part_item.part)) <> lower(btrim(coalesce(csa.primary_job_title, '')))
+            )
+        ) as sec
+      ) as secsort
+        on true
       where (v_ids is null or csa.id::text = any(v_ids))
         and (v_q is null or (
           coalesce(csa.first_name, '') ilike ('%' || v_q || '%')
@@ -5452,6 +5466,7 @@ begin
           or coalesce(csa.phone, '') ilike ('%' || v_q || '%')
           or coalesce(csa.tms_ref, '') ilike ('%' || v_q || '%')
           or coalesce(csa.job_titles_display, '') ilike ('%' || v_q || '%')
+          or coalesce(csa.primary_job_title, '') ilike ('%' || v_q || '%')
         ))
         and (v_active is null or csa.active is not distinct from v_active)
     ),
@@ -5472,30 +5487,34 @@ begin
             case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then fr.tms_ref_num end asc nulls last,
             case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then fr.tms_ref_num end desc nulls last,
 
-            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then lower(coalesce(fr.first_name, '')) end asc nulls last,
-            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then lower(coalesce(fr.first_name, '')) end desc nulls last,
-            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then lower(coalesce(fr.last_name, '')) end asc nulls last,
-            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then lower(coalesce(fr.last_name, '')) end desc nulls last,
-            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then lower(coalesce(fr.display_name, '')) end asc nulls last,
-            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then lower(coalesce(fr.display_name, '')) end desc nulls last,
-            case when v_sort_key = 'email' and v_sort_dir = 'asc' then lower(coalesce(fr.email, '')) end asc nulls last,
-            case when v_sort_key = 'email' and v_sort_dir = 'desc' then lower(coalesce(fr.email, '')) end desc nulls last,
-            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then lower(coalesce(fr.phone, '')) end asc nulls last,
-            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then lower(coalesce(fr.phone, '')) end desc nulls last,
-            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then lower(coalesce(fr.tms_ref, '')) end asc nulls last,
-            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then lower(coalesce(fr.tms_ref, '')) end desc nulls last,
-            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then lower(coalesce(fr.job_titles_display, '')) end asc nulls last,
-            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then lower(coalesce(fr.job_titles_display, '')) end desc nulls last,
-            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then lower(coalesce(fr.primary_job_title, '')) end asc nulls last,
-            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then lower(coalesce(fr.primary_job_title, '')) end desc nulls last,
-            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then lower(coalesce(fr.pay_method, '')) end asc nulls last,
-            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then lower(coalesce(fr.pay_method, '')) end desc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then lower(coalesce(fr.postcode, '')) end asc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then lower(coalesce(fr.postcode, '')) end desc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then lower(coalesce(fr.town_city, '')) end asc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then lower(coalesce(fr.town_city, '')) end desc nulls last,
-            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then lower(coalesce(fr.umbrella_name, '')) end asc nulls last,
-            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then lower(coalesce(fr.umbrella_name, '')) end desc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.first_name, '')), '') end asc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.first_name, '')), '') end desc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.last_name, '')), '') end asc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.last_name, '')), '') end desc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.display_name, '')), '') end asc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.display_name, '')), '') end desc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.email, '')), '') end asc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.email, '')), '') end desc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.phone, '')), '') end asc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.phone, '')), '') end desc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.tms_ref, '')), '') end asc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.tms_ref, '')), '') end desc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.secondary_job_titles_sort_text, '')), '') end asc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.secondary_job_titles_sort_text, '')), '') end desc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.primary_job_title, '')), '') end asc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.primary_job_title, '')), '') end desc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.pay_method, '')), '') end asc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.pay_method, '')), '') end desc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.postcode, '')), '') end asc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.postcode, '')), '') end desc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.town_city, '')), '') end asc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.town_city, '')), '') end desc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.umbrella_name, '')), '') end asc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.umbrella_name, '')), '') end desc nulls last,
+
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(fr.last_name, '')), '') end asc nulls last,
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(fr.first_name, '')), '') end asc nulls last,
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(fr.display_name, '')), '') end asc nulls last,
 
             case when v_sort_dir = 'asc' then lower(coalesce(fr.matched_value_text, '')) end asc nulls last,
             case when v_sort_dir = 'desc' then lower(coalesce(fr.matched_value_text, '')) end desc nulls last,
