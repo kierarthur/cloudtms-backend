@@ -54963,6 +54963,57 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       }
     };
 
+    const normalizeIdArray = (arr) => Array.from(new Set(
+      (Array.isArray(arr) ? arr : [])
+        .map((v) => trimStr(v))
+        .filter(Boolean)
+    ));
+
+    const normalizeDatasetValue = (value) => {
+      if (value === undefined || value === null) return undefined;
+
+      if (Array.isArray(value)) {
+        const arr = value
+          .map(normalizeDatasetValue)
+          .filter((v) => v !== undefined);
+
+        if (!arr.length) return undefined;
+
+        return arr.sort((leftValue, rightValue) => {
+          const leftJson = JSON.stringify(leftValue);
+          const rightJson = JSON.stringify(rightValue);
+          if (leftJson < rightJson) return -1;
+          if (leftJson > rightJson) return 1;
+          return 0;
+        });
+      }
+
+      if (value && typeof value === 'object') {
+        const out = {};
+        Object.keys(value).sort().forEach((key) => {
+          if (key === 'page' || key === 'pageSize' || key === 'sort') return;
+          const normalized = normalizeDatasetValue(value[key]);
+          if (normalized !== undefined) out[key] = normalized;
+        });
+        return Object.keys(out).length ? out : undefined;
+      }
+
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed === '' ? undefined : trimmed;
+      }
+
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : undefined;
+      }
+
+      if (typeof value === 'boolean') {
+        return value;
+      }
+
+      return value;
+    };
+
     const sectionFromRoute = trimStr(section).toLowerCase();
     const sectionFromBody = trimStr(body?.section).toLowerCase();
 
@@ -55032,6 +55083,16 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
 
     const normalizedFilters = normalizeFiltersBySection(sectionKey, rawFilters);
 
+    if (Object.prototype.hasOwnProperty.call(normalizedFilters, 'ids')) {
+      normalizedFilters.ids = normalizeIdArray(normalizedFilters.ids);
+      if (!normalizedFilters.ids.length) delete normalizedFilters.ids;
+    }
+
+    const serverDatasetKey = JSON.stringify({
+      section: sectionKey,
+      filters: normalizeDatasetValue(normalizedFilters) || {}
+    });
+
     const rpcRes = await sbRpc(env, 'summary_typeahead_lookup', {
       p_section: sectionKey,
       p_filters: normalizedFilters,
@@ -55055,6 +55116,21 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
     } catch {}
 
     const target = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const responseDatasetKey = serverDatasetKey;
+
+    if (requestDatasetKey && responseDatasetKey && requestDatasetKey !== responseDatasetKey) {
+      return withCORS(env, req, ok({
+        row_id: null,
+        ordinal_index: null,
+        target_page: (pageSize === 'ALL') ? 1 : null,
+        matched_value: '',
+        dataset_key: responseDatasetKey,
+        section: sectionKey,
+        dataset_key_mismatch: true,
+        requested_dataset_key: requestDatasetKey
+      }));
+    }
 
     const rowId = trimStr(
       target.row_id ??
@@ -55089,8 +55165,6 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       return null;
     })();
 
-    const responseDatasetKey = trimStr(requestDatasetKey || target.dataset_key || '');
-
     return withCORS(env, req, ok({
       row_id: (rowId && computedTargetPage !== null) ? rowId : null,
       ordinal_index: hasValidOrdinal ? ordinalIndexRaw : null,
@@ -55103,8 +55177,6 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
     return withCORS(env, req, serverError('Failed to resolve summary type-ahead target'));
   }
 }
-
-
  async function handleReportPresetsDelete(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -68796,9 +68868,9 @@ async function handleSearchCandidates(env, req) {
   const createdFrom = spec.created_from || null;
   const createdTo = spec.created_to || null;
   const notesExact = spec.notes || null;
-  const jobTitleIncludeNodeIds = Array.isArray(spec.job_title_include_node_ids) ? spec.job_title_include_node_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
-  const jobTitleExcludeNodeIds = Array.isArray(spec.job_title_exclude_node_ids) ? spec.job_title_exclude_node_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
-  const jobTitleRoleIds = Array.isArray(spec.job_title_role_ids) ? spec.job_title_role_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
+  const jobTitleIncludeNodeIds = Array.isArray(spec.job_title_include_node_ids) ? spec.job_title_include_node_ids.map(String).map((s) => s.trim()).filter(Boolean) : [];
+  const jobTitleExcludeNodeIds = Array.isArray(spec.job_title_exclude_node_ids) ? spec.job_title_exclude_node_ids.map(String).map((s) => s.trim()).filter(Boolean) : [];
+  const jobTitleRoleIds = Array.isArray(spec.job_title_role_ids) ? spec.job_title_role_ids.map(String).map((s) => s.trim()).filter(Boolean) : [];
   const jobTitlePrimaryOnly = !!spec.job_title_primary_only;
   const profRegNumber = spec.prof_reg_number || null;
   const profRegType = spec.prof_reg_type || null;
@@ -68838,7 +68910,7 @@ async function handleSearchCandidates(env, req) {
       month: '2-digit',
       day: '2-digit'
     }).formatToParts(new Date());
-    const get = (type) => (parts.find(p => p.type === type)?.value || '');
+    const get = (type) => (parts.find((p) => p.type === type)?.value || '');
     return `${get('year')}-${get('month')}-${get('day')}`;
   };
 
@@ -68856,7 +68928,7 @@ async function handleSearchCandidates(env, req) {
     const daysInTargetMonth = new Date(Date.UTC(y1, m1 + 1, 0)).getUTCDate();
     const d1 = Math.min(d0, daysInTargetMonth);
 
-    return `${String(y1).padStart(4,'0')}-${String(m1 + 1).padStart(2,'0')}-${String(d1).padStart(2,'0')}`;
+    return `${String(y1).padStart(4, '0')}-${String(m1 + 1).padStart(2, '0')}-${String(d1).padStart(2, '0')}`;
   };
 
   const cutoffYMD = ((workStatus === 'RECENT' && !recentAll) || workStatus === 'NOT')
@@ -68936,6 +69008,22 @@ async function handleSearchCandidates(env, req) {
     return 0;
   };
 
+  const compareNullableBoolean = (leftValue, rightValue, dir) => {
+    const leftNorm = leftValue === true ? 1 : (leftValue === false ? 0 : null);
+    const rightNorm = rightValue === true ? 1 : (rightValue === false ? 0 : null);
+
+    const leftBlank = leftNorm == null;
+    const rightBlank = rightNorm == null;
+
+    if (leftBlank && rightBlank) return 0;
+    if (leftBlank) return 1;
+    if (rightBlank) return -1;
+
+    if (leftNorm < rightNorm) return dir === 'desc' ? 1 : -1;
+    if (leftNorm > rightNorm) return dir === 'desc' ? -1 : 1;
+    return 0;
+  };
+
   const compareCandidateRows = (leftRow, rightRow) => {
     let cmp = 0;
 
@@ -68945,13 +69033,41 @@ async function handleSearchCandidates(env, req) {
         deriveSecondaryJobTitlesSortValue(rightRow),
         orderDir
       );
-    } else if (orderCol === 'primary_job_title') {
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.last_name, rightRow && rightRow.last_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.first_name, rightRow && rightRow.first_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.display_name, rightRow && rightRow.display_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+    }
+
+    if (orderCol === 'primary_job_title') {
       cmp = compareNullableText(
         leftRow && leftRow.primary_job_title,
         rightRow && rightRow.primary_job_title,
         orderDir
       );
-    } else if (orderCol === '__tms_ref') {
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.last_name, rightRow && rightRow.last_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.first_name, rightRow && rightRow.first_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.display_name, rightRow && rightRow.display_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+    }
+
+    if (orderCol === '__tms_ref') {
       const leftRefNum = Number(leftRow && leftRow.tms_ref_num);
       const rightRefNum = Number(rightRow && rightRow.tms_ref_num);
       const leftHasRefNum = Number.isFinite(leftRefNum);
@@ -68970,23 +69086,118 @@ async function handleSearchCandidates(env, req) {
           orderDir
         );
       }
+
+      if (cmp !== 0) return cmp;
+      return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
     }
 
-    if (cmp !== 0) return cmp;
+    if (orderCol === 'active') {
+      cmp = compareNullableBoolean(
+        leftRow && leftRow.active,
+        rightRow && rightRow.active,
+        orderDir
+      );
+      if (cmp !== 0) return cmp;
+      return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+    }
 
-    cmp = compareNullableText(leftRow && leftRow.last_name, rightRow && rightRow.last_name, 'asc');
-    if (cmp !== 0) return cmp;
-
-    cmp = compareNullableText(leftRow && leftRow.first_name, rightRow && rightRow.first_name, 'asc');
-    if (cmp !== 0) return cmp;
-
-    cmp = compareNullableText(leftRow && leftRow.display_name, rightRow && rightRow.display_name, 'asc');
+    cmp = compareNullableText(
+      leftRow && leftRow[orderCol],
+      rightRow && rightRow[orderCol],
+      orderDir
+    );
     if (cmp !== 0) return cmp;
 
     return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
   };
 
-  const fetchAllCandidateRows = async ({ selectClause = '*' }) => {
+  const hasCanonicalJobTitleFilter =
+    jobTitleIncludeNodeIds.length > 0 ||
+    jobTitleExcludeNodeIds.length > 0 ||
+    jobTitleRoleIds.length > 0;
+
+  let canonicalCandidateIdsPromise = null;
+
+  const loadCanonicalCandidateIds = async () => {
+    if (!hasCanonicalJobTitleFilter) return [];
+
+    if (!canonicalCandidateIdsPromise) {
+      canonicalCandidateIdsPromise = (async () => {
+        const rpcFilters = (() => {
+          try {
+            return JSON.parse(JSON.stringify(spec || {}));
+          } catch {
+            return { ...(spec || {}) };
+          }
+        })();
+
+        const rpcRes = await sbRpc(env, 'candidate_list_ids', {
+          p_filters: rpcFilters
+        });
+
+        const rows = Array.isArray(rpcRes)
+          ? rpcRes
+          : ((rpcRes && typeof rpcRes === 'object' && Array.isArray(rpcRes.rows)) ? rpcRes.rows : []);
+
+        const outIds = [];
+        const seenIds = new Set();
+
+        for (const row of rows) {
+          const id = String(
+            (row && typeof row === 'object')
+              ? (row.id ?? row.candidate_id ?? '')
+              : (row == null ? '' : row)
+          ).trim();
+
+          if (!id || seenIds.has(id)) continue;
+          seenIds.add(id);
+          outIds.push(id);
+        }
+
+        return outIds;
+      })();
+    }
+
+    return canonicalCandidateIdsPromise;
+  };
+
+  const canonicalCandidateSortSelectClause = 'id,display_name,first_name,last_name,email,phone,pay_method,active,created_at,primary_job_title,job_titles_display,tms_ref,tms_ref_num,roles';
+
+  const fetchCanonicalCandidateRows = async ({ selectClause = '*' } = {}) => {
+    const canonicalIds = await loadCanonicalCandidateIds();
+    if (!Array.isArray(canonicalIds) || !canonicalIds.length) return [];
+
+    const outRows = [];
+    const seenRowIds = new Set();
+    const chunkSize = 100;
+
+    for (let index = 0; index < canonicalIds.length; index += chunkSize) {
+      const chunkIds = canonicalIds.slice(index, index + chunkSize).map((value) => String(value || '').trim()).filter(Boolean);
+      if (!chunkIds.length) continue;
+
+      const api =
+        `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
+        `?select=${selectClause}` +
+        `&id=${enc(`in.(${chunkIds.join(',')})`)}`;
+
+      const res = await sbFetch(env, api, false);
+      const batchRows = Array.isArray(res && res.rows) ? res.rows : [];
+
+      for (const row of batchRows) {
+        const rowId = String(row && row.id ? row.id : '').trim();
+        if (!rowId || seenRowIds.has(rowId)) continue;
+        seenRowIds.add(rowId);
+        outRows.push(row);
+      }
+    }
+
+    return outRows;
+  };
+
+  const fetchAllCandidateRows = async ({
+    selectClause = '*',
+    withJobTitleFilters = true
+  } = {}) => {
     const outRows = [];
     let offsetValue = 0;
     const batchSize = 1000;
@@ -68997,7 +69208,8 @@ async function handleSearchCandidates(env, req) {
         withPaging: true,
         limitValue: batchSize,
         offsetValue,
-        withOrder: false
+        withOrder: false,
+        withJobTitleFilters
       });
 
       const res = await sbFetch(env, api, false);
@@ -69016,7 +69228,8 @@ async function handleSearchCandidates(env, req) {
     withPaging = true,
     limitValue = pageSize,
     offsetValue = (page - 1) * pageSize,
-    withOrder = true
+    withOrder = true,
+    withJobTitleFilters = true
   }) => {
     const orderExpr =
       (orderCol === '__tms_ref')
@@ -69062,10 +69275,10 @@ async function handleSearchCandidates(env, req) {
       orParts = parts;
     }
 
-    if (firstName)   api += `&first_name=ilike.*${enc(firstName)}*`;
-    if (lastName)    api += `&last_name=ilike.*${enc(lastName)}*`;
-    if (email)       api += `&email=ilike.*${enc(email)}*`;
-    if (phone)       api += `&phone=ilike.*${enc(phone)}*`;
+    if (firstName) api += `&first_name=ilike.*${enc(firstName)}*`;
+    if (lastName) api += `&last_name=ilike.*${enc(lastName)}*`;
+    if (email) api += `&email=ilike.*${enc(email)}*`;
+    if (phone) api += `&phone=ilike.*${enc(phone)}*`;
 
     if (notesExact) {
       const escMid = String(notesExact)
@@ -69088,7 +69301,7 @@ async function handleSearchCandidates(env, req) {
     if (createdFrom) api += `&created_at=gte.${enc(createdFrom)}`;
     if (createdTo) api += `&created_at=lte.${enc(createdTo)}`;
 
-    if (jobTitleRoleIds.length) {
+    if (withJobTitleFilters && jobTitleRoleIds.length) {
       if (jobTitlePrimaryOnly) {
         api += `&primary_job_title_id=${enc(`in.(${jobTitleRoleIds.join(',')})`)}`;
       } else {
@@ -69195,7 +69408,12 @@ async function handleSearchCandidates(env, req) {
     try {
       let pickerRows = [];
 
-      if (useDerivedSecondaryJobTitlesSort) {
+      if (hasCanonicalJobTitleFilter) {
+        const allPickerRows = await fetchCanonicalCandidateRows({
+          selectClause: canonicalCandidateSortSelectClause
+        });
+        pickerRows = normalizePickerRows(allPickerRows).sort(compareCandidateRows);
+      } else if (useDerivedSecondaryJobTitlesSort) {
         const allPickerRows = await fetchAllCandidateRows({
           selectClause: 'id,display_name,first_name,last_name,email,phone,tms_ref,roles,primary_job_title,job_titles_display,active'
         });
@@ -69206,14 +69424,15 @@ async function handleSearchCandidates(env, req) {
           withPaging: true,
           limitValue: pickerPageSize + 1,
           offsetValue: (pickerPage - 1) * pickerPageSize,
-          withOrder: true
+          withOrder: true,
+          withJobTitleFilters: true
         });
 
         const { rows } = await sbFetch(env, pickerApi, false);
         pickerRows = normalizePickerRows(rows);
       }
 
-      if (useDerivedSecondaryJobTitlesSort) {
+      if (hasCanonicalJobTitleFilter || useDerivedSecondaryJobTitlesSort) {
         const start = (pickerPage - 1) * pickerPageSize;
         const outRows = pickerRows.slice(start, start + pickerPageSize);
         const hasMore = (start + pickerPageSize) < pickerRows.length;
@@ -69250,27 +69469,42 @@ async function handleSearchCandidates(env, req) {
     const batchSize = 1000;
 
     try {
-      while (true) {
-        const api = buildCandidatesApi({
-          selectClause: 'id',
-          withPaging: true,
-          limitValue: batchSize,
-          offsetValue: offset,
-          withOrder: true
+      if (hasCanonicalJobTitleFilter) {
+        const membershipRows = await fetchCanonicalCandidateRows({
+          selectClause: canonicalCandidateSortSelectClause
         });
+        membershipRows.sort(compareCandidateRows);
 
-        const { rows } = await sbFetch(env, api, false);
-        const batch = Array.isArray(rows) ? rows : [];
-
-        for (const row of batch) {
+        for (const row of membershipRows) {
           const id = row && row.id ? String(row.id).trim() : '';
           if (!id || seen.has(id)) continue;
           seen.add(id);
           idsOut.push(id);
         }
+      } else {
+        while (true) {
+          const api = buildCandidatesApi({
+            selectClause: 'id',
+            withPaging: true,
+            limitValue: batchSize,
+            offsetValue: offset,
+            withOrder: true,
+            withJobTitleFilters: true
+          });
 
-        if (batch.length < batchSize) break;
-        offset += batchSize;
+          const { rows } = await sbFetch(env, api, false);
+          const batch = Array.isArray(rows) ? rows : [];
+
+          for (const row of batch) {
+            const id = row && row.id ? String(row.id).trim() : '';
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            idsOut.push(id);
+          }
+
+          if (batch.length < batchSize) break;
+          offset += batchSize;
+        }
       }
     } catch (err) {
       const msg = String(err?.message || err || 'Supabase fetch failed');
@@ -69287,7 +69521,14 @@ async function handleSearchCandidates(env, req) {
   let total = undefined;
 
   try {
-    if (useDerivedSecondaryJobTitlesSort) {
+    if (hasCanonicalJobTitleFilter) {
+      const allRows = await fetchCanonicalCandidateRows({ selectClause: '*' });
+      allRows.sort(compareCandidateRows);
+
+      const start = (page - 1) * pageSize;
+      rows = allRows.slice(start, start + pageSize);
+      total = allRows.length;
+    } else if (useDerivedSecondaryJobTitlesSort) {
       const allRows = await fetchAllCandidateRows({ selectClause: '*' });
       allRows.sort(compareCandidateRows);
 
@@ -69300,7 +69541,8 @@ async function handleSearchCandidates(env, req) {
         withPaging: true,
         limitValue: pageSize,
         offsetValue: (page - 1) * pageSize,
-        withOrder: true
+        withOrder: true,
+        withJobTitleFilters: true
       });
 
       const res = await sbFetch(env, api, includeCount);
@@ -69373,7 +69615,7 @@ async function handleSearchCandidates(env, req) {
   }
 
   if (format === 'print') {
-    const rowsHtml = (rows || []).map(r => `
+    const rowsHtml = (rows || []).map((r) => `
       <tr>
         <td>${r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' ')}</td>
         <td>${r.email || ''}</td>
@@ -69407,6 +69649,8 @@ async function handleSearchCandidates(env, req) {
     count: respCount
   }));
 }
+
+
 async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -70916,33 +71160,109 @@ async function handleRolesGlobal(env, req) {
       return withCORS(env, req, ok({ roles: cache.roles }));
     }
 
-    // Source of truth: enabled client defaults view (already excludes disabled rows)
-    // Keep it single request; dedupe in JS.
-    const limit = 100000; // safe upper bound; roles are few but windows may be many
-    const url =
+    const limit = 100000;
+
+    const collectRoles = (rows) => {
+      const set = new Set();
+      for (const r of (Array.isArray(rows) ? rows : [])) {
+        const s = String(r?.role || '').trim();
+        if (!s) continue;
+        set.add(s);
+      }
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    };
+
+    const trimLogBody = (value, maxLen = 1200) => {
+      const s = String(value == null ? '' : value);
+      return s.length > maxLen ? `${s.slice(0, maxLen)}…` : s;
+    };
+
+    const fetchRolesRows = async (url, sourceLabel) => {
+      try {
+        const res = await sbFetch(env, url);
+        return Array.isArray(res?.rows) ? res.rows : [];
+      } catch (err) {
+        const wrapped = new Error(err?.message || String(err) || `Failed to fetch roles from ${sourceLabel}`);
+        wrapped.sourceLabel = sourceLabel;
+        wrapped.url = url;
+        wrapped.status = err?.status;
+        wrapped.body = err?.body;
+        throw wrapped;
+      }
+    };
+
+    const viewUrl =
       `${env.SUPABASE_URL}/rest/v1/v_rates_client_defaults_enabled` +
       `?select=role` +
       `&role=is.not.null` +
       `&order=role.asc` +
       `&limit=${limit}`;
 
-    const { rows } = await sbFetch(env, url);
+    const tableUrl =
+      `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
+      `?select=role` +
+      `&disabled_at_utc=is.null` +
+      `&role=is.not.null` +
+      `&order=role.asc` +
+      `&limit=${limit}`;
 
-    const set = new Set();
-    for (const r of (rows || [])) {
-      const s = String(r?.role || '').trim();
-      if (!s) continue;
-      set.add(s);
+    let rows = null;
+    let primaryErr = null;
+
+    try {
+      rows = await fetchRolesRows(viewUrl, 'v_rates_client_defaults_enabled');
+    } catch (err) {
+      primaryErr = err;
+      console.error('[ROLES_GLOBAL] primary source failed', {
+        source: err?.sourceLabel || 'v_rates_client_defaults_enabled',
+        url: err?.url || viewUrl,
+        status: err?.status ?? null,
+        body: trimLogBody(err?.body),
+        err: err?.message || String(err)
+      });
     }
 
-    const roles = Array.from(set).sort((a, b) => a.localeCompare(b));
+    if (!rows) {
+      try {
+        rows = await fetchRolesRows(tableUrl, 'rates_client_defaults');
+      } catch (fallbackErr) {
+        console.error('[ROLES_GLOBAL] fallback source failed', {
+          source: fallbackErr?.sourceLabel || 'rates_client_defaults',
+          url: fallbackErr?.url || tableUrl,
+          status: fallbackErr?.status ?? null,
+          body: trimLogBody(fallbackErr?.body),
+          err: fallbackErr?.message || String(fallbackErr)
+        });
+
+        console.error('[ROLES_GLOBAL] failed', {
+          primary_source: primaryErr?.sourceLabel || 'v_rates_client_defaults_enabled',
+          primary_url: primaryErr?.url || viewUrl,
+          primary_status: primaryErr?.status ?? null,
+          primary_body: trimLogBody(primaryErr?.body),
+          primary_err: primaryErr?.message || String(primaryErr || ''),
+          fallback_source: fallbackErr?.sourceLabel || 'rates_client_defaults',
+          fallback_url: fallbackErr?.url || tableUrl,
+          fallback_status: fallbackErr?.status ?? null,
+          fallback_body: trimLogBody(fallbackErr?.body),
+          fallback_err: fallbackErr?.message || String(fallbackErr)
+        });
+
+        return withCORS(env, req, serverError('Failed to load global roles'));
+      }
+    }
+
+    const roles = collectRoles(rows);
 
     cache.ts = now;
     cache.roles = roles;
 
     return withCORS(env, req, ok({ roles }));
   } catch (e) {
-    console.error('[ROLES_GLOBAL] failed', { err: e?.message || String(e) });
+    console.error('[ROLES_GLOBAL] failed', {
+      err: e?.message || String(e),
+      status: e?.status ?? null,
+      body: String(e?.body == null ? '' : e.body).slice(0, 1200)
+    });
     return withCORS(env, req, serverError('Failed to load global roles'));
   }
 }
