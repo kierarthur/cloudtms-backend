@@ -5250,6 +5250,12 @@ declare
   v_issued_to date := null;
   v_week_ending_from date := null;
   v_week_ending_to date := null;
+  v_job_title_include_node_ids text[] := null;
+  v_job_title_exclude_node_ids text[] := null;
+  v_job_title_role_ids text[] := null;
+  v_job_title_primary_only boolean := false;
+  v_candidate_filters jsonb := '{}'::jsonb;
+  v_candidate_dataset_key text := null;
 begin
   if p_filters is null then
     p_filters := '{}'::jsonb;
@@ -5402,9 +5408,200 @@ begin
     v_week_ending_to := null;
   end;
 
+  begin
+    if p_filters ? 'job_title_include_node_ids' then
+      if jsonb_typeof(p_filters->'job_title_include_node_ids') = 'array' then
+        select array_agg(s.val order by s.val)
+        into v_job_title_include_node_ids
+        from (
+          select distinct nullif(btrim(e.value), '') as val
+          from jsonb_array_elements_text(p_filters->'job_title_include_node_ids') as e(value)
+        ) as s
+        where s.val is not null;
+      elsif nullif(btrim(coalesce(p_filters->>'job_title_include_node_ids', '')), '') is not null then
+        select array_agg(s.val order by s.val)
+        into v_job_title_include_node_ids
+        from (
+          select distinct nullif(btrim(x), '') as val
+          from unnest(regexp_split_to_array(p_filters->>'job_title_include_node_ids', '\s*,\s*')) as u(x)
+        ) as s
+        where s.val is not null;
+      end if;
+    end if;
+  exception when others then
+    v_job_title_include_node_ids := null;
+  end;
+
+  begin
+    if p_filters ? 'job_title_exclude_node_ids' then
+      if jsonb_typeof(p_filters->'job_title_exclude_node_ids') = 'array' then
+        select array_agg(s.val order by s.val)
+        into v_job_title_exclude_node_ids
+        from (
+          select distinct nullif(btrim(e.value), '') as val
+          from jsonb_array_elements_text(p_filters->'job_title_exclude_node_ids') as e(value)
+        ) as s
+        where s.val is not null;
+      elsif nullif(btrim(coalesce(p_filters->>'job_title_exclude_node_ids', '')), '') is not null then
+        select array_agg(s.val order by s.val)
+        into v_job_title_exclude_node_ids
+        from (
+          select distinct nullif(btrim(x), '') as val
+          from unnest(regexp_split_to_array(p_filters->>'job_title_exclude_node_ids', '\s*,\s*')) as u(x)
+        ) as s
+        where s.val is not null;
+      end if;
+    end if;
+  exception when others then
+    v_job_title_exclude_node_ids := null;
+  end;
+
+  begin
+    if p_filters ? 'job_title_role_ids' then
+      if jsonb_typeof(p_filters->'job_title_role_ids') = 'array' then
+        select array_agg(s.val order by s.val)
+        into v_job_title_role_ids
+        from (
+          select distinct nullif(btrim(e.value), '') as val
+          from jsonb_array_elements_text(p_filters->'job_title_role_ids') as e(value)
+        ) as s
+        where s.val is not null;
+      elsif nullif(btrim(coalesce(p_filters->>'job_title_role_ids', '')), '') is not null then
+        select array_agg(s.val order by s.val)
+        into v_job_title_role_ids
+        from (
+          select distinct nullif(btrim(x), '') as val
+          from unnest(regexp_split_to_array(p_filters->>'job_title_role_ids', '\s*,\s*')) as u(x)
+        ) as s
+        where s.val is not null;
+      end if;
+    end if;
+  exception when others then
+    v_job_title_role_ids := null;
+  end;
+
+  if lower(coalesce(p_filters->>'job_title_primary_only', '')) in ('true', 'false') then
+    v_job_title_primary_only := (lower(p_filters->>'job_title_primary_only') = 'true');
+  else
+    v_job_title_primary_only := false;
+  end if;
+
   if v_section = 'candidates' then
+    v_candidate_filters :=
+      coalesce(p_filters, '{}'::jsonb)
+      - 'job_title_include_node_ids'
+      - 'job_title_exclude_node_ids'
+      - 'job_title_role_ids'
+      - 'job_title_primary_only';
+
+    if coalesce(array_length(v_job_title_include_node_ids, 1), 0) > 0
+       or coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) > 0
+       or coalesce(array_length(v_job_title_role_ids, 1), 0) > 0 then
+      v_candidate_filters :=
+        v_candidate_filters
+        || jsonb_build_object(
+          'job_title_include_node_ids', to_jsonb(coalesce(v_job_title_include_node_ids, '{}'::text[])),
+          'job_title_exclude_node_ids', to_jsonb(coalesce(v_job_title_exclude_node_ids, '{}'::text[])),
+          'job_title_role_ids', to_jsonb(coalesce(v_job_title_role_ids, '{}'::text[])),
+          'job_title_primary_only', to_jsonb(v_job_title_primary_only)
+        );
+    end if;
+
+    v_candidate_dataset_key :=
+      md5(
+        jsonb_build_object(
+          'section', v_section,
+          'filters', v_candidate_filters
+        )::text
+      );
+
     return query
-    with filtered_rows as (
+    with recursive job_title_tree as (
+      select
+        djt.id,
+        djt.parent_id,
+        djt.is_role,
+        case
+          when djt.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then true
+          when djt.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then false
+          else false
+        end as checked,
+        case
+          when djt.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then 'included'
+          when djt.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then 'excluded'
+          else 'none'
+        end as inherited_mode
+      from public.default_job_titles as djt
+      where djt.parent_id is null
+         or not exists (
+           select 1
+           from public.default_job_titles as djt_parent
+           where djt_parent.id = djt.parent_id
+         )
+
+      union all
+
+      select
+        djt_child.id,
+        djt_child.parent_id,
+        djt_child.is_role,
+        case
+          when djt_child.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then true
+          when djt_child.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then false
+          when job_title_tree.inherited_mode = 'included' then true
+          when job_title_tree.inherited_mode = 'excluded' then false
+          else false
+        end as checked,
+        case
+          when djt_child.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then 'included'
+          when djt_child.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then 'excluded'
+          when job_title_tree.inherited_mode = 'included' then 'included'
+          when job_title_tree.inherited_mode = 'excluded' then 'excluded'
+          else 'none'
+        end as inherited_mode
+      from public.default_job_titles as djt_child
+      join job_title_tree
+        on job_title_tree.id = djt_child.parent_id
+    ),
+    tree_selected_roles as (
+      select distinct
+        job_title_tree.id::text as role_id_text
+      from job_title_tree
+      where job_title_tree.is_role = true
+        and job_title_tree.checked = true
+    ),
+    effective_role_ids as (
+      select distinct
+        tree_selected_roles.role_id_text
+      from tree_selected_roles
+      where (
+        coalesce(array_length(v_job_title_include_node_ids, 1), 0) > 0
+        or coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) > 0
+      )
+        and (
+          coalesce(array_length(v_job_title_role_ids, 1), 0) = 0
+          or tree_selected_roles.role_id_text = any(coalesce(v_job_title_role_ids, '{}'::text[]))
+        )
+
+      union
+
+      select distinct
+        role_id_texts.role_id_text
+      from unnest(coalesce(v_job_title_role_ids, '{}'::text[])) as role_id_texts(role_id_text)
+      where coalesce(array_length(v_job_title_include_node_ids, 1), 0) = 0
+        and coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) = 0
+        and coalesce(array_length(v_job_title_role_ids, 1), 0) > 0
+    ),
+    candidate_filter_flags as (
+      select
+        (
+          coalesce(array_length(v_job_title_include_node_ids, 1), 0) > 0
+          or coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) > 0
+          or coalesce(array_length(v_job_title_role_ids, 1), 0) > 0
+        ) as has_job_title_filter,
+        v_job_title_primary_only as primary_only
+    ),
+    filtered_rows as (
       select
         csa.id::text as row_id_text,
         case
@@ -5435,6 +5632,8 @@ begin
         csa.tms_ref_num,
         csa.job_titles_display,
         csa.primary_job_title,
+        csa.primary_job_title_id,
+        csa.job_title_ids,
         coalesce(secsort.secondary_job_titles_sort_text, '') as secondary_job_titles_sort_text,
         csa.pay_method,
         csa.postcode,
@@ -5444,6 +5643,7 @@ begin
         csa.updated_at,
         csa.active
       from public.candidates_summary_activity as csa
+      cross join candidate_filter_flags as cff
       left join lateral (
         select string_agg(sec.part, '; ' order by lower(sec.part), sec.part) as secondary_job_titles_sort_text
         from (
@@ -5469,78 +5669,107 @@ begin
           or coalesce(csa.primary_job_title, '') ilike ('%' || v_q || '%')
         ))
         and (v_active is null or csa.active is not distinct from v_active)
+        and (
+          cff.has_job_title_filter = false
+          or (
+            cff.primary_only = true
+            and exists (
+              select 1
+              from effective_role_ids as eri
+              where eri.role_id_text = csa.primary_job_title_id::text
+            )
+          )
+          or (
+            cff.primary_only = false
+            and (
+              exists (
+                select 1
+                from effective_role_ids as eri
+                where eri.role_id_text = csa.primary_job_title_id::text
+              )
+              or exists (
+                select 1
+                from unnest(coalesce(csa.job_title_ids, '{}'::uuid[])) as csa_job_title_ids(job_title_id)
+                join effective_role_ids as eri
+                  on eri.role_id_text = csa_job_title_ids.job_title_id::text
+              )
+            )
+          )
+        )
     ),
     ranked_rows as (
       select
-        fr.row_id_text,
-        fr.matched_value_text,
+        filtered_rows.row_id_text,
+        filtered_rows.matched_value_text,
         row_number() over (
           order by
-            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then fr.created_at end asc nulls last,
-            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then fr.created_at end desc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then fr.updated_at end asc nulls last,
-            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then fr.updated_at end desc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'asc' then filtered_rows.created_at end asc nulls last,
+            case when v_sort_key = 'created_at' and v_sort_dir = 'desc' then filtered_rows.created_at end desc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'asc' then filtered_rows.updated_at end asc nulls last,
+            case when v_sort_key = 'updated_at' and v_sort_dir = 'desc' then filtered_rows.updated_at end desc nulls last,
 
-            case when v_sort_key = 'active' and v_sort_dir = 'asc' then case when fr.active then 1 else 0 end end asc nulls last,
-            case when v_sort_key = 'active' and v_sort_dir = 'desc' then case when fr.active then 1 else 0 end end desc nulls last,
+            case when v_sort_key = 'active' and v_sort_dir = 'asc' then case when filtered_rows.active then 1 else 0 end end asc nulls last,
+            case when v_sort_key = 'active' and v_sort_dir = 'desc' then case when filtered_rows.active then 1 else 0 end end desc nulls last,
 
-            case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then fr.tms_ref_num end asc nulls last,
-            case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then fr.tms_ref_num end desc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then filtered_rows.tms_ref_num end asc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then filtered_rows.tms_ref_num end desc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.tms_ref, '')), '') end asc nulls last,
+            case when v_sort_key = '__tms_ref' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.tms_ref, '')), '') end desc nulls last,
 
-            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.first_name, '')), '') end asc nulls last,
-            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.first_name, '')), '') end desc nulls last,
-            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.last_name, '')), '') end asc nulls last,
-            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.last_name, '')), '') end desc nulls last,
-            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.display_name, '')), '') end asc nulls last,
-            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.display_name, '')), '') end desc nulls last,
-            case when v_sort_key = 'email' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.email, '')), '') end asc nulls last,
-            case when v_sort_key = 'email' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.email, '')), '') end desc nulls last,
-            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.phone, '')), '') end asc nulls last,
-            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.phone, '')), '') end desc nulls last,
-            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.tms_ref, '')), '') end asc nulls last,
-            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.tms_ref, '')), '') end desc nulls last,
-            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.secondary_job_titles_sort_text, '')), '') end asc nulls last,
-            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.secondary_job_titles_sort_text, '')), '') end desc nulls last,
-            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.primary_job_title, '')), '') end asc nulls last,
-            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.primary_job_title, '')), '') end desc nulls last,
-            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.pay_method, '')), '') end asc nulls last,
-            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.pay_method, '')), '') end desc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.postcode, '')), '') end asc nulls last,
-            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.postcode, '')), '') end desc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.town_city, '')), '') end asc nulls last,
-            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.town_city, '')), '') end desc nulls last,
-            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(fr.umbrella_name, '')), '') end asc nulls last,
-            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(fr.umbrella_name, '')), '') end desc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.first_name, '')), '') end asc nulls last,
+            case when v_sort_key = 'first_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.first_name, '')), '') end desc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.last_name, '')), '') end asc nulls last,
+            case when v_sort_key = 'last_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.last_name, '')), '') end desc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.display_name, '')), '') end asc nulls last,
+            case when v_sort_key = 'display_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.display_name, '')), '') end desc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.email, '')), '') end asc nulls last,
+            case when v_sort_key = 'email' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.email, '')), '') end desc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.phone, '')), '') end asc nulls last,
+            case when v_sort_key = 'phone' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.phone, '')), '') end desc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.tms_ref, '')), '') end asc nulls last,
+            case when v_sort_key = 'tms_ref' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.tms_ref, '')), '') end desc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.secondary_job_titles_sort_text, '')), '') end asc nulls last,
+            case when v_sort_key = 'job_titles_display' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.secondary_job_titles_sort_text, '')), '') end desc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.primary_job_title, '')), '') end asc nulls last,
+            case when v_sort_key = 'primary_job_title' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.primary_job_title, '')), '') end desc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.pay_method, '')), '') end asc nulls last,
+            case when v_sort_key = 'pay_method' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.pay_method, '')), '') end desc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.postcode, '')), '') end asc nulls last,
+            case when v_sort_key = 'postcode' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.postcode, '')), '') end desc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.town_city, '')), '') end asc nulls last,
+            case when v_sort_key = 'town_city' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.town_city, '')), '') end desc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'asc' then nullif(lower(coalesce(filtered_rows.umbrella_name, '')), '') end asc nulls last,
+            case when v_sort_key = 'umbrella_name' and v_sort_dir = 'desc' then nullif(lower(coalesce(filtered_rows.umbrella_name, '')), '') end desc nulls last,
 
-            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(fr.last_name, '')), '') end asc nulls last,
-            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(fr.first_name, '')), '') end asc nulls last,
-            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(fr.display_name, '')), '') end asc nulls last,
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(filtered_rows.last_name, '')), '') end asc nulls last,
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(filtered_rows.first_name, '')), '') end asc nulls last,
+            case when v_sort_key in ('job_titles_display', 'primary_job_title') then nullif(lower(coalesce(filtered_rows.display_name, '')), '') end asc nulls last,
 
-            case when v_sort_dir = 'asc' then lower(coalesce(fr.matched_value_text, '')) end asc nulls last,
-            case when v_sort_dir = 'desc' then lower(coalesce(fr.matched_value_text, '')) end desc nulls last,
-            fr.row_id_text asc
+            case when v_sort_dir = 'asc' then lower(coalesce(filtered_rows.matched_value_text, '')) end asc nulls last,
+            case when v_sort_dir = 'desc' then lower(coalesce(filtered_rows.matched_value_text, '')) end desc nulls last,
+            filtered_rows.row_id_text asc
         ) - 1 as rn
-      from filtered_rows as fr
+      from filtered_rows
     ),
     prefixed_rows as (
       select
-        rr.row_id_text,
-        rr.matched_value_text,
-        rr.rn
-      from ranked_rows as rr
-      where lower(coalesce(rr.matched_value_text, '')) like v_prefix_like escape '\'
+        ranked_rows.row_id_text,
+        ranked_rows.matched_value_text,
+        ranked_rows.rn
+      from ranked_rows
+      where lower(coalesce(ranked_rows.matched_value_text, '')) like v_prefix_like escape '\'
     )
     select
-      pr.row_id_text as row_id,
-      pr.rn as ordinal_index,
+      prefixed_rows.row_id_text as row_id,
+      prefixed_rows.rn as ordinal_index,
       case
         when p_page_size is null or p_page_size < 1 then 1
-        else floor((pr.rn)::numeric / p_page_size)::int + 1
+        else floor((prefixed_rows.rn)::numeric / p_page_size)::int + 1
       end as target_page,
-      pr.matched_value_text as matched_value,
-      v_dataset_key as dataset_key
-    from prefixed_rows as pr
-    order by pr.rn
+      prefixed_rows.matched_value_text as matched_value,
+      coalesce(v_candidate_dataset_key, v_dataset_key) as dataset_key
+    from prefixed_rows
+    order by prefixed_rows.rn
     limit 1;
 
     return;
