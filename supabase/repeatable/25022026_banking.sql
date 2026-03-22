@@ -1013,6 +1013,9 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
 );
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1039,6 +1042,7 @@ declare
   v_case_resolution_states jsonb := '[]'::jsonb;
   v_blocked_case_states jsonb := '[]'::jsonb;
   v_safe_case_states jsonb := '[]'::jsonb;
+  v_selected_preview_row_ids jsonb := '[]'::jsonb;
 
   v_umbrella_res jsonb := '{}'::jsonb;
   v_paye_res jsonb := '{}'::jsonb;
@@ -1112,13 +1116,20 @@ begin
     v_safe_case_states := '[]'::jsonb;
   end if;
 
+  if jsonb_typeof(coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb)) = 'array' then
+    v_selected_preview_row_ids := coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb);
+  else
+    v_selected_preview_row_ids := '[]'::jsonb;
+  end if;
+
   v_preview_decisions_json := coalesce(v_preview_decisions_json, '{}'::jsonb)
     - 'mismatch_choices'
     || jsonb_build_object(
          'component_resolutions', v_component_resolutions,
          'case_resolution_states', v_case_resolution_states,
          'blocked_case_states', v_blocked_case_states,
-         'safe_case_states', v_safe_case_states
+         'safe_case_states', v_safe_case_states,
+         'selected_preview_row_ids', v_selected_preview_row_ids
        );
 
   begin
@@ -1190,7 +1201,16 @@ begin
         ),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
-        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
+        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
+        'selected_preview_row_count', coalesce(jsonb_array_length(v_selected_preview_row_ids), 0),
+        'selected_preview_row_ids_sample', (
+          select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+          from (
+            select elem
+            from jsonb_array_elements(v_selected_preview_row_ids) as elem
+            limit 50
+          ) x
+        )
       ),
       'pay_create_draft_batches_split',
       'pay_date:'||p_pay_date::text,
@@ -1410,7 +1430,16 @@ begin
         ),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
-        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
+        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
+        'selected_preview_row_count', coalesce(jsonb_array_length(v_selected_preview_row_ids), 0),
+        'selected_preview_row_ids_sample', (
+          select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+          from (
+            select elem
+            from jsonb_array_elements(v_selected_preview_row_ids) as elem
+            limit 50
+          ) x
+        )
       ),
       'pay_create_draft_batches_split',
       'pay_date:'||p_pay_date::text,
@@ -1494,7 +1523,6 @@ begin
   );
 end;
 $$;
-
 
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
