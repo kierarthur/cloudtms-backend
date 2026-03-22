@@ -54970,14 +54970,14 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
     ));
 
     const normalizeDatasetValue = (value) => {
-      if (value === undefined || value === null) return undefined;
+      if (value === undefined) return undefined;
+      if (value === null) return null;
 
       if (Array.isArray(value)) {
         const arr = value
           .map(normalizeDatasetValue)
-          .filter((v) => v !== undefined);
-
-        if (!arr.length) return undefined;
+          .filter((v) => v !== undefined)
+          .map((v) => (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v);
 
         return arr.sort((leftValue, rightValue) => {
           const leftJson = JSON.stringify(leftValue);
@@ -54991,26 +54991,13 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       if (value && typeof value === 'object') {
         const out = {};
         Object.keys(value).sort().forEach((key) => {
-          if (key === 'page' || key === 'pageSize' || key === 'sort') return;
           const normalized = normalizeDatasetValue(value[key]);
           if (normalized !== undefined) out[key] = normalized;
         });
-        return Object.keys(out).length ? out : undefined;
+        return out;
       }
 
-      if (typeof value === 'string') {
-        const trimmed = value.trim();
-        return trimmed === '' ? undefined : trimmed;
-      }
-
-      if (typeof value === 'number') {
-        return Number.isFinite(value) ? value : undefined;
-      }
-
-      if (typeof value === 'boolean') {
-        return value;
-      }
-
+      if (typeof value === 'number' && !Number.isFinite(value)) return null;
       return value;
     };
 
@@ -55177,6 +55164,7 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
     return withCORS(env, req, serverError('Failed to resolve summary type-ahead target'));
   }
 }
+
  async function handleReportPresetsDelete(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -63493,6 +63481,33 @@ async function handleSummaryMembership(env, req, section) {
   });
 
   try {
+    if (sectionKey === 'candidates') {
+      const rpcRows = await sbRpcAllRows(env, 'candidate_list_ids', {
+        p_filters: clonePlain(effectiveFilters)
+      }, {
+        pageSize: 1000
+      });
+
+      const rowIds = normalizeIdArray(
+        (Array.isArray(rpcRows) ? rpcRows : [])
+          .map((row) => {
+            if (row && typeof row === 'object') return row.id ?? row.candidate_id ?? '';
+            return row == null ? '' : row;
+          })
+      );
+
+      const totalCount = rowIds.length;
+
+      return withCORS(env, req, ok({
+        section: sectionKey,
+        dataset_key: datasetKey,
+        row_ids: rowIds,
+        ids: rowIds.slice(),
+        total_count: totalCount,
+        total: totalCount
+      }));
+    }
+
     const pathMap = {
       candidates: '/api/search/candidates',
       clients: '/api/search/clients',
@@ -63528,7 +63543,6 @@ async function handleSummaryMembership(env, req, section) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SUMMARY_MEMBERSHIP_FAILED')));
   }
 }
-
 
 async function handleSubmit(env, req) {
   const pre = preflightIfNeeded(env, req);
@@ -69131,13 +69145,15 @@ async function handleSearchCandidates(env, req) {
           }
         })();
 
-        const rpcRes = await sbRpc(env, 'candidate_list_ids', {
+        const rpcRows = await sbRpcAllRows(env, 'candidate_list_ids', {
           p_filters: rpcFilters
+        }, {
+          pageSize: 1000
         });
 
-        const rows = Array.isArray(rpcRes)
-          ? rpcRes
-          : ((rpcRes && typeof rpcRes === 'object' && Array.isArray(rpcRes.rows)) ? rpcRes.rows : []);
+        const rows = Array.isArray(rpcRows)
+          ? rpcRows
+          : ((rpcRows && typeof rpcRows === 'object' && Array.isArray(rpcRows.rows)) ? rpcRows.rows : []);
 
         const outIds = [];
         const seenIds = new Set();
@@ -69649,7 +69665,6 @@ async function handleSearchCandidates(env, req) {
     count: respCount
   }));
 }
-
 
 async function handleListCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -71141,6 +71156,7 @@ async function handleChangesPing(env, req) {
   }
 }
 
+
 async function handleRolesGlobal(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -71156,7 +71172,7 @@ async function handleRolesGlobal(env, req) {
     const cache = g.__ROLES_GLOBAL_CACHE__;
     const now = Date.now();
 
-    if (Array.isArray(cache.roles) && cache.roles.length && (now - (cache.ts || 0) < TTL_MS)) {
+    if (Array.isArray(cache.roles) && (now - (cache.ts || 0) < TTL_MS)) {
       return withCORS(env, req, ok({ roles: cache.roles }));
     }
 
@@ -71222,9 +71238,14 @@ async function handleRolesGlobal(env, req) {
       });
     }
 
-    if (!rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
       try {
-        rows = await fetchRolesRows(tableUrl, 'rates_client_defaults');
+        const fallbackRows = await fetchRolesRows(tableUrl, 'rates_client_defaults');
+        if (!Array.isArray(rows) || fallbackRows.length > 0) {
+          rows = fallbackRows;
+        } else if (!Array.isArray(rows)) {
+          rows = fallbackRows;
+        }
       } catch (fallbackErr) {
         console.error('[ROLES_GLOBAL] fallback source failed', {
           source: fallbackErr?.sourceLabel || 'rates_client_defaults',
@@ -71234,20 +71255,22 @@ async function handleRolesGlobal(env, req) {
           err: fallbackErr?.message || String(fallbackErr)
         });
 
-        console.error('[ROLES_GLOBAL] failed', {
-          primary_source: primaryErr?.sourceLabel || 'v_rates_client_defaults_enabled',
-          primary_url: primaryErr?.url || viewUrl,
-          primary_status: primaryErr?.status ?? null,
-          primary_body: trimLogBody(primaryErr?.body),
-          primary_err: primaryErr?.message || String(primaryErr || ''),
-          fallback_source: fallbackErr?.sourceLabel || 'rates_client_defaults',
-          fallback_url: fallbackErr?.url || tableUrl,
-          fallback_status: fallbackErr?.status ?? null,
-          fallback_body: trimLogBody(fallbackErr?.body),
-          fallback_err: fallbackErr?.message || String(fallbackErr)
-        });
+        if (!Array.isArray(rows)) {
+          console.error('[ROLES_GLOBAL] failed', {
+            primary_source: primaryErr?.sourceLabel || 'v_rates_client_defaults_enabled',
+            primary_url: primaryErr?.url || viewUrl,
+            primary_status: primaryErr?.status ?? null,
+            primary_body: trimLogBody(primaryErr?.body),
+            primary_err: primaryErr?.message || String(primaryErr || ''),
+            fallback_source: fallbackErr?.sourceLabel || 'rates_client_defaults',
+            fallback_url: fallbackErr?.url || tableUrl,
+            fallback_status: fallbackErr?.status ?? null,
+            fallback_body: trimLogBody(fallbackErr?.body),
+            fallback_err: fallbackErr?.message || String(fallbackErr)
+          });
 
-        return withCORS(env, req, serverError('Failed to load global roles'));
+          return withCORS(env, req, serverError('Failed to load global roles'));
+        }
       }
     }
 
@@ -71266,7 +71289,6 @@ async function handleRolesGlobal(env, req) {
     return withCORS(env, req, serverError('Failed to load global roles'));
   }
 }
-
 
 async function handleCandidateAliasesDelete(env, req, candidateId) {
   const enc  = encodeURIComponent;
