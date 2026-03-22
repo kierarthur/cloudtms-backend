@@ -5205,6 +5205,8 @@ BEGIN
 END;
 $$;
 
+
+
 create or replace function public.summary_typeahead_lookup(
   p_section text,
   p_filters jsonb default '{}'::jsonb,
@@ -5487,25 +5489,7 @@ begin
   end if;
 
   if v_section = 'candidates' then
-    v_candidate_filters :=
-      coalesce(p_filters, '{}'::jsonb)
-      - 'job_title_include_node_ids'
-      - 'job_title_exclude_node_ids'
-      - 'job_title_role_ids'
-      - 'job_title_primary_only';
-
-    if coalesce(array_length(v_job_title_include_node_ids, 1), 0) > 0
-       or coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) > 0
-       or coalesce(array_length(v_job_title_role_ids, 1), 0) > 0 then
-      v_candidate_filters :=
-        v_candidate_filters
-        || jsonb_build_object(
-          'job_title_include_node_ids', to_jsonb(coalesce(v_job_title_include_node_ids, '{}'::text[])),
-          'job_title_exclude_node_ids', to_jsonb(coalesce(v_job_title_exclude_node_ids, '{}'::text[])),
-          'job_title_role_ids', to_jsonb(coalesce(v_job_title_role_ids, '{}'::text[])),
-          'job_title_primary_only', to_jsonb(v_job_title_primary_only)
-        );
-    end if;
+    v_candidate_filters := coalesce(p_filters, '{}'::jsonb);
 
     v_candidate_dataset_key :=
       md5(
@@ -5516,90 +5500,9 @@ begin
       );
 
     return query
-    with recursive job_title_tree as (
-      select
-        djt.id,
-        djt.parent_id,
-        djt.is_role,
-        case
-          when djt.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then true
-          when djt.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then false
-          else false
-        end as checked,
-        case
-          when djt.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then 'included'
-          when djt.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then 'excluded'
-          else 'none'
-        end as inherited_mode
-      from public.default_job_titles as djt
-      where djt.parent_id is null
-         or not exists (
-           select 1
-           from public.default_job_titles as djt_parent
-           where djt_parent.id = djt.parent_id
-         )
-
-      union all
-
-      select
-        djt_child.id,
-        djt_child.parent_id,
-        djt_child.is_role,
-        case
-          when djt_child.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then true
-          when djt_child.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then false
-          when job_title_tree.inherited_mode = 'included' then true
-          when job_title_tree.inherited_mode = 'excluded' then false
-          else false
-        end as checked,
-        case
-          when djt_child.id::text = any(coalesce(v_job_title_include_node_ids, '{}'::text[])) then 'included'
-          when djt_child.id::text = any(coalesce(v_job_title_exclude_node_ids, '{}'::text[])) then 'excluded'
-          when job_title_tree.inherited_mode = 'included' then 'included'
-          when job_title_tree.inherited_mode = 'excluded' then 'excluded'
-          else 'none'
-        end as inherited_mode
-      from public.default_job_titles as djt_child
-      join job_title_tree
-        on job_title_tree.id = djt_child.parent_id
-    ),
-    tree_selected_roles as (
-      select distinct
-        job_title_tree.id::text as role_id_text
-      from job_title_tree
-      where job_title_tree.is_role = true
-        and job_title_tree.checked = true
-    ),
-    effective_role_ids as (
-      select distinct
-        tree_selected_roles.role_id_text
-      from tree_selected_roles
-      where (
-        coalesce(array_length(v_job_title_include_node_ids, 1), 0) > 0
-        or coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) > 0
-      )
-        and (
-          coalesce(array_length(v_job_title_role_ids, 1), 0) = 0
-          or tree_selected_roles.role_id_text = any(coalesce(v_job_title_role_ids, '{}'::text[]))
-        )
-
-      union
-
-      select distinct
-        role_id_texts.role_id_text
-      from unnest(coalesce(v_job_title_role_ids, '{}'::text[])) as role_id_texts(role_id_text)
-      where coalesce(array_length(v_job_title_include_node_ids, 1), 0) = 0
-        and coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) = 0
-        and coalesce(array_length(v_job_title_role_ids, 1), 0) > 0
-    ),
-    candidate_filter_flags as (
-      select
-        (
-          coalesce(array_length(v_job_title_include_node_ids, 1), 0) > 0
-          or coalesce(array_length(v_job_title_exclude_node_ids, 1), 0) > 0
-          or coalesce(array_length(v_job_title_role_ids, 1), 0) > 0
-        ) as has_job_title_filter,
-        v_job_title_primary_only as primary_only
+    with candidate_ids as (
+      select candidate_list_ids_row.id as candidate_id
+      from public.candidate_list_ids(v_candidate_filters) as candidate_list_ids_row(id)
     ),
     filtered_rows as (
       select
@@ -5662,7 +5565,8 @@ begin
         csa.updated_at,
         csa.active
       from public.candidates_summary_activity as csa
-      cross join candidate_filter_flags as cff
+      join candidate_ids as candidate_ids_row
+        on candidate_ids_row.candidate_id = csa.id
       left join lateral (
         select string_agg(sec.part, '; ' order by lower(sec.part), sec.part) as secondary_job_titles_sort_text
         from (
@@ -5676,45 +5580,6 @@ begin
         ) as sec
       ) as secsort
         on true
-      where (v_ids is null or csa.id::text = any(v_ids))
-        and (v_q is null or (
-          coalesce(csa.first_name, '') ilike ('%' || v_q || '%')
-          or coalesce(csa.last_name, '') ilike ('%' || v_q || '%')
-          or coalesce(csa.display_name, '') ilike ('%' || v_q || '%')
-          or coalesce(csa.email, '') ilike ('%' || v_q || '%')
-          or coalesce(csa.phone, '') ilike ('%' || v_q || '%')
-          or coalesce(csa.tms_ref, '') ilike ('%' || v_q || '%')
-          or coalesce(csa.job_titles_display, '') ilike ('%' || v_q || '%')
-          or coalesce(csa.primary_job_title, '') ilike ('%' || v_q || '%')
-        ))
-        and (v_active is null or csa.active is not distinct from v_active)
-        and (
-          cff.has_job_title_filter = false
-          or (
-            cff.primary_only = true
-            and exists (
-              select 1
-              from effective_role_ids as eri
-              where eri.role_id_text = csa.primary_job_title_id::text
-            )
-          )
-          or (
-            cff.primary_only = false
-            and (
-              exists (
-                select 1
-                from effective_role_ids as eri
-                where eri.role_id_text = csa.primary_job_title_id::text
-              )
-              or exists (
-                select 1
-                from unnest(coalesce(csa.job_title_ids, '{}'::uuid[])) as csa_job_title_ids(job_title_id)
-                join effective_role_ids as eri
-                  on eri.role_id_text = csa_job_title_ids.job_title_id::text
-              )
-            )
-          )
-        )
     ),
     ranked_rows as (
       select
@@ -5775,7 +5640,7 @@ begin
         ranked_rows.matched_value_output_text,
         ranked_rows.rn
       from ranked_rows
-      where lower(coalesce(ranked_rows.sort_value_text, '')) like v_prefix_like escape '\\'
+      where lower(coalesce(ranked_rows.sort_value_text, '')) like v_prefix_like escape '\'
     )
     select
       prefixed_rows.row_id_text as row_id,
