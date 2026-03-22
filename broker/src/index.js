@@ -71156,7 +71156,6 @@ async function handleChangesPing(env, req) {
   }
 }
 
-
 async function handleRolesGlobal(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -71210,7 +71209,7 @@ async function handleRolesGlobal(env, req) {
     const viewUrl =
       `${env.SUPABASE_URL}/rest/v1/v_rates_client_defaults_enabled` +
       `?select=role` +
-      `&role=is.not.null` +
+      `&role=not.is.null` +
       `&order=role.asc` +
       `&limit=${limit}`;
 
@@ -71218,7 +71217,7 @@ async function handleRolesGlobal(env, req) {
       `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
       `?select=role` +
       `&disabled_at_utc=is.null` +
-      `&role=is.not.null` +
+      `&role=not.is.null` +
       `&order=role.asc` +
       `&limit=${limit}`;
 
@@ -71289,7 +71288,6 @@ async function handleRolesGlobal(env, req) {
     return withCORS(env, req, serverError('Failed to load global roles'));
   }
 }
-
 async function handleCandidateAliasesDelete(env, req, candidateId) {
   const enc  = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
