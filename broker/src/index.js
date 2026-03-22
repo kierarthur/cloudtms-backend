@@ -68747,7 +68747,6 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // Add pass-through support for PostgREST 'id=in.(...)' filter
 // ======================================
 
-
 async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -68775,6 +68774,8 @@ async function handleSearchCandidates(env, req) {
     pay_method: 'pay_method',
     active: 'active',
     created_at: 'created_at',
+    primary_job_title: 'primary_job_title',
+    job_titles_display: 'job_titles_display',
     tms_ref: '__tms_ref',
     tms_ref_num: 'tms_ref_num'
   };
@@ -68782,6 +68783,7 @@ async function handleSearchCandidates(env, req) {
   const defaultOrderCol = 'display_name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
+  const useDerivedSecondaryJobTitlesSort = (orderByParam === 'job_titles_display');
 
   const spec = buildCandidateSummaryFilterSpec(urlObj.searchParams);
 
@@ -68794,7 +68796,7 @@ async function handleSearchCandidates(env, req) {
   const createdFrom = spec.created_from || null;
   const createdTo = spec.created_to || null;
   const notesExact = spec.notes || null;
-  const jobTitleRoleIds = Array.isArray(spec.job_title_role_ids) ? spec.job_title_role_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
+  const jobTitleRoleIds = Array.isArray(spec.job_title_role_ids) ? spec.job_title_roleIds?.map(String).map(s => s.trim()).filter(Boolean) : Array.isArray(spec.job_title_role_ids) ? spec.job_title_role_ids.map(String).map(s => s.trim()).filter(Boolean) : [];
   const jobTitlePrimaryOnly = !!spec.job_title_primary_only;
   const profRegNumber = spec.prof_reg_number || null;
   const profRegType = spec.prof_reg_type || null;
@@ -68875,10 +68877,136 @@ async function handleSearchCandidates(env, req) {
         phone: row.phone == null ? '' : String(row.phone),
         tms_ref: row.tms_ref == null ? '' : String(row.tms_ref),
         roles: row.roles == null ? null : row.roles,
+        primary_job_title: row.primary_job_title == null ? '' : String(row.primary_job_title),
         job_titles_display: row.job_titles_display == null ? '' : String(row.job_titles_display),
         active: !!row.active,
         match_rank: Number.isFinite(Number(row.match_rank)) ? Number(row.match_rank) : null
       }));
+  };
+
+  const normalizeTextForSort = (value) => String(value == null ? '' : value).trim().toLowerCase();
+
+  const deriveSecondaryJobTitlesSortValue = (row) => {
+    const primaryTitle = String(row && row.primary_job_title == null ? '' : row && row.primary_job_title || '').trim();
+    const primaryTitleNorm = normalizeTextForSort(primaryTitle);
+
+    const parts = String(row && row.job_titles_display == null ? '' : row && row.job_titles_display || '')
+      .split(';')
+      .map((part) => String(part || '').trim())
+      .filter(Boolean);
+
+    const seen = new Set();
+    const secondary = [];
+
+    for (const part of parts) {
+      const norm = normalizeTextForSort(part);
+      if (!norm) continue;
+      if (primaryTitleNorm && norm === primaryTitleNorm) continue;
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      secondary.push(part);
+    }
+
+    secondary.sort((a, b) => {
+      const aa = normalizeTextForSort(a);
+      const bb = normalizeTextForSort(b);
+      if (aa < bb) return -1;
+      if (aa > bb) return 1;
+      return 0;
+    });
+
+    return secondary.join('; ');
+  };
+
+  const compareNullableText = (leftValue, rightValue, dir) => {
+    const leftNorm = normalizeTextForSort(leftValue);
+    const rightNorm = normalizeTextForSort(rightValue);
+
+    const leftBlank = !leftNorm;
+    const rightBlank = !rightNorm;
+
+    if (leftBlank && rightBlank) return 0;
+    if (leftBlank) return 1;
+    if (rightBlank) return -1;
+
+    if (leftNorm < rightNorm) return dir === 'desc' ? 1 : -1;
+    if (leftNorm > rightNorm) return dir === 'desc' ? -1 : 1;
+    return 0;
+  };
+
+  const compareCandidateRows = (leftRow, rightRow) => {
+    let cmp = 0;
+
+    if (useDerivedSecondaryJobTitlesSort) {
+      cmp = compareNullableText(
+        deriveSecondaryJobTitlesSortValue(leftRow),
+        deriveSecondaryJobTitlesSortValue(rightRow),
+        orderDir
+      );
+    } else if (orderCol === 'primary_job_title') {
+      cmp = compareNullableText(
+        leftRow && leftRow.primary_job_title,
+        rightRow && rightRow.primary_job_title,
+        orderDir
+      );
+    } else if (orderCol === '__tms_ref') {
+      const leftRefNum = Number(leftRow && leftRow.tms_ref_num);
+      const rightRefNum = Number(rightRow && rightRow.tms_ref_num);
+      const leftHasRefNum = Number.isFinite(leftRefNum);
+      const rightHasRefNum = Number.isFinite(rightRefNum);
+
+      if (leftHasRefNum && rightHasRefNum && leftRefNum !== rightRefNum) {
+        cmp = orderDir === 'desc' ? (rightRefNum - leftRefNum) : (leftRefNum - rightRefNum);
+      } else if (leftHasRefNum && !rightHasRefNum) {
+        cmp = -1;
+      } else if (!leftHasRefNum && rightHasRefNum) {
+        cmp = 1;
+      } else {
+        cmp = compareNullableText(
+          leftRow && leftRow.tms_ref,
+          rightRow && rightRow.tms_ref,
+          orderDir
+        );
+      }
+    }
+
+    if (cmp !== 0) return cmp;
+
+    cmp = compareNullableText(leftRow && leftRow.last_name, rightRow && rightRow.last_name, 'asc');
+    if (cmp !== 0) return cmp;
+
+    cmp = compareNullableText(leftRow && leftRow.first_name, rightRow && rightRow.first_name, 'asc');
+    if (cmp !== 0) return cmp;
+
+    cmp = compareNullableText(leftRow && leftRow.display_name, rightRow && rightRow.display_name, 'asc');
+    if (cmp !== 0) return cmp;
+
+    return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+  };
+
+  const fetchAllCandidateRows = async ({ selectClause = '*' }) => {
+    const outRows = [];
+    let offsetValue = 0;
+    const batchSize = 1000;
+
+    while (true) {
+      const api = buildCandidatesApi({
+        selectClause,
+        withPaging: true,
+        limitValue: batchSize,
+        offsetValue,
+        withOrder: false
+      });
+
+      const res = await sbFetch(env, api, false);
+      const batch = Array.isArray(res && res.rows) ? res.rows : [];
+      outRows.push(...batch);
+
+      if (batch.length < batchSize) break;
+      offsetValue += batchSize;
+    }
+
+    return outRows;
   };
 
   const buildCandidatesApi = ({
@@ -68891,7 +69019,11 @@ async function handleSearchCandidates(env, req) {
     const orderExpr =
       (orderCol === '__tms_ref')
         ? `${enc('tms_ref_num')}.${orderDir},${enc('tms_ref')}.${orderDir},id.asc`
-        : `${enc(orderCol)}.${orderDir},id.asc`;
+        : (
+            orderCol === 'primary_job_title'
+              ? `${enc('primary_job_title')}.${orderDir},${enc('last_name')}.asc,${enc('first_name')}.asc,id.asc`
+              : `${enc(orderCol)}.${orderDir},id.asc`
+          );
 
     let api =
       `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
@@ -69059,16 +69191,40 @@ async function handleSearchCandidates(env, req) {
     }
 
     try {
-      const pickerApi = buildCandidatesApi({
-        selectClause: 'id,display_name,first_name,last_name,email,phone,tms_ref,roles,job_titles_display,active',
-        withPaging: true,
-        limitValue: pickerPageSize + 1,
-        offsetValue: (pickerPage - 1) * pickerPageSize,
-        withOrder: true
-      });
+      let pickerRows = [];
 
-      const { rows } = await sbFetch(env, pickerApi, false);
-      const pickerRows = normalizePickerRows(rows);
+      if (useDerivedSecondaryJobTitlesSort) {
+        const allPickerRows = await fetchAllCandidateRows({
+          selectClause: 'id,display_name,first_name,last_name,email,phone,tms_ref,roles,primary_job_title,job_titles_display,active'
+        });
+        pickerRows = normalizePickerRows(allPickerRows).sort(compareCandidateRows);
+      } else {
+        const pickerApi = buildCandidatesApi({
+          selectClause: 'id,display_name,first_name,last_name,email,phone,tms_ref,roles,primary_job_title,job_titles_display,active',
+          withPaging: true,
+          limitValue: pickerPageSize + 1,
+          offsetValue: (pickerPage - 1) * pickerPageSize,
+          withOrder: true
+        });
+
+        const { rows } = await sbFetch(env, pickerApi, false);
+        pickerRows = normalizePickerRows(rows);
+      }
+
+      if (useDerivedSecondaryJobTitlesSort) {
+        const start = (pickerPage - 1) * pickerPageSize;
+        const outRows = pickerRows.slice(start, start + pickerPageSize);
+        const hasMore = (start + pickerPageSize) < pickerRows.length;
+
+        return withCORS(env, req, ok({
+          rows: outRows,
+          page: pickerPage,
+          page_size: pickerPageSize,
+          count: outRows.length,
+          has_more: hasMore
+        }));
+      }
+
       const hasMore = pickerRows.length > pickerPageSize;
       const outRows = pickerRows.slice(0, pickerPageSize);
 
@@ -69125,21 +69281,30 @@ async function handleSearchCandidates(env, req) {
     return withCORS(env, req, ok({ ids: idsOut, count: idsOut.length }));
   }
 
-  const api = buildCandidatesApi({
-    selectClause: '*',
-    withPaging: true,
-    limitValue: pageSize,
-    offsetValue: (page - 1) * pageSize,
-    withOrder: true
-  });
-
   let rows = [];
   let total = undefined;
 
   try {
-    const res = await sbFetch(env, api, includeCount);
-    rows = res?.rows || [];
-    total = res?.total;
+    if (useDerivedSecondaryJobTitlesSort) {
+      const allRows = await fetchAllCandidateRows({ selectClause: '*' });
+      allRows.sort(compareCandidateRows);
+
+      const start = (page - 1) * pageSize;
+      rows = allRows.slice(start, start + pageSize);
+      total = allRows.length;
+    } else {
+      const api = buildCandidatesApi({
+        selectClause: '*',
+        withPaging: true,
+        limitValue: pageSize,
+        offsetValue: (page - 1) * pageSize,
+        withOrder: true
+      });
+
+      const res = await sbFetch(env, api, includeCount);
+      rows = res?.rows || [];
+      total = res?.total;
+    }
   } catch (err) {
     const msg = String(err?.message || err || 'Supabase fetch failed');
 
@@ -69149,7 +69314,7 @@ async function handleSearchCandidates(env, req) {
         req,
         badRequest(
           `Supabase fetch failed: ${msg}`,
-          { order_by: (orderByParam || null), order_dir: orderDir, url: api }
+          { order_by: (orderByParam || null), order_dir: orderDir, use_derived_secondary_job_titles_sort: useDerivedSecondaryJobTitlesSort }
         )
       );
     }
