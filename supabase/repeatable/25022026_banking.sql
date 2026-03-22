@@ -2142,8 +2142,6 @@ $function$;
 
 
 
-
-
 create or replace function public.pay_batch_schedule(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -2193,6 +2191,19 @@ declare
   v_comm_result jsonb := '{}'::jsonb;
   v_comm_error text := null;
   v_comm_trigger_status text := null;
+  v_comm_message_kind text := null;
+
+  v_payout_notice_result jsonb := '{}'::jsonb;
+  v_payout_notice_trigger_status text := null;
+  v_payout_notice_error text := null;
+  v_payout_notice_dispatch_required boolean := false;
+  v_payout_notice_targeted_count int := 0;
+
+  v_remittance_result jsonb := '{}'::jsonb;
+  v_remittance_trigger_status text := null;
+  v_remittance_error text := null;
+  v_remittance_dispatch_required boolean := false;
+  v_remittance_targeted_count int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception '%', jsonb_build_object(
@@ -2711,44 +2722,146 @@ begin
 
   begin
     if v_provider <> 'CSV' then
-      if v_batch_kind_fixed = 'LOANS' then
-        v_comm_result := public.pay_finance_payout_notice_queue_commit_stage(
+      begin
+        v_payout_notice_result := public.pay_finance_payout_notice_queue_commit_stage(
           p_pay_batch_id,
           p_actor_user_id
         );
 
-        if coalesce((v_comm_result->>'ok')::boolean, true) = false then
+        if coalesce((v_payout_notice_result->>'ok')::boolean, true) = false then
           raise exception '%', coalesce(
-            nullif(btrim(coalesce(v_comm_result->>'error','')), ''),
+            nullif(btrim(coalesce(v_payout_notice_result->>'error','')), ''),
             'pay_batch_schedule: payout notice queueing failed'
           );
         end if;
 
-        v_comm_trigger_status := coalesce(
-          nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-          'PAYOUT_NOTICE_QUEUED'
+        v_payout_notice_trigger_status := coalesce(
+          nullif(btrim(coalesce(v_payout_notice_result->>'trigger_status','')), ''),
+          'PAYOUT_NOTICE_BUILD_READY'
         );
-        v_comm_error := nullif(btrim(coalesce(v_comm_result->>'error','')), '');
+        v_payout_notice_error := nullif(btrim(coalesce(v_payout_notice_result->>'error','')), '');
+      exception when others then
+        v_payout_notice_trigger_status := 'PAYOUT_NOTICE_ERROR';
+        v_payout_notice_error := left(coalesce(SQLERRM, 'UNKNOWN_PAYOUT_NOTICE_ERROR'), 1000);
+        v_payout_notice_result := jsonb_build_object(
+          'ok', false,
+          'trigger_status', v_payout_notice_trigger_status,
+          'error', v_payout_notice_error,
+          'message_kind', 'PAYOUT_NOTICE',
+          'automatic_commit_stage', true,
+          'dispatch_required', false,
+          'pay_batch_id', p_pay_batch_id::text
+        );
+      end;
+
+      v_payout_notice_dispatch_required := lower(btrim(coalesce(v_payout_notice_result->>'dispatch_required', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      if btrim(coalesce(v_payout_notice_result->>'candidate_count_targeted', '')) ~ '^[0-9]+$' then
+        v_payout_notice_targeted_count := (v_payout_notice_result->>'candidate_count_targeted')::int;
       else
-        v_comm_result := public.pay_remittance_queue_commit_stage(
+        v_payout_notice_targeted_count := 0;
+      end if;
+
+      begin
+        v_remittance_result := public.pay_remittance_queue_commit_stage(
           p_pay_batch_id,
           'ALL',
           p_actor_user_id
         );
 
-        if coalesce((v_comm_result->>'ok')::boolean, true) = false then
+        if coalesce((v_remittance_result->>'ok')::boolean, true) = false then
           raise exception '%', coalesce(
-            nullif(btrim(coalesce(v_comm_result->>'error','')), ''),
+            nullif(btrim(coalesce(v_remittance_result->>'error','')), ''),
             'pay_batch_schedule: remittance queueing failed'
           );
         end if;
 
-        v_comm_trigger_status := coalesce(
-          nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-          'REMITTANCE_QUEUED'
+        v_remittance_trigger_status := coalesce(
+          nullif(btrim(coalesce(v_remittance_result->>'trigger_status','')), ''),
+          'REMITTANCE_BUILD_READY'
         );
-        v_comm_error := nullif(btrim(coalesce(v_comm_result->>'error','')), '');
+        v_remittance_error := nullif(btrim(coalesce(v_remittance_result->>'error','')), '');
+      exception when others then
+        v_remittance_trigger_status := 'REMITTANCE_ERROR';
+        v_remittance_error := left(coalesce(SQLERRM, 'UNKNOWN_REMITTANCE_ERROR'), 1000);
+        v_remittance_result := jsonb_build_object(
+          'ok', false,
+          'trigger_status', v_remittance_trigger_status,
+          'error', v_remittance_error,
+          'message_kind', 'REMITTANCE',
+          'automatic_commit_stage', true,
+          'dispatch_required', false,
+          'pay_batch_id', p_pay_batch_id::text,
+          'scope', 'ALL'
+        );
+      end;
+
+      v_remittance_dispatch_required := lower(btrim(coalesce(v_remittance_result->>'dispatch_required', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      if btrim(coalesce(v_remittance_result->>'candidate_count_targeted', '')) ~ '^[0-9]+$' then
+        v_remittance_targeted_count := (v_remittance_result->>'candidate_count_targeted')::int;
+      else
+        v_remittance_targeted_count := 0;
       end if;
+
+      v_comm_message_kind := case
+        when (v_payout_notice_dispatch_required = true or v_payout_notice_targeted_count > 0 or v_payout_notice_error is not null)
+         and (v_remittance_dispatch_required = true or v_remittance_targeted_count > 0 or v_remittance_error is not null)
+          then 'PAYOUT_NOTICE_AND_REMITTANCE'
+        when (v_payout_notice_dispatch_required = true or v_payout_notice_targeted_count > 0 or v_payout_notice_error is not null)
+          then 'PAYOUT_NOTICE'
+        when (v_remittance_dispatch_required = true or v_remittance_targeted_count > 0 or v_remittance_error is not null)
+          then 'REMITTANCE'
+        else 'PAYOUT_NOTICE_AND_REMITTANCE'
+      end;
+
+      if v_payout_notice_error is not null and v_remittance_error is not null then
+        v_comm_trigger_status := 'PAYOUT_NOTICE_AND_REMITTANCE_ERROR';
+      elsif v_payout_notice_error is not null then
+        v_comm_trigger_status := 'PAYOUT_NOTICE_ERROR';
+      elsif v_remittance_error is not null then
+        v_comm_trigger_status := 'REMITTANCE_ERROR';
+      elsif v_payout_notice_dispatch_required = true and v_remittance_dispatch_required = true then
+        v_comm_trigger_status := 'PAYOUT_NOTICE_AND_REMITTANCE_BUILD_READY';
+      elsif v_payout_notice_dispatch_required = true then
+        v_comm_trigger_status := coalesce(v_payout_notice_trigger_status, 'PAYOUT_NOTICE_BUILD_READY');
+      elsif v_remittance_dispatch_required = true then
+        v_comm_trigger_status := coalesce(v_remittance_trigger_status, 'REMITTANCE_BUILD_READY');
+      elsif v_payout_notice_targeted_count > 0 and v_remittance_targeted_count > 0 then
+        v_comm_trigger_status := 'NO_QUEUEABLE_PAYOUT_NOTICE_OR_REMITTANCE_JOB';
+      elsif v_payout_notice_targeted_count > 0 then
+        v_comm_trigger_status := coalesce(v_payout_notice_trigger_status, 'NO_QUEUEABLE_PAYOUT_NOTICE_JOB');
+      elsif v_remittance_targeted_count > 0 then
+        v_comm_trigger_status := coalesce(v_remittance_trigger_status, 'NO_QUEUEABLE_REMITTANCE_JOB');
+      else
+        v_comm_trigger_status := 'NO_ELIGIBLE_UNSENT_CANDIDATES';
+      end if;
+
+      v_comm_error := left(
+        coalesce(
+          nullif(
+            btrim(
+              concat_ws(
+                ' | ',
+                nullif(btrim(coalesce(v_payout_notice_error, '')), ''),
+                nullif(btrim(coalesce(v_remittance_error, '')), '')
+              )
+            ),
+            ''
+          ),
+          null
+        ),
+        1000
+      );
+
+      v_comm_result := jsonb_build_object(
+        'ok', (v_payout_notice_error is null and v_remittance_error is null),
+        'trigger_status', v_comm_trigger_status,
+        'error', v_comm_error,
+        'message_kind', v_comm_message_kind,
+        'automatic_commit_stage', true,
+        'dispatch_required', (v_payout_notice_dispatch_required = true or v_remittance_dispatch_required = true),
+        'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+        'remittance', coalesce(v_remittance_result, '{}'::jsonb)
+      );
 
       insert into public.audit_events(
         actor_user_id,
@@ -2772,41 +2885,69 @@ begin
           'scheduled_at_utc', v_sched_at::text,
           'authoritative_payment_date', v_authoritative_payment_date::text,
           'trigger_status', v_comm_trigger_status,
-          'result', coalesce(v_comm_result, '{}'::jsonb)
+          'message_kind', v_comm_message_kind,
+          'result', coalesce(v_comm_result, '{}'::jsonb),
+          'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+          'remittance', coalesce(v_remittance_result, '{}'::jsonb)
         ),
         'commit_stage_communication'
       );
     else
+      v_payout_notice_result := jsonb_build_object(
+        'ok', true,
+        'trigger_status', 'MANUAL_RAIL_NO_SCHEDULE_SEND',
+        'message_kind', 'PAYOUT_NOTICE',
+        'automatic_commit_stage', false,
+        'dispatch_required', false,
+        'pay_batch_id', p_pay_batch_id::text
+      );
+      v_remittance_result := jsonb_build_object(
+        'ok', true,
+        'trigger_status', 'MANUAL_RAIL_NO_SCHEDULE_SEND',
+        'message_kind', 'REMITTANCE',
+        'automatic_commit_stage', false,
+        'dispatch_required', false,
+        'pay_batch_id', p_pay_batch_id::text,
+        'scope', 'ALL'
+      );
+
+      v_payout_notice_trigger_status := 'MANUAL_RAIL_NO_SCHEDULE_SEND';
+      v_remittance_trigger_status := 'MANUAL_RAIL_NO_SCHEDULE_SEND';
+      v_payout_notice_error := null;
+      v_remittance_error := null;
+      v_payout_notice_dispatch_required := false;
+      v_remittance_dispatch_required := false;
+      v_payout_notice_targeted_count := 0;
+      v_remittance_targeted_count := 0;
+
+      v_comm_message_kind := 'PAYOUT_NOTICE_AND_REMITTANCE';
       v_comm_trigger_status := 'MANUAL_RAIL_NO_SCHEDULE_SEND';
       v_comm_error := null;
       v_comm_result := jsonb_build_object(
         'ok', true,
         'trigger_status', v_comm_trigger_status,
-        'message_kind', case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
-        'automatic_commit_stage', false
+        'error', null,
+        'message_kind', v_comm_message_kind,
+        'automatic_commit_stage', false,
+        'dispatch_required', false,
+        'payout_notice', v_payout_notice_result,
+        'remittance', v_remittance_result
       );
     end if;
   exception when others then
-    v_comm_trigger_status := case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE_ERROR' else 'COMMIT_STAGE_SEND_ERROR' end;
+    v_comm_trigger_status := 'COMMIT_STAGE_SEND_ERROR';
     v_comm_error := left(coalesce(SQLERRM,'UNKNOWN_COMMS_ERROR'), 1000);
+    v_comm_message_kind := coalesce(v_comm_message_kind, 'PAYOUT_NOTICE_AND_REMITTANCE');
     v_comm_result := jsonb_build_object(
       'ok', false,
       'trigger_status', v_comm_trigger_status,
       'error', v_comm_error,
-      'message_kind', case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
-      'automatic_commit_stage', (v_provider <> 'CSV')
+      'message_kind', v_comm_message_kind,
+      'automatic_commit_stage', (v_provider <> 'CSV'),
+      'dispatch_required', false,
+      'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+      'remittance', coalesce(v_remittance_result, '{}'::jsonb)
     );
-
-    begin
-      update public.pay_batch_candidates pbc
-      set
-        remittance_trigger_status = v_comm_trigger_status,
-        last_remittance_error = v_comm_error
-      where pbc.pay_batch_id = p_pay_batch_id
-        and pbc.remittance_sent_at_utc is null;
-    exception when others then
-      null;
-    end;
 
     begin
       insert into public.audit_events(
@@ -2831,7 +2972,10 @@ begin
           'scheduled_at_utc', v_sched_at::text,
           'authoritative_payment_date', v_authoritative_payment_date::text,
           'trigger_status', v_comm_trigger_status,
-          'error', v_comm_error
+          'message_kind', v_comm_message_kind,
+          'error', v_comm_error,
+          'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+          'remittance', coalesce(v_remittance_result, '{}'::jsonb)
         ),
         'commit_stage_communication'
       );
@@ -2839,12 +2983,14 @@ begin
       null;
     end;
   end;
-
   v_worker_communications := jsonb_build_object(
     'automatic_commit_stage', (v_provider <> 'CSV'),
-    'message_kind', coalesce(nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''), case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end),
+    'message_kind', coalesce(nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''), v_comm_message_kind, 'PAYOUT_NOTICE_AND_REMITTANCE'),
     'trigger_status', v_comm_trigger_status,
     'error', v_comm_error,
+    'dispatch_required', (v_payout_notice_dispatch_required = true or v_remittance_dispatch_required = true),
+    'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+    'remittance', coalesce(v_remittance_result, '{}'::jsonb),
     'result', coalesce(v_comm_result, '{}'::jsonb)
   );
 
@@ -2892,7 +3038,6 @@ begin
   );
 end;
 $$;
-
 
 create or replace function public.pay_batch_prepare(
   p_pay_batch_id uuid,
@@ -17623,7 +17768,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_queue_commit_stage(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -17642,10 +17786,18 @@ declare
   v_job_results jsonb := '[]'::jsonb;
 
   v_job jsonb;
+  v_work_job jsonb;
   v_job_kind text;
   v_recipient_email text;
   v_candidate_id_text text;
   v_candidate_id uuid;
+
+  v_pruned_job_items jsonb := '[]'::jsonb;
+  v_pruned_job_total numeric := 0;
+  v_pruned_job_item_count integer := 0;
+  v_first_label text := null;
+  v_subject text := null;
+  v_worker_message text := null;
 
   v_target_candidate_count integer := 0;
   v_ready_candidate_count integer := 0;
@@ -17677,10 +17829,6 @@ begin
     raise exception 'pay_finance_payout_notice_queue_commit_stage: pay batch % not found.', p_pay_batch_id;
   end if;
 
-  if upper(coalesce(v_batch.batch_kind_fixed, '')) <> 'LOANS' then
-    raise exception 'pay_finance_payout_notice_queue_commit_stage: pay batch % is not payout-only.', p_pay_batch_id;
-  end if;
-
   drop table if exists pg_temp.tmp_payout_notice_target_candidates;
   create temporary table pg_temp.tmp_payout_notice_target_candidates(
     pay_batch_candidate_id uuid primary key,
@@ -17688,6 +17836,32 @@ begin
     candidate_display_name text null,
     candidate_tms_ref text null
   ) on commit drop;
+
+  drop table if exists pg_temp.tmp_payout_notice_target_items;
+  create temporary table pg_temp.tmp_payout_notice_target_items(
+    candidate_id uuid not null,
+    finance_case_id uuid not null,
+    primary key (candidate_id, finance_case_id)
+  ) on commit drop;
+
+  insert into pg_temp.tmp_payout_notice_target_items(
+    candidate_id,
+    finance_case_id
+  )
+  select distinct
+    pbc.candidate_id,
+    pbi.finance_case_id
+  from public.pay_batch_candidates pbc
+  join public.pay_batch_items pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and coalesce(pbi.is_voided, false) = false
+    and pbi.finance_case_id is not null
+    and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+    and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+    and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+    and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+    and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on');
 
   insert into pg_temp.tmp_payout_notice_target_candidates(
     pay_batch_candidate_id,
@@ -17702,13 +17876,21 @@ begin
     pbc.candidate_tms_ref
   from public.pay_batch_candidates pbc
   where pbc.pay_batch_id = p_pay_batch_id
-    and pbc.remittance_sent_at_utc is null
     and exists (
       select 1
-      from public.pay_batch_items pbi
-      where pbi.pay_batch_candidate_id = pbc.id
-        and coalesce(pbi.is_voided, false) = false
-        and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+      from pg_temp.tmp_payout_notice_target_items ti
+      where ti.candidate_id = pbc.candidate_id
+    )
+    and not exists (
+      select 1
+      from public.mail_outbox mo
+      where mo.reference = (
+        'payout_notice:pay_batch:' || p_pay_batch_id::text || ':PAYOUT_NOTICE:CANDIDATE:' || pbc.candidate_id::text
+      )
+        and upper(coalesce(mo.recipient_kind, '')) = 'CANDIDATE'
+        and mo.recipient_id = pbc.candidate_id
+        and lower(coalesce(mo.context_kind, '')) = 'pay_batches'
+        and mo.context_id = p_pay_batch_id
     );
 
   select count(*)::int
@@ -17794,7 +17976,7 @@ begin
     select j.value
     from jsonb_array_elements(v_build_jobs) as j(value)
   loop
-    v_job_kind := upper(btrim(coalesce(v_job->>'job_kind', '')));
+    v_job_kind := upper(btrim(coalesce(v_job->>'job_kind', 'PAYOUT_NOTICE')));
     v_candidate_id_text := nullif(btrim(coalesce(v_job->>'candidate_id', '')), '');
     v_candidate_id := null;
     v_recipient_email := nullif(btrim(coalesce(v_job->>'recipient_email', '')), '');
@@ -17813,18 +17995,69 @@ begin
          from pg_temp.tmp_payout_notice_target_candidates tc
          where tc.candidate_id = v_candidate_id
        ) then
-      v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_job);
+      select
+        coalesce(jsonb_agg(it.value order by it.ord), '[]'::jsonb),
+        round(
+          coalesce(
+            sum(
+              case
+                when btrim(coalesce(it.value->>'amount', '')) ~ '^-?[0-9]+(\.[0-9]+)?$'
+                  then (it.value->>'amount')::numeric
+                else 0
+              end
+            ),
+            0
+          ),
+          2
+        )
+      into
+        v_pruned_job_items,
+        v_pruned_job_total
+      from jsonb_array_elements(coalesce(v_job->'items', '[]'::jsonb)) with ordinality as it(value, ord)
+      where nullif(btrim(coalesce(it.value->>'finance_case_id', '')), '') is not null
+        and exists (
+          select 1
+          from pg_temp.tmp_payout_notice_target_items ti
+          where ti.candidate_id = v_candidate_id
+            and ti.finance_case_id::text = btrim(it.value->>'finance_case_id')
+        );
 
-      insert into pg_temp.tmp_payout_notice_job_map(
-        candidate_id,
-        job_kind,
-        recipient_email
-      )
-      values (
-        v_candidate_id,
-        v_job_kind,
-        v_recipient_email
-      );
+      v_pruned_job_item_count := jsonb_array_length(coalesce(v_pruned_job_items, '[]'::jsonb));
+
+      if v_pruned_job_item_count > 0 then
+        v_first_label := nullif(btrim(coalesce(v_pruned_job_items->0->>'label', '')), '');
+
+        v_subject := case
+          when v_pruned_job_item_count = 1 and v_first_label = 'Payment Advance' then 'Payment Advance scheduled'
+          when v_pruned_job_item_count = 1 and v_first_label = 'Manual Credit Adjustment' then 'Manual Credit Adjustment scheduled'
+          else 'Payment scheduled'
+        end;
+
+        v_worker_message := case
+          when v_pruned_job_item_count = 1 and v_first_label = 'Payment Advance' then 'A Payment Advance has been scheduled.'
+          when v_pruned_job_item_count = 1 and v_first_label = 'Manual Credit Adjustment' then 'A Manual Credit Adjustment has been scheduled.'
+          else 'A payment has been scheduled.'
+        end;
+
+        v_work_job := coalesce(v_job, '{}'::jsonb) || jsonb_build_object('job_kind', 'PAYOUT_NOTICE');
+        v_work_job := jsonb_set(v_work_job, '{items}', coalesce(v_pruned_job_items, '[]'::jsonb), true);
+        v_work_job := jsonb_set(v_work_job, '{total_amount}', to_jsonb(coalesce(v_pruned_job_total, 0)), true);
+        v_work_job := jsonb_set(v_work_job, '{subject}', to_jsonb(v_subject), true);
+        v_work_job := jsonb_set(v_work_job, '{worker_message}', to_jsonb(v_worker_message), true);
+
+        v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
+
+        insert into pg_temp.tmp_payout_notice_job_map(
+          candidate_id,
+          job_kind,
+          recipient_email
+        )
+        values (
+          v_candidate_id,
+          v_job_kind,
+          v_recipient_email
+        );
+      end if;
     end if;
   end loop;
 
@@ -17836,19 +18069,6 @@ begin
   into v_job_count;
 
   if v_job_count > 0 then
-    update public.pay_batch_candidates pbc
-    set
-      remittance_trigger_status = 'PAYOUT_NOTICE_BUILD_READY',
-      last_remittance_error = null,
-      updated_at = now()
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbc.remittance_sent_at_utc is null
-      and exists (
-        select 1
-        from pg_temp.tmp_payout_notice_job_map jm
-        where jm.candidate_id = pbc.candidate_id
-      );
-
     v_trigger_status := 'PAYOUT_NOTICE_BUILD_READY';
   else
     v_trigger_status := 'NO_QUEUEABLE_PAYOUT_NOTICE_JOB';
@@ -17898,7 +18118,7 @@ begin
   select coalesce(
            jsonb_agg(
              jsonb_build_object(
-               'job_kind', upper(btrim(coalesce(j.job->>'job_kind', ''))),
+               'job_kind', upper(btrim(coalesce(j.job->>'job_kind', 'PAYOUT_NOTICE'))),
                'candidate_id', nullif(btrim(coalesce(j.job->>'candidate_id', '')), ''),
                'recipient_email', nullif(btrim(coalesce(j.job->>'recipient_email', '')), ''),
                'scheduled_payment_date', nullif(btrim(coalesce(j.job->>'scheduled_payment_date', '')), ''),
@@ -17944,8 +18164,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
