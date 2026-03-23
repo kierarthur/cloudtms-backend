@@ -57945,7 +57945,7 @@ async function handleMailshotPrepare(env, req) {
           ? selectionScope.selected_count_context
           : {});
 
-    const membershipTotal = (() => {
+      const membershipTotal = (() => {
       const membershipCandidates = [
         selectionScope.membership_total,
         selectionScope.membership_known_total,
@@ -57958,6 +57958,9 @@ async function handleMailshotPrepare(env, req) {
       ];
 
       for (const membershipCandidate of membershipCandidates) {
+        if (membershipCandidate == null) continue;
+        if (typeof membershipCandidate === 'string' && trimStr(membershipCandidate) === '') continue;
+
         const normalizedMembershipTotal = toNonNegativeIntOrNull(membershipCandidate);
         if (normalizedMembershipTotal != null) return normalizedMembershipTotal;
       }
