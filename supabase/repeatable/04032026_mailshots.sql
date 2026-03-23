@@ -2102,6 +2102,15 @@ begin
       u.created_by,
       u.recipient_kind,
       u.recipient_id,
+      coalesce(
+        case
+          when lower(coalesce(u.recipient_kind, '')) = 'candidate' then nullif(btrim(coalesce(c_rec.display_name, concat_ws(' ', c_rec.first_name, c_rec.last_name), c_rec.email, c_rec.phone, u.to_address)), '')
+          when lower(coalesce(u.recipient_kind, '')) = 'client' then nullif(btrim(coalesce(cl_rec.name, cl_rec.primary_invoice_email, cl_rec.contact_email, u.to_address)), '')
+          when lower(coalesce(u.recipient_kind, '')) = 'umbrella' then nullif(btrim(coalesce(um_rec.name, um_rec.remittance_email, u.to_address)), '')
+          else null
+        end,
+        nullif(btrim(coalesce(u.to_address, '')), '')
+      ) as recipient_display_name,
       u.context_kind,
       u.context_id,
       u.mailshot_run_id,
@@ -2121,6 +2130,15 @@ begin
       end as queue_state,
       (u.scheduled_for_utc is not null) as is_scheduled
     from public.v_outbox_unified as u
+    left join public.candidates as c_rec
+      on lower(coalesce(u.recipient_kind, '')) = 'candidate'
+     and u.recipient_id = c_rec.id
+    left join public.clients as cl_rec
+      on lower(coalesce(u.recipient_kind, '')) = 'client'
+     and u.recipient_id = cl_rec.id
+    left join public.umbrellas as um_rec
+      on lower(coalesce(u.recipient_kind, '')) = 'umbrella'
+     and u.recipient_id = um_rec.id
   ),
   filtered as (
     select
@@ -2143,6 +2161,7 @@ begin
       b.created_by,
       b.recipient_kind,
       b.recipient_id,
+      b.recipient_display_name,
       b.context_kind,
       b.context_id,
       b.mailshot_run_id,
@@ -2160,6 +2179,7 @@ begin
       and (
         v_search is null
         or coalesce(b.to_address,'') ilike ('%' || v_search || '%')
+        or coalesce(b.recipient_display_name,'') ilike ('%' || v_search || '%')
         or coalesce(b.subject,'') ilike ('%' || v_search || '%')
         or coalesce(b.body_text,'') ilike ('%' || v_search || '%')
         or coalesce(b.reference,'') ilike ('%' || v_search || '%')
@@ -2191,6 +2211,7 @@ begin
       f.created_by,
       f.recipient_kind,
       f.recipient_id,
+      f.recipient_display_name,
       f.context_kind,
       f.context_id,
       f.mailshot_run_id,
@@ -2249,6 +2270,7 @@ begin
           'created_by', case when p.created_by is null then null else p.created_by::text end,
           'recipient_kind', p.recipient_kind,
           'recipient_id', case when p.recipient_id is null then null else p.recipient_id::text end,
+          'recipient_display_name', p.recipient_display_name,
           'context_kind', p.context_kind,
           'context_id', case when p.context_id is null then null else p.context_id::text end,
           'mailshot_run_id', case when p.mailshot_run_id is null then null else p.mailshot_run_id::text end,
