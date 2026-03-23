@@ -29935,7 +29935,6 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
   }
 }
 
-
 async function handleBankingPaymentAdvanceCreate(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -29976,6 +29975,16 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
       }
     }
     return false;
+  };
+
+  const optionalTrimmedOrNull = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        const trimmed = String(value).trim();
+        return trimmed ? trimmed : null;
+      }
+    }
+    return null;
   };
 
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
@@ -30061,6 +30070,11 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
+  const beneficiaryName = optionalTrimmedOrNull(body.beneficiary_name, body.beneficiaryName);
+  const sortCode = optionalTrimmedOrNull(body.sort_code, body.sortCode);
+  const accountNumber = optionalTrimmedOrNull(body.account_number, body.accountNumber);
+  const bankDetailsNote = optionalTrimmedOrNull(body.bank_details_note, body.bankDetailsNote);
+
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
@@ -30080,7 +30094,11 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
       p_actor_user_id: user.id,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
-      p_take_home_floor_override: takeHomeFloorOverrideRaw
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_beneficiary_name: beneficiaryName,
+      p_sort_code: sortCode,
+      p_account_number: accountNumber,
+      p_bank_details_note: bankDetailsNote
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_payment_advance_create');
@@ -30089,7 +30107,6 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create payment advance')));
   }
 }
-
 async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30134,6 +30151,25 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
       }
     }
     return false;
+  };
+
+  const optionalTrimmedOrNull = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        const trimmed = String(value).trim();
+        return trimmed ? trimmed : null;
+      }
+    }
+    return null;
+  };
+
+  const normalizeBoolean = (raw) => {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (typeof raw === 'boolean') return raw;
+    const s = String(raw).trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
+    return null;
   };
 
   const principalAmountProvided = hasOwnValue(body, ['principal_amount', 'principalAmount', 'amount']);
@@ -30218,6 +30254,21 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
+  const beneficiaryName = optionalTrimmedOrNull(body.beneficiary_name, body.beneficiaryName);
+  const sortCode = optionalTrimmedOrNull(body.sort_code, body.sortCode);
+  const accountNumber = optionalTrimmedOrNull(body.account_number, body.accountNumber);
+  const bankDetailsNote = optionalTrimmedOrNull(body.bank_details_note, body.bankDetailsNote);
+
+  const removeOneoffBankDetailsProvided =
+    Object.prototype.hasOwnProperty.call(body, 'remove_oneoff_bank_details') ||
+    Object.prototype.hasOwnProperty.call(body, 'removeOneoffBankDetails');
+  const removeOneoffBankDetails = removeOneoffBankDetailsProvided
+    ? normalizeBoolean(body.remove_oneoff_bank_details ?? body.removeOneoffBankDetails)
+    : false;
+  if (removeOneoffBankDetailsProvided && removeOneoffBankDetails === null) {
+    return withCORS(env, req, badRequest('remove_oneoff_bank_details must be true or false when provided'));
+  }
+
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
@@ -30237,7 +30288,12 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
       p_start_week_start: startWeekStartIso,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
-      p_take_home_floor_override: takeHomeFloorOverrideRaw
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_beneficiary_name: beneficiaryName,
+      p_sort_code: sortCode,
+      p_account_number: accountNumber,
+      p_bank_details_note: bankDetailsNote,
+      p_remove_oneoff_bank_details: removeOneoffBankDetails
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_payment_advance_update');
@@ -30246,7 +30302,6 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update payment advance')));
   }
 }
-
 async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -30255,6 +30310,24 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const normalizeTaxability = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!s) return null;
+    if (s === 'TAXABLE') return 'TAXABLE';
+    if (s === 'NON_TAXABLE' || s === 'NONTAXABLE') return 'NON_TAXABLE';
+    return null;
+  };
+
+  const optionalTrimmedOrNull = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        const trimmed = String(value).trim();
+        return trimmed ? trimmed : null;
+      }
+    }
+    return null;
+  };
 
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
@@ -30270,8 +30343,18 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
     return withCORS(env, req, badRequest('adjustment_comment is required'));
   }
 
+  const taxability = normalizeTaxability(body.taxability);
+  if (!taxability) {
+    return withCORS(env, req, badRequest('taxability must be TAXABLE or NON_TAXABLE'));
+  }
+
   const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
   const note = noteRaw ? noteRaw : null;
+
+  const beneficiaryName = optionalTrimmedOrNull(body.beneficiary_name, body.beneficiaryName);
+  const sortCode = optionalTrimmedOrNull(body.sort_code, body.sortCode);
+  const accountNumber = optionalTrimmedOrNull(body.account_number, body.accountNumber);
+  const bankDetailsNote = optionalTrimmedOrNull(body.bank_details_note, body.bankDetailsNote);
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -30288,7 +30371,12 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
       p_amount: amount,
       p_actor_user_id: user.id,
       p_adjustment_comment: adjustmentComment,
-      p_note: note
+      p_note: note,
+      p_taxability: taxability,
+      p_beneficiary_name: beneficiaryName,
+      p_sort_code: sortCode,
+      p_account_number: accountNumber,
+      p_bank_details_note: bankDetailsNote
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_credit_adjustment_create');
@@ -30297,7 +30385,6 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create manual credit adjustment')));
   }
 }
-
 
 async function handleBankingManualCreditAdjustmentUpdate(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
@@ -30311,6 +30398,33 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
+
+  const normalizeTaxability = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!s) return null;
+    if (s === 'TAXABLE') return 'TAXABLE';
+    if (s === 'NON_TAXABLE' || s === 'NONTAXABLE') return 'NON_TAXABLE';
+    return null;
+  };
+
+  const optionalTrimmedOrNull = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        const trimmed = String(value).trim();
+        return trimmed ? trimmed : null;
+      }
+    }
+    return null;
+  };
+
+  const normalizeBoolean = (raw) => {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (typeof raw === 'boolean') return raw;
+    const s = String(raw).trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
+    return null;
+  };
 
   const amount =
     (body.amount === null || body.amount === undefined)
@@ -30329,10 +30443,31 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
     return withCORS(env, req, badRequest('adjustment_comment cannot be blank when provided'));
   }
 
+  const taxabilityProvided = Object.prototype.hasOwnProperty.call(body, 'taxability');
+  const taxability = taxabilityProvided ? normalizeTaxability(body.taxability) : null;
+  if (taxabilityProvided && !taxability) {
+    return withCORS(env, req, badRequest('taxability must be TAXABLE or NON_TAXABLE when provided'));
+  }
+
   const note =
     (body.note === null || body.note === undefined)
       ? null
       : String(body.note).trim();
+
+  const beneficiaryName = optionalTrimmedOrNull(body.beneficiary_name, body.beneficiaryName);
+  const sortCode = optionalTrimmedOrNull(body.sort_code, body.sortCode);
+  const accountNumber = optionalTrimmedOrNull(body.account_number, body.accountNumber);
+  const bankDetailsNote = optionalTrimmedOrNull(body.bank_details_note, body.bankDetailsNote);
+
+  const removeOneoffBankDetailsProvided =
+    Object.prototype.hasOwnProperty.call(body, 'remove_oneoff_bank_details') ||
+    Object.prototype.hasOwnProperty.call(body, 'removeOneoffBankDetails');
+  const removeOneoffBankDetails = removeOneoffBankDetailsProvided
+    ? normalizeBoolean(body.remove_oneoff_bank_details ?? body.removeOneoffBankDetails)
+    : false;
+  if (removeOneoffBankDetailsProvided && removeOneoffBankDetails === null) {
+    return withCORS(env, req, badRequest('remove_oneoff_bank_details must be true or false when provided'));
+  }
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -30349,7 +30484,13 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
       p_actor_user_id: user.id,
       p_amount: amount,
       p_adjustment_comment: adjustmentComment,
-      p_note: note
+      p_note: note,
+      p_taxability: taxability,
+      p_beneficiary_name: beneficiaryName,
+      p_sort_code: sortCode,
+      p_account_number: accountNumber,
+      p_bank_details_note: bankDetailsNote,
+      p_remove_oneoff_bank_details: removeOneoffBankDetails
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_credit_adjustment_update');
@@ -30358,7 +30499,6 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update manual credit adjustment')));
   }
 }
-
 async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -30388,6 +30528,14 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     if (!s) return null;
     if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
     if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const normalizeTaxability = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!s) return null;
+    if (s === 'TAXABLE') return 'TAXABLE';
+    if (s === 'NON_TAXABLE' || s === 'NONTAXABLE') return 'NON_TAXABLE';
     return null;
   };
 
@@ -30468,6 +30616,11 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     return withCORS(env, req, badRequest('adjustment_comment is required'));
   }
 
+  const taxability = normalizeTaxability(body.taxability);
+  if (!taxability) {
+    return withCORS(env, req, badRequest('taxability must be TAXABLE or NON_TAXABLE'));
+  }
+
   const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
   const note = noteRaw ? noteRaw : null;
 
@@ -30509,7 +30662,8 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
       p_adjustment_comment: adjustmentComment,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
-      p_take_home_floor_override: takeHomeFloorOverrideRaw
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_taxability: taxability
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_create');
@@ -30518,7 +30672,6 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create manual debt adjustment')));
   }
 }
-
 async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -30552,6 +30705,14 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
     if (!s) return null;
     if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
     if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const normalizeTaxability = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!s) return null;
+    if (s === 'TAXABLE') return 'TAXABLE';
+    if (s === 'NON_TAXABLE' || s === 'NONTAXABLE') return 'NON_TAXABLE';
     return null;
   };
 
@@ -30632,6 +30793,12 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
     return withCORS(env, req, badRequest('adjustment_comment cannot be blank when provided'));
   }
 
+  const taxabilityProvided = Object.prototype.hasOwnProperty.call(body, 'taxability');
+  const taxability = taxabilityProvided ? normalizeTaxability(body.taxability) : null;
+  if (taxabilityProvided && !taxability) {
+    return withCORS(env, req, badRequest('taxability must be TAXABLE or NON_TAXABLE when provided'));
+  }
+
   const note =
     (body.note === null || body.note === undefined)
       ? null
@@ -30673,7 +30840,8 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
       p_adjustment_comment: adjustmentComment,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
-      p_take_home_floor_override: takeHomeFloorOverrideRaw
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_taxability: taxability
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_update');
@@ -30682,7 +30850,6 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update manual debt adjustment')));
   }
 }
-
 async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -57778,13 +57945,25 @@ async function handleMailshotPrepare(env, req) {
           ? selectionScope.selected_count_context
           : {});
 
-    let membershipTotal = Number(
-      selectionScope.membership_total ??
-      selectionScope.total_count ??
-      selectionScope.total ??
-      selectedCountContextRaw.membership_total
-    );
-    if (!Number.isFinite(membershipTotal) || membershipTotal < 0) membershipTotal = null;
+    const membershipTotal = (() => {
+      const membershipCandidates = [
+        selectionScope.membership_total,
+        selectionScope.membership_known_total,
+        selectionScope.total_count,
+        selectionScope.total,
+        selectedCountContextRaw.membership_total,
+        selectedCountContextRaw.membership_known_total,
+        selectedCountContextRaw.total_count,
+        selectedCountContextRaw.total
+      ];
+
+      for (const membershipCandidate of membershipCandidates) {
+        const normalizedMembershipTotal = toNonNegativeIntOrNull(membershipCandidate);
+        if (normalizedMembershipTotal != null) return normalizedMembershipTotal;
+      }
+
+      return null;
+    })();
 
     const bulkResolved = await resolveBulkContextIdsFromSummarySelection(
       sectionKey,
