@@ -2324,7 +2324,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.outbox_unified_get(
   p_channel text,
   p_id uuid
@@ -2375,6 +2374,15 @@ begin
     u.created_by,
     u.recipient_kind,
     u.recipient_id,
+    coalesce(
+      case
+        when lower(coalesce(u.recipient_kind, '')) = 'candidate' then nullif(btrim(coalesce(c_rec.display_name, concat_ws(' ', c_rec.first_name, c_rec.last_name), c_rec.email, c_rec.phone, u.to_address)), '')
+        when lower(coalesce(u.recipient_kind, '')) = 'client' then nullif(btrim(coalesce(cl_rec.name, cl_rec.primary_invoice_email, cl_rec.contact_email, u.to_address)), '')
+        when lower(coalesce(u.recipient_kind, '')) = 'umbrella' then nullif(btrim(coalesce(um_rec.name, um_rec.remittance_email, u.to_address)), '')
+        else null
+      end,
+      nullif(btrim(coalesce(u.to_address, '')), '')
+    ) as recipient_display_name,
     u.context_kind,
     u.context_id,
     u.mailshot_run_id,
@@ -2395,6 +2403,15 @@ begin
     (u.scheduled_for_utc is not null) as is_scheduled
   into v_row
   from public.v_outbox_unified as u
+  left join public.candidates as c_rec
+    on lower(coalesce(u.recipient_kind, '')) = 'candidate'
+   and u.recipient_id = c_rec.id
+  left join public.clients as cl_rec
+    on lower(coalesce(u.recipient_kind, '')) = 'client'
+   and u.recipient_id = cl_rec.id
+  left join public.umbrellas as um_rec
+    on lower(coalesce(u.recipient_kind, '')) = 'umbrella'
+   and u.recipient_id = um_rec.id
   where upper(coalesce(u.channel,'')) = v_channel
     and u.outbox_id = p_id;
 
@@ -2431,6 +2448,7 @@ begin
       'created_by', case when v_row.created_by is null then null else v_row.created_by::text end,
       'recipient_kind', v_row.recipient_kind,
       'recipient_id', case when v_row.recipient_id is null then null else v_row.recipient_id::text end,
+      'recipient_display_name', v_row.recipient_display_name,
       'context_kind', v_row.context_kind,
       'context_id', case when v_row.context_id is null then null else v_row.context_id::text end,
       'mailshot_run_id', case when v_row.mailshot_run_id is null then null else v_row.mailshot_run_id::text end,
@@ -2444,7 +2462,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.comms_by_recipient(
   p_recipient_kind text,
   p_recipient_id uuid,
