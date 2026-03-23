@@ -16067,12 +16067,10 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_loans_snoozes_list(
   p_candidate_id uuid default null::uuid,
   p_client_id uuid default null::uuid,
-  p_include_paid_off boolean default true,
-  p_include_cleared_snoozes boolean default false
+  p_hide_completed_non_current_items boolean default true
 )
 returns jsonb
 language plpgsql
@@ -16084,6 +16082,7 @@ declare
   v_finance_cases jsonb := '[]'::jsonb;
   v_timesheet_snoozes jsonb := '[]'::jsonb;
   v_summary jsonb := '{}'::jsonb;
+  v_hide_completed_non_current_items boolean := coalesce(p_hide_completed_non_current_items, true);
 begin
   with finance_rows as (
     select
@@ -16134,6 +16133,22 @@ begin
       vfcr.active_snooze_note,
       vfcr.active_snooze_created_at_utc,
       vfcr.active_snooze_updated_at_utc,
+      case when vfcr.management_group is null then null else vfcr.management_group::text end as management_group,
+      vfcr.lifecycle_status_display,
+      case when vfcr.taxability is null then null else vfcr.taxability::text end as taxability,
+      case when vfcr.routing_kind is null then null else vfcr.routing_kind::text end as routing_kind,
+      coalesce(vfcr.oneoff_bank_details_required, false) as oneoff_bank_details_required,
+      coalesce(vfcr.is_candidate_directed_oneoff_payout, false) as is_candidate_directed_oneoff_payout,
+      coalesce(vfcr.appears_on_umbrella_remittance, false) as appears_on_umbrella_remittance,
+      coalesce(vfcr.generates_candidate_payment_advice, false) as generates_candidate_payment_advice,
+      coalesce(vfcr.oneoff_bank_details_present, false) as oneoff_bank_details_present,
+      coalesce(vfcr.oneoff_bank_details_editable, false) as oneoff_bank_details_editable,
+      coalesce(vfcr.snooze_allowed, false) as snooze_allowed,
+      coalesce(vfcr.edit_bank_details_allowed, false) as edit_bank_details_allowed,
+      vfcr.oneoff_bank_beneficiary_name,
+      vfcr.oneoff_bank_sort_code,
+      vfcr.oneoff_bank_account_number,
+      vfcr.oneoff_bank_note,
       case
         when vfcr.case_type = 'PAYMENT_ADVANCE' then false
         else coalesce(vfcr.is_mixed_case, false)
@@ -16226,9 +16241,8 @@ begin
     where (p_candidate_id is null or vfcr.candidate_id = p_candidate_id)
       and (p_client_id is null or vfcr.client_id = p_client_id)
       and (
-        p_include_paid_off = true
-        or vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
-        or (vfcr.status <> 'PAID_OFF' and coalesce(vfcr.outstanding_amount, 0) > 0)
+        v_hide_completed_non_current_items = false
+        or upper(coalesce(vfcr.lifecycle_status_display, '')) in ('NOT PROCESSED YET', 'DRAFTED AWAITING AUTHORISATION')
       )
   ),
   finance_payload_rows as (
@@ -16248,7 +16262,22 @@ begin
           'client_id', case when fr.client_id is null then null else fr.client_id::text end,
           'client_name', fr.client_name,
           'status', fr.status::text,
+          'finance_status', fr.status::text,
           'payout_status', case when fr.payout_status is null then null else fr.payout_status::text end,
+          'finance_payout_status', case when fr.payout_status is null then null else fr.payout_status::text end,
+          'management_group', fr.management_group,
+          'lifecycle_status_display', fr.lifecycle_status_display,
+          'finance_lifecycle_status_display', fr.lifecycle_status_display,
+          'taxability', fr.taxability,
+          'routing_kind', fr.routing_kind,
+          'oneoff_bank_details_required', fr.oneoff_bank_details_required,
+          'oneoff_bank_details_present', fr.oneoff_bank_details_present,
+          'oneoff_bank_details_editable', fr.oneoff_bank_details_editable,
+          'edit_bank_details_allowed', fr.edit_bank_details_allowed,
+          'snooze_allowed', fr.snooze_allowed,
+          'is_candidate_directed_oneoff_payout', fr.is_candidate_directed_oneoff_payout,
+          'appears_on_umbrella_remittance', fr.appears_on_umbrella_remittance,
+          'generates_candidate_payment_advice', fr.generates_candidate_payment_advice,
           'blocked_state', fr.blocked_state,
           'blocked_reason', fr.blocked_reason
         )
@@ -16266,7 +16295,23 @@ begin
           'adjustment_comment', fr.adjustment_comment,
           'notes', fr.notes,
           'linked_timesheet_id', case when fr.linked_timesheet_id is null then null else fr.linked_timesheet_id::text end,
-          'linked_shift_date', case when fr.linked_shift_date is null then null else fr.linked_shift_date::text end
+          'linked_shift_date', case when fr.linked_shift_date is null then null else fr.linked_shift_date::text end,
+          'active_snooze_id', case when fr.active_snooze_id is null then null else fr.active_snooze_id::text end,
+          'active_snooze_kind', fr.active_snooze_kind,
+          'active_snooze_mode', case
+            when fr.active_snooze_id is null then 'NOT_SNOOZED'
+            when fr.active_snooze_until_date is null then 'INDEFINITE'
+            else 'DATED'
+          end,
+          'active_snooze_until_date', case when fr.active_snooze_until_date is null then null else fr.active_snooze_until_date::text end,
+          'active_snooze_note', fr.active_snooze_note,
+          'active_snooze_created_at_utc', case when fr.active_snooze_created_at_utc is null then null else fr.active_snooze_created_at_utc::text end,
+          'active_snooze_updated_at_utc', case when fr.active_snooze_updated_at_utc is null then null else fr.active_snooze_updated_at_utc::text end,
+          'active_snooze_visibility_status', case
+            when fr.active_snooze_id is null then 'NOT_SNOOZED'
+            when fr.active_snooze_until_date is null then 'INDEFINITE_SNOOZE'
+            else 'DATED_SNOOZE'
+          end
         )
         ||
         jsonb_build_object(
@@ -16297,6 +16342,10 @@ begin
           'unresolved_taxable_count', fr.unresolved_taxable_count,
           'stale_count', fr.stale_count,
           'component_resolution_summary_json', fr.component_resolution_summary_json,
+          'oneoff_bank_beneficiary_name', fr.oneoff_bank_beneficiary_name,
+          'oneoff_bank_sort_code', fr.oneoff_bank_sort_code,
+          'oneoff_bank_account_number', fr.oneoff_bank_account_number,
+          'oneoff_bank_note', fr.oneoff_bank_note,
           'snooze', case
             when fr.active_snooze_id is null then null
             else jsonb_build_object(
@@ -16315,7 +16364,11 @@ begin
             'can_resume', fr.can_resume,
             'can_write_off', fr.can_write_off,
             'can_edit', fr.can_edit,
-            'can_unsnooze', fr.can_unsnooze
+            'can_snooze', (fr.snooze_allowed and fr.active_snooze_id is null),
+            'can_unsnooze', fr.can_unsnooze,
+            'can_clear_snooze', fr.can_unsnooze,
+            'can_edit_snooze', fr.can_unsnooze,
+            'can_edit_bank_details', fr.edit_bank_details_allowed
           )
         )
       ) as row_json
@@ -16659,7 +16712,7 @@ begin
     where (p_client_id is null or tsrl.current_client_id = p_client_id)
       and (
         tsrl.lifecycle_state = 'ACTIVE'
-        or (p_include_cleared_snoozes = true and tsrl.lifecycle_state <> 'ACTIVE')
+        or (v_hide_completed_non_current_items = false and tsrl.lifecycle_state <> 'ACTIVE')
       )
   ),
   timesheet_snoozes_json as (
@@ -16737,8 +16790,7 @@ begin
     'filters', jsonb_build_object(
       'candidate_id', case when p_candidate_id is null then null else p_candidate_id::text end,
       'client_id', case when p_client_id is null then null else p_client_id::text end,
-      'include_paid_off', p_include_paid_off,
-      'include_cleared_snoozes', p_include_cleared_snoozes
+      'hide_completed_non_current_items', v_hide_completed_non_current_items
     ),
     'summary', v_summary,
     'finance_cases', v_finance_cases,
@@ -16746,6 +16798,7 @@ begin
   );
 end;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_build(
   p_pay_batch_id uuid
