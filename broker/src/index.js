@@ -10672,19 +10672,61 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
   }
 
+  const buildCommunicationsSummary = (res) => {
+    const communicationMode = String(res?.communication_mode || 'NONE').trim().toUpperCase() || 'NONE';
+
+    const remittanceResult = (res && typeof res === 'object' && res.remittance_result && typeof res.remittance_result === 'object')
+      ? res.remittance_result
+      : null;
+
+    const payoutNoticeResult = (res && typeof res === 'object' && res.payout_notice_result && typeof res.payout_notice_result === 'object')
+      ? res.payout_notice_result
+      : null;
+
+    const remittanceQueuedCount = Number(remittanceResult?.queued_count || 0);
+    const remittanceSkippedCount = Number(remittanceResult?.skipped_count || 0);
+    const payoutNoticeQueuedCount = Number(payoutNoticeResult?.queued_count || 0);
+    const payoutNoticeSkippedCount = Number(payoutNoticeResult?.skipped_count || 0);
+
+    const queuedCount = Number(res?.queued_count || (remittanceQueuedCount + payoutNoticeQueuedCount) || 0);
+    const skippedCount = Number(res?.skipped_count || (remittanceSkippedCount + payoutNoticeSkippedCount) || 0);
+
+    return {
+      communication_mode: communicationMode,
+      sent_or_queued: queuedCount > 0,
+      queued_count: queuedCount,
+      skipped_count: skippedCount,
+      remittances: {
+        trigger_status: String(remittanceResult?.trigger_status || '').trim() || null,
+        queued_count: remittanceQueuedCount,
+        skipped_count: remittanceSkippedCount
+      },
+      payout_notices: {
+        trigger_status: String(payoutNoticeResult?.trigger_status || '').trim() || null,
+        queued_count: payoutNoticeQueuedCount,
+        skipped_count: payoutNoticeSkippedCount
+      }
+    };
+  };
+
   try {
     const res = await sendPayBatchRemittancesInternal(env, {
       payBatchId,
       scope,
       actorUserId: user.id
     });
-    return withCORS(env, req, ok(res));
+
+    const communicationsSummary = buildCommunicationsSummary(res);
+
+    return withCORS(env, req, ok({
+      ...res,
+      communications_summary: communicationsSummary
+    }));
   } catch (e) {
     const msg = String(e?.message || e || 'REM_SEND_FAILED');
     return withCORS(env, req, serverError(msg));
   }
 }
-
 async function sendPayBatchRemittancesInternal(env, opts) {
   const payBatchId = opts && opts.payBatchId ? String(opts.payBatchId) : '';
   const actorUserId = opts && opts.actorUserId ? String(opts.actorUserId) : '';
@@ -10715,9 +10757,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
   }
 
   const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
-  const batchKindFixed = String(batchObj?.batch_kind_fixed || '').trim().toUpperCase();
-  const isPayoutNoticeBatch = batchKindFixed === 'LOANS';
-  const messageKind = isPayoutNoticeBatch ? 'PAYOUT_NOTICE' : 'REMITTANCE';
 
   let payrollTesting = false;
   let settingsHeaderMsg = null;
@@ -10757,83 +10796,58 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     testTo = remittanceTestRecipientEmail.trim();
   }
 
-  let helperRes = null;
-  try {
-    const helperRpcRes = isPayoutNoticeBatch
-      ? await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
-          p_pay_batch_id: payBatchId,
-          p_actor_user_id: actorUserId
-        })
-      : await sbRpc(env, 'pay_remittance_queue_commit_stage', {
-          p_pay_batch_id: payBatchId,
-          p_scope: scope,
-          p_actor_user_id: actorUserId
-        });
+  const callQueueStage = async (commKind) => {
+    try {
+      const helperRpcRes = (commKind === 'PAYOUT_NOTICE')
+        ? await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
+            p_pay_batch_id: payBatchId,
+            p_actor_user_id: actorUserId
+          })
+        : await sbRpc(env, 'pay_remittance_queue_commit_stage', {
+            p_pay_batch_id: payBatchId,
+            p_scope: scope,
+            p_actor_user_id: actorUserId
+          });
 
-    helperRes = unwrapRpc(
-      helperRpcRes,
-      isPayoutNoticeBatch ? 'pay_finance_payout_notice_queue_commit_stage' : 'pay_remittance_queue_commit_stage'
-    );
-  } catch (e) {
-    const msg = (e && e.message) ? String(e.message) : String(e || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED'));
-    throw new Error(msg);
-  }
+      const helperRes = unwrapRpc(
+        helperRpcRes,
+        commKind === 'PAYOUT_NOTICE'
+          ? 'pay_finance_payout_notice_queue_commit_stage'
+          : 'pay_remittance_queue_commit_stage'
+      );
 
-  if (!helperRes || typeof helperRes !== 'object') {
-    throw new Error(isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED');
-  }
+      if (!helperRes || typeof helperRes !== 'object') {
+        throw new Error(commKind === 'PAYOUT_NOTICE' ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED');
+      }
 
-  if (helperRes.ok === false) {
-    throw new Error(String(helperRes.error || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED')));
-  }
+      if (helperRes.ok === false) {
+        throw new Error(String(helperRes.error || (commKind === 'PAYOUT_NOTICE' ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED')));
+      }
+
+      return helperRes;
+    } catch (e) {
+      const fallback = commKind === 'PAYOUT_NOTICE' ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED';
+      const msg = (e && e.message) ? String(e.message) : String(e || fallback);
+      throw new Error(msg);
+    }
+  };
+
+  const remittanceHelperRes = await callQueueStage('REMITTANCE');
+  const payoutNoticeHelperRes = await callQueueStage('PAYOUT_NOTICE');
 
   let headerMsgFromBuild = null;
   let footerMsgFromBuild = null;
 
-  if (!isPayoutNoticeBatch) {
-    try {
-      const buildRes0 = await sbRpc(env, 'pay_remittance_build', {
-        p_pay_batch_id: payBatchId,
-        p_scope: scope
-      });
-      const buildRes = unwrapRpc(buildRes0, 'pay_remittance_build');
+  try {
+    const buildRes0 = await sbRpc(env, 'pay_remittance_build', {
+      p_pay_batch_id: payBatchId,
+      p_scope: scope
+    });
+    const buildRes = unwrapRpc(buildRes0, 'pay_remittance_build');
 
-      headerMsgFromBuild = (buildRes && typeof buildRes.remittance_header_message === 'string') ? buildRes.remittance_header_message : null;
-      footerMsgFromBuild = (buildRes && typeof buildRes.remittance_footer_message === 'string') ? buildRes.remittance_footer_message : null;
-    } catch {}
-  }
-
-  const jobs = Array.isArray(helperRes?.jobs) ? helperRes.jobs : [];
-  const helperCandidateResults = Array.isArray(helperRes?.candidate_results) ? helperRes.candidate_results : [];
-  const authoritativePaymentDate =
-    (helperRes && helperRes.authoritative_payment_date != null && String(helperRes.authoritative_payment_date).trim())
-      ? String(helperRes.authoritative_payment_date).trim()
-      : ((batchObj && batchObj.authoritative_payment_date != null && String(batchObj.authoritative_payment_date).trim())
-          ? String(batchObj.authoritative_payment_date).trim()
-          : null);
-
-  const payDate =
-    (helperRes && helperRes.pay_date != null && String(helperRes.pay_date).trim())
-      ? String(helperRes.pay_date).trim()
-      : ((helperRes && helperRes.scheduled_payment_date != null && String(helperRes.scheduled_payment_date).trim())
-          ? String(helperRes.scheduled_payment_date).trim()
-          : (authoritativePaymentDate || ((batchObj && batchObj.pay_date != null && String(batchObj.pay_date).trim()) ? String(batchObj.pay_date).trim() : null)));
-
-  const bulkRef =
-    (helperRes && helperRes.bulk_reference != null && String(helperRes.bulk_reference).trim())
-      ? String(helperRes.bulk_reference).trim()
-      : ((batchObj && batchObj.bulk_reference != null && String(batchObj.bulk_reference).trim()) ? String(batchObj.bulk_reference).trim() : null);
-
-  const headerMsg = (headerMsgFromBuild && headerMsgFromBuild.trim().length)
-    ? headerMsgFromBuild
-    : (settingsHeaderMsg && settingsHeaderMsg.trim().length ? settingsHeaderMsg : null);
-
-  const footerMsg = (footerMsgFromBuild && footerMsgFromBuild.trim().length)
-    ? footerMsgFromBuild
-    : (settingsFooterMsg && settingsFooterMsg.trim().length ? settingsFooterMsg : null);
-
-  const queued = [];
-  const skipped = [];
+    headerMsgFromBuild = (buildRes && typeof buildRes.remittance_header_message === 'string') ? buildRes.remittance_header_message : null;
+    footerMsgFromBuild = (buildRes && typeof buildRes.remittance_footer_message === 'string') ? buildRes.remittance_footer_message : null;
+  } catch {}
 
   const asMoney = (v) => {
     const n = Number(v);
@@ -11105,220 +11119,336 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     }
   };
 
-  for (const helperCandidate of helperCandidateResults) {
-    const hasJob = helperCandidate && helperCandidate.has_job === true;
-    if (hasJob) continue;
+  const resolveResultMeta = (helperRes) => {
+    const authoritativePaymentDate =
+      (helperRes && helperRes.authoritative_payment_date != null && String(helperRes.authoritative_payment_date).trim())
+        ? String(helperRes.authoritative_payment_date).trim()
+        : ((batchObj && batchObj.authoritative_payment_date != null && String(batchObj.authoritative_payment_date).trim())
+            ? String(batchObj.authoritative_payment_date).trim()
+            : null);
 
-    const candidateIdText = (helperCandidate && helperCandidate.candidate_id != null) ? String(helperCandidate.candidate_id).trim() : '';
-    const candidateDisplayName = (helperCandidate && helperCandidate.candidate_display_name != null) ? String(helperCandidate.candidate_display_name).trim() : '';
-    const candidateTmsRef = (helperCandidate && helperCandidate.candidate_tms_ref != null) ? String(helperCandidate.candidate_tms_ref).trim() : '';
-    const triggerStatusText = (helperCandidate && helperCandidate.trigger_status != null) ? String(helperCandidate.trigger_status).trim().toUpperCase() : 'NO_QUEUEABLE_JOB';
+    const payDate =
+      (helperRes && helperRes.pay_date != null && String(helperRes.pay_date).trim())
+        ? String(helperRes.pay_date).trim()
+        : ((helperRes && helperRes.scheduled_payment_date != null && String(helperRes.scheduled_payment_date).trim())
+            ? String(helperRes.scheduled_payment_date).trim()
+            : (authoritativePaymentDate || ((batchObj && batchObj.pay_date != null && String(batchObj.pay_date).trim()) ? String(batchObj.pay_date).trim() : null)));
 
-    skipped.push({
-      job_kind: messageKind,
-      payee_entity_kind: 'CANDIDATE',
-      payee_entity_id: candidateIdText || null,
-      candidate_id: candidateIdText || null,
-      candidate_display_name: candidateDisplayName || null,
-      candidate_tms_ref: candidateTmsRef || null,
-      reason: triggerStatusText || 'NO_QUEUEABLE_JOB',
-      trigger_status: triggerStatusText || 'NO_QUEUEABLE_JOB'
-    });
-  }
+    const bulkRef =
+      (helperRes && helperRes.bulk_reference != null && String(helperRes.bulk_reference).trim())
+        ? String(helperRes.bulk_reference).trim()
+        : ((batchObj && batchObj.bulk_reference != null && String(batchObj.bulk_reference).trim()) ? String(batchObj.bulk_reference).trim() : null);
 
-  for (const job of jobs) {
-    const jobKindRaw = String(job?.job_kind || '').trim().toUpperCase();
+    return {
+      authoritativePaymentDate,
+      payDate,
+      bulkRef
+    };
+  };
 
-    const isUmbrellaJob = !isPayoutNoticeBatch && (jobKindRaw === 'UMBRELLA_REMITTANCE');
-    const isPayeJob = !isPayoutNoticeBatch && (jobKindRaw === 'PAYE_REMITTANCE');
-    const isUmbrellaCopyJob = !isPayoutNoticeBatch && (jobKindRaw === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE');
+  const processHelperResult = async (commKind, helperRes) => {
+    const isPayoutNotice = commKind === 'PAYOUT_NOTICE';
+    const jobs = Array.isArray(helperRes?.jobs) ? helperRes.jobs : [];
+    const helperCandidateResults = Array.isArray(helperRes?.candidate_results) ? helperRes.candidate_results : [];
+    const { authoritativePaymentDate, payDate, bulkRef } = resolveResultMeta(helperRes);
 
-    if (!isPayoutNoticeBatch && !isUmbrellaJob && !isPayeJob && !isUmbrellaCopyJob) {
+    const headerMsg = (!isPayoutNotice && headerMsgFromBuild && headerMsgFromBuild.trim().length)
+      ? headerMsgFromBuild
+      : (settingsHeaderMsg && settingsHeaderMsg.trim().length ? settingsHeaderMsg : null);
+
+    const footerMsg = (!isPayoutNotice && footerMsgFromBuild && footerMsgFromBuild.trim().length)
+      ? footerMsgFromBuild
+      : (settingsFooterMsg && settingsFooterMsg.trim().length ? settingsFooterMsg : null);
+
+    const queued = [];
+    const skipped = [];
+
+    for (const helperCandidate of helperCandidateResults) {
+      const hasJob = helperCandidate && helperCandidate.has_job === true;
+      if (hasJob) continue;
+
+      const candidateIdText = (helperCandidate && helperCandidate.candidate_id != null) ? String(helperCandidate.candidate_id).trim() : '';
+      const candidateDisplayName = (helperCandidate && helperCandidate.candidate_display_name != null) ? String(helperCandidate.candidate_display_name).trim() : '';
+      const candidateTmsRef = (helperCandidate && helperCandidate.candidate_tms_ref != null) ? String(helperCandidate.candidate_tms_ref).trim() : '';
+      const triggerStatusText = (helperCandidate && helperCandidate.trigger_status != null) ? String(helperCandidate.trigger_status).trim().toUpperCase() : 'NO_QUEUEABLE_JOB';
+
       skipped.push({
-        job_kind: jobKindRaw || null,
-        reason: 'UNKNOWN_JOB_KIND',
-        trigger_status: 'UNKNOWN_JOB_KIND'
+        comm_kind: commKind,
+        job_kind: commKind,
+        payee_entity_kind: 'CANDIDATE',
+        payee_entity_id: candidateIdText || null,
+        candidate_id: candidateIdText || null,
+        candidate_display_name: candidateDisplayName || null,
+        candidate_tms_ref: candidateTmsRef || null,
+        reason: triggerStatusText || 'NO_QUEUEABLE_JOB',
+        trigger_status: triggerStatusText || 'NO_QUEUEABLE_JOB'
       });
-      continue;
     }
 
-    const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
-    const detailed = !!(job && job.detailed_breakdown === true);
+    for (const job of jobs) {
+      const jobKindRaw = String(job?.job_kind || '').trim().toUpperCase();
 
-    const toEmailRaw =
-      isPayoutNoticeBatch
-        ? (job?.recipient_email ?? job?.email ?? recipient?.email ?? recipient?.remittance_email ?? null)
-        : (isUmbrellaJob
-            ? (recipient?.remittance_email ?? recipient?.email ?? null)
-            : (recipient?.email ?? recipient?.remittance_email ?? null));
+      const isUmbrellaJob = !isPayoutNotice && (jobKindRaw === 'UMBRELLA_REMITTANCE');
+      const isPayeJob = !isPayoutNotice && (jobKindRaw === 'PAYE_REMITTANCE');
+      const isUmbrellaCopyJob = !isPayoutNotice && (jobKindRaw === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE');
 
-    const intendedToEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
-    const toEmail = testTo ? testTo : intendedToEmail;
+      if (!isPayoutNotice && !isUmbrellaJob && !isPayeJob && !isUmbrellaCopyJob) {
+        skipped.push({
+          comm_kind: commKind,
+          job_kind: jobKindRaw || null,
+          reason: 'UNKNOWN_JOB_KIND',
+          trigger_status: 'UNKNOWN_JOB_KIND'
+        });
+        continue;
+      }
 
-    const candidateIdFromJob = isPayoutNoticeBatch
-      ? String(job?.candidate_id ?? recipient?.candidate_id ?? '').trim()
-      : String(recipient?.candidate_id || '').trim();
+      const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
+      const detailed = !!(job && job.detailed_breakdown === true);
 
-    const umbrellaIdFromJob = !isPayoutNoticeBatch
-      ? String(recipient?.umbrella_id || '').trim()
-      : '';
+      const toEmailRaw =
+        isPayoutNotice
+          ? (job?.recipient_email ?? job?.email ?? recipient?.email ?? recipient?.remittance_email ?? null)
+          : (isUmbrellaJob
+              ? (recipient?.remittance_email ?? recipient?.email ?? null)
+              : (recipient?.email ?? recipient?.remittance_email ?? null));
 
-    if (!toEmail) {
-      skipped.push({
-        job_kind: jobKindRaw || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE' : null),
-        payee_entity_kind: isPayoutNoticeBatch ? 'CANDIDATE' : (recipient?.entity_kind ?? null),
-        payee_entity_id: isPayoutNoticeBatch ? (candidateIdFromJob || null) : (recipient?.candidate_id ?? recipient?.umbrella_id ?? null),
-        candidate_id: candidateIdFromJob || null,
-        umbrella_id: umbrellaIdFromJob || null,
-        reason: 'NO_EMAIL',
-        trigger_status: 'NO_EMAIL'
-      });
-      continue;
-    }
+      const intendedToEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
+      const toEmail = testTo ? testTo : intendedToEmail;
 
-    const jobTestMode = !!(job && job.test_mode === true);
-    const effectiveTestMode = !!(jobTestMode || payrollTesting);
+      const candidateIdFromJob = isPayoutNotice
+        ? String(job?.candidate_id ?? recipient?.candidate_id ?? '').trim()
+        : String(recipient?.candidate_id || '').trim();
 
-    const payPeriodLabel = payDate ? payDate : 'Pay run';
+      const umbrellaIdFromJob = !isPayoutNotice
+        ? String(recipient?.umbrella_id || '').trim()
+        : '';
 
-    let subjectSuffix = 'Remittance Advice';
-    if (isUmbrellaJob) subjectSuffix = 'Remittance Advice – Umbrella';
-    if (isPayeJob) subjectSuffix = 'Remittance Advice – PAYE';
-    if (isUmbrellaCopyJob) subjectSuffix = 'Remittance Advice – Umbrella copy';
+      if (!toEmail) {
+        skipped.push({
+          comm_kind: commKind,
+          job_kind: jobKindRaw || commKind,
+          payee_entity_kind: isPayoutNotice ? 'CANDIDATE' : (recipient?.entity_kind ?? null),
+          payee_entity_id: isPayoutNotice ? (candidateIdFromJob || null) : (recipient?.candidate_id ?? recipient?.umbrella_id ?? null),
+          candidate_id: candidateIdFromJob || null,
+          umbrella_id: umbrellaIdFromJob || null,
+          reason: 'NO_EMAIL',
+          trigger_status: 'NO_EMAIL'
+        });
+        continue;
+      }
 
-    const defaultSubject = effectiveTestMode ? `[TEST MODE] ${subjectSuffix} – ${payPeriodLabel}` : `${subjectSuffix} – ${payPeriodLabel}`;
-    const basePayoutSubject = String(job?.subject || '').trim();
-    const payoutSubject = (() => {
-      if (!isPayoutNoticeBatch) return defaultSubject;
-      const seed = basePayoutSubject || `Payment notice – ${payPeriodLabel}`;
-      if (!effectiveTestMode) return seed;
-      return /^\[TEST MODE\]/i.test(seed) ? seed : `[TEST MODE] ${seed}`;
-    })();
+      const jobTestMode = !!(job && job.test_mode === true);
+      const effectiveTestMode = !!(jobTestMode || payrollTesting);
 
-    const subject = isPayoutNoticeBatch ? payoutSubject : defaultSubject;
+      const payPeriodLabel = payDate ? payDate : 'Pay run';
 
-    const lines = [];
-    if (headerMsg) {
-      lines.push(headerMsg);
-      lines.push('');
-    }
+      let subjectSuffix = 'Remittance Advice';
+      if (!isPayoutNotice && isUmbrellaJob) subjectSuffix = 'Remittance Advice – Umbrella';
+      if (!isPayoutNotice && isPayeJob) subjectSuffix = 'Remittance Advice – PAYE';
+      if (!isPayoutNotice && isUmbrellaCopyJob) subjectSuffix = 'Remittance Advice – Umbrella copy';
 
-    if (effectiveTestMode) {
-      if (payrollTesting) {
-        lines.push('PAYROLL TEST MODE — remittances routed to test recipient');
-        lines.push(`Test recipient: ${testTo}`);
-        if (intendedToEmail) lines.push(`Intended recipient: ${intendedToEmail}`);
-        lines.push('');
-      } else {
-        lines.push('SIMULATED / TEST MODE — no bank payment was submitted');
+      const defaultSubject = effectiveTestMode ? `[TEST MODE] ${subjectSuffix} – ${payPeriodLabel}` : `${subjectSuffix} – ${payPeriodLabel}`;
+      const basePayoutSubject = String(job?.subject || '').trim();
+      const payoutSubject = (() => {
+        if (!isPayoutNotice) return defaultSubject;
+        const seed = basePayoutSubject || `Payment notice – ${payPeriodLabel}`;
+        if (!effectiveTestMode) return seed;
+        return /^\[TEST MODE\]/i.test(seed) ? seed : `[TEST MODE] ${seed}`;
+      })();
+
+      const subject = isPayoutNotice ? payoutSubject : defaultSubject;
+
+      const lines = [];
+      if (headerMsg) {
+        lines.push(headerMsg);
         lines.push('');
       }
-    }
 
-    if (isPayoutNoticeBatch) {
-      const payoutScheduledDate =
-        String(job?.scheduled_payment_date || authoritativePaymentDate || payDate || '').trim();
-
-      const candidateDisplay = [
-        String(job?.candidate_display_name || job?.display_name || recipient?.display_name || '').trim(),
-        String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()
-          ? `(${String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()})`
-          : ''
-      ].filter(Boolean).join(' ') || '(unknown)';
-
-      lines.push('Payment Notice');
-      if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
-      if (payoutScheduledDate) lines.push(`Scheduled payment date: ${payoutScheduledDate}`);
-      lines.push(`Pay batch: ${payBatchId}`);
-      lines.push(`Scope: ${scope}`);
-      lines.push(`Candidate: ${candidateDisplay}`);
-      lines.push('');
-
-      const items = Array.isArray(job?.items) ? job.items : [];
-      if (items.length) {
-        lines.push('Items');
-        for (const item of items) {
-          const label = String(
-            item?.label ??
-            item?.title ??
-            item?.kind ??
-            item?.type ??
-            item?.item_type ??
-            'Payment item'
-          ).trim();
-
-          const amountVal =
-            item?.amount ??
-            item?.total ??
-            item?.value ??
-            item?.scheduled_amount ??
-            item?.payment_amount ??
-            null;
-          const amountNum = asNum(amountVal);
-
-          const commentText = String(
-            item?.adjustment_comment ??
-            item?.comment ??
-            item?.note ??
-            ''
-          ).trim();
-
-          const scheduleText = stringifyPayoutSchedule(
-            item?.repayment_arrangement ??
-            item?.repayment_schedule ??
-            item?.schedule ??
-            job?.repayment_arrangement ??
-            job?.repayment_schedule
-          );
-
-          const lineMain = `${label}${amountNum != null ? ` — £${asMoney(amountNum)}` : ''}`;
-          lines.push(lineMain);
-          if (commentText) lines.push(`Comment: ${commentText}`);
-          if (scheduleText) lines.push(`Repayment arrangement: ${scheduleText}`);
-          lines.push('');
-        }
-      } else {
-        const bodyLines = Array.isArray(job?.body_lines) ? job.body_lines : [];
-        if (bodyLines.length) {
-          pushPayoutBodyLines(lines, bodyLines);
+      if (effectiveTestMode) {
+        if (payrollTesting) {
+          lines.push('PAYROLL TEST MODE — communications routed to test recipient');
+          lines.push(`Test recipient: ${testTo}`);
+          if (intendedToEmail) lines.push(`Intended recipient: ${intendedToEmail}`);
           lines.push('');
         } else {
-          const rootScheduleText = stringifyPayoutSchedule(job?.repayment_arrangement ?? job?.repayment_schedule);
-          const rootCommentText = String(job?.adjustment_comment ?? job?.comment ?? '').trim();
-
-          if (rootCommentText) {
-            lines.push(`Comment: ${rootCommentText}`);
-          }
-          if (rootScheduleText) {
-            lines.push(`Repayment arrangement: ${rootScheduleText}`);
-          }
+          lines.push('SIMULATED / TEST MODE — communication generated without live dispatch');
           lines.push('');
         }
       }
 
-      lines.push('This payment notice was generated from frozen pay batch artifacts in CloudTMS.');
-    } else {
-      lines.push('Remittance Advice');
-      if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
-      if (payDate) lines.push(`Pay date: ${payDate}`);
-      lines.push(`Pay batch: ${payBatchId}`);
-      lines.push(`Scope: ${scope}`);
-      lines.push('');
+      if (isPayoutNotice) {
+        const payoutScheduledDate = String(job?.scheduled_payment_date || authoritativePaymentDate || payDate || '').trim();
 
-      if (isUmbrellaJob) {
-        const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
-        if (umbName) {
-          lines.push(`Umbrella: ${umbName}`);
-          lines.push('');
+        const candidateDisplay = [
+          String(job?.candidate_display_name || job?.display_name || recipient?.display_name || '').trim(),
+          String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()
+            ? `(${String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()})`
+            : ''
+        ].filter(Boolean).join(' ') || '(unknown)';
+
+        lines.push('Payment Notice');
+        if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
+        if (payoutScheduledDate) lines.push(`Scheduled payment date: ${payoutScheduledDate}`);
+        lines.push(`Pay batch: ${payBatchId}`);
+        lines.push(`Scope: ${scope}`);
+        lines.push(`Candidate: ${candidateDisplay}`);
+        lines.push('');
+
+        const items = Array.isArray(job?.items) ? job.items : [];
+        if (items.length) {
+          lines.push('Items');
+          for (const item of items) {
+            const label = String(
+              item?.label ??
+              item?.title ??
+              item?.kind ??
+              item?.type ??
+              item?.item_type ??
+              'Payment item'
+            ).trim();
+
+            const amountVal =
+              item?.amount ??
+              item?.total ??
+              item?.value ??
+              item?.scheduled_amount ??
+              item?.payment_amount ??
+              null;
+            const amountNum = asNum(amountVal);
+
+            const commentText = String(
+              item?.adjustment_comment ??
+              item?.comment ??
+              item?.note ??
+              ''
+            ).trim();
+
+            const scheduleText = stringifyPayoutSchedule(
+              item?.repayment_arrangement ??
+              item?.repayment_schedule ??
+              item?.schedule ??
+              job?.repayment_arrangement ??
+              job?.repayment_schedule
+            );
+
+            const lineMain = `${label}${amountNum != null ? ` — £${asMoney(amountNum)}` : ''}`;
+            lines.push(lineMain);
+            if (commentText) lines.push(`Comment: ${commentText}`);
+            if (scheduleText) lines.push(`Repayment arrangement: ${scheduleText}`);
+            lines.push('');
+          }
+        } else {
+          const bodyLines = Array.isArray(job?.body_lines) ? job.body_lines : [];
+          if (bodyLines.length) {
+            pushPayoutBodyLines(lines, bodyLines);
+            lines.push('');
+          } else {
+            const rootScheduleText = stringifyPayoutSchedule(job?.repayment_arrangement ?? job?.repayment_schedule);
+            const rootCommentText = String(job?.adjustment_comment ?? job?.comment ?? '').trim();
+
+            if (rootCommentText) {
+              lines.push(`Comment: ${rootCommentText}`);
+            }
+            if (rootScheduleText) {
+              lines.push(`Repayment arrangement: ${rootScheduleText}`);
+            }
+            lines.push('');
+          }
         }
 
-        const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
-        for (const c of candidates) {
-          const dn = (c?.display_name && String(c.display_name).trim()) ? String(c.display_name).trim() : '';
-          const tr = (c?.tms_ref && String(c.tms_ref).trim()) ? String(c.tms_ref).trim() : '';
-          const candidateDisplay = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ') || '(unknown)';
+        lines.push('This payment notice was generated from frozen pay batch artifacts in CloudTMS.');
+      } else {
+        lines.push('Remittance Advice');
+        if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
+        if (payDate) lines.push(`Pay date: ${payDate}`);
+        lines.push(`Pay batch: ${payBatchId}`);
+        lines.push(`Scope: ${scope}`);
+        lines.push('');
 
-          const timesheets = Array.isArray(c?.timesheets) ? c.timesheets : [];
+        if (isUmbrellaJob) {
+          const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
+          if (umbName) {
+            lines.push(`Umbrella: ${umbName}`);
+            lines.push('');
+          }
+
+          const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
+          for (const c of candidates) {
+            const dn = (c?.display_name && String(c.display_name).trim()) ? String(c.display_name).trim() : '';
+            const tr = (c?.tms_ref && String(c.tms_ref).trim()) ? String(c.tms_ref).trim() : '';
+            const candidateDisplay = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ') || '(unknown)';
+
+            const timesheets = Array.isArray(c?.timesheets) ? c.timesheets : [];
+            for (const ts of timesheets) {
+              const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
+              renderTimesheetSection(lines, {
+                candidateDisplay,
+                clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
+                weekEnding,
+                jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
+                band: (ts?.band != null) ? String(ts.band) : '',
+                timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
+                renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
+                detailed,
+                unit_rows: ts?.unit_rows,
+                additional_units_rows: ts?.additional_units_rows,
+                expenses_rows: ts?.expenses_rows,
+                other_rows: ts?.other_rows,
+                totals: ts?.totals,
+                schedule_rows: ts?.schedule_rows,
+                schedule_changes: ts?.schedule_changes
+              });
+            }
+          }
+        } else {
+          const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
+          const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
+          const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
+
+          if (isPayeJob) {
+            const adv = (job && typeof job.paye_net_advisory === 'object' && job.paye_net_advisory) ? job.paye_net_advisory : null;
+
+            const originalNet = asNum(adv?.original_net_input);
+            const loanTaken = asNum(adv?.loan_repayment_taken);
+            const overpayTaken = asNum(adv?.overpayment_recovery_taken);
+            const finalNetPaid = asNum(adv?.final_net_paid);
+
+            const hasLoan = (loanTaken != null && loanTaken > 1e-9);
+            const hasOverpay = (overpayTaken != null && overpayTaken > 1e-9);
+
+            const dedTotal = Number(loanTaken || 0) + Number(overpayTaken || 0);
+            const hasAnyDeduction = (dedTotal > 1e-9);
+            const netMissing = (originalNet == null);
+
+            if (adv && (hasAnyDeduction || netMissing)) {
+              lines.push('PAYE net summary');
+
+              if (netMissing) {
+                lines.push('PAYE net not provided\t(advisory — final paid cannot be confirmed until net is entered)');
+              }
+
+              if (originalNet != null) lines.push(`Original PAYE net\t£${asMoney(originalNet) ?? ''}`);
+              else lines.push('Original PAYE net\t(not provided)');
+
+              if (hasLoan) lines.push(`Loan repayment\t-£${asMoney(loanTaken) ?? ''}`);
+              if (hasOverpay) lines.push(`Overpayment recovery\t-£${asMoney(overpayTaken) ?? ''}`);
+
+              if (originalNet != null && hasAnyDeduction) {
+                const computedFinal = Number(originalNet) - Number(dedTotal || 0);
+                lines.push(`Final paid\t£${asMoney(originalNet) ?? ''} − £${asMoney(dedTotal) ?? ''} = £${asMoney(computedFinal) ?? ''}`);
+              } else if (finalNetPaid != null) {
+                lines.push(`Final paid\t£${asMoney(finalNetPaid) ?? ''}`);
+              } else if (originalNet != null) {
+                lines.push(`Final paid\t£${asMoney(originalNet) ?? ''}`);
+              } else {
+                lines.push('Final paid\t(unknown — PAYE net not provided)');
+              }
+
+              lines.push('');
+            }
+          }
+
+          const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
           for (const ts of timesheets) {
             const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
             renderTimesheetSection(lines, {
@@ -11340,116 +11470,138 @@ async function sendPayBatchRemittancesInternal(env, opts) {
             });
           }
         }
-      } else {
-        const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
-        const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
-        const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
 
-        if (isPayeJob) {
-          const adv = (job && typeof job.paye_net_advisory === 'object' && job.paye_net_advisory) ? job.paye_net_advisory : null;
-
-          const originalNet = asNum(adv?.original_net_input);
-          const loanTaken = asNum(adv?.loan_repayment_taken);
-          const overpayTaken = asNum(adv?.overpayment_recovery_taken);
-          const finalNetPaid = asNum(adv?.final_net_paid);
-
-          const hasLoan = (loanTaken != null && loanTaken > 1e-9);
-          const hasOverpay = (overpayTaken != null && overpayTaken > 1e-9);
-
-          const dedTotal = Number(loanTaken || 0) + Number(overpayTaken || 0);
-          const hasAnyDeduction = (dedTotal > 1e-9);
-          const netMissing = (originalNet == null);
-
-          if (adv && (hasAnyDeduction || netMissing)) {
-            lines.push('PAYE net summary');
-
-            if (netMissing) {
-              lines.push('PAYE net not provided\t(advisory — final paid cannot be confirmed until net is entered)');
-            }
-
-            if (originalNet != null) lines.push(`Original PAYE net\t£${asMoney(originalNet) ?? ''}`);
-            else lines.push('Original PAYE net\t(not provided)');
-
-            if (hasLoan) lines.push(`Loan repayment\t-£${asMoney(loanTaken) ?? ''}`);
-            if (hasOverpay) lines.push(`Overpayment recovery\t-£${asMoney(overpayTaken) ?? ''}`);
-
-            if (originalNet != null && hasAnyDeduction) {
-              const computedFinal = Number(originalNet) - Number(dedTotal || 0);
-              lines.push(`Final paid\t£${asMoney(originalNet) ?? ''} − £${asMoney(dedTotal) ?? ''} = £${asMoney(computedFinal) ?? ''}`);
-            } else if (finalNetPaid != null) {
-              lines.push(`Final paid\t£${asMoney(finalNetPaid) ?? ''}`);
-            } else if (originalNet != null) {
-              lines.push(`Final paid\t£${asMoney(originalNet) ?? ''}`);
-            } else {
-              lines.push('Final paid\t(unknown — PAYE net not provided)');
-            }
-
-            lines.push('');
-          }
-        }
-
-        const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
-        for (const ts of timesheets) {
-          const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
-          renderTimesheetSection(lines, {
-            candidateDisplay,
-            clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
-            weekEnding,
-            jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
-            band: (ts?.band != null) ? String(ts.band) : '',
-            timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
-            renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
-            detailed,
-            unit_rows: ts?.unit_rows,
-            additional_units_rows: ts?.additional_units_rows,
-            expenses_rows: ts?.expenses_rows,
-            other_rows: ts?.other_rows,
-            totals: ts?.totals,
-            schedule_rows: ts?.schedule_rows,
-            schedule_changes: ts?.schedule_changes
-          });
-        }
+        lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
       }
 
-      lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
-    }
+      if (footerMsg) {
+        lines.push('');
+        lines.push(footerMsg);
+      }
 
-    if (footerMsg) {
-      lines.push('');
-      lines.push(footerMsg);
-    }
+      const bodyText = lines.join('\n');
+      const bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
 
-    const bodyText = lines.join('\n');
-    const bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
+      const payeeEntityKind = isPayoutNotice
+        ? 'CANDIDATE'
+        : ((recipient?.entity_kind && String(recipient.entity_kind).trim())
+            ? String(recipient.entity_kind).trim()
+            : (isUmbrellaJob ? 'UMBRELLA' : 'CANDIDATE'));
 
-    const payeeEntityKind = isPayoutNoticeBatch
-      ? 'CANDIDATE'
-      : ((recipient?.entity_kind && String(recipient.entity_kind).trim())
-          ? String(recipient.entity_kind).trim()
-          : (isUmbrellaJob ? 'UMBRELLA' : 'CANDIDATE'));
+      const payeeEntityId = isPayoutNotice
+        ? (candidateIdFromJob || null)
+        : (isUmbrellaJob ? (recipient?.umbrella_id ?? null) : (recipient?.candidate_id ?? null));
 
-    const payeeEntityId = isPayoutNoticeBatch
-      ? (candidateIdFromJob || null)
-      : (isUmbrellaJob ? (recipient?.umbrella_id ?? null) : (recipient?.candidate_id ?? null));
+      const payeeEntityIdText = (payeeEntityId != null) ? String(payeeEntityId).trim() : 'UNKNOWN';
+      const referencePrefix = isPayoutNotice ? 'payout_notice' : 'remit';
+      const reference = `${referencePrefix}:pay_batch:${payBatchId}:${jobKindRaw || commKind}:${payeeEntityKind}:${payeeEntityIdText}`;
 
-    const payeeEntityIdText = (payeeEntityId != null) ? String(payeeEntityId).trim() : 'UNKNOWN';
-    const referencePrefix = isPayoutNoticeBatch ? 'payout_notice' : 'remit';
-    const reference = `${referencePrefix}:pay_batch:${payBatchId}:${jobKindRaw || messageKind}:${payeeEntityKind}:${payeeEntityIdText}`;
+      try {
+        const qType = encodeURIComponent('REMITTANCE');
+        const qTo = encodeURIComponent(toEmail);
+        const qRef = encodeURIComponent(reference);
 
-    try {
-      const qType = encodeURIComponent('REMITTANCE');
-      const qTo = encodeURIComponent(toEmail);
-      const qRef = encodeURIComponent(reference);
+        const { rows: existing } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=id,status,created_at_utc&type=eq.${qType}&to=eq.${qTo}&reference=eq.${qRef}&limit=1`
+        );
 
-      const { rows: existing } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=id,status,created_at_utc&type=eq.${qType}&to=eq.${qTo}&reference=eq.${qRef}&limit=1`
-      );
-
-      if (Array.isArray(existing) && existing.length > 0) {
-        const ex0 = existing[0] || {};
+        if (Array.isArray(existing) && existing.length > 0) {
+          const ex0 = existing[0] || {};
+          skipped.push({
+            comm_kind: commKind,
+            job_kind: jobKindRaw || commKind,
+            payee_entity_kind: payeeEntityKind,
+            payee_entity_id: payeeEntityIdText,
+            candidate_id: candidateIdFromJob || null,
+            umbrella_id: umbrellaIdFromJob || null,
+            to: toEmail,
+            intended_to: intendedToEmail,
+            subject,
+            reference,
+            reason: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
+            trigger_status: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
+            existing_mail_outbox_id: ex0.id ? String(ex0.id) : null,
+            existing_status: ex0.status ? String(ex0.status) : null
+          });
+          continue;
+        }
+      } catch (e) {
         skipped.push({
-          job_kind: jobKindRaw || messageKind,
+          comm_kind: commKind,
+          job_kind: jobKindRaw || commKind,
+          payee_entity_kind: payeeEntityKind,
+          payee_entity_id: payeeEntityIdText,
+          candidate_id: candidateIdFromJob || null,
+          umbrella_id: umbrellaIdFromJob || null,
+          to: toEmail,
+          intended_to: intendedToEmail,
+          reason: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
+          trigger_status: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
+          error: String(e?.message || e || 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED').slice(0, 500)
+        });
+        continue;
+      }
+
+      const recipientKindLower = (String(payeeEntityKind || '').trim().toUpperCase() === 'UMBRELLA') ? 'umbrella' : 'candidate';
+      const contextId = isUuid(payBatchId) ? payBatchId : null;
+
+      const outboxRow = {
+        type: 'REMITTANCE',
+        to: toEmail,
+        cc: null,
+        bcc: null,
+        reply_to: null,
+        importance: 'Normal',
+        email_type: 'html',
+        subject,
+        body_text: bodyText,
+        body_html: bodyHtml,
+        attachments: null,
+        status: 'QUEUED',
+        reference,
+        created_by: actorUserId || null,
+        created_at_utc: nowIso,
+        recipient_kind: recipientKindLower,
+        recipient_id: (payeeEntityId != null && isUuid(payeeEntityIdText)) ? payeeEntityIdText : null,
+        context_kind: 'pay_batches',
+        context_id: contextId,
+        mailshot_run_id: null,
+        document_template_id: null
+      };
+
+      try {
+        const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify(outboxRow)
+        });
+
+        if (!ins.ok) {
+          const errTxt = await ins.text().catch(() => '');
+          skipped.push({
+            comm_kind: commKind,
+            job_kind: jobKindRaw || commKind,
+            payee_entity_kind: payeeEntityKind,
+            payee_entity_id: payeeEntityIdText,
+            candidate_id: candidateIdFromJob || null,
+            umbrella_id: umbrellaIdFromJob || null,
+            to: toEmail,
+            intended_to: intendedToEmail,
+            reason: 'MAIL_OUTBOX_INSERT_FAILED',
+            trigger_status: 'MAIL_OUTBOX_INSERT_FAILED',
+            error: (errTxt || '').slice(0, 500)
+          });
+          continue;
+        }
+
+        const insJson = await ins.json().catch(() => []);
+        const mail = Array.isArray(insJson) ? insJson[0] : insJson;
+        const mailId = mail?.id ? String(mail.id) : null;
+
+        queued.push({
+          comm_kind: commKind,
+          job_kind: jobKindRaw || commKind,
           payee_entity_kind: payeeEntityKind,
           payee_entity_id: payeeEntityIdText,
           candidate_id: candidateIdFromJob || null,
@@ -11458,133 +11610,121 @@ async function sendPayBatchRemittancesInternal(env, opts) {
           intended_to: intendedToEmail,
           subject,
           reference,
-          reason: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
-          trigger_status: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
-          existing_mail_outbox_id: ex0.id ? String(ex0.id) : null,
-          existing_status: ex0.status ? String(ex0.status) : null
+          trigger_status: 'QUEUED_TO_MAIL_OUTBOX',
+          mail_outbox_id: mailId
         });
-        continue;
-      }
-    } catch (e) {
-      skipped.push({
-        job_kind: jobKindRaw || messageKind,
-        payee_entity_kind: payeeEntityKind,
-        payee_entity_id: payeeEntityIdText,
-        candidate_id: candidateIdFromJob || null,
-        umbrella_id: umbrellaIdFromJob || null,
-        to: toEmail,
-        intended_to: intendedToEmail,
-        reason: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
-        trigger_status: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
-        error: String(e?.message || e || 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED').slice(0, 500)
-      });
-      continue;
-    }
-
-    const recipientKindLower = (String(payeeEntityKind || '').trim().toUpperCase() === 'UMBRELLA') ? 'umbrella' : 'candidate';
-    const contextId = isUuid(payBatchId) ? payBatchId : null;
-
-    const outboxRow = {
-      type: 'REMITTANCE',
-      to: toEmail,
-      cc: null,
-      bcc: null,
-      reply_to: null,
-      importance: 'Normal',
-      email_type: 'html',
-      subject,
-      body_text: bodyText,
-      body_html: bodyHtml,
-      attachments: null,
-      status: 'QUEUED',
-      reference,
-      created_by: actorUserId || null,
-      created_at_utc: nowIso,
-      recipient_kind: recipientKindLower,
-      recipient_id: (payeeEntityId != null && isUuid(payeeEntityIdText)) ? payeeEntityIdText : null,
-      context_kind: 'pay_batches',
-      context_id: contextId,
-      mailshot_run_id: null,
-      document_template_id: null
-    };
-
-    try {
-      const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
-        body: JSON.stringify(outboxRow)
-      });
-
-      if (!ins.ok) {
-        const errTxt = await ins.text().catch(() => '');
+      } catch (e) {
         skipped.push({
-          job_kind: jobKindRaw || messageKind,
+          comm_kind: commKind,
+          job_kind: jobKindRaw || commKind,
           payee_entity_kind: payeeEntityKind,
           payee_entity_id: payeeEntityIdText,
           candidate_id: candidateIdFromJob || null,
           umbrella_id: umbrellaIdFromJob || null,
           to: toEmail,
           intended_to: intendedToEmail,
-          reason: 'MAIL_OUTBOX_INSERT_FAILED',
-          trigger_status: 'MAIL_OUTBOX_INSERT_FAILED',
-          error: (errTxt || '').slice(0, 500)
+          reason: 'MAIL_OUTBOX_EXCEPTION',
+          trigger_status: 'MAIL_OUTBOX_EXCEPTION',
+          error: String(e?.message || e || 'MAIL_OUTBOX_EXCEPTION').slice(0, 500)
         });
         continue;
       }
-
-      const insJson = await ins.json().catch(() => []);
-      const mail = Array.isArray(insJson) ? insJson[0] : insJson;
-      const mailId = mail?.id ? String(mail.id) : null;
-
-      queued.push({
-        job_kind: jobKindRaw || messageKind,
-        payee_entity_kind: payeeEntityKind,
-        payee_entity_id: payeeEntityIdText,
-        candidate_id: candidateIdFromJob || null,
-        umbrella_id: umbrellaIdFromJob || null,
-        to: toEmail,
-        intended_to: intendedToEmail,
-        subject,
-        reference,
-        trigger_status: 'QUEUED_TO_MAIL_OUTBOX',
-        mail_outbox_id: mailId
-      });
-    } catch (e) {
-      skipped.push({
-        job_kind: jobKindRaw || messageKind,
-        payee_entity_kind: payeeEntityKind,
-        payee_entity_id: payeeEntityIdText,
-        candidate_id: candidateIdFromJob || null,
-        umbrella_id: umbrellaIdFromJob || null,
-        to: toEmail,
-        intended_to: intendedToEmail,
-        reason: 'MAIL_OUTBOX_EXCEPTION',
-        trigger_status: 'MAIL_OUTBOX_EXCEPTION',
-        error: String(e?.message || e || 'MAIL_OUTBOX_EXCEPTION').slice(0, 500)
-      });
-      continue;
     }
-  }
 
-  if ((queued.length || skipped.length) && typeof sbRpc === 'function') {
+    return {
+      ok: true,
+      pay_batch_id: payBatchId,
+      scope,
+      message_kind: commKind,
+      trigger_status: String(helperRes?.trigger_status || '').trim() || (queued.length ? 'QUEUED_TO_MAIL_OUTBOX' : 'NO_QUEUEABLE_JOB'),
+      error: null,
+      pay_date: payDate,
+      authoritative_payment_date: authoritativePaymentDate,
+      bulk_reference: bulkRef,
+      payroll_testing: payrollTesting,
+      test_recipient: testTo,
+      queued_count: queued.length,
+      skipped_count: skipped.length,
+      queued,
+      skipped
+    };
+  };
+
+  const remittanceResult = await processHelperResult('REMITTANCE', remittanceHelperRes);
+  const payoutNoticeResult = await processHelperResult('PAYOUT_NOTICE', payoutNoticeHelperRes);
+
+  const hasRemittanceChannel =
+    (remittanceResult.queued_count > 0)
+    || (remittanceResult.skipped_count > 0)
+    || (String(remittanceHelperRes?.trigger_status || '').trim().length > 0);
+
+  const hasPayoutNoticeChannel =
+    (payoutNoticeResult.queued_count > 0)
+    || (payoutNoticeResult.skipped_count > 0)
+    || (String(payoutNoticeHelperRes?.trigger_status || '').trim().length > 0);
+
+  const communicationMode =
+    hasRemittanceChannel && hasPayoutNoticeChannel
+      ? 'MIXED'
+      : hasPayoutNoticeChannel
+        ? 'PAYOUT_NOTICE'
+        : hasRemittanceChannel
+          ? 'REMITTANCE'
+          : 'NONE';
+
+  const combinedQueued = [
+    ...(Array.isArray(remittanceResult.queued) ? remittanceResult.queued : []),
+    ...(Array.isArray(payoutNoticeResult.queued) ? payoutNoticeResult.queued : [])
+  ];
+
+  const combinedSkipped = [
+    ...(Array.isArray(remittanceResult.skipped) ? remittanceResult.skipped : []),
+    ...(Array.isArray(payoutNoticeResult.skipped) ? payoutNoticeResult.skipped : [])
+  ];
+
+  const combinedTriggerStatus = (() => {
+    const parts = [];
+    const remStatus = String(remittanceResult?.trigger_status || '').trim();
+    const pnStatus = String(payoutNoticeResult?.trigger_status || '').trim();
+    if (remStatus) parts.push(`REMITTANCE:${remStatus}`);
+    if (pnStatus) parts.push(`PAYOUT_NOTICE:${pnStatus}`);
+    return parts.join('|') || (combinedQueued.length ? 'QUEUED_TO_MAIL_OUTBOX' : 'NO_QUEUEABLE_JOB');
+  })();
+
+  const combinedPayDate =
+    remittanceResult?.pay_date
+      ? remittanceResult.pay_date
+      : (payoutNoticeResult?.pay_date || null);
+
+  const combinedAuthoritativePaymentDate =
+    remittanceResult?.authoritative_payment_date
+      ? remittanceResult.authoritative_payment_date
+      : (payoutNoticeResult?.authoritative_payment_date || null);
+
+  const combinedBulkReference =
+    remittanceResult?.bulk_reference
+      ? remittanceResult.bulk_reference
+      : (payoutNoticeResult?.bulk_reference || null);
+
+  if ((combinedQueued.length || combinedSkipped.length) && typeof sbRpc === 'function') {
     try {
       await sbRpc(env, 'pay_remittance_mark_sent', {
         p_pay_batch_id: payBatchId,
         p_scope: scope,
         p_results_json: {
-          message_kind: messageKind,
-          queued,
-          skipped,
-          pay_date: payDate,
-          authoritative_payment_date: authoritativePaymentDate,
-          bulk_reference: bulkRef,
+          communication_mode: communicationMode,
+          remittance_result: remittanceResult,
+          payout_notice_result: payoutNoticeResult,
+          pay_date: combinedPayDate,
+          authoritative_payment_date: combinedAuthoritativePaymentDate,
+          bulk_reference: combinedBulkReference,
           payroll_testing: payrollTesting,
           test_recipient: testTo
         },
         p_actor_user_id: actorUserId
       });
     } catch (e) {
-      console.warn('[banking][remittances] pay_remittance_mark_sent failed:', e?.message || e);
+      console.warn('[banking][communications] pay_remittance_mark_sent failed:', e?.message || e);
     }
   }
 
@@ -11592,18 +11732,20 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     ok: true,
     pay_batch_id: payBatchId,
     scope,
-    message_kind: messageKind,
-    trigger_status: String(helperRes?.trigger_status || '').trim() || (queued.length ? 'QUEUED_TO_MAIL_OUTBOX' : 'NO_QUEUEABLE_JOB'),
+    communication_mode: communicationMode,
+    trigger_status: combinedTriggerStatus,
     error: null,
-    pay_date: payDate,
-    authoritative_payment_date: authoritativePaymentDate,
-    bulk_reference: bulkRef,
+    pay_date: combinedPayDate,
+    authoritative_payment_date: combinedAuthoritativePaymentDate,
+    bulk_reference: combinedBulkReference,
     payroll_testing: payrollTesting,
     test_recipient: testTo,
-    queued_count: queued.length,
-    skipped_count: skipped.length,
-    queued,
-    skipped
+    queued_count: combinedQueued.length,
+    skipped_count: combinedSkipped.length,
+    queued: combinedQueued,
+    skipped: combinedSkipped,
+    remittance_result: remittanceResult,
+    payout_notice_result: payoutNoticeResult
   };
 }
 
@@ -14775,6 +14917,43 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     };
   };
 
+  const buildCommunicationsSummary = (res) => {
+    const communicationMode = String(res?.communication_mode || 'NONE').trim().toUpperCase() || 'NONE';
+
+    const remittanceResult = (res && typeof res === 'object' && res.remittance_result && typeof res.remittance_result === 'object')
+      ? res.remittance_result
+      : null;
+
+    const payoutNoticeResult = (res && typeof res === 'object' && res.payout_notice_result && typeof res.payout_notice_result === 'object')
+      ? res.payout_notice_result
+      : null;
+
+    const remittanceQueuedCount = Number(remittanceResult?.queued_count || 0);
+    const remittanceSkippedCount = Number(remittanceResult?.skipped_count || 0);
+    const payoutNoticeQueuedCount = Number(payoutNoticeResult?.queued_count || 0);
+    const payoutNoticeSkippedCount = Number(payoutNoticeResult?.skipped_count || 0);
+
+    const queuedCount = Number(res?.queued_count || (remittanceQueuedCount + payoutNoticeQueuedCount) || 0);
+    const skippedCount = Number(res?.skipped_count || (remittanceSkippedCount + payoutNoticeSkippedCount) || 0);
+
+    return {
+      communication_mode: communicationMode,
+      sent_or_queued: queuedCount > 0,
+      queued_count: queuedCount,
+      skipped_count: skippedCount,
+      remittances: {
+        trigger_status: String(remittanceResult?.trigger_status || '').trim() || null,
+        queued_count: remittanceQueuedCount,
+        skipped_count: remittanceSkippedCount
+      },
+      payout_notices: {
+        trigger_status: String(payoutNoticeResult?.trigger_status || '').trim() || null,
+        queued_count: payoutNoticeQueuedCount,
+        skipped_count: payoutNoticeSkippedCount
+      }
+    };
+  };
+
   try {
     let gateGet0;
     try {
@@ -14853,8 +15032,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
     const providerRaw = String(batchObj?.rail_provider_snapshot || 'CSV').trim().toUpperCase();
     const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
-    const batchKindFixed = String(batchObj?.batch_kind_fixed || '').trim().toUpperCase();
-    const messageKindForBatch = (batchKindFixed === 'LOANS') ? 'PAYOUT_NOTICE' : 'REMITTANCE';
     const adapter = getRailAdapter(provider);
 
     if (!adapter) {
@@ -14938,9 +15115,30 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       attempted: false,
       sent_or_queued: false,
       trigger_status: scheduleAttempted ? 'NOT_YET_AUTHORISED' : 'SCHEDULING_NOT_APPLICABLE',
-      message_kind: messageKindForBatch,
+      communication_mode: 'NONE',
+      message_kind: null,
       error: null,
       scope: payChannelScope,
+      queued_count: 0,
+      skipped_count: 0,
+      remittance_result: null,
+      payout_notice_result: null,
+      communications_summary: {
+        communication_mode: 'NONE',
+        sent_or_queued: false,
+        queued_count: 0,
+        skipped_count: 0,
+        remittances: {
+          trigger_status: null,
+          queued_count: 0,
+          skipped_count: 0
+        },
+        payout_notices: {
+          trigger_status: null,
+          queued_count: 0,
+          skipped_count: 0
+        }
+      },
       result: null
     };
 
@@ -14961,15 +15159,28 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
         const sendTriggerStatus = String(sendResult?.trigger_status || '').trim();
         const queuedCount = Number(sendResult?.queued_count || 0);
+        const skippedCount = Number(sendResult?.skipped_count || 0);
         const sentOrQueued = Number.isFinite(queuedCount) && queuedCount > 0;
+        const communicationMode = String(sendResult?.communication_mode || 'NONE').trim().toUpperCase() || 'NONE';
+        const communicationsSummary = buildCommunicationsSummary(sendResult);
 
         workerCommunications = {
           attempted: true,
           sent_or_queued: sentOrQueued,
           trigger_status: sendTriggerStatus || 'COMMIT_STAGE_SEND_COMPLETED',
-          message_kind: String(sendResult?.message_kind || messageKindForBatch).trim().toUpperCase() || messageKindForBatch,
+          communication_mode: communicationMode,
+          message_kind: null,
           error: null,
           scope: payChannelScope,
+          queued_count: queuedCount,
+          skipped_count: skippedCount,
+          remittance_result: (sendResult && typeof sendResult === 'object' && sendResult.remittance_result && typeof sendResult.remittance_result === 'object')
+            ? sendResult.remittance_result
+            : null,
+          payout_notice_result: (sendResult && typeof sendResult === 'object' && sendResult.payout_notice_result && typeof sendResult.payout_notice_result === 'object')
+            ? sendResult.payout_notice_result
+            : null,
+          communications_summary: communicationsSummary,
           result: sendResult
         };
       } catch (e) {
@@ -14977,9 +15188,30 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
           attempted: true,
           sent_or_queued: false,
           trigger_status: 'COMMIT_STAGE_SEND_ERROR',
-          message_kind: messageKindForBatch,
+          communication_mode: 'NONE',
+          message_kind: null,
           error: String(e?.message || e || 'COMMIT_STAGE_SEND_ERROR'),
           scope: payChannelScope,
+          queued_count: 0,
+          skipped_count: 0,
+          remittance_result: null,
+          payout_notice_result: null,
+          communications_summary: {
+            communication_mode: 'NONE',
+            sent_or_queued: false,
+            queued_count: 0,
+            skipped_count: 0,
+            remittances: {
+              trigger_status: null,
+              queued_count: 0,
+              skipped_count: 0
+            },
+            payout_notices: {
+              trigger_status: null,
+              queued_count: 0,
+              skipped_count: 0
+            }
+          },
           result: null
         };
       }
@@ -15002,6 +15234,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       scheduled: scheduledOut,
       schedule_attempted: scheduleAttempted,
       remittances: workerCommunications,
+      communications: workerCommunications,
       worker_communications: workerCommunications,
       batch_get: afterGet
     }));
