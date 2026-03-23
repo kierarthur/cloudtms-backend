@@ -2848,6 +2848,8 @@ begin;
 --   - NULL => snooze forever
 --   - date => snoozed until that date (inclusive)
 -- =========================================================
+
+
 CREATE OR REPLACE FUNCTION public.pay_snooze_upsert(
   p_candidate_id uuid,
   p_timesheet_id uuid,
@@ -2892,6 +2894,20 @@ DECLARE
   v_finance_case_id uuid := NULL;
   v_event_type text := NULL;
   v_conflict_snooze_id uuid := NULL;
+
+  v_finance_case_record public.pay_advances%rowtype;
+  v_requested_week_start_date date := NULL;
+  v_target_week_start date := NULL;
+  v_next_due_week_start_before_snooze_date date := NULL;
+  v_next_due_week_start_after_snooze_date date := NULL;
+
+  v_schedule_rebase_result jsonb := NULL;
+  v_schedule_before_snooze_json jsonb := NULL;
+  v_next_due_week_start_before_snooze text := NULL;
+  v_requested_week_start text := NULL;
+  v_schedule_after_snooze_json jsonb := NULL;
+  v_next_due_week_start_after_snooze text := NULL;
+  v_installment_count integer := NULL;
 BEGIN
   IF p_candidate_id IS NULL THEN
     RAISE EXCEPTION 'candidate_id is required';
@@ -3440,18 +3456,165 @@ BEGIN
     v_action := 'CREATED';
   END IF;
 
-  SELECT jsonb_build_object(
-           'id', s.id::text,
-           'candidate_id', s.candidate_id::text,
-           'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
-           'booking_id', s.booking_id,
-           'segment_id', s.segment_id,
-           'segment_stable_key', s.segment_stable_key,
-           'source_ref', s.source_ref,
-           'snooze_kind', s.snooze_kind,
-           'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
-           'note', s.note
-         )
+  IF v_finance_case_id IS NOT NULL
+     AND v_kind IN ('OVERPAYMENT_RECOVERY', 'PAYMENT_ADVANCE_REPAYMENT', 'MANUAL_DEBT_RECOVERY')
+     AND p_snooze_until_date IS NOT NULL
+  THEN
+    SELECT pa.*
+    INTO v_finance_case_record
+    FROM public.pay_advances AS pa
+    WHERE pa.id = v_finance_case_id
+    LIMIT 1
+    FOR UPDATE;
+
+    IF v_finance_case_record.id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+        'code', 'FINANCE_CASE_NOT_FOUND',
+        'message', '_pay_repayment_schedule_rebase_for_snooze: finance case not found',
+        'finance_case_id', v_finance_case_id::text
+      )::text;
+    END IF;
+
+    IF v_finance_case_record.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum THEN
+      v_schedule_before_snooze_json := coalesce(v_finance_case_record.schedule_json, '[]'::jsonb);
+      v_next_due_week_start_before_snooze_date := v_finance_case_record.next_due_week_start;
+      v_requested_week_start_date := public._pay_week_start_monday(p_snooze_until_date);
+
+      IF v_next_due_week_start_before_snooze_date IS NULL THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+          'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+          'code', 'NEXT_DUE_MISSING',
+          'message', '_pay_repayment_schedule_rebase_for_snooze: next_due_week_start is required on the finance case'
+        )::text;
+      END IF;
+
+      IF v_requested_week_start_date < v_next_due_week_start_before_snooze_date THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+          'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+          'code', 'SNOOZE_DATE_BEFORE_NEXT_DUE',
+          'message', '_pay_repayment_schedule_rebase_for_snooze: snooze_until_date cannot move the repayment schedule earlier than the current next due week',
+          'finance_case_id', v_finance_case_id::text,
+          'current_next_due_week_start', v_next_due_week_start_before_snooze_date::text,
+          'requested_week_start', v_requested_week_start_date::text
+        )::text;
+      END IF;
+
+      v_target_week_start := CASE
+        WHEN v_requested_week_start_date = v_next_due_week_start_before_snooze_date THEN (v_next_due_week_start_before_snooze_date + 7)
+        ELSE v_requested_week_start_date
+      END;
+
+      WITH schedule_rows AS (
+        SELECT
+          row_number() OVER (ORDER BY (elem.value ->> 'week_start')::date ASC, elem.ordinality ASC) AS seq_no,
+          round(coalesce((elem.value ->> 'amount')::numeric, 0), 2) AS amount_value
+        FROM jsonb_array_elements(v_schedule_before_snooze_json) WITH ORDINALITY AS elem(value, ordinality)
+        WHERE coalesce((elem.value ->> 'amount')::numeric, 0) < 0
+      )
+      SELECT
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+              'amount', sr.amount_value
+            )
+            ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+          ),
+          '[]'::jsonb
+        ),
+        count(*)::integer
+      INTO v_schedule_after_snooze_json, v_installment_count
+      FROM schedule_rows AS sr;
+
+      v_next_due_week_start_after_snooze_date := CASE
+        WHEN v_installment_count > 0 THEN v_target_week_start
+        ELSE NULL
+      END;
+
+      UPDATE public.pay_advances AS pa
+      SET schedule_json = v_schedule_after_snooze_json,
+          next_due_week_start = v_next_due_week_start_after_snooze_date,
+          updated_at = now()
+      WHERE pa.id = v_finance_case_id;
+
+      v_schedule_rebase_result := jsonb_build_object(
+        'ok', true,
+        'finance_case_id', v_finance_case_id::text,
+        'schedule_before_snooze_json', v_schedule_before_snooze_json,
+        'next_due_week_start_before_snooze', CASE WHEN v_next_due_week_start_before_snooze_date IS NULL THEN NULL ELSE v_next_due_week_start_before_snooze_date::text END,
+        'requested_week_start', CASE WHEN v_requested_week_start_date IS NULL THEN NULL ELSE v_requested_week_start_date::text END,
+        'schedule_after_snooze_json', v_schedule_after_snooze_json,
+        'next_due_week_start_after_snooze', CASE WHEN v_next_due_week_start_after_snooze_date IS NULL THEN NULL ELSE v_next_due_week_start_after_snooze_date::text END,
+        'installment_count', v_installment_count
+      );
+    ELSE
+      v_schedule_rebase_result := public._pay_repayment_schedule_rebase_for_snooze(
+        v_finance_case_id,
+        p_snooze_until_date
+      );
+    END IF;
+
+    v_schedule_before_snooze_json := v_schedule_rebase_result -> 'schedule_before_snooze_json';
+    v_next_due_week_start_before_snooze_date := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_rebase_result ->> 'next_due_week_start_before_snooze', '')), '') IS NULL THEN NULL
+      ELSE (v_schedule_rebase_result ->> 'next_due_week_start_before_snooze')::date
+    END;
+    v_next_due_week_start_before_snooze := CASE
+      WHEN v_next_due_week_start_before_snooze_date IS NULL THEN NULL
+      ELSE v_next_due_week_start_before_snooze_date::text
+    END;
+    v_requested_week_start_date := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_rebase_result ->> 'requested_week_start', '')), '') IS NULL THEN NULL
+      ELSE (v_schedule_rebase_result ->> 'requested_week_start')::date
+    END;
+    v_requested_week_start := CASE
+      WHEN v_requested_week_start_date IS NULL THEN NULL
+      ELSE v_requested_week_start_date::text
+    END;
+    v_schedule_after_snooze_json := v_schedule_rebase_result -> 'schedule_after_snooze_json';
+    v_next_due_week_start_after_snooze_date := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_rebase_result ->> 'next_due_week_start_after_snooze', '')), '') IS NULL THEN NULL
+      ELSE (v_schedule_rebase_result ->> 'next_due_week_start_after_snooze')::date
+    END;
+    v_next_due_week_start_after_snooze := CASE
+      WHEN v_next_due_week_start_after_snooze_date IS NULL THEN NULL
+      ELSE v_next_due_week_start_after_snooze_date::text
+    END;
+    v_installment_count := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_rebase_result ->> 'installment_count', '')), '') ~ '^-?[0-9]+$'
+      THEN (v_schedule_rebase_result ->> 'installment_count')::integer
+      ELSE NULL
+    END;
+
+    UPDATE public.pay_item_snoozes AS s
+    SET schedule_before_snooze_json = v_schedule_before_snooze_json,
+        next_due_week_start_before_snooze = v_next_due_week_start_before_snooze_date,
+        schedule_after_snooze_json = v_schedule_after_snooze_json,
+        next_due_week_start_after_snooze = v_next_due_week_start_after_snooze_date,
+        updated_at_utc = now(),
+        updated_by_user_id = p_actor_user_id
+    WHERE s.id = v_keeper_id;
+  END IF;
+
+  SELECT
+    jsonb_build_object(
+      'id', s.id::text,
+      'candidate_id', s.candidate_id::text,
+      'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+      'booking_id', s.booking_id,
+      'segment_id', s.segment_id,
+      'segment_stable_key', s.segment_stable_key,
+      'source_ref', s.source_ref,
+      'snooze_kind', s.snooze_kind,
+      'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
+      'note', s.note
+    )
+    ||
+    CASE
+      WHEN v_schedule_rebase_result IS NULL THEN '{}'::jsonb
+      ELSE jsonb_build_object('schedule_rebase_result', v_schedule_rebase_result)
+    END
   INTO v_after
   FROM public.pay_item_snoozes s
   WHERE s.id = v_keeper_id;
@@ -3514,30 +3677,36 @@ BEGIN
     );
   END IF;
 
-  RETURN jsonb_build_object(
-    'ok', true,
-    'action', v_action,
-    'id', v_keeper_id::text,
-    'candidate_id', p_candidate_id::text,
-    'timesheet_id', CASE WHEN v_effective_timesheet_id IS NULL THEN NULL ELSE v_effective_timesheet_id::text END,
-    'booking_id', v_booking_id,
-    'segment_id', v_effective_segment_id,
-    'segment_stable_key', v_segment_stable_key,
-    'source_ref', v_source_ref,
-    'finance_case_id', CASE WHEN v_finance_case_id IS NULL THEN NULL ELSE v_finance_case_id::text END,
-    'snooze_kind', v_kind,
-    'snooze_until_date', CASE WHEN p_snooze_until_date IS NULL THEN NULL ELSE p_snooze_until_date::text END,
-    'snooze_is_indefinite', (p_snooze_until_date IS NULL),
-    'note', v_note
-  );
+  RETURN
+    jsonb_build_object(
+      'ok', true,
+      'action', v_action,
+      'id', v_keeper_id::text,
+      'candidate_id', p_candidate_id::text,
+      'timesheet_id', CASE WHEN v_effective_timesheet_id IS NULL THEN NULL ELSE v_effective_timesheet_id::text END,
+      'booking_id', v_booking_id,
+      'segment_id', v_effective_segment_id,
+      'segment_stable_key', v_segment_stable_key,
+      'source_ref', v_source_ref,
+      'finance_case_id', CASE WHEN v_finance_case_id IS NULL THEN NULL ELSE v_finance_case_id::text END,
+      'snooze_kind', v_kind,
+      'snooze_until_date', CASE WHEN p_snooze_until_date IS NULL THEN NULL ELSE p_snooze_until_date::text END,
+      'snooze_is_indefinite', (p_snooze_until_date IS NULL),
+      'note', v_note
+    )
+    ||
+    jsonb_build_object(
+      'schedule_before_snooze_json', v_schedule_before_snooze_json,
+      'next_due_week_start_before_snooze', v_next_due_week_start_before_snooze,
+      'requested_week_start', v_requested_week_start,
+      'schedule_after_snooze_json', v_schedule_after_snooze_json,
+      'next_due_week_start_after_snooze', v_next_due_week_start_after_snooze,
+      'installment_count', v_installment_count
+    );
 END;
 $$;
 
 
--- =========================================================
--- pay_snooze_clear
--- Clears (deactivates) a snooze by id (audit-safe; does not delete).
--- =========================================================
 CREATE OR REPLACE FUNCTION public.pay_snooze_clear(
   p_snooze_id uuid,
   p_actor_user_id uuid DEFAULT NULL
@@ -3552,6 +3721,23 @@ DECLARE
   v_before jsonb := NULL;
   v_after jsonb := NULL;
   v_finance_case_id uuid := NULL;
+
+  v_finance_case_record public.pay_advances%rowtype;
+  v_effective_from_date date := NULL;
+  v_requested_week_start_date date := NULL;
+  v_current_operating_week_start_date date := NULL;
+  v_target_week_start date := NULL;
+  v_next_due_week_start_before_restore_date date := NULL;
+  v_next_due_week_start_after_restore_date date := NULL;
+
+  v_schedule_restore_result jsonb := NULL;
+  v_schedule_before_restore_json jsonb := NULL;
+  v_next_due_week_start_before_restore text := NULL;
+  v_requested_week_start text := NULL;
+  v_current_operating_week_start text := NULL;
+  v_schedule_after_restore_json jsonb := NULL;
+  v_next_due_week_start_after_restore text := NULL;
+  v_installment_count integer := NULL;
 BEGIN
   IF p_snooze_id IS NULL THEN
     RAISE EXCEPTION 'snooze_id is required';
@@ -3612,17 +3798,156 @@ BEGIN
     updated_by_user_id = p_actor_user_id
   WHERE s.id = p_snooze_id;
 
-  SELECT jsonb_build_object(
-           'id', s.id::text,
-           'candidate_id', s.candidate_id::text,
-           'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
-           'segment_id', s.segment_id,
-           'source_ref', s.source_ref,
-           'snooze_kind', s.snooze_kind,
-           'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
-           'note', s.note,
-           'cleared_at_utc', s.cleared_at_utc
-         )
+  IF v_finance_case_id IS NOT NULL
+     AND upper(coalesce(v_row.snooze_kind, '')) IN ('OVERPAYMENT_RECOVERY', 'PAYMENT_ADVANCE_REPAYMENT', 'MANUAL_DEBT_RECOVERY')
+     AND v_row.snooze_until_date IS NOT NULL
+  THEN
+    v_effective_from_date := (now() AT TIME ZONE 'Europe/London')::date;
+
+    SELECT pa.*
+    INTO v_finance_case_record
+    FROM public.pay_advances AS pa
+    WHERE pa.id = v_finance_case_id
+    LIMIT 1
+    FOR UPDATE;
+
+    IF v_finance_case_record.id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+        'code', 'FINANCE_CASE_NOT_FOUND',
+        'message', '_pay_repayment_schedule_restore_after_snooze_clear: finance case not found',
+        'finance_case_id', v_finance_case_id::text
+      )::text;
+    END IF;
+
+    IF v_finance_case_record.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum THEN
+      v_schedule_before_restore_json := coalesce(v_finance_case_record.schedule_json, '[]'::jsonb);
+      v_next_due_week_start_before_restore_date := v_finance_case_record.next_due_week_start;
+      v_requested_week_start_date := public._pay_week_start_monday(v_effective_from_date);
+      v_current_operating_week_start_date := public._pay_week_start_monday((now() AT TIME ZONE 'Europe/London')::date);
+
+      IF v_requested_week_start_date < v_current_operating_week_start_date THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+          'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+          'code', 'EFFECTIVE_FROM_DATE_BEFORE_NOW',
+          'message', '_pay_repayment_schedule_restore_after_snooze_clear: effective_from_date cannot restore the repayment schedule earlier than the current operating week',
+          'finance_case_id', v_finance_case_id::text,
+          'requested_week_start', v_requested_week_start_date::text,
+          'current_operating_week_start', v_current_operating_week_start_date::text
+        )::text;
+      END IF;
+
+      v_target_week_start := v_requested_week_start_date;
+
+      WITH schedule_rows AS (
+        SELECT
+          row_number() OVER (ORDER BY (elem.value ->> 'week_start')::date ASC, elem.ordinality ASC) AS seq_no,
+          round(coalesce((elem.value ->> 'amount')::numeric, 0), 2) AS amount_value
+        FROM jsonb_array_elements(v_schedule_before_restore_json) WITH ORDINALITY AS elem(value, ordinality)
+        WHERE coalesce((elem.value ->> 'amount')::numeric, 0) < 0
+      )
+      SELECT
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+              'amount', sr.amount_value
+            )
+            ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+          ),
+          '[]'::jsonb
+        ),
+        count(*)::integer
+      INTO v_schedule_after_restore_json, v_installment_count
+      FROM schedule_rows AS sr;
+
+      v_next_due_week_start_after_restore_date := CASE
+        WHEN v_installment_count > 0 THEN v_target_week_start
+        ELSE NULL
+      END;
+
+      UPDATE public.pay_advances AS pa
+      SET schedule_json = v_schedule_after_restore_json,
+          next_due_week_start = v_next_due_week_start_after_restore_date,
+          updated_at = now()
+      WHERE pa.id = v_finance_case_id;
+
+      v_schedule_restore_result := jsonb_build_object(
+        'ok', true,
+        'finance_case_id', v_finance_case_id::text,
+        'schedule_before_restore_json', v_schedule_before_restore_json,
+        'next_due_week_start_before_restore', CASE WHEN v_next_due_week_start_before_restore_date IS NULL THEN NULL ELSE v_next_due_week_start_before_restore_date::text END,
+        'requested_week_start', CASE WHEN v_requested_week_start_date IS NULL THEN NULL ELSE v_requested_week_start_date::text END,
+        'current_operating_week_start', CASE WHEN v_current_operating_week_start_date IS NULL THEN NULL ELSE v_current_operating_week_start_date::text END,
+        'schedule_after_restore_json', v_schedule_after_restore_json,
+        'next_due_week_start_after_restore', CASE WHEN v_next_due_week_start_after_restore_date IS NULL THEN NULL ELSE v_next_due_week_start_after_restore_date::text END,
+        'installment_count', v_installment_count
+      );
+    ELSE
+      v_schedule_restore_result := public._pay_repayment_schedule_restore_after_snooze_clear(
+        v_finance_case_id,
+        v_effective_from_date
+      );
+    END IF;
+
+    v_schedule_before_restore_json := v_schedule_restore_result -> 'schedule_before_restore_json';
+    v_next_due_week_start_before_restore_date := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_restore_result ->> 'next_due_week_start_before_restore', '')), '') IS NULL THEN NULL
+      ELSE (v_schedule_restore_result ->> 'next_due_week_start_before_restore')::date
+    END;
+    v_next_due_week_start_before_restore := CASE
+      WHEN v_next_due_week_start_before_restore_date IS NULL THEN NULL
+      ELSE v_next_due_week_start_before_restore_date::text
+    END;
+    v_requested_week_start_date := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_restore_result ->> 'requested_week_start', '')), '') IS NULL THEN NULL
+      ELSE (v_schedule_restore_result ->> 'requested_week_start')::date
+    END;
+    v_requested_week_start := CASE
+      WHEN v_requested_week_start_date IS NULL THEN NULL
+      ELSE v_requested_week_start_date::text
+    END;
+    v_current_operating_week_start_date := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_restore_result ->> 'current_operating_week_start', '')), '') IS NULL THEN NULL
+      ELSE (v_schedule_restore_result ->> 'current_operating_week_start')::date
+    END;
+    v_current_operating_week_start := CASE
+      WHEN v_current_operating_week_start_date IS NULL THEN NULL
+      ELSE v_current_operating_week_start_date::text
+    END;
+    v_schedule_after_restore_json := v_schedule_restore_result -> 'schedule_after_restore_json';
+    v_next_due_week_start_after_restore_date := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_restore_result ->> 'next_due_week_start_after_restore', '')), '') IS NULL THEN NULL
+      ELSE (v_schedule_restore_result ->> 'next_due_week_start_after_restore')::date
+    END;
+    v_next_due_week_start_after_restore := CASE
+      WHEN v_next_due_week_start_after_restore_date IS NULL THEN NULL
+      ELSE v_next_due_week_start_after_restore_date::text
+    END;
+    v_installment_count := CASE
+      WHEN nullif(btrim(coalesce(v_schedule_restore_result ->> 'installment_count', '')), '') ~ '^-?[0-9]+$'
+      THEN (v_schedule_restore_result ->> 'installment_count')::integer
+      ELSE NULL
+    END;
+  END IF;
+
+  SELECT
+    jsonb_build_object(
+      'id', s.id::text,
+      'candidate_id', s.candidate_id::text,
+      'timesheet_id', CASE WHEN s.timesheet_id IS NULL THEN NULL ELSE s.timesheet_id::text END,
+      'segment_id', s.segment_id,
+      'source_ref', s.source_ref,
+      'snooze_kind', s.snooze_kind,
+      'snooze_until_date', CASE WHEN s.snooze_until_date IS NULL THEN NULL ELSE s.snooze_until_date::text END,
+      'note', s.note,
+      'cleared_at_utc', s.cleared_at_utc
+    )
+    ||
+    CASE
+      WHEN v_schedule_restore_result IS NULL THEN '{}'::jsonb
+      ELSE jsonb_build_object('schedule_restore_result', v_schedule_restore_result)
+    END
   INTO v_after
   FROM public.pay_item_snoozes s
   WHERE s.id = p_snooze_id;
@@ -3680,20 +4005,33 @@ BEGIN
     );
   END IF;
 
-  RETURN jsonb_build_object(
-    'ok', true,
-    'action', 'CLEARED',
-    'id', v_row.id::text,
-    'candidate_id', v_row.candidate_id::text,
-    'timesheet_id', CASE WHEN v_row.timesheet_id IS NULL THEN NULL ELSE v_row.timesheet_id::text END,
-    'segment_id', v_row.segment_id,
-    'source_ref', v_row.source_ref,
-    'finance_case_id', CASE WHEN v_finance_case_id IS NULL THEN NULL ELSE v_finance_case_id::text END,
-    'snooze_kind', v_row.snooze_kind,
-    'preview_visibility_hint', 'RELOAD_PREVIEW'
-  );
+  RETURN
+    jsonb_build_object(
+      'ok', true,
+      'action', 'CLEARED',
+      'id', v_row.id::text,
+      'candidate_id', v_row.candidate_id::text,
+      'timesheet_id', CASE WHEN v_row.timesheet_id IS NULL THEN NULL ELSE v_row.timesheet_id::text END,
+      'segment_id', v_row.segment_id,
+      'source_ref', v_row.source_ref,
+      'finance_case_id', CASE WHEN v_finance_case_id IS NULL THEN NULL ELSE v_finance_case_id::text END,
+      'snooze_kind', v_row.snooze_kind,
+      'preview_visibility_hint', 'RELOAD_PREVIEW'
+    )
+    ||
+    jsonb_build_object(
+      'schedule_before_restore_json', v_schedule_before_restore_json,
+      'next_due_week_start_before_restore', v_next_due_week_start_before_restore,
+      'requested_week_start', v_requested_week_start,
+      'current_operating_week_start', v_current_operating_week_start,
+      'schedule_after_restore_json', v_schedule_after_restore_json,
+      'next_due_week_start_after_restore', v_next_due_week_start_after_restore,
+      'installment_count', v_installment_count
+    );
 END;
 $$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_snoozes_list(
   p_candidate_id uuid DEFAULT NULL,
