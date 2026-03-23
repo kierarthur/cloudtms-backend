@@ -5957,8 +5957,6 @@ begin
 end;
 $$;
 
-
-
 create or replace function public.pay_remittance_mark_sent(
   p_pay_batch_id uuid,
   p_scope text,
@@ -5979,8 +5977,17 @@ declare
     when jsonb_typeof(p_results_json) = 'object' then p_results_json
     else jsonb_build_object('raw', p_results_json)
   end;
-  v_message_kind text := upper(btrim(coalesce(v_results->>'message_kind', 'REMITTANCE')));
+  v_input_message_kind text := upper(btrim(coalesce(v_results->>'message_kind', 'REMITTANCE')));
+  v_message_kind text := null;
+  v_audit_action text := null;
+  v_audit_reason text := null;
   v_audit_id uuid;
+
+  v_has_remittance_result boolean := false;
+  v_has_payout_notice_result boolean := false;
+  v_remittance_result jsonb := '{}'::jsonb;
+  v_payout_notice_result jsonb := '{}'::jsonb;
+  v_communication_mode text := 'NONE';
 
   v_item jsonb;
   v_item_payee_kind text;
@@ -5990,12 +5997,23 @@ declare
   v_item_umbrella_id uuid;
   v_item_trigger_status text;
   v_item_error_text text;
+  v_item_has_job boolean;
 
   v_success_count integer := 0;
   v_failure_count integer := 0;
   v_no_result_count integer := 0;
-  v_unmatched_queued_count integer := 0;
-  v_unmatched_skipped_count integer := 0;
+
+  v_remittance_success_count integer := 0;
+  v_remittance_failure_count integer := 0;
+  v_remittance_no_result_count integer := 0;
+  v_remittance_unmatched_queued_count integer := 0;
+  v_remittance_unmatched_skipped_count integer := 0;
+
+  v_payout_notice_success_count integer := 0;
+  v_payout_notice_failure_count integer := 0;
+  v_payout_notice_no_result_count integer := 0;
+  v_payout_notice_unmatched_queued_count integer := 0;
+  v_payout_notice_unmatched_skipped_count integer := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_remittance_mark_sent: pay_batch_id is required';
@@ -6020,47 +6038,227 @@ begin
     raise exception 'pay_remittance_mark_sent: pay batch % not found.', p_pay_batch_id;
   end if;
 
-  create temp table if not exists _tmp_mark_sent_target_candidates (
+  if jsonb_typeof(v_results->'remittance_result') = 'object' then
+    v_has_remittance_result := true;
+    v_remittance_result := coalesce(v_results->'remittance_result', '{}'::jsonb);
+  end if;
+
+  if jsonb_typeof(v_results->'payout_notice_result') = 'object' then
+    v_has_payout_notice_result := true;
+    v_payout_notice_result := coalesce(v_results->'payout_notice_result', '{}'::jsonb);
+  end if;
+
+  if v_has_remittance_result is false and v_has_payout_notice_result is false then
+    if v_input_message_kind = 'PAYOUT_NOTICE' then
+      v_has_payout_notice_result := true;
+      v_payout_notice_result := v_results;
+    else
+      v_has_remittance_result := true;
+      v_remittance_result := v_results;
+    end if;
+  end if;
+
+  if v_has_remittance_result and v_has_payout_notice_result then
+    v_communication_mode := 'MIXED';
+    v_message_kind := 'MIXED';
+    v_audit_action := 'PAY_BATCH_COMMUNICATIONS_SENT';
+    v_audit_reason := 'communications_mark_sent';
+  elsif v_has_payout_notice_result then
+    v_communication_mode := 'PAYOUT_NOTICE';
+    v_message_kind := 'PAYOUT_NOTICE';
+    v_audit_action := 'PAY_PAYOUT_NOTICE_SENT';
+    v_audit_reason := 'payout_notice_mark_sent';
+  else
+    v_communication_mode := 'REMITTANCE';
+    v_message_kind := 'REMITTANCE';
+    v_audit_action := 'PAY_REMITTANCE_SENT';
+    v_audit_reason := 'remittance_mark_sent';
+  end if;
+
+  drop table if exists pg_temp._tmp_mark_sent_target_candidates;
+  create temporary table pg_temp._tmp_mark_sent_target_candidates (
     pay_batch_candidate_id uuid primary key,
-    candidate_id uuid not null
+    candidate_id uuid not null,
+    target_from_remittance boolean not null default false,
+    target_from_payout_notice boolean not null default false
   ) on commit drop;
 
-  truncate table _tmp_mark_sent_target_candidates;
+  if v_has_remittance_result then
+    insert into pg_temp._tmp_mark_sent_target_candidates(
+      pay_batch_candidate_id,
+      candidate_id,
+      target_from_remittance,
+      target_from_payout_notice
+    )
+    select
+      pbc.id,
+      pbc.candidate_id,
+      true,
+      false
+    from public.pay_batch_candidates pbc
+    where pbc.pay_batch_id = p_pay_batch_id
+      and exists (
+        select 1
+        from public.pay_batch_items pbi
+        where pbi.pay_batch_candidate_id = pbc.id
+          and pbi.item_type <> 'DEBT_CREATED'
+          and coalesce(pbi.is_voided, false) = false
+          and (
+            v_scope = 'ALL'
+            or upper(coalesce(pbi.pay_channel, '')) = v_scope
+          )
+          and not (
+            pbi.finance_case_id is not null
+            and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+            and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          )
+      )
+    on conflict (pay_batch_candidate_id)
+    do update set
+      target_from_remittance = true;
+  end if;
 
-  insert into _tmp_mark_sent_target_candidates(
-    pay_batch_candidate_id,
-    candidate_id
-  )
-  select
-    pbc.id,
-    pbc.candidate_id
-  from public.pay_batch_candidates pbc
-  where pbc.pay_batch_id = p_pay_batch_id
-    and exists (
-      select 1
-      from public.pay_batch_items pbi
-      where pbi.pay_batch_candidate_id = pbc.id
-        and pbi.item_type <> 'DEBT_CREATED'
-        and coalesce(pbi.is_voided, false) = false
-        and (
-          v_scope = 'ALL'
-          or upper(coalesce(pbi.pay_channel, '')) = v_scope
+  if v_has_payout_notice_result then
+    if jsonb_typeof(v_payout_notice_result->'candidate_results') = 'array' then
+      insert into pg_temp._tmp_mark_sent_target_candidates(
+        pay_batch_candidate_id,
+        candidate_id,
+        target_from_remittance,
+        target_from_payout_notice
+      )
+      select
+        pbc.id,
+        pbc.candidate_id,
+        false,
+        true
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = p_pay_batch_id
+        and exists (
+          select 1
+          from jsonb_array_elements(v_payout_notice_result->'candidate_results') as cr(value)
+          where nullif(btrim(coalesce(cr.value->>'candidate_id', '')), '') = pbc.candidate_id::text
         )
-    );
+      on conflict (pay_batch_candidate_id)
+      do update set
+        target_from_payout_notice = true;
+    else
+      insert into pg_temp._tmp_mark_sent_target_candidates(
+        pay_batch_candidate_id,
+        candidate_id,
+        target_from_remittance,
+        target_from_payout_notice
+      )
+      select
+        pbc.id,
+        pbc.candidate_id,
+        false,
+        true
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = p_pay_batch_id
+        and exists (
+          select 1
+          from public.pay_batch_items pbi
+          where pbi.pay_batch_candidate_id = pbc.id
+            and coalesce(pbi.is_voided, false) = false
+            and pbi.finance_case_id is not null
+            and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and (
+              v_scope = 'ALL'
+              or upper(coalesce(pbi.pay_channel, '')) = v_scope
+            )
+            and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+            and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        )
+      on conflict (pay_batch_candidate_id)
+      do update set
+        target_from_payout_notice = true;
+    end if;
+  end if;
 
-  create temp table if not exists _tmp_mark_sent_events (
+  drop table if exists pg_temp._tmp_mark_sent_events;
+  create temporary table pg_temp._tmp_mark_sent_events (
     candidate_id uuid not null,
+    comm_kind text not null,
     outcome text not null,
     trigger_status text null,
     error_text text null
   ) on commit drop;
 
-  truncate table _tmp_mark_sent_events;
+  if v_has_remittance_result and jsonb_typeof(v_remittance_result->'candidate_results') = 'array' then
+    for v_item in
+      select cr.value
+      from jsonb_array_elements(v_remittance_result->'candidate_results') as cr(value)
+    loop
+      v_item_candidate_id_text := nullif(btrim(coalesce(v_item->>'candidate_id', '')), '');
+      v_item_candidate_id := null;
+      v_item_has_job := lower(btrim(coalesce(v_item->>'has_job', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', 'NO_QUEUEABLE_JOB')));
 
-  if jsonb_typeof(v_results->'queued') = 'array' then
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null and v_item_has_job is false then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'REMITTANCE',
+          'FAILURE',
+          v_item_trigger_status,
+          left(v_item_trigger_status, 1000)
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_remittance = true;
+      end if;
+    end loop;
+  end if;
+
+  if v_has_payout_notice_result and jsonb_typeof(v_payout_notice_result->'candidate_results') = 'array' then
+    for v_item in
+      select cr.value
+      from jsonb_array_elements(v_payout_notice_result->'candidate_results') as cr(value)
+    loop
+      v_item_candidate_id_text := nullif(btrim(coalesce(v_item->>'candidate_id', '')), '');
+      v_item_candidate_id := null;
+      v_item_has_job := lower(btrim(coalesce(v_item->>'has_job', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', 'NO_QUEUEABLE_PAYOUT_NOTICE_JOB')));
+
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null and v_item_has_job is false then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'FAILURE',
+          v_item_trigger_status,
+          left(v_item_trigger_status, 1000)
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_payout_notice = true;
+      end if;
+    end loop;
+  end if;
+
+  if v_has_remittance_result and jsonb_typeof(v_remittance_result->'queued') = 'array' then
     for v_item in
       select q.value
-      from jsonb_array_elements(v_results->'queued') as q(value)
+      from jsonb_array_elements(v_remittance_result->'queued') as q(value)
     loop
       v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', '')));
       v_item_candidate_id_text := nullif(
@@ -6102,44 +6300,56 @@ begin
       end if;
 
       if v_item_candidate_id is not null then
-        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
         select
           tc.candidate_id,
+          'REMITTANCE',
           'SUCCESS',
           v_item_trigger_status,
           null
-        from _tmp_mark_sent_target_candidates tc
-        where tc.candidate_id = v_item_candidate_id;
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_remittance = true;
       elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
-        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
         select distinct
           tc.candidate_id,
+          'REMITTANCE',
           'SUCCESS',
           v_item_trigger_status,
           null
-        from _tmp_mark_sent_target_candidates tc
+        from pg_temp._tmp_mark_sent_target_candidates tc
         join public.pay_batch_candidates pbc
           on pbc.id = tc.pay_batch_candidate_id
         join public.pay_batch_items pbi
           on pbi.pay_batch_candidate_id = pbc.id
         where pbc.pay_batch_id = p_pay_batch_id
+          and tc.target_from_remittance = true
           and pbi.item_type <> 'DEBT_CREATED'
           and coalesce(pbi.is_voided, false) = false
           and (
             v_scope = 'ALL'
             or upper(coalesce(pbi.pay_channel, '')) = v_scope
           )
-          and pbi.umbrella_id = v_item_umbrella_id;
+          and pbi.umbrella_id = v_item_umbrella_id
+          and not (
+            pbi.finance_case_id is not null
+            and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+            and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          );
       else
-        v_unmatched_queued_count := v_unmatched_queued_count + 1;
+        v_remittance_unmatched_queued_count := v_remittance_unmatched_queued_count + 1;
       end if;
     end loop;
   end if;
 
-  if jsonb_typeof(v_results->'skipped') = 'array' then
+  if v_has_remittance_result and jsonb_typeof(v_remittance_result->'skipped') = 'array' then
     for v_item in
       select s.value
-      from jsonb_array_elements(v_results->'skipped') as s(value)
+      from jsonb_array_elements(v_remittance_result->'skipped') as s(value)
     loop
       v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', '')));
       v_item_candidate_id_text := nullif(
@@ -6182,140 +6392,677 @@ begin
       end if;
 
       if v_item_candidate_id is not null then
-        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
         select
           tc.candidate_id,
+          'REMITTANCE',
           'FAILURE',
           v_item_trigger_status,
           v_item_error_text
-        from _tmp_mark_sent_target_candidates tc
-        where tc.candidate_id = v_item_candidate_id;
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_remittance = true;
       elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
-        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
         select distinct
           tc.candidate_id,
+          'REMITTANCE',
           'FAILURE',
           v_item_trigger_status,
           v_item_error_text
-        from _tmp_mark_sent_target_candidates tc
+        from pg_temp._tmp_mark_sent_target_candidates tc
         join public.pay_batch_candidates pbc
           on pbc.id = tc.pay_batch_candidate_id
         join public.pay_batch_items pbi
           on pbi.pay_batch_candidate_id = pbc.id
         where pbc.pay_batch_id = p_pay_batch_id
+          and tc.target_from_remittance = true
           and pbi.item_type <> 'DEBT_CREATED'
           and coalesce(pbi.is_voided, false) = false
           and (
             v_scope = 'ALL'
             or upper(coalesce(pbi.pay_channel, '')) = v_scope
           )
-          and pbi.umbrella_id = v_item_umbrella_id;
+          and pbi.umbrella_id = v_item_umbrella_id
+          and not (
+            pbi.finance_case_id is not null
+            and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+            and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          );
       else
-        v_unmatched_skipped_count := v_unmatched_skipped_count + 1;
+        v_remittance_unmatched_skipped_count := v_remittance_unmatched_skipped_count + 1;
       end if;
     end loop;
   end if;
 
-  create temp table if not exists _tmp_mark_sent_agg (
+  if v_has_payout_notice_result and jsonb_typeof(v_payout_notice_result->'queued') = 'array' then
+    for v_item in
+      select q.value
+      from jsonb_array_elements(v_payout_notice_result->'queued') as q(value)
+    loop
+      v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', 'CANDIDATE')));
+      v_item_candidate_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'candidate_id',
+            case when v_item_payee_kind = 'CANDIDATE' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_umbrella_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'umbrella_id',
+            case when v_item_payee_kind = 'UMBRELLA' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_candidate_id := null;
+      v_item_umbrella_id := null;
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', 'QUEUED_TO_MAIL_OUTBOX')));
+
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_umbrella_id_text is not null then
+        begin
+          v_item_umbrella_id := v_item_umbrella_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_umbrella_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'SUCCESS',
+          v_item_trigger_status,
+          null
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_payout_notice = true;
+      elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select distinct
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'SUCCESS',
+          v_item_trigger_status,
+          null
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        join public.pay_batch_candidates pbc
+          on pbc.id = tc.pay_batch_candidate_id
+        join public.pay_batch_items pbi
+          on pbi.pay_batch_candidate_id = pbc.id
+        where pbc.pay_batch_id = p_pay_batch_id
+          and tc.target_from_payout_notice = true
+          and coalesce(pbi.is_voided, false) = false
+          and pbi.finance_case_id is not null
+          and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+          and (
+            v_scope = 'ALL'
+            or upper(coalesce(pbi.pay_channel, '')) = v_scope
+          )
+          and pbi.umbrella_id = v_item_umbrella_id
+          and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+          and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      else
+        v_payout_notice_unmatched_queued_count := v_payout_notice_unmatched_queued_count + 1;
+      end if;
+    end loop;
+  end if;
+
+  if v_has_payout_notice_result and jsonb_typeof(v_payout_notice_result->'skipped') = 'array' then
+    for v_item in
+      select s.value
+      from jsonb_array_elements(v_payout_notice_result->'skipped') as s(value)
+    loop
+      v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', 'CANDIDATE')));
+      v_item_candidate_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'candidate_id',
+            case when v_item_payee_kind = 'CANDIDATE' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_umbrella_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'umbrella_id',
+            case when v_item_payee_kind = 'UMBRELLA' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_candidate_id := null;
+      v_item_umbrella_id := null;
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', v_item->>'reason', 'SEND_SKIPPED')));
+      v_item_error_text := left(coalesce(nullif(btrim(coalesce(v_item->>'error', '')), ''), nullif(btrim(coalesce(v_item->>'reason', '')), ''), 'SEND_SKIPPED'), 1000);
+
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_umbrella_id_text is not null then
+        begin
+          v_item_umbrella_id := v_item_umbrella_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_umbrella_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'FAILURE',
+          v_item_trigger_status,
+          v_item_error_text
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_payout_notice = true;
+      elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select distinct
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'FAILURE',
+          v_item_trigger_status,
+          v_item_error_text
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        join public.pay_batch_candidates pbc
+          on pbc.id = tc.pay_batch_candidate_id
+        join public.pay_batch_items pbi
+          on pbi.pay_batch_candidate_id = pbc.id
+        where pbc.pay_batch_id = p_pay_batch_id
+          and tc.target_from_payout_notice = true
+          and coalesce(pbi.is_voided, false) = false
+          and pbi.finance_case_id is not null
+          and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+          and (
+            v_scope = 'ALL'
+            or upper(coalesce(pbi.pay_channel, '')) = v_scope
+          )
+          and pbi.umbrella_id = v_item_umbrella_id
+          and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+          and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      else
+        v_payout_notice_unmatched_skipped_count := v_payout_notice_unmatched_skipped_count + 1;
+      end if;
+    end loop;
+  end if;
+
+  drop table if exists pg_temp._tmp_mark_sent_agg;
+  create temporary table pg_temp._tmp_mark_sent_agg (
     pay_batch_candidate_id uuid primary key,
     candidate_id uuid not null,
+    target_from_remittance boolean not null,
+    target_from_payout_notice boolean not null,
     has_success boolean not null,
+    has_success_remittance boolean not null,
+    has_success_payout_notice boolean not null,
     success_trigger_status text null,
     failure_trigger_status text null,
-    failure_error text null
+    failure_error text null,
+    remittance_success_trigger_status text null,
+    payout_notice_success_trigger_status text null,
+    remittance_failure_trigger_status text null,
+    payout_notice_failure_trigger_status text null,
+    remittance_failure_error text null,
+    payout_notice_failure_error text null
   ) on commit drop;
 
-  truncate table _tmp_mark_sent_agg;
-
-  insert into _tmp_mark_sent_agg(
+  insert into pg_temp._tmp_mark_sent_agg(
     pay_batch_candidate_id,
     candidate_id,
+    target_from_remittance,
+    target_from_payout_notice,
     has_success,
+    has_success_remittance,
+    has_success_payout_notice,
     success_trigger_status,
     failure_trigger_status,
-    failure_error
+    failure_error,
+    remittance_success_trigger_status,
+    payout_notice_success_trigger_status,
+    remittance_failure_trigger_status,
+    payout_notice_failure_trigger_status,
+    remittance_failure_error,
+    payout_notice_failure_error
   )
   select
     tc.pay_batch_candidate_id,
     tc.candidate_id,
-    exists (
-      select 1
-      from _tmp_mark_sent_events evs
-      where evs.candidate_id = tc.candidate_id
-        and evs.outcome = 'SUCCESS'
+    tc.target_from_remittance,
+    tc.target_from_payout_notice,
+    (
+      exists (
+        select 1
+        from pg_temp._tmp_mark_sent_events evs
+        where evs.candidate_id = tc.candidate_id
+          and evs.outcome = 'SUCCESS'
+      )
     ) as has_success,
-    coalesce(
-      (
-        select evs2.trigger_status
-        from _tmp_mark_sent_events evs2
-        where evs2.candidate_id = tc.candidate_id
-          and evs2.outcome = 'SUCCESS'
-          and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
-        order by evs2.trigger_status
-        limit 1
-      ),
-      'QUEUED_TO_MAIL_OUTBOX'
-    ) as success_trigger_status,
+    (
+      exists (
+        select 1
+        from pg_temp._tmp_mark_sent_events evs
+        where evs.candidate_id = tc.candidate_id
+          and evs.comm_kind = 'REMITTANCE'
+          and evs.outcome = 'SUCCESS'
+      )
+    ) as has_success_remittance,
+    (
+      exists (
+        select 1
+        from pg_temp._tmp_mark_sent_events evs
+        where evs.candidate_id = tc.candidate_id
+          and evs.comm_kind = 'PAYOUT_NOTICE'
+          and evs.outcome = 'SUCCESS'
+      )
+    ) as has_success_payout_notice,
+    case
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.comm_kind = 'REMITTANCE'
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+       and (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.comm_kind = 'PAYOUT_NOTICE'
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then 'REMITTANCE_AND_PAYOUT_NOTICE_QUEUED'
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.comm_kind = 'REMITTANCE'
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then coalesce(
+          (
+            select evs2.trigger_status
+            from pg_temp._tmp_mark_sent_events evs2
+            where evs2.candidate_id = tc.candidate_id
+              and evs2.comm_kind = 'REMITTANCE'
+              and evs2.outcome = 'SUCCESS'
+              and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+            order by evs2.trigger_status
+            limit 1
+          ),
+          'QUEUED_TO_MAIL_OUTBOX'
+        )
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.comm_kind = 'PAYOUT_NOTICE'
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then coalesce(
+          (
+            select evs2.trigger_status
+            from pg_temp._tmp_mark_sent_events evs2
+            where evs2.candidate_id = tc.candidate_id
+              and evs2.comm_kind = 'PAYOUT_NOTICE'
+              and evs2.outcome = 'SUCCESS'
+              and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+            order by evs2.trigger_status
+            limit 1
+          ),
+          'QUEUED_TO_MAIL_OUTBOX'
+        )
+      else null
+    end as success_trigger_status,
+    case
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then null
+      when tc.target_from_remittance and tc.target_from_payout_notice then
+        case
+          when coalesce(
+            (
+              select evf.trigger_status
+              from pg_temp._tmp_mark_sent_events evf
+              where evf.candidate_id = tc.candidate_id
+                and evf.comm_kind = 'REMITTANCE'
+                and evf.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+              order by evf.trigger_status
+              limit 1
+            ),
+            'NO_RESULT_RECORDED'
+          ) <> 'NO_RESULT_RECORDED'
+           and coalesce(
+            (
+              select evf.trigger_status
+              from pg_temp._tmp_mark_sent_events evf
+              where evf.candidate_id = tc.candidate_id
+                and evf.comm_kind = 'PAYOUT_NOTICE'
+                and evf.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+              order by evf.trigger_status
+              limit 1
+            ),
+            'NO_RESULT_RECORDED'
+          ) <> 'NO_RESULT_RECORDED'
+            then 'REMITTANCE_AND_PAYOUT_NOTICE_FAILED'
+          when coalesce(
+            (
+              select evf.trigger_status
+              from pg_temp._tmp_mark_sent_events evf
+              where evf.candidate_id = tc.candidate_id
+                and evf.comm_kind = 'REMITTANCE'
+                and evf.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+              order by evf.trigger_status
+              limit 1
+            ),
+            'NO_RESULT_RECORDED'
+          ) <> 'NO_RESULT_RECORDED'
+            then coalesce(
+              (
+                select evf.trigger_status
+                from pg_temp._tmp_mark_sent_events evf
+                where evf.candidate_id = tc.candidate_id
+                  and evf.comm_kind = 'REMITTANCE'
+                  and evf.outcome = 'FAILURE'
+                  and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+                order by evf.trigger_status
+                limit 1
+              ),
+              'NO_RESULT_RECORDED'
+            )
+          when coalesce(
+            (
+              select evf.trigger_status
+              from pg_temp._tmp_mark_sent_events evf
+              where evf.candidate_id = tc.candidate_id
+                and evf.comm_kind = 'PAYOUT_NOTICE'
+                and evf.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+              order by evf.trigger_status
+              limit 1
+            ),
+            'NO_RESULT_RECORDED'
+          ) <> 'NO_RESULT_RECORDED'
+            then coalesce(
+              (
+                select evf.trigger_status
+                from pg_temp._tmp_mark_sent_events evf
+                where evf.candidate_id = tc.candidate_id
+                  and evf.comm_kind = 'PAYOUT_NOTICE'
+                  and evf.outcome = 'FAILURE'
+                  and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+                order by evf.trigger_status
+                limit 1
+              ),
+              'NO_RESULT_RECORDED'
+            )
+          else 'NO_RESULT_RECORDED'
+        end
+      when tc.target_from_remittance then
+        coalesce(
+          (
+            select evf.trigger_status
+            from pg_temp._tmp_mark_sent_events evf
+            where evf.candidate_id = tc.candidate_id
+              and evf.comm_kind = 'REMITTANCE'
+              and evf.outcome = 'FAILURE'
+              and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+            order by evf.trigger_status
+            limit 1
+          ),
+          'NO_RESULT_RECORDED'
+        )
+      when tc.target_from_payout_notice then
+        coalesce(
+          (
+            select evf.trigger_status
+            from pg_temp._tmp_mark_sent_events evf
+            where evf.candidate_id = tc.candidate_id
+              and evf.comm_kind = 'PAYOUT_NOTICE'
+              and evf.outcome = 'FAILURE'
+              and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+            order by evf.trigger_status
+            limit 1
+          ),
+          'NO_RESULT_RECORDED'
+        )
+      else 'NO_RESULT_RECORDED'
+    end as failure_trigger_status,
+    case
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then null
+      else left(
+        coalesce(
+          (
+            select string_agg(errs.err_txt, ' | ')
+            from (
+              select distinct nullif(btrim(coalesce(evf2.error_text, '')), '') as err_txt
+              from pg_temp._tmp_mark_sent_events evf2
+              where evf2.candidate_id = tc.candidate_id
+                and evf2.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf2.error_text, '')), '') is not null
+              order by err_txt
+            ) errs
+          ),
+          'NO_RESULT_RECORDED'
+        ),
+        1000
+      )
+    end as failure_error,
+    (
+      select evs2.trigger_status
+      from pg_temp._tmp_mark_sent_events evs2
+      where evs2.candidate_id = tc.candidate_id
+        and evs2.comm_kind = 'REMITTANCE'
+        and evs2.outcome = 'SUCCESS'
+        and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+      order by evs2.trigger_status
+      limit 1
+    ) as remittance_success_trigger_status,
+    (
+      select evs2.trigger_status
+      from pg_temp._tmp_mark_sent_events evs2
+      where evs2.candidate_id = tc.candidate_id
+        and evs2.comm_kind = 'PAYOUT_NOTICE'
+        and evs2.outcome = 'SUCCESS'
+        and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+      order by evs2.trigger_status
+      limit 1
+    ) as payout_notice_success_trigger_status,
     coalesce(
       (
         select evf.trigger_status
-        from _tmp_mark_sent_events evf
+        from pg_temp._tmp_mark_sent_events evf
         where evf.candidate_id = tc.candidate_id
+          and evf.comm_kind = 'REMITTANCE'
           and evf.outcome = 'FAILURE'
           and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
         order by evf.trigger_status
         limit 1
       ),
-      'NO_RESULT_RECORDED'
-    ) as failure_trigger_status,
+      case when tc.target_from_remittance then 'NO_RESULT_RECORDED' else null end
+    ) as remittance_failure_trigger_status,
+    coalesce(
+      (
+        select evf.trigger_status
+        from pg_temp._tmp_mark_sent_events evf
+        where evf.candidate_id = tc.candidate_id
+          and evf.comm_kind = 'PAYOUT_NOTICE'
+          and evf.outcome = 'FAILURE'
+          and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+        order by evf.trigger_status
+        limit 1
+      ),
+      case when tc.target_from_payout_notice then 'NO_RESULT_RECORDED' else null end
+    ) as payout_notice_failure_trigger_status,
     left(
       coalesce(
         (
-          select string_agg(err_txt, ' | ')
+          select string_agg(errs.err_txt, ' | ')
           from (
             select distinct nullif(btrim(coalesce(evf2.error_text, '')), '') as err_txt
-            from _tmp_mark_sent_events evf2
+            from pg_temp._tmp_mark_sent_events evf2
             where evf2.candidate_id = tc.candidate_id
+              and evf2.comm_kind = 'REMITTANCE'
               and evf2.outcome = 'FAILURE'
               and nullif(btrim(coalesce(evf2.error_text, '')), '') is not null
             order by err_txt
           ) errs
         ),
-        'NO_RESULT_RECORDED'
+        case when tc.target_from_remittance then 'NO_RESULT_RECORDED' else null end
       ),
       1000
-    ) as failure_error
-  from _tmp_mark_sent_target_candidates tc;
+    ) as remittance_failure_error,
+    left(
+      coalesce(
+        (
+          select string_agg(errs.err_txt, ' | ')
+          from (
+            select distinct nullif(btrim(coalesce(evf2.error_text, '')), '') as err_txt
+            from pg_temp._tmp_mark_sent_events evf2
+            where evf2.candidate_id = tc.candidate_id
+              and evf2.comm_kind = 'PAYOUT_NOTICE'
+              and evf2.outcome = 'FAILURE'
+              and nullif(btrim(coalesce(evf2.error_text, '')), '') is not null
+            order by err_txt
+          ) errs
+        ),
+        case when tc.target_from_payout_notice then 'NO_RESULT_RECORDED' else null end
+      ),
+      1000
+    ) as payout_notice_failure_error
+  from pg_temp._tmp_mark_sent_target_candidates tc;
 
   update public.pay_batch_candidates pbc
   set
     remittance_sent_at_utc = coalesce(pbc.remittance_sent_at_utc, v_now),
     remittance_sent_by_user_id = coalesce(pbc.remittance_sent_by_user_id, p_actor_user_id),
-    remittance_trigger_status = agg.success_trigger_status,
+    remittance_trigger_status = agg.remittance_success_trigger_status,
     last_remittance_error = null,
     updated_at = v_now
-  from _tmp_mark_sent_agg agg
+  from pg_temp._tmp_mark_sent_agg agg
   where pbc.id = agg.pay_batch_candidate_id
-    and agg.has_success = true;
-
-  get diagnostics v_success_count = row_count;
+    and agg.target_from_remittance = true
+    and agg.has_success_remittance = true;
 
   update public.pay_batch_candidates pbc
   set
-    remittance_trigger_status = agg.failure_trigger_status,
-    last_remittance_error = agg.failure_error,
+    remittance_trigger_status = agg.remittance_failure_trigger_status,
+    last_remittance_error = agg.remittance_failure_error,
     updated_at = v_now
-  from _tmp_mark_sent_agg agg
+  from pg_temp._tmp_mark_sent_agg agg
   where pbc.id = agg.pay_batch_candidate_id
-    and agg.has_success = false;
+    and agg.target_from_remittance = true
+    and agg.has_success_remittance = false;
 
-  get diagnostics v_failure_count = row_count;
+  select count(*)::int
+  into v_success_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.has_success = true;
+
+  select count(*)::int
+  into v_failure_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.has_success = false
+    and (agg.target_from_remittance = true or agg.target_from_payout_notice = true);
 
   select count(*)::int
   into v_no_result_count
-  from _tmp_mark_sent_agg agg
+  from pg_temp._tmp_mark_sent_agg agg
   where agg.has_success = false
     and agg.failure_trigger_status = 'NO_RESULT_RECORDED';
+
+  select count(*)::int
+  into v_remittance_success_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_remittance = true
+    and agg.has_success_remittance = true;
+
+  select count(*)::int
+  into v_remittance_failure_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_remittance = true
+    and agg.has_success_remittance = false
+    and agg.remittance_failure_trigger_status <> 'NO_RESULT_RECORDED';
+
+  select count(*)::int
+  into v_remittance_no_result_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_remittance = true
+    and agg.has_success_remittance = false
+    and agg.remittance_failure_trigger_status = 'NO_RESULT_RECORDED';
+
+  select count(*)::int
+  into v_payout_notice_success_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_payout_notice = true
+    and agg.has_success_payout_notice = true;
+
+  select count(*)::int
+  into v_payout_notice_failure_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_payout_notice = true
+    and agg.has_success_payout_notice = false
+    and agg.payout_notice_failure_trigger_status <> 'NO_RESULT_RECORDED';
+
+  select count(*)::int
+  into v_payout_notice_no_result_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_payout_notice = true
+    and agg.has_success_payout_notice = false
+    and agg.payout_notice_failure_trigger_status = 'NO_RESULT_RECORDED';
 
   insert into public.audit_events(
     actor_user_id,
@@ -6330,20 +7077,37 @@ begin
     p_actor_user_id,
     'pay_batch',
     p_pay_batch_id::text,
-    'PAY_REMITTANCE_SENT',
+    v_audit_action,
     null,
     jsonb_build_object(
       'pay_batch_id', p_pay_batch_id::text,
       'scope', v_scope,
       'message_kind', v_message_kind,
+      'communication_mode', v_communication_mode,
       'success_count', v_success_count,
       'failure_count', v_failure_count,
       'no_result_count', v_no_result_count,
-      'unmatched_queued_count', v_unmatched_queued_count,
-      'unmatched_skipped_count', v_unmatched_skipped_count,
+      'remittance_result', jsonb_build_object(
+        'included', v_has_remittance_result,
+        'success_count', v_remittance_success_count,
+        'failure_count', v_remittance_failure_count,
+        'no_result_count', v_remittance_no_result_count,
+        'unmatched_queued_count', v_remittance_unmatched_queued_count,
+        'unmatched_skipped_count', v_remittance_unmatched_skipped_count,
+        'results', case when v_has_remittance_result then coalesce(v_remittance_result, '{}'::jsonb) else null end
+      ),
+      'payout_notice_result', jsonb_build_object(
+        'included', v_has_payout_notice_result,
+        'success_count', v_payout_notice_success_count,
+        'failure_count', v_payout_notice_failure_count,
+        'no_result_count', v_payout_notice_no_result_count,
+        'unmatched_queued_count', v_payout_notice_unmatched_queued_count,
+        'unmatched_skipped_count', v_payout_notice_unmatched_skipped_count,
+        'results', case when v_has_payout_notice_result then coalesce(v_payout_notice_result, '{}'::jsonb) else null end
+      ),
       'results', coalesce(v_results, '{}'::jsonb)
     ),
-    'remittance_mark_sent'
+    v_audit_reason
   )
   returning id into v_audit_id;
 
@@ -6352,11 +7116,26 @@ begin
     'pay_batch_id', p_pay_batch_id::text,
     'scope', v_scope,
     'message_kind', v_message_kind,
+    'communication_mode', v_communication_mode,
     'success_count', v_success_count,
     'failure_count', v_failure_count,
     'no_result_count', v_no_result_count,
-    'unmatched_queued_count', v_unmatched_queued_count,
-    'unmatched_skipped_count', v_unmatched_skipped_count,
+    'remittance_result', jsonb_build_object(
+      'included', v_has_remittance_result,
+      'success_count', v_remittance_success_count,
+      'failure_count', v_remittance_failure_count,
+      'no_result_count', v_remittance_no_result_count,
+      'unmatched_queued_count', v_remittance_unmatched_queued_count,
+      'unmatched_skipped_count', v_remittance_unmatched_skipped_count
+    ),
+    'payout_notice_result', jsonb_build_object(
+      'included', v_has_payout_notice_result,
+      'success_count', v_payout_notice_success_count,
+      'failure_count', v_payout_notice_failure_count,
+      'no_result_count', v_payout_notice_no_result_count,
+      'unmatched_queued_count', v_payout_notice_unmatched_queued_count,
+      'unmatched_skipped_count', v_payout_notice_unmatched_skipped_count
+    ),
     'audit_event_id', v_audit_id::text
   );
 end;
