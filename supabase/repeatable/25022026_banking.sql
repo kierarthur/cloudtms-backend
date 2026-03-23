@@ -12487,10 +12487,6 @@ end;
 $function$;
 
 
-
-
-
-
 create or replace function public.pay_batch_export_csv_rows(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -12783,7 +12779,7 @@ begin
       ) as sort_surname,
 
       case
-        when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 3
+        when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then 3
         when b.timesheet_id is null then 2
         else 1
       end as sort_group,
@@ -12795,6 +12791,7 @@ begin
       case
         when b.item_type = 'OVERPAYMENT_RECOVERY' then 900
         when b.item_type = 'LOAN_REPAYMENT' then 910
+        when b.item_type = 'MANUAL_DEBT_RECOVERY' then 915
         when b.item_type = 'LOAN_PAYOUT' then 920
         when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 930
         else case upper(coalesce(b.line_kind,''))
@@ -12816,6 +12813,7 @@ begin
         when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
         when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
         when b.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+        when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
         when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
         else upper(coalesce(b.line_kind,''))
       end as line_kind,
@@ -12851,6 +12849,7 @@ begin
           'item_type_label', case
             when b.item_type = 'LOAN_PAYOUT' then 'Loan payout'
             when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual credit adjustment payment'
+            when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual debt adjustment deduction'
             when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual debt adjustment deduction'
             when b.finance_case_type = 'OVERPAYMENT' and b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
             when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
@@ -12858,7 +12857,7 @@ begin
             else null
           end,
           'payment_or_deduction', case
-            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 'DEDUCTION'
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then 'DEDUCTION'
             when b.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT') then 'PAYMENT'
             when coalesce(b.amount_ex_vat, 0) < 0 then 'DEDUCTION'
             when coalesce(b.amount_ex_vat, 0) > 0 then 'PAYMENT'
@@ -12915,6 +12914,7 @@ begin
           'line_kind', case
             when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
             when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+            when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
             when b.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
             when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
             else b.line_kind
@@ -12922,6 +12922,7 @@ begin
           'line_label', case
             when b.item_type = 'LOAN_PAYOUT' then 'Loan payout'
             when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual credit adjustment payment'
+            when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual debt adjustment deduction'
             when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual debt adjustment deduction'
             when b.finance_case_type = 'OVERPAYMENT' and b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
             when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
@@ -12931,7 +12932,7 @@ begin
             else b.item_type
           end,
           'row_group', case
-            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 'DEDUCTION'
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then 'DEDUCTION'
             when b.timesheet_id is null then 'NON_TIMESHEET'
             else 'TIMESHEET'
           end,
@@ -12955,18 +12956,20 @@ begin
 
           'is_overpayment_recovery', (b.item_type = 'OVERPAYMENT_RECOVERY'),
           'is_loan_repayment', (b.item_type = 'LOAN_REPAYMENT'),
+          'is_manual_debt_recovery', (b.item_type = 'MANUAL_DEBT_RECOVERY'),
           'deduction_kind', case
+            when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
             when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_ADJUSTMENT'
             when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
             when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
             else null
           end,
           'deduction_amount_ex_vat', case
-            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_ex_vat,0)),2)
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(b.amount_ex_vat,0)),2)
             else null
           end,
           'deduction_amount_inc_vat', case
-            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_inc_vat,0)),2)
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(b.amount_inc_vat,0)),2)
             else null
           end,
 
@@ -13080,6 +13083,7 @@ begin
   );
 end;
 $$;
+
 
 
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
