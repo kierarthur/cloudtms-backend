@@ -3388,7 +3388,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.outbox_unified_retry(
   p_channel text,
   p_id uuid,
@@ -3477,6 +3476,12 @@ begin
       raise exception 'outbox row is not retryable because it has already been sent';
     end if;
 
+    if coalesce(v_mail_row.attempt_lease_token, '') <> ''
+       and v_mail_row.attempt_lease_expires_at_utc is not null
+       and v_mail_row.attempt_lease_expires_at_utc > v_now then
+      raise exception 'outbox row is not retryable because it is currently being sent';
+    end if;
+
     if upper(coalesce(v_mail_row.status::text,'')) not in ('QUEUED','FAILED') then
       raise exception 'outbox row status is not retryable';
     end if;
@@ -3518,6 +3523,9 @@ begin
         last_error = null,
         provider_message_id = null,
         provider_status = null,
+        attempt_lease_token = null,
+        attempt_leased_at_utc = null,
+        attempt_lease_expires_at_utc = null,
         next_attempt_at_utc = v_effective_retry_at_utc
     where mo.id = v_mail_row.id;
 
