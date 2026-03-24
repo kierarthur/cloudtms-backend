@@ -16145,6 +16145,489 @@ async function handleBankingPaySnoozeClear(env, req, user) {
   }
 }
 
+
+async function ensureRailPayeeMapForHash(env, { provider, rail_env, entity_kind, entity_id, bank_details_hash, actor_user_id } = {}) {
+  const railProvider = String(provider || '').trim().toUpperCase();
+  const railEnv = String(rail_env || '').trim().toUpperCase();
+  const entityKind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const bankDetailsHash = String(bank_details_hash || '').trim();
+  const actorUserId = String(actor_user_id || '').trim() || null;
+
+  if (!railProvider) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'PROVIDER_REQUIRED',
+      rail_provider: null,
+      rail_env: railEnv || null,
+      entity_kind: entityKind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null
+    };
+  }
+
+  if (!railEnv) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'ENV_REQUIRED',
+      rail_provider: railProvider,
+      rail_env: null,
+      entity_kind: entityKind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null
+    };
+  }
+
+  if (entityKind !== 'CANDIDATE' && entityKind !== 'UMBRELLA') {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'PAYEE_ENTITY_KIND_INVALID',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null
+    };
+  }
+
+  if (!entityId || !bankDetailsHash) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'MISSING_PAYEE_IDENTITY',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null
+    };
+  }
+
+  const target = await resolveRailPayeeTargetByHash(env, {
+    entity_kind: entityKind,
+    entity_id: entityId,
+    bank_details_hash: bankDetailsHash
+  });
+
+  if (!target || target.found !== true) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: String(target?.reason || 'PAYEE_TARGET_NOT_FOUND'),
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: bankDetailsHash
+    };
+  }
+
+  const resolvedHash = String(target.bank_details_hash || '').trim();
+  const payeeName = String(target.bank_fields?.payee_name || '').trim();
+  const sortCode = String(target.bank_fields?.sort_code || '').trim();
+  const accountNumber = String(target.bank_fields?.account_number || '').trim();
+  const accountType = String(target.bank_fields?.account_type || '').trim();
+
+  const sortDigits = sortCode.replace(/[^0-9]/g, '');
+  const acctDigits = accountNumber.replace(/[^0-9]/g, '');
+
+  if (!resolvedHash || !payeeName || sortDigits.length !== 6 || !acctDigits) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'MISSING_BANK_FIELDS',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash || bankDetailsHash
+    };
+  }
+
+  let checkRow = null;
+  try {
+    const q = new URLSearchParams();
+    q.set('select', 'status,override_reason,override_hash');
+    q.set('rail_provider', `eq.${railProvider}`);
+    q.set('rail_env', `eq.${railEnv}`);
+    q.set('entity_kind', `eq.${entityKind}`);
+    q.set('entity_id', `eq.${entityId}`);
+    q.set('bank_details_hash', `eq.${resolvedHash}`);
+    q.set('limit', '1');
+
+    const url = `${env.SUPABASE_URL}/rest/v1/bank_name_checks?${q.toString()}`;
+    const res = await sbFetch(env, url);
+    checkRow = (res && Array.isArray(res.rows) && res.rows.length) ? res.rows[0] : null;
+  } catch {
+    checkRow = null;
+  }
+
+  const nameCheckStatus = String(checkRow?.status || '').trim().toUpperCase();
+  const overrideHash = String(checkRow?.override_hash || '').trim();
+  const overrideReason = String(checkRow?.override_reason || '').trim();
+  const hasOverride = (!!overrideHash && overrideHash === resolvedHash) || !!overrideReason;
+  const nameGateSatisfied = (nameCheckStatus === 'PASS') || hasOverride;
+
+  if (!nameGateSatisfied) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'NAME_CHECK_REQUIRED',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  }
+
+  const adapter = getRailAdapter(railProvider);
+  if (!adapter || typeof adapter.ensurePayeeMapped !== 'function') {
+    return {
+      attempted: false,
+      ok: true,
+      skipped: true,
+      reason: 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  }
+
+  try {
+    if (typeof adapter.capabilities === 'function') {
+      const caps = await adapter.capabilities(env);
+      if (caps && typeof caps === 'object' && caps.available === false) {
+        return {
+          attempted: false,
+          ok: false,
+          skipped: true,
+          reason: String(caps.reason || 'RAIL_NOT_AVAILABLE'),
+          rail_provider: railProvider,
+          rail_env: railEnv,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash: resolvedHash
+        };
+      }
+    }
+  } catch (e) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'RAIL_CAPABILITIES_FAILED',
+      error: String(e?.message || e),
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  }
+
+  try {
+    const setupRes = await adapter.ensurePayeeMapped(env, {
+      rail_env: railEnv,
+      actor_user_id: actorUserId,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash,
+      bank_fields: {
+        payee_name: payeeName,
+        bank_name: String(target.bank_fields?.bank_name || '').trim(),
+        sort_code: sortCode,
+        account_number: accountNumber,
+        account_type: accountType
+      }
+    });
+
+    if (setupRes && typeof setupRes === 'object') {
+      return setupRes;
+    }
+
+    return {
+      attempted: true,
+      ok: true,
+      skipped: false,
+      reason: null,
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  } catch (e) {
+    return {
+      attempted: true,
+      ok: false,
+      skipped: false,
+      reason: 'RAIL_PROVIDER_SETUP_FAILED',
+      error: String(e?.message || e),
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  }
+}
+
+async function handleBankingPayEnsurePayeeMap(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  let provider = String(body.provider || body.rail_provider || '').trim().toUpperCase();
+  let railEnv = String(body.env || body.rail_env || '').trim().toUpperCase();
+
+  const entityKind = String(body.entity_kind || body.payee_entity_kind || '').trim().toUpperCase();
+  const entityId = String(body.entity_id || body.payee_entity_id || '').trim();
+  const bankDetailsHash = String(body.bank_details_hash || body.payee_bank_hash || body.bank_details_hash_snapshot || body.snapshot_bank_details_hash || '').trim();
+
+  if (!entityKind) return withCORS(env, req, badRequest('entity_kind is required (CANDIDATE|UMBRELLA)'));
+  if (!(entityKind === 'CANDIDATE' || entityKind === 'UMBRELLA')) return withCORS(env, req, badRequest('entity_kind must be CANDIDATE or UMBRELLA'));
+  if (!entityId) return withCORS(env, req, badRequest('entity_id is required'));
+  if (!uuidRe.test(entityId)) return withCORS(env, req, badRequest('entity_id must be a UUID'));
+  if (!bankDetailsHash) return withCORS(env, req, badRequest('bank_details_hash is required'));
+
+  if (!provider || !railEnv) {
+    try {
+      const sel = ['rail_provider_default', 'rail_env_default'].join(',');
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}`);
+      const r0 = (rows && rows[0]) ? rows[0] : null;
+
+      if (!provider) provider = String(r0?.rail_provider_default || 'CSV').trim().toUpperCase();
+      if (!railEnv) railEnv = String(r0?.rail_env_default || 'PROD').trim().toUpperCase();
+    } catch {
+      if (!provider) provider = 'CSV';
+      if (!railEnv) railEnv = 'PROD';
+    }
+  }
+
+  if (!provider) return withCORS(env, req, badRequest('provider is required'));
+  if (!railEnv) return withCORS(env, req, badRequest('env is required'));
+
+  try {
+    const railSetup = await ensureRailPayeeMapForHash(env, {
+      provider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: bankDetailsHash,
+      actor_user_id: user && user.id ? user.id : null
+    });
+
+    if (railSetup && railSetup.ok === true) {
+      return withCORS(env, req, ok({ ok: true, rail_setup: railSetup }));
+    }
+
+    if (railSetup && railSetup.skipped === true && railSetup.reason === 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP') {
+      return withCORS(env, req, ok({ ok: true, rail_setup: railSetup }));
+    }
+
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ ok: false, rail_setup: railSetup }),
+        { status: 400, headers: JSON_HEADERS }
+      )
+    );
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function resolveRailPayeeTargetByHash(env, { entity_kind, entity_id, bank_details_hash } = {}) {
+  const entityKind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const bankDetailsHash = String(bank_details_hash || '').trim();
+
+  if (entityKind !== 'CANDIDATE' && entityKind !== 'UMBRELLA') {
+    return {
+      found: false,
+      entity_kind: entityKind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null,
+      bank_fields: null,
+      reason: 'PAYEE_ENTITY_KIND_INVALID'
+    };
+  }
+
+  if (!entityId) {
+    return {
+      found: false,
+      entity_kind: entityKind,
+      entity_id: null,
+      bank_details_hash: bankDetailsHash || null,
+      bank_fields: null,
+      reason: 'ENTITY_ID_REQUIRED'
+    };
+  }
+
+  if (!bankDetailsHash) {
+    return {
+      found: false,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: null,
+      bank_fields: null,
+      reason: 'BANK_DETAILS_HASH_REQUIRED'
+    };
+  }
+
+  if (entityKind === 'CANDIDATE') {
+    try {
+      const qs = new URLSearchParams();
+      qs.set('select', 'id,display_name,account_holder,bank_name,sort_code,account_number,bank_details_hash');
+      qs.set('id', `eq.${entityId}`);
+      qs.set('limit', '1');
+
+      const url = `${env.SUPABASE_URL}/rest/v1/candidates?${qs.toString()}`;
+      const fetchRes = await sbFetch(env, url);
+      const row0 = (fetchRes && Array.isArray(fetchRes.rows) && fetchRes.rows.length) ? fetchRes.rows[0] : null;
+
+      if (row0 && typeof row0 === 'object') {
+        const currentHash = String(row0.bank_details_hash || '').trim();
+        if (currentHash && currentHash === bankDetailsHash) {
+          const payeeName = String(row0.account_holder || row0.display_name || '').trim();
+          return {
+            found: true,
+            entity_kind: entityKind,
+            entity_id: entityId,
+            bank_details_hash: currentHash,
+            bank_fields: {
+              payee_name: payeeName,
+              bank_name: String(row0.bank_name || '').trim(),
+              sort_code: String(row0.sort_code || '').trim(),
+              account_number: String(row0.account_number || '').trim(),
+              account_type: 'personal'
+            },
+            source: 'CANDIDATE_CURRENT'
+          };
+        }
+      }
+    } catch {}
+
+    try {
+      const oneoffQs = new URLSearchParams();
+      oneoffQs.set('select', 'finance_case_id,candidate_id,beneficiary_name,sort_code,account_number,bank_details_hash,note');
+      oneoffQs.set('candidate_id', `eq.${entityId}`);
+      oneoffQs.set('bank_details_hash', `eq.${bankDetailsHash}`);
+      oneoffQs.set('limit', '25');
+
+      const oneoffUrl = `${env.SUPABASE_URL}/rest/v1/pay_finance_case_oneoff_payout_bank_details?${oneoffQs.toString()}`;
+      const oneoffRes = await sbFetch(env, oneoffUrl);
+      const oneoffRows = (oneoffRes && Array.isArray(oneoffRes.rows)) ? oneoffRes.rows : [];
+
+      for (const row0 of oneoffRows) {
+        const financeCaseId = String(row0 && row0.finance_case_id ? row0.finance_case_id : '').trim();
+        if (!financeCaseId) continue;
+
+        try {
+          const viewQs = new URLSearchParams();
+          viewQs.set('select', 'finance_case_id,candidate_id,routing_kind,edit_bank_details_allowed,oneoff_bank_details_present,oneoff_bank_details_editable');
+          viewQs.set('finance_case_id', `eq.${financeCaseId}`);
+          viewQs.set('candidate_id', `eq.${entityId}`);
+          viewQs.set('routing_kind', 'eq.ONE_OFF_SPECIFIED_BANK_ACCOUNT');
+          viewQs.set('edit_bank_details_allowed', 'eq.true');
+          viewQs.set('limit', '1');
+
+          const viewUrl = `${env.SUPABASE_URL}/rest/v1/v_finance_cases_register?${viewQs.toString()}`;
+          const viewRes = await sbFetch(env, viewUrl);
+          const financeRow = (viewRes && Array.isArray(viewRes.rows) && viewRes.rows.length) ? viewRes.rows[0] : null;
+
+          if (!financeRow || typeof financeRow !== 'object') continue;
+
+          return {
+            found: true,
+            entity_kind: entityKind,
+            entity_id: entityId,
+            bank_details_hash: String(row0.bank_details_hash || '').trim(),
+            bank_fields: {
+              payee_name: String(row0.beneficiary_name || '').trim(),
+              bank_name: '',
+              sort_code: String(row0.sort_code || '').trim(),
+              account_number: String(row0.account_number || '').trim(),
+              account_type: 'personal'
+            },
+            source: 'CANDIDATE_ONEOFF_PAYOUT',
+            finance_case_id: financeCaseId
+          };
+        } catch {}
+      }
+    } catch {}
+
+    return {
+      found: false,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: bankDetailsHash,
+      bank_fields: null,
+      reason: 'PAYEE_TARGET_NOT_FOUND'
+    };
+  }
+
+  try {
+    const qs = new URLSearchParams();
+    qs.set('select', 'id,name,bank_name,sort_code,account_number,bank_details_hash');
+    qs.set('id', `eq.${entityId}`);
+    qs.set('limit', '1');
+
+    const url = `${env.SUPABASE_URL}/rest/v1/umbrellas?${qs.toString()}`;
+    const fetchRes = await sbFetch(env, url);
+    const row0 = (fetchRes && Array.isArray(fetchRes.rows) && fetchRes.rows.length) ? fetchRes.rows[0] : null;
+
+    if (row0 && typeof row0 === 'object') {
+      const currentHash = String(row0.bank_details_hash || '').trim();
+      if (currentHash && currentHash === bankDetailsHash) {
+        return {
+          found: true,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash: currentHash,
+          bank_fields: {
+            payee_name: String(row0.name || '').trim(),
+            bank_name: String(row0.bank_name || '').trim(),
+            sort_code: String(row0.sort_code || '').trim(),
+            account_number: String(row0.account_number || '').trim(),
+            account_type: 'business'
+          },
+          source: 'UMBRELLA_CURRENT'
+        };
+      }
+    }
+  } catch {}
+
+  return {
+    found: false,
+    entity_kind: entityKind,
+    entity_id: entityId,
+    bank_details_hash: bankDetailsHash,
+    bank_fields: null,
+    reason: 'PAYEE_TARGET_NOT_FOUND'
+  };
+}
+
+
+
 async function handleBankingBankNameCheckSetOverride(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -16159,6 +16642,13 @@ async function handleBankingBankNameCheckSetOverride(env, req, user) {
 
   const entityKind = String(body.entity_kind || body.payee_entity_kind || '').trim().toUpperCase();
   const entityId = String(body.entity_id || body.payee_entity_id || '').trim();
+  const bankDetailsHash = String(
+    body.bank_details_hash ||
+    body.payee_bank_hash ||
+    body.bank_details_hash_snapshot ||
+    body.snapshot_bank_details_hash ||
+    ''
+  ).trim();
   const reason = String(body.reason || '').trim();
 
   if (!entityKind) return withCORS(env, req, badRequest('entity_kind is required (CANDIDATE|UMBRELLA)'));
@@ -16192,7 +16682,8 @@ async function handleBankingBankNameCheckSetOverride(env, req, user) {
       p_entity_kind: entityKind,
       p_entity_id: entityId,
       p_reason: reason,
-      p_actor_user_id: user.id
+      p_actor_user_id: user.id,
+      p_bank_details_hash: bankDetailsHash || null
     });
 
     let payload = rpcRes;
@@ -16203,48 +16694,15 @@ async function handleBankingBankNameCheckSetOverride(env, req, user) {
       }
     } catch {}
 
-    const _loadCurrentPayeeBankDetails = async () => {
-      const isCandidate = (entityKind === 'CANDIDATE');
-      const tableName = isCandidate ? 'candidates' : 'umbrellas';
-      const selectCols = isCandidate
-        ? ['id', 'display_name', 'account_holder', 'bank_name', 'sort_code', 'account_number', 'bank_details_hash'].join(',')
-        : ['id', 'name', 'bank_name', 'sort_code', 'account_number', 'bank_details_hash'].join(',');
+    const payloadRow = (payload && typeof payload === 'object' && payload.row && typeof payload.row === 'object')
+      ? payload.row
+      : null;
 
-      const qs = new URLSearchParams();
-      qs.set('select', selectCols);
-      qs.set('id', `eq.${entityId}`);
-      qs.set('limit', '1');
-
-      const url = `${env.SUPABASE_URL}/rest/v1/${tableName}?${qs.toString()}`;
-      const fetchRes = await sbFetch(env, url);
-      const row0 = (fetchRes && Array.isArray(fetchRes.rows) && fetchRes.rows.length) ? fetchRes.rows[0] : null;
-
-      if (!row0 || typeof row0 !== 'object') {
-        return {
-          found: false,
-          entity_kind: entityKind,
-          entity_id: entityId
-        };
-      }
-
-      const payeeName = isCandidate
-        ? String(row0.account_holder || row0.display_name || '').trim()
-        : String(row0.name || '').trim();
-
-      return {
-        found: true,
-        entity_kind: entityKind,
-        entity_id: entityId,
-        bank_details_hash: String(row0.bank_details_hash || '').trim(),
-        bank_fields: {
-          payee_name: payeeName,
-          bank_name: String(row0.bank_name || '').trim(),
-          sort_code: String(row0.sort_code || '').trim(),
-          account_number: String(row0.account_number || '').trim(),
-          account_type: isCandidate ? 'personal' : 'business'
-        }
-      };
-    };
+    const resolvedTargetHash = String(
+      payloadRow?.bank_details_hash ||
+      bankDetailsHash ||
+      ''
+    ).trim();
 
     let railSetup = {
       attempted: false,
@@ -16254,140 +16712,45 @@ async function handleBankingBankNameCheckSetOverride(env, req, user) {
       rail_provider: provider,
       rail_env: railEnv,
       entity_kind: entityKind,
-      entity_id: entityId
+      entity_id: entityId,
+      bank_details_hash: resolvedTargetHash || null
     };
 
-    try {
-      const adapter = getRailAdapter(provider);
-      if (!adapter || typeof adapter.ensurePayeeMapped !== 'function') {
+    if (resolvedTargetHash) {
+      try {
+        railSetup = await ensureRailPayeeMapForHash(env, {
+          provider,
+          rail_env: railEnv,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash: resolvedTargetHash,
+          actor_user_id: user.id
+        });
+      } catch (e) {
         railSetup = {
           attempted: false,
-          ok: true,
+          ok: false,
           skipped: true,
-          reason: 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP',
+          reason: 'RAIL_PROVIDER_SETUP_FAILED',
+          error: String(e?.message || e),
           rail_provider: provider,
           rail_env: railEnv,
           entity_kind: entityKind,
-          entity_id: entityId
+          entity_id: entityId,
+          bank_details_hash: resolvedTargetHash || null
         };
-      } else {
-        let caps = null;
-        try {
-          if (typeof adapter.capabilities === 'function') {
-            caps = await adapter.capabilities(env);
-          }
-        } catch (e) {
-          railSetup = {
-            attempted: false,
-            ok: false,
-            skipped: true,
-            reason: 'RAIL_CAPABILITIES_FAILED',
-            error: String(e?.message || e),
-            rail_provider: provider,
-            rail_env: railEnv,
-            entity_kind: entityKind,
-            entity_id: entityId
-          };
-          caps = null;
-        }
-
-        if (!(railSetup && railSetup.reason === 'RAIL_CAPABILITIES_FAILED')) {
-          if (caps && typeof caps === 'object' && caps.available === false) {
-            railSetup = {
-              attempted: false,
-              ok: false,
-              skipped: true,
-              reason: String(caps.reason || 'RAIL_NOT_AVAILABLE'),
-              rail_provider: provider,
-              rail_env: railEnv,
-              entity_kind: entityKind,
-              entity_id: entityId
-            };
-          } else {
-            const currentPayee = await _loadCurrentPayeeBankDetails();
-
-            if (!currentPayee.found) {
-              railSetup = {
-                attempted: false,
-                ok: false,
-                skipped: true,
-                reason: 'ENTITY_NOT_FOUND',
-                rail_provider: provider,
-                rail_env: railEnv,
-                entity_kind: entityKind,
-                entity_id: entityId
-              };
-            } else if (
-              !String(currentPayee.bank_details_hash || '').trim() ||
-              !String(currentPayee.bank_fields?.payee_name || '').trim() ||
-              String(currentPayee.bank_fields?.sort_code || '').replace(/[^0-9]/g, '').length !== 6 ||
-              !String(currentPayee.bank_fields?.account_number || '').replace(/[^0-9]/g, '')
-            ) {
-              railSetup = {
-                attempted: false,
-                ok: false,
-                skipped: true,
-                reason: 'MISSING_BANK_FIELDS',
-                rail_provider: provider,
-                rail_env: railEnv,
-                entity_kind: entityKind,
-                entity_id: entityId,
-                bank_details_hash: String(currentPayee.bank_details_hash || '').trim() || null
-              };
-            } else {
-              try {
-                const setupRes = await adapter.ensurePayeeMapped(env, {
-                  rail_env: railEnv,
-                  actor_user_id: user.id,
-                  entity_kind: entityKind,
-                  entity_id: entityId,
-                  bank_details_hash: String(currentPayee.bank_details_hash || '').trim(),
-                  bank_fields: currentPayee.bank_fields
-                });
-
-                if (setupRes && typeof setupRes === 'object') {
-                  railSetup = setupRes;
-                } else {
-                  railSetup = {
-                    attempted: true,
-                    ok: true,
-                    skipped: false,
-                    rail_provider: provider,
-                    rail_env: railEnv,
-                    entity_kind: entityKind,
-                    entity_id: entityId,
-                    bank_details_hash: String(currentPayee.bank_details_hash || '').trim()
-                  };
-                }
-              } catch (e) {
-                railSetup = {
-                  attempted: true,
-                  ok: false,
-                  skipped: false,
-                  reason: 'RAIL_PROVIDER_SETUP_FAILED',
-                  error: String(e?.message || e),
-                  rail_provider: provider,
-                  rail_env: railEnv,
-                  entity_kind: entityKind,
-                  entity_id: entityId,
-                  bank_details_hash: String(currentPayee.bank_details_hash || '').trim()
-                };
-              }
-            }
-          }
-        }
       }
-    } catch (e) {
+    } else {
       railSetup = {
         attempted: false,
         ok: false,
         skipped: true,
-        reason: 'RAIL_PROVIDER_SETUP_FAILED',
-        error: String(e?.message || e),
+        reason: 'BANK_DETAILS_HASH_REQUIRED',
         rail_provider: provider,
         rail_env: railEnv,
         entity_kind: entityKind,
-        entity_id: entityId
+        entity_id: entityId,
+        bank_details_hash: null
       };
     }
 
@@ -16415,6 +16778,13 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
 
   const entityKind = String(body.entity_kind || body.payee_entity_kind || '').trim().toUpperCase();
   const entityId = String(body.entity_id || body.payee_entity_id || '').trim();
+  const bankDetailsHash = String(
+    body.bank_details_hash ||
+    body.payee_bank_hash ||
+    body.bank_details_hash_snapshot ||
+    body.snapshot_bank_details_hash ||
+    ''
+  ).trim();
 
   if (!entityKind) return withCORS(env, req, badRequest('entity_kind is required (CANDIDATE|UMBRELLA)'));
   if (!(entityKind === 'CANDIDATE' || entityKind === 'UMBRELLA')) return withCORS(env, req, badRequest('entity_kind must be CANDIDATE or UMBRELLA'));
@@ -16445,7 +16815,8 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
       p_env: railEnv,
       p_entity_kind: entityKind,
       p_entity_id: entityId,
-      p_actor_user_id: user.id
+      p_actor_user_id: user.id,
+      p_bank_details_hash: bankDetailsHash || null
     });
 
     let payload = rpcRes;
@@ -16461,6 +16832,7 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -57045,7 +57417,6 @@ async function handleMailshotEnqueue(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const enc = encodeURIComponent;
 
@@ -57071,6 +57442,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 
   const take = Math.max(1, Math.min(requestedTake, maxDrainJobs));
   const typeFilter = Array.isArray(types) && types.length ? types : null;
+  const typeFilterSet = typeFilter
+    ? new Set(typeFilter.map((tp) => String(tp || '').trim().toUpperCase()).filter(Boolean))
+    : null;
 
   let sent = 0;
   let failed = 0;
@@ -57083,32 +57457,148 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return new Date(ms).toISOString();
   };
 
-  const getEmailOutboxReadyBatch = async (takeCount, selectedTypes) => {
-    const readyIso = nowIsoUtc();
+  const leaseMinutes = 5;
+  const attemptLeaseToken =
+    (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+      ? globalThis.crypto.randomUUID()
+      : `lease_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
-    let url =
-      `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=*` +
-      `&status=eq.QUEUED` +
-      `&or=(` +
-        `and(next_attempt_at_utc.not.is.null,next_attempt_at_utc.lte.${enc(readyIso)}),` +
-        `and(next_attempt_at_utc.is.null,scheduled_for_utc.not.is.null,scheduled_for_utc.lte.${enc(readyIso)}),` +
-        `and(next_attempt_at_utc.is.null,scheduled_for_utc.is.null)` +
-      `)` +
-      `&order=next_attempt_at_utc.asc.nullslast` +
-      `&order=scheduled_for_utc.asc.nullslast` +
-      `&order=created_at_utc.asc` +
-      `&limit=${takeCount}`;
+  const patchMailOutboxRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?${query}`, {
+      method: 'PATCH',
+      headers: {
+        ...sbHeaders(env),
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(body)
+    });
 
-    if (selectedTypes) {
-      const t = selectedTypes.map((tp) => `"${enc(tp)}"`).join(",");
-      url += `&type=in.(${t})`;
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `mail_outbox patch failed (${res.status})`);
     }
 
-    const { rows } = await sbFetch(env, url, false);
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const clearClaimedLease = async (rowId, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}`,
+      {
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const patchClaimedRowFailed = async (rowId, msg, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
+      {
+        status: 'FAILED',
+        failed_at: nowIsoUtc(),
+        last_error: String(msg || 'FAILED'),
+        provider_status: 'FAILED',
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const patchClaimedRowSent = async (rowId, providerMessageId, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}`,
+      {
+        status: 'SENT',
+        sent_at: nowIsoUtc(),
+        provider_message_id: providerMessageId || null,
+        provider_status: 'ACCEPTED',
+        delivered_at: null,
+        read_at: null,
+        last_error: null,
+        failed_at: null,
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const patchClaimedRowDeferred = async (rowId, msg, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
+      {
+        status: 'QUEUED',
+        last_error: String(msg || 'DEFERRED'),
+        next_attempt_at_utc: nowPlusMinutesIso(10),
+        failed_at: null,
+        provider_status: null,
+        provider_message_id: null,
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const claimEmailOutboxReadyBatch = async (takeCount) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/email_outbox_claim_ready_batch`, {
+      method: 'POST',
+      headers: sbHeaders(env),
+      body: JSON.stringify({
+        p_limit: takeCount,
+        p_attempt_lease_token: attemptLeaseToken,
+        p_lease_minutes: leaseMinutes
+      })
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `email_outbox_claim_ready_batch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
     return Array.isArray(rows) ? rows : [];
   };
 
-  const picked = await getEmailOutboxReadyBatch(take, typeFilter);
+  const claimTake = typeFilterSet ? maxDrainJobs : take;
+  const claimed = await claimEmailOutboxReadyBatch(claimTake);
+
+  if (claimed.length === 0) {
+    return { picked: 0, sent: 0, failed: 0, deferred: 0, errors: [] };
+  }
+
+  const picked = [];
+  const toRelease = [];
+
+  if (typeFilterSet) {
+    for (const row of claimed) {
+      const rowType = String(row && row.type ? row.type : '').trim().toUpperCase();
+      if (typeFilterSet.has(rowType) && picked.length < take) {
+        picked.push(row);
+      } else {
+        toRelease.push(row);
+      }
+    }
+  } else {
+    picked.push(...claimed.slice(0, take));
+    toRelease.push(...claimed.slice(take));
+  }
+
+  for (const row of toRelease) {
+    try {
+      await clearClaimedLease(row.id, attemptLeaseToken);
+    } catch {}
+  }
+
   if (picked.length === 0) {
     return { picked: 0, sent: 0, failed: 0, deferred: 0, errors: [] };
   }
@@ -57128,29 +57618,19 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     bucket.rowIds.push(rowId);
   };
 
-  const patchRowFailed = async (rowId, msg) => {
-    try {
-      await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-        method: 'PATCH',
-        headers: sbHeaders(env),
-        body: JSON.stringify({
-          status: 'FAILED',
-          failed_at: nowIsoUtc(),
-          last_error: String(msg || 'FAILED'),
-          provider_status: 'FAILED'
-        }),
-      });
-    } catch {}
-  };
-
-  const reconcileBatchResult = async (res, rowIds) => {
-    if (!res.ok) {
-      const errMsg = String(res.body || `HTTP ${res.status}`);
+  const reconcileBatchResult = async (res, rowIds, currentLeaseToken) => {
+    if (!res || !res.ok) {
+      const errMsg = String((res && res.body) || (res && `HTTP ${res.status}`) || 'Provider transport failure');
       for (const rowId of rowIds) {
-        await patchRowFailed(rowId, errMsg);
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
-        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
       }
       return;
     }
@@ -57166,108 +57646,130 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     if (!Array.isArray(results) || results.length === 0) {
       const errMsg = 'Provider returned no per-item results (cannot reconcile)';
       for (const rowId of rowIds) {
-        await patchRowFailed(rowId, errMsg);
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
-        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
       }
       return;
     }
 
     const byOutboxId = new Map();
     for (const r of results) {
-      const oid = r?.meta?.outbox_id || r?.meta?.outboxId || r?.meta?.id || null;
-      if (oid) byOutboxId.set(String(oid), r);
+      const oid =
+        r?.outbox_id ||
+        r?.outboxId ||
+        r?.meta?.outbox_id ||
+        r?.meta?.outboxId ||
+        r?.meta?.id ||
+        null;
+      if (!oid) continue;
+      byOutboxId.set(String(oid), r);
     }
 
-    for (let i = 0; i < rowIds.length; i++) {
-      const rowId = rowIds[i];
-      const r = byOutboxId.get(String(rowId)) || results[i] || null;
+    for (const rowId of rowIds) {
+      const r = byOutboxId.get(String(rowId)) || null;
+
+      if (!r) {
+        const errMsg = 'PROVIDER_RESULT_MISSING_FOR_ITEM';
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
+        continue;
+      }
 
       const status = String(r?.status || '').toUpperCase();
       const isSuccess = status === 'SUCCESS';
       const isFailed = status === 'FAILED' || status === 'FAIL' || status === 'ERROR';
 
       if (isSuccess) {
-        const providerMessageId = r?.provider_message_id || r?.providerMessageId || res.provider_message_id || null;
+        const providerMessageId =
+          r?.provider_message_id ||
+          r?.providerMessageId ||
+          null;
 
-        const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: 'PATCH',
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: 'SENT',
-            sent_at: nowIsoUtc(),
-            provider_message_id: providerMessageId || null,
-            provider_status: 'ACCEPTED',
-            delivered_at: null,
-            read_at: null,
-            last_error: null,
-            failed_at: null,
-          }),
-        });
-
-        if (!upd.ok) {
-          const errTxt = await upd.text();
-          throw new Error(`Sent but failed to update status: ${errTxt}`);
-        }
+        const updatedRow = await patchClaimedRowSent(rowId, providerMessageId, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
 
         sent += 1;
         await recordEmailAudit(env, null, 'EMAIL_SENT', {
           outbox_id: rowId,
           provider_message_id: providerMessageId,
-          type: r?.meta?.type || 'BATCH',
+          type: r?.meta?.type || 'BATCH'
         });
         continue;
       }
 
       if (isFailed) {
         const errMsg = String(r?.error || r?.body || r?.message || 'Provider failed');
-        const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: 'PATCH',
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: 'FAILED',
-            failed_at: nowIsoUtc(),
-            last_error: errMsg,
-            provider_status: 'FAILED'
-          }),
-        });
-
-        if (!upd.ok) {
-          const errTxt = await upd.text();
-          throw new Error(`Provider fail and update fail: ${errTxt}`);
-        }
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
 
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
         await recordEmailAudit(env, null, 'EMAIL_FAILED', {
           outbox_id: rowId,
           error: errMsg,
-          type: r?.meta?.type || 'BATCH',
+          type: r?.meta?.type || 'BATCH'
         });
         continue;
       }
 
       {
         const errMsg = String(r?.error || r?.body || r?.message || 'Unknown provider status');
-        await patchRowFailed(rowId, errMsg);
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
+
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
-        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
       }
     }
   };
 
   for (const row of picked) {
     try {
-      const payload = await buildEmailPayloadFromOutboxRow(env, row);
+      const payloadBase = await buildEmailPayloadFromOutboxRow(env, row);
+      const payload = {
+        ...payloadBase,
+        meta: {
+          ...((payloadBase && payloadBase.meta && typeof payloadBase.meta === 'object') ? payloadBase.meta : {}),
+          outbox_id: row.id || null,
+          type: row.type || null,
+          reference: row.reference || null,
+          sender_user_id: row.created_by || null,
+          recipient_kind: row.recipient_kind || null,
+          recipient_id: row.recipient_id || null,
+          context_kind: row.context_kind || null,
+          context_id: row.context_id || null,
+          mailshot_run_id: row.mailshot_run_id || null,
+          document_template_id: row.document_template_id || null
+        }
+      };
+
       const rowType = String(row && row.type ? row.type : '').trim().toUpperCase();
       const senderUserId = (row && row.created_by != null) ? String(row.created_by).trim() : '';
 
       if (rowType === 'MAILSHOT_EMAIL') {
         if (!senderUserId) {
           const msg = 'MAILSHOT_SENDER_USER_MISSING';
-          await patchRowFailed(row.id, msg);
+          const updatedRow = await patchClaimedRowFailed(row.id, msg, attemptLeaseToken).catch(() => null);
+          if (!updatedRow) continue;
           failed += 1;
           errors.push({ id: row.id, error: msg });
           await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
@@ -57282,17 +57784,8 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       const msg = String(e?.message || e);
 
       if (msg.startsWith('PDF_NOT_READY:')) {
-        try {
-          await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-            method: 'PATCH',
-            headers: sbHeaders(env),
-            body: JSON.stringify({
-              status: 'QUEUED',
-              last_error: msg,
-              next_attempt_at_utc: nowPlusMinutesIso(10),
-            }),
-          });
-        } catch {}
+        const updatedRow = await patchClaimedRowDeferred(row.id, msg, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         deferred += 1;
         errors.push({ id: row.id, error: msg, deferred: true });
         await recordEmailAudit(env, null, 'EMAIL_DEFERRED', {
@@ -57303,7 +57796,8 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         continue;
       }
 
-      await patchRowFailed(row.id, msg);
+      const updatedRow = await patchClaimedRowFailed(row.id, msg, attemptLeaseToken).catch(() => null);
+      if (!updatedRow) continue;
       failed += 1;
       errors.push({ id: row.id, error: msg });
       await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
@@ -57325,8 +57819,19 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       if (!batchJobs.length) continue;
 
       const batchPayload = { items: batchJobs };
-      const res = await postToPowerAutomate(env, batchPayload, bucket.channel);
-      await reconcileBatchResult(res, batchRowIds);
+
+      let res = null;
+      try {
+        res = await postToPowerAutomate(env, batchPayload, bucket.channel);
+      } catch (e) {
+        res = {
+          ok: false,
+          status: 0,
+          body: String(e?.message || e || 'Provider transport failure')
+        };
+      }
+
+      await reconcileBatchResult(res, batchRowIds, attemptLeaseToken);
       outboundCallCount += 1;
     }
 
@@ -57335,6 +57840,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 
   return { picked: picked.length, sent, failed, deferred, errors };
 }
+
 async function drainCommsOutboxOnce(env, { limit } = {}) {
   const enc = encodeURIComponent;
 
@@ -69671,7 +70177,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     // 1) Load current umbrella (for change detection)
     const { rows: beforeRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(umbrellaId)}&select=name,bank_name,sort_code,account_number`
+      `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(umbrellaId)}&select=name,bank_name,sort_code,account_number,bank_details_hash`
     );
     const before = beforeRows?.[0] || {};
 
@@ -69688,6 +70194,9 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     }
     const json = await res.json().catch(() => ({}));
     const umbrella = Array.isArray(json) ? json[0] : json;
+
+    const oldHash = (before && before.bank_details_hash != null) ? String(before.bank_details_hash).trim() : '';
+    const newHash = (umbrella && umbrella.bank_details_hash != null) ? String(umbrella.bank_details_hash).trim() : '';
 
     // 3) Detect pay-channel impacting changes
     const watched = ['name','bank_name','sort_code','account_number'];
@@ -69727,13 +70236,25 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
       }
     }
 
+    if (oldHash && oldHash !== newHash) {
+      try {
+        await cleanupStaleRailPayeeMappingsForHash(env, {
+          entity_kind: 'UMBRELLA',
+          entity_id: umbrellaId,
+          old_bank_details_hash: oldHash,
+          new_bank_details_hash: newHash || null,
+          actor_user_id: user.id
+        });
+      } catch (cleanupErr) {
+        console.warn('[BANK_PAYEE_CLEANUP] umbrella cleanup failed (non-fatal)', cleanupErr?.message || cleanupErr);
+      }
+    }
+
     return withCORS(env, req, ok({ umbrella }));
   } catch {
     return withCORS(env, req, serverError("Failed to update umbrella"));
   }
 }
-
-
 // ====================== CANDIDATES ======================
 /**
  * @openapi
@@ -71509,8 +72030,6 @@ return withCORS(env, req, ok({
   }
 }
 
-
-
 async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -71726,6 +72245,7 @@ async function handleUpdateCandidate(env, req, candidateId) {
       'bank_name',
       'sort_code',
       'account_number',
+      'bank_details_hash',
       'key_norm',
       'nhsp_hr_name_aliases'
     ].join(',');
@@ -71810,6 +72330,9 @@ async function handleUpdateCandidate(env, req, candidateId) {
     }
     const json = await res.json().catch(() => ({}));
     const candidate = Array.isArray(json) ? json[0] : json;
+
+    const oldHash = (before && before.bank_details_hash != null) ? String(before.bank_details_hash).trim() : '';
+    const newHash = (candidate && candidate.bank_details_hash != null) ? String(candidate.bank_details_hash).trim() : '';
 
     // 2b) Upsert candidate_job_titles if job_titles were explicitly provided
     if (jtArray !== null) {
@@ -71937,6 +72460,20 @@ const tsfinRun = await tsfinTargetedDrainNow(env, {
   chunkSize: 50
 });
 
+    if (oldHash && oldHash !== newHash) {
+      try {
+        await cleanupStaleRailPayeeMappingsForHash(env, {
+          entity_kind: 'CANDIDATE',
+          entity_id: candidateId,
+          old_bank_details_hash: oldHash,
+          new_bank_details_hash: newHash || null,
+          actor_user_id: user.id
+        });
+      } catch (cleanupErr) {
+        console.warn('[BANK_PAYEE_CLEANUP] candidate cleanup failed (non-fatal)', cleanupErr?.message || cleanupErr);
+      }
+    }
+
 return withCORS(env, req, ok({
   candidate,
   tsfin: {
@@ -71954,7 +72491,6 @@ return withCORS(env, req, ok({
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
-
 
 async function handleGetCandidate(env, req, candidateId) {
   const enc  = encodeURIComponent;
@@ -94281,6 +94817,346 @@ async function handleClientDeleteApply(env, req, clientId) {
   }
 }
 
+async function revolutCounterparty_deleteIfMapped(env, token, { rail_env, entity_kind, entity_id, bank_details_hash, payee_id, payee_account_id, actor_user_id } = {}) {
+  const kind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const bankHash = String(bank_details_hash || '').trim();
+
+  const railEnvRaw = (rail_env !== undefined && rail_env !== null) ? String(rail_env).trim() : '';
+  const railEnv = (railEnvRaw ? railEnvRaw : 'PROD').toUpperCase();
+
+  const providedPayeeId = (payee_id !== undefined && payee_id !== null) ? String(payee_id).trim() : '';
+  const providedPayeeAccountId = (payee_account_id !== undefined && payee_account_id !== null) ? String(payee_account_id).trim() : '';
+  const actorRaw = (actor_user_id !== undefined && actor_user_id !== null) ? String(actor_user_id).trim() : '';
+  const actorUserId = actorRaw ? actorRaw : null;
+
+  if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'REVOLUT_PAYEE_KIND_INVALID',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankHash || null,
+      payee_id: null
+    };
+  }
+
+  if (!entityId) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'REVOLUT_PAYEE_ID_REQUIRED',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: null,
+      bank_details_hash: bankHash || null,
+      payee_id: null
+    };
+  }
+
+  if (!bankHash) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'REVOLUT_BANK_HASH_REQUIRED',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: null,
+      payee_id: null
+    };
+  }
+
+  const t = token ? String(token).trim() : '';
+  if (!t) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'REVOLUT_COUNTERPARTY_NO_TOKEN',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: bankHash,
+      payee_id: null
+    };
+  }
+
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  const q = new URLSearchParams();
+  q.set('select', 'payee_id,payee_account_id');
+  q.set('rail_provider', 'eq.REVOLUT');
+  q.set('rail_env', `eq.${railEnv}`);
+  q.set('entity_kind', `eq.${kind}`);
+  q.set('entity_id', `eq.${entityId}`);
+  q.set('bank_details_hash', `eq.${bankHash}`);
+  q.set('limit', '1');
+
+  const mapUrl = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${q.toString()}`;
+  const mapRes = await sbFetch(env, mapUrl);
+  const row = (mapRes && Array.isArray(mapRes.rows) && mapRes.rows.length) ? mapRes.rows[0] : null;
+
+  if (!row) {
+    return {
+      attempted: false,
+      ok: true,
+      skipped: true,
+      reason: 'PAYEE_MAP_NOT_FOUND',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: bankHash,
+      payee_id: null
+    };
+  }
+
+  const storedPayeeId = row && row.payee_id ? String(row.payee_id).trim() : '';
+  const storedPayeeAccountId = row && row.payee_account_id ? String(row.payee_account_id).trim() : '';
+
+  if (!storedPayeeId) {
+    return {
+      attempted: false,
+      ok: true,
+      skipped: true,
+      reason: 'PAYEE_MAP_MISSING_PAYEE_ID',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: bankHash,
+      payee_id: null
+    };
+  }
+
+  const deleteUrl = `${apiBase}/counterparty/${encodeURIComponent(storedPayeeId)}`;
+  const res = await fetch(deleteUrl, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${t}`,
+      Accept: 'application/json'
+    }
+  });
+
+  const text = await res.text();
+
+  if (res.status === 204 || res.status === 404) {
+    return {
+      attempted: true,
+      ok: true,
+      skipped: false,
+      reason: null,
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: bankHash,
+      payee_id: storedPayeeId
+    };
+  }
+
+  if (!res.ok) {
+    throw new Error(`REVOLUT_COUNTERPARTY_DELETE_FAILED_${res.status}: ${text}`);
+  }
+
+  return {
+    attempted: true,
+    ok: true,
+    skipped: false,
+    reason: null,
+    rail_provider: 'REVOLUT',
+    rail_env: railEnv,
+    entity_kind: kind,
+    entity_id: entityId,
+    bank_details_hash: bankHash,
+    payee_id: storedPayeeId
+  };
+}
+
+async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_id, old_bank_details_hash, new_bank_details_hash, actor_user_id } = {}) {
+  const kind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const oldBankHash = String(old_bank_details_hash || '').trim();
+  const newBankHash = String(new_bank_details_hash || '').trim();
+  const actorUserId = (actor_user_id === undefined || actor_user_id === null) ? null : String(actor_user_id).trim() || null;
+
+  const out = {
+    ok: true,
+    attempted: false,
+    entity_kind: kind || null,
+    entity_id: entityId || null,
+    old_bank_details_hash: oldBankHash || null,
+    new_bank_details_hash: newBankHash || null,
+    rows_found: 0,
+    rows_processed: 0,
+    local_deleted_count: 0,
+    skipped_reason: null,
+    results: []
+  };
+
+  if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') {
+    out.skipped_reason = 'PAYEE_ENTITY_KIND_INVALID';
+    return out;
+  }
+
+  if (!entityId) {
+    out.skipped_reason = 'MISSING_ENTITY_ID';
+    return out;
+  }
+
+  if (!oldBankHash) {
+    out.skipped_reason = 'OLD_BANK_HASH_REQUIRED';
+    return out;
+  }
+
+  if (newBankHash && oldBankHash === newBankHash) {
+    out.skipped_reason = 'BANK_HASH_UNCHANGED';
+    return out;
+  }
+
+  let rows = [];
+  try {
+    const q = new URLSearchParams();
+    q.set('select', 'id,rail_provider,rail_env,entity_kind,entity_id,bank_details_hash,payee_id,payee_account_id,meta_json');
+    q.set('entity_kind', `eq.${kind}`);
+    q.set('entity_id', `eq.${entityId}`);
+    q.set('bank_details_hash', `eq.${oldBankHash}`);
+
+    const url = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${q.toString()}`;
+    const res = await sbFetch(env, url);
+    rows = (res && Array.isArray(res.rows)) ? res.rows : [];
+  } catch (e) {
+    try {
+      console.warn('[BANK_PAYEE_CLEANUP] lookup failed (non-fatal)', {
+        entity_kind: kind,
+        entity_id: entityId,
+        old_bank_details_hash: oldBankHash,
+        error: String(e?.message || e)
+      });
+    } catch {}
+    out.skipped_reason = 'LOOKUP_FAILED';
+    return out;
+  }
+
+  out.rows_found = rows.length;
+
+  if (!rows.length) {
+    out.skipped_reason = 'PAYEE_MAP_NOT_FOUND';
+    return out;
+  }
+
+  out.attempted = true;
+
+  for (const row of rows) {
+    const rowId = (row && row.id !== undefined && row.id !== null) ? String(row.id).trim() : '';
+    const provider = (row && row.rail_provider !== undefined && row.rail_provider !== null) ? String(row.rail_provider).trim().toUpperCase() : '';
+    const railEnv = (row && row.rail_env !== undefined && row.rail_env !== null) ? String(row.rail_env).trim().toUpperCase() : '';
+    const rowKind = (row && row.entity_kind !== undefined && row.entity_kind !== null) ? String(row.entity_kind).trim().toUpperCase() : kind;
+    const rowEntityId = (row && row.entity_id !== undefined && row.entity_id !== null) ? String(row.entity_id).trim() : entityId;
+    const rowBankHash = (row && row.bank_details_hash !== undefined && row.bank_details_hash !== null) ? String(row.bank_details_hash).trim() : oldBankHash;
+    const rowPayeeId = (row && row.payee_id !== undefined && row.payee_id !== null) ? String(row.payee_id).trim() : '';
+    const rowPayeeAccountId = (row && row.payee_account_id !== undefined && row.payee_account_id !== null) ? String(row.payee_account_id).trim() : '';
+    const rowMetaJson = (row && row.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json)) ? row.meta_json : null;
+
+    const rowResult = {
+      id: rowId || null,
+      rail_provider: provider || null,
+      rail_env: railEnv || null,
+      entity_kind: rowKind || null,
+      entity_id: rowEntityId || null,
+      bank_details_hash: rowBankHash || null,
+      payee_id: rowPayeeId || null,
+      attempted_delete: false,
+      local_deleted: false,
+      skipped: false,
+      reason: null
+    };
+
+    try {
+      const adapter = getRailAdapter(provider || 'CSV');
+
+      if (!adapter || typeof adapter.deletePayeeIfMapped !== 'function') {
+        rowResult.skipped = true;
+        rowResult.reason = 'RAIL_DOES_NOT_SUPPORT_DELETE_PAYEE';
+        out.results.push(rowResult);
+        continue;
+      }
+
+      const deleteRes = await adapter.deletePayeeIfMapped(env, {
+        rail_env: railEnv,
+        actor_user_id: actorUserId,
+        entity_kind: rowKind,
+        entity_id: rowEntityId,
+        bank_details_hash: rowBankHash,
+        payee_id: rowPayeeId || null,
+        payee_account_id: rowPayeeAccountId || null,
+        meta_json: rowMetaJson
+      });
+
+      rowResult.attempted_delete = !!(deleteRes && deleteRes.attempted === true);
+      rowResult.skipped = !!(deleteRes && deleteRes.skipped === true);
+      rowResult.reason = (deleteRes && deleteRes.reason !== undefined && deleteRes.reason !== null)
+        ? String(deleteRes.reason)
+        : null;
+
+      const deleteOk = !!(deleteRes && deleteRes.ok === true);
+      const confirmedMissing =
+        rowResult.reason === 'PAYEE_MAP_NOT_FOUND' ||
+        rowResult.reason === 'PAYEE_MAP_MISSING_PAYEE_ID';
+
+      const shouldDeleteLocal = deleteOk && (!rowResult.skipped || confirmedMissing);
+
+      if (shouldDeleteLocal && rowId) {
+        const delQ = new URLSearchParams();
+        delQ.set('id', `eq.${rowId}`);
+
+        const delUrl = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${delQ.toString()}`;
+        await sbFetch(env, delUrl, {
+          method: 'DELETE',
+          headers: {
+            Prefer: 'return=minimal'
+          }
+        });
+
+        rowResult.local_deleted = true;
+        out.local_deleted_count += 1;
+      }
+
+      out.rows_processed += 1;
+      out.results.push(rowResult);
+    } catch (e) {
+      rowResult.reason = `DELETE_FAILED: ${String(e?.message || e)}`;
+      out.results.push(rowResult);
+      try {
+        console.warn('[BANK_PAYEE_CLEANUP] row delete failed (non-fatal)', {
+          id: rowId || null,
+          rail_provider: provider || null,
+          rail_env: railEnv || null,
+          entity_kind: rowKind || null,
+          entity_id: rowEntityId || null,
+          bank_details_hash: rowBankHash || null,
+          payee_id: rowPayeeId || null,
+          error: String(e?.message || e)
+        });
+      } catch {}
+    }
+  }
+
+  return out;
+}
+
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -94354,6 +95230,7 @@ function getRailAdapter(provider) {
             supports_scheduling: true,
             supports_name_check: true,
             supports_auto_execute: true,
+            supports_delete_payee: true,
             api_base: apiBase,
             worker_env: workerEnv
           };
@@ -94587,6 +95464,190 @@ function getRailAdapter(provider) {
             payee_id: mapped && mapped.payee_id ? String(mapped.payee_id).trim() : null,
             payee_account_id: mapped && mapped.payee_account_id ? String(mapped.payee_account_id).trim() : null,
             reused: !!(mapped && mapped.reused === true)
+          };
+        },
+
+        async deletePayeeIfMapped(env, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, payee_id, payee_account_id, meta_json } = {}) {
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
+          const expectedEnv = normalizeEnv(rail_env, workerEnv);
+
+          const kind = String(entity_kind || '').trim().toUpperCase();
+          const entityId = String(entity_id || '').trim();
+          const bankHash = String(bank_details_hash || '').trim();
+
+          const providedPayeeId =
+            (payee_id === undefined || payee_id === null) ? '' : String(payee_id).trim();
+
+          const providedPayeeAccountId =
+            (payee_account_id === undefined || payee_account_id === null) ? '' : String(payee_account_id).trim();
+
+          const providedMetaJson =
+            (meta_json && typeof meta_json === 'object' && !Array.isArray(meta_json)) ? meta_json : null;
+
+          if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'PAYEE_ENTITY_KIND_INVALID',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind || null,
+              entity_id: entityId || null,
+              bank_details_hash: bankHash || null,
+              payee_id: providedPayeeId || null,
+              payee_account_id: providedPayeeAccountId || null,
+              meta_json: providedMetaJson
+            };
+          }
+
+          if (!entityId || !bankHash) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'MISSING_PAYEE_IDENTITY',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId || null,
+              bank_details_hash: bankHash || null,
+              payee_id: providedPayeeId || null,
+              payee_account_id: providedPayeeAccountId || null,
+              meta_json: providedMetaJson
+            };
+          }
+
+          if (expectedEnv !== workerEnv) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'RAIL_ENV_MISMATCH',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash,
+              payee_id: providedPayeeId || null,
+              payee_account_id: providedPayeeAccountId || null,
+              meta_json: providedMetaJson
+            };
+          }
+
+          const caps = await this.capabilities(env);
+          if (caps && typeof caps === 'object' && caps.available === false) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: String(caps.reason || 'RAIL_NOT_AVAILABLE'),
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash,
+              payee_id: providedPayeeId || null,
+              payee_account_id: providedPayeeAccountId || null,
+              meta_json: providedMetaJson
+            };
+          }
+
+          const q = new URLSearchParams();
+          q.set('select', 'id,payee_id,payee_account_id,meta_json');
+          q.set('rail_provider', 'eq.REVOLUT');
+          q.set('rail_env', `eq.${expectedEnv}`);
+          q.set('entity_kind', `eq.${kind}`);
+          q.set('entity_id', `eq.${entityId}`);
+          q.set('bank_details_hash', `eq.${bankHash}`);
+          q.set('limit', '1');
+
+          const mapUrl = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${q.toString()}`;
+          const mapRes = await sbFetch(env, mapUrl);
+          const row = (mapRes && Array.isArray(mapRes.rows) && mapRes.rows.length) ? mapRes.rows[0] : null;
+
+          const mapRowId = row && row.id ? String(row.id).trim() : '';
+          const mappedPayeeId = row && row.payee_id ? String(row.payee_id).trim() : '';
+          const mappedPayeeAccountId = row && row.payee_account_id ? String(row.payee_account_id).trim() : '';
+          const mappedMetaJson = (row && row.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json)) ? row.meta_json : null;
+
+          const targetPayeeId = providedPayeeId || mappedPayeeId;
+          const targetPayeeAccountId = providedPayeeAccountId || mappedPayeeAccountId || null;
+          const targetMetaJson = mappedMetaJson || providedMetaJson || null;
+
+          if (!mapRowId && !targetPayeeId) {
+            return {
+              attempted: false,
+              ok: true,
+              skipped: true,
+              reason: 'PAYEE_MAP_NOT_FOUND',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash,
+              payee_id: null,
+              payee_account_id: null,
+              meta_json: targetMetaJson,
+              external_deleted: false,
+              local_deleted: false
+            };
+          }
+
+          let externalDeleted = false;
+
+          if (targetPayeeId) {
+            const token = await revolutAuth_getAccessToken(env);
+            const base = (apiBase && String(apiBase).trim()) ? String(apiBase).trim() : 'https://b2b.revolut.com/api/1.0';
+            const deleteUrl = `${base}/counterparty/${encodeURIComponent(targetPayeeId)}`;
+
+            const res = await fetch(deleteUrl, {
+              method: 'DELETE',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/json'
+              }
+            });
+
+            const text = await res.text();
+
+            if (res.status === 204 || res.status === 404) {
+              externalDeleted = true;
+            } else if (!res.ok) {
+              throw new Error(`REVOLUT_COUNTERPARTY_DELETE_FAILED_${res.status}: ${text}`);
+            } else {
+              externalDeleted = true;
+            }
+          }
+
+              return {
+            attempted: true,
+            ok: true,
+            skipped: false,
+            reason: null,
+            rail_provider: 'REVOLUT',
+            rail_env: expectedEnv,
+            worker_env: workerEnv,
+            api_base: apiBase || null,
+            entity_kind: kind,
+            entity_id: entityId,
+            bank_details_hash: bankHash,
+            payee_id: targetPayeeId || null,
+            payee_account_id: targetPayeeAccountId,
+            meta_json: targetMetaJson,
+            external_deleted: externalDeleted,
+            local_deleted: false
           };
         },
 
@@ -95222,6 +96283,7 @@ function getRailAdapter(provider) {
             supports_scheduling: false,
             supports_name_check: false,
             supports_auto_execute: false,
+            supports_delete_payee: false,
             api_base: null,
             worker_env: null
           };
@@ -95255,6 +96317,25 @@ function getRailAdapter(provider) {
             entity_kind: (entity_kind === undefined || entity_kind === null) ? null : String(entity_kind).trim().toUpperCase(),
             entity_id: (entity_id === undefined || entity_id === null) ? null : String(entity_id).trim(),
             bank_details_hash: (bank_details_hash === undefined || bank_details_hash === null) ? null : String(bank_details_hash).trim()
+          };
+        },
+
+        async deletePayeeIfMapped(env, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, payee_id, payee_account_id, meta_json } = {}) {
+          return {
+            attempted: false,
+            ok: true,
+            skipped: true,
+            reason: 'RAIL_DOES_NOT_SUPPORT_DELETE_PAYEE',
+            rail_provider: 'CSV',
+            rail_env: (rail_env === undefined || rail_env === null) ? null : String(rail_env).trim().toUpperCase(),
+            entity_kind: (entity_kind === undefined || entity_kind === null) ? null : String(entity_kind).trim().toUpperCase(),
+            entity_id: (entity_id === undefined || entity_id === null) ? null : String(entity_id).trim(),
+            bank_details_hash: (bank_details_hash === undefined || bank_details_hash === null) ? null : String(bank_details_hash).trim(),
+            payee_id: (payee_id === undefined || payee_id === null) ? null : String(payee_id).trim(),
+            payee_account_id: (payee_account_id === undefined || payee_account_id === null) ? null : String(payee_account_id).trim(),
+            meta_json: (meta_json && typeof meta_json === 'object' && !Array.isArray(meta_json)) ? meta_json : null,
+            external_deleted: false,
+            local_deleted: false
           };
         },
 
@@ -95327,7 +96408,6 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p] || getRailAdapter.__RAIL_REGISTRY.CSV;
   return mk();
 }
-
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
   const nowMs = Date.now();
@@ -100590,6 +101670,9 @@ if (req.method === 'GET' && p === '/api/banking/pay/authorisers') {
   return withCORS(env, req, await handlePaymentAuthorisersList(env, req, user));
 }
 
+if (req.method === 'POST' && p === '/api/banking/pay/payee-map/ensure') {
+  return handleBankingPayEnsurePayeeMap(env, req, user);
+}
 // ROUTERS (insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
 // alongside the other /api/banking/pay/batch/:id/* routes, after `user` has been resolved.)
 // ROUTERS (insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
