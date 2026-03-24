@@ -5377,3 +5377,87 @@ begin
 end;
 $function$;
 
+create or replace function public.comms_outbox_claim_ready_batch(
+  p_channel text,
+  p_limit integer,
+  p_attempt_lease_token text,
+  p_lease_minutes integer default 5
+)
+returns setof public.comms_outbox
+language plpgsql
+as $function$
+declare
+  v_now timestamptz := now();
+  v_channel text := nullif(upper(btrim(coalesce(p_channel, ''))), '');
+  v_effective_limit integer := greatest(coalesce(p_limit, 0), 0);
+  v_effective_lease_minutes integer := greatest(coalesce(p_lease_minutes, 5), 1);
+begin
+  if v_channel is null then
+    raise exception 'channel is required';
+  end if;
+
+  if v_channel not in ('WHATSAPP', 'SMS', 'VOICE') then
+    raise exception 'unsupported channel %', v_channel;
+  end if;
+
+  if coalesce(btrim(p_attempt_lease_token), '') = '' then
+    raise exception 'attempt_lease_token is required';
+  end if;
+
+  if v_effective_limit = 0 then
+    return;
+  end if;
+
+  return query
+  with picked as (
+    select co.id
+    from public.comms_outbox as co
+    where upper(coalesce(co.channel, '')) = v_channel
+      and upper(coalesce(co.status, '')) = 'QUEUED'
+      and co.sent_at is null
+      and co.delivered_at is null
+      and co.read_at is null
+      and coalesce(
+            co.next_attempt_at_utc,
+            co.scheduled_for_utc,
+            co.created_at_utc
+          ) <= v_now
+      and (
+            co.attempt_lease_token is null
+         or co.attempt_lease_expires_at_utc is null
+         or co.attempt_lease_expires_at_utc <= v_now
+      )
+    order by
+      coalesce(
+        co.next_attempt_at_utc,
+        co.scheduled_for_utc,
+        co.created_at_utc
+      ) asc,
+      co.created_at_utc asc,
+      co.id asc
+    for update skip locked
+    limit v_effective_limit
+  ),
+  updated as (
+    update public.comms_outbox as co
+    set attempt_lease_token = p_attempt_lease_token,
+        attempt_leased_at_utc = v_now,
+        attempt_lease_expires_at_utc = v_now + make_interval(mins => v_effective_lease_minutes)
+    from picked
+    where co.id = picked.id
+    returning co.*
+  )
+  select u.*
+  from updated as u
+  order by
+    coalesce(
+      u.next_attempt_at_utc,
+      u.scheduled_for_utc,
+      u.created_at_utc
+    ) asc,
+    u.created_at_utc asc,
+    u.id asc;
+
+  return;
+end;
+$function$;
