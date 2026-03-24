@@ -29244,19 +29244,18 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
   };
 }
 
-
 async function handleMailshotRunsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
 
-  const enc = encodeURIComponent;
-
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
 
-  const page = Math.max(1, parseInt(q('page') || '1', 10));
-  const pageSize = Math.max(1, Math.min(100, parseInt(q('page_size') || '25', 10)));
-  const offset = (page - 1) * pageSize;
+  const pageRaw = Number(q('page'));
+  const pageSizeRaw = Number(q('page_size'));
+
+  const page = Number.isFinite(pageRaw) ? Math.max(1, Math.trunc(pageRaw)) : 1;
+  const pageSize = Number.isFinite(pageSizeRaw) ? Math.max(1, Math.min(100, Math.trunc(pageSizeRaw))) : 25;
 
   const orderByRaw = String(q('order_by') || 'created_at_utc').trim().toLowerCase();
   const orderDirRaw = String(q('order_dir') || 'desc').trim().toLowerCase();
@@ -29265,309 +29264,60 @@ async function handleMailshotRunsList(env, req) {
   const orderBy = allowedSort.has(orderByRaw) ? orderByRaw : 'created_at_utc';
   const orderDir = (orderDirRaw === 'asc') ? 'asc' : 'desc';
 
-  const fetchRestRows = async (path, { countExact = false } = {}) => {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
-      headers: {
-        ...sbHeaders(env),
-        ...(countExact ? { Prefer: 'count=exact' } : {})
-      }
-    });
-
-    const txt = await res.text().catch(() => '');
-    let json = null;
-    try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
-
-    if (!res.ok) {
-      throw new Error(txt || `REST ${res.status}`);
-    }
-
-    let total = null;
-    if (countExact) {
-      const cr = String(res.headers.get('content-range') || '');
-      const m = cr.match(/\/(\d+|\*)$/);
-      if (m && m[1] !== '*') total = parseInt(m[1], 10);
-    }
-
-    return {
-      rows: Array.isArray(json) ? json : [],
-      total
-    };
-  };
-
-  const classifyChildRows = (rows) => {
-    const out = {
-      total_rows: 0,
-      pending_total: 0,
-      failed_total: 0,
-      sent_total: 0,
-      delivered_total: 0,
-      read_total: 0,
-      blocking_total: 0,
-      cancelable_total: 0
-    };
-
-    for (const r of (Array.isArray(rows) ? rows : [])) {
-      out.total_rows += 1;
-
-      if (r && r.read_at) {
-        out.read_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.delivered_at) {
-        out.delivered_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.sent_at) {
-        out.sent_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.failed_at) {
-        out.failed_total += 1;
-        out.cancelable_total += 1;
-      } else {
-        out.pending_total += 1;
-        out.cancelable_total += 1;
-      }
-    }
-
-    return out;
-  };
-
   try {
-    const runsPath =
-      `mailshot_runs` +
-      `?select=id,context_kind,output_type,document_template_id,created_by,created_at_utc,result_json,delivery_timing_json` +
-      `&order=${enc(orderBy)}.${enc(orderDir)}` +
-      `&limit=${pageSize}` +
-      `&offset=${offset}`;
-
-    const runRes = await fetchRestRows(runsPath, { countExact: true });
-    const runRows = Array.isArray(runRes.rows) ? runRes.rows : [];
-    const totalCount = (typeof runRes.total === 'number') ? runRes.total : runRows.length;
-
-    const runIds = runRows.map(r => String(r && r.id ? r.id : '')).filter(Boolean);
-    const templateIds = Array.from(new Set(
-      runRows.map(r => String(r && r.document_template_id ? r.document_template_id : '')).filter(Boolean)
-    ));
-
-    let templateRows = [];
-    if (templateIds.length) {
-      const templatePath =
-        `document_templates` +
-        `?select=id,filename` +
-        `&id=in.(${templateIds.map(enc).join(',')})`;
-      const tplRes = await fetchRestRows(templatePath);
-      templateRows = Array.isArray(tplRes.rows) ? tplRes.rows : [];
-    }
-
-    const templateNameById = new Map(
-      templateRows.map(r => [String(r.id), String(r.filename || '')])
+    const rpcRes = await sbRpc(
+      env,
+      'mailshot_runs_list',
+      {
+        p_page: page,
+        p_page_size: pageSize,
+        p_order_by: orderBy,
+        p_order_dir: orderDir
+      },
+      { timeoutMs: 30000 }
     );
 
-    let mailChildRows = [];
-    let commsChildRows = [];
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_runs_list')) {
+        payload = payload.mailshot_runs_list;
+      }
+    } catch {}
 
-    if (runIds.length) {
-      const mailPath =
-        `mail_outbox` +
-        `?select=id,mailshot_run_id,sent_at,delivered_at,read_at,failed_at` +
-        `&mailshot_run_id=in.(${runIds.map(enc).join(',')})`;
-      const commsPath =
-        `comms_outbox` +
-        `?select=id,mailshot_run_id,sent_at,delivered_at,read_at,failed_at` +
-        `&mailshot_run_id=in.(${runIds.map(enc).join(',')})`;
-
-      const [mailRes, commsRes] = await Promise.all([
-        fetchRestRows(mailPath),
-        fetchRestRows(commsPath)
-      ]);
-
-      mailChildRows = Array.isArray(mailRes.rows) ? mailRes.rows : [];
-      commsChildRows = Array.isArray(commsRes.rows) ? commsRes.rows : [];
-    }
-
-    const mailByRun = new Map();
-    const commsByRun = new Map();
-
-    for (const r of mailChildRows) {
-      const k = String(r && r.mailshot_run_id ? r.mailshot_run_id : '');
-      if (!k) continue;
-      if (!mailByRun.has(k)) mailByRun.set(k, []);
-      mailByRun.get(k).push(r);
-    }
-
-    for (const r of commsChildRows) {
-      const k = String(r && r.mailshot_run_id ? r.mailshot_run_id : '');
-      if (!k) continue;
-      if (!commsByRun.has(k)) commsByRun.set(k, []);
-      commsByRun.get(k).push(r);
-    }
-
-    const items = runRows.map((r) => {
-      const runId = String(r && r.id ? r.id : '');
-      const resultJson = (r && r.result_json && typeof r.result_json === 'object' && !Array.isArray(r.result_json))
-        ? r.result_json
-        : {};
-      const deliveryTimingJson = (r && r.delivery_timing_json && typeof r.delivery_timing_json === 'object' && !Array.isArray(r.delivery_timing_json))
-        ? r.delivery_timing_json
-        : {};
-
-      const mailCounts = classifyChildRows(mailByRun.get(runId) || []);
-      const commsCounts = classifyChildRows(commsByRun.get(runId) || []);
-
-      const totalRows = mailCounts.total_rows + commsCounts.total_rows;
-      const pendingTotal = mailCounts.pending_total + commsCounts.pending_total;
-      const liveFailedTotal = mailCounts.failed_total + commsCounts.failed_total;
-      const sentTotal = mailCounts.sent_total + commsCounts.sent_total;
-      const deliveredTotal = mailCounts.delivered_total + commsCounts.delivered_total;
-      const readTotal = mailCounts.read_total + commsCounts.read_total;
-      const successTotal = sentTotal + deliveredTotal + readTotal;
-      const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
-      const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
-
-      const initialQueued = Number(resultJson.queued || 0);
-      const initialSkipped = Number(resultJson.skipped || 0);
-      const initialFailed = Number(resultJson.failed || 0);
-
-      const canonicalCounts = {
-        queued: pendingTotal,
-        skipped: initialSkipped,
-        failed: initialFailed + liveFailedTotal,
-        success: successTotal,
-        blocking: blockingTotal,
-        total_rows: totalRows,
-        cancelable: cancelableTotal,
-        sent: sentTotal,
-        delivered: deliveredTotal,
-        read: readTotal
-      };
-
-      return {
-        id: runId,
-        mailshot_run_id: runId,
-        context_kind: r.context_kind || null,
-        output_type: r.output_type || null,
-        document_template_id: r.document_template_id || null,
-        template_filename: r.document_template_id ? (templateNameById.get(String(r.document_template_id)) || null) : null,
-        created_by: r.created_by || null,
-        created_at_utc: r.created_at_utc || null,
-        delivery_timing_json: deliveryTimingJson,
-
-        counts: canonicalCounts,
-
-        initial_counts: {
-          queued: initialQueued,
-          skipped: initialSkipped,
-          failed: initialFailed
-        },
-
-        live_counts: {
-          total_rows: totalRows,
-          mail_rows: mailCounts.total_rows,
-          comms_rows: commsCounts.total_rows,
-          pending_total: pendingTotal,
-          failed_total: liveFailedTotal,
-          sent_total: sentTotal,
-          delivered_total: deliveredTotal,
-          read_total: readTotal,
-          success_total: successTotal,
-          blocking_total: blockingTotal,
-          cancelable_total: cancelableTotal
-        },
-
-        can_cancel_pending: (cancelableTotal > 0) || (blockingTotal === 0),
-        can_delete_if_unsent: blockingTotal === 0,
-
-        result_json: resultJson
-      };
-    });
-
-    return withCORS(env, req, ok({
-      ok: true,
-      items,
-      page,
-      page_size: pageSize,
-      total_count: totalCount,
-      has_more: (offset + items.length) < totalCount,
-      order_by: orderBy,
-      order_dir: orderDir
-    }));
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
   } catch (e) {
     const msg = String(e?.message || e || 'MAILSHOT_RUNS_LIST_FAILED');
     return withCORS(env, req, serverError(msg));
   }
 }
-
 async function handleMailshotRunGet(env, req, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
 
-  const enc = encodeURIComponent;
   const runId = String(id || '').trim();
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!runId) return withCORS(env, req, badRequest('id is required'));
   if (!uuidRe.test(runId)) return withCORS(env, req, badRequest('invalid_id'));
 
-  const fetchRestRows = async (path) => {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
-      headers: { ...sbHeaders(env) }
+  try {
+    let payload = await sbRpc(env, 'mailshot_run_get', {
+      p_mailshot_run_id: runId
     });
 
-    const txt = await res.text().catch(() => '');
-    let json = null;
-    try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_run_get')) payload = payload.mailshot_run_get;
+    } catch {}
 
-    if (!res.ok) {
-      throw new Error(txt || `REST ${res.status}`);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return withCORS(env, req, serverError('MAILSHOT_RUN_GET_FAILED'));
     }
 
-    return Array.isArray(json) ? json : [];
-  };
-
-  const classifyChildRows = (rows) => {
-    const out = {
-      total_rows: 0,
-      pending_total: 0,
-      failed_total: 0,
-      sent_total: 0,
-      delivered_total: 0,
-      read_total: 0,
-      blocking_total: 0,
-      cancelable_total: 0
-    };
-
-    for (const r of (Array.isArray(rows) ? rows : [])) {
-      out.total_rows += 1;
-
-      if (r && r.read_at) {
-        out.read_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.delivered_at) {
-        out.delivered_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.sent_at) {
-        out.sent_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.failed_at) {
-        out.failed_total += 1;
-        out.cancelable_total += 1;
-      } else {
-        out.pending_total += 1;
-        out.cancelable_total += 1;
-      }
-    }
-
-    return out;
-  };
-
-  try {
-    const runRows = await fetchRestRows(
-      `mailshot_runs` +
-      `?select=id,context_kind,output_type,document_template_id,created_by,created_at_utc,selection_json,result_json,delivery_timing_json` +
-      `&id=eq.${enc(runId)}` +
-      `&limit=1`
-    );
-
-    const runRow = Array.isArray(runRows) && runRows.length ? runRows[0] : null;
-    if (!runRow) {
+    if (payload.ok === false && String(payload.error || '').trim() === 'mailshot_run_not_found') {
       return withCORS(
         env,
         req,
@@ -29578,141 +29328,11 @@ async function handleMailshotRunGet(env, req, id) {
       );
     }
 
-    let templateFilename = null;
-    if (runRow.document_template_id) {
-      const templateRows = await fetchRestRows(
-        `document_templates` +
-        `?select=id,filename` +
-        `&id=eq.${enc(String(runRow.document_template_id))}` +
-        `&limit=1`
-      );
-      if (Array.isArray(templateRows) && templateRows.length) {
-        templateFilename = templateRows[0].filename || null;
-      }
+    if (payload.ok === false) {
+      return withCORS(env, req, serverError(String(payload.error || 'MAILSHOT_RUN_GET_FAILED')));
     }
 
-    const [mailChildRows, commsChildRows] = await Promise.all([
-      fetchRestRows(
-        `mail_outbox` +
-        `?select=id,mailshot_run_id,status,to,sent_at,delivered_at,read_at,failed_at` +
-        `&mailshot_run_id=eq.${enc(runId)}`
-      ),
-      fetchRestRows(
-        `comms_outbox` +
-        `?select=id,mailshot_run_id,channel,status,to_address,sent_at,delivered_at,read_at,failed_at` +
-        `&mailshot_run_id=eq.${enc(runId)}`
-      )
-    ]);
-
-    const mailCounts = classifyChildRows(mailChildRows);
-    const commsCounts = classifyChildRows(commsChildRows);
-
-    const resultJson = (runRow.result_json && typeof runRow.result_json === 'object' && !Array.isArray(runRow.result_json))
-      ? runRow.result_json
-      : {};
-    const deliveryTimingJson = (runRow.delivery_timing_json && typeof runRow.delivery_timing_json === 'object' && !Array.isArray(runRow.delivery_timing_json))
-      ? runRow.delivery_timing_json
-      : {};
-    const selectionJson = (runRow.selection_json && typeof runRow.selection_json === 'object' && !Array.isArray(runRow.selection_json))
-      ? runRow.selection_json
-      : {};
-
-    const totalRows = mailCounts.total_rows + commsCounts.total_rows;
-    const pendingTotal = mailCounts.pending_total + commsCounts.pending_total;
-    const liveFailedTotal = mailCounts.failed_total + commsCounts.failed_total;
-    const sentTotal = mailCounts.sent_total + commsCounts.sent_total;
-    const deliveredTotal = mailCounts.delivered_total + commsCounts.delivered_total;
-    const readTotal = mailCounts.read_total + commsCounts.read_total;
-    const successTotal = sentTotal + deliveredTotal + readTotal;
-    const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
-    const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
-
-    const initialQueued = Number(resultJson.queued || 0);
-    const initialSkipped = Number(resultJson.skipped || 0);
-    const initialFailed = Number(resultJson.failed || 0);
-
-    const canonicalCounts = {
-      queued: pendingTotal,
-      skipped: initialSkipped,
-      failed: initialFailed + liveFailedTotal,
-      success: successTotal,
-      blocking: blockingTotal,
-      total_rows: totalRows,
-      cancelable: cancelableTotal,
-      sent: sentTotal,
-      delivered: deliveredTotal,
-      read: readTotal
-    };
-
-    return withCORS(env, req, ok({
-      ok: true,
-      item: {
-        id: String(runRow.id),
-        mailshot_run_id: String(runRow.id),
-        context_kind: runRow.context_kind || null,
-        output_type: runRow.output_type || null,
-        document_template_id: runRow.document_template_id || null,
-        template_filename: templateFilename,
-        created_by: runRow.created_by || null,
-        created_at_utc: runRow.created_at_utc || null,
-        delivery_timing_json: deliveryTimingJson,
-        selection_json: selectionJson,
-        result_json: resultJson,
-
-        counts: canonicalCounts,
-
-        initial_counts: {
-          queued: initialQueued,
-          skipped: initialSkipped,
-          failed: initialFailed
-        },
-
-        live_counts: {
-          total_rows: totalRows,
-          mail_rows: mailCounts.total_rows,
-          comms_rows: commsCounts.total_rows,
-          pending_total: pendingTotal,
-          failed_total: liveFailedTotal,
-          sent_total: sentTotal,
-          delivered_total: deliveredTotal,
-          read_total: readTotal,
-          success_total: successTotal,
-          blocking_total: blockingTotal,
-          cancelable_total: cancelableTotal,
-          blocking_mail_sent: mailCounts.sent_total,
-          blocking_mail_delivered: mailCounts.delivered_total,
-          blocking_mail_read: mailCounts.read_total,
-          blocking_comms_sent: commsCounts.sent_total,
-          blocking_comms_delivered: commsCounts.delivered_total,
-          blocking_comms_read: commsCounts.read_total
-        },
-
-        can_cancel_pending: (cancelableTotal > 0) || (blockingTotal === 0),
-        can_delete_if_unsent: blockingTotal === 0,
-
-        child_preview: {
-          mail_items: (Array.isArray(mailChildRows) ? mailChildRows : []).slice(0, 25).map(r => ({
-            id: r.id,
-            status: r.status || null,
-            to_address: r.to || null,
-            sent_at: r.sent_at || null,
-            delivered_at: r.delivered_at || null,
-            read_at: r.read_at || null,
-            failed_at: r.failed_at || null
-          })),
-          comms_items: (Array.isArray(commsChildRows) ? commsChildRows : []).slice(0, 25).map(r => ({
-            id: r.id,
-            channel: r.channel || null,
-            status: r.status || null,
-            to_address: r.to_address || null,
-            sent_at: r.sent_at || null,
-            delivered_at: r.delivered_at || null,
-            read_at: r.read_at || null,
-            failed_at: r.failed_at || null
-          }))
-        }
-      }
-    }));
+    return withCORS(env, req, ok(payload));
   } catch (e) {
     const msg = String(e?.message || e || 'MAILSHOT_RUN_GET_FAILED');
     return withCORS(env, req, serverError(msg));
