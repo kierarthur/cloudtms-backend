@@ -16203,7 +16203,199 @@ async function handleBankingBankNameCheckSetOverride(env, req, user) {
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    const _loadCurrentPayeeBankDetails = async () => {
+      const isCandidate = (entityKind === 'CANDIDATE');
+      const tableName = isCandidate ? 'candidates' : 'umbrellas';
+      const selectCols = isCandidate
+        ? ['id', 'display_name', 'account_holder', 'bank_name', 'sort_code', 'account_number', 'bank_details_hash'].join(',')
+        : ['id', 'name', 'bank_name', 'sort_code', 'account_number', 'bank_details_hash'].join(',');
+
+      const qs = new URLSearchParams();
+      qs.set('select', selectCols);
+      qs.set('id', `eq.${entityId}`);
+      qs.set('limit', '1');
+
+      const url = `${env.SUPABASE_URL}/rest/v1/${tableName}?${qs.toString()}`;
+      const fetchRes = await sbFetch(env, url);
+      const row0 = (fetchRes && Array.isArray(fetchRes.rows) && fetchRes.rows.length) ? fetchRes.rows[0] : null;
+
+      if (!row0 || typeof row0 !== 'object') {
+        return {
+          found: false,
+          entity_kind: entityKind,
+          entity_id: entityId
+        };
+      }
+
+      const payeeName = isCandidate
+        ? String(row0.account_holder || row0.display_name || '').trim()
+        : String(row0.name || '').trim();
+
+      return {
+        found: true,
+        entity_kind: entityKind,
+        entity_id: entityId,
+        bank_details_hash: String(row0.bank_details_hash || '').trim(),
+        bank_fields: {
+          payee_name: payeeName,
+          bank_name: String(row0.bank_name || '').trim(),
+          sort_code: String(row0.sort_code || '').trim(),
+          account_number: String(row0.account_number || '').trim(),
+          account_type: isCandidate ? 'personal' : 'business'
+        }
+      };
+    };
+
+    let railSetup = {
+      attempted: false,
+      ok: true,
+      skipped: true,
+      reason: 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP',
+      rail_provider: provider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId
+    };
+
+    try {
+      const adapter = getRailAdapter(provider);
+      if (!adapter || typeof adapter.ensurePayeeMapped !== 'function') {
+        railSetup = {
+          attempted: false,
+          ok: true,
+          skipped: true,
+          reason: 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP',
+          rail_provider: provider,
+          rail_env: railEnv,
+          entity_kind: entityKind,
+          entity_id: entityId
+        };
+      } else {
+        let caps = null;
+        try {
+          if (typeof adapter.capabilities === 'function') {
+            caps = await adapter.capabilities(env);
+          }
+        } catch (e) {
+          railSetup = {
+            attempted: false,
+            ok: false,
+            skipped: true,
+            reason: 'RAIL_CAPABILITIES_FAILED',
+            error: String(e?.message || e),
+            rail_provider: provider,
+            rail_env: railEnv,
+            entity_kind: entityKind,
+            entity_id: entityId
+          };
+          caps = null;
+        }
+
+        if (!(railSetup && railSetup.reason === 'RAIL_CAPABILITIES_FAILED')) {
+          if (caps && typeof caps === 'object' && caps.available === false) {
+            railSetup = {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: String(caps.reason || 'RAIL_NOT_AVAILABLE'),
+              rail_provider: provider,
+              rail_env: railEnv,
+              entity_kind: entityKind,
+              entity_id: entityId
+            };
+          } else {
+            const currentPayee = await _loadCurrentPayeeBankDetails();
+
+            if (!currentPayee.found) {
+              railSetup = {
+                attempted: false,
+                ok: false,
+                skipped: true,
+                reason: 'ENTITY_NOT_FOUND',
+                rail_provider: provider,
+                rail_env: railEnv,
+                entity_kind: entityKind,
+                entity_id: entityId
+              };
+            } else if (
+              !String(currentPayee.bank_details_hash || '').trim() ||
+              !String(currentPayee.bank_fields?.payee_name || '').trim() ||
+              String(currentPayee.bank_fields?.sort_code || '').replace(/[^0-9]/g, '').length !== 6 ||
+              !String(currentPayee.bank_fields?.account_number || '').replace(/[^0-9]/g, '')
+            ) {
+              railSetup = {
+                attempted: false,
+                ok: false,
+                skipped: true,
+                reason: 'MISSING_BANK_FIELDS',
+                rail_provider: provider,
+                rail_env: railEnv,
+                entity_kind: entityKind,
+                entity_id: entityId,
+                bank_details_hash: String(currentPayee.bank_details_hash || '').trim() || null
+              };
+            } else {
+              try {
+                const setupRes = await adapter.ensurePayeeMapped(env, {
+                  rail_env: railEnv,
+                  actor_user_id: user.id,
+                  entity_kind: entityKind,
+                  entity_id: entityId,
+                  bank_details_hash: String(currentPayee.bank_details_hash || '').trim(),
+                  bank_fields: currentPayee.bank_fields
+                });
+
+                if (setupRes && typeof setupRes === 'object') {
+                  railSetup = setupRes;
+                } else {
+                  railSetup = {
+                    attempted: true,
+                    ok: true,
+                    skipped: false,
+                    rail_provider: provider,
+                    rail_env: railEnv,
+                    entity_kind: entityKind,
+                    entity_id: entityId,
+                    bank_details_hash: String(currentPayee.bank_details_hash || '').trim()
+                  };
+                }
+              } catch (e) {
+                railSetup = {
+                  attempted: true,
+                  ok: false,
+                  skipped: false,
+                  reason: 'RAIL_PROVIDER_SETUP_FAILED',
+                  error: String(e?.message || e),
+                  rail_provider: provider,
+                  rail_env: railEnv,
+                  entity_kind: entityKind,
+                  entity_id: entityId,
+                  bank_details_hash: String(currentPayee.bank_details_hash || '').trim()
+                };
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      railSetup = {
+        attempted: false,
+        ok: false,
+        skipped: true,
+        reason: 'RAIL_PROVIDER_SETUP_FAILED',
+        error: String(e?.message || e),
+        rail_provider: provider,
+        rail_env: railEnv,
+        entity_kind: entityKind,
+        entity_id: entityId
+      };
+    }
+
+    const responsePayload = (payload && typeof payload === 'object')
+      ? { ...payload, rail_setup: railSetup }
+      : { rail_setup: railSetup };
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
@@ -29679,13 +29871,42 @@ function buildOutboxFiltersFromUi() {
   return { filters, sort };
 }
 
-
 function renderOutboxTable(content, rows) {
-  currentRows = Array.isArray(rows) ? rows.map((r) => {
+  const normalizeOutboxChannel = (value) => String(value == null ? '' : value).trim().toUpperCase();
+  const normalizeOutboxId = (value) => String(value == null ? '' : value).trim();
+  const makeOutboxSelectionKey = (channel, id) => {
+    const ch = normalizeOutboxChannel(channel);
+    const oid = normalizeOutboxId(id);
+    return (ch && oid) ? `${ch}::${oid}` : '';
+  };
+  const parseOutboxSelectionKey = (value) => {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return null;
+    const idx = raw.indexOf('::');
+    if (idx <= 0) return null;
+    const channel = normalizeOutboxChannel(raw.slice(0, idx));
+    const id = normalizeOutboxId(raw.slice(idx + 2));
+    if (!channel || !id) return null;
+    return {
+      key: makeOutboxSelectionKey(channel, id),
+      channel,
+      id,
+      outbox_id: id
+    };
+  };
+
+  const normalizedRows = Array.isArray(rows) ? rows.map((r) => {
     const raw = (r && typeof r === 'object') ? r : {};
-    const channel = String(raw.channel || '').trim().toUpperCase();
-    const outboxId = String(raw.outbox_id || raw.id || '').trim();
+    const channel = normalizeOutboxChannel(raw.channel || '');
+    const outboxId = normalizeOutboxId(raw.outbox_id || raw.id || '');
+    const outboxKey = makeOutboxSelectionKey(channel, outboxId);
     const toAddress = String(raw.to_address || raw.to || '').trim();
+    const recipientDisplayName = String(
+      raw.recipient_display_name ||
+      raw.candidate_name ||
+      raw.display_name ||
+      ''
+    ).trim();
     const subject = String(raw.subject || '').trim();
     const preview = String(
       raw.body_preview ||
@@ -29699,8 +29920,10 @@ function renderOutboxTable(content, rows) {
       ...raw,
       id: outboxId,
       outbox_id: outboxId,
+      outbox_key: outboxKey,
       channel,
       to_address: toAddress,
+      recipient_display_name: recipientDisplayName,
       subject,
       preview,
       status: String(raw.status || '').trim().toUpperCase(),
@@ -29720,38 +29943,272 @@ function renderOutboxTable(content, rows) {
     };
   }) : [];
 
+  const rowBySelectionKey = new Map();
+  normalizedRows.forEach((row) => {
+    if (row && row.outbox_key) {
+      rowBySelectionKey.set(String(row.outbox_key), row);
+    }
+  });
+
   currentSelection = null;
 
   window.__listState = window.__listState || {};
+  const canonicalOutboxSort = { key: 'created_at_utc', dir: 'desc' };
+  const normalizeOutboxSort = (sortValue) => {
+    const raw = (sortValue && typeof sortValue === 'object') ? sortValue : {};
+    const key = String(raw.key || '').trim();
+    const dir = String(raw.dir || '').trim().toLowerCase();
+    return {
+      key: key || canonicalOutboxSort.key,
+      dir: (dir === 'asc' || dir === 'desc') ? dir : canonicalOutboxSort.dir
+    };
+  };
+
   const st = (window.__listState.outbox ||= {
     page: 1,
     pageSize: 50,
     total: null,
     hasMore: false,
     filters: null,
-    sort: { key: null, dir: 'asc' }
+    sort: { ...canonicalOutboxSort }
   });
-  if (!st.sort || typeof st.sort !== 'object') {
-    st.sort = { key: null, dir: 'asc' };
-  }
+  st.sort = normalizeOutboxSort(st.sort);
 
   window.__selection = window.__selection || {};
-  const sel = (window.__selection.outbox ||= { fingerprint:'', ids:new Set() });
+  const normalizeStringSet = (value) => {
+    const out = new Set();
+    if (value instanceof Set) {
+      Array.from(value)
+        .map(v => String(v == null ? '' : v).trim())
+        .filter(Boolean)
+        .forEach(v => out.add(v));
+      return out;
+    }
+    if (Array.isArray(value)) {
+      value
+        .map(v => String(v == null ? '' : v).trim())
+        .filter(Boolean)
+        .forEach(v => out.add(v));
+      return out;
+    }
+    return out;
+  };
 
-  const getFp = () => (typeof getSummaryFingerprint === 'function') ? getSummaryFingerprint('outbox') : JSON.stringify({ section:'outbox', filters: st.filters || {}, sort: st.sort || {} });
+  const sel = (window.__selection.outbox ||= {
+    fingerprint: '',
+    ids: new Set(),
+    keys: new Set(),
+    row_refs: {},
+    row_refs_by_id: {}
+  });
+
+  sel.ids = normalizeStringSet(sel.ids);
+  sel.keys = normalizeStringSet(sel.keys);
+  if (!sel.row_refs || typeof sel.row_refs !== 'object' || Array.isArray(sel.row_refs)) {
+    sel.row_refs = {};
+  }
+  if (!sel.row_refs_by_id || typeof sel.row_refs_by_id !== 'object' || Array.isArray(sel.row_refs_by_id)) {
+    sel.row_refs_by_id = {};
+  }
+
+  const getFp = () => (typeof getSummaryFingerprint === 'function')
+    ? getSummaryFingerprint('outbox')
+    : JSON.stringify({ section: 'outbox', filters: st.filters || {}, sort: st.sort || canonicalOutboxSort });
+
   const fp = getFp();
   if (sel.fingerprint !== fp) {
     sel.fingerprint = fp;
     sel.ids.clear();
+    sel.keys.clear();
+    sel.row_refs = {};
+    sel.row_refs_by_id = {};
   }
 
-  const isRowSelected = (id) => sel.ids.has(String(id || ''));
-  const setRowSelected = (id, on) => {
-    const k = String(id || '').trim();
-    if (!k) return;
-    if (on) sel.ids.add(k);
-    else sel.ids.delete(k);
+  const normalizeOutboxRowRef = (rowLike) => {
+    const raw = (rowLike && typeof rowLike === 'object') ? rowLike : {};
+    const id = normalizeOutboxId(raw.outbox_id != null ? raw.outbox_id : raw.id);
+    const channel = normalizeOutboxChannel(raw.channel != null ? raw.channel : raw.row_channel);
+    const key = makeOutboxSelectionKey(channel, id);
+    if (!id || !channel || !key) return null;
+    return {
+      key,
+      channel,
+      id,
+      outbox_id: id
+    };
   };
+
+  const rememberOutboxRowRef = (rowLike) => {
+    const ref = normalizeOutboxRowRef(rowLike);
+    if (!ref) return null;
+
+    sel.row_refs[ref.key] = {
+      key: ref.key,
+      channel: ref.channel,
+      id: ref.id,
+      outbox_id: ref.outbox_id
+    };
+
+    const existingKeys = Array.isArray(sel.row_refs_by_id[ref.id])
+      ? sel.row_refs_by_id[ref.id]
+          .map(v => String(v == null ? '' : v).trim())
+          .filter(Boolean)
+      : [];
+
+    if (!existingKeys.includes(ref.key)) existingKeys.push(ref.key);
+    sel.row_refs_by_id[ref.id] = existingKeys;
+
+    return ref;
+  };
+
+  const removeOutboxSelectionRef = (rowLike) => {
+    const ref = normalizeOutboxRowRef(rowLike);
+    if (!ref) return;
+
+    try {
+      sel.keys.delete(ref.key);
+    } catch {}
+
+    try {
+      if (sel.row_refs && typeof sel.row_refs === 'object') {
+        delete sel.row_refs[ref.key];
+      }
+    } catch {}
+
+    try {
+      if (sel.row_refs_by_id && typeof sel.row_refs_by_id === 'object') {
+        const nextKeys = (Array.isArray(sel.row_refs_by_id[ref.id]) ? sel.row_refs_by_id[ref.id] : [])
+          .map(v => String(v == null ? '' : v).trim())
+          .filter(Boolean)
+          .filter(v => v !== ref.key);
+
+        if (nextKeys.length) {
+          sel.row_refs_by_id[ref.id] = nextKeys;
+        } else {
+          delete sel.row_refs_by_id[ref.id];
+        }
+
+        const stillSelectedForId = nextKeys.some((key) => sel.keys.has(key));
+        if (!stillSelectedForId) {
+          sel.ids.delete(ref.id);
+        }
+      } else {
+        sel.ids.delete(ref.id);
+      }
+    } catch {}
+  };
+
+  const setRowSelected = (rowLike, on) => {
+    const ref = rememberOutboxRowRef(rowLike);
+    if (!ref) return;
+
+    if (on) {
+      sel.ids.add(ref.id);
+      sel.keys.add(ref.key);
+      return;
+    }
+
+    removeOutboxSelectionRef(ref);
+  };
+
+  const getSelectedSnapshot = () => {
+    const refs = [];
+    const seenKeys = new Set();
+    const resolvedIds = new Set();
+    const unresolvedIds = [];
+
+    const pushRef = (rowLike) => {
+      const ref = normalizeOutboxRowRef(rowLike);
+      if (!ref) return;
+      if (seenKeys.has(ref.key)) return;
+      seenKeys.add(ref.key);
+      refs.push({
+        key: ref.key,
+        channel: ref.channel,
+        id: ref.id,
+        outbox_id: ref.outbox_id
+      });
+      resolvedIds.add(ref.id);
+    };
+
+    sel.keys.forEach((rawKey) => {
+      const key = String(rawKey == null ? '' : rawKey).trim();
+      if (!key) return;
+
+      const storedRef = (sel.row_refs && typeof sel.row_refs === 'object')
+        ? sel.row_refs[key]
+        : null;
+
+      if (storedRef) {
+        pushRef(storedRef);
+        return;
+      }
+
+      const parsedRef = parseOutboxSelectionKey(key);
+      if (parsedRef) {
+        pushRef(parsedRef);
+      }
+    });
+
+    sel.ids.forEach((rawId) => {
+      const id = normalizeOutboxId(rawId);
+      if (!id) return;
+
+      const linkedKeys = Array.isArray(sel.row_refs_by_id[id])
+        ? sel.row_refs_by_id[id]
+            .map(v => String(v == null ? '' : v).trim())
+            .filter(Boolean)
+        : [];
+
+      if (linkedKeys.length) {
+        linkedKeys.forEach((linkedKey) => {
+          const storedRef = (sel.row_refs && typeof sel.row_refs === 'object')
+            ? sel.row_refs[linkedKey]
+            : null;
+
+          if (storedRef) {
+            pushRef(storedRef);
+            return;
+          }
+
+          const parsedRef = parseOutboxSelectionKey(linkedKey);
+          if (parsedRef) {
+            pushRef(parsedRef);
+          }
+        });
+        return;
+      }
+
+      if (!resolvedIds.has(id)) {
+        unresolvedIds.push(id);
+      }
+    });
+
+    return {
+      refs,
+      unresolvedIds: Array.from(new Set(
+        unresolvedIds
+          .map(v => normalizeOutboxId(v))
+          .filter(Boolean)
+          .filter(v => !resolvedIds.has(v))
+      ))
+    };
+  };
+
+  const getSelectedCount = () => {
+    const snapshot = getSelectedSnapshot();
+    return snapshot.refs.length + snapshot.unresolvedIds.length;
+  };
+
+  const isRowSelected = (rowLike) => {
+    const ref = normalizeOutboxRowRef(rowLike);
+    if (!ref) return false;
+    return sel.keys.has(ref.key) || sel.ids.has(ref.id);
+  };
+
+  normalizedRows.forEach((row) => {
+    rememberOutboxRowRef(row);
+  });
 
   const fmtDt = (v) => {
     try {
@@ -29777,11 +30234,11 @@ function renderOutboxTable(content, rows) {
   const safeHtml = (typeof escapeHtml === 'function')
     ? escapeHtml
     : (s) => String(s ?? '')
-        .replaceAll('&','&amp;')
-        .replaceAll('<','&lt;')
-        .replaceAll('>','&gt;')
-        .replaceAll('"','&quot;')
-        .replaceAll("'","&#39;");
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
 
   const statusPill = (status) => {
     const s = String(status || '').trim().toUpperCase();
@@ -29802,6 +30259,67 @@ function renderOutboxTable(content, rows) {
     return `<span class="${cls}">${safeHtml(s || '—')}</span>`;
   };
 
+  const getActionState = (row) => {
+    const raw = (row && typeof row === 'object') ? row : {};
+    const status = String(raw.status || '').trim().toUpperCase();
+    const queueState = String(raw.queue_state || '').trim().toUpperCase();
+
+    const isFailed = status === 'FAILED';
+    const isCompleted =
+      status === 'SENT' ||
+      status === 'DELIVERED' ||
+      status === 'READ' ||
+      !!String(raw.sent_at || '').trim() ||
+      !!String(raw.delivered_at || '').trim() ||
+      !!String(raw.read_at || '').trim();
+
+    const isPending =
+      !isFailed &&
+      !isCompleted &&
+      (
+        status === 'QUEUED' ||
+        queueState === 'QUEUED' ||
+        queueState === 'READY' ||
+        queueState === 'SCHEDULED'
+      );
+
+    return {
+      isFailed,
+      isCompleted,
+      isPending,
+      canRetry: isFailed,
+      canReschedule: isFailed || isPending,
+      canDelete: isPending
+    };
+  };
+
+  const renderActionButtons = (row) => {
+    const actionState = getActionState(row);
+    const bits = [];
+
+    if (actionState.canRetry) {
+      bits.push(
+        `<button type="button" class="btn btn-sm btn-outline" data-act="retry" data-outbox-key="${safeHtml(row.outbox_key)}" data-outbox-id="${safeHtml(row.id)}" data-channel="${safeHtml(row.channel)}">Retry</button>`
+      );
+    }
+    if (actionState.canReschedule) {
+      bits.push(
+        `<button type="button" class="btn btn-sm btn-primary" data-act="reschedule" data-outbox-key="${safeHtml(row.outbox_key)}" data-outbox-id="${safeHtml(row.id)}" data-channel="${safeHtml(row.channel)}">Reschedule</button>`
+      );
+    }
+    if (actionState.canDelete) {
+      bits.push(
+        `<button type="button" class="btn btn-sm btn-warn" data-act="delete" data-outbox-key="${safeHtml(row.outbox_key)}" data-outbox-id="${safeHtml(row.id)}" data-channel="${safeHtml(row.channel)}">Delete</button>`
+      );
+    }
+
+    if (!bits.length) {
+      return `<span class="mini" style="opacity:.7;">—</span>`;
+    }
+
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;">${bits.join('')}</div>`;
+  };
+
   const updateToolButtons = () => {
     try {
       if (typeof window.__refreshOutboxToolsButtons === 'function') {
@@ -29815,333 +30333,579 @@ function renderOutboxTable(content, rows) {
     renderSummary(data);
   };
 
+  const memKey = 'summary:outbox';
+  window.__scrollMemory = window.__scrollMemory || {};
+  const prevScrollY = window.__scrollMemory[memKey] ?? 0;
+
   content.innerHTML = '';
 
-  const top = document.createElement('div');
-  top.className = 'card';
-  top.style.padding = '12px';
-  top.style.marginBottom = '12px';
-  top.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-      <div>
-        <div style="font-weight:700;font-size:14px;">Unified Outbox</div>
-        <div class="mini" style="opacity:.8;">
-          Search, filter, sort, and action queued / scheduled / sent communications.
-        </div>
-      </div>
-      <div class="mini" style="opacity:.75;">
-        Selected: <strong id="outboxSelectedCount">${sel.ids.size}</strong>
-      </div>
-    </div>
+  const topControls = document.createElement('div');
+  topControls.style.cssText = 'display:flex;align-items:end;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap;';
 
-    <div style="display:grid;grid-template-columns:minmax(220px,1.4fr) 160px 160px 160px 180px 120px;gap:10px;align-items:end;margin-top:12px;">
-      <div>
-        <label class="inline mini" style="opacity:.85;">Search</label>
-        <input id="outboxSearchText" class="input" type="text" value="${safeHtml(String((st.filters && (st.filters.q || st.filters.search)) || ''))}" placeholder="Search recipient / subject / preview…" />
-      </div>
+  const sizeLabel = document.createElement('span');
+  sizeLabel.className = 'mini';
+  sizeLabel.textContent = 'Page size:';
+  topControls.appendChild(sizeLabel);
 
-      <div>
-        <label class="inline mini" style="opacity:.85;">Channel</label>
-        <select id="outboxFilterChannel" class="input">
-          <option value="ALL">All</option>
-          <option value="EMAIL" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'EMAIL' ? 'selected' : ''}>Email</option>
-          <option value="WHATSAPP" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'WHATSAPP' ? 'selected' : ''}>WhatsApp</option>
-          <option value="SMS" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'SMS' ? 'selected' : ''}>SMS</option>
-          <option value="VOICE" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'VOICE' ? 'selected' : ''}>Voice</option>
-        </select>
-      </div>
+  const sizeSel = document.createElement('select');
+  sizeSel.id = 'outboxPageSize';
+  sizeSel.classList.add('dark-control');
+  ['50', '100', '200', 'ALL'].forEach((optVal) => {
+    const opt = document.createElement('option');
+    opt.value = optVal;
+    opt.textContent = (optVal === 'ALL') ? 'All' : `First ${optVal}`;
+    if (String(st.pageSize) === optVal) opt.selected = true;
+    sizeSel.appendChild(opt);
+  });
+  sizeSel.addEventListener('change', async () => {
+    const val = String(sizeSel.value || '50');
+    st.pageSize = (val === 'ALL') ? 'ALL' : Number(val);
+    st.page = 1;
+    await rerenderWithFreshData();
+  });
+  topControls.appendChild(sizeSel);
 
-      <div>
-        <label class="inline mini" style="opacity:.85;">Status</label>
-        <select id="outboxFilterStatus" class="input">
-          <option value="ALL">All</option>
-          <option value="QUEUED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'QUEUED' ? 'selected' : ''}>Queued</option>
-          <option value="SENT" ${String(st.filters && st.filters.status || '').toUpperCase() === 'SENT' ? 'selected' : ''}>Sent</option>
-          <option value="DELIVERED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'DELIVERED' ? 'selected' : ''}>Delivered</option>
-          <option value="READ" ${String(st.filters && st.filters.status || '').toUpperCase() === 'READ' ? 'selected' : ''}>Read</option>
-          <option value="FAILED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'FAILED' ? 'selected' : ''}>Failed</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="inline mini" style="opacity:.85;">Queue state</label>
-        <select id="outboxFilterQueueState" class="input">
-          <option value="ALL">All</option>
-          <option value="QUEUED" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'QUEUED' ? 'selected' : ''}>Queued</option>
-          <option value="READY" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'READY' ? 'selected' : ''}>Ready</option>
-          <option value="SCHEDULED" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'SCHEDULED' ? 'selected' : ''}>Scheduled</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="inline mini" style="opacity:.85;">Sort by</label>
-        <select id="outboxSortKey" class="input">
-          <option value="created_at_utc" ${String(st.sort && st.sort.key || 'created_at_utc') === 'created_at_utc' ? 'selected' : ''}>Created</option>
-          <option value="scheduled_for_utc" ${String(st.sort && st.sort.key || '') === 'scheduled_for_utc' ? 'selected' : ''}>Scheduled</option>
-          <option value="effective_ready_at_utc" ${String(st.sort && st.sort.key || '') === 'effective_ready_at_utc' ? 'selected' : ''}>Ready at</option>
-          <option value="status" ${String(st.sort && st.sort.key || '') === 'status' ? 'selected' : ''}>Status</option>
-          <option value="channel" ${String(st.sort && st.sort.key || '') === 'channel' ? 'selected' : ''}>Channel</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="inline mini" style="opacity:.85;">Direction</label>
-        <select id="outboxSortDir" class="input">
-          <option value="desc" ${String(st.sort && st.sort.dir || 'desc').toLowerCase() === 'desc' ? 'selected' : ''}>Desc</option>
-          <option value="asc" ${String(st.sort && st.sort.dir || '').toLowerCase() === 'asc' ? 'selected' : ''}>Asc</option>
-        </select>
-      </div>
-    </div>
-
-    <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap;">
-      <button type="button" class="btn btn-outline" id="outboxApplyFiltersBtn">Apply</button>
-      <button type="button" class="btn btn-outline" id="outboxClearSelectionBtn" ${sel.ids.size ? '' : 'disabled style="opacity:.6"'}>Clear selection</button>
-    </div>
-  `;
-  content.appendChild(top);
-
-  const tableWrap = document.createElement('div');
-  tableWrap.className = 'card';
-  tableWrap.style.padding = '12px';
-  tableWrap.innerHTML = `
-    <div class="picker-table-wrap">
-      <table class="grid" id="outboxGrid">
-        <thead>
-          <tr>
-            <th style="width:40px;"><input type="checkbox" id="outboxSelectAll" /></th>
-            <th>Channel</th>
-            <th>Recipient</th>
-            <th>Content</th>
-            <th>Status</th>
-            <th>Queue</th>
-            <th>Scheduled</th>
-            <th>Ready at</th>
-            <th style="width:190px;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${
-            currentRows.length
-              ? currentRows.map((r) => `
-                <tr data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">
-                  <td><input type="checkbox" class="outbox-row-select" data-outbox-id="${safeHtml(r.id)}" ${isRowSelected(r.id) ? 'checked' : ''} /></td>
-                  <td>${safeHtml(r.channel || '—')}</td>
-                  <td>
-                    <div style="font-weight:600;">${safeHtml(r.to_address || '—')}</div>
-                    <div class="mini" style="opacity:.75;">${safeHtml(r.recipient_kind || '')}</div>
-                  </td>
-                  <td>
-                    <div style="font-weight:600;">${safeHtml(r.subject || r.preview || '—')}</div>
-                    <div class="mini" style="opacity:.75;white-space:pre-wrap;">${safeHtml(r.channel === 'EMAIL' ? r.preview : r.preview || r.subject || '')}</div>
-                  </td>
-                  <td>${statusPill(r.status)}</td>
-                  <td>${queueStatePill(r.queue_state)}</td>
-                  <td>${safeHtml(fmtDt(r.scheduled_for_utc) || '—')}</td>
-                  <td>${safeHtml(fmtDt(r.effective_ready_at_utc || r.next_attempt_at_utc) || '—')}</td>
-                  <td>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                      <button type="button" class="btn btn-sm btn-outline" data-act="retry" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Retry</button>
-                      <button type="button" class="btn btn-sm btn-outline" data-act="reschedule" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Reschedule</button>
-                      <button type="button" class="btn btn-sm btn-outline" data-act="delete" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              `).join('')
-              : `
-                <tr>
-                  <td colspan="9" class="mini" style="opacity:.75;">No Outbox rows found.</td>
-                </tr>
-              `
-          }
-        </tbody>
-      </table>
-    </div>
-  `;
-  content.appendChild(tableWrap);
-
-  const pager = document.createElement('div');
-  pager.className = 'card';
-  pager.style.padding = '12px';
-  const pageNum = Number(st.page || 1);
-  const pageSize = st.pageSize === 'ALL' ? 'ALL' : Number(st.pageSize || 50);
-  const totalKnown = (typeof st.total === 'number');
-  const hasMore = !!st.hasMore;
-
-  let infoText = '';
-  if (pageSize === 'ALL') {
-    infoText = `Showing all ${currentRows.length} rows.`;
-  } else if (totalKnown) {
-    const start = ((pageNum - 1) * pageSize) + 1;
-    const end = Math.min(start + currentRows.length - 1, Number(st.total || 0));
-    infoText = `Showing ${start}–${end} of ${st.total}`;
-  } else {
-    const start = ((pageNum - 1) * pageSize) + 1;
-    const end = start + currentRows.length - 1;
-    infoText = `Showing ${start}–${end}${hasMore ? '+' : ''}`;
-  }
-
-  pager.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button type="button" class="btn btn-outline" id="outboxPrevPageBtn" ${pageNum <= 1 ? 'disabled style="opacity:.6"' : ''}>Prev</button>
-        <button type="button" class="btn btn-outline" id="outboxNextPageBtn" ${(!hasMore && totalKnown && (pageNum * Number(pageSize || 50) >= Number(st.total || 0))) || pageSize === 'ALL' ? 'disabled style="opacity:.6"' : ''}>Next</button>
-      </div>
-      <div class="mini" style="opacity:.8;">${safeHtml(infoText)}</div>
-    </div>
-  `;
-  content.appendChild(pager);
-
-  const getRowByBtn = (btn) => {
-    const oid = String(btn.getAttribute('data-outbox-id') || '').trim();
-    const ch = String(btn.getAttribute('data-channel') || '').trim().toUpperCase();
-    return currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
+  const mkField = (labelText, controlEl) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+    const lab = document.createElement('span');
+    lab.className = 'mini';
+    lab.style.opacity = '.85';
+    lab.textContent = labelText;
+    wrap.appendChild(lab);
+    wrap.appendChild(controlEl);
+    return wrap;
   };
 
-  const topEl = content.querySelector('.card');
-  const applyBtn = document.getElementById('outboxApplyFiltersBtn');
-  const clearSelBtn = document.getElementById('outboxClearSelectionBtn');
+  const searchEl = document.createElement('input');
+  searchEl.id = 'outboxSearchText';
+  searchEl.className = 'input';
+  searchEl.classList.add('dark-control');
+  searchEl.type = 'text';
+  searchEl.placeholder = 'Search recipient / subject / preview…';
+  searchEl.style.cssText = 'width:280px;min-width:280px;';
+  searchEl.value = String((st.filters && (st.filters.q || st.filters.search)) || '');
+  topControls.appendChild(mkField('Search', searchEl));
+
+  const channelEl = document.createElement('select');
+  channelEl.id = 'outboxFilterChannel';
+  channelEl.className = 'input';
+  channelEl.classList.add('dark-control');
+  [
+    ['ALL', 'All'],
+    ['EMAIL', 'Email'],
+    ['WHATSAPP', 'WhatsApp'],
+    ['SMS', 'SMS'],
+    ['VOICE', 'Voice']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.filters && st.filters.channel || '').toUpperCase() === v) o.selected = true;
+    channelEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Channel', channelEl));
+
+  const statusEl = document.createElement('select');
+  statusEl.id = 'outboxFilterStatus';
+  statusEl.className = 'input';
+  statusEl.classList.add('dark-control');
+  [
+    ['ALL', 'All'],
+    ['QUEUED', 'Queued'],
+    ['SENT', 'Sent'],
+    ['DELIVERED', 'Delivered'],
+    ['READ', 'Read'],
+    ['FAILED', 'Failed']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.filters && st.filters.status || '').toUpperCase() === v) o.selected = true;
+    statusEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Status', statusEl));
+
+  const queueStateEl = document.createElement('select');
+  queueStateEl.id = 'outboxFilterQueueState';
+  queueStateEl.className = 'input';
+  queueStateEl.classList.add('dark-control');
+  [
+    ['ALL', 'All'],
+    ['QUEUED', 'Queued'],
+    ['READY', 'Ready'],
+    ['SCHEDULED', 'Scheduled']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.filters && st.filters.queue_state || '').toUpperCase() === v) o.selected = true;
+    queueStateEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Queue state', queueStateEl));
+
+  const sortKeyEl = document.createElement('select');
+  sortKeyEl.id = 'outboxSortKey';
+  sortKeyEl.className = 'input';
+  sortKeyEl.classList.add('dark-control');
+  [
+    ['created_at_utc', 'Created'],
+    ['scheduled_for_utc', 'Scheduled'],
+    ['effective_ready_at_utc', 'Ready at'],
+    ['status', 'Status'],
+    ['channel', 'Channel']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.sort && st.sort.key || canonicalOutboxSort.key) === v) o.selected = true;
+    sortKeyEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Sort by', sortKeyEl));
+
+  const sortDirEl = document.createElement('select');
+  sortDirEl.id = 'outboxSortDir';
+  sortDirEl.className = 'input';
+  sortDirEl.classList.add('dark-control');
+  [
+    ['desc', 'Desc'],
+    ['asc', 'Asc']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.sort && st.sort.dir || canonicalOutboxSort.dir).toLowerCase() === v) o.selected = true;
+    sortDirEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Direction', sortDirEl));
+
+  const applyBtn = document.createElement('button');
+  applyBtn.type = 'button';
+  applyBtn.id = 'outboxApplyFiltersBtn';
+  applyBtn.className = 'btn btn-outline';
+  applyBtn.textContent = 'Apply';
+  topControls.appendChild(applyBtn);
+
+  const spacerTop = document.createElement('div');
+  spacerTop.style.flex = '1';
+  topControls.appendChild(spacerTop);
+
+  const selectedInfo = document.createElement('div');
+  selectedInfo.className = 'mini';
+  selectedInfo.style.opacity = '.8';
+  selectedInfo.innerHTML = `Selected: <strong id="outboxSelectedCount">${getSelectedCount()}</strong>`;
+  topControls.appendChild(selectedInfo);
+
+  const clearSelBtn = document.createElement('button');
+  clearSelBtn.type = 'button';
+  clearSelBtn.id = 'outboxClearSelectionBtn';
+  clearSelBtn.className = 'btn btn-outline';
+  clearSelBtn.textContent = 'Clear selection';
+  topControls.appendChild(clearSelBtn);
+
+  content.appendChild(topControls);
+
+  const bodyWrap = document.createElement('div');
+  bodyWrap.className = 'summary-body';
+  content.appendChild(bodyWrap);
+
+  const tbl = document.createElement('table');
+  tbl.className = 'grid';
+  tbl.style.width = '100%';
+  tbl.style.tableLayout = 'fixed';
+  bodyWrap.appendChild(tbl);
+
+  const thead = document.createElement('thead');
+  thead.style.borderBottom = '1px solid var(--line)';
+  tbl.appendChild(thead);
+
+  const trh = document.createElement('tr');
+  thead.appendChild(trh);
+
+  const thSel = document.createElement('th');
+  thSel.style.width = '40px';
+  thSel.style.minWidth = '40px';
+  thSel.style.maxWidth = '40px';
+  thSel.innerHTML = `<input type="checkbox" id="outboxSelectAll" />`;
+  trh.appendChild(thSel);
+
+  [
+    'Channel',
+    'Recipient',
+    'Content',
+    'Status',
+    'Queue',
+    'Created',
+    'Scheduled',
+    'Ready at',
+    'Actions'
+  ].forEach((label, idx) => {
+    const th = document.createElement('th');
+    th.textContent = label;
+    if (idx === 1) {
+      th.style.width = '260px';
+      th.style.minWidth = '260px';
+      th.style.maxWidth = '260px';
+    }
+    if (idx === 2) {
+      th.style.width = '320px';
+      th.style.minWidth = '320px';
+    }
+    if (idx === 8) {
+      th.style.width = '260px';
+      th.style.minWidth = '260px';
+    }
+    trh.appendChild(th);
+  });
+
+  const tb = document.createElement('tbody');
+  tbl.appendChild(tb);
+
+  if (normalizedRows.length) {
+    normalizedRows.forEach((r) => {
+      const tr = document.createElement('tr');
+      tr.dataset.outboxId = String(r.id || '');
+      tr.dataset.channel = String(r.channel || '').toUpperCase();
+      tr.dataset.outboxKey = String(r.outbox_key || '');
+
+      tr.innerHTML = `
+        <td style="width:40px;min-width:40px;max-width:40px;">
+          <input type="checkbox" class="outbox-row-select" data-outbox-key="${safeHtml(r.outbox_key)}" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}" ${isRowSelected(r) ? 'checked' : ''} />
+        </td>
+        <td style="vertical-align:top;">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;max-width:100%;">
+            <div style="font-weight:600;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word;" title="${safeHtml(r.channel || '—')}">${safeHtml(r.channel || '—')}</div>
+          </div>
+        </td>
+        <td style="width:260px;max-width:260px;vertical-align:top;">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;max-width:100%;">
+            <div style="font-weight:600;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word;" title="${safeHtml(r.recipient_display_name || r.to_address || '—')}">${safeHtml(r.recipient_display_name || r.to_address || '—')}</div>
+            <div class="mini" style="opacity:.75;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">${safeHtml(r.recipient_kind || '')}</div>
+          </div>
+        </td>
+        <td style="width:320px;max-width:320px;vertical-align:top;">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;max-width:100%;">
+            <div style="font-weight:600;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word;" title="${safeHtml(r.subject || r.preview || '—')}">${safeHtml(r.subject || r.preview || '—')}</div>
+            <div class="mini" style="opacity:.75;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;min-width:0;max-width:100%;">${safeHtml(r.channel === 'EMAIL' ? r.preview : (r.preview || r.subject || ''))}</div>
+          </div>
+        </td>
+        <td>${statusPill(r.status)}</td>
+        <td>${queueStatePill(r.queue_state)}</td>
+        <td>${safeHtml(fmtDt(r.created_at_utc) || '—')}</td>
+        <td>${safeHtml(fmtDt(r.scheduled_for_utc) || '—')}</td>
+        <td>${safeHtml(fmtDt(r.effective_ready_at_utc || r.next_attempt_at_utc) || '—')}</td>
+        <td>${renderActionButtons(r)}</td>
+      `;
+      tb.appendChild(tr);
+    });
+  } else {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="10" class="mini" style="opacity:.75;">No Outbox rows found.</td>`;
+    tb.appendChild(tr);
+  }
+
+  const getRowByBtn = (btn) => {
+    const key = String(btn.getAttribute('data-outbox-key') || '').trim();
+    if (!key) return null;
+    return rowBySelectionKey.get(key) || null;
+  };
+
   const selectAll = document.getElementById('outboxSelectAll');
   const selectedCountEl = document.getElementById('outboxSelectedCount');
 
   const updateSelectionUi = () => {
-    const visibleIds = currentRows.map(r => String(r.id || ''));
-    const selectedVisible = visibleIds.filter(id => sel.ids.has(id)).length;
+    const visibleSelected = normalizedRows.filter((row) => isRowSelected(row)).length;
 
     if (selectAll) {
-      selectAll.checked = (visibleIds.length > 0 && selectedVisible === visibleIds.length);
-      selectAll.indeterminate = (selectedVisible > 0 && selectedVisible < visibleIds.length);
+      selectAll.checked = (normalizedRows.length > 0 && visibleSelected === normalizedRows.length);
+      selectAll.indeterminate = (visibleSelected > 0 && visibleSelected < normalizedRows.length);
     }
 
-    if (selectedCountEl) selectedCountEl.textContent = String(sel.ids.size);
+    if (selectedCountEl) selectedCountEl.textContent = String(getSelectedCount());
+
     if (clearSelBtn) {
-      clearSelBtn.disabled = (sel.ids.size === 0);
-      clearSelBtn.style.opacity = (sel.ids.size === 0) ? '0.6' : '';
+      clearSelBtn.disabled = (getSelectedCount() === 0);
+      clearSelBtn.style.opacity = (getSelectedCount() === 0) ? '0.6' : '';
     }
 
     updateToolButtons();
   };
 
-  if (applyBtn) {
-    applyBtn.onclick = async () => {
-      const built = buildOutboxFiltersFromUi();
-      st.filters = built.filters;
-      st.sort = built.sort;
-      st.page = 1;
-      await rerenderWithFreshData();
-    };
-  }
+  const applyFiltersNow = async () => {
+    const built = buildOutboxFiltersFromUi();
+    st.filters = built.filters;
+    st.sort = normalizeOutboxSort(built.sort);
+    st.page = 1;
+    await rerenderWithFreshData();
+  };
 
-  if (clearSelBtn) {
-    clearSelBtn.onclick = () => {
-      sel.ids.clear();
-      updateSelectionUi();
-      content.querySelectorAll('.outbox-row-select').forEach((cb) => { cb.checked = false; });
-    };
-  }
+  applyBtn.onclick = async () => {
+    await applyFiltersNow();
+  };
+
+  clearSelBtn.onclick = () => {
+    sel.ids.clear();
+    sel.keys.clear();
+    currentSelection = null;
+    updateSelectionUi();
+    bodyWrap.querySelectorAll('.outbox-row-select').forEach((cb) => {
+      cb.checked = false;
+    });
+  };
 
   if (selectAll) {
     selectAll.onclick = (ev) => {
       ev.stopPropagation();
       const wantOn = !!selectAll.checked;
-      currentRows.forEach(r => setRowSelected(r.id, wantOn));
-      content.querySelectorAll('.outbox-row-select').forEach((cb) => { cb.checked = wantOn; });
+      normalizedRows.forEach((row) => setRowSelected(row, wantOn));
+      bodyWrap.querySelectorAll('.outbox-row-select').forEach((cb) => {
+        cb.checked = wantOn;
+      });
       updateSelectionUi();
     };
   }
 
-  content.querySelectorAll('.outbox-row-select').forEach((cb) => {
+  bodyWrap.querySelectorAll('.outbox-row-select').forEach((cb) => {
     cb.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      const oid = String(cb.getAttribute('data-outbox-id') || '').trim();
-      setRowSelected(oid, !!cb.checked);
+      const key = String(cb.getAttribute('data-outbox-key') || '').trim();
+      const row = rowBySelectionKey.get(key) || null;
+      if (!row) return;
+      setRowSelected(row, !!cb.checked);
       updateSelectionUi();
     });
   });
 
-  const tbody = content.querySelector('#outboxGrid tbody');
-  if (tbody) {
-    tbody.addEventListener('dblclick', async (ev) => {
-      const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-id]') : null;
-      if (!tr) return;
-      const oid = String(tr.getAttribute('data-outbox-id') || '').trim();
-      const ch = String(tr.getAttribute('data-channel') || '').trim().toUpperCase();
-      const row = currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
+  tb.addEventListener('dblclick', async (ev) => {
+    if (ev.target && ev.target.closest && ev.target.closest('button, input, a')) return;
+    const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-key]') : null;
+    if (!tr) return;
+
+    const key = String(tr.getAttribute('data-outbox-key') || '').trim();
+    const row = rowBySelectionKey.get(key) || null;
+    if (!row) return;
+
+    if (typeof openOutboxDetailModal === 'function') {
+      await openOutboxDetailModal({
+        outbox_id: row.outbox_id,
+        channel: row.channel
+      });
+    }
+  });
+
+  tb.addEventListener('click', async (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-act]') : null;
+    if (btn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      const row = getRowByBtn(btn);
       if (!row) return;
-      await openOutboxDetailModal(row);
-    });
 
-    tbody.addEventListener('click', async (ev) => {
-      const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-act]') : null;
-      if (btn) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        const row = getRowByBtn(btn);
-        if (!row) return;
+      const actionState = getActionState(row);
+      const act = String(btn.getAttribute('data-act') || '').trim();
 
-        const act = String(btn.getAttribute('data-act') || '').trim();
-        if (act === 'retry') {
+      if (act === 'retry' && actionState.canRetry) {
+        if (typeof handleOutboxRetryAction === 'function') {
           await handleOutboxRetryAction(row, {
             onDone: async () => { await rerenderWithFreshData(); }
           });
-          return;
         }
-        if (act === 'reschedule') {
+        return;
+      }
+
+      if (act === 'reschedule' && actionState.canReschedule) {
+        if (typeof handleOutboxRescheduleAction === 'function') {
           await handleOutboxRescheduleAction(row, {
             onDone: async () => { await rerenderWithFreshData(); }
           });
-          return;
         }
-        if (act === 'delete') {
-          await handleOutboxDeleteAction(row, {
-            onDone: async () => { await rerenderWithFreshData(); }
-          });
-          return;
-        }
+        return;
       }
 
-      const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-id]') : null;
-      if (!tr) return;
-      tbody.querySelectorAll('tr.selected').forEach(n => n.classList.remove('selected'));
-      tr.classList.add('selected');
+      if (act === 'delete' && actionState.canDelete) {
+        if (typeof handleOutboxDeleteAction === 'function') {
+          await handleOutboxDeleteAction(row, {
+            onDone: async () => {
+              removeOutboxSelectionRef(row);
+              try {
+                if (
+                  currentSelection &&
+                  typeof currentSelection === 'object' &&
+                  String(currentSelection.outbox_id || currentSelection.id || '').trim() === String(row.outbox_id || row.id || '').trim() &&
+                  String(currentSelection.channel || '').trim().toUpperCase() === String(row.channel || '').trim().toUpperCase()
+                ) {
+                  currentSelection = null;
+                }
+              } catch {}
+              await rerenderWithFreshData();
+            }
+          });
+        } else {
+          console.warn('[OUTBOX][DELETE] handleOutboxDeleteAction is not defined');
+        }
+        return;
+      }
 
-      const oid = String(tr.getAttribute('data-outbox-id') || '').trim();
-      const ch = String(tr.getAttribute('data-channel') || '').trim().toUpperCase();
-      currentSelection = currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
-    });
-  }
+      return;
+    }
 
-  const prevBtn = document.getElementById('outboxPrevPageBtn');
-  if (prevBtn) {
-    prevBtn.onclick = async () => {
-      if (Number(st.page || 1) <= 1) return;
-      st.page = Math.max(1, Number(st.page || 1) - 1);
-      await rerenderWithFreshData();
+    const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-key]') : null;
+    if (!tr) return;
+
+    tb.querySelectorAll('tr.selected').forEach((n) => n.classList.remove('selected'));
+    tr.classList.add('selected');
+
+    const key = String(tr.getAttribute('data-outbox-key') || '').trim();
+    const row = rowBySelectionKey.get(key) || null;
+    if (!row) {
+      currentSelection = null;
+      return;
+    }
+
+    currentSelection = {
+      outbox_id: row.outbox_id,
+      id: row.id,
+      channel: row.channel,
+      outbox_key: row.outbox_key
     };
+  });
+
+  const pager = document.createElement('div');
+  pager.classList.add('pager');
+  pager.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--line);';
+
+  const info = document.createElement('span');
+  info.className = 'mini';
+
+  const pageNum = Number(st.page || 1);
+  const pageSize = st.pageSize === 'ALL' ? 'ALL' : Number(st.pageSize || 50);
+  const totalKnown = (typeof st.total === 'number');
+  const hasMore = !!st.hasMore;
+
+  const mkBtn = (label, disabled, onClick, isActive) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.disabled = !!disabled;
+    b.classList.add('pager-btn');
+    if (isActive) b.classList.add('active');
+    b.style.cssText = 'border:1px solid var(--line);background:#0b152a;color:var(--text);padding:4px 8px;border-radius:8px;cursor:pointer';
+    if (!disabled && typeof onClick === 'function') b.addEventListener('click', onClick);
+    return b;
+  };
+
+  let maxPageToShow;
+  if (totalKnown && pageSize !== 'ALL') {
+    maxPageToShow = Math.max(1, Math.ceil(st.total / Number(pageSize)));
+  } else if (pageSize === 'ALL') {
+    maxPageToShow = 1;
+  } else {
+    maxPageToShow = hasMore ? (pageNum + 1) : pageNum;
   }
 
-  const nextBtn = document.getElementById('outboxNextPageBtn');
-  if (nextBtn) {
-    nextBtn.onclick = async () => {
-      st.page = Number(st.page || 1) + 1;
+  if (pageSize !== 'ALL') {
+    const prevBtn = mkBtn('Prev', pageNum <= 1, async () => {
+      st.page = Math.max(1, pageNum - 1);
       await rerenderWithFreshData();
+    }, false);
+    pager.appendChild(prevBtn);
+
+    const makePageLink = (n) => {
+      const isActive = (n === pageNum);
+      return mkBtn(String(n), false, isActive ? null : async () => {
+        st.page = n;
+        await rerenderWithFreshData();
+      }, isActive);
     };
+
+    const pages = [];
+    if (maxPageToShow <= 7) {
+      for (let n = 1; n <= maxPageToShow; n++) pages.push(n);
+    } else {
+      pages.push(1);
+      if (pageNum > 3) pages.push('…');
+      for (let n = Math.max(2, pageNum - 1); n <= Math.min(maxPageToShow - 1, pageNum + 1); n++) pages.push(n);
+      if (hasMore || pageNum + 1 < maxPageToShow) pages.push('…');
+      pages.push(maxPageToShow);
+    }
+
+    pages.forEach((pn) => {
+      if (pn === '…') {
+        const span = document.createElement('span');
+        span.textContent = '…';
+        span.className = 'mini';
+        pager.appendChild(span);
+      } else {
+        pager.appendChild(makePageLink(pn));
+      }
+    });
+
+    const nextDisabled = (!hasMore && (!totalKnown || pageNum >= maxPageToShow));
+    const nextBtn = mkBtn('Next', nextDisabled, async () => {
+      st.page = pageNum + 1;
+      await rerenderWithFreshData();
+    }, false);
+    pager.appendChild(nextBtn);
   }
 
-  const searchEl = document.getElementById('outboxSearchText');
-  if (searchEl) {
-    searchEl.addEventListener('keydown', async (ev) => {
-      if (ev.key !== 'Enter') return;
-      const built = buildOutboxFiltersFromUi();
-      st.filters = built.filters;
-      st.sort = built.sort;
-      st.page = 1;
-      await rerenderWithFreshData();
-    });
+  if (pageSize === 'ALL') {
+    info.textContent = `Showing all ${normalizedRows.length} rows.`;
+  } else if (totalKnown) {
+    const start = ((pageNum - 1) * pageSize) + 1;
+    const end = Math.min(start + normalizedRows.length - 1, Number(st.total || 0));
+    info.textContent = `Showing ${start}–${end} of ${st.total}`;
+  } else {
+    const start = ((pageNum - 1) * pageSize) + 1;
+    const end = start + normalizedRows.length - 1;
+    info.textContent = `Showing ${start}–${end}${hasMore ? '+' : ''}`;
+  }
+
+  const spacer = document.createElement('div');
+  spacer.style.flex = '1';
+  pager.appendChild(spacer);
+  pager.appendChild(info);
+  content.appendChild(pager);
+
+  searchEl.addEventListener('keydown', async (ev) => {
+    if (ev.key !== 'Enter') return;
+    await applyFiltersNow();
+  });
+
+  channelEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  statusEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  queueStateEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  sortKeyEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  sortDirEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  const scrollHost = bodyWrap;
+  if (scrollHost) {
+    scrollHost.__activeMemKey = memKey;
+    scrollHost.scrollTop = prevScrollY;
+    if (!scrollHost.__scrollMemHooked) {
+      scrollHost.addEventListener('scroll', () => {
+        const k = scrollHost.__activeMemKey || memKey;
+        window.__scrollMemory[k] = scrollHost.scrollTop || 0;
+      });
+      scrollHost.__scrollMemHooked = true;
+    }
   }
 
   updateSelectionUi();
 }
-
 async function handleBankingFinanceLoansSnoozesList(env, req, user) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -94074,6 +94838,138 @@ function getRailAdapter(provider) {
           return { ok: true, valid: true, reason: null, account: match, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
         },
 
+        async ensurePayeeMapped(env, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, bank_fields } = {}) {
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
+          const expectedEnv = normalizeEnv(rail_env, workerEnv);
+
+          const kind = String(entity_kind || '').trim().toUpperCase();
+          const entityId = String(entity_id || '').trim();
+          const bankHash = String(bank_details_hash || '').trim();
+
+          if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'PAYEE_ENTITY_KIND_INVALID',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind || null,
+              entity_id: entityId || null,
+              bank_details_hash: bankHash || null
+            };
+          }
+
+          if (!entityId || !bankHash) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'MISSING_PAYEE_IDENTITY',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId || null,
+              bank_details_hash: bankHash || null
+            };
+          }
+
+          if (expectedEnv !== workerEnv) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'RAIL_ENV_MISMATCH',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash
+            };
+          }
+
+          const caps = await this.capabilities(env);
+          if (caps && typeof caps === 'object' && caps.available === false) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: String(caps.reason || 'RAIL_NOT_AVAILABLE'),
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash
+            };
+          }
+
+          const payeeName = String(bank_fields?.payee_name || '').trim();
+          const sortCode = String(bank_fields?.sort_code || '').trim();
+          const accountNumber = String(bank_fields?.account_number || '').trim();
+          const accountType = String(bank_fields?.account_type || '').trim();
+
+          const sortDigits = sortCode.replace(/[^0-9]/g, '');
+          const acctDigits = accountNumber.replace(/[^0-9]/g, '');
+
+          if (!payeeName || sortDigits.length !== 6 || !acctDigits) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'MISSING_BANK_FIELDS',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash
+            };
+          }
+
+          const token = await revolutAuth_getAccessToken(env);
+
+          const mapped = await revolutCounterparty_ensureMapped(env, token, {
+            rail_env: expectedEnv,
+            actor_user_id: actor_user_id,
+            entity_kind: kind,
+            entity_id: entityId,
+            bank_details_hash: bankHash,
+            bank_fields: {
+              payee_name: payeeName,
+              sort_code: sortCode,
+              account_number: accountNumber,
+              account_type: accountType
+            }
+          });
+
+          return {
+            attempted: true,
+            ok: true,
+            skipped: false,
+            reason: null,
+            rail_provider: 'REVOLUT',
+            rail_env: expectedEnv,
+            worker_env: workerEnv,
+            api_base: apiBase || null,
+            entity_kind: kind,
+            entity_id: entityId,
+            bank_details_hash: bankHash,
+            payee_id: mapped && mapped.payee_id ? String(mapped.payee_id).trim() : null,
+            payee_account_id: mapped && mapped.payee_account_id ? String(mapped.payee_account_id).trim() : null,
+            reused: !!(mapped && mapped.reused === true)
+          };
+        },
+
         async prepareBatch(env, batchId, actorUserId) {
           if (!batchId) throw new Error('prepareBatch: batchId required');
           if (!actorUserId) throw new Error('prepareBatch: actorUserId required');
@@ -94728,6 +95624,20 @@ function getRailAdapter(provider) {
           return { ok: true, valid: false, reason: 'CSV_HAS_NO_FUNDING_ACCOUNTS', account: null };
         },
 
+        async ensurePayeeMapped(env, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, bank_fields } = {}) {
+          return {
+            attempted: false,
+            ok: true,
+            skipped: true,
+            reason: 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP',
+            rail_provider: 'CSV',
+            rail_env: (rail_env === undefined || rail_env === null) ? null : String(rail_env).trim().toUpperCase(),
+            entity_kind: (entity_kind === undefined || entity_kind === null) ? null : String(entity_kind).trim().toUpperCase(),
+            entity_id: (entity_id === undefined || entity_id === null) ? null : String(entity_id).trim(),
+            bank_details_hash: (bank_details_hash === undefined || bank_details_hash === null) ? null : String(bank_details_hash).trim()
+          };
+        },
+
         async prepareBatch() {
           // CSV has no external prepare step
           return { ok: true, did_work: false, payees_processed: 0 };
@@ -94797,7 +95707,6 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p] || getRailAdapter.__RAIL_REGISTRY.CSV;
   return mk();
 }
-
 
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
