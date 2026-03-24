@@ -5295,5 +5295,77 @@ begin
 end;
 $function$;
 
+create or replace function public.email_outbox_claim_ready_batch(
+  p_limit integer,
+  p_attempt_lease_token text,
+  p_lease_minutes integer default 5
+)
+returns setof public.mail_outbox
+language plpgsql
+as $function$
+declare
+  v_now timestamptz := now();
+  v_effective_limit integer := greatest(coalesce(p_limit, 0), 0);
+  v_effective_lease_minutes integer := greatest(coalesce(p_lease_minutes, 5), 1);
+begin
+  if coalesce(btrim(p_attempt_lease_token), '') = '' then
+    raise exception 'attempt_lease_token is required';
+  end if;
 
+  if v_effective_limit = 0 then
+    return;
+  end if;
+
+  return query
+  with picked as (
+    select mo.id
+    from public.mail_outbox as mo
+    where mo.status = 'QUEUED'::public.mail_status_enum
+      and mo.sent_at is null
+      and mo.delivered_at is null
+      and mo.read_at is null
+      and coalesce(
+            mo.next_attempt_at_utc,
+            mo.scheduled_for_utc,
+            mo.created_at_utc
+          ) <= v_now
+      and (
+            mo.attempt_lease_token is null
+         or mo.attempt_lease_expires_at_utc is null
+         or mo.attempt_lease_expires_at_utc <= v_now
+      )
+    order by
+      coalesce(
+        mo.next_attempt_at_utc,
+        mo.scheduled_for_utc,
+        mo.created_at_utc
+      ) asc,
+      mo.created_at_utc asc,
+      mo.id asc
+    for update skip locked
+    limit v_effective_limit
+  ),
+  updated as (
+    update public.mail_outbox as mo
+    set attempt_lease_token = p_attempt_lease_token,
+        attempt_leased_at_utc = v_now,
+        attempt_lease_expires_at_utc = v_now + make_interval(mins => v_effective_lease_minutes)
+    from picked
+    where mo.id = picked.id
+    returning mo.*
+  )
+  select u.*
+  from updated as u
+  order by
+    coalesce(
+      u.next_attempt_at_utc,
+      u.scheduled_for_utc,
+      u.created_at_utc
+    ) asc,
+    u.created_at_utc asc,
+    u.id asc;
+
+  return;
+end;
+$function$;
 
