@@ -57857,6 +57857,12 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
 
   const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
 
+  const leaseMinutes = 5;
+  const attemptLeaseToken =
+    (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+      ? globalThis.crypto.randomUUID()
+      : `lease_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
   let cfgAll = {};
   try {
     const s = await loadSettingsDefaults(env);
@@ -57929,38 +57935,62 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
     return take;
   };
 
-  const getCommsOutboxReadyBatch = async (channel, take) => {
+  const patchCommsOutboxRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
+      method: 'PATCH',
+      headers: {
+        ...sbHeaders(env),
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const claimCommsOutboxReadyBatch = async (channel, take) => {
     if (!take || take <= 0) return [];
-    const readyIso = nowIso();
-    const url =
-      `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
-      `?select=*` +
-      `&status=eq.QUEUED` +
-      `&channel=eq.${enc(String(channel || '').toUpperCase())}` +
-      `&or=(` +
-        `and(next_attempt_at_utc.not.is.null,next_attempt_at_utc.lte.${enc(readyIso)}),` +
-        `and(next_attempt_at_utc.is.null,scheduled_for_utc.not.is.null,scheduled_for_utc.lte.${enc(readyIso)}),` +
-        `and(next_attempt_at_utc.is.null,scheduled_for_utc.is.null)` +
-      `)` +
-      `&order=next_attempt_at_utc.asc.nullslast` +
-      `&order=scheduled_for_utc.asc.nullslast` +
-      `&order=created_at_utc.asc` +
-      `&limit=${take}`;
-    const { rows } = await sbFetch(env, url, false);
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/comms_outbox_claim_ready_batch`, {
+      method: 'POST',
+      headers: sbHeaders(env),
+      body: JSON.stringify({
+        p_channel: String(channel || '').toUpperCase(),
+        p_limit: take,
+        p_attempt_lease_token: attemptLeaseToken,
+        p_lease_minutes: leaseMinutes
+      })
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox_claim_ready_batch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
     return Array.isArray(rows) ? rows : [];
   };
 
-  const patchFailRow = async (id, msg, providerKey) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
+  const patchFailRow = async (id, msg, providerKey, currentLeaseToken) => {
+    const rows = await patchCommsOutboxRows(
+      `id=eq.${enc(id)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
+      {
         status: 'FAILED',
         failed_at: nowIso(),
         last_error: String(msg || 'FAILED').slice(0, 500),
-        provider_key: providerKey || null
-      })
-    });
+        provider_key: providerKey || null,
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const report = {
@@ -57976,9 +58006,9 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
     now_utc: null
   };
 
-  const pickedWhatsapp = await getCommsOutboxReadyBatch('WHATSAPP', alloc('WHATSAPP'));
-  const pickedSms = await getCommsOutboxReadyBatch('SMS', alloc('SMS'));
-  const pickedVoice = await getCommsOutboxReadyBatch('VOICE', alloc('VOICE'));
+  const pickedWhatsapp = await claimCommsOutboxReadyBatch('WHATSAPP', alloc('WHATSAPP'));
+  const pickedSms = await claimCommsOutboxReadyBatch('SMS', alloc('SMS'));
+  const pickedVoice = await claimCommsOutboxReadyBatch('VOICE', alloc('VOICE'));
 
   report.by_channel.WHATSAPP.picked = pickedWhatsapp.length;
   report.by_channel.SMS.picked = pickedSms.length;
@@ -57988,7 +58018,7 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   if (pickedWhatsapp.length) {
     const ad = channelToAdaptor.WHATSAPP;
     if (ad === 'wati') {
-      const r = await sendViaWatiBulkTemplate(env, watiCfg, pickedWhatsapp);
+      const r = await sendViaWatiBulkTemplate(env, watiCfg, pickedWhatsapp, { attemptLeaseToken });
       report.sent += r.sent;
       report.failed += r.failed;
       report.errors.push(...(r.errors || []));
@@ -57998,7 +58028,8 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
       for (const row of pickedWhatsapp) {
         const id = row && row.id ? String(row.id) : '';
         if (!id) continue;
-        await patchFailRow(id, `NO_ADAPTOR_FOR_WHATSAPP:${ad || 'missing'}`, null);
+        const updatedRow = await patchFailRow(id, `NO_ADAPTOR_FOR_WHATSAPP:${ad || 'missing'}`, null, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         report.failed += 1;
         report.by_channel.WHATSAPP.failed += 1;
         report.errors.push({ id, error: `NO_ADAPTOR_FOR_WHATSAPP:${ad || 'missing'}` });
@@ -58009,7 +58040,7 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   if (pickedSms.length) {
     const ad = channelToAdaptor.SMS;
     if (ad === 'clicksend') {
-      const r = await sendViaClicksendSmsBulk(env, csCfg, pickedSms);
+      const r = await sendViaClicksendSmsBulk(env, csCfg, pickedSms, { attemptLeaseToken });
       report.sent += r.sent;
       report.failed += r.failed;
       report.errors.push(...(r.errors || []));
@@ -58019,7 +58050,8 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
       for (const row of pickedSms) {
         const id = row && row.id ? String(row.id) : '';
         if (!id) continue;
-        await patchFailRow(id, `NO_ADAPTOR_FOR_SMS:${ad || 'missing'}`, null);
+        const updatedRow = await patchFailRow(id, `NO_ADAPTOR_FOR_SMS:${ad || 'missing'}`, null, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         report.failed += 1;
         report.by_channel.SMS.failed += 1;
         report.errors.push({ id, error: `NO_ADAPTOR_FOR_SMS:${ad || 'missing'}` });
@@ -58030,7 +58062,7 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   if (pickedVoice.length) {
     const ad = channelToAdaptor.VOICE;
     if (ad === 'clicksend') {
-      const r = await sendViaClicksendVoiceBulk(env, csCfg, pickedVoice);
+      const r = await sendViaClicksendVoiceBulk(env, csCfg, pickedVoice, { attemptLeaseToken });
       report.sent += r.sent;
       report.failed += r.failed;
       report.errors.push(...(r.errors || []));
@@ -58040,7 +58072,8 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
       for (const row of pickedVoice) {
         const id = row && row.id ? String(row.id) : '';
         if (!id) continue;
-        await patchFailRow(id, `NO_ADAPTOR_FOR_VOICE:${ad || 'missing'}`, null);
+        const updatedRow = await patchFailRow(id, `NO_ADAPTOR_FOR_VOICE:${ad || 'missing'}`, null, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         report.failed += 1;
         report.by_channel.VOICE.failed += 1;
         report.errors.push({ id, error: `NO_ADAPTOR_FOR_VOICE:${ad || 'missing'}` });
@@ -58052,9 +58085,7 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   return report;
 }
 
-
-
-async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
+async function sendViaWatiBulkTemplate(env, watiCfg, rows, opts = {}) {
   const enc = encodeURIComponent;
 
   const nowIso = () => new Date().toISOString();
@@ -58128,34 +58159,68 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     return { provider, templateName, paramName };
   };
 
-  const patchSuccess = async (id, providerMessageId, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+  const attemptLeaseToken = (opts && typeof opts === 'object' && opts.attemptLeaseToken != null)
+    ? String(opts.attemptLeaseToken || '').trim()
+    : '';
+
+  const patchClaimedRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'WATI',
-        status: 'SENT',
-        sent_at: nowIso(),
-        provider_message_id: providerMessageId || null,
-        provider_response_json: respJson || {},
-        last_error: null,
-        failed_at: null
-      })
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(body)
     });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '');
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'WATI',
+      status: 'SENT',
+      sent_at: nowIso(),
+      provider_message_id: providerMessageId || null,
+      provider_response_json: respJson || {},
+      last_error: null,
+      failed_at: null,
+      delivered_at: null,
+      read_at: null,
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
+    });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const patchFailure = async (id, errMsg, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'WATI',
-        status: 'FAILED',
-        failed_at: nowIso(),
-        provider_response_json: respJson || {},
-        last_error: String(errMsg || 'FAILED').slice(0, 500)
-      })
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '') +
+      `&sent_at=is.null`;
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'WATI',
+      status: 'FAILED',
+      failed_at: nowIso(),
+      provider_response_json: respJson || {},
+      last_error: String(errMsg || 'FAILED').slice(0, 500),
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
     });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const cfg = isPlainObject(watiCfg) ? watiCfg : {};
@@ -58176,7 +58241,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     };
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, detail);
+      const updatedRow = await patchFailure(r.id, msg, detail).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id: r.id, error: msg, missing_field: 'base_url', missing_config_path: 'settings_defaults.comms_adaptors_json.wati.base_url' });
     }
@@ -58192,7 +58258,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     };
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, detail);
+      const updatedRow = await patchFailure(r.id, msg, detail).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id: r.id, error: msg, missing_field: 'WATI_API_TOKEN', missing_config_path: 'env.WATI_API_TOKEN' });
     }
@@ -58220,35 +58287,40 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     const paramName = String(contract.paramName || '').trim();
 
     if (!waNum) {
-      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      const updatedRow = await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'MISSING_TO' });
       continue;
     }
 
     if (!msg) {
-      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
+      const updatedRow = await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'EMPTY_MESSAGE' });
       continue;
     }
 
     if (provider && provider !== 'WATI') {
-      await patchFailure(id, 'INVALID_WATI_PROVIDER_CONTRACT', { error: 'INVALID_WATI_PROVIDER_CONTRACT', provider_contract: contract });
+      const updatedRow = await patchFailure(id, 'INVALID_WATI_PROVIDER_CONTRACT', { error: 'INVALID_WATI_PROVIDER_CONTRACT', provider_contract: contract }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'INVALID_WATI_PROVIDER_CONTRACT' });
       continue;
     }
 
     if (!templateName) {
-      await patchFailure(id, 'WATI_TEMPLATE_NAME_MISSING', { error: 'WATI_TEMPLATE_NAME_MISSING', provider_contract: contract });
+      const updatedRow = await patchFailure(id, 'WATI_TEMPLATE_NAME_MISSING', { error: 'WATI_TEMPLATE_NAME_MISSING', provider_contract: contract }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'WATI_TEMPLATE_NAME_MISSING' });
       continue;
     }
 
     if (!paramName) {
-      await patchFailure(id, 'WATI_PARAM_NAME_MISSING', { error: 'WATI_PARAM_NAME_MISSING', provider_contract: contract });
+      const updatedRow = await patchFailure(id, 'WATI_PARAM_NAME_MISSING', { error: 'WATI_PARAM_NAME_MISSING', provider_contract: contract }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'WATI_PARAM_NAME_MISSING' });
       continue;
@@ -58314,7 +58386,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
       } catch (e) {
         const errMsg = String(e?.message || e || 'WATI_REQUEST_FAILED');
         for (const item of chunk) {
-          await patchFailure(item.id, errMsg, { error: errMsg });
+          const updatedRow = await patchFailure(item.id, errMsg, { error: errMsg }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: errMsg });
         }
@@ -58324,7 +58397,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
       if (!httpOk) {
         const errMsg = `WATI_HTTP_${httpStatus}`;
         for (const item of chunk) {
-          await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null });
+          const updatedRow = await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: errMsg });
         }
@@ -58337,7 +58411,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
       if (!topResult || receiversResp.length === 0) {
         const errMsg = topResult ? 'WATI_NO_RECEIVER_RESULTS' : (respJson && respJson.error ? String(respJson.error) : 'WATI_RESULT_FALSE');
         for (const item of chunk) {
-          await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+          const updatedRow = await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: errMsg });
         }
@@ -58350,7 +58425,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
 
         if (!(rr && typeof rr === 'object')) {
           const msg = 'WATI_MISSING_RECEIVER_RESULT';
-          await patchFailure(item.id, msg, { full: respJson });
+          const updatedRow = await patchFailure(item.id, msg, { full: respJson }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: msg });
           continue;
@@ -58365,13 +58441,15 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
 
         if (!isValid || errStr) {
           const msg = errStr || 'WATI_INVALID_WHATSAPP_NUMBER';
-          await patchFailure(item.id, msg, { wati: rr, full: respJson });
+          const updatedRow = await patchFailure(item.id, msg, { wati: rr, full: respJson }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: msg });
           continue;
         }
 
-        await patchSuccess(item.id, localMessageId, { wati: rr, full: respJson });
+        const updatedRow = await patchSuccess(item.id, localMessageId, { wati: rr, full: respJson }).catch(() => null);
+        if (!updatedRow) continue;
         report.sent += 1;
       }
     }
@@ -58380,7 +58458,7 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
   return report;
 }
 
-async function sendViaClicksendSmsBulk(env, csCfg, rows) {
+async function sendViaClicksendSmsBulk(env, csCfg, rows, opts = {}) {
   const enc = encodeURIComponent;
 
   const nowIso = () => new Date().toISOString();
@@ -58406,40 +58484,78 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
     }
     const digits = s.replace(/[^\d]/g, '');
     if (!digits) return '';
-    // UK convenience
     if (digits.length === 11 && digits.startsWith('07')) return '+44' + digits.slice(1);
     if (digits.startsWith('44')) return '+' + digits;
     return '+' + digits;
   };
 
-  const patchSuccess = async (id, providerMessageId, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+  const attemptLeaseToken = (opts && typeof opts === 'object' && opts.attemptLeaseToken != null)
+    ? String(opts.attemptLeaseToken || '').trim()
+    : '';
+
+  const makeScopedCustomString = (id) => {
+    const rowId = String(id || '').trim();
+    if (!rowId) return '';
+    if (!attemptLeaseToken) return rowId;
+    return `${rowId}|${attemptLeaseToken}`;
+  };
+
+  const patchClaimedRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'CLICKSEND',
-        status: 'SENT',
-        sent_at: nowIso(),
-        provider_message_id: providerMessageId || null,
-        provider_response_json: respJson || {},
-        last_error: null,
-        failed_at: null
-      })
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(body)
     });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '');
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'CLICKSEND',
+      status: 'SENT',
+      sent_at: nowIso(),
+      provider_message_id: providerMessageId || null,
+      provider_response_json: respJson || {},
+      last_error: null,
+      failed_at: null,
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
+    });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const patchFailure = async (id, errMsg, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'CLICKSEND',
-        status: 'FAILED',
-        failed_at: nowIso(),
-        provider_response_json: respJson || {},
-        last_error: String(errMsg || 'FAILED').slice(0, 500)
-      })
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '') +
+      `&sent_at=is.null`;
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'CLICKSEND',
+      status: 'FAILED',
+      failed_at: nowIso(),
+      provider_response_json: respJson || {},
+      last_error: String(errMsg || 'FAILED').slice(0, 500),
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
     });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const cfg = isPlainObject(csCfg) ? csCfg : {};
@@ -58459,7 +58575,8 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
     const msg = (missingEnv.length === 1) ? `${missingEnv[0]}_MISSING` : 'CLICKSEND_API_CREDENTIALS_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      const updatedRow = await patchFailure(r.id, msg, { error: msg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id: r.id, error: msg });
     }
@@ -58471,8 +58588,7 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
 
   const slice = (Array.isArray(rows) ? rows : []).slice(0, batchMax);
 
-  const messages = [];
-  const rowIds = [];
+  const items = [];
 
   for (const r of slice) {
     const id = r && r.id ? String(r.id) : '';
@@ -58483,7 +58599,8 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
 
     const to = normalizeE164(toRaw);
     if (!to) {
-      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      const updatedRow = await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'MISSING_TO' });
       continue;
@@ -58492,23 +58609,31 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
     if (bodyRaw.length > smsMax) bodyRaw = bodyRaw.slice(0, smsMax);
 
     if (!String(bodyRaw).trim()) {
-      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
+      const updatedRow = await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'EMPTY_MESSAGE' });
       continue;
     }
 
-    messages.push({
-      source: 'cloudtms',
-      body: bodyRaw,
-      to,
-      custom_string: id
-    });
+    const customString = makeScopedCustomString(id);
 
-    rowIds.push(id);
+    items.push({
+      id,
+      customString,
+      message: {
+        source: 'cloudtms',
+        body: bodyRaw,
+        to,
+        custom_string: customString
+      }
+    });
   }
 
-  if (messages.length === 0) return report;
+  if (items.length === 0) return report;
+
+  const messages = items.map((item) => item.message);
+  const rowIds = items.map((item) => item.id);
 
   let respText = '';
   let respJson = null;
@@ -58531,20 +58656,22 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
     try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
   } catch (e) {
     const errMsg = String(e?.message || e || 'CLICKSEND_REQUEST_FAILED');
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { error: errMsg });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, { error: errMsg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
 
   if (!httpOk) {
     const errMsg = `CLICKSEND_HTTP_${httpStatus}`;
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { http_status: httpStatus, body: respText || null });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
@@ -58555,44 +58682,45 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
 
   if (!okTop) {
     const errMsg = (respJson && respJson.response_msg) ? String(respJson.response_msg) : 'CLICKSEND_RESPONSE_NOT_SUCCESS';
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
 
-  // Map by custom_string if possible; otherwise index
   const byCustom = new Map();
   for (const m of msgsResp) {
     const cs = (m && m.custom_string != null) ? String(m.custom_string) : '';
     if (cs) byCustom.set(cs, m);
   }
 
-  for (let i = 0; i < rowIds.length; i++) {
-    const id = rowIds[i];
-    const m = byCustom.get(id) || msgsResp[i] || null;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const m = byCustom.get(item.customString) || msgsResp[i] || null;
 
     const messageId = m && (m.message_id || m.messageId) ? String(m.message_id || m.messageId) : null;
     const status = m && m.status ? String(m.status).toUpperCase() : '';
 
     if (status && status !== 'SUCCESS' && status !== 'QUEUED') {
       const msg = m && m.status ? `CLICKSEND_${status}` : 'CLICKSEND_MESSAGE_FAILED';
-      await patchFailure(id, msg, { clicksend: m, full: respJson });
+      const updatedRow = await patchFailure(item.id, msg, { clicksend: m, full: respJson }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: msg });
+      report.errors.push({ id: item.id, error: msg });
       continue;
     }
 
-    await patchSuccess(id, messageId, { clicksend: m, full: respJson });
+    const updatedRow = await patchSuccess(item.id, messageId, { clicksend: m, full: respJson }).catch(() => null);
+    if (!updatedRow) continue;
     report.sent += 1;
   }
 
   return report;
 }
-
-async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
+async function sendViaClicksendVoiceBulk(env, csCfg, rows, opts = {}) {
   const enc = encodeURIComponent;
 
   const nowIso = () => new Date().toISOString();
@@ -58618,40 +58746,78 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     }
     const digits = s.replace(/[^\d]/g, '');
     if (!digits) return '';
-    // UK convenience
     if (digits.length === 11 && digits.startsWith('07')) return '+44' + digits.slice(1);
     if (digits.startsWith('44')) return '+' + digits;
     return '+' + digits;
   };
 
-  const patchSuccess = async (id, providerMessageId, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+  const attemptLeaseToken = (opts && typeof opts === 'object' && opts.attemptLeaseToken != null)
+    ? String(opts.attemptLeaseToken || '').trim()
+    : '';
+
+  const makeScopedCustomString = (id) => {
+    const rowId = String(id || '').trim();
+    if (!rowId) return '';
+    if (!attemptLeaseToken) return rowId;
+    return `${rowId}|${attemptLeaseToken}`;
+  };
+
+  const patchClaimedRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'CLICKSEND',
-        status: 'SENT',
-        sent_at: nowIso(),
-        provider_message_id: providerMessageId || null,
-        provider_response_json: respJson || {},
-        last_error: null,
-        failed_at: null
-      })
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(body)
     });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '');
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'CLICKSEND',
+      status: 'SENT',
+      sent_at: nowIso(),
+      provider_message_id: providerMessageId || null,
+      provider_response_json: respJson || {},
+      last_error: null,
+      failed_at: null,
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
+    });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const patchFailure = async (id, errMsg, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'CLICKSEND',
-        status: 'FAILED',
-        failed_at: nowIso(),
-        provider_response_json: respJson || {},
-        last_error: String(errMsg || 'FAILED').slice(0, 500)
-      })
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '') +
+      `&sent_at=is.null`;
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'CLICKSEND',
+      status: 'FAILED',
+      failed_at: nowIso(),
+      provider_response_json: respJson || {},
+      last_error: String(errMsg || 'FAILED').slice(0, 500),
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
     });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const cfg = isPlainObject(csCfg) ? csCfg : {};
@@ -58675,7 +58841,8 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     const msg = (missingEnv.length === 1) ? `${missingEnv[0]}_MISSING` : 'CLICKSEND_API_CREDENTIALS_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      const updatedRow = await patchFailure(r.id, msg, { error: msg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id: r.id, error: msg });
     }
@@ -58686,7 +58853,8 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     const msg = 'CLICKSEND_VOICE_CONFIG_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      const updatedRow = await patchFailure(r.id, msg, { error: msg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id: r.id, error: msg });
     }
@@ -58698,8 +58866,7 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
 
   const slice = (Array.isArray(rows) ? rows : []).slice(0, batchMax);
 
-  const messages = [];
-  const rowIds = [];
+  const items = [];
 
   for (const r of slice) {
     const id = r && r.id ? String(r.id) : '';
@@ -58710,7 +58877,8 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
 
     const to = normalizeE164(toRaw);
     if (!to) {
-      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      const updatedRow = await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'MISSING_TO' });
       continue;
@@ -58719,28 +58887,35 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     if (bodyRaw.length > voiceMax) bodyRaw = bodyRaw.slice(0, voiceMax);
 
     if (!String(bodyRaw).trim()) {
-      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
+      const updatedRow = await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'EMPTY_MESSAGE' });
       continue;
     }
 
+    const customString = makeScopedCustomString(id);
     const msg = {
       source: 'cloudtms',
       body: bodyRaw,
       to,
       voice,
-      custom_string: id,
+      custom_string: customString,
       country
     };
 
     if (lang && String(lang).trim()) msg.lang = String(lang).trim();
 
-    messages.push(msg);
-    rowIds.push(id);
+    items.push({
+      id,
+      customString,
+      message: msg
+    });
   }
 
-  if (messages.length === 0) return report;
+  if (items.length === 0) return report;
+
+  const messages = items.map((item) => item.message);
 
   let respText = '';
   let respJson = null;
@@ -58763,20 +58938,22 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
   } catch (e) {
     const errMsg = String(e?.message || e || 'CLICKSEND_REQUEST_FAILED');
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { error: errMsg });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, { error: errMsg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
 
   if (!httpOk) {
     const errMsg = `CLICKSEND_HTTP_${httpStatus}`;
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { http_status: httpStatus, body: respText || null });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
@@ -58787,10 +58964,11 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
 
   if (!okTop) {
     const errMsg = (respJson && respJson.response_msg) ? String(respJson.response_msg) : 'CLICKSEND_RESPONSE_NOT_SUCCESS';
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
@@ -58801,27 +58979,30 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     if (cs) byCustom.set(cs, m);
   }
 
-  for (let i = 0; i < rowIds.length; i++) {
-    const id = rowIds[i];
-    const m = byCustom.get(id) || msgsResp[i] || null;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const m = byCustom.get(item.customString) || msgsResp[i] || null;
 
     const messageId = m && (m.message_id || m.messageId) ? String(m.message_id || m.messageId) : null;
     const status = m && m.status ? String(m.status).toUpperCase() : '';
 
     if (status && status !== 'SUCCESS' && status !== 'QUEUED') {
       const msg = m && m.status ? `CLICKSEND_${status}` : 'CLICKSEND_MESSAGE_FAILED';
-      await patchFailure(id, msg, { clicksend: m, full: respJson });
+      const updatedRow = await patchFailure(item.id, msg, { clicksend: m, full: respJson }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: msg });
+      report.errors.push({ id: item.id, error: msg });
       continue;
     }
 
-    await patchSuccess(id, messageId, { clicksend: m, full: respJson });
+    const updatedRow = await patchSuccess(item.id, messageId, { clicksend: m, full: respJson }).catch(() => null);
+    if (!updatedRow) continue;
     report.sent += 1;
   }
 
   return report;
 }
+
 async function handleMailshotPrepare(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -60016,7 +60197,6 @@ async function handleWebhookWati(env, req) {
   }));
 }
 
-
 async function handleWebhookClicksend(env, req) {
   const enc = encodeURIComponent;
 
@@ -60110,6 +60290,34 @@ async function handleWebhookClicksend(env, req) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+  const parseAttemptScopedCustomString = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    const idx = raw.indexOf('|');
+    if (idx <= 0) return null;
+    const rowId = raw.slice(0, idx).trim();
+    const leaseToken = raw.slice(idx + 1).trim();
+    if (!uuidRe.test(rowId) || !leaseToken) return null;
+    return { rowId, leaseToken };
+  };
+
+  const patchCommsOutboxRows = async (query, body) => {
+    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => '');
+      throw new Error(txt || `comms_outbox patch failed (${resp.status})`);
+    }
+
+    const rows = await resp.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
   const results = [];
   let updated = 0;
   let ignored = 0;
@@ -60134,6 +60342,8 @@ async function handleWebhookClicksend(env, req) {
       payload.customString,
       payload.customstring
     );
+
+    const customStringScope = parseAttemptScopedCustomString(customString);
 
     const messageId = firstNonEmpty(
       payload.message_id,
@@ -60187,18 +60397,21 @@ async function handleWebhookClicksend(env, req) {
     let rowSource = null;
     let rowLookupAmbiguous = false;
 
-    if (customString && uuidRe.test(customString)) {
+    if (customStringScope) {
       try {
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
-            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error` +
-            `&id=eq.${enc(customString)}` +
+            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error,attempt_lease_token` +
+            `&id=eq.${enc(customStringScope.rowId)}` +
+            `&attempt_lease_token=eq.${enc(customStringScope.leaseToken)}` +
+            `&channel=in.(SMS,VOICE)` +
+            `&or=(provider_key.eq.AUTO,provider_key.eq.CLICKSEND,provider_key.is.null)` +
             `&limit=1`,
           false
         );
         row = Array.isArray(rows) && rows.length ? rows[0] : null;
-        if (row) rowSource = 'CUSTOM_STRING';
+        if (row) rowSource = 'CUSTOM_STRING_ATTEMPT';
       } catch {
         row = null;
         rowSource = null;
@@ -60210,7 +60423,7 @@ async function handleWebhookClicksend(env, req) {
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
-            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error` +
+            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error,attempt_lease_token` +
             `&provider_message_id=eq.${enc(messageId)}` +
             `&channel=in.(SMS,VOICE)` +
             `&or=(provider_key.eq.AUTO,provider_key.eq.CLICKSEND,provider_key.is.null)` +
@@ -60302,7 +60515,10 @@ async function handleWebhookClicksend(env, req) {
 
     const patch = {
       provider_key: 'CLICKSEND',
-      provider_response_json: payload
+      provider_response_json: payload,
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
     };
 
     if (messageId) patch.provider_message_id = messageId;
@@ -60337,21 +60553,38 @@ async function handleWebhookClicksend(env, req) {
       patch.last_error = null;
     }
 
-    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(row.id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify(patch)
-    });
+    let patchQuery = `id=eq.${enc(row.id)}`;
+    if (rowSource === 'CUSTOM_STRING_ATTEMPT' && customStringScope) {
+      patchQuery += `&attempt_lease_token=eq.${enc(customStringScope.leaseToken)}`;
+    } else if (rowSource === 'PROVIDER_MESSAGE_ID' && messageId) {
+      patchQuery += `&provider_message_id=eq.${enc(messageId)}`;
+    }
 
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => '');
+    let patchedRows = [];
+    try {
+      patchedRows = await patchCommsOutboxRows(patchQuery, patch);
+    } catch (e) {
       results.push({
         ok: false,
         reason: 'PATCH_FAILED',
         custom_string: customString || null,
         message_id: messageId || null,
         mappedStatus,
-        error: txt || null
+        error: String(e?.message || e || 'PATCH_FAILED')
+      });
+      continue;
+    }
+
+    if (!Array.isArray(patchedRows) || patchedRows.length === 0) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'STALE_OR_ALREADY_SETTLED',
+        outbox_id: row.id,
+        custom_string: customString || null,
+        message_id: messageId || null,
+        mappedStatus,
+        lookup_source: rowSource
       });
       continue;
     }
@@ -60375,8 +60608,6 @@ async function handleWebhookClicksend(env, req) {
     results
   }));
 }
-
-
 
 
 async function handleOutboxUnifiedDelete(env, req, channel, id) {
@@ -61020,31 +61251,6 @@ async function handleEmailSend(env, req) {
 
 
 
-async function handleOutboxRetry(env, req, outboxId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  try {
-    const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(outboxId)}`, {
-      method: 'PATCH', headers: sbHeaders(env),
-      body: JSON.stringify({
-        status: 'QUEUED',
-        sent_at: null,
-        delivered_at: null,
-        read_at: null,
-        failed_at: null,
-        last_error: null,
-        provider_message_id: null,
-        provider_status: null
-      })
-    });
-    if (!upd.ok) return withCORS(env, req, serverError(`Failed to retry: ${await upd.text()}`));
-    await recordEmailAudit(env, user, 'EMAIL_RETRY', { outbox_id: outboxId });
-    return withCORS(env, req, ok({ queued: true }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
-  }
-}
 
 async function handleListOutbox(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -61086,60 +61292,6 @@ async function handleListOutbox(env, req) {
   return withCORS(env, req, ok(rows[0]));
 }
 
-async function handleOutboxMarkSent(env, req) {
-  // Optional callback for provider -> system reconciliation
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
-  const { id, provider_message_id } = body || {};
-  if (!isNonEmptyString(id)) return withCORS(env, req, badRequest('id is required'));
-
-  const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(id)}`, {
-    method: 'PATCH', headers: sbHeaders(env),
-    body: JSON.stringify({
-      status: 'SENT',
-      sent_at: nowIso(),
-      provider_message_id: provider_message_id || null,
-      provider_status: 'ACCEPTED',
-      delivered_at: null,
-      read_at: null,
-      last_error: null,
-      failed_at: null
-    })
-  });
-  if (!upd.ok) return withCORS(env, req, serverError(`Failed to mark sent: ${await upd.text()}`));
-
-  await recordEmailAudit(env, user, 'EMAIL_MARK_SENT', { outbox_id: id, provider_message_id });
-  return withCORS(env, req, ok({ ok: true }));
-}
-
-
-async function handleOutboxMarkFailed(env, req) {
-  // Optional callback for provider -> system reconciliation
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
-  const { id, error } = body || {};
-  if (!isNonEmptyString(id)) return withCORS(env, req, badRequest('id is required'));
-
-  const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(id)}`, {
-    method: 'PATCH', headers: sbHeaders(env),
-    body: JSON.stringify({
-      status: 'FAILED',
-      failed_at: nowIso(),
-      last_error: String(error || 'Unknown error'),
-      provider_status: 'FAILED'
-    })
-  });
-  if (!upd.ok) return withCORS(env, req, serverError(`Failed to mark failed: ${await upd.text()}`));
-
-  await recordEmailAudit(env, user, 'EMAIL_MARK_FAILED', { outbox_id: id, error: String(error || 'Unknown error') });
-  return withCORS(env, req, ok({ ok: true }));
-}
 
 // ------------------------------
 // HTTP handler – TSO failure email queueing
@@ -102658,13 +102810,8 @@ if (req.method === 'GET' && p === '/api/mailshots') {
   if (m && req.method === 'GET') return handleMailshotRunGet(env, req, m.id);
 }
       if (req.method === 'POST' && p === '/api/email/outbox/drain')          return handleOutboxDrain(env, req);
-      {
-        const outRetry = matchPath(p, '/api/email/outbox/:id/retry');
-        if (outRetry && req.method === 'POST')                               return handleOutboxRetry(env, req, outRetry.id);
-      }
+   
 
-      if (req.method === 'POST' && p === '/api/email/outbox/mark-sent')      return handleOutboxMarkSent(env, req);
-      if (req.method === 'POST' && p === '/api/email/outbox/mark-failed')    return handleOutboxMarkFailed(env, req);
 
       if (req.method === 'POST' && p === '/api/email/send')                  return handleEmailSend(env, req);
       if (req.method === 'POST' && p === '/api/email/broadcast')             return handleEmailSend(env, req);
