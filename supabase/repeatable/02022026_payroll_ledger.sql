@@ -9125,93 +9125,103 @@ ts_itemised as (
 
     select
       fcl.candidate_id,
-      jsonb_build_object(
-        'preview_row_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
-        'line_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
-        'candidate_id', fcl.candidate_id::text,
-        'tms_ref', fcl.cand_tms_ref,
-        'display_name', fcl.cand_display_name,
-        'line_type', fcl.line_type,
-        'item_type_label', fcl.item_type_label,
-        'item_direction', fcl.item_direction,
-        'finance_case_id', fcl.finance_case_id::text,
-        'case_key', ('finance:' || fcl.finance_case_id::text),
-        'case_type', fcl.case_type::text,
-        'case_is_blocked', fcl.case_is_blocked,
-        'case_resolution_summary', fcl.case_resolution_summary_json,
-        'case_components', fcl.case_components_json,
-        'timesheet_id', case when fcl.linked_timesheet_id is null then null else fcl.linked_timesheet_id::text end,
-        'client_id', case when fcl.client_id is null then null else fcl.client_id::text end,
-        'client_name', fcl.client_name,
-        'week_ending_date', null,
-        'linked_shift_date', case when fcl.linked_shift_date is null then null else fcl.linked_shift_date::text end,
-        'pay_channel', fcl.candidate_pay_method,
-        'paye_treatment', fcl.paye_treatment,
-        'route_type', case when fcl.routing_kind is null then 'NORMAL_PAYMENT' else fcl.routing_kind::text end,
-        'routing_kind', case when fcl.routing_kind is null then null else fcl.routing_kind::text end,
-        'destination_label', fcl.destination_label,
-        'taxability', case when fcl.taxability is null then null else fcl.taxability::text end,
-        'beneficiary_name', fcl.beneficiary_name,
-        'masked_bank_account', fcl.masked_bank_account,
-        'bank_details_hash', fcl.payee_bank_hash,
-        'blocked_reason_codes', fcl.blocked_reason_codes,
-        'readiness_state', fcl.readiness_state,
-        'draftable', fcl.draftable,
-        'snooze_allowed', fcl.snooze_allowed,
-        'oneoff_bank_details_present', fcl.oneoff_bank_details_present,
-        'is_candidate_directed_oneoff_payout', fcl.is_candidate_directed_oneoff_payout,
-        'appears_on_umbrella_remittance', fcl.appears_on_umbrella_remittance,
-        'generates_candidate_payment_advice', fcl.generates_candidate_payment_advice,
-        'adjustment_comment', fcl.adjustment_comment,
-        'amount_ex_vat', fcl.signed_amount_ex_vat,
-        'amount_display', fcl.signed_amount_ex_vat,
-        'is_advanced', false,
-        'advanced_override_id', null,
-        'advanced_reason', null,
-        'is_excluded_from_allocation', (fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null),
-        'is_ready_for_draft', fcl.draftable,
-        'presentation_section', case
-          when fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null then 'BLOCKED_FOR_PAY'
-          when fcl.case_is_blocked then 'BLOCKED_FOR_PAY'
-          else 'READY_TO_PAY'
-        end,
-        'presentation_role', 'PARENT',
-        'presentation_line_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
-        'presentation_parent_line_id', ('finance:' || fcl.finance_case_id::text),
-        'presentation_reason', case
-          when fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null then 'DATED_SNOOZE'
-          when fcl.case_is_blocked then 'CASE_BLOCKED'
-          else 'READY_TO_PAY'
-        end,
-        'source_ref', ('advance:' || fcl.finance_case_id::text),
-        'snooze_kind', case
-          when fcl.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(fcl.lifecycle_status_display,'')) = 'PAID' then 'PAYMENT_ADVANCE_REPAYMENT'
-          when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
-          else ''
-        end,
-        'snooze_identity', jsonb_build_object(
-          'identity_type', 'FINANCE_CASE',
-          'timesheet_id', null,
-          'booking_id', null,
-          'segment_id', null,
-          'segment_stable_key', null,
-          'source_ref', ('advance:' || fcl.finance_case_id::text)
-        ),
-        'snooze_state', case
-          when fcl.active_snooze_id is null then jsonb_build_object('state','NONE')
-          when fcl.active_snooze_until_date is null then jsonb_build_object(
-            'state', 'INDEFINITE_SNOOZED',
-            'snooze_id', fcl.active_snooze_id::text,
-            'snooze_until_date', null,
-            'note', fcl.active_snooze_note
-          )
-          else jsonb_build_object(
-            'state', 'DATED_SNOOZED',
-            'snooze_id', fcl.active_snooze_id::text,
-            'snooze_until_date', fcl.active_snooze_until_date::text,
-            'note', fcl.active_snooze_note
-          )
-        end
+      (
+        jsonb_build_object(
+          'preview_row_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
+          'line_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
+          'candidate_id', fcl.candidate_id::text,
+          'tms_ref', fcl.cand_tms_ref,
+          'display_name', fcl.cand_display_name,
+          'line_type', fcl.line_type,
+          'item_type_label', fcl.item_type_label,
+          'item_direction', fcl.item_direction,
+          'finance_case_id', fcl.finance_case_id::text,
+          'case_key', ('finance:' || fcl.finance_case_id::text),
+          'case_type', fcl.case_type::text,
+          'case_is_blocked', fcl.case_is_blocked
+        )
+        || jsonb_build_object(
+          'case_resolution_summary', fcl.case_resolution_summary_json,
+          'case_components', fcl.case_components_json,
+          'timesheet_id', case when fcl.linked_timesheet_id is null then null else fcl.linked_timesheet_id::text end,
+          'client_id', case when fcl.client_id is null then null else fcl.client_id::text end,
+          'client_name', fcl.client_name,
+          'week_ending_date', null,
+          'linked_shift_date', case when fcl.linked_shift_date is null then null else fcl.linked_shift_date::text end,
+          'pay_channel', fcl.candidate_pay_method,
+          'paye_treatment', fcl.paye_treatment,
+          'route_type', case when fcl.routing_kind is null then 'NORMAL_PAYMENT' else fcl.routing_kind::text end,
+          'routing_kind', case when fcl.routing_kind is null then null else fcl.routing_kind::text end,
+          'destination_label', fcl.destination_label,
+          'taxability', case when fcl.taxability is null then null else fcl.taxability::text end
+        )
+        || jsonb_build_object(
+          'beneficiary_name', fcl.beneficiary_name,
+          'masked_bank_account', fcl.masked_bank_account,
+          'bank_details_hash', fcl.payee_bank_hash,
+          'blocked_reason_codes', fcl.blocked_reason_codes,
+          'readiness_state', fcl.readiness_state,
+          'draftable', fcl.draftable,
+          'snooze_allowed', fcl.snooze_allowed,
+          'oneoff_bank_details_present', fcl.oneoff_bank_details_present,
+          'is_candidate_directed_oneoff_payout', fcl.is_candidate_directed_oneoff_payout,
+          'appears_on_umbrella_remittance', fcl.appears_on_umbrella_remittance,
+          'generates_candidate_payment_advice', fcl.generates_candidate_payment_advice,
+          'adjustment_comment', fcl.adjustment_comment,
+          'amount_ex_vat', fcl.signed_amount_ex_vat,
+          'amount_display', fcl.signed_amount_ex_vat,
+          'is_advanced', false,
+          'advanced_override_id', null,
+          'advanced_reason', null
+        )
+        || jsonb_build_object(
+          'is_excluded_from_allocation', (fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null),
+          'is_ready_for_draft', fcl.draftable,
+          'presentation_section', case
+            when fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null then 'BLOCKED_FOR_PAY'
+            when fcl.case_is_blocked then 'BLOCKED_FOR_PAY'
+            else 'READY_TO_PAY'
+          end,
+          'presentation_role', 'PARENT',
+          'presentation_line_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
+          'presentation_parent_line_id', ('finance:' || fcl.finance_case_id::text),
+          'presentation_reason', case
+            when fcl.active_snooze_id is not null and fcl.active_snooze_until_date is not null then 'DATED_SNOOZE'
+            when fcl.case_is_blocked then 'CASE_BLOCKED'
+            else 'READY_TO_PAY'
+          end,
+          'source_ref', ('advance:' || fcl.finance_case_id::text),
+          'snooze_kind', case
+            when fcl.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(fcl.lifecycle_status_display,'')) = 'PAID' then 'PAYMENT_ADVANCE_REPAYMENT'
+            when fcl.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+            else ''
+          end
+        )
+        || jsonb_build_object(
+          'snooze_identity', jsonb_build_object(
+            'identity_type', 'FINANCE_CASE',
+            'timesheet_id', null,
+            'booking_id', null,
+            'segment_id', null,
+            'segment_stable_key', null,
+            'source_ref', ('advance:' || fcl.finance_case_id::text)
+          ),
+          'snooze_state', case
+            when fcl.active_snooze_id is null then jsonb_build_object('state','NONE')
+            when fcl.active_snooze_until_date is null then jsonb_build_object(
+              'state', 'INDEFINITE_SNOOZED',
+              'snooze_id', fcl.active_snooze_id::text,
+              'snooze_until_date', null,
+              'note', fcl.active_snooze_note
+            )
+            else jsonb_build_object(
+              'state', 'DATED_SNOOZED',
+              'snooze_id', fcl.active_snooze_id::text,
+              'snooze_until_date', fcl.active_snooze_until_date::text,
+              'note', fcl.active_snooze_note
+            )
+          end
+        )
       ) as line_json,
       fcl.candidate_pay_method as pay_channel,
       fcl.paye_treatment,
