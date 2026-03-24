@@ -12106,8 +12106,9 @@ async function buildPayBatchDetailPdfFromRows(exportObj) {
   return pdfBytes;
 }
 
-
 async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) {
+  if (!user) return withCORS(env, req, unauthorized());
+
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
 
@@ -12175,6 +12176,22 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     return null;
   };
 
+  const safeStr = (v) => (v == null ? '' : String(v));
+  const asNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const asMoney = (v) => {
+    const n = asNum(v);
+    if (n == null) return '';
+    return n.toFixed(2);
+  };
+  const boolLabel = (v) => {
+    if (v === true) return 'Yes';
+    if (v === false) return 'No';
+    return '';
+  };
+
   try {
     const raw0 = await sbRpc(env, 'pay_batch_export_csv_rows', {
       p_pay_batch_id: id,
@@ -12183,7 +12200,240 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
 
     const exportObj = unwrapRpc(raw0, 'pay_batch_export_csv_rows');
 
-    const pdfBytes = await buildPayBatchDetailPdfFromRows(exportObj);
+    const batch = (exportObj && typeof exportObj === 'object' && exportObj.batch && typeof exportObj.batch === 'object')
+      ? exportObj.batch
+      : {};
+
+    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+
+    const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
+    const PAGE_W_MM = 210;
+    const PAGE_H_MM = 297;
+    const yFromTopMm = (yTopMm) => PAGE_H_MM - (Number(yTopMm) || 0);
+
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const M = 10;
+    const lineH = 4.2;
+    const small = 8;
+    const tiny = 7;
+    const title = 12;
+
+    const state = { page: null, yTop: 0, pageNo: 0 };
+
+    const drawText = (page, f, text, xMm, yTopMm, size, opts = {}) => {
+      const s = safeStr(text);
+      if (!s) return;
+      page.drawText(s, {
+        x: mmToPt(xMm),
+        y: mmToPt(yFromTopMm(yTopMm)),
+        size,
+        font: f,
+        ...opts
+      });
+    };
+
+    const drawLine = (page, x1Mm, yTopMm, x2Mm) => {
+      page.drawLine({
+        start: { x: mmToPt(x1Mm), y: mmToPt(yFromTopMm(yTopMm)) },
+        end: { x: mmToPt(x2Mm), y: mmToPt(yFromTopMm(yTopMm)) },
+        thickness: 0.6,
+        color: rgb(0.85, 0.85, 0.85)
+      });
+    };
+
+    const textWidthMm = (f, text, size) => {
+      const s = safeStr(text);
+      if (!s) return 0;
+      return (f.widthOfTextAtSize(s, size) * 25.4) / 72;
+    };
+
+    const fitText = (f, text, size, maxWmm) => {
+      const s = safeStr(text);
+      if (!s) return '';
+      if (textWidthMm(f, s, size) <= maxWmm) return s;
+      const ell = '…';
+      let out = s;
+      while (out.length > 1 && textWidthMm(f, out + ell, size) > maxWmm) {
+        out = out.slice(0, -1);
+      }
+      return out.length ? `${out}${ell}` : ell;
+    };
+
+    const ensureSpace = (neededMm) => {
+      const bottom = PAGE_H_MM - M;
+      if ((state.yTop + neededMm) > bottom) {
+        newPage();
+        return true;
+      }
+      return false;
+    };
+
+    const drawHeader = () => {
+      const batchId = safeStr(batch.id || id);
+      const batchStatus = safeStr(batch.status || '');
+      const payDate = safeStr(batch.pay_date || '');
+      const batchKind = safeStr(batch.batch_kind_fixed || batch.batch_kind || '');
+      const generatedAt = safeStr(batch.generated_at_utc || '');
+      const y = state.yTop;
+
+      drawText(state.page, fontBold, 'Pay Batch Detail Export', M, y, title);
+      drawText(state.page, font, `Batch: ${batchId}`, M, y + 7, small);
+      drawText(state.page, font, `Status: ${batchStatus}`, M, y + 12, small);
+      drawText(state.page, font, `Pay date: ${payDate}`, M, y + 17, small);
+      drawText(state.page, font, `Kind: ${batchKind}`, M, y + 22, small);
+      if (generatedAt) drawText(state.page, font, `Generated: ${generatedAt}`, M, y + 27, tiny);
+      drawText(state.page, font, `Page ${state.pageNo}`, PAGE_W_MM - M - 20, y, small);
+      drawLine(state.page, M, y + 31, PAGE_W_MM - M);
+      state.yTop = y + 35;
+    };
+
+    const newPage = () => {
+      state.pageNo += 1;
+      state.page = pdfDoc.addPage([mmToPt(PAGE_W_MM), mmToPt(PAGE_H_MM)]);
+      state.yTop = M;
+      drawHeader();
+    };
+
+    const grouped = new Map();
+    for (const row of rows) {
+      const candidateId = safeStr(row?.candidate_id || '');
+      const key = candidateId || `__no_candidate__:${grouped.size}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(row);
+    }
+
+    const sortGroupKey = (arr) => {
+      const first = Array.isArray(arr) && arr.length ? arr[0] : {};
+      const ln = safeStr(first?.candidate_last_name).toLowerCase();
+      const fn = safeStr(first?.candidate_first_name).toLowerCase();
+      const dn = safeStr(first?.candidate_display_name).toLowerCase();
+      const ref = safeStr(first?.candidate_tms_ref || first?.candidate_tms_ref_snap).toLowerCase();
+      return `${ln}|${fn}|${dn}|${ref}`;
+    };
+
+    const candidateGroups = [...grouped.values()].sort((a, b) => sortGroupKey(a).localeCompare(sortGroupKey(b)));
+
+    newPage();
+
+    const topCols = {
+      date: { x: M, w: 18 },
+      client: { x: M + 20, w: 32 },
+      type: { x: M + 54, w: 24 },
+      dir: { x: M + 80, w: 16 },
+      tax: { x: M + 98, w: 18 },
+      method: { x: M + 118, w: 18 },
+      destination: { x: M + 138, w: 34 },
+      amount: { x: M + 174, w: 20 }
+    };
+
+    const drawMainHeader = () => {
+      drawText(state.page, fontBold, 'Date', topCols.date.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Client', topCols.client.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Type', topCols.type.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Dir', topCols.dir.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Tax', topCols.tax.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Method', topCols.method.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Destination', topCols.destination.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Amount', topCols.amount.x, state.yTop, tiny);
+      state.yTop += 4.5;
+      drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
+      state.yTop += 2.0;
+    };
+
+    drawMainHeader();
+
+    for (const groupRows of candidateGroups) {
+      const first = groupRows[0] || {};
+      const candidateName = safeStr(first?.candidate_display_name || [safeStr(first?.candidate_first_name), safeStr(first?.candidate_last_name)].filter(Boolean).join(' ').trim() || first?.candidate_id || '');
+      const candidateRef = safeStr(first?.candidate_tms_ref || first?.candidate_tms_ref_snap || '');
+      const candidateDisplay = candidateRef ? `${candidateName} (${candidateRef})` : candidateName;
+
+      ensureSpace(12);
+      drawText(state.page, fontBold, candidateDisplay || '(unknown candidate)', M, state.yTop, small);
+      state.yTop += 5.0;
+
+      for (const row of groupRows) {
+        const amountText = (() => {
+          const deductionAmount = asNum(row?.deduction_amount ?? row?.deduction_amount_ex_vat);
+          const amountEx = asNum(row?.amount_ex_vat);
+          const paymentOrDeduction = safeStr(row?.payment_or_deduction).trim().toUpperCase();
+          if (paymentOrDeduction === 'DEDUCTION' && deductionAmount != null) return `£${asMoney(deductionAmount)}`;
+          if (amountEx != null) return `£${asMoney(amountEx)}`;
+          return '';
+        })();
+
+        const dateText = safeStr(row?.work_date || row?.seg_work_date || row?.sort_work_date || row?.week_ending_date || '');
+        const clientText = safeStr(row?.client_name || '');
+        const typeText = safeStr(row?.item_type_label || row?.item_type || row?.line_kind || '');
+        const directionText = safeStr(row?.payment_or_deduction || '');
+        const taxText = safeStr(row?.taxability || row?.finance_taxability || '');
+        const methodText = safeStr(row?.pay_method || row?.pay_channel || '');
+        const destinationText = safeStr(row?.payout_destination || row?.routing_kind || row?.finance_routing_kind || '');
+
+        ensureSpace(16);
+
+        drawText(state.page, font, fitText(font, dateText, tiny, topCols.date.w), topCols.date.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, clientText, tiny, topCols.client.w), topCols.client.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, typeText, tiny, topCols.type.w), topCols.type.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, directionText, tiny, topCols.dir.w), topCols.dir.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, taxText, tiny, topCols.tax.w), topCols.tax.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, methodText, tiny, topCols.method.w), topCols.method.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, destinationText, tiny, topCols.destination.w), topCols.destination.x, state.yTop, tiny);
+        drawText(state.page, fontBold, amountText, topCols.amount.x, state.yTop, tiny);
+        state.yTop += 4.5;
+
+        const detailLine1 = [
+          safeStr(row?.finance_case_reference) ? `Ref: ${safeStr(row.finance_case_reference)}` : '',
+          safeStr(row?.comment_or_note) ? `Note: ${safeStr(row.comment_or_note)}` : '',
+          safeStr(row?.description) ? `Desc: ${safeStr(row.description)}` : ''
+        ].filter(Boolean).join('   ');
+
+        const detailLine2 = [
+          safeStr(row?.masked_bank_account_paid_to || row?.masked_bank_account) ? `Masked account: ${safeStr(row.masked_bank_account_paid_to || row.masked_bank_account)}` : '',
+          safeStr(row?.beneficiary_name) ? `Beneficiary: ${safeStr(row.beneficiary_name)}` : '',
+          safeStr(row?.bank_details_created_by_display_name || row?.bank_details_created_by) ? `Entered by: ${safeStr(row.bank_details_created_by_display_name || row.bank_details_created_by)}` : '',
+          safeStr(row?.bank_details_updated_by_display_name || row?.bank_details_updated_by) ? `Last changed by: ${safeStr(row.bank_details_updated_by_display_name || row.bank_details_updated_by)}` : ''
+        ].filter(Boolean).join('   ');
+
+        const detailLine3 = [
+          safeStr(row?.lifecycle_status_display || row?.finance_lifecycle_status_display || row?.lifecycle_status) ? `Lifecycle: ${safeStr(row.lifecycle_status_display || row.finance_lifecycle_status_display || row.lifecycle_status)}` : '',
+          safeStr(row?.finance_status) ? `Finance status: ${safeStr(row.finance_status)}` : '',
+          safeStr(row?.finance_payout_status) ? `Payout status: ${safeStr(row.finance_payout_status)}` : '',
+          row?.is_candidate_directed_oneoff_payout !== undefined ? `Candidate-directed one-off: ${boolLabel(row.is_candidate_directed_oneoff_payout)}` : '',
+          row?.appears_on_umbrella_remittance !== undefined ? `On umbrella remittance: ${boolLabel(row.appears_on_umbrella_remittance)}` : '',
+          row?.generates_candidate_payment_advice !== undefined ? `Generates payout advice: ${boolLabel(row.generates_candidate_payment_advice)}` : ''
+        ].filter(Boolean).join('   ');
+
+        if (detailLine1) {
+          ensureSpace(4.0);
+          drawText(state.page, font, fitText(font, detailLine1, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
+          state.yTop += 3.8;
+        }
+
+        if (detailLine2) {
+          ensureSpace(4.0);
+          drawText(state.page, font, fitText(font, detailLine2, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
+          state.yTop += 3.8;
+        }
+
+        if (detailLine3) {
+          ensureSpace(4.0);
+          drawText(state.page, font, fitText(font, detailLine3, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
+          state.yTop += 3.8;
+        }
+
+        state.yTop += 1.5;
+      }
+
+      state.yTop += 2.5;
+      drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
+      state.yTop += 4.0;
+    }
+
+    const pdfBytes = await pdfDoc.save();
 
     const filename = `pay_batch_${id}_detail.pdf`;
     const res = new Response(pdfBytes, {
@@ -12201,8 +12451,6 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_PDF_FAILED')));
   }
 }
-
-
 
 /**
  * Minimal HTML escape for safe <pre> usage.
@@ -18304,14 +18552,11 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
 
 
+async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
+  if (!user) return withCORS(env, req, unauthorized());
 
-async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
-
-  const url = new URL(req.url);
-  const scopeRaw = String(url.searchParams.get('scope') || 'ALL').trim().toUpperCase();
-  const scope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -18335,6 +18580,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
         const envObj = _safeJsonParse(e.body);
         if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
       }
 
       if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
@@ -18376,93 +18622,232 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return null;
   };
 
+  const csvEscape = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const asBoolText = (v) => {
+    return v === true ? 'true' : (v === false ? 'false' : '');
+  };
+
+  const normalizeText = (v) => {
+    return (v === null || v === undefined) ? '' : String(v);
+  };
+
+  const coalesce = (...vals) => {
+    for (const v of vals) {
+      if (v !== null && v !== undefined && String(v) !== '') return v;
+    }
+    return '';
+  };
+
   try {
-    // ✅ Freshness gate (bank CSV should not export stale batches)
-    try {
-      const fr0 = await sbRpc(env, 'pay_batch_validate_freshness', {
-        p_pay_batch_id: id,
-        p_actor_user_id: user && user.id ? user.id : null
-      });
-      const fr = unwrapRpc(fr0, 'pay_batch_validate_freshness');
-      const isStale = !!(fr && typeof fr === 'object' && fr.is_stale === true);
-      if (isStale) {
-        const payload = (fr && typeof fr === 'object') ? fr : { is_stale: true, stale_reasons: [], diff: [] };
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json; charset=utf-8');
-        return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
-      }
-    } catch (e) {
-      const stale409 = _maybeStale409(e);
-      if (stale409) return stale409;
-      // If freshness RPC fails for any other reason, treat as server error (do not risk exporting stale).
-      return withCORS(env, req, serverError(String(e?.message || e)));
+    const raw0 = await sbRpc(env, 'pay_batch_export_csv_rows', {
+      p_pay_batch_id: id,
+      p_actor_user_id: user.id
+    });
+
+    const exportObj = unwrapRpc(raw0, 'pay_batch_export_csv_rows');
+
+    const batch = (exportObj && typeof exportObj === 'object' && exportObj.batch && typeof exportObj.batch === 'object')
+      ? exportObj.batch
+      : {};
+
+    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+
+    const batchId = (batch && batch.id != null) ? String(batch.id) : id;
+    const batchStatus = (batch && batch.status != null) ? String(batch.status) : '';
+    const payDate = (batch && batch.pay_date != null) ? String(batch.pay_date) : '';
+    const batchKind = (batch && batch.batch_kind != null) ? String(batch.batch_kind) : '';
+    const batchKindFixed = (batch && batch.batch_kind_fixed != null) ? String(batch.batch_kind_fixed) : '';
+
+    const cols = [
+      'batch_id',
+      'batch_status',
+      'pay_date',
+      'batch_kind',
+      'batch_kind_fixed',
+
+      'candidate_last_name',
+      'candidate_first_name',
+      'candidate_ref',
+      'candidate_display_name',
+      'client_name',
+      'client_id',
+      'timesheet_id',
+      'work_date',
+      'week_ending_date',
+      'reference_number',
+
+      'line_kind',
+      'bucket_code',
+      'unit_name',
+      'units',
+      'rate',
+      'amount_ex_vat',
+      'amount_vat',
+      'amount_inc_vat',
+      'signed_amount_ex_vat',
+
+      'item_type',
+      'item_type_label',
+      'payment_or_deduction',
+      'is_deduction',
+      'deduction_kind',
+      'deduction_amount',
+
+      'taxability',
+      'pay_channel',
+      'pay_method',
+
+      'finance_case_reference',
+      'source_ref',
+      'comment_or_note',
+      'description',
+      'item_description',
+
+      'payout_destination',
+      'routing_kind',
+      'finance_routing_kind',
+      'appears_on_umbrella_remittance',
+      'generates_candidate_payment_advice',
+      'is_candidate_directed_oneoff_payout',
+
+      'masked_bank_account',
+      'masked_bank_account_paid_to',
+      'beneficiary_name',
+
+      'bank_details_created_by',
+      'bank_details_created_by_display_name',
+      'bank_details_created_by_email',
+      'bank_details_created_by_user_id',
+      'bank_details_updated_by',
+      'bank_details_updated_by_display_name',
+      'bank_details_updated_by_email',
+      'bank_details_updated_by_user_id',
+
+      'lifecycle_status',
+      'lifecycle_status_display',
+      'finance_lifecycle_status_display',
+      'finance_status',
+      'finance_payout_status',
+
+      'paye_net_amount',
+      'repayment_week_start'
+    ];
+
+    const lines = [];
+    lines.push(cols.map(csvEscape).join(','));
+
+    for (const row of rows) {
+      const itemType = normalizeText(coalesce(row?.item_type, ''));
+      const paymentOrDeduction = normalizeText(coalesce(row?.payment_or_deduction, ''));
+      const deductionKind = normalizeText(coalesce(row?.deduction_kind, itemType));
+      const deductionAmount = coalesce(row?.deduction_amount, row?.deduction_amount_ex_vat, '');
+      const isDeduction = (String(paymentOrDeduction).trim().toUpperCase() === 'DEDUCTION')
+        ? 'true'
+        : (String(paymentOrDeduction).trim().toUpperCase() === 'PAYMENT' ? 'false' : asBoolText(row?.is_deduction));
+
+      const vals = [
+        batchId,
+        batchStatus,
+        payDate,
+        batchKind,
+        batchKindFixed,
+
+        normalizeText(row?.candidate_last_name),
+        normalizeText(row?.candidate_first_name),
+        normalizeText(coalesce(row?.candidate_tms_ref, row?.candidate_tms_ref_snap, '')),
+        normalizeText(coalesce(row?.candidate_display_name, row?.candidate_display_name_snap, '')),
+        normalizeText(row?.client_name),
+        normalizeText(row?.client_id),
+        normalizeText(row?.timesheet_id),
+        normalizeText(coalesce(row?.work_date, row?.seg_work_date, row?.sort_work_date, '')),
+        normalizeText(row?.week_ending_date),
+        normalizeText(row?.reference_number),
+
+        normalizeText(row?.line_kind),
+        normalizeText(coalesce(row?.bucket_code, row?.sort_bucket_code, '')),
+        normalizeText(coalesce(row?.unit_name, row?.sort_unit_name, '')),
+        normalizeText(row?.units),
+        normalizeText(row?.rate),
+        normalizeText(row?.amount_ex_vat),
+        normalizeText(row?.amount_vat),
+        normalizeText(row?.amount_inc_vat),
+        normalizeText(row?.signed_amount_ex_vat),
+
+        itemType,
+        normalizeText(row?.item_type_label),
+        paymentOrDeduction,
+        isDeduction,
+        deductionKind,
+        normalizeText(deductionAmount),
+
+        normalizeText(coalesce(row?.taxability, row?.finance_taxability, '')),
+        normalizeText(row?.pay_channel),
+        normalizeText(row?.pay_method),
+
+        normalizeText(row?.finance_case_reference),
+        normalizeText(row?.source_ref),
+        normalizeText(row?.comment_or_note),
+        normalizeText(row?.description),
+        normalizeText(row?.item_description),
+
+        normalizeText(row?.payout_destination),
+        normalizeText(coalesce(row?.routing_kind, row?.finance_routing_kind, '')),
+        normalizeText(row?.finance_routing_kind),
+        asBoolText(row?.appears_on_umbrella_remittance),
+        asBoolText(row?.generates_candidate_payment_advice),
+        asBoolText(row?.is_candidate_directed_oneoff_payout),
+
+        normalizeText(row?.masked_bank_account),
+        normalizeText(row?.masked_bank_account_paid_to),
+        normalizeText(row?.beneficiary_name),
+
+        normalizeText(row?.bank_details_created_by),
+        normalizeText(row?.bank_details_created_by_display_name),
+        normalizeText(row?.bank_details_created_by_email),
+        normalizeText(row?.bank_details_created_by_user_id),
+        normalizeText(row?.bank_details_updated_by),
+        normalizeText(row?.bank_details_updated_by_display_name),
+        normalizeText(row?.bank_details_updated_by_email),
+        normalizeText(row?.bank_details_updated_by_user_id),
+
+        normalizeText(row?.lifecycle_status),
+        normalizeText(row?.lifecycle_status_display),
+        normalizeText(row?.finance_lifecycle_status_display),
+        normalizeText(row?.finance_status),
+        normalizeText(row?.finance_payout_status),
+
+        normalizeText(row?.paye_net_amount),
+        normalizeText(row?.repayment_week_start)
+      ];
+
+      lines.push(vals.map(csvEscape).join(','));
     }
 
-    // Resolve provider from batch snapshot; delegate export to adapter if supported.
-    const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    const csvText = lines.join('\r\n');
 
-    let batchPayload = batchRes;
-    try {
-      if (Array.isArray(batchRes) && batchRes.length === 1 && batchRes[0] && typeof batchRes[0] === 'object') batchPayload = batchRes[0];
-      if (batchPayload && typeof batchPayload === 'object' && Object.prototype.hasOwnProperty.call(batchPayload, 'pay_batch_get')) {
-        batchPayload = batchPayload.pay_batch_get;
+    const filename = `pay_batch_${batchId}_detail.csv`;
+    const res = new Response(csvText, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`
       }
-    } catch {}
+    });
 
-    const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
-    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
-
-    const adapter = getRailAdapter(provider);
-    if (!adapter || typeof adapter.exportCsv !== 'function') {
-      return withCORS(env, req, badRequest('EXPORT_NOT_SUPPORTED_FOR_THIS_RAIL'));
-    }
-
-    // ✅ Generic availability gate via adapter.capabilities() (no provider-specific checks here)
-    try {
-      if (adapter && typeof adapter.capabilities === 'function') {
-        const caps = await adapter.capabilities(env);
-        if (caps && typeof caps === 'object' && caps.available === false) {
-          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
-          return withCORS(env, req, badRequest(reason));
-        }
-      }
-    } catch (e) {
-      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
-      return withCORS(env, req, badRequest(msg));
-    }
-
-    let csvText = null;
-    try {
-      csvText = await adapter.exportCsv(env, id, { scope }, user && user.id ? user.id : null);
-    } catch (e) {
-      const stale409 = _maybeStale409(e);
-      if (stale409) return stale409;
-
-      const msg = (e && e.message) ? String(e.message) : String(e || 'EXPORT_FAILED');
-      if (msg.includes('RAIL_ENV_MISMATCH')) {
-        return withCORS(env, req, badRequest(msg));
-      }
-      throw e;
-    }
-
-    const txt = (csvText === null || csvText === undefined) ? '' : String(csvText);
-
-    const headers = new Headers();
-    headers.set('Content-Type', 'text/csv; charset=utf-8');
-    headers.set('Content-Disposition', `attachment; filename="pay_batch_${id}_${scope}.csv"`);
-    // CORS
-    headers.set('Access-Control-Allow-Origin', '*');
-    headers.set('Access-Control-Allow-Headers', '*');
-    headers.set('Access-Control-Allow-Methods', '*');
-
-    return new Response(txt, { status: 200, headers });
+    return withCORS(env, req, res);
   } catch (e) {
     const stale409 = _maybeStale409(e);
     if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
   }
 }
-
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -19853,224 +20238,6 @@ async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   }
 
   return withCORS(env, req, ok({ replaced: true, r2_key: newKey }));
-}
-
-
-async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
-  };
-
-  const _safeJsonParse = (s) => {
-    try { return JSON.parse(String(s || '')); } catch { return null; }
-  };
-
-  const _extractDbRaisedJson = (e) => {
-    try {
-      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
-
-      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
-
-      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
-        const envObj = _safeJsonParse(e.body);
-        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
-      }
-
-      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
-        const m = e.message;
-        const i1 = m.indexOf('{');
-        const i2 = m.lastIndexOf('}');
-        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
-          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
-          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
-        }
-      }
-
-      if (!msg || typeof msg !== 'string') return null;
-      const t = msg.trim();
-
-      if (t.startsWith('{') && t.endsWith('}')) {
-        const payload = _safeJsonParse(t);
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-
-      const j1 = t.indexOf('{');
-      const j2 = t.lastIndexOf('}');
-      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
-        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-    } catch {}
-    return null;
-  };
-
-  const _maybeStale409 = (e) => {
-    const payload = _extractDbRaisedJson(e);
-    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json; charset=utf-8');
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
-    }
-    return null;
-  };
-
-  const csvEscape = (v) => {
-    const s = (v === null || v === undefined) ? '' : String(v);
-    if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
-  };
-
-  try {
-    const raw0 = await sbRpc(env, 'pay_batch_export_csv_rows', {
-      p_pay_batch_id: id,
-      p_actor_user_id: user.id
-    });
-
-    const exportObj = unwrapRpc(raw0, 'pay_batch_export_csv_rows');
-
-    const batch = (exportObj && typeof exportObj === 'object' && exportObj.batch && typeof exportObj.batch === 'object')
-      ? exportObj.batch
-      : {};
-
-    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
-
-    const batchId = (batch && batch.id != null) ? String(batch.id) : id;
-    const batchStatus = (batch && batch.status != null) ? String(batch.status) : '';
-    const payDate = (batch && batch.pay_date != null) ? String(batch.pay_date) : '';
-    const batchKind = (batch && batch.batch_kind != null) ? String(batch.batch_kind) : '';
-
-    const cols = [
-      'batch_id',
-      'batch_status',
-      'pay_date',
-      'batch_kind',
-
-      'candidate_last_name',
-      'candidate_first_name',
-      'candidate_ref',
-      'candidate_display_name',
-
-      'client_name',
-      'client_id',
-
-      'timesheet_id',
-      'work_date',
-      'week_ending_date',
-      'reference_number',
-
-      'line_kind',
-      'bucket_code',
-      'unit_name',
-      'units',
-      'rate',
-
-      'amount_ex_vat',
-      'vat_amount',
-      'amount_inc_vat',
-
-      'is_deduction',
-      'deduction_kind',
-      'deduction_amount',
-
-      'paye_net_amount',
-
-      'pay_channel',
-      'item_type',
-      'source_ref',
-      'repayment_week_start'
-    ];
-
-    const lines = [];
-    lines.push(cols.map(csvEscape).join(','));
-
-    for (const r of rows) {
-      const isOverpay = (r && r.is_overpayment_recovery === true);
-      const isLoanRepay = (r && r.is_loan_repayment === true);
-      const isDed = (isOverpay || isLoanRepay);
-
-      const deductionKind = isDed
-        ? (r && r.item_type != null ? String(r.item_type) : (isOverpay ? 'OVERPAYMENT_RECOVERY' : 'LOAN_REPAYMENT'))
-        : '';
-
-      const deductionAmount = isDed
-        ? (r && r.deduction_amount_ex_vat != null ? r.deduction_amount_ex_vat : '')
-        : '';
-
-      const vals = [
-        batchId,
-        batchStatus,
-        payDate,
-        batchKind,
-
-        (r && r.candidate_last_name != null) ? r.candidate_last_name : '',
-        (r && r.candidate_first_name != null) ? r.candidate_first_name : '',
-        (r && r.candidate_tms_ref != null) ? r.candidate_tms_ref : '',
-        (r && r.candidate_display_name != null) ? r.candidate_display_name : '',
-
-        (r && r.client_name != null) ? r.client_name : '',
-        (r && r.client_id != null) ? r.client_id : '',
-
-        (r && r.timesheet_id != null) ? r.timesheet_id : '',
-        (r && r.work_date != null) ? r.work_date : '',
-        (r && r.week_ending_date != null) ? r.week_ending_date : '',
-        (r && r.reference_number != null) ? r.reference_number : '',
-
-        (r && r.line_kind != null) ? r.line_kind : '',
-        (r && r.bucket_code != null) ? r.bucket_code : '',
-        (r && r.unit_name != null) ? r.unit_name : '',
-        (r && r.units != null) ? r.units : '',
-        (r && r.rate != null) ? r.rate : '',
-
-        (r && r.amount_ex_vat != null) ? r.amount_ex_vat : '',
-        (r && r.amount_vat != null) ? r.amount_vat : '',
-        (r && r.amount_inc_vat != null) ? r.amount_inc_vat : '',
-
-        isDed ? 'true' : 'false',
-        deductionKind,
-        deductionAmount,
-
-        (r && r.paye_net_amount != null) ? r.paye_net_amount : '',
-
-        (r && r.pay_channel != null) ? r.pay_channel : '',
-        (r && r.item_type != null) ? r.item_type : '',
-        (r && r.source_ref != null) ? r.source_ref : '',
-        (r && r.repayment_week_start != null) ? r.repayment_week_start : ''
-      ];
-
-      lines.push(vals.map(csvEscape).join(','));
-    }
-
-    const csvText = lines.join('\r\n');
-
-    const filename = `pay_batch_${batchId}_detail.csv`;
-    const res = new Response(csvText, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`
-      }
-    });
-
-    return withCORS(env, req, res);
-  } catch (e) {
-    const stale409 = _maybeStale409(e);
-    if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
-  }
 }
 
 
@@ -30044,20 +30211,35 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
     return withCORS(env, req, badRequest('client_id must be a UUID'));
   }
 
-  const includePaidOff = parseBool(u.searchParams.get('include_paid_off') ?? u.searchParams.get('includePaidOff'), true);
-  const includeClearedSnoozes = parseBool(u.searchParams.get('include_cleared_snoozes') ?? u.searchParams.get('includeClearedSnoozes'), false);
+  const hideCompletedNonCurrentItems = parseBool(
+    u.searchParams.get('hide_completed_non_current_items') ?? u.searchParams.get('hideCompletedNonCurrentItems'),
+    true
+  );
 
   try {
     const rpcRes = await sbRpc(env, 'pay_loans_snoozes_list', {
       p_candidate_id: candidateIdRaw || null,
       p_client_id: clientIdRaw || null,
-      p_include_paid_off: includePaidOff,
-      p_include_cleared_snoozes: includeClearedSnoozes
+      p_hide_completed_non_current_items: hideCompletedNonCurrentItems
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_loans_snoozes_list');
-    const financeCasesIn = Array.isArray(payload?.finance_cases) ? payload.finance_cases : [];
-    const timesheetSnoozesIn = Array.isArray(payload?.timesheet_snoozes) ? payload.timesheet_snoozes : [];
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const filtersIn = (payloadObj.filters && typeof payloadObj.filters === 'object' && !Array.isArray(payloadObj.filters))
+      ? payloadObj.filters
+      : {};
+
+    const {
+      include_paid_off: _dropIncludePaidOffSnake,
+      includePaidOff: _dropIncludePaidOffCamel,
+      include_cleared_snoozes: _dropIncludeClearedSnoozesSnake,
+      includeClearedSnoozes: _dropIncludeClearedSnoozesCamel,
+      ...filtersRest
+    } = filtersIn;
+
+    const financeCasesIn = Array.isArray(payloadObj.finance_cases) ? payloadObj.finance_cases : [];
+    const timesheetSnoozesIn = Array.isArray(payloadObj.timesheet_snoozes) ? payloadObj.timesheet_snoozes : [];
 
     const financeCases = financeCasesIn.map((row) => {
       const caseType = String(row?.case_type || '').trim().toUpperCase();
@@ -30069,6 +30251,10 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
       const blockedState = blockedStateForRow(row);
       const blockedReason = blockedReasonForRow(row);
       const rowLabel = String(row?.row_label || '').trim() || defaultRowLabelForCaseType(caseType);
+
+      const existingActionFlags = (row?.action_flags && typeof row.action_flags === 'object' && !Array.isArray(row.action_flags))
+        ? row.action_flags
+        : {};
 
       const isRepayable =
         caseType === 'PAYMENT_ADVANCE' ||
@@ -30103,17 +30289,26 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
         !writtenOff;
 
       const canSnooze =
-        isRepayable &&
-        outstandingAmount > 0 &&
-        !writtenOff &&
-        !activeSnoozeId;
+        (row?.snooze_allowed === true) ||
+        (
+          row?.snooze_allowed == null &&
+          isRepayable &&
+          outstandingAmount > 0 &&
+          !writtenOff &&
+          !activeSnoozeId
+        );
 
-      const canClearSnooze = !!activeSnoozeId;
-      const canEditSnooze = !!activeSnoozeId;
+      const canClearSnooze = existingActionFlags.can_clear_snooze === true || !!activeSnoozeId;
+      const canEditSnooze = existingActionFlags.can_edit_snooze === true || !!activeSnoozeId;
 
       const canEditPayout =
         (caseType === 'PAYMENT_ADVANCE' || caseType === 'MANUAL_CREDIT_ADJUSTMENT') &&
         payoutStatus !== 'PAID';
+
+      const canEditBankDetails =
+        existingActionFlags.can_edit_bank_details === true ||
+        row?.edit_bank_details_allowed === true ||
+        row?.oneoff_bank_details_editable === true;
 
       return {
         ...row,
@@ -30130,36 +30325,47 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
             ? row.component_resolution_summary_json
             : null,
         action_flags: {
-          can_edit_case: canEditCase,
-          can_edit_payout: canEditPayout,
-          can_restructure: canRestructure,
-          can_pause: canPause,
-          can_resume: canResume,
-          can_write_off: canWriteOff,
-          can_snooze: canSnooze,
-          can_unsnooze: canClearSnooze,
-          can_clear_snooze: canClearSnooze,
-          can_edit_snooze: canEditSnooze,
-          can_open_audit: true
+          ...existingActionFlags,
+          can_edit_case: existingActionFlags.can_edit_case ?? canEditCase,
+          can_edit_payout: existingActionFlags.can_edit_payout ?? canEditPayout,
+          can_edit_bank_details: canEditBankDetails,
+          can_restructure: existingActionFlags.can_restructure ?? canRestructure,
+          can_pause: existingActionFlags.can_pause ?? canPause,
+          can_resume: existingActionFlags.can_resume ?? canResume,
+          can_write_off: existingActionFlags.can_write_off ?? canWriteOff,
+          can_snooze: existingActionFlags.can_snooze ?? canSnooze,
+          can_unsnooze: existingActionFlags.can_unsnooze ?? canClearSnooze,
+          can_clear_snooze: existingActionFlags.can_clear_snooze ?? canClearSnooze,
+          can_edit_snooze: existingActionFlags.can_edit_snooze ?? canEditSnooze,
+          can_open_audit: existingActionFlags.can_open_audit ?? true
         }
       };
     });
 
     const timesheetSnoozes = timesheetSnoozesIn.map((row) => {
-      const canClearSnooze = !row?.cleared_at_utc;
+      const existingActionFlags = (row?.action_flags && typeof row.action_flags === 'object' && !Array.isArray(row.action_flags))
+        ? row.action_flags
+        : {};
+      const canClearSnooze = existingActionFlags.can_clear_snooze ?? !row?.cleared_at_utc;
+
       return {
         ...row,
         action_flags: {
-          can_unsnooze: canClearSnooze,
-          can_clear_snooze: canClearSnooze,
-          can_open_audit: false
+          ...existingActionFlags,
+          can_unsnooze: existingActionFlags.can_unsnooze ?? canClearSnooze,
+          can_clear_snooze: existingActionFlags.can_clear_snooze ?? canClearSnooze,
+          can_open_audit: existingActionFlags.can_open_audit ?? false
         }
       };
     });
 
     return withCORS(env, req, ok({
-      ...((payload && typeof payload === 'object') ? payload : {}),
+      ...payloadObj,
       ok: true,
+      filters: {
+        ...filtersRest,
+        hide_completed_non_current_items: hideCompletedNonCurrentItems
+      },
       finance_cases: financeCases,
       timesheet_snoozes: timesheetSnoozes
     }));
@@ -30167,6 +30373,7 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load banking finance loans/snoozes list')));
   }
 }
+
 
 async function handleBankingPaymentAdvanceCreate(env, req, user) {
   let body = null;
