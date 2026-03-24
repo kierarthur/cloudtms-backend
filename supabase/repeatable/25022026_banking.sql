@@ -1542,60 +1542,90 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 declare
-  v_provider text := upper(btrim(coalesce(p_provider,'')));
-  v_env text := upper(btrim(coalesce(p_env,'')));
-  v_kind text := upper(btrim(coalesce(p_entity_kind,'')));
-  v_status text := upper(btrim(coalesce(p_status,'')));
+  v_provider text := upper(btrim(coalesce(p_provider, '')));
+  v_env text := upper(btrim(coalesce(p_env, '')));
+  v_kind text := upper(btrim(coalesce(p_entity_kind, '')));
+  v_status text := upper(btrim(coalesce(p_status, '')));
+  v_provided_hash text := btrim(coalesce(p_bank_details_hash, ''));
 
-  v_current_hash text;
+  v_entity_exists boolean := false;
+  v_current_hash text := null;
+  v_hash_is_valid boolean := false;
   v_now timestamptz := now();
 
   v_inserted boolean := false;
-
   v_action text := null;
-
   v_row_json jsonb;
 begin
   if v_provider = '' then
-    raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'PROVIDER_REQUIRED')::text;
   end if;
   if v_env = '' then
-    raise exception '%', jsonb_build_object('error','ENV_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENV_REQUIRED')::text;
   end if;
-  if v_kind not in ('CANDIDATE','UMBRELLA') then
-    raise exception '%', jsonb_build_object('error','INVALID_ENTITY_KIND','expected','CANDIDATE|UMBRELLA')::text;
+  if v_kind not in ('CANDIDATE', 'UMBRELLA') then
+    raise exception '%', jsonb_build_object('error', 'INVALID_ENTITY_KIND', 'expected', 'CANDIDATE|UMBRELLA')::text;
   end if;
   if p_entity_id is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_ID_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENTITY_ID_REQUIRED')::text;
   end if;
-  if v_status not in ('UNVERIFIED','PASS','NEAR_MATCH','FAIL','UNAVAILABLE') then
-    raise exception '%', jsonb_build_object('error','INVALID_STATUS')::text;
+  if v_status not in ('UNVERIFIED', 'PASS', 'NEAR_MATCH', 'FAIL', 'UNAVAILABLE') then
+    raise exception '%', jsonb_build_object('error', 'INVALID_STATUS')::text;
   end if;
-  if p_bank_details_hash is null or btrim(p_bank_details_hash) = '' then
-    raise exception '%', jsonb_build_object('error','BANK_DETAILS_HASH_REQUIRED')::text;
+  if v_provided_hash = '' then
+    raise exception '%', jsonb_build_object('error', 'BANK_DETAILS_HASH_REQUIRED')::text;
   end if;
 
-  -- Resolve current bank_details_hash from the entity table (must match to accept the result)
   if v_kind = 'CANDIDATE' then
-    select c.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.candidates c
-    where c.id = p_entity_id
-    limit 1;
+    where c.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select c.bank_details_hash
+      into v_current_hash
+      from public.candidates c
+      where c.id = p_entity_id
+      limit 1;
+    end if;
   else
-    select u.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.umbrellas u
-    where u.id = p_entity_id
-    limit 1;
+    where u.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select u.bank_details_hash
+      into v_current_hash
+      from public.umbrellas u
+      where u.id = p_entity_id
+      limit 1;
+    end if;
   end if;
 
-  if v_current_hash is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_NOT_FOUND_OR_NO_HASH','entity_kind',v_kind)::text;
+  if not v_entity_exists then
+    raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
   end if;
 
-  -- Stale-result guard (bank details changed while check in-flight)
-  if v_current_hash is distinct from btrim(p_bank_details_hash) then
+  v_hash_is_valid := (v_current_hash is not null and v_current_hash = v_provided_hash);
+
+  if not v_hash_is_valid and v_kind = 'CANDIDATE' then
+    select exists (
+      select 1
+      from public.v_finance_cases_register vfcr
+      where vfcr.candidate_id = p_entity_id
+        and vfcr.routing_kind::text = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+        and coalesce(vfcr.edit_bank_details_allowed, false) = true
+        and coalesce(vfcr.oneoff_bank_details_present, false) = true
+        and vfcr.oneoff_bank_details_hash = v_provided_hash
+    )
+    into v_hash_is_valid;
+  end if;
+
+  if not v_hash_is_valid then
     return jsonb_build_object(
       'ok', true,
       'action', 'ignored_stale_hash',
@@ -1604,12 +1634,10 @@ begin
       'entity_kind', v_kind,
       'entity_id', p_entity_id::text,
       'current_bank_details_hash', v_current_hash,
-      'provided_bank_details_hash', btrim(p_bank_details_hash)
+      'provided_bank_details_hash', v_provided_hash
     );
   end if;
 
-  -- ✅ Approach A: single statement consumes the CTE and captures both inserted_flag + row JSON.
-  -- IMPORTANT: explicitly type NULLs to avoid any implicit text typing issues for uuid columns.
   with upserted as (
     insert into public.bank_name_checks (
       rail_provider,
@@ -1632,7 +1660,7 @@ begin
       v_env,
       v_kind,
       p_entity_id,
-      v_current_hash,
+      v_provided_hash,
       v_status,
       coalesce(p_checked_at_utc, v_now),
       p_result_json,
@@ -1649,7 +1677,6 @@ begin
       checked_at_utc = excluded.checked_at_utc,
       result_json = excluded.result_json,
       updated_at_utc = v_now,
-
       override_reason = case
         when excluded.status = 'PASS' then null::text
         else public.bank_name_checks.override_reason
@@ -1707,13 +1734,17 @@ end;
 $function$;
 
 
+
+DROP FUNCTION IF EXISTS public.bank_name_check_set_override(text, text, text, uuid, text, uuid);
+
 CREATE OR REPLACE FUNCTION public.bank_name_check_set_override(
   p_provider text,
   p_env text,
   p_entity_kind text,
   p_entity_id uuid,
   p_reason text,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_bank_details_hash text default null
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1721,14 +1752,17 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 declare
-  v_provider text := upper(btrim(coalesce(p_provider,'')));
-  v_env text := upper(btrim(coalesce(p_env,'')));
-  v_kind text := upper(btrim(coalesce(p_entity_kind,'')));
-
-  v_reason text := nullif(btrim(coalesce(p_reason,'')), '');
+  v_provider text := upper(btrim(coalesce(p_provider, '')));
+  v_env text := upper(btrim(coalesce(p_env, '')));
+  v_kind text := upper(btrim(coalesce(p_entity_kind, '')));
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_requested_hash text := nullif(btrim(coalesce(p_bank_details_hash, '')), '');
   v_now timestamptz := now();
 
-  v_current_hash text;
+  v_entity_exists boolean := false;
+  v_current_hash text := null;
+  v_target_hash text := null;
+  v_target_is_valid_oneoff boolean := false;
 
   v_before public.bank_name_checks%rowtype;
   v_row public.bank_name_checks%rowtype;
@@ -1740,41 +1774,89 @@ declare
   v_action text := null;
 begin
   if v_provider = '' then
-    raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'PROVIDER_REQUIRED')::text;
   end if;
   if v_env = '' then
-    raise exception '%', jsonb_build_object('error','ENV_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENV_REQUIRED')::text;
   end if;
-  if v_kind not in ('CANDIDATE','UMBRELLA') then
-    raise exception '%', jsonb_build_object('error','INVALID_ENTITY_KIND','expected','CANDIDATE|UMBRELLA')::text;
+  if v_kind not in ('CANDIDATE', 'UMBRELLA') then
+    raise exception '%', jsonb_build_object('error', 'INVALID_ENTITY_KIND', 'expected', 'CANDIDATE|UMBRELLA')::text;
   end if;
   if p_entity_id is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_ID_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENTITY_ID_REQUIRED')::text;
   end if;
   if v_reason is null then
-    raise exception '%', jsonb_build_object('error','REASON_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'REASON_REQUIRED')::text;
   end if;
 
-  -- Resolve current bank_details_hash (override must apply to the current hash)
   if v_kind = 'CANDIDATE' then
-    select c.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.candidates c
-    where c.id = p_entity_id
-    limit 1;
+    where c.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select c.bank_details_hash
+      into v_current_hash
+      from public.candidates c
+      where c.id = p_entity_id
+      limit 1;
+    end if;
   else
-    select u.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.umbrellas u
-    where u.id = p_entity_id
-    limit 1;
+    where u.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select u.bank_details_hash
+      into v_current_hash
+      from public.umbrellas u
+      where u.id = p_entity_id
+      limit 1;
+    end if;
   end if;
 
-  if v_current_hash is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_NOT_FOUND_OR_NO_HASH','entity_kind',v_kind)::text;
+  if not v_entity_exists then
+    raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
   end if;
 
-  -- Capture before row (if any)
+  if v_requested_hash is null then
+    v_target_hash := v_current_hash;
+  elsif v_current_hash is not null and v_current_hash = v_requested_hash then
+    v_target_hash := v_current_hash;
+  elsif v_kind = 'CANDIDATE' then
+    select exists (
+      select 1
+      from public.v_finance_cases_register vfcr
+      where vfcr.candidate_id = p_entity_id
+        and vfcr.routing_kind::text = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+        and coalesce(vfcr.edit_bank_details_allowed, false) = true
+        and coalesce(vfcr.oneoff_bank_details_present, false) = true
+        and vfcr.oneoff_bank_details_hash = v_requested_hash
+    )
+    into v_target_is_valid_oneoff;
+
+    if v_target_is_valid_oneoff then
+      v_target_hash := v_requested_hash;
+    end if;
+  end if;
+
+  if v_target_hash is null then
+    if v_requested_hash is null then
+      raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'INVALID_TARGET_BANK_DETAILS_HASH',
+      'entity_kind', v_kind,
+      'entity_id', p_entity_id::text,
+      'bank_details_hash', v_requested_hash
+    )::text;
+  end if;
+
   select bnc.*
   into v_before
   from public.bank_name_checks bnc
@@ -1782,7 +1864,7 @@ begin
     and bnc.rail_env = v_env
     and bnc.entity_kind = v_kind
     and bnc.entity_id = p_entity_id
-    and bnc.bank_details_hash = v_current_hash
+    and bnc.bank_details_hash = v_target_hash
   limit 1;
 
   if v_before.id is not null then
@@ -1805,7 +1887,6 @@ begin
     );
   end if;
 
-  -- Ensure row exists (insert UNVERIFIED if not), then set override fields.
   with upserted as (
     insert into public.bank_name_checks (
       rail_provider,
@@ -1828,14 +1909,14 @@ begin
       v_env,
       v_kind,
       p_entity_id,
-      v_current_hash,
+      v_target_hash,
       'UNVERIFIED',
       null,
       null,
       v_reason,
       p_actor_user_id,
       v_now,
-      v_current_hash,
+      v_target_hash,
       v_now,
       v_now
     )
@@ -1846,16 +1927,13 @@ begin
       override_at_utc = excluded.override_at_utc,
       override_hash = excluded.override_hash,
       updated_at_utc = v_now
-    returning
-      public.bank_name_checks.*
+    returning public.bank_name_checks.*
   )
-  select
-    u.*
+  select u.*
   into v_row
   from upserted u
   limit 1;
 
-  -- Derive inserted vs updated deterministically from timestamps set by this function.
   v_inserted := (v_row.created_at_utc is not null and v_row.updated_at_utc is not null and v_row.created_at_utc = v_row.updated_at_utc);
   v_action := case when v_inserted then 'inserted' else 'updated' end;
 
@@ -1877,7 +1955,6 @@ begin
     'updated_at_utc', v_row.updated_at_utc
   );
 
-  -- ✅ User-facing audit (UNGATED): bank name-check override set
   perform public._audit_insert(
     'bank_name_checks',
     v_row.id::text,
@@ -1896,13 +1973,15 @@ begin
 end;
 $function$;
 
+DROP FUNCTION IF EXISTS public.bank_name_check_clear_override(text, text, text, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_clear_override(
   p_provider text,
   p_env text,
   p_entity_kind text,
   p_entity_id uuid,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_bank_details_hash text default null
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1910,46 +1989,99 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 declare
-  v_provider text := upper(btrim(coalesce(p_provider,'')));
-  v_env text := upper(btrim(coalesce(p_env,'')));
-  v_kind text := upper(btrim(coalesce(p_entity_kind,'')));
+  v_provider text := upper(btrim(coalesce(p_provider, '')));
+  v_env text := upper(btrim(coalesce(p_env, '')));
+  v_kind text := upper(btrim(coalesce(p_entity_kind, '')));
+  v_requested_hash text := nullif(btrim(coalesce(p_bank_details_hash, '')), '');
 
   v_now timestamptz := now();
-  v_current_hash text;
+  v_entity_exists boolean := false;
+  v_current_hash text := null;
+  v_target_hash text := null;
+  v_target_is_valid_oneoff boolean := false;
 
-  v_updated int := 0;
+  v_updated integer := 0;
   v_row public.bank_name_checks%rowtype;
 begin
   if v_provider = '' then
-    raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'PROVIDER_REQUIRED')::text;
   end if;
   if v_env = '' then
-    raise exception '%', jsonb_build_object('error','ENV_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENV_REQUIRED')::text;
   end if;
-  if v_kind not in ('CANDIDATE','UMBRELLA') then
-    raise exception '%', jsonb_build_object('error','INVALID_ENTITY_KIND','expected','CANDIDATE|UMBRELLA')::text;
+  if v_kind not in ('CANDIDATE', 'UMBRELLA') then
+    raise exception '%', jsonb_build_object('error', 'INVALID_ENTITY_KIND', 'expected', 'CANDIDATE|UMBRELLA')::text;
   end if;
   if p_entity_id is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_ID_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENTITY_ID_REQUIRED')::text;
   end if;
 
-  -- Resolve current hash
   if v_kind = 'CANDIDATE' then
-    select c.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.candidates c
-    where c.id = p_entity_id
-    limit 1;
+    where c.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select c.bank_details_hash
+      into v_current_hash
+      from public.candidates c
+      where c.id = p_entity_id
+      limit 1;
+    end if;
   else
-    select u.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.umbrellas u
-    where u.id = p_entity_id
-    limit 1;
+    where u.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select u.bank_details_hash
+      into v_current_hash
+      from public.umbrellas u
+      where u.id = p_entity_id
+      limit 1;
+    end if;
   end if;
 
-  if v_current_hash is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_NOT_FOUND_OR_NO_HASH','entity_kind',v_kind)::text;
+  if not v_entity_exists then
+    raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
+  end if;
+
+  if v_requested_hash is null then
+    v_target_hash := v_current_hash;
+  elsif v_current_hash is not null and v_current_hash = v_requested_hash then
+    v_target_hash := v_current_hash;
+  elsif v_kind = 'CANDIDATE' then
+    select exists (
+      select 1
+      from public.v_finance_cases_register vfcr
+      where vfcr.candidate_id = p_entity_id
+        and vfcr.routing_kind::text = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+        and coalesce(vfcr.edit_bank_details_allowed, false) = true
+        and coalesce(vfcr.oneoff_bank_details_present, false) = true
+        and vfcr.oneoff_bank_details_hash = v_requested_hash
+    )
+    into v_target_is_valid_oneoff;
+
+    if v_target_is_valid_oneoff then
+      v_target_hash := v_requested_hash;
+    end if;
+  end if;
+
+  if v_target_hash is null then
+    if v_requested_hash is null then
+      raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'INVALID_TARGET_BANK_DETAILS_HASH',
+      'entity_kind', v_kind,
+      'entity_id', p_entity_id::text,
+      'bank_details_hash', v_requested_hash
+    )::text;
   end if;
 
   update public.bank_name_checks bnc
@@ -1963,7 +2095,7 @@ begin
     and bnc.rail_env = v_env
     and bnc.entity_kind = v_kind
     and bnc.entity_id = p_entity_id
-    and bnc.bank_details_hash = v_current_hash;
+    and bnc.bank_details_hash = v_target_hash;
 
   get diagnostics v_updated = row_count;
 
@@ -1982,7 +2114,7 @@ begin
     and bnc2.rail_env = v_env
     and bnc2.entity_kind = v_kind
     and bnc2.entity_id = p_entity_id
-    and bnc2.bank_details_hash = v_current_hash
+    and bnc2.bank_details_hash = v_target_hash
   limit 1;
 
   return jsonb_build_object(
@@ -2007,6 +2139,11 @@ begin
   );
 end;
 $function$;
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.bank_payee_map_upsert(
   p_provider text,
