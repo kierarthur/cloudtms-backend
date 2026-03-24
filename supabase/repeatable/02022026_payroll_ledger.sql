@@ -7415,6 +7415,72 @@ ts_itemised as (
      and pe.payee_entity_id = cp.payee_entity_id
      and pe.bank_details_hash is not distinct from cp.payee_bank_hash
   ),
+  timesheet_case_rollup_effective as (
+    select
+      tcr.candidate_id,
+      tcr.timesheet_id,
+      tcr.client_id,
+      tcr.ts_week_ending_date,
+      tcr.ts_client_name,
+      tcr.ts_pay_method,
+      tcr.cand_pay_method,
+      tcr.cand_tms_ref,
+      tcr.cand_display_name,
+      tcr.cand_umbrella_id,
+      tcr.umb_enabled,
+      tcr.umb_vat_chargeable,
+      tcr.candidate_has_bank_details,
+      tcr.candidate_bank_hash,
+      tcr.umbrella_has_bank_details,
+      tcr.umbrella_bank_hash,
+      tcr.case_total_amount_ex,
+      case
+        when (coalesce(tcr.is_blocked, false) or not coalesce(cp.is_ready_for_draft, false))
+        then 0::numeric
+        else tcr.safe_amount_ex
+      end as safe_amount_ex,
+      tcr.unresolved_taxable_amount_ex,
+      tcr.open_taxable_count,
+      tcr.open_reimbursement_count,
+      tcr.unresolved_taxable_count,
+      tcr.stale_count,
+      tcr.is_mixed_case,
+      (coalesce(tcr.is_blocked, false) or not coalesce(cp.is_ready_for_draft, false)) as is_blocked,
+      tcr.segments_total_ex,
+      tcr.delta_additional_pay_ex_vat,
+      tcr.delta_expenses_pay_ex_vat,
+      tcr.delta_travel_pay_ex_vat,
+      tcr.delta_accommodation_pay_ex_vat,
+      tcr.delta_other_pay_ex_vat,
+      tcr.delta_mileage_pay_ex_vat,
+      tcr.segment_deltas_json,
+      tcr.adjustment_deltas_json,
+      tcr.additional_unit_deltas_json,
+      tcr.reservation_overrun_detected,
+      tcr.payment_amount_ex_vat,
+      tcr.payment_amount_inc_vat,
+      tcr.payment_amount,
+      (
+        coalesce(tcr.case_resolution_summary_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'is_blocked', (coalesce(tcr.is_blocked, false) or not coalesce(cp.is_ready_for_draft, false)),
+          'safe_amount_ex_vat', case
+            when (coalesce(tcr.is_blocked, false) or not coalesce(cp.is_ready_for_draft, false))
+            then 0::numeric
+            else coalesce(tcr.case_total_amount_ex, 0)
+          end,
+          'blocked_case_amount_ex_vat', case
+            when (coalesce(tcr.is_blocked, false) or not coalesce(cp.is_ready_for_draft, false))
+            then coalesce(tcr.case_total_amount_ex, 0)
+            else 0::numeric
+          end
+        )
+      ) as case_resolution_summary_json,
+      tcr.case_components_json
+    from timesheet_case_rollup tcr
+    left join cand_payee cp
+      on cp.candidate_id = tcr.candidate_id
+  ),
   summary_json as (
     select
       jsonb_build_object(
@@ -8247,7 +8313,7 @@ ts_itemised as (
            or (ass.booking_id is null and ass.timesheet_id = tcr.timesheet_id and ass.segment_id is not distinct from nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')), ''))
          )
       ), '[]'::jsonb) as segment_rows_json
-    from timesheet_case_rollup tcr
+    from timesheet_case_rollup_effective tcr
     join cand_payee cp
       on cp.candidate_id = tcr.candidate_id
     join ts_baseline tb
@@ -8695,6 +8761,13 @@ ts_itemised as (
         ctps.has_active_timesheet_snooze = true
         or ctps.case_is_blocked = true
         or coalesce(ctps.blocked_visible_segment_count, 0) > 0
+        or (
+          ctps.is_ready_for_draft = false
+          and (
+            round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
+            or coalesce(ctps.ready_segment_count, 0) > 0
+          )
+        )
       ) as has_blocked_presentation,
       (
         ctps.has_active_timesheet_snooze = false
@@ -8829,6 +8902,7 @@ ts_itemised as (
     where ctpp.has_active_timesheet_snooze = false
       and ctpp.case_is_blocked = false
       and ctpp.has_ready_presentation = true
+      and ctpp.is_ready_for_draft = true
 
     union all
 
@@ -8869,11 +8943,11 @@ ts_itemised as (
         )
         || jsonb_build_object(
           'amount_ex_vat', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_ex_vat
             else ctpp.blocked_section_amount_ex_vat
           end,
           'amount_display', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_display
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_display
             else ctpp.blocked_section_amount_display
           end,
           'is_advanced', (ctpp.override_id is not null),
@@ -8886,11 +8960,11 @@ ts_itemised as (
             else false
           end,
           'segment_rows', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.visible_segment_rows_json
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.visible_segment_rows_json
             else ctpp.blocked_visible_segment_rows_json
           end,
           'segment_count', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
             else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
           end
         )
@@ -8914,23 +8988,23 @@ ts_itemised as (
           'is_partially_ready', ctpp.is_partially_ready,
           'is_partially_blocked', ctpp.is_partially_blocked,
           'section_amount_ex_vat', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_ex_vat
             else ctpp.blocked_section_amount_ex_vat
           end,
           'section_amount_display', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_display
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_display
             else ctpp.blocked_section_amount_display
           end,
           'section_segment_rows', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.visible_segment_rows_json
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.visible_segment_rows_json
             else ctpp.blocked_visible_segment_rows_json
           end,
           'section_segment_count', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
             else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
           end,
           'section_non_segment_amount_ex_vat', case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.non_segment_amount_ex_vat
+            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.non_segment_amount_ex_vat
             else 0
           end
         )
@@ -8978,7 +9052,7 @@ ts_itemised as (
       ctpp.candidate_pay_method as pay_channel,
       case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
       case
-        when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true then ctpp.amount_ex_vat
+        when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_ex_vat
         else ctpp.blocked_section_amount_ex_vat
       end as amount_ex_vat,
       (ctpp.has_active_timesheet_snooze = true) as is_excluded_from_allocation
@@ -8987,6 +9061,7 @@ ts_itemised as (
       and (
         ctpp.has_active_timesheet_snooze = true
         or ctpp.case_is_blocked = true
+        or ctpp.is_ready_for_draft = false
         or ctpp.blocked_visible_segment_count > 0
       )
   ),
@@ -9106,12 +9181,15 @@ ts_itemised as (
         || jsonb_build_object(
           'preview_row_id', coalesce(nullif(btrim(coalesce(ctpr.line_json->>'line_id','')), ''), md5(ctpr.line_json::text)),
           'readiness_state', case
-            when upper(coalesce(ctpr.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY' then 'BLOCKED_FOR_PAY'
+            when upper(coalesce(ctpr.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY'
+              or coalesce(nullif(ctpr.line_json->>'is_ready_for_draft','')::boolean, false) = false
+            then 'BLOCKED_FOR_PAY'
             else 'READY_TO_PAY'
           end,
           'draftable', (
             upper(coalesce(ctpr.line_json->>'presentation_section','')) = 'READY_TO_PAY'
             and coalesce(nullif(ctpr.line_json->>'is_excluded_from_allocation','')::boolean, false) = false
+            and coalesce(nullif(ctpr.line_json->>'is_ready_for_draft','')::boolean, false) = true
           )
         )
       ) as line_json,
@@ -9248,7 +9326,7 @@ ts_itemised as (
     select
       ctpp.candidate_id,
       round(
-        coalesce(sum(case when ctpp.has_active_timesheet_snooze = false and ctpp.case_is_blocked = false and ctpp.has_ready_presentation = true then ctpp.ready_section_amount_ex_vat else 0 end), 0),
+        coalesce(sum(case when ctpp.has_active_timesheet_snooze = false and ctpp.case_is_blocked = false and ctpp.has_ready_presentation = true and ctpp.is_ready_for_draft = true then ctpp.ready_section_amount_ex_vat else 0 end), 0),
         2
       ) as ready_timesheet_total_ex_vat,
       count(*) filter (
@@ -9258,6 +9336,7 @@ ts_itemised as (
         where ctpp.has_active_timesheet_snooze = false
           and ctpp.case_is_blocked = false
           and ctpp.has_ready_presentation = true
+          and ctpp.is_ready_for_draft = true
       )::int as ready_timesheet_preview_count,
       coalesce(
         jsonb_agg(
@@ -9316,11 +9395,11 @@ ts_itemised as (
             'is_partially_blocked', ctpp.is_partially_blocked
           )
           order by ctpp.week_ending_date, ctpp.client_name, ctpp.timesheet_id
-        ) filter (where ctpp.has_active_timesheet_snooze = false and ctpp.case_is_blocked = false and ctpp.has_ready_presentation = true and round(coalesce(ctpp.ready_section_amount_ex_vat,0),2) <> 0),
+        ) filter (where ctpp.has_active_timesheet_snooze = false and ctpp.case_is_blocked = false and ctpp.has_ready_presentation = true and ctpp.is_ready_for_draft = true and round(coalesce(ctpp.ready_section_amount_ex_vat,0),2) <> 0),
         '[]'::jsonb
       ) as ready_timesheets_itemisation
     from canonical_timesheet_presentation_state ctpp
-    left join timesheet_case_rollup tcr
+    left join timesheet_case_rollup_effective tcr
       on tcr.timesheet_id = ctpp.timesheet_id
      and tcr.candidate_id = ctpp.candidate_id
     group by ctpp.candidate_id
@@ -9354,7 +9433,7 @@ ts_itemised as (
         'unresolved_taxable_amount_ex_vat', tcr.unresolved_taxable_amount_ex,
         'components', tcr.case_components_json
       ) as case_json
-    from timesheet_case_rollup tcr
+    from timesheet_case_rollup_effective tcr
 
     union all
 
@@ -10055,6 +10134,7 @@ ts_itemised as (
   );
 end;
 $function$;
+
 
 
 
