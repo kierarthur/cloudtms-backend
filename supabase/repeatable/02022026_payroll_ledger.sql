@@ -10157,6 +10157,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -10265,7 +10266,13 @@ declare
   v_preview_decisions_keys jsonb := '{}'::jsonb;
   v_selected_preview_row_ids text[] := array[]::text[];
   v_selected_preview_row_count int := 0;
-  v_selected_preview_rows_supplied boolean := coalesce((p_preview_decisions_json ? 'selected_preview_row_ids'), false);
+  v_selected_preview_row_ids_present boolean := coalesce((p_preview_decisions_json ? 'selected_preview_row_ids'), false);
+  v_selected_preview_rows_supplied boolean := false;
+  v_selected_preview_rows_mode text := 'IMPLICIT_ALL';
+  v_selected_preview_rows_pre_selection_ct int := 0;
+  v_selected_preview_rows_post_selection_ct int := 0;
+  v_candidate_rows_before_empty_delete int := 0;
+  v_candidate_rows_after_empty_delete int := 0;
 -- ✅ Optional: timesheet_ids to exclude from drafting (non-blocking TSFIN path)
 v_exclude_timesheet_ids uuid[] := array[]::uuid[];
 v_exclude_ts_raw text;
@@ -10708,24 +10715,42 @@ end;
     v_candidate_filter := null;
   end if;
 
-  if jsonb_typeof(p_preview_decisions_json->'selected_preview_row_ids') = 'array' then
-    select coalesce(
-      array_agg(distinct row_id order by row_id),
-      array[]::text[]
-    )
-    into v_selected_preview_row_ids
-    from (
-      select nullif(btrim(x), '') as row_id
-      from jsonb_array_elements_text(p_preview_decisions_json->'selected_preview_row_ids') as q(x)
-      where nullif(btrim(x), '') is not null
-    ) as s;
-  end if;
+  if v_selected_preview_row_ids_present then
+    if p_preview_decisions_json->'selected_preview_row_ids' is null
+       or jsonb_typeof(p_preview_decisions_json->'selected_preview_row_ids') = 'null' then
+      v_selected_preview_row_ids := array[]::text[];
+      v_selected_preview_row_count := 0;
+      v_selected_preview_rows_supplied := false;
+      v_selected_preview_rows_mode := 'IMPLICIT_ALL';
+    elsif jsonb_typeof(p_preview_decisions_json->'selected_preview_row_ids') = 'array' then
+      select coalesce(
+        array_agg(distinct row_id order by row_id),
+        array[]::text[]
+      )
+      into v_selected_preview_row_ids
+      from (
+        select nullif(btrim(x), '') as row_id
+        from jsonb_array_elements_text(p_preview_decisions_json->'selected_preview_row_ids') as q(x)
+        where nullif(btrim(x), '') is not null
+      ) as s;
 
-  if v_selected_preview_row_ids is null then
+      v_selected_preview_row_count := coalesce(array_length(v_selected_preview_row_ids, 1), 0);
+
+      if v_selected_preview_row_count = 0 then
+        raise exception 'preview_decisions_json.selected_preview_row_ids must not be an empty array when explicitly supplied';
+      end if;
+
+      v_selected_preview_rows_supplied := true;
+      v_selected_preview_rows_mode := 'EXPLICIT_SUBSET';
+    else
+      raise exception 'preview_decisions_json.selected_preview_row_ids must be an array when supplied';
+    end if;
+  else
     v_selected_preview_row_ids := array[]::text[];
+    v_selected_preview_row_count := 0;
+    v_selected_preview_rows_supplied := false;
+    v_selected_preview_rows_mode := 'IMPLICIT_ALL';
   end if;
-
-  v_selected_preview_row_count := coalesce(array_length(v_selected_preview_row_ids, 1), 0);
 
   begin
     select coalesce(jsonb_agg(x.id order by x.id), '[]'::jsonb), count(*)::int
@@ -10784,6 +10809,10 @@ end;
         'candidate_filter_array_sample', v_sample_candidate_ids,
         'candidate_filter_single', coalesce(v_candidate_filter_single::text, null),
         'client_filter_single', coalesce(v_client_filter_single::text, null),
+        'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
+        'selected_preview_rows_supplied', v_selected_preview_rows_supplied,
+        'selected_preview_rows_mode', v_selected_preview_rows_mode,
+        'selected_preview_row_count', v_selected_preview_row_count,
         'preview_decisions_key_samples', v_preview_decisions_keys
       ),
       'pay_create_draft_batch',
@@ -10825,6 +10854,42 @@ end;
   ) on commit drop;
 
   truncate table pg_temp.tmp_pay_selected_preview_rows;
+
+  with preview as (
+    select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null) as j
+  ),
+  all_candidates as (
+    select c as cand
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'paye_candidates', '[]'::jsonb)) as c
+    union all
+    select c as cand
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'non_paye_payees', '[]'::jsonb)) as c
+  ),
+  item_rows as (
+    select
+      nullif(btrim(coalesce(cand->>'candidate_id','')), '')::uuid as candidate_id,
+      itm.item_json,
+      coalesce(
+        nullif(btrim(coalesce(itm.item_json->>'preview_row_id','')), ''),
+        nullif(btrim(coalesce(itm.item_json->>'line_id','')), '')
+      ) as preview_row_id,
+      nullif(btrim(coalesce(itm.item_json->>'client_id','')), '')::uuid as client_id,
+      nullif(btrim(coalesce(itm.item_json->>'finance_case_id','')), '')::uuid as finance_case_id,
+      nullif(btrim(coalesce(itm.item_json->>'timesheet_id','')), '')::uuid as timesheet_id
+    from all_candidates
+    cross join lateral jsonb_array_elements(coalesce(cand->'itemisation', '[]'::jsonb)) as itm(item_json)
+    where nullif(btrim(coalesce(cand->>'candidate_id','')), '') is not null
+  )
+  select count(distinct ir.preview_row_id)::int
+  into v_selected_preview_rows_pre_selection_ct
+  from item_rows ir
+  where ir.preview_row_id is not null
+    and (v_candidate_filter is null or ir.candidate_id = any(v_candidate_filter))
+    and (v_candidate_filter_single is null or ir.candidate_id = v_candidate_filter_single)
+    and (v_client_filter_single is null or ir.client_id = v_client_filter_single)
+    and coalesce(nullif(ir.item_json->>'draftable','')::boolean, false) = true;
 
   insert into pg_temp.tmp_pay_selected_preview_rows (
     preview_row_id,
@@ -10909,15 +10974,22 @@ end;
     and (v_candidate_filter is null or ir.candidate_id = any(v_candidate_filter))
     and (v_candidate_filter_single is null or ir.candidate_id = v_candidate_filter_single)
     and (v_client_filter_single is null or ir.client_id = v_client_filter_single)
+    and coalesce(nullif(ir.item_json->>'draftable','')::boolean, false) = true
     and (
-      (v_selected_preview_rows_supplied = false and coalesce(nullif(ir.item_json->>'draftable','')::boolean, false) = true)
-      or (v_selected_preview_rows_supplied = true and ir.preview_row_id = any(v_selected_preview_row_ids))
+      v_selected_preview_rows_supplied = false
+      or ir.preview_row_id = any(v_selected_preview_row_ids)
     )
   order by ir.preview_row_id;
 
   select count(*)::int
-  into v_selected_preview_row_count
+  into v_selected_preview_rows_post_selection_ct
   from pg_temp.tmp_pay_selected_preview_rows;
+
+  v_selected_preview_row_count := v_selected_preview_rows_post_selection_ct;
+
+  if v_selected_preview_rows_supplied = true and v_selected_preview_rows_post_selection_ct = 0 then
+    raise exception 'Selected preview rows are not valid for the current preview';
+  end if;
 
   begin
     perform public._imp_debug_audit(
@@ -10925,6 +10997,11 @@ end;
       'PAY_CREATE_DRAFT_BATCH:STAGE_05B_BUILD_SELECTED_PREVIEW_ROWS',
       jsonb_build_object(
         'stage', v_stage,
+        'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
+        'selected_preview_rows_supplied', v_selected_preview_rows_supplied,
+        'selected_preview_rows_mode', v_selected_preview_rows_mode,
+        'selected_preview_rows_pre_selection_ct', v_selected_preview_rows_pre_selection_ct,
+        'selected_preview_rows_post_selection_ct', v_selected_preview_rows_post_selection_ct,
         'selected_preview_row_count', v_selected_preview_row_count,
         'selected_preview_rows_sample', (
           select coalesce(jsonb_agg(jsonb_build_object(
@@ -10953,11 +11030,7 @@ end;
 
   select coalesce(array_agg(distinct spr.candidate_id), array[]::uuid[])
   into v_candidate_ids
-  from pg_temp.tmp_pay_selected_preview_rows spr
-  where (
-    (v_selected_preview_rows_supplied = true and v_selected_preview_row_count > 0)
-    or spr.draftable = true
-  );
+  from pg_temp.tmp_pay_selected_preview_rows spr;
 
   begin
     select coalesce(jsonb_agg(x.candidate_id::text order by x.candidate_id::text), '[]'::jsonb)
@@ -11430,15 +11503,22 @@ end;
     and (v_candidate_filter is null or ir.candidate_id = any(v_candidate_filter))
     and (v_candidate_filter_single is null or ir.candidate_id = v_candidate_filter_single)
     and (v_client_filter_single is null or ir.client_id = v_client_filter_single)
+    and coalesce(nullif(ir.item_json->>'draftable','')::boolean, false) = true
     and (
-      (v_selected_preview_rows_supplied = false and coalesce(nullif(ir.item_json->>'draftable','')::boolean, false) = true)
-      or (v_selected_preview_rows_supplied = true and ir.preview_row_id = any(v_selected_preview_row_ids))
+      v_selected_preview_rows_supplied = false
+      or ir.preview_row_id = any(v_selected_preview_row_ids)
     )
   order by ir.preview_row_id;
 
   select count(*)::int
-  into v_selected_preview_row_count
+  into v_selected_preview_rows_post_selection_ct
   from pg_temp.tmp_pay_selected_preview_rows;
+
+  v_selected_preview_row_count := v_selected_preview_rows_post_selection_ct;
+
+  if v_selected_preview_rows_supplied = true and v_selected_preview_rows_post_selection_ct = 0 then
+    raise exception 'Selected preview rows are not valid for the current preview';
+  end if;
 
   begin
     perform public._imp_debug_audit(
@@ -11446,6 +11526,11 @@ end;
       'PAY_CREATE_DRAFT_BATCH:STAGE_08D_REFRESH_SELECTED_PREVIEW_ROWS_POST_RESOLUTION',
       jsonb_build_object(
         'stage', v_stage,
+        'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
+        'selected_preview_rows_supplied', v_selected_preview_rows_supplied,
+        'selected_preview_rows_mode', v_selected_preview_rows_mode,
+        'selected_preview_rows_pre_selection_ct', v_selected_preview_rows_pre_selection_ct,
+        'selected_preview_rows_post_selection_ct', v_selected_preview_rows_post_selection_ct,
         'selected_preview_row_count', v_selected_preview_row_count,
         'selected_preview_rows_sample', (
           select coalesce(jsonb_agg(jsonb_build_object(
@@ -12983,6 +13068,11 @@ end;
   v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
 
   -- Remove any candidate rows that ended up with no items for this scoped batch
+  select count(*)::int
+  into v_candidate_rows_before_empty_delete
+  from public.pay_batch_candidates pbc_before
+  where pbc_before.pay_batch_id = v_batch_id;
+
   delete from public.pay_batch_candidates pbc_del
   where pbc_del.pay_batch_id = v_batch_id
     and not exists (
@@ -12995,6 +13085,11 @@ end;
 
   GET DIAGNOSTICS v_rows_del_candidates = ROW_COUNT;
 
+  select count(*)::int
+  into v_candidate_rows_after_empty_delete
+  from public.pay_batch_candidates pbc_after
+  where pbc_after.pay_batch_id = v_batch_id;
+
   begin
     perform public._imp_debug_audit(
       p_actor_user_id,
@@ -13002,7 +13097,9 @@ end;
       jsonb_build_object(
         'stage', v_stage,
         'pay_batch_id', v_batch_id::text,
-        'deleted_candidate_rows', v_rows_del_candidates
+        'candidate_rows_before_empty_delete', v_candidate_rows_before_empty_delete,
+        'deleted_candidate_rows', v_rows_del_candidates,
+        'candidate_rows_after_empty_delete', v_candidate_rows_after_empty_delete
       ),
       'pay_batches',
       v_batch_id::text,
@@ -13026,6 +13123,14 @@ end;
           'stage', v_stage,
           'pay_batch_id', v_batch_id::text,
           'scope', v_scope,
+          'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
+          'selected_preview_rows_supplied', v_selected_preview_rows_supplied,
+          'selected_preview_rows_mode', v_selected_preview_rows_mode,
+          'selected_preview_rows_pre_selection_ct', v_selected_preview_rows_pre_selection_ct,
+          'selected_preview_rows_post_selection_ct', v_selected_preview_rows_post_selection_ct,
+          'candidate_rows_before_empty_delete', v_candidate_rows_before_empty_delete,
+          'deleted_candidate_rows', v_rows_del_candidates,
+          'candidate_rows_after_empty_delete', v_candidate_rows_after_empty_delete,
           'error', 'Nothing to pay (no payable items for scope after blockers)'
         ),
         'pay_batches',
