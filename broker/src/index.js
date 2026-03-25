@@ -13385,7 +13385,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
   };
 
-  const normalizeComponentResolutionsShape = (value) => {
+   const normalizeComponentResolutionsShape = (value) => {
     if (Array.isArray(value)) {
       const cloned = cloneJson(value);
       return Array.isArray(cloned) ? cloned : null;
@@ -13395,6 +13395,85 @@ async function handleBankingPayCreateDraft(env, req, user) {
       return (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) ? cloned : null;
     }
     return null;
+  };
+
+  const normalizeStringArray = (raw) => {
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const x of raw) {
+      const s = String(x || '').trim();
+      if (!s || seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    return out;
+  };
+
+  const cloneCaseStateSnapshot = (value) => {
+    if (Array.isArray(value)) {
+      const cloned = cloneJson(value);
+      return Array.isArray(cloned) ? cloned : null;
+    }
+    if (isPlainObject(value)) {
+      const cloned = cloneJson(value);
+      return (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) ? cloned : null;
+    }
+    return null;
+  };
+
+  const collectPreviewRowIdsFromPreview = (preview) => {
+    const payload = (preview && typeof preview === 'object' && !Array.isArray(preview)) ? preview : null;
+    if (!payload) return [];
+
+    const out = [];
+    const seen = new Set();
+
+    const pushId = (raw) => {
+      const s = String(raw || '').trim();
+      if (!s || seen.has(s)) return;
+      seen.add(s);
+      out.push(s);
+    };
+
+    const candidateBuckets = [
+      Array.isArray(payload?.paye_candidates) ? payload.paye_candidates : [],
+      Array.isArray(payload?.non_paye_payees) ? payload.non_paye_payees : []
+    ];
+
+    for (const bucket of candidateBuckets) {
+      for (const cand of bucket) {
+        if (!cand || typeof cand !== 'object') continue;
+        const itemisation = Array.isArray(cand.itemisation) ? cand.itemisation : [];
+        for (const item of itemisation) {
+          if (!item || typeof item !== 'object') continue;
+          pushId(
+            item.preview_row_id ||
+            item.row_id ||
+            item.line_id ||
+            item.id
+          );
+        }
+      }
+    }
+
+    const topLevelRows = [
+      ...(Array.isArray(payload?.canonical_preview_lines) ? payload.canonical_preview_lines : []),
+      ...(Array.isArray(payload?.preview_rows) ? payload.preview_rows : []),
+      ...(Array.isArray(payload?.rows) ? payload.rows : [])
+    ];
+
+    for (const row of topLevelRows) {
+      if (!row || typeof row !== 'object') continue;
+      pushId(
+        row.preview_row_id ||
+        row.row_id ||
+        row.line_id ||
+        row.id
+      );
+    }
+
+    return out;
   };
 
   const candidateId = candRaw ? candRaw : null;
@@ -13492,11 +13571,19 @@ async function handleBankingPayCreateDraft(env, req, user) {
     previewDecisions.exclude_timesheet_ids = Array.from(mergedExclude);
   }
 
-  if (overrideReason && !previewDecisions.same_week_paye_override_reason) {
+   if (overrideReason && !previewDecisions.same_week_paye_override_reason) {
     previewDecisions.same_week_paye_override_reason = overrideReason;
   }
   if (overrideContinue === true && previewDecisions.same_week_paye_override_continue !== true) {
     previewDecisions.same_week_paye_override_continue = true;
+  }
+
+  const hasSelectedPreviewRowIdsKey = Object.prototype.hasOwnProperty.call(previewDecisions, 'selected_preview_row_ids');
+  const rawSelectedPreviewRowIds = hasSelectedPreviewRowIdsKey ? previewDecisions.selected_preview_row_ids : undefined;
+  const explicitSelectedPreviewRowIdsProvided = hasSelectedPreviewRowIdsKey && rawSelectedPreviewRowIds !== null && rawSelectedPreviewRowIds !== undefined;
+
+  if (hasSelectedPreviewRowIdsKey && explicitSelectedPreviewRowIdsProvided && !Array.isArray(rawSelectedPreviewRowIds)) {
+    return withCORS(env, req, badRequest('preview_decisions_json.selected_preview_row_ids must be an array when provided'));
   }
 
   let overrideVerified = false;
@@ -13781,7 +13868,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     pushValue(raw);
     return out;
   };
-
   const collectDecisionAwareScope = (decisionsObj, includeCandidateIds) => {
     const includeSetNorm = (() => {
       if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
@@ -13790,14 +13876,15 @@ async function handleBankingPayCreateDraft(env, req, user) {
       return s;
     })();
 
-    const hasSafeSnapshot = (
+    const hasSafeSnapshotKey = (
       decisionsObj &&
       typeof decisionsObj === 'object' &&
-      Object.prototype.hasOwnProperty.call(decisionsObj, 'safe_case_states') &&
-      decisionsObj.safe_case_states != null
+      Object.prototype.hasOwnProperty.call(decisionsObj, 'safe_case_states')
     );
 
+    const hasSafeSnapshot = hasSafeSnapshotKey && decisionsObj.safe_case_states != null;
     const safeEntries = hasSafeSnapshot ? extractCaseStateEntries(decisionsObj.safe_case_states) : [];
+    const safeSnapshotSuppliedEmpty = hasSafeSnapshot && safeEntries.length === 0;
     const eligibleCandidateIds = new Set();
     const timesheetIds = new Set();
     const timesheetToCandidateId = new Map();
@@ -13842,13 +13929,14 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
 
     return {
+      hasSafeSnapshotKey,
       hasSafeSnapshot,
+      safeSnapshotSuppliedEmpty,
       eligibleCandidateIds,
       timesheetIds: Array.from(timesheetIds),
       timesheetToCandidateId
     };
   };
-
   const chunk = (arr, n) => {
     const out = [];
     for (let i = 0; i < (arr?.length || 0); i += n) out.push(arr.slice(i, i + n));
@@ -13979,31 +14067,110 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
   try {
     const preview0 = await callPayPreview();
+    const previewRowUniverse = collectPreviewRowIdsFromPreview(preview0);
 
-    const decisionAwareScope = collectDecisionAwareScope(previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+    if (!explicitSelectedPreviewRowIdsProvided) {
+      try { delete previewDecisions.selected_preview_row_ids; } catch {}
+    } else {
+      const normalizedSelectedPreviewRowIds = normalizeStringArray(rawSelectedPreviewRowIds);
 
-    const effectiveEligibleCandidateIds = decisionAwareScope.hasSafeSnapshot
-      ? decisionAwareScope.eligibleCandidateIds
-      : null;
+      if (normalizedSelectedPreviewRowIds.length <= 0) {
+        try {
+          console.warn('[handleBankingPayCreateDraft] Rejected explicit empty selected_preview_row_ids', {
+            candidate_id: candidateId,
+            client_id: clientId,
+            preview_row_universe_count: previewRowUniverse.length
+          });
+        } catch {}
+        return withCORS(env, req, badRequest('No preview rows selected. Tick at least one preview row or use Tick all.'));
+      }
 
-    const effectiveEligibleCount = decisionAwareScope.hasSafeSnapshot
-      ? decisionAwareScope.eligibleCandidateIds.size
-      : countEligibleCandidates(preview0, (Array.isArray(includeSet) ? includeSet : null));
+      if (previewRowUniverse.length > 0) {
+        const validPreviewRowIdSet = new Set(previewRowUniverse);
+        const filteredSelectedPreviewRowIds = normalizedSelectedPreviewRowIds.filter((rowId) => validPreviewRowIdSet.has(rowId));
 
-    if (effectiveEligibleCount <= 0) {
-      return withCORS(env, req, badRequest('Nothing is currently Ready to Pay for draft creation. Resolve Blocked for Pay items or refresh preview.'));
+        if (filteredSelectedPreviewRowIds.length <= 0) {
+          try {
+            console.warn('[handleBankingPayCreateDraft] Rejected selected_preview_row_ids not present in current preview universe', {
+              candidate_id: candidateId,
+              client_id: clientId,
+              selected_preview_row_ids: normalizedSelectedPreviewRowIds,
+              preview_row_universe_count: previewRowUniverse.length
+            });
+          } catch {}
+          return withCORS(env, req, badRequest('Selected preview rows are not valid for the current preview. Refresh preview and try again.'));
+        }
+
+        previewDecisions.selected_preview_row_ids = filteredSelectedPreviewRowIds;
+      } else {
+        previewDecisions.selected_preview_row_ids = normalizedSelectedPreviewRowIds;
+      }
     }
 
     const rawEligibleScope =
       collectEligibleTimesheetsForDraft(preview0, (Array.isArray(includeSet) ? includeSet : null));
 
-    const effectiveTimesheetToCandidateId = decisionAwareScope.hasSafeSnapshot
-      ? decisionAwareScope.timesheetToCandidateId
-      : rawEligibleScope.timesheetToCandidateId;
+    let decisionAwareScope = collectDecisionAwareScope(previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
 
-    const inScopeTimesheetIds = decisionAwareScope.hasSafeSnapshot
-      ? decisionAwareScope.timesheetIds
-      : rawEligibleScope.timesheetIds;
+    const decisionAwareSnapshotLooksMalformed =
+      !!decisionAwareScope.hasSafeSnapshot &&
+      (
+        (decisionAwareScope.eligibleCandidateIds.size === 0 && rawEligibleScope.eligibleCandidateIds.size > 0) ||
+        (decisionAwareScope.timesheetIds.length === 0 && rawEligibleScope.timesheetIds.length > 0)
+      );
+
+    if (decisionAwareSnapshotLooksMalformed) {
+      const previewCaseResolutionStates = cloneCaseStateSnapshot(preview0?.case_resolution_states);
+      const previewBlockedCaseStates = cloneCaseStateSnapshot(preview0?.blocked_case_states);
+      const previewSafeCaseStates = cloneCaseStateSnapshot(preview0?.safe_case_states);
+
+      if (previewCaseResolutionStates !== null) previewDecisions.case_resolution_states = previewCaseResolutionStates;
+      if (previewBlockedCaseStates !== null) previewDecisions.blocked_case_states = previewBlockedCaseStates;
+      if (previewSafeCaseStates !== null) previewDecisions.safe_case_states = previewSafeCaseStates;
+
+      try {
+        console.warn('[handleBankingPayCreateDraft] Rebuilt malformed decision snapshot from preview truth', {
+          candidate_id: candidateId,
+          client_id: clientId,
+          has_safe_snapshot_key: decisionAwareScope.hasSafeSnapshotKey,
+          has_safe_snapshot: decisionAwareScope.hasSafeSnapshot,
+          safe_snapshot_supplied_empty: decisionAwareScope.safeSnapshotSuppliedEmpty,
+          decision_safe_candidate_count: decisionAwareScope.eligibleCandidateIds.size,
+          decision_safe_timesheet_count: decisionAwareScope.timesheetIds.length,
+          preview_safe_candidate_count: rawEligibleScope.eligibleCandidateIds.size,
+          preview_safe_timesheet_count: rawEligibleScope.timesheetIds.length,
+          explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true
+        });
+      } catch {}
+
+      decisionAwareScope = collectDecisionAwareScope(previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+    }
+
+    const effectiveScope = (decisionAwareScope.hasSafeSnapshot && !decisionAwareScope.safeSnapshotSuppliedEmpty)
+      ? decisionAwareScope
+      : rawEligibleScope;
+
+    const effectiveEligibleCount = effectiveScope.eligibleCandidateIds.size;
+
+    if (effectiveEligibleCount <= 0) {
+      try {
+        console.warn('[handleBankingPayCreateDraft] No eligible scope after sanitation', {
+          candidate_id: candidateId,
+          client_id: clientId,
+          has_safe_snapshot_key: decisionAwareScope.hasSafeSnapshotKey,
+          has_safe_snapshot: decisionAwareScope.hasSafeSnapshot,
+          safe_snapshot_supplied_empty: decisionAwareScope.safeSnapshotSuppliedEmpty,
+          decision_snapshot_malformed: decisionAwareSnapshotLooksMalformed,
+          explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true,
+          preview_row_universe_count: previewRowUniverse.length,
+          preview_decision_keys: Object.keys(previewDecisions || {})
+        });
+      } catch {}
+      return withCORS(env, req, badRequest('Nothing is currently Ready to Pay for draft creation. Resolve Blocked for Pay items or refresh preview.'));
+    }
+
+    const effectiveTimesheetToCandidateId = effectiveScope.timesheetToCandidateId;
+    const inScopeTimesheetIds = effectiveScope.timesheetIds;
 
     const uniqueInScopeIds = Array.isArray(inScopeTimesheetIds)
       ? Array.from(new Set(inScopeTimesheetIds.filter(x => uuidRe.test(String(x || '').trim()))))
