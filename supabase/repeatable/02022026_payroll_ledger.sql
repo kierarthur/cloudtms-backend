@@ -10158,6 +10158,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -10858,29 +10859,20 @@ end;
   with preview as (
     select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null) as j
   ),
-  all_candidates as (
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'paye_candidates', '[]'::jsonb)) as c
-    union all
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'non_paye_payees', '[]'::jsonb)) as c
-  ),
   item_rows as (
     select
-      nullif(btrim(coalesce(cand->>'candidate_id','')), '')::uuid as candidate_id,
-      itm.item_json,
+      nullif(btrim(coalesce(line_json->>'candidate_id','')), '')::uuid as candidate_id,
+      line_json as item_json,
       coalesce(
-        nullif(btrim(coalesce(itm.item_json->>'preview_row_id','')), ''),
-        nullif(btrim(coalesce(itm.item_json->>'line_id','')), '')
+        nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'line_id','')), '')
       ) as preview_row_id,
-      nullif(btrim(coalesce(itm.item_json->>'client_id','')), '')::uuid as client_id,
-      nullif(btrim(coalesce(itm.item_json->>'finance_case_id','')), '')::uuid as finance_case_id,
-      nullif(btrim(coalesce(itm.item_json->>'timesheet_id','')), '')::uuid as timesheet_id
-    from all_candidates
-    cross join lateral jsonb_array_elements(coalesce(cand->'itemisation', '[]'::jsonb)) as itm(item_json)
-    where nullif(btrim(coalesce(cand->>'candidate_id','')), '') is not null
+      nullif(btrim(coalesce(line_json->>'client_id','')), '')::uuid as client_id,
+      nullif(btrim(coalesce(line_json->>'finance_case_id','')), '')::uuid as finance_case_id,
+      nullif(btrim(coalesce(line_json->>'timesheet_id','')), '')::uuid as timesheet_id
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'canonical_preview_lines', '[]'::jsonb)) as line_json
+    where nullif(btrim(coalesce(line_json->>'candidate_id','')), '') is not null
   )
   select count(distinct ir.preview_row_id)::int
   into v_selected_preview_rows_pre_selection_ct
@@ -10920,29 +10912,20 @@ end;
   with preview as (
     select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null) as j
   ),
-  all_candidates as (
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'paye_candidates', '[]'::jsonb)) as c
-    union all
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'non_paye_payees', '[]'::jsonb)) as c
-  ),
   item_rows as (
     select
-      nullif(btrim(coalesce(cand->>'candidate_id','')), '')::uuid as candidate_id,
-      itm.item_json,
+      nullif(btrim(coalesce(line_json->>'candidate_id','')), '')::uuid as candidate_id,
+      line_json as item_json,
       coalesce(
-        nullif(btrim(coalesce(itm.item_json->>'preview_row_id','')), ''),
-        nullif(btrim(coalesce(itm.item_json->>'line_id','')), '')
+        nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'line_id','')), '')
       ) as preview_row_id,
-      nullif(btrim(coalesce(itm.item_json->>'client_id','')), '')::uuid as client_id,
-      nullif(btrim(coalesce(itm.item_json->>'finance_case_id','')), '')::uuid as finance_case_id,
-      nullif(btrim(coalesce(itm.item_json->>'timesheet_id','')), '')::uuid as timesheet_id
-    from all_candidates
-    cross join lateral jsonb_array_elements(coalesce(cand->'itemisation', '[]'::jsonb)) as itm(item_json)
-    where nullif(btrim(coalesce(cand->>'candidate_id','')), '') is not null
+      nullif(btrim(coalesce(line_json->>'client_id','')), '')::uuid as client_id,
+      nullif(btrim(coalesce(line_json->>'finance_case_id','')), '')::uuid as finance_case_id,
+      nullif(btrim(coalesce(line_json->>'timesheet_id','')), '')::uuid as timesheet_id
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'canonical_preview_lines', '[]'::jsonb)) as line_json
+    where nullif(btrim(coalesce(line_json->>'candidate_id','')), '') is not null
   )
   select distinct on (ir.preview_row_id)
     ir.preview_row_id,
@@ -11449,29 +11432,20 @@ end;
   with preview as (
     select public.pay_preview(p_pay_date, p_week_ending_cutoff, p_actor_user_id, null, null) as j
   ),
-  all_candidates as (
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'paye_candidates', '[]'::jsonb)) as c
-    union all
-    select c as cand
-    from preview
-    cross join lateral jsonb_array_elements(coalesce(preview.j->'non_paye_payees', '[]'::jsonb)) as c
-  ),
   item_rows as (
     select
-      nullif(btrim(coalesce(cand->>'candidate_id','')), '')::uuid as candidate_id,
-      itm.item_json,
+      nullif(btrim(coalesce(line_json->>'candidate_id','')), '')::uuid as candidate_id,
+      line_json as item_json,
       coalesce(
-        nullif(btrim(coalesce(itm.item_json->>'preview_row_id','')), ''),
-        nullif(btrim(coalesce(itm.item_json->>'line_id','')), '')
+        nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'line_id','')), '')
       ) as preview_row_id,
-      nullif(btrim(coalesce(itm.item_json->>'client_id','')), '')::uuid as client_id,
-      nullif(btrim(coalesce(itm.item_json->>'finance_case_id','')), '')::uuid as finance_case_id,
-      nullif(btrim(coalesce(itm.item_json->>'timesheet_id','')), '')::uuid as timesheet_id
-    from all_candidates
-    cross join lateral jsonb_array_elements(coalesce(cand->'itemisation', '[]'::jsonb)) as itm(item_json)
-    where nullif(btrim(coalesce(cand->>'candidate_id','')), '') is not null
+      nullif(btrim(coalesce(line_json->>'client_id','')), '')::uuid as client_id,
+      nullif(btrim(coalesce(line_json->>'finance_case_id','')), '')::uuid as finance_case_id,
+      nullif(btrim(coalesce(line_json->>'timesheet_id','')), '')::uuid as timesheet_id
+    from preview
+    cross join lateral jsonb_array_elements(coalesce(preview.j->'canonical_preview_lines', '[]'::jsonb)) as line_json
+    where nullif(btrim(coalesce(line_json->>'candidate_id','')), '') is not null
   )
   select distinct on (ir.preview_row_id)
     ir.preview_row_id,
@@ -11827,7 +11801,19 @@ end;
      and spr.timesheet_id = ir.timesheet_id
      and spr.preview_row_id = coalesce(
        nullif(btrim(coalesce(ir.item_json->>'preview_row_id','')), ''),
-       nullif(btrim(coalesce(ir.item_json->>'line_id','')), '')
+       nullif(btrim(coalesce(ir.item_json->>'line_id','')), ''),
+       case
+         when nullif(btrim(coalesce(ir.item_json->>'timesheet_id','')), '') is not null then
+           case
+             when coalesce(nullif(ir.item_json->>'is_partially_ready','')::boolean, false) = true
+               then nullif(btrim(coalesce(ir.item_json->>'timesheet_id','')), '') || ':01:ready'
+             else nullif(btrim(coalesce(ir.item_json->>'timesheet_id','')), '')
+           end
+         when nullif(btrim(coalesce(ir.item_json->>'finance_case_id','')), '') is not null
+          and nullif(btrim(coalesce(ir.item_json->>'line_type','')), '') is not null
+           then 'finance:' || nullif(btrim(coalesce(ir.item_json->>'finance_case_id','')), '') || ':' || lower(nullif(btrim(coalesce(ir.item_json->>'line_type','')), ''))
+         else null
+       end
      )
     where ir.timesheet_id is not null
       and not (ir.timesheet_id = any(v_exclude_timesheet_ids))
@@ -15877,6 +15863,9 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
 
 
 
