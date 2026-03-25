@@ -70860,15 +70860,25 @@ async function handleSearchCandidates(env, req) {
     return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
   };
 
-  const hasCanonicalJobTitleFilter =
+   const hasCanonicalJobTitleFilter =
     jobTitleIncludeNodeIds.length > 0 ||
     jobTitleExcludeNodeIds.length > 0 ||
     jobTitleRoleIds.length > 0;
 
+  // ✅ Date-semantics alignment:
+  // If any created/updated date filters are present, force the canonical (RPC-driven) path
+  // so we inherit the DB's date semantics (and avoid timestamp boundary drift).
+  const hasCanonicalRpcFilter =
+    hasCanonicalJobTitleFilter ||
+    !!createdFrom ||
+    !!createdTo ||
+    !!updatedFrom ||
+    !!updatedTo;
+
   let canonicalCandidateIdsPromise = null;
 
   const loadCanonicalCandidateIds = async () => {
-    if (!hasCanonicalJobTitleFilter) return [];
+    if (!hasCanonicalRpcFilter) return [];
 
     if (!canonicalCandidateIdsPromise) {
       canonicalCandidateIdsPromise = (async () => {
@@ -71166,7 +71176,7 @@ async function handleSearchCandidates(env, req) {
     try {
       let pickerRows = [];
 
-      if (hasCanonicalJobTitleFilter) {
+         if (hasCanonicalRpcFilter) {
         const allPickerRows = await fetchCanonicalCandidateRows({
           selectClause: canonicalCandidateSortSelectClause
         });
@@ -71190,7 +71200,7 @@ async function handleSearchCandidates(env, req) {
         pickerRows = normalizePickerRows(rows);
       }
 
-      if (hasCanonicalJobTitleFilter || useDerivedSecondaryJobTitlesSort) {
+      if (hasCanonicalRpcFilter || useDerivedSecondaryJobTitlesSort) {
         const start = (pickerPage - 1) * pickerPageSize;
         const outRows = pickerRows.slice(start, start + pickerPageSize);
         const hasMore = (start + pickerPageSize) < pickerRows.length;
@@ -71219,7 +71229,6 @@ async function handleSearchCandidates(env, req) {
       return withCORS(env, req, serverError(msg));
     }
   }
-
   if (format === 'membership') {
     const idsOut = [];
     const seen = new Set();
@@ -71227,7 +71236,7 @@ async function handleSearchCandidates(env, req) {
     const batchSize = 1000;
 
     try {
-      if (hasCanonicalJobTitleFilter) {
+      if (hasCanonicalRpcFilter) {
         const membershipRows = await fetchCanonicalCandidateRows({
           selectClause: canonicalCandidateSortSelectClause
         });
@@ -71279,7 +71288,7 @@ async function handleSearchCandidates(env, req) {
   let total = undefined;
 
   try {
-    if (hasCanonicalJobTitleFilter) {
+    if (hasCanonicalRpcFilter) {
       const allRows = await fetchCanonicalCandidateRows({ selectClause: '*' });
       allRows.sort(compareCandidateRows);
 
