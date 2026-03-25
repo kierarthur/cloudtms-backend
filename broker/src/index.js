@@ -62347,10 +62347,20 @@ function buildCandidateSummaryFilterSpec(input = {}) {
   const activeRaw = trimStr(getOne('active')) || null;
   const active = activeRaw ? activeRaw.toLowerCase() : null;
 
-  const createdFrom = trimStr(getOne('created_from')) || null;
-  const createdTo = trimStr(getOne('created_to')) || null;
-  const updatedFrom = trimStr(getOne('updated_from')) || null;
-  const updatedTo = trimStr(getOne('updated_to')) || null;
+  const normalizeIsoDate = (v) => {
+    const s = trimStr(v);
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // Accept DD/MM/YYYY if it ever leaks through (defensive)
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const createdFrom = normalizeIsoDate(getOne('created_from'));
+  const createdTo = normalizeIsoDate(getOne('created_to'));
+  const updatedFrom = normalizeIsoDate(getOne('updated_from'));
+  const updatedTo = normalizeIsoDate(getOne('updated_to'));
 
   const jobTitleIncludeNodeIds = normalizeIdArray(getAll('job_title_include_node_ids'));
   const jobTitleExcludeNodeIds = normalizeIdArray(getAll('job_title_exclude_node_ids'));
@@ -62407,7 +62417,7 @@ function buildCandidateSummaryFilterSpec(input = {}) {
   if (createdTo) out.created_to = createdTo;
   if (updatedFrom) out.updated_from = updatedFrom;
   if (updatedTo) out.updated_to = updatedTo;
-  if (jobTitleRoleIds.length) {
+  if (jobTitleIncludeNodeIds.length || jobTitleExcludeNodeIds.length || jobTitleRoleIds.length) {
     out.job_title_include_node_ids = jobTitleIncludeNodeIds;
     out.job_title_exclude_node_ids = jobTitleExcludeNodeIds;
     out.job_title_role_ids = jobTitleRoleIds;
@@ -70658,6 +70668,18 @@ async function handleSearchCandidates(env, req) {
     return `${String(y1).padStart(4, '0')}-${String(m1 + 1).padStart(2, '0')}-${String(d1).padStart(2, '0')}`;
   };
 
+  const addDaysYMD = (ymd, days) => {
+    const s = String(ymd || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const d = new Date(`${s}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + (Number(days) || 0));
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   const cutoffYMD = ((workStatus === 'RECENT' && !recentAll) || workStatus === 'NOT')
     ? subtractMonthsYMD(londonYMDNow(), recentMonths)
     : null;
@@ -71027,9 +71049,12 @@ async function handleSearchCandidates(env, req) {
     if (active === 'true') api += `&active=eq.true`;
     if (active === 'false') api += `&active=eq.false`;
 
-    if (createdFrom) api += `&created_at=gte.${enc(createdFrom)}`;
-    if (createdTo) api += `&created_at=lte.${enc(createdTo)}`;
-
+     if (createdFrom) api += `&created_at=gte.${enc(createdFrom)}`;
+    if (createdTo) {
+      const next = addDaysYMD(createdTo, 1);
+      if (next) api += `&created_at=lt.${enc(next)}`;
+      else api += `&created_at=lte.${enc(createdTo)}`;
+    }
     if (withJobTitleFilters && jobTitleRoleIds.length) {
       if (jobTitlePrimaryOnly) {
         api += `&primary_job_title_id=${enc(`in.(${jobTitleRoleIds.join(',')})`)}`;
@@ -71051,8 +71076,12 @@ async function handleSearchCandidates(env, req) {
     if (townCity) api += `&town_city=ilike.*${enc(townCity)}*`;
     if (postcode) api += `&postcode=ilike.*${enc(postcode)}*`;
 
-    if (updatedFrom) api += `&updated_at=gte.${enc(updatedFrom)}`;
-    if (updatedTo) api += `&updated_at=lte.${enc(updatedTo)}`;
+     if (updatedFrom) api += `&updated_at=gte.${enc(updatedFrom)}`;
+    if (updatedTo) {
+      const next = addDaysYMD(updatedTo, 1);
+      if (next) api += `&updated_at=lt.${enc(next)}`;
+      else api += `&updated_at=lte.${enc(updatedTo)}`;
+    }
 
     if (sortCode) api += `&sort_code=ilike.*${enc(sortCode)}*`;
     if (accountNumber) api += `&account_number=ilike.*${enc(accountNumber)}*`;
