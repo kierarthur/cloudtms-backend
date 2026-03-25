@@ -1045,6 +1045,8 @@ declare
   v_selected_preview_row_ids jsonb := null;
   v_selected_preview_row_ids_present boolean := false;
   v_selected_preview_row_ids_supplied boolean := false;
+  v_selected_preview_row_ids_input_count integer := 0;
+  v_selected_preview_row_ids_sanitized_count integer := 0;
 
   v_umbrella_res jsonb := '{}'::jsonb;
   v_paye_res jsonb := '{}'::jsonb;
@@ -1125,11 +1127,35 @@ begin
        or jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'null' then
       v_selected_preview_row_ids := null;
       v_selected_preview_row_ids_supplied := false;
+      v_selected_preview_row_ids_input_count := 0;
+      v_selected_preview_row_ids_sanitized_count := 0;
     elsif jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'array' then
-      v_selected_preview_row_ids := coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb);
-      if coalesce(jsonb_array_length(v_selected_preview_row_ids), 0) = 0 then
-        raise exception 'preview_decisions_json.selected_preview_row_ids must not be an empty array when explicitly supplied';
+      v_selected_preview_row_ids_input_count := coalesce(jsonb_array_length(v_preview_decisions_json->'selected_preview_row_ids'), 0);
+
+      select
+        coalesce(jsonb_agg(to_jsonb(s.row_id) order by s.ord), '[]'::jsonb),
+        count(*)::int
+      into
+        v_selected_preview_row_ids,
+        v_selected_preview_row_ids_sanitized_count
+      from (
+        select distinct on (x.row_id)
+          x.ord,
+          x.row_id
+        from (
+          select
+            e.ord,
+            btrim(e.value) as row_id
+          from jsonb_array_elements_text(coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb)) with ordinality as e(value, ord)
+        ) x
+        where x.row_id <> ''
+        order by x.row_id, x.ord
+      ) s;
+
+      if coalesce(v_selected_preview_row_ids_sanitized_count, 0) = 0 then
+        raise exception 'preview_decisions_json.selected_preview_row_ids must contain at least one non-blank preview row id when explicitly supplied';
       end if;
+
       v_selected_preview_row_ids_supplied := true;
     else
       raise exception 'preview_decisions_json.selected_preview_row_ids must be an array when supplied';
@@ -1137,6 +1163,8 @@ begin
   else
     v_selected_preview_row_ids := null;
     v_selected_preview_row_ids_supplied := false;
+    v_selected_preview_row_ids_input_count := 0;
+    v_selected_preview_row_ids_sanitized_count := 0;
   end if;
 
   v_preview_decisions_json := coalesce(v_preview_decisions_json, '{}'::jsonb)
@@ -1226,9 +1254,15 @@ begin
         'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
         'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
         'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
+        'selected_preview_row_input_count', (
+          case
+            when v_selected_preview_row_ids_present then v_selected_preview_row_ids_input_count
+            else null
+          end
+        ),
         'selected_preview_row_count', (
           case
-            when v_selected_preview_row_ids_supplied then coalesce(jsonb_array_length(v_selected_preview_row_ids), 0)
+            when v_selected_preview_row_ids_supplied then coalesce(v_selected_preview_row_ids_sanitized_count, coalesce(jsonb_array_length(v_selected_preview_row_ids), 0))
             else null
           end
         ),
@@ -1467,9 +1501,15 @@ begin
         'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
         'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
         'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
+        'selected_preview_row_input_count', (
+          case
+            when v_selected_preview_row_ids_present then v_selected_preview_row_ids_input_count
+            else null
+          end
+        ),
         'selected_preview_row_count', (
           case
-            when v_selected_preview_row_ids_supplied then coalesce(jsonb_array_length(v_selected_preview_row_ids), 0)
+            when v_selected_preview_row_ids_supplied then coalesce(v_selected_preview_row_ids_sanitized_count, coalesce(jsonb_array_length(v_selected_preview_row_ids), 0))
             else null
           end
         ),
@@ -1569,6 +1609,8 @@ begin
   );
 end;
 $$;
+
+
 
 
 
