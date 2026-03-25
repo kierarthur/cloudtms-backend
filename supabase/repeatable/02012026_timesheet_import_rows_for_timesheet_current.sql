@@ -66,7 +66,7 @@ as $$
       )
   ),
 
-  -- ✅ NEW evidence source: Daily HealthRoster rows linked by payload_json.resolved_timesheet_id
+  -- ✅ NEW evidence source:  Daily HealthRoster rows linked by payload_json.resolved_timesheet_id
   -- Only DAILY imports are included here (HEALTHROSTER_DAILY).
   daily as (
     select
