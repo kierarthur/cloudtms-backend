@@ -1042,7 +1042,9 @@ declare
   v_case_resolution_states jsonb := '[]'::jsonb;
   v_blocked_case_states jsonb := '[]'::jsonb;
   v_safe_case_states jsonb := '[]'::jsonb;
-  v_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_selected_preview_row_ids jsonb := null;
+  v_selected_preview_row_ids_present boolean := false;
+  v_selected_preview_row_ids_supplied boolean := false;
 
   v_umbrella_res jsonb := '{}'::jsonb;
   v_paye_res jsonb := '{}'::jsonb;
@@ -1116,21 +1118,41 @@ begin
     v_safe_case_states := '[]'::jsonb;
   end if;
 
-  if jsonb_typeof(coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb)) = 'array' then
-    v_selected_preview_row_ids := coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb);
+  v_selected_preview_row_ids_present := (v_preview_decisions_json ? 'selected_preview_row_ids');
+
+  if v_selected_preview_row_ids_present then
+    if v_preview_decisions_json->'selected_preview_row_ids' is null
+       or jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'null' then
+      v_selected_preview_row_ids := null;
+      v_selected_preview_row_ids_supplied := false;
+    elsif jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'array' then
+      v_selected_preview_row_ids := coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb);
+      if coalesce(jsonb_array_length(v_selected_preview_row_ids), 0) = 0 then
+        raise exception 'preview_decisions_json.selected_preview_row_ids must not be an empty array when explicitly supplied';
+      end if;
+      v_selected_preview_row_ids_supplied := true;
+    else
+      raise exception 'preview_decisions_json.selected_preview_row_ids must be an array when supplied';
+    end if;
   else
-    v_selected_preview_row_ids := '[]'::jsonb;
+    v_selected_preview_row_ids := null;
+    v_selected_preview_row_ids_supplied := false;
   end if;
 
   v_preview_decisions_json := coalesce(v_preview_decisions_json, '{}'::jsonb)
     - 'mismatch_choices'
+    - 'selected_preview_row_ids'
     || jsonb_build_object(
          'component_resolutions', v_component_resolutions,
          'case_resolution_states', v_case_resolution_states,
          'blocked_case_states', v_blocked_case_states,
-         'safe_case_states', v_safe_case_states,
-         'selected_preview_row_ids', v_selected_preview_row_ids
+         'safe_case_states', v_safe_case_states
        );
+
+  if v_selected_preview_row_ids_supplied then
+    v_preview_decisions_json := v_preview_decisions_json
+      || jsonb_build_object('selected_preview_row_ids', v_selected_preview_row_ids);
+  end if;
 
   begin
     perform public._imp_debug_audit(
@@ -1202,14 +1224,26 @@ begin
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
         'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
-        'selected_preview_row_count', coalesce(jsonb_array_length(v_selected_preview_row_ids), 0),
+        'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
+        'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
+        'selected_preview_row_count', (
+          case
+            when v_selected_preview_row_ids_supplied then coalesce(jsonb_array_length(v_selected_preview_row_ids), 0)
+            else null
+          end
+        ),
         'selected_preview_row_ids_sample', (
-          select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-          from (
-            select elem
-            from jsonb_array_elements(v_selected_preview_row_ids) as elem
-            limit 50
-          ) x
+          case
+            when v_selected_preview_row_ids_supplied then (
+              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+              from (
+                select elem
+                from jsonb_array_elements(v_selected_preview_row_ids) as elem
+                limit 50
+              ) x
+            )
+            else null
+          end
         )
       ),
       'pay_create_draft_batches_split',
@@ -1418,7 +1452,7 @@ begin
         'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
         'paye_overpayment_sync', v_paye_overpayment_sync,
         'component_resolution_shape', coalesce(jsonb_typeof(v_component_resolutions), 'null'),
-        'component_resolution_count', (
+          'component_resolution_count', (
           case
             when jsonb_typeof(v_component_resolutions) = 'object' then (
               select count(*)::int
@@ -1431,14 +1465,26 @@ begin
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
         'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
-        'selected_preview_row_count', coalesce(jsonb_array_length(v_selected_preview_row_ids), 0),
+        'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
+        'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
+        'selected_preview_row_count', (
+          case
+            when v_selected_preview_row_ids_supplied then coalesce(jsonb_array_length(v_selected_preview_row_ids), 0)
+            else null
+          end
+        ),
         'selected_preview_row_ids_sample', (
-          select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-          from (
-            select elem
-            from jsonb_array_elements(v_selected_preview_row_ids) as elem
-            limit 50
-          ) x
+          case
+            when v_selected_preview_row_ids_supplied then (
+              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+              from (
+                select elem
+                from jsonb_array_elements(v_selected_preview_row_ids) as elem
+                limit 50
+              ) x
+            )
+            else null
+          end
         )
       ),
       'pay_create_draft_batches_split',
@@ -1523,6 +1569,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
