@@ -954,6 +954,7 @@ security definer
 set search_path = public
 as $$
 declare
+  v_timezone_id text := null;
   v_first_name text := null;
   v_last_name text := null;
   v_email text := null;
@@ -961,10 +962,10 @@ declare
   v_notes text := null;
   v_pay_method text := null;
   v_active text := null;
-  v_created_from timestamptz := null;
-  v_created_to timestamptz := null;
-  v_updated_from timestamptz := null;
-  v_updated_to timestamptz := null;
+  v_created_from date := null;
+  v_created_to date := null;
+  v_updated_from date := null;
+  v_updated_to date := null;
   v_job_title_include_node_ids text[] := null;
   v_job_title_exclude_node_ids text[] := null;
   v_job_title_role_ids uuid[] := null;
@@ -993,6 +994,19 @@ begin
     p_filters := '{}'::jsonb;
   end if;
 
+  begin
+    select sd.timezone_id
+      into v_timezone_id
+    from public.settings_defaults as sd
+    limit 1;
+  exception when others then
+    v_timezone_id := null;
+  end;
+
+  if nullif(btrim(coalesce(v_timezone_id, '')), '') is null then
+    v_timezone_id := 'UTC';
+  end if;
+
   v_first_name := nullif(btrim(coalesce(p_filters->>'first_name', '')), '');
   v_last_name := nullif(btrim(coalesce(p_filters->>'last_name', '')), '');
   v_email := nullif(btrim(coalesce(p_filters->>'email', '')), '');
@@ -1015,7 +1029,7 @@ begin
 
   begin
     if nullif(btrim(coalesce(p_filters->>'created_from', '')), '') is not null then
-      v_created_from := (p_filters->>'created_from')::timestamptz;
+      v_created_from := (p_filters->>'created_from')::date;
     end if;
   exception when others then
     v_created_from := null;
@@ -1023,7 +1037,7 @@ begin
 
   begin
     if nullif(btrim(coalesce(p_filters->>'created_to', '')), '') is not null then
-      v_created_to := (p_filters->>'created_to')::timestamptz;
+      v_created_to := (p_filters->>'created_to')::date;
     end if;
   exception when others then
     v_created_to := null;
@@ -1031,7 +1045,7 @@ begin
 
   begin
     if nullif(btrim(coalesce(p_filters->>'updated_from', '')), '') is not null then
-      v_updated_from := (p_filters->>'updated_from')::timestamptz;
+      v_updated_from := (p_filters->>'updated_from')::date;
     end if;
   exception when others then
     v_updated_from := null;
@@ -1039,7 +1053,7 @@ begin
 
   begin
     if nullif(btrim(coalesce(p_filters->>'updated_to', '')), '') is not null then
-      v_updated_to := (p_filters->>'updated_to')::timestamptz;
+      v_updated_to := (p_filters->>'updated_to')::date;
     end if;
   exception when others then
     v_updated_to := null;
@@ -1228,7 +1242,7 @@ begin
   end if;
 
   if v_work_status in ('RECENT', 'NOT') and not v_recent_all then
-    v_cutoff_ymd := ((now() at time zone 'Europe/London')::date - make_interval(months => v_recent_months))::date;
+    v_cutoff_ymd := ((now() at time zone v_timezone_id)::date - make_interval(months => v_recent_months))::date;
   end if;
 
   return query
@@ -1340,10 +1354,10 @@ begin
         or (v_active = 'true' and csa.active = true)
         or (v_active = 'false' and csa.active = false)
       )
-      and (v_created_from is null or csa.created_at >= v_created_from)
-      and (v_created_to is null or csa.created_at <= v_created_to)
-      and (v_updated_from is null or csa.updated_at >= v_updated_from)
-      and (v_updated_to is null or csa.updated_at <= v_updated_to)
+      and (v_created_from is null or (csa.created_at AT TIME ZONE v_timezone_id)::date >= v_created_from)
+      and (v_created_to is null or (csa.created_at AT TIME ZONE v_timezone_id)::date <= v_created_to)
+      and (v_updated_from is null or (csa.updated_at AT TIME ZONE v_timezone_id)::date >= v_updated_from)
+      and (v_updated_to is null or (csa.updated_at AT TIME ZONE v_timezone_id)::date <= v_updated_to)
       and (
         candidate_flags.has_job_title_filter = false
         or (
