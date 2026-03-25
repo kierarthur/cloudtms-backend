@@ -1011,6 +1011,11 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
   text,
   public.pay_override_mode_enum
 );
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1034,10 +1039,10 @@ AS $$
 declare
   v_preview_decisions_json jsonb := coalesce(p_preview_decisions_json, '{}'::jsonb);
   v_component_resolutions jsonb := '{}'::jsonb;
-  v_legacy_mismatch_choices jsonb := '{}'::jsonb;
   v_case_resolution_states jsonb := '[]'::jsonb;
   v_blocked_case_states jsonb := '[]'::jsonb;
   v_safe_case_states jsonb := '[]'::jsonb;
+  v_selected_preview_row_ids jsonb := '[]'::jsonb;
 
   v_umbrella_res jsonb := '{}'::jsonb;
   v_paye_res jsonb := '{}'::jsonb;
@@ -1085,16 +1090,12 @@ begin
     raise exception 'preview_decisions_json must be a jsonb object';
   end if;
 
-  if jsonb_typeof(coalesce(v_preview_decisions_json->'component_resolutions', '{}'::jsonb)) = 'object' then
+  if jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'object' then
     v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '{}'::jsonb);
+  elsif jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'array' then
+    v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '[]'::jsonb);
   else
     v_component_resolutions := '{}'::jsonb;
-  end if;
-
-  if jsonb_typeof(coalesce(v_preview_decisions_json->'mismatch_choices', '{}'::jsonb)) = 'object' then
-    v_legacy_mismatch_choices := coalesce(v_preview_decisions_json->'mismatch_choices', '{}'::jsonb);
-  else
-    v_legacy_mismatch_choices := '{}'::jsonb;
   end if;
 
   if jsonb_typeof(coalesce(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb)) = 'array' then
@@ -1115,13 +1116,20 @@ begin
     v_safe_case_states := '[]'::jsonb;
   end if;
 
+  if jsonb_typeof(coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb)) = 'array' then
+    v_selected_preview_row_ids := coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb);
+  else
+    v_selected_preview_row_ids := '[]'::jsonb;
+  end if;
+
   v_preview_decisions_json := coalesce(v_preview_decisions_json, '{}'::jsonb)
+    - 'mismatch_choices'
     || jsonb_build_object(
          'component_resolutions', v_component_resolutions,
-         'mismatch_choices', v_legacy_mismatch_choices,
          'case_resolution_states', v_case_resolution_states,
          'blocked_case_states', v_blocked_case_states,
-         'safe_case_states', v_safe_case_states
+         'safe_case_states', v_safe_case_states,
+         'selected_preview_row_ids', v_selected_preview_row_ids
        );
 
   begin
@@ -1150,26 +1158,59 @@ begin
             limit 50
           ) k
         ),
+        'component_resolution_shape', coalesce(jsonb_typeof(v_component_resolutions), 'null'),
         'component_resolution_keys_sample', (
-          select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
-          from (
-            select e.key
-            from jsonb_each(v_component_resolutions) e
-            order by e.key
-            limit 50
-          ) k
+          case
+            when jsonb_typeof(v_component_resolutions) = 'object' then (
+              select coalesce(jsonb_agg(k.key_text order by k.key_text), '[]'::jsonb)
+              from (
+                select e.key as key_text
+                from jsonb_each(v_component_resolutions) e
+                order by e.key
+                limit 50
+              ) k
+            )
+            when jsonb_typeof(v_component_resolutions) = 'array' then (
+              select coalesce(jsonb_agg(k.key_text order by k.ord), '[]'::jsonb)
+              from (
+                select
+                  coalesce(
+                    nullif(btrim(coalesce(a.value->>'candidate_id','')), ''),
+                    nullif(btrim(coalesce(a.value->>'finance_component_id','')), ''),
+                    '#' || a.ord::text
+                  ) as key_text,
+                  a.ord
+                from jsonb_array_elements(v_component_resolutions) with ordinality as a(value, ord)
+                where jsonb_typeof(a.value) = 'object'
+                order by a.ord
+                limit 50
+              ) k
+            )
+            else '[]'::jsonb
+          end
         ),
         'component_resolution_count', (
-          select count(*)::int
-          from jsonb_each(v_component_resolutions) e
-        ),
-        'legacy_mismatch_choice_count', (
-          select count(*)::int
-          from jsonb_each(v_legacy_mismatch_choices) e
+          case
+            when jsonb_typeof(v_component_resolutions) = 'object' then (
+              select count(*)::int
+              from jsonb_each(v_component_resolutions) e
+            )
+            when jsonb_typeof(v_component_resolutions) = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
+            else 0
+          end
         ),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
-        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
+        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
+        'selected_preview_row_count', coalesce(jsonb_array_length(v_selected_preview_row_ids), 0),
+        'selected_preview_row_ids_sample', (
+          select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+          from (
+            select elem
+            from jsonb_array_elements(v_selected_preview_row_ids) as elem
+            limit 50
+          ) x
+        )
       ),
       'pay_create_draft_batches_split',
       'pay_date:'||p_pay_date::text,
@@ -1376,17 +1417,29 @@ begin
         'paye_pay_batch_id', coalesce(v_paye_pay_batch_id::text, null),
         'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
         'paye_overpayment_sync', v_paye_overpayment_sync,
+        'component_resolution_shape', coalesce(jsonb_typeof(v_component_resolutions), 'null'),
         'component_resolution_count', (
-          select count(*)::int
-          from jsonb_each(v_component_resolutions) e
-        ),
-        'legacy_mismatch_choice_count', (
-          select count(*)::int
-          from jsonb_each(v_legacy_mismatch_choices) e
+          case
+            when jsonb_typeof(v_component_resolutions) = 'object' then (
+              select count(*)::int
+              from jsonb_each(v_component_resolutions) e
+            )
+            when jsonb_typeof(v_component_resolutions) = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
+            else 0
+          end
         ),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
-        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
+        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
+        'selected_preview_row_count', coalesce(jsonb_array_length(v_selected_preview_row_ids), 0),
+        'selected_preview_row_ids_sample', (
+          select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+          from (
+            select elem
+            from jsonb_array_elements(v_selected_preview_row_ids) as elem
+            limit 50
+          ) x
+        )
       ),
       'pay_create_draft_batches_split',
       'pay_date:'||p_pay_date::text,
@@ -1423,6 +1476,12 @@ begin
     'umbrella_overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
     'paye_overpayment_sync', case when v_paye_overpayment_sync_only then v_paye_overpayment_sync else null end,
     'paye_guardrails', v_paye_guardrails,
+    'blocked_case_states', v_blocked_case_states,
+    'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+    'safe_case_states', v_safe_case_states,
+    'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
+    'case_resolution_states', v_case_resolution_states,
+    'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
     'scope_results', jsonb_build_object(
       'UMBRELLA', jsonb_build_object(
         'status', v_umbrella_status,
@@ -1433,7 +1492,11 @@ begin
         'pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
         'overpayment_sync_only', v_umbrella_overpayment_sync_only,
         'overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
-        'guardrails', null
+        'guardrails', null,
+        'blocked_case_states', v_blocked_case_states,
+        'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+        'safe_case_states', v_safe_case_states,
+        'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
       ),
       'PAYE', jsonb_build_object(
         'status', v_paye_status,
@@ -1450,13 +1513,16 @@ begin
         'override_continue', coalesce(p_override_continue, false),
         'override_verified', coalesce(p_override_verified, false),
         'override_verified_by_user_id', case when p_override_verified_by_user_id is null then null else p_override_verified_by_user_id::text end,
-        'override_verified_at_utc', p_override_verified_at_utc
+        'override_verified_at_utc', p_override_verified_at_utc,
+        'blocked_case_states', v_blocked_case_states,
+        'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+        'safe_case_states', v_safe_case_states,
+        'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
       )
     )
   );
 end;
 $$;
-
 
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_record_result(
@@ -1476,60 +1542,90 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 declare
-  v_provider text := upper(btrim(coalesce(p_provider,'')));
-  v_env text := upper(btrim(coalesce(p_env,'')));
-  v_kind text := upper(btrim(coalesce(p_entity_kind,'')));
-  v_status text := upper(btrim(coalesce(p_status,'')));
+  v_provider text := upper(btrim(coalesce(p_provider, '')));
+  v_env text := upper(btrim(coalesce(p_env, '')));
+  v_kind text := upper(btrim(coalesce(p_entity_kind, '')));
+  v_status text := upper(btrim(coalesce(p_status, '')));
+  v_provided_hash text := btrim(coalesce(p_bank_details_hash, ''));
 
-  v_current_hash text;
+  v_entity_exists boolean := false;
+  v_current_hash text := null;
+  v_hash_is_valid boolean := false;
   v_now timestamptz := now();
 
   v_inserted boolean := false;
-
   v_action text := null;
-
   v_row_json jsonb;
 begin
   if v_provider = '' then
-    raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'PROVIDER_REQUIRED')::text;
   end if;
   if v_env = '' then
-    raise exception '%', jsonb_build_object('error','ENV_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENV_REQUIRED')::text;
   end if;
-  if v_kind not in ('CANDIDATE','UMBRELLA') then
-    raise exception '%', jsonb_build_object('error','INVALID_ENTITY_KIND','expected','CANDIDATE|UMBRELLA')::text;
+  if v_kind not in ('CANDIDATE', 'UMBRELLA') then
+    raise exception '%', jsonb_build_object('error', 'INVALID_ENTITY_KIND', 'expected', 'CANDIDATE|UMBRELLA')::text;
   end if;
   if p_entity_id is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_ID_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENTITY_ID_REQUIRED')::text;
   end if;
-  if v_status not in ('UNVERIFIED','PASS','NEAR_MATCH','FAIL','UNAVAILABLE') then
-    raise exception '%', jsonb_build_object('error','INVALID_STATUS')::text;
+  if v_status not in ('UNVERIFIED', 'PASS', 'NEAR_MATCH', 'FAIL', 'UNAVAILABLE') then
+    raise exception '%', jsonb_build_object('error', 'INVALID_STATUS')::text;
   end if;
-  if p_bank_details_hash is null or btrim(p_bank_details_hash) = '' then
-    raise exception '%', jsonb_build_object('error','BANK_DETAILS_HASH_REQUIRED')::text;
+  if v_provided_hash = '' then
+    raise exception '%', jsonb_build_object('error', 'BANK_DETAILS_HASH_REQUIRED')::text;
   end if;
 
-  -- Resolve current bank_details_hash from the entity table (must match to accept the result)
   if v_kind = 'CANDIDATE' then
-    select c.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.candidates c
-    where c.id = p_entity_id
-    limit 1;
+    where c.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select c.bank_details_hash
+      into v_current_hash
+      from public.candidates c
+      where c.id = p_entity_id
+      limit 1;
+    end if;
   else
-    select u.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.umbrellas u
-    where u.id = p_entity_id
-    limit 1;
+    where u.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select u.bank_details_hash
+      into v_current_hash
+      from public.umbrellas u
+      where u.id = p_entity_id
+      limit 1;
+    end if;
   end if;
 
-  if v_current_hash is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_NOT_FOUND_OR_NO_HASH','entity_kind',v_kind)::text;
+  if not v_entity_exists then
+    raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
   end if;
 
-  -- Stale-result guard (bank details changed while check in-flight)
-  if v_current_hash is distinct from btrim(p_bank_details_hash) then
+  v_hash_is_valid := (v_current_hash is not null and v_current_hash = v_provided_hash);
+
+  if not v_hash_is_valid and v_kind = 'CANDIDATE' then
+    select exists (
+      select 1
+      from public.v_finance_cases_register vfcr
+      where vfcr.candidate_id = p_entity_id
+        and vfcr.routing_kind::text = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+        and coalesce(vfcr.edit_bank_details_allowed, false) = true
+        and coalesce(vfcr.oneoff_bank_details_present, false) = true
+        and vfcr.oneoff_bank_details_hash = v_provided_hash
+    )
+    into v_hash_is_valid;
+  end if;
+
+  if not v_hash_is_valid then
     return jsonb_build_object(
       'ok', true,
       'action', 'ignored_stale_hash',
@@ -1538,12 +1634,10 @@ begin
       'entity_kind', v_kind,
       'entity_id', p_entity_id::text,
       'current_bank_details_hash', v_current_hash,
-      'provided_bank_details_hash', btrim(p_bank_details_hash)
+      'provided_bank_details_hash', v_provided_hash
     );
   end if;
 
-  -- ✅ Approach A: single statement consumes the CTE and captures both inserted_flag + row JSON.
-  -- IMPORTANT: explicitly type NULLs to avoid any implicit text typing issues for uuid columns.
   with upserted as (
     insert into public.bank_name_checks (
       rail_provider,
@@ -1566,7 +1660,7 @@ begin
       v_env,
       v_kind,
       p_entity_id,
-      v_current_hash,
+      v_provided_hash,
       v_status,
       coalesce(p_checked_at_utc, v_now),
       p_result_json,
@@ -1583,7 +1677,6 @@ begin
       checked_at_utc = excluded.checked_at_utc,
       result_json = excluded.result_json,
       updated_at_utc = v_now,
-
       override_reason = case
         when excluded.status = 'PASS' then null::text
         else public.bank_name_checks.override_reason
@@ -1641,13 +1734,17 @@ end;
 $function$;
 
 
+
+DROP FUNCTION IF EXISTS public.bank_name_check_set_override(text, text, text, uuid, text, uuid);
+
 CREATE OR REPLACE FUNCTION public.bank_name_check_set_override(
   p_provider text,
   p_env text,
   p_entity_kind text,
   p_entity_id uuid,
   p_reason text,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_bank_details_hash text default null
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1655,14 +1752,17 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 declare
-  v_provider text := upper(btrim(coalesce(p_provider,'')));
-  v_env text := upper(btrim(coalesce(p_env,'')));
-  v_kind text := upper(btrim(coalesce(p_entity_kind,'')));
-
-  v_reason text := nullif(btrim(coalesce(p_reason,'')), '');
+  v_provider text := upper(btrim(coalesce(p_provider, '')));
+  v_env text := upper(btrim(coalesce(p_env, '')));
+  v_kind text := upper(btrim(coalesce(p_entity_kind, '')));
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_requested_hash text := nullif(btrim(coalesce(p_bank_details_hash, '')), '');
   v_now timestamptz := now();
 
-  v_current_hash text;
+  v_entity_exists boolean := false;
+  v_current_hash text := null;
+  v_target_hash text := null;
+  v_target_is_valid_oneoff boolean := false;
 
   v_before public.bank_name_checks%rowtype;
   v_row public.bank_name_checks%rowtype;
@@ -1674,41 +1774,89 @@ declare
   v_action text := null;
 begin
   if v_provider = '' then
-    raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'PROVIDER_REQUIRED')::text;
   end if;
   if v_env = '' then
-    raise exception '%', jsonb_build_object('error','ENV_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENV_REQUIRED')::text;
   end if;
-  if v_kind not in ('CANDIDATE','UMBRELLA') then
-    raise exception '%', jsonb_build_object('error','INVALID_ENTITY_KIND','expected','CANDIDATE|UMBRELLA')::text;
+  if v_kind not in ('CANDIDATE', 'UMBRELLA') then
+    raise exception '%', jsonb_build_object('error', 'INVALID_ENTITY_KIND', 'expected', 'CANDIDATE|UMBRELLA')::text;
   end if;
   if p_entity_id is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_ID_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENTITY_ID_REQUIRED')::text;
   end if;
   if v_reason is null then
-    raise exception '%', jsonb_build_object('error','REASON_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'REASON_REQUIRED')::text;
   end if;
 
-  -- Resolve current bank_details_hash (override must apply to the current hash)
   if v_kind = 'CANDIDATE' then
-    select c.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.candidates c
-    where c.id = p_entity_id
-    limit 1;
+    where c.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select c.bank_details_hash
+      into v_current_hash
+      from public.candidates c
+      where c.id = p_entity_id
+      limit 1;
+    end if;
   else
-    select u.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.umbrellas u
-    where u.id = p_entity_id
-    limit 1;
+    where u.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select u.bank_details_hash
+      into v_current_hash
+      from public.umbrellas u
+      where u.id = p_entity_id
+      limit 1;
+    end if;
   end if;
 
-  if v_current_hash is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_NOT_FOUND_OR_NO_HASH','entity_kind',v_kind)::text;
+  if not v_entity_exists then
+    raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
   end if;
 
-  -- Capture before row (if any)
+  if v_requested_hash is null then
+    v_target_hash := v_current_hash;
+  elsif v_current_hash is not null and v_current_hash = v_requested_hash then
+    v_target_hash := v_current_hash;
+  elsif v_kind = 'CANDIDATE' then
+    select exists (
+      select 1
+      from public.v_finance_cases_register vfcr
+      where vfcr.candidate_id = p_entity_id
+        and vfcr.routing_kind::text = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+        and coalesce(vfcr.edit_bank_details_allowed, false) = true
+        and coalesce(vfcr.oneoff_bank_details_present, false) = true
+        and vfcr.oneoff_bank_details_hash = v_requested_hash
+    )
+    into v_target_is_valid_oneoff;
+
+    if v_target_is_valid_oneoff then
+      v_target_hash := v_requested_hash;
+    end if;
+  end if;
+
+  if v_target_hash is null then
+    if v_requested_hash is null then
+      raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'INVALID_TARGET_BANK_DETAILS_HASH',
+      'entity_kind', v_kind,
+      'entity_id', p_entity_id::text,
+      'bank_details_hash', v_requested_hash
+    )::text;
+  end if;
+
   select bnc.*
   into v_before
   from public.bank_name_checks bnc
@@ -1716,7 +1864,7 @@ begin
     and bnc.rail_env = v_env
     and bnc.entity_kind = v_kind
     and bnc.entity_id = p_entity_id
-    and bnc.bank_details_hash = v_current_hash
+    and bnc.bank_details_hash = v_target_hash
   limit 1;
 
   if v_before.id is not null then
@@ -1739,7 +1887,6 @@ begin
     );
   end if;
 
-  -- Ensure row exists (insert UNVERIFIED if not), then set override fields.
   with upserted as (
     insert into public.bank_name_checks (
       rail_provider,
@@ -1762,14 +1909,14 @@ begin
       v_env,
       v_kind,
       p_entity_id,
-      v_current_hash,
+      v_target_hash,
       'UNVERIFIED',
       null,
       null,
       v_reason,
       p_actor_user_id,
       v_now,
-      v_current_hash,
+      v_target_hash,
       v_now,
       v_now
     )
@@ -1780,16 +1927,13 @@ begin
       override_at_utc = excluded.override_at_utc,
       override_hash = excluded.override_hash,
       updated_at_utc = v_now
-    returning
-      public.bank_name_checks.*
+    returning public.bank_name_checks.*
   )
-  select
-    u.*
+  select u.*
   into v_row
   from upserted u
   limit 1;
 
-  -- Derive inserted vs updated deterministically from timestamps set by this function.
   v_inserted := (v_row.created_at_utc is not null and v_row.updated_at_utc is not null and v_row.created_at_utc = v_row.updated_at_utc);
   v_action := case when v_inserted then 'inserted' else 'updated' end;
 
@@ -1811,7 +1955,6 @@ begin
     'updated_at_utc', v_row.updated_at_utc
   );
 
-  -- ✅ User-facing audit (UNGATED): bank name-check override set
   perform public._audit_insert(
     'bank_name_checks',
     v_row.id::text,
@@ -1830,13 +1973,15 @@ begin
 end;
 $function$;
 
+DROP FUNCTION IF EXISTS public.bank_name_check_clear_override(text, text, text, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.bank_name_check_clear_override(
   p_provider text,
   p_env text,
   p_entity_kind text,
   p_entity_id uuid,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_bank_details_hash text default null
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1844,46 +1989,99 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 declare
-  v_provider text := upper(btrim(coalesce(p_provider,'')));
-  v_env text := upper(btrim(coalesce(p_env,'')));
-  v_kind text := upper(btrim(coalesce(p_entity_kind,'')));
+  v_provider text := upper(btrim(coalesce(p_provider, '')));
+  v_env text := upper(btrim(coalesce(p_env, '')));
+  v_kind text := upper(btrim(coalesce(p_entity_kind, '')));
+  v_requested_hash text := nullif(btrim(coalesce(p_bank_details_hash, '')), '');
 
   v_now timestamptz := now();
-  v_current_hash text;
+  v_entity_exists boolean := false;
+  v_current_hash text := null;
+  v_target_hash text := null;
+  v_target_is_valid_oneoff boolean := false;
 
-  v_updated int := 0;
+  v_updated integer := 0;
   v_row public.bank_name_checks%rowtype;
 begin
   if v_provider = '' then
-    raise exception '%', jsonb_build_object('error','PROVIDER_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'PROVIDER_REQUIRED')::text;
   end if;
   if v_env = '' then
-    raise exception '%', jsonb_build_object('error','ENV_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENV_REQUIRED')::text;
   end if;
-  if v_kind not in ('CANDIDATE','UMBRELLA') then
-    raise exception '%', jsonb_build_object('error','INVALID_ENTITY_KIND','expected','CANDIDATE|UMBRELLA')::text;
+  if v_kind not in ('CANDIDATE', 'UMBRELLA') then
+    raise exception '%', jsonb_build_object('error', 'INVALID_ENTITY_KIND', 'expected', 'CANDIDATE|UMBRELLA')::text;
   end if;
   if p_entity_id is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_ID_REQUIRED')::text;
+    raise exception '%', jsonb_build_object('error', 'ENTITY_ID_REQUIRED')::text;
   end if;
 
-  -- Resolve current hash
   if v_kind = 'CANDIDATE' then
-    select c.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.candidates c
-    where c.id = p_entity_id
-    limit 1;
+    where c.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select c.bank_details_hash
+      into v_current_hash
+      from public.candidates c
+      where c.id = p_entity_id
+      limit 1;
+    end if;
   else
-    select u.bank_details_hash
-    into v_current_hash
+    perform 1
     from public.umbrellas u
-    where u.id = p_entity_id
-    limit 1;
+    where u.id = p_entity_id;
+
+    v_entity_exists := found;
+
+    if v_entity_exists then
+      select u.bank_details_hash
+      into v_current_hash
+      from public.umbrellas u
+      where u.id = p_entity_id
+      limit 1;
+    end if;
   end if;
 
-  if v_current_hash is null then
-    raise exception '%', jsonb_build_object('error','ENTITY_NOT_FOUND_OR_NO_HASH','entity_kind',v_kind)::text;
+  if not v_entity_exists then
+    raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
+  end if;
+
+  if v_requested_hash is null then
+    v_target_hash := v_current_hash;
+  elsif v_current_hash is not null and v_current_hash = v_requested_hash then
+    v_target_hash := v_current_hash;
+  elsif v_kind = 'CANDIDATE' then
+    select exists (
+      select 1
+      from public.v_finance_cases_register vfcr
+      where vfcr.candidate_id = p_entity_id
+        and vfcr.routing_kind::text = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+        and coalesce(vfcr.edit_bank_details_allowed, false) = true
+        and coalesce(vfcr.oneoff_bank_details_present, false) = true
+        and vfcr.oneoff_bank_details_hash = v_requested_hash
+    )
+    into v_target_is_valid_oneoff;
+
+    if v_target_is_valid_oneoff then
+      v_target_hash := v_requested_hash;
+    end if;
+  end if;
+
+  if v_target_hash is null then
+    if v_requested_hash is null then
+      raise exception '%', jsonb_build_object('error', 'ENTITY_NOT_FOUND_OR_NO_HASH', 'entity_kind', v_kind)::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'INVALID_TARGET_BANK_DETAILS_HASH',
+      'entity_kind', v_kind,
+      'entity_id', p_entity_id::text,
+      'bank_details_hash', v_requested_hash
+    )::text;
   end if;
 
   update public.bank_name_checks bnc
@@ -1897,7 +2095,7 @@ begin
     and bnc.rail_env = v_env
     and bnc.entity_kind = v_kind
     and bnc.entity_id = p_entity_id
-    and bnc.bank_details_hash = v_current_hash;
+    and bnc.bank_details_hash = v_target_hash;
 
   get diagnostics v_updated = row_count;
 
@@ -1916,7 +2114,7 @@ begin
     and bnc2.rail_env = v_env
     and bnc2.entity_kind = v_kind
     and bnc2.entity_id = p_entity_id
-    and bnc2.bank_details_hash = v_current_hash
+    and bnc2.bank_details_hash = v_target_hash
   limit 1;
 
   return jsonb_build_object(
@@ -1941,6 +2139,11 @@ begin
   );
 end;
 $function$;
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.bank_payee_map_upsert(
   p_provider text,
@@ -2076,8 +2279,6 @@ $function$;
 
 
 
-
-
 create or replace function public.pay_batch_schedule(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -2127,6 +2328,19 @@ declare
   v_comm_result jsonb := '{}'::jsonb;
   v_comm_error text := null;
   v_comm_trigger_status text := null;
+  v_comm_message_kind text := null;
+
+  v_payout_notice_result jsonb := '{}'::jsonb;
+  v_payout_notice_trigger_status text := null;
+  v_payout_notice_error text := null;
+  v_payout_notice_dispatch_required boolean := false;
+  v_payout_notice_targeted_count int := 0;
+
+  v_remittance_result jsonb := '{}'::jsonb;
+  v_remittance_trigger_status text := null;
+  v_remittance_error text := null;
+  v_remittance_dispatch_required boolean := false;
+  v_remittance_targeted_count int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception '%', jsonb_build_object(
@@ -2645,44 +2859,146 @@ begin
 
   begin
     if v_provider <> 'CSV' then
-      if v_batch_kind_fixed = 'LOANS' then
-        v_comm_result := public.pay_finance_payout_notice_queue_commit_stage(
+      begin
+        v_payout_notice_result := public.pay_finance_payout_notice_queue_commit_stage(
           p_pay_batch_id,
           p_actor_user_id
         );
 
-        if coalesce((v_comm_result->>'ok')::boolean, true) = false then
+        if coalesce((v_payout_notice_result->>'ok')::boolean, true) = false then
           raise exception '%', coalesce(
-            nullif(btrim(coalesce(v_comm_result->>'error','')), ''),
+            nullif(btrim(coalesce(v_payout_notice_result->>'error','')), ''),
             'pay_batch_schedule: payout notice queueing failed'
           );
         end if;
 
-        v_comm_trigger_status := coalesce(
-          nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-          'PAYOUT_NOTICE_QUEUED'
+        v_payout_notice_trigger_status := coalesce(
+          nullif(btrim(coalesce(v_payout_notice_result->>'trigger_status','')), ''),
+          'PAYOUT_NOTICE_BUILD_READY'
         );
-        v_comm_error := nullif(btrim(coalesce(v_comm_result->>'error','')), '');
+        v_payout_notice_error := nullif(btrim(coalesce(v_payout_notice_result->>'error','')), '');
+      exception when others then
+        v_payout_notice_trigger_status := 'PAYOUT_NOTICE_ERROR';
+        v_payout_notice_error := left(coalesce(SQLERRM, 'UNKNOWN_PAYOUT_NOTICE_ERROR'), 1000);
+        v_payout_notice_result := jsonb_build_object(
+          'ok', false,
+          'trigger_status', v_payout_notice_trigger_status,
+          'error', v_payout_notice_error,
+          'message_kind', 'PAYOUT_NOTICE',
+          'automatic_commit_stage', true,
+          'dispatch_required', false,
+          'pay_batch_id', p_pay_batch_id::text
+        );
+      end;
+
+      v_payout_notice_dispatch_required := lower(btrim(coalesce(v_payout_notice_result->>'dispatch_required', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      if btrim(coalesce(v_payout_notice_result->>'candidate_count_targeted', '')) ~ '^[0-9]+$' then
+        v_payout_notice_targeted_count := (v_payout_notice_result->>'candidate_count_targeted')::int;
       else
-        v_comm_result := public.pay_remittance_queue_commit_stage(
+        v_payout_notice_targeted_count := 0;
+      end if;
+
+      begin
+        v_remittance_result := public.pay_remittance_queue_commit_stage(
           p_pay_batch_id,
           'ALL',
           p_actor_user_id
         );
 
-        if coalesce((v_comm_result->>'ok')::boolean, true) = false then
+        if coalesce((v_remittance_result->>'ok')::boolean, true) = false then
           raise exception '%', coalesce(
-            nullif(btrim(coalesce(v_comm_result->>'error','')), ''),
+            nullif(btrim(coalesce(v_remittance_result->>'error','')), ''),
             'pay_batch_schedule: remittance queueing failed'
           );
         end if;
 
-        v_comm_trigger_status := coalesce(
-          nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-          'REMITTANCE_QUEUED'
+        v_remittance_trigger_status := coalesce(
+          nullif(btrim(coalesce(v_remittance_result->>'trigger_status','')), ''),
+          'REMITTANCE_BUILD_READY'
         );
-        v_comm_error := nullif(btrim(coalesce(v_comm_result->>'error','')), '');
+        v_remittance_error := nullif(btrim(coalesce(v_remittance_result->>'error','')), '');
+      exception when others then
+        v_remittance_trigger_status := 'REMITTANCE_ERROR';
+        v_remittance_error := left(coalesce(SQLERRM, 'UNKNOWN_REMITTANCE_ERROR'), 1000);
+        v_remittance_result := jsonb_build_object(
+          'ok', false,
+          'trigger_status', v_remittance_trigger_status,
+          'error', v_remittance_error,
+          'message_kind', 'REMITTANCE',
+          'automatic_commit_stage', true,
+          'dispatch_required', false,
+          'pay_batch_id', p_pay_batch_id::text,
+          'scope', 'ALL'
+        );
+      end;
+
+      v_remittance_dispatch_required := lower(btrim(coalesce(v_remittance_result->>'dispatch_required', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      if btrim(coalesce(v_remittance_result->>'candidate_count_targeted', '')) ~ '^[0-9]+$' then
+        v_remittance_targeted_count := (v_remittance_result->>'candidate_count_targeted')::int;
+      else
+        v_remittance_targeted_count := 0;
       end if;
+
+      v_comm_message_kind := case
+        when (v_payout_notice_dispatch_required = true or v_payout_notice_targeted_count > 0 or v_payout_notice_error is not null)
+         and (v_remittance_dispatch_required = true or v_remittance_targeted_count > 0 or v_remittance_error is not null)
+          then 'PAYOUT_NOTICE_AND_REMITTANCE'
+        when (v_payout_notice_dispatch_required = true or v_payout_notice_targeted_count > 0 or v_payout_notice_error is not null)
+          then 'PAYOUT_NOTICE'
+        when (v_remittance_dispatch_required = true or v_remittance_targeted_count > 0 or v_remittance_error is not null)
+          then 'REMITTANCE'
+        else 'PAYOUT_NOTICE_AND_REMITTANCE'
+      end;
+
+      if v_payout_notice_error is not null and v_remittance_error is not null then
+        v_comm_trigger_status := 'PAYOUT_NOTICE_AND_REMITTANCE_ERROR';
+      elsif v_payout_notice_error is not null then
+        v_comm_trigger_status := 'PAYOUT_NOTICE_ERROR';
+      elsif v_remittance_error is not null then
+        v_comm_trigger_status := 'REMITTANCE_ERROR';
+      elsif v_payout_notice_dispatch_required = true and v_remittance_dispatch_required = true then
+        v_comm_trigger_status := 'PAYOUT_NOTICE_AND_REMITTANCE_BUILD_READY';
+      elsif v_payout_notice_dispatch_required = true then
+        v_comm_trigger_status := coalesce(v_payout_notice_trigger_status, 'PAYOUT_NOTICE_BUILD_READY');
+      elsif v_remittance_dispatch_required = true then
+        v_comm_trigger_status := coalesce(v_remittance_trigger_status, 'REMITTANCE_BUILD_READY');
+      elsif v_payout_notice_targeted_count > 0 and v_remittance_targeted_count > 0 then
+        v_comm_trigger_status := 'NO_QUEUEABLE_PAYOUT_NOTICE_OR_REMITTANCE_JOB';
+      elsif v_payout_notice_targeted_count > 0 then
+        v_comm_trigger_status := coalesce(v_payout_notice_trigger_status, 'NO_QUEUEABLE_PAYOUT_NOTICE_JOB');
+      elsif v_remittance_targeted_count > 0 then
+        v_comm_trigger_status := coalesce(v_remittance_trigger_status, 'NO_QUEUEABLE_REMITTANCE_JOB');
+      else
+        v_comm_trigger_status := 'NO_ELIGIBLE_UNSENT_CANDIDATES';
+      end if;
+
+      v_comm_error := left(
+        coalesce(
+          nullif(
+            btrim(
+              concat_ws(
+                ' | ',
+                nullif(btrim(coalesce(v_payout_notice_error, '')), ''),
+                nullif(btrim(coalesce(v_remittance_error, '')), '')
+              )
+            ),
+            ''
+          ),
+          null
+        ),
+        1000
+      );
+
+      v_comm_result := jsonb_build_object(
+        'ok', (v_payout_notice_error is null and v_remittance_error is null),
+        'trigger_status', v_comm_trigger_status,
+        'error', v_comm_error,
+        'message_kind', v_comm_message_kind,
+        'automatic_commit_stage', true,
+        'dispatch_required', (v_payout_notice_dispatch_required = true or v_remittance_dispatch_required = true),
+        'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+        'remittance', coalesce(v_remittance_result, '{}'::jsonb)
+      );
 
       insert into public.audit_events(
         actor_user_id,
@@ -2706,41 +3022,69 @@ begin
           'scheduled_at_utc', v_sched_at::text,
           'authoritative_payment_date', v_authoritative_payment_date::text,
           'trigger_status', v_comm_trigger_status,
-          'result', coalesce(v_comm_result, '{}'::jsonb)
+          'message_kind', v_comm_message_kind,
+          'result', coalesce(v_comm_result, '{}'::jsonb),
+          'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+          'remittance', coalesce(v_remittance_result, '{}'::jsonb)
         ),
         'commit_stage_communication'
       );
     else
+      v_payout_notice_result := jsonb_build_object(
+        'ok', true,
+        'trigger_status', 'MANUAL_RAIL_NO_SCHEDULE_SEND',
+        'message_kind', 'PAYOUT_NOTICE',
+        'automatic_commit_stage', false,
+        'dispatch_required', false,
+        'pay_batch_id', p_pay_batch_id::text
+      );
+      v_remittance_result := jsonb_build_object(
+        'ok', true,
+        'trigger_status', 'MANUAL_RAIL_NO_SCHEDULE_SEND',
+        'message_kind', 'REMITTANCE',
+        'automatic_commit_stage', false,
+        'dispatch_required', false,
+        'pay_batch_id', p_pay_batch_id::text,
+        'scope', 'ALL'
+      );
+
+      v_payout_notice_trigger_status := 'MANUAL_RAIL_NO_SCHEDULE_SEND';
+      v_remittance_trigger_status := 'MANUAL_RAIL_NO_SCHEDULE_SEND';
+      v_payout_notice_error := null;
+      v_remittance_error := null;
+      v_payout_notice_dispatch_required := false;
+      v_remittance_dispatch_required := false;
+      v_payout_notice_targeted_count := 0;
+      v_remittance_targeted_count := 0;
+
+      v_comm_message_kind := 'PAYOUT_NOTICE_AND_REMITTANCE';
       v_comm_trigger_status := 'MANUAL_RAIL_NO_SCHEDULE_SEND';
       v_comm_error := null;
       v_comm_result := jsonb_build_object(
         'ok', true,
         'trigger_status', v_comm_trigger_status,
-        'message_kind', case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
-        'automatic_commit_stage', false
+        'error', null,
+        'message_kind', v_comm_message_kind,
+        'automatic_commit_stage', false,
+        'dispatch_required', false,
+        'payout_notice', v_payout_notice_result,
+        'remittance', v_remittance_result
       );
     end if;
   exception when others then
-    v_comm_trigger_status := case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE_ERROR' else 'COMMIT_STAGE_SEND_ERROR' end;
+    v_comm_trigger_status := 'COMMIT_STAGE_SEND_ERROR';
     v_comm_error := left(coalesce(SQLERRM,'UNKNOWN_COMMS_ERROR'), 1000);
+    v_comm_message_kind := coalesce(v_comm_message_kind, 'PAYOUT_NOTICE_AND_REMITTANCE');
     v_comm_result := jsonb_build_object(
       'ok', false,
       'trigger_status', v_comm_trigger_status,
       'error', v_comm_error,
-      'message_kind', case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
-      'automatic_commit_stage', (v_provider <> 'CSV')
+      'message_kind', v_comm_message_kind,
+      'automatic_commit_stage', (v_provider <> 'CSV'),
+      'dispatch_required', false,
+      'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+      'remittance', coalesce(v_remittance_result, '{}'::jsonb)
     );
-
-    begin
-      update public.pay_batch_candidates pbc
-      set
-        remittance_trigger_status = v_comm_trigger_status,
-        last_remittance_error = v_comm_error
-      where pbc.pay_batch_id = p_pay_batch_id
-        and pbc.remittance_sent_at_utc is null;
-    exception when others then
-      null;
-    end;
 
     begin
       insert into public.audit_events(
@@ -2765,7 +3109,10 @@ begin
           'scheduled_at_utc', v_sched_at::text,
           'authoritative_payment_date', v_authoritative_payment_date::text,
           'trigger_status', v_comm_trigger_status,
-          'error', v_comm_error
+          'message_kind', v_comm_message_kind,
+          'error', v_comm_error,
+          'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+          'remittance', coalesce(v_remittance_result, '{}'::jsonb)
         ),
         'commit_stage_communication'
       );
@@ -2773,12 +3120,14 @@ begin
       null;
     end;
   end;
-
   v_worker_communications := jsonb_build_object(
     'automatic_commit_stage', (v_provider <> 'CSV'),
-    'message_kind', coalesce(nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''), case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end),
+    'message_kind', coalesce(nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''), v_comm_message_kind, 'PAYOUT_NOTICE_AND_REMITTANCE'),
     'trigger_status', v_comm_trigger_status,
     'error', v_comm_error,
+    'dispatch_required', (v_payout_notice_dispatch_required = true or v_remittance_dispatch_required = true),
+    'payout_notice', coalesce(v_payout_notice_result, '{}'::jsonb),
+    'remittance', coalesce(v_remittance_result, '{}'::jsonb),
     'result', coalesce(v_comm_result, '{}'::jsonb)
   );
 
@@ -2864,6 +3213,11 @@ declare
   v_same_week_override_json jsonb := '{}'::jsonb;
   v_commit_stage_worker_communications jsonb := '{}'::jsonb;
   v_remittance_status_summary jsonb := '{}'::jsonb;
+  v_finance_prepare_summary jsonb := '{}'::jsonb;
+  v_finance_destination_groups jsonb := '[]'::jsonb;
+  v_has_finance_snapshot_blockers boolean := false;
+  v_has_umbrella_remittance_items boolean := false;
+  v_has_candidate_payment_advice_items boolean := false;
 begin
   if p_pay_batch_id is null then
     raise exception '%', jsonb_build_object(
@@ -3272,6 +3626,175 @@ begin
     coalesce((select hb.has_any from hard_blockers hb), false)
   into v_payees, v_summary, v_has_hard_blockers;
 
+
+  if v_batch_kind_fixed <> 'LOANS' then
+    with finance_items as (
+      select
+        pbi.id as pay_batch_item_id,
+        pbi.item_type,
+        pbi.pay_channel,
+        pbi.finance_case_id,
+        pbi.source_ref,
+        pbi.payout_instruction_snapshot_json
+      from public.pay_batch_items as pbi
+      join public.pay_batch_candidates as pbc3
+        on pbc3.id = pbi.pay_batch_candidate_id
+      where pbc3.pay_batch_id = p_pay_batch_id
+        and pbi.is_voided = false
+        and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY','LOAN_REPAYMENT')
+    ),
+    parsed as (
+      select
+        fi.pay_batch_item_id,
+        fi.item_type,
+        upper(coalesce(fi.pay_channel,'')) as pay_channel,
+        fi.finance_case_id,
+        fi.source_ref,
+        fi.payout_instruction_snapshot_json,
+        upper(nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'routing_kind','')), '')) as routing_kind,
+        nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'destination_label','')), '') as destination_label,
+        upper(nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'payee_entity_kind','')), '')) as payee_entity_kind,
+        case
+          when nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'payee_entity_id','')), '') is null then null::uuid
+          else (fi.payout_instruction_snapshot_json->>'payee_entity_id')::uuid
+        end as payee_entity_id,
+        nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'bank_details_hash','')), '') as bank_details_hash,
+        nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'beneficiary_name','')), '') as beneficiary_name,
+        coalesce((fi.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance')::boolean, false) as appears_on_umbrella_remittance,
+        coalesce((fi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice')::boolean, false) as generates_candidate_payment_advice
+      from finance_items as fi
+    ),
+    enriched as (
+      select
+        p.*,
+        (p.payout_instruction_snapshot_json is null) as is_missing_snapshot,
+        (
+          p.payout_instruction_snapshot_json is not null
+          and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and (
+            p.bank_details_hash is null
+            or p.beneficiary_name is null
+            or p.payee_entity_kind is null
+            or p.payee_entity_id is null
+          )
+        ) as is_missing_oneoff_snapshot_details,
+        coalesce(bnc.status, 'UNVERIFIED') as name_check_status,
+        (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash) as name_check_has_override,
+        (bpm.payee_id is not null) as payee_map_present,
+        (
+          p.payout_instruction_snapshot_json is not null
+          and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and p.bank_details_hash is not null
+          and v_need_name_check = true
+          and coalesce(bnc.status, 'UNVERIFIED') <> 'PASS'
+          and not (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash)
+        ) as is_name_check_blocked,
+        (
+          p.payout_instruction_snapshot_json is not null
+          and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and p.bank_details_hash is not null
+          and v_requires_payee_map = true
+          and (bpm.payee_id is null)
+        ) as is_payee_map_blocked
+      from parsed as p
+      left join public.bank_name_checks as bnc
+        on bnc.rail_provider = v_batch.rail_provider_snapshot
+       and bnc.rail_env = v_batch.rail_env_snapshot
+       and bnc.entity_kind = p.payee_entity_kind
+       and bnc.entity_id = p.payee_entity_id
+       and bnc.bank_details_hash = p.bank_details_hash
+      left join public.bank_payee_map as bpm
+        on bpm.rail_provider = v_batch.rail_provider_snapshot
+       and bpm.rail_env = v_batch.rail_env_snapshot
+       and bpm.entity_kind = p.payee_entity_kind
+       and bpm.entity_id = p.payee_entity_id
+       and bpm.bank_details_hash = p.bank_details_hash
+    ),
+    destination_groups as (
+      select
+        e.routing_kind,
+        e.payee_entity_kind,
+        e.payee_entity_id,
+        e.bank_details_hash,
+        e.destination_label,
+        count(*)::int as item_count
+      from enriched as e
+      group by
+        e.routing_kind,
+        e.payee_entity_kind,
+        e.payee_entity_id,
+        e.bank_details_hash,
+        e.destination_label
+    ),
+    summary as (
+      select
+        jsonb_build_object(
+          'finance_item_count', count(*)::int,
+          'missing_snapshot_count', count(*) filter (where e.is_missing_snapshot)::int,
+          'missing_oneoff_snapshot_details_count', count(*) filter (where e.is_missing_oneoff_snapshot_details)::int,
+          'name_check_blocked_count', count(*) filter (where e.is_name_check_blocked)::int,
+          'payee_map_blocked_count', count(*) filter (where e.is_payee_map_blocked)::int,
+          'blocked_item_ids', coalesce(
+            jsonb_agg(e.pay_batch_item_id::text) filter (
+              where e.is_missing_snapshot
+                 or e.is_missing_oneoff_snapshot_details
+                 or e.is_name_check_blocked
+                 or e.is_payee_map_blocked
+            ),
+            '[]'::jsonb
+          )
+        ) as summary_json,
+        exists(
+          select 1
+          from enriched as eb
+          where eb.is_missing_snapshot
+             or eb.is_missing_oneoff_snapshot_details
+             or eb.is_name_check_blocked
+             or eb.is_payee_map_blocked
+        ) as has_blockers,
+        coalesce(bool_or(e.appears_on_umbrella_remittance), false) as has_umbrella_remittance_items,
+        coalesce(bool_or(e.generates_candidate_payment_advice), false) as has_candidate_payment_advice_items
+      from enriched as e
+    )
+    select
+      coalesce(s.summary_json, '{}'::jsonb),
+      coalesce(
+        (
+          select jsonb_agg(
+            jsonb_build_object(
+              'routing_kind', dg.routing_kind,
+              'payee_entity_kind', dg.payee_entity_kind,
+              'payee_entity_id', case when dg.payee_entity_id is null then null else dg.payee_entity_id::text end,
+              'bank_details_hash', dg.bank_details_hash,
+              'destination_label', dg.destination_label,
+              'item_count', dg.item_count
+            )
+            order by dg.routing_kind, dg.payee_entity_kind, dg.payee_entity_id, dg.bank_details_hash
+          )
+          from destination_groups as dg
+        ),
+        '[]'::jsonb
+      ),
+      coalesce(s.has_blockers, false),
+      coalesce(s.has_umbrella_remittance_items, false),
+      coalesce(s.has_candidate_payment_advice_items, false)
+    into
+      v_finance_prepare_summary,
+      v_finance_destination_groups,
+      v_has_finance_snapshot_blockers,
+      v_has_umbrella_remittance_items,
+      v_has_candidate_payment_advice_items
+    from summary as s;
+
+    v_has_hard_blockers := coalesce(v_has_hard_blockers, false) or coalesce(v_has_finance_snapshot_blockers, false);
+  else
+    v_finance_prepare_summary := '{}'::jsonb;
+    v_finance_destination_groups := '[]'::jsonb;
+    v_has_finance_snapshot_blockers := false;
+    v_has_umbrella_remittance_items := false;
+    v_has_candidate_payment_advice_items := (v_batch_kind_fixed = 'LOANS');
+  end if;
+
   select coalesce(
     jsonb_build_object(
       'total_count', count(*)::int,
@@ -3343,9 +3866,19 @@ begin
   select jsonb_build_object(
     'enabled_for_commit_stage', (v_provider <> 'CSV'),
     'trigger_point', case when v_provider <> 'CSV' then 'SCHEDULED_OR_AUTHORISED' else 'MANUAL_CONFIRM' end,
-    'message_kind', case when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
+    'message_kind',
+      case
+        when v_has_umbrella_remittance_items = true and v_has_candidate_payment_advice_items = true then 'MIXED'
+        when v_has_candidate_payment_advice_items = true then 'PAYOUT_NOTICE'
+        when v_has_umbrella_remittance_items = true then 'REMITTANCE'
+        when v_batch_kind_fixed = 'LOANS' then 'PAYOUT_NOTICE'
+        else 'NONE'
+      end,
     'will_fire_automatically', (v_provider <> 'CSV'),
     'current_status', coalesce(v_batch.status,''),
+    'has_umbrella_remittance_items', v_has_umbrella_remittance_items,
+    'has_candidate_payment_advice_items', v_has_candidate_payment_advice_items,
+    'finance_destination_groups', v_finance_destination_groups,
     'already_sent_summary', v_remittance_status_summary
   )
   into v_commit_stage_worker_communications;
@@ -3359,6 +3892,10 @@ begin
         'stale_reasons', v_stale_reasons,
         'raw', v_fresh
       ),
+      'finance_prepare', v_finance_prepare_summary,
+      'finance_destination_groups', v_finance_destination_groups,
+      'has_umbrella_remittance_items', v_has_umbrella_remittance_items,
+      'has_candidate_payment_advice_items', v_has_candidate_payment_advice_items,
       'worker_communications', v_commit_stage_worker_communications
     );
 
@@ -3415,12 +3952,19 @@ begin
     'payees', v_payees,
     'summary', v_summary,
     'finance_reservations', v_finance_reservation_summary,
+    'finance_prepare', v_finance_prepare_summary,
+    'finance_destination_groups', v_finance_destination_groups,
+    'has_umbrella_remittance_items', v_has_umbrella_remittance_items,
+    'has_candidate_payment_advice_items', v_has_candidate_payment_advice_items,
     'same_week_paye_override', v_same_week_override_json,
     'worker_communications', v_commit_stage_worker_communications,
     'has_hard_blockers', v_has_hard_blockers
   );
 end;
 $$;
+
+
+
 
 
 create or replace function public.pay_batch_mark_blocked_funds(
@@ -5550,8 +6094,6 @@ begin
 end;
 $$;
 
-
-
 create or replace function public.pay_remittance_mark_sent(
   p_pay_batch_id uuid,
   p_scope text,
@@ -5572,8 +6114,17 @@ declare
     when jsonb_typeof(p_results_json) = 'object' then p_results_json
     else jsonb_build_object('raw', p_results_json)
   end;
-  v_message_kind text := upper(btrim(coalesce(v_results->>'message_kind', 'REMITTANCE')));
+  v_input_message_kind text := upper(btrim(coalesce(v_results->>'message_kind', 'REMITTANCE')));
+  v_message_kind text := null;
+  v_audit_action text := null;
+  v_audit_reason text := null;
   v_audit_id uuid;
+
+  v_has_remittance_result boolean := false;
+  v_has_payout_notice_result boolean := false;
+  v_remittance_result jsonb := '{}'::jsonb;
+  v_payout_notice_result jsonb := '{}'::jsonb;
+  v_communication_mode text := 'NONE';
 
   v_item jsonb;
   v_item_payee_kind text;
@@ -5583,12 +6134,23 @@ declare
   v_item_umbrella_id uuid;
   v_item_trigger_status text;
   v_item_error_text text;
+  v_item_has_job boolean;
 
   v_success_count integer := 0;
   v_failure_count integer := 0;
   v_no_result_count integer := 0;
-  v_unmatched_queued_count integer := 0;
-  v_unmatched_skipped_count integer := 0;
+
+  v_remittance_success_count integer := 0;
+  v_remittance_failure_count integer := 0;
+  v_remittance_no_result_count integer := 0;
+  v_remittance_unmatched_queued_count integer := 0;
+  v_remittance_unmatched_skipped_count integer := 0;
+
+  v_payout_notice_success_count integer := 0;
+  v_payout_notice_failure_count integer := 0;
+  v_payout_notice_no_result_count integer := 0;
+  v_payout_notice_unmatched_queued_count integer := 0;
+  v_payout_notice_unmatched_skipped_count integer := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_remittance_mark_sent: pay_batch_id is required';
@@ -5613,47 +6175,227 @@ begin
     raise exception 'pay_remittance_mark_sent: pay batch % not found.', p_pay_batch_id;
   end if;
 
-  create temp table if not exists _tmp_mark_sent_target_candidates (
+  if jsonb_typeof(v_results->'remittance_result') = 'object' then
+    v_has_remittance_result := true;
+    v_remittance_result := coalesce(v_results->'remittance_result', '{}'::jsonb);
+  end if;
+
+  if jsonb_typeof(v_results->'payout_notice_result') = 'object' then
+    v_has_payout_notice_result := true;
+    v_payout_notice_result := coalesce(v_results->'payout_notice_result', '{}'::jsonb);
+  end if;
+
+  if v_has_remittance_result is false and v_has_payout_notice_result is false then
+    if v_input_message_kind = 'PAYOUT_NOTICE' then
+      v_has_payout_notice_result := true;
+      v_payout_notice_result := v_results;
+    else
+      v_has_remittance_result := true;
+      v_remittance_result := v_results;
+    end if;
+  end if;
+
+  if v_has_remittance_result and v_has_payout_notice_result then
+    v_communication_mode := 'MIXED';
+    v_message_kind := 'MIXED';
+    v_audit_action := 'PAY_BATCH_COMMUNICATIONS_SENT';
+    v_audit_reason := 'communications_mark_sent';
+  elsif v_has_payout_notice_result then
+    v_communication_mode := 'PAYOUT_NOTICE';
+    v_message_kind := 'PAYOUT_NOTICE';
+    v_audit_action := 'PAY_PAYOUT_NOTICE_SENT';
+    v_audit_reason := 'payout_notice_mark_sent';
+  else
+    v_communication_mode := 'REMITTANCE';
+    v_message_kind := 'REMITTANCE';
+    v_audit_action := 'PAY_REMITTANCE_SENT';
+    v_audit_reason := 'remittance_mark_sent';
+  end if;
+
+  drop table if exists pg_temp._tmp_mark_sent_target_candidates;
+  create temporary table pg_temp._tmp_mark_sent_target_candidates (
     pay_batch_candidate_id uuid primary key,
-    candidate_id uuid not null
+    candidate_id uuid not null,
+    target_from_remittance boolean not null default false,
+    target_from_payout_notice boolean not null default false
   ) on commit drop;
 
-  truncate table _tmp_mark_sent_target_candidates;
+  if v_has_remittance_result then
+    insert into pg_temp._tmp_mark_sent_target_candidates(
+      pay_batch_candidate_id,
+      candidate_id,
+      target_from_remittance,
+      target_from_payout_notice
+    )
+    select
+      pbc.id,
+      pbc.candidate_id,
+      true,
+      false
+    from public.pay_batch_candidates pbc
+    where pbc.pay_batch_id = p_pay_batch_id
+      and exists (
+        select 1
+        from public.pay_batch_items pbi
+        where pbi.pay_batch_candidate_id = pbc.id
+          and pbi.item_type <> 'DEBT_CREATED'
+          and coalesce(pbi.is_voided, false) = false
+          and (
+            v_scope = 'ALL'
+            or upper(coalesce(pbi.pay_channel, '')) = v_scope
+          )
+          and not (
+            pbi.finance_case_id is not null
+            and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+            and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          )
+      )
+    on conflict (pay_batch_candidate_id)
+    do update set
+      target_from_remittance = true;
+  end if;
 
-  insert into _tmp_mark_sent_target_candidates(
-    pay_batch_candidate_id,
-    candidate_id
-  )
-  select
-    pbc.id,
-    pbc.candidate_id
-  from public.pay_batch_candidates pbc
-  where pbc.pay_batch_id = p_pay_batch_id
-    and exists (
-      select 1
-      from public.pay_batch_items pbi
-      where pbi.pay_batch_candidate_id = pbc.id
-        and pbi.item_type <> 'DEBT_CREATED'
-        and coalesce(pbi.is_voided, false) = false
-        and (
-          v_scope = 'ALL'
-          or upper(coalesce(pbi.pay_channel, '')) = v_scope
+  if v_has_payout_notice_result then
+    if jsonb_typeof(v_payout_notice_result->'candidate_results') = 'array' then
+      insert into pg_temp._tmp_mark_sent_target_candidates(
+        pay_batch_candidate_id,
+        candidate_id,
+        target_from_remittance,
+        target_from_payout_notice
+      )
+      select
+        pbc.id,
+        pbc.candidate_id,
+        false,
+        true
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = p_pay_batch_id
+        and exists (
+          select 1
+          from jsonb_array_elements(v_payout_notice_result->'candidate_results') as cr(value)
+          where nullif(btrim(coalesce(cr.value->>'candidate_id', '')), '') = pbc.candidate_id::text
         )
-    );
+      on conflict (pay_batch_candidate_id)
+      do update set
+        target_from_payout_notice = true;
+    else
+      insert into pg_temp._tmp_mark_sent_target_candidates(
+        pay_batch_candidate_id,
+        candidate_id,
+        target_from_remittance,
+        target_from_payout_notice
+      )
+      select
+        pbc.id,
+        pbc.candidate_id,
+        false,
+        true
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = p_pay_batch_id
+        and exists (
+          select 1
+          from public.pay_batch_items pbi
+          where pbi.pay_batch_candidate_id = pbc.id
+            and coalesce(pbi.is_voided, false) = false
+            and pbi.finance_case_id is not null
+            and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and (
+              v_scope = 'ALL'
+              or upper(coalesce(pbi.pay_channel, '')) = v_scope
+            )
+            and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+            and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        )
+      on conflict (pay_batch_candidate_id)
+      do update set
+        target_from_payout_notice = true;
+    end if;
+  end if;
 
-  create temp table if not exists _tmp_mark_sent_events (
+  drop table if exists pg_temp._tmp_mark_sent_events;
+  create temporary table pg_temp._tmp_mark_sent_events (
     candidate_id uuid not null,
+    comm_kind text not null,
     outcome text not null,
     trigger_status text null,
     error_text text null
   ) on commit drop;
 
-  truncate table _tmp_mark_sent_events;
+  if v_has_remittance_result and jsonb_typeof(v_remittance_result->'candidate_results') = 'array' then
+    for v_item in
+      select cr.value
+      from jsonb_array_elements(v_remittance_result->'candidate_results') as cr(value)
+    loop
+      v_item_candidate_id_text := nullif(btrim(coalesce(v_item->>'candidate_id', '')), '');
+      v_item_candidate_id := null;
+      v_item_has_job := lower(btrim(coalesce(v_item->>'has_job', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', 'NO_QUEUEABLE_JOB')));
 
-  if jsonb_typeof(v_results->'queued') = 'array' then
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null and v_item_has_job is false then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'REMITTANCE',
+          'FAILURE',
+          v_item_trigger_status,
+          left(v_item_trigger_status, 1000)
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_remittance = true;
+      end if;
+    end loop;
+  end if;
+
+  if v_has_payout_notice_result and jsonb_typeof(v_payout_notice_result->'candidate_results') = 'array' then
+    for v_item in
+      select cr.value
+      from jsonb_array_elements(v_payout_notice_result->'candidate_results') as cr(value)
+    loop
+      v_item_candidate_id_text := nullif(btrim(coalesce(v_item->>'candidate_id', '')), '');
+      v_item_candidate_id := null;
+      v_item_has_job := lower(btrim(coalesce(v_item->>'has_job', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', 'NO_QUEUEABLE_PAYOUT_NOTICE_JOB')));
+
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null and v_item_has_job is false then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'FAILURE',
+          v_item_trigger_status,
+          left(v_item_trigger_status, 1000)
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_payout_notice = true;
+      end if;
+    end loop;
+  end if;
+
+  if v_has_remittance_result and jsonb_typeof(v_remittance_result->'queued') = 'array' then
     for v_item in
       select q.value
-      from jsonb_array_elements(v_results->'queued') as q(value)
+      from jsonb_array_elements(v_remittance_result->'queued') as q(value)
     loop
       v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', '')));
       v_item_candidate_id_text := nullif(
@@ -5695,44 +6437,56 @@ begin
       end if;
 
       if v_item_candidate_id is not null then
-        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
         select
           tc.candidate_id,
+          'REMITTANCE',
           'SUCCESS',
           v_item_trigger_status,
           null
-        from _tmp_mark_sent_target_candidates tc
-        where tc.candidate_id = v_item_candidate_id;
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_remittance = true;
       elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
-        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
         select distinct
           tc.candidate_id,
+          'REMITTANCE',
           'SUCCESS',
           v_item_trigger_status,
           null
-        from _tmp_mark_sent_target_candidates tc
+        from pg_temp._tmp_mark_sent_target_candidates tc
         join public.pay_batch_candidates pbc
           on pbc.id = tc.pay_batch_candidate_id
         join public.pay_batch_items pbi
           on pbi.pay_batch_candidate_id = pbc.id
         where pbc.pay_batch_id = p_pay_batch_id
+          and tc.target_from_remittance = true
           and pbi.item_type <> 'DEBT_CREATED'
           and coalesce(pbi.is_voided, false) = false
           and (
             v_scope = 'ALL'
             or upper(coalesce(pbi.pay_channel, '')) = v_scope
           )
-          and pbi.umbrella_id = v_item_umbrella_id;
+          and pbi.umbrella_id = v_item_umbrella_id
+          and not (
+            pbi.finance_case_id is not null
+            and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+            and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          );
       else
-        v_unmatched_queued_count := v_unmatched_queued_count + 1;
+        v_remittance_unmatched_queued_count := v_remittance_unmatched_queued_count + 1;
       end if;
     end loop;
   end if;
 
-  if jsonb_typeof(v_results->'skipped') = 'array' then
+  if v_has_remittance_result and jsonb_typeof(v_remittance_result->'skipped') = 'array' then
     for v_item in
       select s.value
-      from jsonb_array_elements(v_results->'skipped') as s(value)
+      from jsonb_array_elements(v_remittance_result->'skipped') as s(value)
     loop
       v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', '')));
       v_item_candidate_id_text := nullif(
@@ -5775,140 +6529,677 @@ begin
       end if;
 
       if v_item_candidate_id is not null then
-        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
         select
           tc.candidate_id,
+          'REMITTANCE',
           'FAILURE',
           v_item_trigger_status,
           v_item_error_text
-        from _tmp_mark_sent_target_candidates tc
-        where tc.candidate_id = v_item_candidate_id;
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_remittance = true;
       elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
-        insert into _tmp_mark_sent_events(candidate_id, outcome, trigger_status, error_text)
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
         select distinct
           tc.candidate_id,
+          'REMITTANCE',
           'FAILURE',
           v_item_trigger_status,
           v_item_error_text
-        from _tmp_mark_sent_target_candidates tc
+        from pg_temp._tmp_mark_sent_target_candidates tc
         join public.pay_batch_candidates pbc
           on pbc.id = tc.pay_batch_candidate_id
         join public.pay_batch_items pbi
           on pbi.pay_batch_candidate_id = pbc.id
         where pbc.pay_batch_id = p_pay_batch_id
+          and tc.target_from_remittance = true
           and pbi.item_type <> 'DEBT_CREATED'
           and coalesce(pbi.is_voided, false) = false
           and (
             v_scope = 'ALL'
             or upper(coalesce(pbi.pay_channel, '')) = v_scope
           )
-          and pbi.umbrella_id = v_item_umbrella_id;
+          and pbi.umbrella_id = v_item_umbrella_id
+          and not (
+            pbi.finance_case_id is not null
+            and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+            and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          );
       else
-        v_unmatched_skipped_count := v_unmatched_skipped_count + 1;
+        v_remittance_unmatched_skipped_count := v_remittance_unmatched_skipped_count + 1;
       end if;
     end loop;
   end if;
 
-  create temp table if not exists _tmp_mark_sent_agg (
+  if v_has_payout_notice_result and jsonb_typeof(v_payout_notice_result->'queued') = 'array' then
+    for v_item in
+      select q.value
+      from jsonb_array_elements(v_payout_notice_result->'queued') as q(value)
+    loop
+      v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', 'CANDIDATE')));
+      v_item_candidate_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'candidate_id',
+            case when v_item_payee_kind = 'CANDIDATE' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_umbrella_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'umbrella_id',
+            case when v_item_payee_kind = 'UMBRELLA' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_candidate_id := null;
+      v_item_umbrella_id := null;
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', 'QUEUED_TO_MAIL_OUTBOX')));
+
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_umbrella_id_text is not null then
+        begin
+          v_item_umbrella_id := v_item_umbrella_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_umbrella_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'SUCCESS',
+          v_item_trigger_status,
+          null
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_payout_notice = true;
+      elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select distinct
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'SUCCESS',
+          v_item_trigger_status,
+          null
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        join public.pay_batch_candidates pbc
+          on pbc.id = tc.pay_batch_candidate_id
+        join public.pay_batch_items pbi
+          on pbi.pay_batch_candidate_id = pbc.id
+        where pbc.pay_batch_id = p_pay_batch_id
+          and tc.target_from_payout_notice = true
+          and coalesce(pbi.is_voided, false) = false
+          and pbi.finance_case_id is not null
+          and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+          and (
+            v_scope = 'ALL'
+            or upper(coalesce(pbi.pay_channel, '')) = v_scope
+          )
+          and pbi.umbrella_id = v_item_umbrella_id
+          and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+          and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      else
+        v_payout_notice_unmatched_queued_count := v_payout_notice_unmatched_queued_count + 1;
+      end if;
+    end loop;
+  end if;
+
+  if v_has_payout_notice_result and jsonb_typeof(v_payout_notice_result->'skipped') = 'array' then
+    for v_item in
+      select s.value
+      from jsonb_array_elements(v_payout_notice_result->'skipped') as s(value)
+    loop
+      v_item_payee_kind := upper(btrim(coalesce(v_item->>'payee_entity_kind', 'CANDIDATE')));
+      v_item_candidate_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'candidate_id',
+            case when v_item_payee_kind = 'CANDIDATE' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_umbrella_id_text := nullif(
+        btrim(
+          coalesce(
+            v_item->>'umbrella_id',
+            case when v_item_payee_kind = 'UMBRELLA' then v_item->>'payee_entity_id' else null end
+          )
+        ),
+        ''
+      );
+      v_item_candidate_id := null;
+      v_item_umbrella_id := null;
+      v_item_trigger_status := upper(btrim(coalesce(v_item->>'trigger_status', v_item->>'reason', 'SEND_SKIPPED')));
+      v_item_error_text := left(coalesce(nullif(btrim(coalesce(v_item->>'error', '')), ''), nullif(btrim(coalesce(v_item->>'reason', '')), ''), 'SEND_SKIPPED'), 1000);
+
+      if v_item_candidate_id_text is not null then
+        begin
+          v_item_candidate_id := v_item_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_candidate_id := null;
+        end;
+      end if;
+
+      if v_item_umbrella_id_text is not null then
+        begin
+          v_item_umbrella_id := v_item_umbrella_id_text::uuid;
+        exception when invalid_text_representation then
+          v_item_umbrella_id := null;
+        end;
+      end if;
+
+      if v_item_candidate_id is not null then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'FAILURE',
+          v_item_trigger_status,
+          v_item_error_text
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        where tc.candidate_id = v_item_candidate_id
+          and tc.target_from_payout_notice = true;
+      elsif v_item_payee_kind = 'UMBRELLA' and v_item_umbrella_id is not null then
+        insert into pg_temp._tmp_mark_sent_events(candidate_id, comm_kind, outcome, trigger_status, error_text)
+        select distinct
+          tc.candidate_id,
+          'PAYOUT_NOTICE',
+          'FAILURE',
+          v_item_trigger_status,
+          v_item_error_text
+        from pg_temp._tmp_mark_sent_target_candidates tc
+        join public.pay_batch_candidates pbc
+          on pbc.id = tc.pay_batch_candidate_id
+        join public.pay_batch_items pbi
+          on pbi.pay_batch_candidate_id = pbc.id
+        where pbc.pay_batch_id = p_pay_batch_id
+          and tc.target_from_payout_notice = true
+          and coalesce(pbi.is_voided, false) = false
+          and pbi.finance_case_id is not null
+          and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+          and (
+            v_scope = 'ALL'
+            or upper(coalesce(pbi.pay_channel, '')) = v_scope
+          )
+          and pbi.umbrella_id = v_item_umbrella_id
+          and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+          and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+      else
+        v_payout_notice_unmatched_skipped_count := v_payout_notice_unmatched_skipped_count + 1;
+      end if;
+    end loop;
+  end if;
+
+  drop table if exists pg_temp._tmp_mark_sent_agg;
+  create temporary table pg_temp._tmp_mark_sent_agg (
     pay_batch_candidate_id uuid primary key,
     candidate_id uuid not null,
+    target_from_remittance boolean not null,
+    target_from_payout_notice boolean not null,
     has_success boolean not null,
+    has_success_remittance boolean not null,
+    has_success_payout_notice boolean not null,
     success_trigger_status text null,
     failure_trigger_status text null,
-    failure_error text null
+    failure_error text null,
+    remittance_success_trigger_status text null,
+    payout_notice_success_trigger_status text null,
+    remittance_failure_trigger_status text null,
+    payout_notice_failure_trigger_status text null,
+    remittance_failure_error text null,
+    payout_notice_failure_error text null
   ) on commit drop;
 
-  truncate table _tmp_mark_sent_agg;
-
-  insert into _tmp_mark_sent_agg(
+  insert into pg_temp._tmp_mark_sent_agg(
     pay_batch_candidate_id,
     candidate_id,
+    target_from_remittance,
+    target_from_payout_notice,
     has_success,
+    has_success_remittance,
+    has_success_payout_notice,
     success_trigger_status,
     failure_trigger_status,
-    failure_error
+    failure_error,
+    remittance_success_trigger_status,
+    payout_notice_success_trigger_status,
+    remittance_failure_trigger_status,
+    payout_notice_failure_trigger_status,
+    remittance_failure_error,
+    payout_notice_failure_error
   )
   select
     tc.pay_batch_candidate_id,
     tc.candidate_id,
-    exists (
-      select 1
-      from _tmp_mark_sent_events evs
-      where evs.candidate_id = tc.candidate_id
-        and evs.outcome = 'SUCCESS'
+    tc.target_from_remittance,
+    tc.target_from_payout_notice,
+    (
+      exists (
+        select 1
+        from pg_temp._tmp_mark_sent_events evs
+        where evs.candidate_id = tc.candidate_id
+          and evs.outcome = 'SUCCESS'
+      )
     ) as has_success,
-    coalesce(
-      (
-        select evs2.trigger_status
-        from _tmp_mark_sent_events evs2
-        where evs2.candidate_id = tc.candidate_id
-          and evs2.outcome = 'SUCCESS'
-          and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
-        order by evs2.trigger_status
-        limit 1
-      ),
-      'QUEUED_TO_MAIL_OUTBOX'
-    ) as success_trigger_status,
+    (
+      exists (
+        select 1
+        from pg_temp._tmp_mark_sent_events evs
+        where evs.candidate_id = tc.candidate_id
+          and evs.comm_kind = 'REMITTANCE'
+          and evs.outcome = 'SUCCESS'
+      )
+    ) as has_success_remittance,
+    (
+      exists (
+        select 1
+        from pg_temp._tmp_mark_sent_events evs
+        where evs.candidate_id = tc.candidate_id
+          and evs.comm_kind = 'PAYOUT_NOTICE'
+          and evs.outcome = 'SUCCESS'
+      )
+    ) as has_success_payout_notice,
+    case
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.comm_kind = 'REMITTANCE'
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+       and (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.comm_kind = 'PAYOUT_NOTICE'
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then 'REMITTANCE_AND_PAYOUT_NOTICE_QUEUED'
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.comm_kind = 'REMITTANCE'
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then coalesce(
+          (
+            select evs2.trigger_status
+            from pg_temp._tmp_mark_sent_events evs2
+            where evs2.candidate_id = tc.candidate_id
+              and evs2.comm_kind = 'REMITTANCE'
+              and evs2.outcome = 'SUCCESS'
+              and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+            order by evs2.trigger_status
+            limit 1
+          ),
+          'QUEUED_TO_MAIL_OUTBOX'
+        )
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.comm_kind = 'PAYOUT_NOTICE'
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then coalesce(
+          (
+            select evs2.trigger_status
+            from pg_temp._tmp_mark_sent_events evs2
+            where evs2.candidate_id = tc.candidate_id
+              and evs2.comm_kind = 'PAYOUT_NOTICE'
+              and evs2.outcome = 'SUCCESS'
+              and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+            order by evs2.trigger_status
+            limit 1
+          ),
+          'QUEUED_TO_MAIL_OUTBOX'
+        )
+      else null
+    end as success_trigger_status,
+    case
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then null
+      when tc.target_from_remittance and tc.target_from_payout_notice then
+        case
+          when coalesce(
+            (
+              select evf.trigger_status
+              from pg_temp._tmp_mark_sent_events evf
+              where evf.candidate_id = tc.candidate_id
+                and evf.comm_kind = 'REMITTANCE'
+                and evf.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+              order by evf.trigger_status
+              limit 1
+            ),
+            'NO_RESULT_RECORDED'
+          ) <> 'NO_RESULT_RECORDED'
+           and coalesce(
+            (
+              select evf.trigger_status
+              from pg_temp._tmp_mark_sent_events evf
+              where evf.candidate_id = tc.candidate_id
+                and evf.comm_kind = 'PAYOUT_NOTICE'
+                and evf.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+              order by evf.trigger_status
+              limit 1
+            ),
+            'NO_RESULT_RECORDED'
+          ) <> 'NO_RESULT_RECORDED'
+            then 'REMITTANCE_AND_PAYOUT_NOTICE_FAILED'
+          when coalesce(
+            (
+              select evf.trigger_status
+              from pg_temp._tmp_mark_sent_events evf
+              where evf.candidate_id = tc.candidate_id
+                and evf.comm_kind = 'REMITTANCE'
+                and evf.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+              order by evf.trigger_status
+              limit 1
+            ),
+            'NO_RESULT_RECORDED'
+          ) <> 'NO_RESULT_RECORDED'
+            then coalesce(
+              (
+                select evf.trigger_status
+                from pg_temp._tmp_mark_sent_events evf
+                where evf.candidate_id = tc.candidate_id
+                  and evf.comm_kind = 'REMITTANCE'
+                  and evf.outcome = 'FAILURE'
+                  and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+                order by evf.trigger_status
+                limit 1
+              ),
+              'NO_RESULT_RECORDED'
+            )
+          when coalesce(
+            (
+              select evf.trigger_status
+              from pg_temp._tmp_mark_sent_events evf
+              where evf.candidate_id = tc.candidate_id
+                and evf.comm_kind = 'PAYOUT_NOTICE'
+                and evf.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+              order by evf.trigger_status
+              limit 1
+            ),
+            'NO_RESULT_RECORDED'
+          ) <> 'NO_RESULT_RECORDED'
+            then coalesce(
+              (
+                select evf.trigger_status
+                from pg_temp._tmp_mark_sent_events evf
+                where evf.candidate_id = tc.candidate_id
+                  and evf.comm_kind = 'PAYOUT_NOTICE'
+                  and evf.outcome = 'FAILURE'
+                  and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+                order by evf.trigger_status
+                limit 1
+              ),
+              'NO_RESULT_RECORDED'
+            )
+          else 'NO_RESULT_RECORDED'
+        end
+      when tc.target_from_remittance then
+        coalesce(
+          (
+            select evf.trigger_status
+            from pg_temp._tmp_mark_sent_events evf
+            where evf.candidate_id = tc.candidate_id
+              and evf.comm_kind = 'REMITTANCE'
+              and evf.outcome = 'FAILURE'
+              and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+            order by evf.trigger_status
+            limit 1
+          ),
+          'NO_RESULT_RECORDED'
+        )
+      when tc.target_from_payout_notice then
+        coalesce(
+          (
+            select evf.trigger_status
+            from pg_temp._tmp_mark_sent_events evf
+            where evf.candidate_id = tc.candidate_id
+              and evf.comm_kind = 'PAYOUT_NOTICE'
+              and evf.outcome = 'FAILURE'
+              and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+            order by evf.trigger_status
+            limit 1
+          ),
+          'NO_RESULT_RECORDED'
+        )
+      else 'NO_RESULT_RECORDED'
+    end as failure_trigger_status,
+    case
+      when (
+        exists (
+          select 1
+          from pg_temp._tmp_mark_sent_events evs
+          where evs.candidate_id = tc.candidate_id
+            and evs.outcome = 'SUCCESS'
+        )
+      )
+        then null
+      else left(
+        coalesce(
+          (
+            select string_agg(errs.err_txt, ' | ')
+            from (
+              select distinct nullif(btrim(coalesce(evf2.error_text, '')), '') as err_txt
+              from pg_temp._tmp_mark_sent_events evf2
+              where evf2.candidate_id = tc.candidate_id
+                and evf2.outcome = 'FAILURE'
+                and nullif(btrim(coalesce(evf2.error_text, '')), '') is not null
+              order by err_txt
+            ) errs
+          ),
+          'NO_RESULT_RECORDED'
+        ),
+        1000
+      )
+    end as failure_error,
+    (
+      select evs2.trigger_status
+      from pg_temp._tmp_mark_sent_events evs2
+      where evs2.candidate_id = tc.candidate_id
+        and evs2.comm_kind = 'REMITTANCE'
+        and evs2.outcome = 'SUCCESS'
+        and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+      order by evs2.trigger_status
+      limit 1
+    ) as remittance_success_trigger_status,
+    (
+      select evs2.trigger_status
+      from pg_temp._tmp_mark_sent_events evs2
+      where evs2.candidate_id = tc.candidate_id
+        and evs2.comm_kind = 'PAYOUT_NOTICE'
+        and evs2.outcome = 'SUCCESS'
+        and nullif(btrim(coalesce(evs2.trigger_status, '')), '') is not null
+      order by evs2.trigger_status
+      limit 1
+    ) as payout_notice_success_trigger_status,
     coalesce(
       (
         select evf.trigger_status
-        from _tmp_mark_sent_events evf
+        from pg_temp._tmp_mark_sent_events evf
         where evf.candidate_id = tc.candidate_id
+          and evf.comm_kind = 'REMITTANCE'
           and evf.outcome = 'FAILURE'
           and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
         order by evf.trigger_status
         limit 1
       ),
-      'NO_RESULT_RECORDED'
-    ) as failure_trigger_status,
+      case when tc.target_from_remittance then 'NO_RESULT_RECORDED' else null end
+    ) as remittance_failure_trigger_status,
+    coalesce(
+      (
+        select evf.trigger_status
+        from pg_temp._tmp_mark_sent_events evf
+        where evf.candidate_id = tc.candidate_id
+          and evf.comm_kind = 'PAYOUT_NOTICE'
+          and evf.outcome = 'FAILURE'
+          and nullif(btrim(coalesce(evf.trigger_status, '')), '') is not null
+        order by evf.trigger_status
+        limit 1
+      ),
+      case when tc.target_from_payout_notice then 'NO_RESULT_RECORDED' else null end
+    ) as payout_notice_failure_trigger_status,
     left(
       coalesce(
         (
-          select string_agg(err_txt, ' | ')
+          select string_agg(errs.err_txt, ' | ')
           from (
             select distinct nullif(btrim(coalesce(evf2.error_text, '')), '') as err_txt
-            from _tmp_mark_sent_events evf2
+            from pg_temp._tmp_mark_sent_events evf2
             where evf2.candidate_id = tc.candidate_id
+              and evf2.comm_kind = 'REMITTANCE'
               and evf2.outcome = 'FAILURE'
               and nullif(btrim(coalesce(evf2.error_text, '')), '') is not null
             order by err_txt
           ) errs
         ),
-        'NO_RESULT_RECORDED'
+        case when tc.target_from_remittance then 'NO_RESULT_RECORDED' else null end
       ),
       1000
-    ) as failure_error
-  from _tmp_mark_sent_target_candidates tc;
+    ) as remittance_failure_error,
+    left(
+      coalesce(
+        (
+          select string_agg(errs.err_txt, ' | ')
+          from (
+            select distinct nullif(btrim(coalesce(evf2.error_text, '')), '') as err_txt
+            from pg_temp._tmp_mark_sent_events evf2
+            where evf2.candidate_id = tc.candidate_id
+              and evf2.comm_kind = 'PAYOUT_NOTICE'
+              and evf2.outcome = 'FAILURE'
+              and nullif(btrim(coalesce(evf2.error_text, '')), '') is not null
+            order by err_txt
+          ) errs
+        ),
+        case when tc.target_from_payout_notice then 'NO_RESULT_RECORDED' else null end
+      ),
+      1000
+    ) as payout_notice_failure_error
+  from pg_temp._tmp_mark_sent_target_candidates tc;
 
   update public.pay_batch_candidates pbc
   set
     remittance_sent_at_utc = coalesce(pbc.remittance_sent_at_utc, v_now),
     remittance_sent_by_user_id = coalesce(pbc.remittance_sent_by_user_id, p_actor_user_id),
-    remittance_trigger_status = agg.success_trigger_status,
+    remittance_trigger_status = agg.remittance_success_trigger_status,
     last_remittance_error = null,
     updated_at = v_now
-  from _tmp_mark_sent_agg agg
+  from pg_temp._tmp_mark_sent_agg agg
   where pbc.id = agg.pay_batch_candidate_id
-    and agg.has_success = true;
-
-  get diagnostics v_success_count = row_count;
+    and agg.target_from_remittance = true
+    and agg.has_success_remittance = true;
 
   update public.pay_batch_candidates pbc
   set
-    remittance_trigger_status = agg.failure_trigger_status,
-    last_remittance_error = agg.failure_error,
+    remittance_trigger_status = agg.remittance_failure_trigger_status,
+    last_remittance_error = agg.remittance_failure_error,
     updated_at = v_now
-  from _tmp_mark_sent_agg agg
+  from pg_temp._tmp_mark_sent_agg agg
   where pbc.id = agg.pay_batch_candidate_id
-    and agg.has_success = false;
+    and agg.target_from_remittance = true
+    and agg.has_success_remittance = false;
 
-  get diagnostics v_failure_count = row_count;
+  select count(*)::int
+  into v_success_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.has_success = true;
+
+  select count(*)::int
+  into v_failure_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.has_success = false
+    and (agg.target_from_remittance = true or agg.target_from_payout_notice = true);
 
   select count(*)::int
   into v_no_result_count
-  from _tmp_mark_sent_agg agg
+  from pg_temp._tmp_mark_sent_agg agg
   where agg.has_success = false
     and agg.failure_trigger_status = 'NO_RESULT_RECORDED';
+
+  select count(*)::int
+  into v_remittance_success_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_remittance = true
+    and agg.has_success_remittance = true;
+
+  select count(*)::int
+  into v_remittance_failure_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_remittance = true
+    and agg.has_success_remittance = false
+    and agg.remittance_failure_trigger_status <> 'NO_RESULT_RECORDED';
+
+  select count(*)::int
+  into v_remittance_no_result_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_remittance = true
+    and agg.has_success_remittance = false
+    and agg.remittance_failure_trigger_status = 'NO_RESULT_RECORDED';
+
+  select count(*)::int
+  into v_payout_notice_success_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_payout_notice = true
+    and agg.has_success_payout_notice = true;
+
+  select count(*)::int
+  into v_payout_notice_failure_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_payout_notice = true
+    and agg.has_success_payout_notice = false
+    and agg.payout_notice_failure_trigger_status <> 'NO_RESULT_RECORDED';
+
+  select count(*)::int
+  into v_payout_notice_no_result_count
+  from pg_temp._tmp_mark_sent_agg agg
+  where agg.target_from_payout_notice = true
+    and agg.has_success_payout_notice = false
+    and agg.payout_notice_failure_trigger_status = 'NO_RESULT_RECORDED';
 
   insert into public.audit_events(
     actor_user_id,
@@ -5923,20 +7214,37 @@ begin
     p_actor_user_id,
     'pay_batch',
     p_pay_batch_id::text,
-    'PAY_REMITTANCE_SENT',
+    v_audit_action,
     null,
     jsonb_build_object(
       'pay_batch_id', p_pay_batch_id::text,
       'scope', v_scope,
       'message_kind', v_message_kind,
+      'communication_mode', v_communication_mode,
       'success_count', v_success_count,
       'failure_count', v_failure_count,
       'no_result_count', v_no_result_count,
-      'unmatched_queued_count', v_unmatched_queued_count,
-      'unmatched_skipped_count', v_unmatched_skipped_count,
+      'remittance_result', jsonb_build_object(
+        'included', v_has_remittance_result,
+        'success_count', v_remittance_success_count,
+        'failure_count', v_remittance_failure_count,
+        'no_result_count', v_remittance_no_result_count,
+        'unmatched_queued_count', v_remittance_unmatched_queued_count,
+        'unmatched_skipped_count', v_remittance_unmatched_skipped_count,
+        'results', case when v_has_remittance_result then coalesce(v_remittance_result, '{}'::jsonb) else null end
+      ),
+      'payout_notice_result', jsonb_build_object(
+        'included', v_has_payout_notice_result,
+        'success_count', v_payout_notice_success_count,
+        'failure_count', v_payout_notice_failure_count,
+        'no_result_count', v_payout_notice_no_result_count,
+        'unmatched_queued_count', v_payout_notice_unmatched_queued_count,
+        'unmatched_skipped_count', v_payout_notice_unmatched_skipped_count,
+        'results', case when v_has_payout_notice_result then coalesce(v_payout_notice_result, '{}'::jsonb) else null end
+      ),
       'results', coalesce(v_results, '{}'::jsonb)
     ),
-    'remittance_mark_sent'
+    v_audit_reason
   )
   returning id into v_audit_id;
 
@@ -5945,11 +7253,26 @@ begin
     'pay_batch_id', p_pay_batch_id::text,
     'scope', v_scope,
     'message_kind', v_message_kind,
+    'communication_mode', v_communication_mode,
     'success_count', v_success_count,
     'failure_count', v_failure_count,
     'no_result_count', v_no_result_count,
-    'unmatched_queued_count', v_unmatched_queued_count,
-    'unmatched_skipped_count', v_unmatched_skipped_count,
+    'remittance_result', jsonb_build_object(
+      'included', v_has_remittance_result,
+      'success_count', v_remittance_success_count,
+      'failure_count', v_remittance_failure_count,
+      'no_result_count', v_remittance_no_result_count,
+      'unmatched_queued_count', v_remittance_unmatched_queued_count,
+      'unmatched_skipped_count', v_remittance_unmatched_skipped_count
+    ),
+    'payout_notice_result', jsonb_build_object(
+      'included', v_has_payout_notice_result,
+      'success_count', v_payout_notice_success_count,
+      'failure_count', v_payout_notice_failure_count,
+      'no_result_count', v_payout_notice_no_result_count,
+      'unmatched_queued_count', v_payout_notice_unmatched_queued_count,
+      'unmatched_skipped_count', v_payout_notice_unmatched_skipped_count
+    ),
     'audit_event_id', v_audit_id::text
   );
 end;
@@ -10058,6 +11381,10 @@ end;
 $function$;
 
 
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -11773,7 +13100,11 @@ begin
 
   ---------------------------------------------------------------------------
   -- PAYE_NET_CHANGED: diff[] must include candidate net deltas (and net/awaiting drift)
-  -- Only PAYMENT_ADVANCE repayment remains a net-side deduction.
+  -- PAYE net-side effects now include:
+  --   * LOAN_PAYOUT (NET_ADD)
+  --   * MANUAL_CREDIT_PAYOUT when non-taxable (NET_ADD)
+  --   * MANUAL_DEBT_RECOVERY / LOAN_REPAYMENT when non-taxable (NET_DEDUCT)
+  -- Taxable manual adjustments remain gross-side and must not be counted here.
   ---------------------------------------------------------------------------
   if v_scope = 'PAYE' and coalesce(v_batch_kind_fixed,'') <> 'LOANS' then
     insert into pg_temp.tmp_fresh_paye_net_diffs (
@@ -11790,8 +13121,7 @@ begin
         pbc.id as pay_batch_candidate_id,
         pbc.candidate_id,
         coalesce(pbc.awaiting_net_amount,false) as awaiting_net_amount,
-        round(coalesce(pbc.net_bank_amount,0),2)::numeric(12,2) as net_bank_amount_ex,
-        round(coalesce(pbc.loan_repayment_taken,0),2)::numeric(12,2) as loan_repayment_taken_ex
+        round(coalesce(pbc.net_bank_amount,0),2)::numeric(12,2) as net_bank_amount_ex
       from public.pay_batch_candidates pbc
       where pbc.pay_batch_id = p_pay_batch_id
     ),
@@ -11803,35 +13133,70 @@ begin
       left join public.pay_batch_paye_net_inputs pni
         on pni.pay_batch_candidate_id = c.pay_batch_candidate_id
     ),
-    net_ded_present as (
+    net_side_effects as (
       select
         c.pay_batch_candidate_id,
+        round(
+          coalesce(sum(
+            case
+              when pbi.is_voided = false
+               and upper(coalesce(pbi.paye_treatment,'')) = 'NET_ADD'
+                then coalesce(pbi.amount_ex_vat, 0)
+              else 0
+            end
+          ), 0),
+          2
+        )::numeric(12,2) as net_additions_ex,
+        round(
+          coalesce(sum(
+            case
+              when pbi.is_voided = false
+               and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT'
+                then abs(coalesce(pbi.amount_ex_vat, 0))
+              else 0
+            end
+          ), 0),
+          2
+        )::numeric(12,2) as net_deductions_ex,
         exists(
           select 1
-          from public.pay_batch_items pbi
-          where pbi.pay_batch_candidate_id = c.pay_batch_candidate_id
-            and pbi.is_voided = false
-            and pbi.item_type = 'LOAN_REPAYMENT'
-        ) as has_net_deductions
+          from public.pay_batch_items pbi_chk
+          where pbi_chk.pay_batch_candidate_id = c.pay_batch_candidate_id
+            and pbi_chk.is_voided = false
+            and upper(coalesce(pbi_chk.paye_treatment,'')) in ('NET_ADD','NET_DEDUCT')
+        ) as has_net_side_items
       from cand c
+      left join public.pay_batch_items pbi
+        on pbi.pay_batch_candidate_id = c.pay_batch_candidate_id
+      group by c.pay_batch_candidate_id
     )
     select
       c.candidate_id,
       'PAYE_NET' as key_type,
       ('candidate:' || c.candidate_id::text) as key_value,
       ni.net_amount::numeric(12,2) as expected_ex,
-      round(c.net_bank_amount_ex + c.loan_repayment_taken_ex, 2)::numeric(12,2) as actual_ex,
+      round(
+        c.net_bank_amount_ex
+        - coalesce(nse.net_additions_ex, 0)
+        + coalesce(nse.net_deductions_ex, 0),
+        2
+      )::numeric(12,2) as actual_ex,
       4 as ord
     from cand c
     left join net_inp ni
       on ni.pay_batch_candidate_id = c.pay_batch_candidate_id
-    join net_ded_present ndp
-      on ndp.pay_batch_candidate_id = c.pay_batch_candidate_id
+    join net_side_effects nse
+      on nse.pay_batch_candidate_id = c.pay_batch_candidate_id
     where c.awaiting_net_amount <> (ni.net_amount is null)
-       or ((ni.net_amount is null) and ndp.has_net_deductions = true)
+       or ((ni.net_amount is null) and nse.has_net_side_items = true)
        or (
             ni.net_amount is not null
-        and round(ni.net_amount,2) <> round(c.net_bank_amount_ex + c.loan_repayment_taken_ex, 2)
+        and round(ni.net_amount,2) <> round(
+              c.net_bank_amount_ex
+              - coalesce(nse.net_additions_ex, 0)
+              + coalesce(nse.net_deductions_ex, 0),
+              2
+            )
        );
 
     select count(*)::int
@@ -12038,12 +13403,6 @@ end;
 $function$;
 
 
-
-
-
-
-
-
 create or replace function public.pay_batch_export_csv_rows(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -12214,8 +13573,13 @@ begin
       pbi.timesheet_id as timesheet_id,
       pbi.segment_key as segment_key,
       pbi.source_ref as source_ref,
+      pbi.description as item_description,
       pbi.pay_channel as pay_channel,
       pbi.repayment_week_start as repayment_week_start,
+      pbi.finance_case_id as finance_case_id,
+      pbi.finance_component_id as finance_component_id,
+      pbi.paye_treatment as paye_treatment,
+      pbi.payout_instruction_snapshot_json as payout_instruction_snapshot_json,
 
       pbib.line_kind as line_kind,
       pbib.bucket_code as bucket_code,
@@ -12233,7 +13597,37 @@ begin
 
       nl.paye_net_amount as paye_net_amount,
 
-      segd.work_date as seg_work_date
+      segd.work_date as seg_work_date,
+
+      vfcr.case_type as finance_case_type,
+      vfcr.taxability as finance_taxability,
+      vfcr.routing_kind as finance_routing_kind,
+      vfcr.management_group as finance_management_group,
+      vfcr.lifecycle_status_display as finance_lifecycle_status_display,
+      vfcr.status as finance_status,
+      vfcr.payout_status as finance_payout_status,
+      vfcr.adjustment_comment as finance_adjustment_comment,
+      vfcr.notes as finance_notes,
+      vfcr.is_candidate_directed_oneoff_payout as is_candidate_directed_oneoff_payout,
+      vfcr.appears_on_umbrella_remittance as appears_on_umbrella_remittance,
+      vfcr.generates_candidate_payment_advice as generates_candidate_payment_advice,
+
+      case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_created_by_user_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_created_by_user_id','')), ''))::uuid
+        else null::uuid
+      end as bank_details_created_by_user_id,
+
+      case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_updated_by_user_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_updated_by_user_id','')), ''))::uuid
+        else null::uuid
+      end as bank_details_updated_by_user_id,
+
+      tuc.display_name as bank_details_created_by_display_name,
+      tuc.email as bank_details_created_by_email,
+      tuu.display_name as bank_details_updated_by_display_name,
+      tuu.email as bank_details_updated_by_email
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
@@ -12274,6 +13668,20 @@ begin
         and nullif(btrim(coalesce(seg->>'date','')),'') ~ '^\d{4}-\d{2}-\d{2}$'
       limit 1
     ) segd on true
+    left join public.v_finance_cases_register vfcr
+      on vfcr.finance_case_id = pbi.finance_case_id
+    left join public.tms_users tuc
+      on tuc.id = case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_created_by_user_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_created_by_user_id','')), ''))::uuid
+        else null::uuid
+      end
+    left join public.tms_users tuu
+      on tuu.id = case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_updated_by_user_id','')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_updated_by_user_id','')), ''))::uuid
+        else null::uuid
+      end
     where pbi.item_type <> 'DEBT_CREATED'
       and pbi.is_voided = false
   ),
@@ -12287,7 +13695,7 @@ begin
       ) as sort_surname,
 
       case
-        when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 3
+        when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then 3
         when b.timesheet_id is null then 2
         else 1
       end as sort_group,
@@ -12299,6 +13707,9 @@ begin
       case
         when b.item_type = 'OVERPAYMENT_RECOVERY' then 900
         when b.item_type = 'LOAN_REPAYMENT' then 910
+        when b.item_type = 'MANUAL_DEBT_RECOVERY' then 915
+        when b.item_type = 'LOAN_PAYOUT' then 920
+        when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 930
         else case upper(coalesce(b.line_kind,''))
           when 'TS_BUCKET' then 100
           when 'ADDITIONAL_UNIT' then 200
@@ -12317,94 +13728,181 @@ begin
       case
         when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
         when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+        when b.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+        when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
+        when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
         else upper(coalesce(b.line_kind,''))
       end as line_kind,
 
-      jsonb_build_object(
-        'candidate_id', b.candidate_id::text,
-        'candidate_tms_ref', coalesce(
-          nullif(btrim(coalesce(b.candidate_tms_ref_snap,'')), ''),
-          nullif(btrim(coalesce(b.cand_tms_ref_live,'')), ''),
-          null
-        ),
-        'candidate_first_name', nullif(btrim(coalesce(b.cand_first_name,'')), ''),
-        'candidate_last_name', nullif(btrim(coalesce(b.cand_last_name,'')), ''),
-        'candidate_display_name', nullif(btrim(coalesce(b.candidate_display_name_snap,'')), ''),
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'candidate_id', b.candidate_id::text,
+          'candidate_tms_ref', coalesce(
+            nullif(btrim(coalesce(b.candidate_tms_ref_snap,'')), ''),
+            nullif(btrim(coalesce(b.cand_tms_ref_live,'')), ''),
+            null
+          ),
+          'candidate_first_name', nullif(btrim(coalesce(b.cand_first_name,'')), ''),
+          'candidate_last_name', nullif(btrim(coalesce(b.cand_last_name,'')), ''),
+          'candidate_display_name', nullif(btrim(coalesce(b.candidate_display_name_snap,'')), ''),
 
-        'client_id', case when b.client_id is null then null else b.client_id::text end,
-        'client_name', b.client_name,
+          'client_id', case when b.client_id is null then null else b.client_id::text end,
+          'client_name', b.client_name,
 
-        'timesheet_id', case when b.timesheet_id is null then null else b.timesheet_id::text end,
-        'week_ending_date', case when b.week_ending_date is null then null else b.week_ending_date::text end,
-        'work_date', case
-          when b.seg_work_date is not null then b.seg_work_date::text
-          when b.week_ending_date is not null then b.week_ending_date::text
-          when b.repayment_week_start is not null then b.repayment_week_start::text
-          else null
-        end,
-        'reference_number', b.reference_number,
+          'timesheet_id', case when b.timesheet_id is null then null else b.timesheet_id::text end,
+          'week_ending_date', case when b.week_ending_date is null then null else b.week_ending_date::text end,
+          'work_date', case
+            when b.seg_work_date is not null then b.seg_work_date::text
+            when b.week_ending_date is not null then b.week_ending_date::text
+            when b.repayment_week_start is not null then b.repayment_week_start::text
+            else null
+          end,
+          'reference_number', b.reference_number,
 
-        'pay_channel', upper(coalesce(b.pay_channel,'')),
-        'item_type', b.item_type,
+          'pay_channel', upper(coalesce(b.pay_channel,'')),
+          'pay_method', upper(coalesce(b.pay_channel,'')),
+          'item_type', b.item_type,
+          'item_type_label', case
+            when b.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+            when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual credit adjustment payment'
+            when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual debt adjustment deduction'
+            when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual debt adjustment deduction'
+            when b.finance_case_type = 'OVERPAYMENT' and b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+            when b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            else null
+          end,
+          'payment_or_deduction', case
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then 'DEDUCTION'
+            when b.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT') then 'PAYMENT'
+            when coalesce(b.amount_ex_vat, 0) < 0 then 'DEDUCTION'
+            when coalesce(b.amount_ex_vat, 0) > 0 then 'PAYMENT'
+            else 'ZERO'
+          end,
 
-        'line_kind', case
-          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-          when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
-          else b.line_kind
-        end,
-        'line_label', case
-          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
-          when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
-          when nullif(btrim(coalesce(b.unit_name,'')), '') is not null then b.unit_name
-          when nullif(btrim(coalesce(b.line_kind,'')), '') is not null then b.line_kind
-          else b.item_type
-        end,
-        'row_group', case
-          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then 'DEDUCTION'
-          when b.timesheet_id is null then 'NON_TIMESHEET'
-          else 'TIMESHEET'
-        end,
-        'is_non_timesheet_line', (b.timesheet_id is null),
-        'bucket_code', b.bucket_code,
+          'finance_case_id', case when b.finance_case_id is null then null else b.finance_case_id::text end,
+          'finance_case_reference', case when b.finance_case_id is null then null else b.finance_case_id::text end,
+          'finance_component_id', case when b.finance_component_id is null then null else b.finance_component_id::text end,
+          'finance_case_type', case when b.finance_case_type is null then null else b.finance_case_type::text end,
+          'finance_management_group', b.finance_management_group,
+          'lifecycle_status', b.finance_lifecycle_status_display,
+          'finance_status', case when b.finance_status is null then null else b.finance_status::text end,
+          'finance_payout_status', case when b.finance_payout_status is null then null else b.finance_payout_status::text end,
 
-        'unit_name', b.unit_name,
-        'units', b.units,
-        'rate', b.rate,
+          'taxability', coalesce(
+            nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'taxability','')), ''),
+            case when b.finance_taxability is null then null else b.finance_taxability::text end
+          ),
+          'routing_kind', coalesce(
+            nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''),
+            case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end
+          ),
+          'payout_destination', coalesce(
+            nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'destination_label','')), ''),
+            case
+              when coalesce(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''), case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'one-off specified bank account'
+              when coalesce(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''), case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end) = 'UMBRELLA_COMPANY' then 'umbrella company'
+              when upper(coalesce(b.pay_channel,'')) = 'PAYE' then 'normal PAYE route'
+              else null
+            end
+          ),
+          'masked_bank_account', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'masked_bank_account','')), ''),
+          'masked_bank_account_paid_to', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'masked_bank_account','')), ''),
+          'beneficiary_name', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'beneficiary_name','')), ''),
+          'bank_details_hash', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'bank_details_hash','')), ''),
+          'bank_details_note', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'bank_details_note','')), ''),
+          'bank_details_created_by_user_id', case when b.bank_details_created_by_user_id is null then null else b.bank_details_created_by_user_id::text end,
+          'bank_details_created_by', coalesce(
+            nullif(btrim(coalesce(b.bank_details_created_by_display_name,'')), ''),
+            nullif(btrim(coalesce(b.bank_details_created_by_email,'')), ''),
+            case when b.bank_details_created_by_user_id is null then null else b.bank_details_created_by_user_id::text end
+          ),
+          'bank_details_updated_by_user_id', case when b.bank_details_updated_by_user_id is null then null else b.bank_details_updated_by_user_id::text end,
+          'bank_details_updated_by', coalesce(
+            nullif(btrim(coalesce(b.bank_details_updated_by_display_name,'')), ''),
+            nullif(btrim(coalesce(b.bank_details_updated_by_email,'')), ''),
+            case when b.bank_details_updated_by_user_id is null then null else b.bank_details_updated_by_user_id::text end
+          ),
+          'appears_on_umbrella_remittance', coalesce(b.appears_on_umbrella_remittance, false),
+          'generates_candidate_payment_advice', coalesce(b.generates_candidate_payment_advice, false),
+          'is_candidate_directed_oneoff_payout', coalesce(b.is_candidate_directed_oneoff_payout, false),
 
-        'amount_ex_vat', b.amount_ex_vat,
-        'amount_vat', b.amount_vat,
-        'amount_inc_vat', b.amount_inc_vat,
-        'signed_amount_ex_vat', b.amount_ex_vat,
-        'signed_amount_inc_vat', b.amount_inc_vat,
-        'amount_sign', case
-          when coalesce(b.amount_ex_vat, 0) < 0 then 'NEGATIVE'
-          when coalesce(b.amount_ex_vat, 0) > 0 then 'POSITIVE'
-          else 'ZERO'
-        end,
+          'line_kind', case
+            when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+            when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+            when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
+            when b.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+            when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
+            else b.line_kind
+          end,
+          'line_label', case
+            when b.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+            when b.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual credit adjustment payment'
+            when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual debt adjustment deduction'
+            when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual debt adjustment deduction'
+            when b.finance_case_type = 'OVERPAYMENT' and b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            when b.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+            when b.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            when nullif(btrim(coalesce(b.unit_name,'')), '') is not null then b.unit_name
+            when nullif(btrim(coalesce(b.line_kind,'')), '') is not null then b.line_kind
+            else b.item_type
+          end,
+          'row_group', case
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then 'DEDUCTION'
+            when b.timesheet_id is null then 'NON_TIMESHEET'
+            else 'TIMESHEET'
+          end,
+          'is_non_timesheet_line', (b.timesheet_id is null),
+          'bucket_code', b.bucket_code,
 
-        'is_overpayment_recovery', (b.item_type = 'OVERPAYMENT_RECOVERY'),
-        'is_loan_repayment', (b.item_type = 'LOAN_REPAYMENT'),
-        'deduction_kind', case
-          when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-          when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
-          else null
-        end,
-        'deduction_amount_ex_vat', case
-          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_ex_vat,0)),2)
-          else null
-        end,
-        'deduction_amount_inc_vat', case
-          when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT') then round(abs(coalesce(b.amount_inc_vat,0)),2)
-          else null
-        end,
+          'unit_name', b.unit_name,
+          'units', b.units,
+          'rate', b.rate,
 
-        'paye_net_amount', case
-          when upper(coalesce(b.pay_channel,'')) = 'PAYE' then b.paye_net_amount
-          else null
-        end,
+          'amount_ex_vat', b.amount_ex_vat,
+          'amount_vat', b.amount_vat,
+          'amount_inc_vat', b.amount_inc_vat,
+          'signed_amount_ex_vat', b.amount_ex_vat,
+          'signed_amount_inc_vat', b.amount_inc_vat,
+          'amount_sign', case
+            when coalesce(b.amount_ex_vat, 0) < 0 then 'NEGATIVE'
+            when coalesce(b.amount_ex_vat, 0) > 0 then 'POSITIVE'
+            else 'ZERO'
+          end,
 
-        'source_ref', b.source_ref,
-        'repayment_week_start', case when b.repayment_week_start is null then null else b.repayment_week_start::text end
+          'is_overpayment_recovery', (b.item_type = 'OVERPAYMENT_RECOVERY'),
+          'is_loan_repayment', (b.item_type = 'LOAN_REPAYMENT'),
+          'is_manual_debt_recovery', (b.item_type = 'MANUAL_DEBT_RECOVERY'),
+          'deduction_kind', case
+            when b.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
+            when b.finance_case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_ADJUSTMENT'
+            when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+            when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+            else null
+          end,
+          'deduction_amount_ex_vat', case
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(b.amount_ex_vat,0)),2)
+            else null
+          end,
+          'deduction_amount_inc_vat', case
+            when b.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then round(abs(coalesce(b.amount_inc_vat,0)),2)
+            else null
+          end,
+
+          'paye_net_amount', case
+            when upper(coalesce(b.pay_channel,'')) = 'PAYE' then b.paye_net_amount
+            else null
+          end,
+          'paye_treatment', b.paye_treatment,
+
+          'adjustment_comment', b.finance_adjustment_comment,
+          'note', coalesce(b.finance_notes, b.item_description),
+          'comment_or_note', coalesce(b.finance_adjustment_comment, b.finance_notes, b.item_description),
+          'description', b.item_description,
+
+          'source_ref', b.source_ref,
+          'repayment_week_start', case when b.repayment_week_start is null then null else b.repayment_week_start::text end
+        )
       ) as row_json
     from base b
   )
@@ -12503,6 +14001,7 @@ end;
 $$;
 
 
+
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
   p_actor_user_id uuid DEFAULT NULL
@@ -12515,6 +14014,7 @@ AS $$
 DECLARE
   v_out jsonb;
   v_has_tsfin boolean := false;
+  v_today_uk date := (now() AT TIME ZONE 'Europe/London')::date;
 BEGIN
   IF p_timesheet_id IS NULL THEN
     RAISE EXCEPTION 'timesheet_pay_state: timesheet_id is required';
@@ -12524,9 +14024,14 @@ BEGIN
   tf AS (
     SELECT
       tf.timesheet_id,
+      tf.candidate_id,
+      ts.booking_id,
       tf.pay_on_hold,
       tf.invoice_breakdown_json
     FROM public.timesheets_financials tf
+    LEFT JOIN public.timesheets ts
+      ON ts.timesheet_id = tf.timesheet_id
+     AND ts.is_current = true
     WHERE tf.timesheet_id = p_timesheet_id
       AND tf.is_current = true
     LIMIT 1
@@ -12534,6 +14039,8 @@ BEGIN
   tf_norm AS (
     SELECT
       t.timesheet_id,
+      t.candidate_id,
+      t.booking_id,
       COALESCE(t.pay_on_hold, false) AS pay_on_hold,
       CASE
         WHEN t.invoice_breakdown_json IS NOT NULL AND jsonb_typeof(t.invoice_breakdown_json) = 'object'
@@ -12549,27 +14056,49 @@ BEGIN
       AND (jsonb_typeof(tn.invoice_breakdown_json->'segments') = 'array') AS is_segments_mode
     FROM tf_norm tn
   ),
+  segment_components AS (
+    SELECT
+      nullif(btrim(COALESCE(seg.value->>'segment_id','')), '') AS component_id,
+      nullif(btrim(COALESCE(seg.value->>'date','')), '') AS component_date,
+      coalesce(
+        nullif(btrim(COALESCE(seg.value->>'segment_stable_key','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'segment_id','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'segment_key','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'ref_num','')), ''),
+        nullif(btrim(COALESCE(seg.value->>'date','')), '')
+      ) AS component_stable_key,
+      nullif(btrim(COALESCE(seg.value->>'ref_num','')), '') AS component_ref_num,
+      COALESCE(NULLIF(seg.value->>'exclude_from_pay','')::boolean, false) AS is_on_hold
+    FROM tf_norm tn
+    JOIN is_seg isg
+      ON true
+    JOIN LATERAL jsonb_array_elements(COALESCE(tn.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg(value)
+      ON true
+    WHERE isg.is_segments_mode = true
+      AND seg.value IS NOT NULL
+      AND jsonb_typeof(seg.value) = 'object'
+      AND nullif(btrim(COALESCE(seg.value->>'segment_id','')), '') IS NOT NULL
+  ),
   components AS (
     SELECT
-      nullif(btrim(COALESCE(seg->>'segment_id','')), '') AS component_id,
-      nullif(btrim(COALESCE(seg->>'date','')), '') AS component_date,
-      COALESCE(NULLIF(seg->>'exclude_from_pay','')::boolean, false) AS is_on_hold
-    FROM tf_norm tn
-    JOIN is_seg isg ON true
-    JOIN LATERAL jsonb_array_elements(COALESCE(tn.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg ON true
-    WHERE isg.is_segments_mode = true
-      AND seg IS NOT NULL
-      AND jsonb_typeof(seg) = 'object'
-      AND nullif(btrim(COALESCE(seg->>'segment_id','')), '') IS NOT NULL
+      sc.component_id,
+      sc.component_date,
+      sc.component_stable_key,
+      sc.component_ref_num,
+      sc.is_on_hold
+    FROM segment_components sc
 
     UNION ALL
 
     SELECT
       'TOTAL'::text AS component_id,
       NULL::text AS component_date,
+      ('timesheet:' || COALESCE(tn.booking_id, tn.timesheet_id::text))::text AS component_stable_key,
+      NULL::text AS component_ref_num,
       tn.pay_on_hold AS is_on_hold
     FROM tf_norm tn
-    JOIN is_seg isg ON true
+    JOIN is_seg isg
+      ON true
     WHERE isg.is_segments_mode = false
   ),
   active_override AS (
@@ -12607,15 +14136,117 @@ BEGIN
       s.id AS snooze_id,
       s.snooze_until_date,
       s.note
-    FROM public.pay_item_snoozes s
-    WHERE s.timesheet_id = p_timesheet_id
-      AND s.source_ref IS NULL
-      AND s.segment_id IS NULL
-      AND s.cleared_at_utc IS NULL
-      AND upper(COALESCE(s.snooze_kind,'')) = 'TIMESHEET_PAYMENT'
-      AND (s.snooze_until_date IS NULL OR s.snooze_until_date >= current_date)
+    FROM tf_norm tn
+    JOIN public.pay_item_snoozes s
+      ON s.candidate_id = tn.candidate_id
+     AND s.source_ref IS NULL
+     AND s.segment_id IS NULL
+     AND s.segment_stable_key IS NULL
+     AND s.cleared_at_utc IS NULL
+     AND upper(COALESCE(s.snooze_kind,'')) = 'TIMESHEET_PAYMENT'
+     AND (s.snooze_until_date IS NULL OR s.snooze_until_date >= v_today_uk)
+     AND (
+       (tn.booking_id IS NOT NULL AND s.booking_id IS NOT DISTINCT FROM tn.booking_id)
+       OR
+       (s.booking_id IS NULL AND s.timesheet_id = p_timesheet_id)
+     )
     ORDER BY s.updated_at_utc DESC NULLS LAST, s.created_at_utc DESC, s.id DESC
     LIMIT 1
+  ),
+  active_segment_snoozes_source AS (
+    SELECT
+      s.id AS snooze_id,
+      s.candidate_id,
+      s.timesheet_id,
+      s.booking_id,
+      s.segment_id,
+      coalesce(
+        nullif(btrim(COALESCE(s.segment_stable_key,'')), ''),
+        nullif(btrim(COALESCE(s.segment_id,'')), '')
+      ) AS segment_stable_key,
+      upper(COALESCE(s.snooze_kind,'')) AS snooze_kind,
+      s.snooze_until_date,
+      s.note,
+      s.created_at_utc,
+      s.updated_at_utc
+    FROM tf_norm tn
+    JOIN public.pay_item_snoozes s
+      ON s.candidate_id = tn.candidate_id
+     AND s.source_ref IS NULL
+     AND s.cleared_at_utc IS NULL
+     AND upper(COALESCE(s.snooze_kind,'')) IN ('DO_NOT_PAY', 'BLOCKED_TIMESHEET')
+     AND (s.snooze_until_date IS NULL OR s.snooze_until_date >= v_today_uk)
+     AND coalesce(
+           nullif(btrim(COALESCE(s.segment_stable_key,'')), ''),
+           nullif(btrim(COALESCE(s.segment_id,'')), '')
+         ) IS NOT NULL
+     AND (
+       (tn.booking_id IS NOT NULL AND s.booking_id IS NOT DISTINCT FROM tn.booking_id)
+       OR
+       (s.booking_id IS NULL AND s.timesheet_id = p_timesheet_id)
+     )
+  ),
+  active_segment_snooze_matches AS (
+    SELECT
+      sc.component_id,
+      sc.component_date,
+      sc.component_stable_key,
+      sc.component_ref_num,
+      ass.snooze_id,
+      ass.candidate_id,
+      ass.timesheet_id,
+      ass.booking_id,
+      ass.segment_id,
+      ass.segment_stable_key,
+      ass.snooze_kind,
+      ass.snooze_until_date,
+      ass.note,
+      ass.created_at_utc,
+      ass.updated_at_utc,
+      row_number() OVER (
+        PARTITION BY sc.component_id
+        ORDER BY ass.updated_at_utc DESC NULLS LAST, ass.created_at_utc DESC, ass.snooze_id DESC
+      ) AS rn
+    FROM segment_components sc
+    JOIN active_segment_snoozes_source ass
+      ON (
+        (
+          ass.booking_id IS NOT NULL
+          AND (
+            ass.segment_stable_key IS NOT DISTINCT FROM sc.component_stable_key
+            OR ass.segment_id IS NOT DISTINCT FROM sc.component_id
+          )
+        )
+        OR
+        (
+          ass.booking_id IS NULL
+          AND ass.timesheet_id IS NOT DISTINCT FROM p_timesheet_id
+          AND (
+            ass.segment_id IS NOT DISTINCT FROM sc.component_id
+            OR ass.segment_stable_key IS NOT DISTINCT FROM sc.component_stable_key
+          )
+        )
+      )
+  ),
+  active_segment_snoozes AS (
+    SELECT
+      asm.component_id,
+      asm.component_date,
+      asm.component_stable_key,
+      asm.component_ref_num,
+      asm.snooze_id,
+      asm.candidate_id,
+      asm.timesheet_id,
+      asm.booking_id,
+      asm.segment_id,
+      asm.segment_stable_key,
+      asm.snooze_kind,
+      asm.snooze_until_date,
+      asm.note,
+      asm.created_at_utc,
+      asm.updated_at_utc
+    FROM active_segment_snooze_matches asm
+    WHERE asm.rn = 1
   ),
   pay_items AS (
     SELECT
@@ -12657,6 +14288,8 @@ BEGIN
     SELECT
       c.component_id,
       c.component_date,
+      c.component_stable_key,
+      c.component_ref_num,
       c.is_on_hold,
       CASE
         WHEN c.is_on_hold = true THEN 'ON_HOLD'
@@ -12666,12 +14299,25 @@ BEGIN
         WHEN ao.override_id IS NOT NULL THEN 'ADVANCED'
         ELSE 'UNPAID'
       END AS stage,
-      a.settled_at_utc
+      a.settled_at_utc,
+      CASE
+        WHEN c.component_id = 'TOTAL' THEN 'NONE'
+        WHEN ass.snooze_id IS NULL THEN 'NONE'
+        WHEN ass.snooze_until_date IS NULL THEN 'INDEFINITE_SNOOZED'
+        ELSE 'DATED_SNOOZED'
+      END AS snooze_state,
+      ass.snooze_id,
+      ass.snooze_until_date,
+      ass.note AS snooze_note,
+      ass.segment_id AS snooze_segment_id,
+      ass.segment_stable_key AS snooze_segment_stable_key
     FROM components c
     LEFT JOIN agg a
       ON a.component_id = c.component_id
     LEFT JOIN active_override ao
       ON true
+    LEFT JOIN active_segment_snoozes ass
+      ON ass.component_id = c.component_id
   ),
   counts AS (
     SELECT
@@ -12721,6 +14367,8 @@ BEGIN
           jsonb_build_object(
             'component_id', cs.component_id,
             'date', cs.component_date,
+            'segment_stable_key', cs.component_stable_key,
+            'ref_num', cs.component_ref_num,
             'is_on_hold', cs.is_on_hold,
             'stage', cs.stage,
             'paid_at_utc', cs.settled_at_utc,
@@ -12728,7 +14376,13 @@ BEGIN
               CASE
                 WHEN cs.settled_at_utc IS NULL THEN NULL
                 ELSE to_char(cs.settled_at_utc AT TIME ZONE 'Europe/London', 'Dy DD/MM/YYYY HH24:MI') || 'hrs'
-              END
+              END,
+            'snooze_state', cs.snooze_state,
+            'snooze_id', CASE WHEN cs.snooze_id IS NULL THEN NULL ELSE cs.snooze_id::text END,
+            'snooze_until_date', CASE WHEN cs.snooze_until_date IS NULL THEN NULL ELSE cs.snooze_until_date::text END,
+            'snooze_note', cs.snooze_note,
+            'snooze_segment_id', cs.snooze_segment_id,
+            'snooze_segment_stable_key', cs.snooze_segment_stable_key
           )
           ORDER BY
             CASE WHEN cs.component_id = 'TOTAL' THEN 0 ELSE 1 END,
@@ -12738,6 +14392,36 @@ BEGIN
         '[]'::jsonb
       ) AS components
     FROM comp_state cs
+  ),
+  segment_snoozes_json AS (
+    SELECT
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'snooze_id', ass.snooze_id::text,
+            'candidate_id', ass.candidate_id::text,
+            'timesheet_id', CASE WHEN ass.timesheet_id IS NULL THEN NULL ELSE ass.timesheet_id::text END,
+            'booking_id', ass.booking_id,
+            'segment_id', ass.segment_id,
+            'segment_stable_key', ass.segment_stable_key,
+            'snooze_kind', ass.snooze_kind,
+            'snooze_until_date', CASE WHEN ass.snooze_until_date IS NULL THEN NULL ELSE ass.snooze_until_date::text END,
+            'note', ass.note,
+            'snooze_note', ass.note,
+            'date', ass.component_date,
+            'work_date', ass.component_date,
+            'ref_num', ass.component_ref_num,
+            'snooze_state',
+              CASE
+                WHEN ass.snooze_until_date IS NULL THEN 'INDEFINITE_SNOOZED'
+                ELSE 'DATED_SNOOZED'
+              END
+          )
+          ORDER BY ass.component_date NULLS LAST, ass.segment_stable_key NULLS LAST, ass.segment_id NULLS LAST
+        ),
+        '[]'::jsonb
+      ) AS segment_snoozes
+    FROM active_segment_snoozes ass
   ),
   paid_status AS (
     SELECT
@@ -12848,7 +14532,8 @@ BEGIN
         'reserved_ex_vat', a.reserved_ex_vat
       ),
       'hover', h.hover_summary,
-      'components', cj.components
+      'components', cj.components,
+      'segment_snoozes', ssj.segment_snoozes
     )
   INTO v_out
   FROM counts c
@@ -12857,6 +14542,7 @@ BEGIN
   CROSS JOIN adjusted a
   CROSS JOIN hover h
   CROSS JOIN comp_json cj
+  CROSS JOIN segment_snoozes_json ssj
   CROSS JOIN override_json oj
   CROSS JOIN snooze_json sj;
 
@@ -12896,9 +14582,6 @@ BEGIN
   RETURN v_out;
 END;
 $$;
-
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_candidate_advances_report(
@@ -14522,20 +16205,21 @@ end;
 $$;
 
 create or replace function public.pay_loans_snoozes_list(
-  p_candidate_id uuid default null,
-  p_client_id uuid default null,
-  p_include_paid_off boolean default true,
-  p_include_cleared_snoozes boolean default false
+  p_candidate_id uuid default null::uuid,
+  p_client_id uuid default null::uuid,
+  p_hide_completed_non_current_items boolean default true
 )
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $function$
 declare
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
   v_finance_cases jsonb := '[]'::jsonb;
   v_timesheet_snoozes jsonb := '[]'::jsonb;
   v_summary jsonb := '{}'::jsonb;
+  v_hide_completed_non_current_items boolean := coalesce(p_hide_completed_non_current_items, true);
 begin
   with finance_rows as (
     select
@@ -14551,9 +16235,9 @@ begin
       vfcr.payout_status,
       vfcr.payout_pay_batch_id,
       vfcr.payout_transfer_id,
-      round(coalesce(vfcr.original_amount,0),2) as original_amount,
-      round(coalesce(vfcr.outstanding_amount,0),2) as outstanding_amount,
-      round(coalesce(vfcr.weekly_due,0),2) as weekly_due,
+      round(coalesce(vfcr.original_amount, 0), 2) as original_amount,
+      round(coalesce(vfcr.outstanding_amount, 0), 2) as outstanding_amount,
+      round(coalesce(vfcr.weekly_due, 0), 2) as weekly_due,
       vfcr.weeks_total,
       vfcr.start_week_start,
       vfcr.next_due_week_start,
@@ -14586,11 +16270,58 @@ begin
       vfcr.active_snooze_note,
       vfcr.active_snooze_created_at_utc,
       vfcr.active_snooze_updated_at_utc,
+      case when vfcr.management_group is null then null else vfcr.management_group::text end as management_group,
+      vfcr.lifecycle_status_display,
+      case when vfcr.taxability is null then null else vfcr.taxability::text end as taxability,
+      case when vfcr.routing_kind is null then null else vfcr.routing_kind::text end as routing_kind,
+      coalesce(vfcr.oneoff_bank_details_required, false) as oneoff_bank_details_required,
+      coalesce(vfcr.is_candidate_directed_oneoff_payout, false) as is_candidate_directed_oneoff_payout,
+      coalesce(vfcr.appears_on_umbrella_remittance, false) as appears_on_umbrella_remittance,
+      coalesce(vfcr.generates_candidate_payment_advice, false) as generates_candidate_payment_advice,
+      coalesce(vfcr.oneoff_bank_details_present, false) as oneoff_bank_details_present,
+      coalesce(vfcr.oneoff_bank_details_editable, false) as oneoff_bank_details_editable,
+      coalesce(vfcr.snooze_allowed, false) as snooze_allowed,
+      coalesce(vfcr.edit_bank_details_allowed, false) as edit_bank_details_allowed,
+      vfcr.oneoff_bank_beneficiary_name,
+      vfcr.oneoff_bank_sort_code,
+      vfcr.oneoff_bank_account_number,
+      vfcr.oneoff_bank_note,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then false
+        else coalesce(vfcr.is_mixed_case, false)
+      end as is_mixed_case,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 0
+        else coalesce(vfcr.open_taxable_count, 0)
+      end as open_taxable_count,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 0
+        else coalesce(vfcr.open_reimbursement_count, 0)
+      end as open_reimbursement_count,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 0
+        else coalesce(vfcr.unresolved_taxable_count, 0)
+      end as unresolved_taxable_count,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 0
+        else coalesce(vfcr.stale_count, 0)
+      end as stale_count,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then jsonb_build_object(
+          'open_taxable_count', 0,
+          'open_reimbursement_count', 0,
+          'unresolved_taxable_count', 0,
+          'stale_count', 0,
+          'is_mixed_case', false
+        )
+        else coalesce(vfcr.component_resolution_summary_json, '{}'::jsonb)
+      end as component_resolution_summary_json,
       case
         when vfcr.case_type = 'PAYMENT_ADVANCE' then 'Payment Advance'
         when vfcr.case_type = 'OVERPAYMENT' then 'Overpayment'
         when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'Manual Debt Adjustment'
         when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then 'Manual Credit Adjustment'
+        when vfcr.case_type = 'UNDERPAYMENT' then 'Underpayment'
         else vfcr.case_type::text
       end as admin_label,
       case
@@ -14599,41 +16330,64 @@ begin
         else 'DATED_SNOOZE'
       end as snooze_state,
       case
-        when vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT') and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
-        else false
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then 'READY'
+        when coalesce(vfcr.unresolved_taxable_count, 0) > 0 and coalesce(vfcr.stale_count, 0) > 0 then 'BLOCKED_STALE_TAXABLE_COMPONENTS'
+        when coalesce(vfcr.unresolved_taxable_count, 0) > 0 then 'BLOCKED_UNRESOLVED_TAXABLE_COMPONENTS'
+        else 'READY'
+      end as blocked_state,
+      case
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then null
+        when coalesce(vfcr.unresolved_taxable_count, 0) > 0 and coalesce(vfcr.stale_count, 0) > 0 then 'One or more taxable components are stale and must be re-resolved before the case can proceed.'
+        when coalesce(vfcr.unresolved_taxable_count, 0) > 0 then 'One or more taxable components are unresolved and must be resolved before the case can proceed.'
+        else null
+      end as blocked_reason,
+      case
+        when vfcr.case_type in ('PAYMENT_ADVANCE', 'MANUAL_DEBT_ADJUSTMENT')
+         and round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+         and vfcr.written_off_at_utc is null
+        then true else false
       end as can_restructure,
       case
-        when vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') and vfcr.status = 'ACTIVE' and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
-        else false
+        when vfcr.case_type in ('PAYMENT_ADVANCE', 'OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT')
+         and vfcr.status = 'ACTIVE'
+         and round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+         and vfcr.written_off_at_utc is null
+        then true else false
       end as can_pause,
       case
-        when vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') and vfcr.status = 'PAUSED' and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
-        else false
+        when vfcr.case_type in ('PAYMENT_ADVANCE', 'OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT')
+         and vfcr.status = 'PAUSED'
+         and round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+         and vfcr.written_off_at_utc is null
+        then true else false
       end as can_resume,
       case
-        when vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT') and round(coalesce(vfcr.outstanding_amount,0),2) > 0 and vfcr.written_off_at_utc is null then true
-        else false
+        when vfcr.case_type in ('PAYMENT_ADVANCE', 'OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT')
+         and round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+         and vfcr.written_off_at_utc is null
+        then true else false
       end as can_write_off,
       case
-        when vfcr.case_type = 'PAYMENT_ADVANCE' then coalesce(vfcr.payout_status,'PENDING') in ('PENDING','CANCELLED')
-        when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then coalesce(vfcr.payout_status,'PENDING') in ('PENDING','CANCELLED')
+        when vfcr.case_type = 'PAYMENT_ADVANCE' then coalesce(vfcr.payout_status, 'PENDING') in ('PENDING', 'CANCELLED')
+        when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT' then coalesce(vfcr.payout_status, 'PENDING') in ('PENDING', 'CANCELLED')
         when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT' then true
         else false
       end as can_edit,
-      case
-        when vfcr.active_snooze_id is not null then true else false end as can_unsnooze
+      case when vfcr.active_snooze_id is not null then true else false end as can_unsnooze
     from public.v_finance_cases_register vfcr
     where (p_candidate_id is null or vfcr.candidate_id = p_candidate_id)
       and (p_client_id is null or vfcr.client_id = p_client_id)
       and (
-        p_include_paid_off = true
-        or vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
-        or (vfcr.status <> 'PAID_OFF' and coalesce(vfcr.outstanding_amount,0) > 0)
+        v_hide_completed_non_current_items = false
+        or upper(coalesce(vfcr.lifecycle_status_display, '')) in ('NOT PROCESSED YET', 'DRAFTED AWAITING AUTHORISATION')
       )
   ),
-  finance_json as (
-    select coalesce(
-      jsonb_agg(
+  finance_payload_rows as (
+    select
+      fr.candidate_display_name,
+      fr.admin_label,
+      fr.finance_case_id,
+      jsonb_strip_nulls(
         jsonb_build_object(
           'finance_case_id', fr.finance_case_id::text,
           'case_type', fr.case_type::text,
@@ -14645,7 +16399,27 @@ begin
           'client_id', case when fr.client_id is null then null else fr.client_id::text end,
           'client_name', fr.client_name,
           'status', fr.status::text,
+          'finance_status', fr.status::text,
           'payout_status', case when fr.payout_status is null then null else fr.payout_status::text end,
+          'finance_payout_status', case when fr.payout_status is null then null else fr.payout_status::text end,
+          'management_group', fr.management_group,
+          'lifecycle_status_display', fr.lifecycle_status_display,
+          'finance_lifecycle_status_display', fr.lifecycle_status_display,
+          'taxability', fr.taxability,
+          'routing_kind', fr.routing_kind,
+          'oneoff_bank_details_required', fr.oneoff_bank_details_required,
+          'oneoff_bank_details_present', fr.oneoff_bank_details_present,
+          'oneoff_bank_details_editable', fr.oneoff_bank_details_editable,
+          'edit_bank_details_allowed', fr.edit_bank_details_allowed,
+          'snooze_allowed', fr.snooze_allowed,
+          'is_candidate_directed_oneoff_payout', fr.is_candidate_directed_oneoff_payout,
+          'appears_on_umbrella_remittance', fr.appears_on_umbrella_remittance,
+          'generates_candidate_payment_advice', fr.generates_candidate_payment_advice,
+          'blocked_state', fr.blocked_state,
+          'blocked_reason', fr.blocked_reason
+        )
+        ||
+        jsonb_build_object(
           'payout_pay_batch_id', case when fr.payout_pay_batch_id is null then null else fr.payout_pay_batch_id::text end,
           'payout_transfer_id', case when fr.payout_transfer_id is null then null else fr.payout_transfer_id::text end,
           'original_amount', fr.original_amount,
@@ -14654,11 +16428,30 @@ begin
           'weeks_total', fr.weeks_total,
           'start_week_start', case when fr.start_week_start is null then null else fr.start_week_start::text end,
           'next_due_week_start', case when fr.next_due_week_start is null then null else fr.next_due_week_start::text end,
-          'schedule_json', coalesce(fr.schedule_json,'[]'::jsonb),
+          'schedule_json', coalesce(fr.schedule_json, '[]'::jsonb),
           'adjustment_comment', fr.adjustment_comment,
           'notes', fr.notes,
           'linked_timesheet_id', case when fr.linked_timesheet_id is null then null else fr.linked_timesheet_id::text end,
           'linked_shift_date', case when fr.linked_shift_date is null then null else fr.linked_shift_date::text end,
+          'active_snooze_id', case when fr.active_snooze_id is null then null else fr.active_snooze_id::text end,
+          'active_snooze_kind', fr.active_snooze_kind,
+          'active_snooze_mode', case
+            when fr.active_snooze_id is null then 'NOT_SNOOZED'
+            when fr.active_snooze_until_date is null then 'INDEFINITE'
+            else 'DATED'
+          end,
+          'active_snooze_until_date', case when fr.active_snooze_until_date is null then null else fr.active_snooze_until_date::text end,
+          'active_snooze_note', fr.active_snooze_note,
+          'active_snooze_created_at_utc', case when fr.active_snooze_created_at_utc is null then null else fr.active_snooze_created_at_utc::text end,
+          'active_snooze_updated_at_utc', case when fr.active_snooze_updated_at_utc is null then null else fr.active_snooze_updated_at_utc::text end,
+          'active_snooze_visibility_status', case
+            when fr.active_snooze_id is null then 'NOT_SNOOZED'
+            when fr.active_snooze_until_date is null then 'INDEFINITE_SNOOZE'
+            else 'DATED_SNOOZE'
+          end
+        )
+        ||
+        jsonb_build_object(
           'source_original_paid_amount', fr.source_original_paid_amount,
           'source_corrected_paid_amount', fr.source_corrected_paid_amount,
           'minimum_earnings_threshold', fr.minimum_earnings_threshold,
@@ -14666,17 +16459,30 @@ begin
           'written_off_at_utc', case when fr.written_off_at_utc is null then null else fr.written_off_at_utc::text end,
           'write_off_reason', fr.write_off_reason,
           'cleared_at_utc', case when fr.cleared_at_utc is null then null else fr.cleared_at_utc::text end,
-          'active_reserved_amount', coalesce(fr.active_reserved_amount,0),
-          'reserved_amount', coalesce(fr.reserved_amount,0),
-          'committed_amount', coalesce(fr.committed_amount,0),
-          'settled_amount', coalesce(fr.settled_amount,0),
-          'released_amount', coalesce(fr.released_amount,0),
-          'active_reservation_count', coalesce(fr.active_reservation_count,0),
+          'active_reserved_amount', coalesce(fr.active_reserved_amount, 0),
+          'reserved_amount', coalesce(fr.reserved_amount, 0),
+          'committed_amount', coalesce(fr.committed_amount, 0),
+          'settled_amount', coalesce(fr.settled_amount, 0),
+          'released_amount', coalesce(fr.released_amount, 0),
+          'active_reservation_count', coalesce(fr.active_reservation_count, 0)
+        )
+        ||
+        jsonb_build_object(
           'latest_recovery_pay_batch_id', case when fr.latest_recovery_pay_batch_id is null then null else fr.latest_recovery_pay_batch_id::text end,
           'latest_recovery_pay_date', case when fr.latest_recovery_pay_date is null then null else fr.latest_recovery_pay_date::text end,
           'latest_remittance_sent_at_utc', case when fr.latest_remittance_sent_at_utc is null then null else fr.latest_remittance_sent_at_utc::text end,
           'latest_remittance_trigger_status', fr.latest_remittance_trigger_status,
           'last_remittance_error', fr.last_remittance_error,
+          'is_mixed_case', fr.is_mixed_case,
+          'open_taxable_count', fr.open_taxable_count,
+          'open_reimbursement_count', fr.open_reimbursement_count,
+          'unresolved_taxable_count', fr.unresolved_taxable_count,
+          'stale_count', fr.stale_count,
+          'component_resolution_summary_json', fr.component_resolution_summary_json,
+          'oneoff_bank_beneficiary_name', fr.oneoff_bank_beneficiary_name,
+          'oneoff_bank_sort_code', fr.oneoff_bank_sort_code,
+          'oneoff_bank_account_number', fr.oneoff_bank_account_number,
+          'oneoff_bank_note', fr.oneoff_bank_note,
           'snooze', case
             when fr.active_snooze_id is null then null
             else jsonb_build_object(
@@ -14695,126 +16501,441 @@ begin
             'can_resume', fr.can_resume,
             'can_write_off', fr.can_write_off,
             'can_edit', fr.can_edit,
-            'can_unsnooze', fr.can_unsnooze
+            'can_snooze', (fr.snooze_allowed and fr.active_snooze_id is null),
+            'can_unsnooze', fr.can_unsnooze,
+            'can_clear_snooze', fr.can_unsnooze,
+            'can_edit_snooze', fr.can_unsnooze,
+            'can_edit_bank_details', fr.edit_bank_details_allowed
           )
         )
-        order by fr.candidate_display_name asc, fr.admin_label asc, fr.finance_case_id asc
-      ),
-      '[]'::jsonb
-    ) as payload
+      ) as row_json
     from finance_rows fr
   ),
-  timesheet_snooze_rows as (
+  finance_json as (
+    select
+      coalesce(
+        jsonb_agg(
+          fpr.row_json
+          order by fpr.candidate_display_name asc, fpr.admin_label asc, fpr.finance_case_id asc
+        ),
+        '[]'::jsonb
+      ) as payload
+    from finance_payload_rows fpr
+  ),
+  pay_item_snooze_source as (
     select
       pis.id as snooze_id,
       pis.candidate_id,
       c.tms_ref as candidate_tms_ref,
       c.display_name as candidate_display_name,
-      tf.client_id,
-      cl.name as client_name,
-      pis.timesheet_id,
-      pis.segment_id,
-      pis.snooze_kind,
+      pis.timesheet_id as stored_timesheet_id,
+      coalesce(pis.booking_id, ts_stored.booking_id) as booking_id,
+      pis.segment_id as stored_segment_id,
+      coalesce(nullif(btrim(coalesce(pis.segment_stable_key, '')), ''), nullif(btrim(coalesce(pis.segment_id, '')), '')) as segment_stable_key,
+      upper(coalesce(pis.snooze_kind, '')) as snooze_kind,
       pis.snooze_until_date,
       pis.note,
       pis.created_at_utc,
       pis.updated_at_utc,
+      pis.cleared_at_utc,
       pis.created_by_user_id,
-      pis.updated_by_user_id,
-      ts.week_ending_date,
-      ts.reference_number,
-      case
-        when pis.snooze_until_date is null then 'INDEFINITE_SNOOZE'
-        else 'DATED_SNOOZE'
-      end as snooze_state
+      pis.updated_by_user_id
     from public.pay_item_snoozes pis
     join public.candidates c
       on c.id = pis.candidate_id
-    left join public.timesheets_financials tf
-      on tf.timesheet_id = pis.timesheet_id
-     and tf.is_current = true
-    left join public.clients cl
-      on cl.id = tf.client_id
-    left join public.timesheets ts
-      on ts.timesheet_id = pis.timesheet_id
+    left join public.timesheets ts_stored
+      on ts_stored.timesheet_id = pis.timesheet_id
     where pis.source_ref is null
-      and pis.timesheet_id is not null
-      and (
-        (p_include_cleared_snoozes = true and pis.cleared_at_utc is not null)
-        or (pis.cleared_at_utc is null)
-      )
       and (p_candidate_id is null or pis.candidate_id = p_candidate_id)
-      and (p_client_id is null or tf.client_id = p_client_id)
       and (
-        p_include_cleared_snoozes = true
-        or pis.snooze_until_date is null
-        or pis.snooze_until_date >= (now() at time zone 'Europe/London')::date
+        coalesce(pis.booking_id, ts_stored.booking_id) is not null
+        or pis.timesheet_id is not null
+      )
+  ),
+  current_timesheet_context as (
+    select distinct
+      pss.booking_id,
+      ts_current.timesheet_id as current_timesheet_id,
+      tf_current.client_id as client_id,
+      cl_current.name as client_name,
+      tf_current.role as role,
+      tf_current.band as band,
+      ts_current.week_ending_date as week_ending_date,
+      ts_current.reference_number as reference_number,
+      tf_current.invoice_breakdown_json as invoice_breakdown_json,
+      round(coalesce(tf_current.total_pay_ex_vat, 0), 2) as total_pay_ex_vat
+    from pay_item_snooze_source pss
+    join public.timesheets ts_current
+      on ts_current.booking_id = pss.booking_id
+     and ts_current.is_current = true
+    left join public.timesheets_financials tf_current
+      on tf_current.timesheet_id = ts_current.timesheet_id
+     and tf_current.is_current = true
+    left join public.clients cl_current
+      on cl_current.id = tf_current.client_id
+  ),
+  current_timesheet_segments_actual as (
+    select
+      ctc.current_timesheet_id,
+      ctc.booking_id,
+      nullif(btrim(coalesce(seg_item.value->>'segment_id', '')), '') as segment_id,
+      coalesce(
+        nullif(btrim(coalesce(seg_item.value->>'segment_stable_key', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'segment_id', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'segment_key', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'date', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'ref_num', '')), '')
+      ) as segment_stable_key,
+      nullif(btrim(coalesce(seg_item.value->>'date', '')), '') as work_date,
+      coalesce(nullif(btrim(coalesce(seg_item.value->>'client_name', '')), ''), ctc.client_name) as client_name,
+      coalesce(nullif(btrim(coalesce(seg_item.value->>'role', '')), ''), ctc.role) as role,
+      coalesce(nullif(btrim(coalesce(seg_item.value->>'band', '')), ''), ctc.band) as band,
+      coalesce(
+        nullif(btrim(coalesce(seg_item.value->>'start', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'start_hhmm', '')), '')
+      ) as start_time,
+      coalesce(
+        nullif(btrim(coalesce(seg_item.value->>'end', '')), ''),
+        nullif(btrim(coalesce(seg_item.value->>'end_hhmm', '')), '')
+      ) as finish_time,
+      nullif(btrim(coalesce(seg_item.value->>'break_start', '')), '') as break_start,
+      nullif(btrim(coalesce(seg_item.value->>'break_end', '')), '') as break_end,
+      coalesce(
+        nullif(seg_item.value->>'break_mins', '')::numeric,
+        nullif(seg_item.value->>'break_minutes', '')::numeric
+      ) as break_mins,
+      round(coalesce(nullif(seg_item.value->>'pay_amount', '')::numeric, 0), 2) as pay_amount_ex_vat,
+      nullif(btrim(coalesce(seg_item.value->>'ref_num', '')), '') as ref_num
+    from current_timesheet_context ctc
+    join lateral jsonb_array_elements(
+      case
+        when ctc.invoice_breakdown_json is not null
+         and jsonb_typeof(ctc.invoice_breakdown_json) = 'object'
+         and jsonb_typeof(ctc.invoice_breakdown_json->'segments') = 'array'
+        then ctc.invoice_breakdown_json->'segments'
+        else '[]'::jsonb
+      end
+    ) as seg_item(value)
+      on true
+    where seg_item.value is not null
+      and jsonb_typeof(seg_item.value) = 'object'
+  ),
+  current_timesheet_segments as (
+    select
+      ctsa.current_timesheet_id,
+      ctsa.booking_id,
+      ctsa.segment_id,
+      ctsa.segment_stable_key,
+      ctsa.work_date,
+      ctsa.client_name,
+      ctsa.role,
+      ctsa.band,
+      ctsa.start_time,
+      ctsa.finish_time,
+      ctsa.break_start,
+      ctsa.break_end,
+      ctsa.break_mins,
+      ctsa.pay_amount_ex_vat,
+      ctsa.ref_num
+    from current_timesheet_segments_actual ctsa
+
+    union all
+
+    select
+      ctc.current_timesheet_id,
+      ctc.booking_id,
+      null::text as segment_id,
+      ('timesheet:' || coalesce(ctc.booking_id, ctc.current_timesheet_id::text)) as segment_stable_key,
+      null::text as work_date,
+      ctc.client_name,
+      ctc.role,
+      ctc.band,
+      null::text as start_time,
+      null::text as finish_time,
+      null::text as break_start,
+      null::text as break_end,
+      null::numeric as break_mins,
+      round(coalesce(ctc.total_pay_ex_vat, 0), 2) as pay_amount_ex_vat,
+      ctc.reference_number as ref_num
+    from current_timesheet_context ctc
+    where not exists (
+      select 1
+      from current_timesheet_segments_actual ctsa
+      where ctsa.current_timesheet_id = ctc.current_timesheet_id
+    )
+  ),
+  current_timesheet_segment_groups as (
+    select
+      cts.current_timesheet_id,
+      count(*)::int as segment_count,
+      round(coalesce(sum(cts.pay_amount_ex_vat), 0), 2) as total_segment_pay_ex_vat,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'segment_id', cts.segment_id,
+            'segment_stable_key', cts.segment_stable_key,
+            'date', cts.work_date,
+            'client_name', cts.client_name,
+            'role', cts.role,
+            'band', cts.band,
+            'start', cts.start_time,
+            'finish', cts.finish_time,
+            'break_start', cts.break_start,
+            'break_end', cts.break_end,
+            'break_mins', cts.break_mins,
+            'pay_amount_ex_vat', cts.pay_amount_ex_vat,
+            'ref_num', cts.ref_num
+          )
+          order by cts.work_date asc nulls last, cts.start_time asc nulls last, cts.segment_stable_key asc
+        ),
+        '[]'::jsonb
+      ) as segment_rows_json
+    from current_timesheet_segments cts
+    group by cts.current_timesheet_id
+  ),
+  timesheet_snooze_rows_raw as (
+    select
+      pss.snooze_id,
+      pss.candidate_id,
+      pss.candidate_tms_ref,
+      pss.candidate_display_name,
+      pss.stored_timesheet_id,
+      pss.booking_id,
+      pss.stored_segment_id,
+      pss.segment_stable_key,
+      pss.snooze_kind,
+      pss.snooze_until_date,
+      pss.note,
+      pss.created_at_utc,
+      pss.updated_at_utc,
+      pss.cleared_at_utc,
+      pss.created_by_user_id,
+      pss.updated_by_user_id,
+      case when pss.segment_stable_key is null then 'WHOLE_TIMESHEET' else 'SEGMENT' end as row_kind,
+      ctc.current_timesheet_id,
+      ctc.client_id as current_client_id,
+      ctc.client_name as current_client_name,
+      ctc.role as current_role,
+      ctc.band as current_band,
+      ctc.week_ending_date as current_week_ending_date,
+      ctc.reference_number as current_reference_number,
+      cts.segment_id as current_segment_id,
+      cts.segment_stable_key as current_segment_stable_key,
+      cts.work_date as current_segment_date,
+      cts.client_name as current_segment_client_name,
+      cts.role as current_segment_role,
+      cts.band as current_segment_band,
+      cts.start_time as current_segment_start,
+      cts.finish_time as current_segment_finish,
+      cts.break_start as current_segment_break_start,
+      cts.break_end as current_segment_break_end,
+      cts.break_mins as current_segment_break_mins,
+      cts.pay_amount_ex_vat as current_segment_pay_amount_ex_vat,
+      cts.ref_num as current_segment_ref_num,
+      ctsg.segment_count,
+      ctsg.total_segment_pay_ex_vat,
+      ctsg.segment_rows_json
+    from pay_item_snooze_source pss
+    left join current_timesheet_context ctc
+      on ctc.booking_id = pss.booking_id
+    left join current_timesheet_segments cts
+      on cts.current_timesheet_id = ctc.current_timesheet_id
+     and pss.segment_stable_key is not null
+     and (
+       cts.segment_stable_key = pss.segment_stable_key
+       or (
+         pss.stored_segment_id is not null
+         and cts.segment_id = pss.stored_segment_id
+       )
+     )
+    left join current_timesheet_segment_groups ctsg
+      on ctsg.current_timesheet_id = ctc.current_timesheet_id
+  ),
+  timesheet_snooze_rows_lifecycle as (
+    select
+      tsrr.*,
+      case
+        when tsrr.cleared_at_utc is not null then 'CLEARED'
+        when tsrr.current_timesheet_id is null then 'CLEARED_DELETED_TIMESHEET'
+        when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then 'CLEARED_DELETED_SEGMENT'
+        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then 'EXPIRED'
+        else 'ACTIVE'
+      end as lifecycle_state,
+      case
+        when tsrr.cleared_at_utc is not null then tsrr.cleared_at_utc
+        when tsrr.current_timesheet_id is null then tsrr.updated_at_utc
+        when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then tsrr.updated_at_utc
+        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then tsrr.updated_at_utc
+        else null::timestamptz
+      end as effective_cleared_at_utc,
+      case
+        when tsrr.cleared_at_utc is not null then 'USER_CLEARED'
+        when tsrr.current_timesheet_id is null then 'DELETED_TIMESHEET'
+        when tsrr.row_kind = 'SEGMENT' and tsrr.current_segment_stable_key is null then 'DELETED_SEGMENT'
+        when tsrr.snooze_until_date is not null and tsrr.snooze_until_date < v_today_uk then 'EXPIRED'
+        else null::text
+      end as clear_reason
+    from timesheet_snooze_rows_raw tsrr
+  ),
+  timesheet_snooze_rows_filtered as (
+    select
+      tsrl.snooze_id,
+      tsrl.candidate_id,
+      tsrl.candidate_tms_ref,
+      tsrl.candidate_display_name,
+      case when tsrl.current_client_id is null then null else tsrl.current_client_id::text end as client_id_text,
+      tsrl.current_client_name as client_name,
+      coalesce(tsrl.current_timesheet_id, tsrl.stored_timesheet_id) as display_timesheet_id,
+      tsrl.current_timesheet_id,
+      tsrl.stored_timesheet_id,
+      tsrl.booking_id,
+      case when tsrl.row_kind = 'SEGMENT' then coalesce(tsrl.current_segment_id, tsrl.stored_segment_id) else null end as display_segment_id,
+      tsrl.stored_segment_id,
+      tsrl.segment_stable_key,
+      tsrl.row_kind,
+      tsrl.snooze_kind,
+      tsrl.snooze_until_date,
+      tsrl.note,
+      tsrl.created_at_utc,
+      tsrl.updated_at_utc,
+      tsrl.effective_cleared_at_utc,
+      tsrl.lifecycle_state,
+      tsrl.clear_reason,
+      case
+        when tsrl.lifecycle_state = 'ACTIVE' and tsrl.snooze_until_date is null then 'INDEFINITE_SNOOZE'
+        when tsrl.lifecycle_state = 'ACTIVE' and tsrl.snooze_until_date is not null then 'DATED_SNOOZE'
+        when tsrl.lifecycle_state = 'EXPIRED' then 'EXPIRED'
+        else 'CLEARED'
+      end as snooze_state,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then tsrl.current_week_ending_date
+        else null::date
+      end as week_ending_date,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then tsrl.current_reference_number
+        else tsrl.current_segment_ref_num
+      end as reference_number,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then round(coalesce(tsrl.total_segment_pay_ex_vat, 0), 2)
+        else round(coalesce(tsrl.current_segment_pay_amount_ex_vat, 0), 2)
+      end as pay_amount_ex_vat,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then coalesce(tsrl.segment_count, 0)
+        when tsrl.current_segment_stable_key is not null then 1
+        else 0
+      end as segment_count,
+      case
+        when tsrl.row_kind = 'WHOLE_TIMESHEET' then coalesce(tsrl.segment_rows_json, '[]'::jsonb)
+        when tsrl.current_segment_stable_key is not null then jsonb_build_array(
+          jsonb_build_object(
+            'segment_id', tsrl.current_segment_id,
+            'segment_stable_key', tsrl.current_segment_stable_key,
+            'date', tsrl.current_segment_date,
+            'client_name', tsrl.current_segment_client_name,
+            'role', tsrl.current_segment_role,
+            'band', tsrl.current_segment_band,
+            'start', tsrl.current_segment_start,
+            'finish', tsrl.current_segment_finish,
+            'break_start', tsrl.current_segment_break_start,
+            'break_end', tsrl.current_segment_break_end,
+            'break_mins', tsrl.current_segment_break_mins,
+            'pay_amount_ex_vat', tsrl.current_segment_pay_amount_ex_vat,
+            'ref_num', tsrl.current_segment_ref_num
+          )
+        )
+        else '[]'::jsonb
+      end as segment_rows_json
+    from timesheet_snooze_rows_lifecycle tsrl
+    where (p_client_id is null or tsrl.current_client_id = p_client_id)
+      and (
+        tsrl.lifecycle_state = 'ACTIVE'
+        or (v_hide_completed_non_current_items = false and tsrl.lifecycle_state <> 'ACTIVE')
       )
   ),
   timesheet_snoozes_json as (
-    select coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'snooze_id', tsr.snooze_id::text,
-          'candidate_id', tsr.candidate_id::text,
-          'candidate_tms_ref', tsr.candidate_tms_ref,
-          'candidate_display_name', tsr.candidate_display_name,
-          'client_id', case when tsr.client_id is null then null else tsr.client_id::text end,
-          'client_name', tsr.client_name,
-          'timesheet_id', tsr.timesheet_id::text,
-          'segment_id', tsr.segment_id,
-          'week_ending_date', case when tsr.week_ending_date is null then null else tsr.week_ending_date::text end,
-          'reference_number', tsr.reference_number,
-          'snooze_kind', tsr.snooze_kind,
-          'snooze_until_date', case when tsr.snooze_until_date is null then null else tsr.snooze_until_date::text end,
-          'note', tsr.note,
-          'created_at_utc', case when tsr.created_at_utc is null then null else tsr.created_at_utc::text end,
-          'updated_at_utc', case when tsr.updated_at_utc is null then null else tsr.updated_at_utc::text end,
-          'snooze_state', tsr.snooze_state,
-          'action_flags', jsonb_build_object(
-            'can_unsnooze', true,
-            'can_change_to_indefinite', tsr.snooze_until_date is not null,
-            'can_change_to_dated', tsr.snooze_until_date is null,
-            'can_amend_date', tsr.snooze_until_date is not null
+    select
+      coalesce(
+        jsonb_agg(
+          jsonb_strip_nulls(
+            jsonb_build_object(
+              'snooze_id', tsf.snooze_id::text,
+              'row_kind', tsf.row_kind,
+              'lifecycle_state', tsf.lifecycle_state,
+              'clear_reason', tsf.clear_reason,
+              'candidate_id', tsf.candidate_id::text,
+              'candidate_tms_ref', tsf.candidate_tms_ref,
+              'candidate_display_name', tsf.candidate_display_name,
+              'client_id', tsf.client_id_text,
+              'client_name', tsf.client_name,
+              'timesheet_id', case when tsf.display_timesheet_id is null then null else tsf.display_timesheet_id::text end,
+              'current_timesheet_id', case when tsf.current_timesheet_id is null then null else tsf.current_timesheet_id::text end,
+              'original_timesheet_id', case when tsf.stored_timesheet_id is null then null else tsf.stored_timesheet_id::text end,
+              'booking_id', tsf.booking_id,
+              'segment_id', tsf.display_segment_id,
+              'original_segment_id', tsf.stored_segment_id,
+              'segment_stable_key', tsf.segment_stable_key,
+              'week_ending_date', case when tsf.week_ending_date is null then null else tsf.week_ending_date::text end,
+              'reference_number', tsf.reference_number,
+              'snooze_kind', tsf.snooze_kind,
+              'snooze_until_date', case when tsf.snooze_until_date is null then null else tsf.snooze_until_date::text end,
+              'note', tsf.note,
+              'created_at_utc', case when tsf.created_at_utc is null then null else tsf.created_at_utc::text end,
+              'updated_at_utc', case when tsf.updated_at_utc is null then null else tsf.updated_at_utc::text end,
+              'cleared_at_utc', case when tsf.effective_cleared_at_utc is null then null else tsf.effective_cleared_at_utc::text end,
+              'snooze_state', tsf.snooze_state,
+              'pay_amount_ex_vat', tsf.pay_amount_ex_vat,
+              'segment_count', tsf.segment_count,
+              'segment_rows', tsf.segment_rows_json,
+              'action_flags', jsonb_build_object(
+                'can_unsnooze', (tsf.lifecycle_state = 'ACTIVE'),
+                'can_change_to_indefinite', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is not null),
+                'can_change_to_dated', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is null),
+                'can_amend_date', (tsf.lifecycle_state = 'ACTIVE' and tsf.snooze_until_date is not null)
+              )
+            )
           )
-        )
-        order by tsr.candidate_display_name asc, tsr.week_ending_date asc nulls last, tsr.timesheet_id asc
-      ),
-      '[]'::jsonb
-    ) as payload
-    from timesheet_snooze_rows tsr
+          order by tsf.candidate_display_name asc, tsf.row_kind asc, tsf.week_ending_date asc nulls last, tsf.display_timesheet_id asc nulls last, tsf.segment_stable_key asc nulls last, tsf.snooze_id asc
+        ),
+        '[]'::jsonb
+      ) as payload
+    from timesheet_snooze_rows_filtered tsf
   ),
   summary_data as (
-    select jsonb_build_object(
-      'payment_advances_active_count', count(*) filter (where fr.case_type = 'PAYMENT_ADVANCE' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
-      'overpayments_active_count', count(*) filter (where fr.case_type = 'OVERPAYMENT' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
-      'manual_debt_adjustments_active_count', count(*) filter (where fr.case_type = 'MANUAL_DEBT_ADJUSTMENT' and fr.status in ('ACTIVE','PAUSED') and fr.outstanding_amount > 0),
-      'manual_credit_adjustments_count', count(*) filter (where fr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'),
-      'finance_cases_with_active_snooze_count', count(*) filter (where fr.active_snooze_id is not null),
-      'timesheet_snoozes_count', (select count(*) from timesheet_snooze_rows)
-    ) as payload
+    select
+      jsonb_build_object(
+        'payment_advances_active_count', count(*) filter (where fr.case_type = 'PAYMENT_ADVANCE' and fr.status in ('ACTIVE', 'PAUSED') and fr.outstanding_amount > 0),
+        'overpayments_active_count', count(*) filter (where fr.case_type = 'OVERPAYMENT' and fr.status in ('ACTIVE', 'PAUSED') and fr.outstanding_amount > 0),
+        'underpayments_active_count', count(*) filter (where fr.case_type = 'UNDERPAYMENT' and fr.status in ('ACTIVE', 'PAUSED') and fr.outstanding_amount > 0),
+        'manual_debt_adjustments_active_count', count(*) filter (where fr.case_type = 'MANUAL_DEBT_ADJUSTMENT' and fr.status in ('ACTIVE', 'PAUSED') and fr.outstanding_amount > 0),
+        'manual_credit_adjustments_count', count(*) filter (where fr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'),
+        'mixed_finance_cases_count', count(*) filter (where fr.is_mixed_case),
+        'unresolved_finance_cases_count', count(*) filter (where fr.unresolved_taxable_count > 0),
+        'stale_finance_cases_count', count(*) filter (where fr.stale_count > 0),
+        'finance_cases_with_active_snooze_count', count(*) filter (where fr.active_snooze_id is not null),
+        'timesheet_snoozes_count', (select count(*) from timesheet_snooze_rows_filtered)
+      ) as payload
     from finance_rows fr
   )
-  select fj.payload, tsj.payload, sd.payload
-  into v_finance_cases, v_timesheet_snoozes, v_summary
-  from finance_json fj
-  cross join timesheet_snoozes_json tsj
-  cross join summary_data sd;
+  select
+    coalesce((select fj.payload from finance_json fj), '[]'::jsonb),
+    coalesce((select tsj.payload from timesheet_snoozes_json tsj), '[]'::jsonb),
+    coalesce((select sd.payload from summary_data sd), '{}'::jsonb)
+  into v_finance_cases, v_timesheet_snoozes, v_summary;
 
   return jsonb_build_object(
     'ok', true,
     'filters', jsonb_build_object(
       'candidate_id', case when p_candidate_id is null then null else p_candidate_id::text end,
       'client_id', case when p_client_id is null then null else p_client_id::text end,
-      'include_paid_off', p_include_paid_off,
-      'include_cleared_snoozes', p_include_cleared_snoozes
+      'hide_completed_non_current_items', v_hide_completed_non_current_items
     ),
     'summary', v_summary,
     'finance_cases', v_finance_cases,
     'timesheet_snoozes', v_timesheet_snoozes
   );
 end;
-$$;
+$function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_build(
   p_pay_batch_id uuid
@@ -16227,7 +18348,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
   p_scope text,
@@ -16256,9 +18376,17 @@ declare
   v_candidate_id uuid;
   v_umbrella_id_text text;
   v_umbrella_id uuid;
+
   v_pruned_candidates jsonb := '[]'::jsonb;
   v_candidate_json jsonb;
+  v_candidate_work_json jsonb;
+  v_pruned_non_timesheet_lines jsonb := '[]'::jsonb;
+  v_pruned_transfers jsonb := '[]'::jsonb;
+  v_candidate_excluded_transfer_total numeric := 0;
+  v_job_excluded_transfer_total numeric := 0;
+  v_original_job_total numeric := 0;
   v_pruned_total_amount numeric := 0;
+  v_final_paid_amount numeric := 0;
 
   v_target_candidate_count integer := 0;
   v_ready_candidate_count integer := 0;
@@ -16294,9 +18422,59 @@ begin
     raise exception 'pay_remittance_queue_commit_stage: pay batch % not found.', p_pay_batch_id;
   end if;
 
-  if upper(coalesce(v_batch.batch_kind_fixed, '')) = 'LOANS' then
-    raise exception 'pay_remittance_queue_commit_stage: pay batch % is payout-only; use pay_finance_payout_notice_queue_commit_stage.', p_pay_batch_id;
-  end if;
+  drop table if exists pg_temp.tmp_commit_stage_excluded_finance_cases;
+  create temporary table pg_temp.tmp_commit_stage_excluded_finance_cases(
+    candidate_id uuid not null,
+    finance_case_id uuid not null,
+    primary key (candidate_id, finance_case_id)
+  ) on commit drop;
+
+  drop table if exists pg_temp.tmp_commit_stage_excluded_transfers;
+  create temporary table pg_temp.tmp_commit_stage_excluded_transfers(
+    transfer_id uuid primary key,
+    candidate_id uuid not null,
+    umbrella_id uuid null
+  ) on commit drop;
+
+  insert into pg_temp.tmp_commit_stage_excluded_finance_cases(
+    candidate_id,
+    finance_case_id
+  )
+  select distinct
+    pbc.candidate_id,
+    pbi.finance_case_id
+  from public.pay_batch_candidates pbc
+  join public.pay_batch_items pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.remittance_sent_at_utc is null
+    and coalesce(pbi.is_voided, false) = false
+    and pbi.finance_case_id is not null
+    and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+    and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+    and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+    and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on');
+
+  insert into pg_temp.tmp_commit_stage_excluded_transfers(
+    transfer_id,
+    candidate_id,
+    umbrella_id
+  )
+  select distinct
+    pbi.pay_bank_transfer_id,
+    pbc.candidate_id,
+    pbi.umbrella_id
+  from public.pay_batch_candidates pbc
+  join public.pay_batch_items pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and pbc.remittance_sent_at_utc is null
+    and coalesce(pbi.is_voided, false) = false
+    and pbi.pay_bank_transfer_id is not null
+    and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+    and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+    and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+    and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on');
 
   drop table if exists pg_temp.tmp_commit_stage_target_candidates;
   create temporary table pg_temp.tmp_commit_stage_target_candidates(
@@ -16325,10 +18503,17 @@ begin
       from public.pay_batch_items pbi
       where pbi.pay_batch_candidate_id = pbc.id
         and coalesce(pbi.is_voided, false) = false
+        and pbi.item_type <> 'DEBT_CREATED'
         and (
-          v_scope = 'ALL'
-          or (v_scope = 'PAYE' and upper(coalesce(pbi.pay_channel, '')) = 'PAYE')
-          or (v_scope = 'UMBRELLA' and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA')
+          (v_scope = 'ALL' or v_scope = 'UMBRELLA')
+          and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA'
+        )
+        and not (
+          pbi.finance_case_id is not null
+          and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+          and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+          and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
         )
     );
 
@@ -16428,120 +18613,116 @@ begin
       nullif(btrim(coalesce(v_job #>> '{recipient,remittance_email}', '')), '')
     );
 
-    if v_job_kind in ('PAYE_REMITTANCE', 'CANDIDATE_UMBRELLA_COPY_REMITTANCE') then
-      v_candidate_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,candidate_id}', '')), '');
-      v_candidate_id := null;
+    if v_job_kind = 'UMBRELLA_REMITTANCE' then
+      v_umbrella_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,umbrella_id}', '')), '');
+      v_umbrella_id := null;
 
-      if v_candidate_id_text is not null then
+      if v_umbrella_id_text is not null then
         begin
-          v_candidate_id := v_candidate_id_text::uuid;
+          v_umbrella_id := v_umbrella_id_text::uuid;
         exception when invalid_text_representation then
-          v_candidate_id := null;
+          v_umbrella_id := null;
         end;
       end if;
 
-      if v_candidate_id is not null
-         and exists (
-           select 1
-           from pg_temp.tmp_commit_stage_target_candidates tc
-           where tc.candidate_id = v_candidate_id
-         ) then
-        v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
+      v_pruned_candidates := '[]'::jsonb;
+      v_job_excluded_transfer_total := 0;
 
-        insert into pg_temp.tmp_commit_stage_job_map(
-          candidate_id,
-          job_kind,
-          recipient_kind,
-          recipient_email,
-          umbrella_id
-        )
-        values (
-          v_candidate_id,
-          v_job_kind,
-          v_recipient_kind,
-          v_recipient_email,
-          null
-        );
-      end if;
+      for v_candidate_json in
+        select ca.value
+        from jsonb_array_elements(coalesce(v_job->'candidates', '[]'::jsonb)) as ca(value)
+      loop
+        v_candidate_id_text := nullif(btrim(coalesce(v_candidate_json->>'candidate_id', '')), '');
+        v_candidate_id := null;
 
-    elsif v_job_kind = 'UMBRELLA_REMITTANCE' then
-      select coalesce(
-        jsonb_agg(ca.value order by coalesce(ca.value->>'display_name', ''), coalesce(ca.value->>'tms_ref', ''), coalesce(ca.value->>'candidate_id', '')),
-        '[]'::jsonb
-      )
-      into v_pruned_candidates
-      from jsonb_array_elements(coalesce(v_job->'candidates', '[]'::jsonb)) as ca(value)
-      where nullif(btrim(coalesce(ca.value->>'candidate_id', '')), '') is not null
-        and exists (
-          select 1
-          from pg_temp.tmp_commit_stage_target_candidates tc
-          where tc.candidate_id::text = btrim(ca.value->>'candidate_id')
-        );
+        if v_candidate_id_text is not null then
+          begin
+            v_candidate_id := v_candidate_id_text::uuid;
+          exception when invalid_text_representation then
+            v_candidate_id := null;
+          end;
+        end if;
+
+        if v_candidate_id is not null
+           and exists (
+             select 1
+             from pg_temp.tmp_commit_stage_target_candidates tc
+             where tc.candidate_id = v_candidate_id
+           ) then
+          v_candidate_work_json := v_candidate_json;
+
+          select round(coalesce(sum(pbt.amount), 0), 2)
+          into v_candidate_excluded_transfer_total
+          from pg_temp.tmp_commit_stage_excluded_transfers et
+          join public.pay_bank_transfers pbt
+            on pbt.id = et.transfer_id
+          where et.candidate_id = v_candidate_id
+            and (
+              v_umbrella_id is null
+              or et.umbrella_id is null
+              or et.umbrella_id = v_umbrella_id
+            );
+
+          v_job_excluded_transfer_total := round(coalesce(v_job_excluded_transfer_total, 0) + coalesce(v_candidate_excluded_transfer_total, 0), 2);
+
+          select coalesce(jsonb_agg(nt.value order by nt.ord), '[]'::jsonb)
+          into v_pruned_non_timesheet_lines
+          from jsonb_array_elements(coalesce(v_candidate_json->'non_timesheet_lines', '[]'::jsonb)) with ordinality as nt(value, ord)
+          where not (
+            upper(coalesce(nt.value->>'internal_item_type', '')) in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+            and nullif(btrim(coalesce(nt.value->>'finance_case_id', '')), '') is not null
+            and exists (
+              select 1
+              from pg_temp.tmp_commit_stage_excluded_finance_cases ef
+              where ef.candidate_id = v_candidate_id
+                and ef.finance_case_id::text = btrim(nt.value->>'finance_case_id')
+            )
+          );
+
+          v_candidate_work_json := jsonb_set(v_candidate_work_json, '{non_timesheet_lines}', coalesce(v_pruned_non_timesheet_lines, '[]'::jsonb), true);
+
+          if jsonb_typeof(v_candidate_work_json->'totals') = 'object' then
+            if btrim(coalesce(v_candidate_work_json #>> '{totals,final_paid}', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' then
+              v_final_paid_amount := round(greatest((v_candidate_work_json #>> '{totals,final_paid}')::numeric - coalesce(v_candidate_excluded_transfer_total, 0), 0), 2);
+              v_candidate_work_json := jsonb_set(v_candidate_work_json, '{totals,final_paid}', to_jsonb(v_final_paid_amount), true);
+              if jsonb_typeof(v_candidate_work_json #> '{totals,deductions_summary}') = 'object' then
+                v_candidate_work_json := jsonb_set(v_candidate_work_json, '{totals,deductions_summary,final_payable}', to_jsonb(v_final_paid_amount), true);
+              end if;
+            end if;
+          end if;
+
+          v_pruned_candidates := v_pruned_candidates || jsonb_build_array(v_candidate_work_json);
+
+          insert into pg_temp.tmp_commit_stage_job_map(
+            candidate_id,
+            job_kind,
+            recipient_kind,
+            recipient_email,
+            umbrella_id
+          )
+          values (
+            v_candidate_id,
+            v_job_kind,
+            v_recipient_kind,
+            v_recipient_email,
+            v_umbrella_id
+          );
+        end if;
+      end loop;
 
       if jsonb_array_length(v_pruned_candidates) > 0 then
-        select round(
-                 coalesce(
-                   sum(
-                     coalesce(
-                       nullif(btrim(coalesce(pc.value #>> '{totals,final_paid}', '')), '')::numeric,
-                       0
-                     )
-                   ),
-                   0
-                 ),
-                 2
-               )
-        into v_pruned_total_amount
-        from jsonb_array_elements(v_pruned_candidates) as pc(value);
+        if btrim(coalesce(v_job #>> '{summary,total_amount}', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' then
+          v_original_job_total := (v_job #>> '{summary,total_amount}')::numeric;
+        else
+          v_original_job_total := 0;
+        end if;
+
+        v_pruned_total_amount := round(greatest(coalesce(v_original_job_total, 0) - coalesce(v_job_excluded_transfer_total, 0), 0), 2);
 
         v_work_job := jsonb_set(v_work_job, '{candidates}', v_pruned_candidates, true);
         v_work_job := jsonb_set(v_work_job, '{summary,total_amount}', to_jsonb(coalesce(v_pruned_total_amount, 0)), true);
 
         v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
-
-        v_umbrella_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,umbrella_id}', '')), '');
-        v_umbrella_id := null;
-
-        if v_umbrella_id_text is not null then
-          begin
-            v_umbrella_id := v_umbrella_id_text::uuid;
-          exception when invalid_text_representation then
-            v_umbrella_id := null;
-          end;
-        end if;
-
-        for v_candidate_json in
-          select pc.value
-          from jsonb_array_elements(v_pruned_candidates) as pc(value)
-        loop
-          v_candidate_id_text := nullif(btrim(coalesce(v_candidate_json->>'candidate_id', '')), '');
-          v_candidate_id := null;
-
-          if v_candidate_id_text is not null then
-            begin
-              v_candidate_id := v_candidate_id_text::uuid;
-            exception when invalid_text_representation then
-              v_candidate_id := null;
-            end;
-          end if;
-
-          if v_candidate_id is not null then
-            insert into pg_temp.tmp_commit_stage_job_map(
-              candidate_id,
-              job_kind,
-              recipient_kind,
-              recipient_email,
-              umbrella_id
-            )
-            values (
-              v_candidate_id,
-              v_job_kind,
-              v_recipient_kind,
-              v_recipient_email,
-              v_umbrella_id
-            );
-          end if;
-        end loop;
       end if;
     end if;
   end loop;
@@ -16709,10 +18890,18 @@ declare
   v_job_results jsonb := '[]'::jsonb;
 
   v_job jsonb;
+  v_work_job jsonb;
   v_job_kind text;
   v_recipient_email text;
   v_candidate_id_text text;
   v_candidate_id uuid;
+
+  v_pruned_job_items jsonb := '[]'::jsonb;
+  v_pruned_job_total numeric := 0;
+  v_pruned_job_item_count integer := 0;
+  v_first_label text := null;
+  v_subject text := null;
+  v_worker_message text := null;
 
   v_target_candidate_count integer := 0;
   v_ready_candidate_count integer := 0;
@@ -16744,10 +18933,6 @@ begin
     raise exception 'pay_finance_payout_notice_queue_commit_stage: pay batch % not found.', p_pay_batch_id;
   end if;
 
-  if upper(coalesce(v_batch.batch_kind_fixed, '')) <> 'LOANS' then
-    raise exception 'pay_finance_payout_notice_queue_commit_stage: pay batch % is not payout-only.', p_pay_batch_id;
-  end if;
-
   drop table if exists pg_temp.tmp_payout_notice_target_candidates;
   create temporary table pg_temp.tmp_payout_notice_target_candidates(
     pay_batch_candidate_id uuid primary key,
@@ -16755,6 +18940,32 @@ begin
     candidate_display_name text null,
     candidate_tms_ref text null
   ) on commit drop;
+
+  drop table if exists pg_temp.tmp_payout_notice_target_items;
+  create temporary table pg_temp.tmp_payout_notice_target_items(
+    candidate_id uuid not null,
+    finance_case_id uuid not null,
+    primary key (candidate_id, finance_case_id)
+  ) on commit drop;
+
+  insert into pg_temp.tmp_payout_notice_target_items(
+    candidate_id,
+    finance_case_id
+  )
+  select distinct
+    pbc.candidate_id,
+    pbi.finance_case_id
+  from public.pay_batch_candidates pbc
+  join public.pay_batch_items pbi
+    on pbi.pay_batch_candidate_id = pbc.id
+  where pbc.pay_batch_id = p_pay_batch_id
+    and coalesce(pbi.is_voided, false) = false
+    and pbi.finance_case_id is not null
+    and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+    and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+    and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+    and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+    and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice', 'false'))) in ('true', '1', 'yes', 'y', 'on');
 
   insert into pg_temp.tmp_payout_notice_target_candidates(
     pay_batch_candidate_id,
@@ -16769,13 +18980,21 @@ begin
     pbc.candidate_tms_ref
   from public.pay_batch_candidates pbc
   where pbc.pay_batch_id = p_pay_batch_id
-    and pbc.remittance_sent_at_utc is null
     and exists (
       select 1
-      from public.pay_batch_items pbi
-      where pbi.pay_batch_candidate_id = pbc.id
-        and coalesce(pbi.is_voided, false) = false
-        and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+      from pg_temp.tmp_payout_notice_target_items ti
+      where ti.candidate_id = pbc.candidate_id
+    )
+    and not exists (
+      select 1
+      from public.mail_outbox mo
+      where mo.reference = (
+        'payout_notice:pay_batch:' || p_pay_batch_id::text || ':PAYOUT_NOTICE:CANDIDATE:' || pbc.candidate_id::text
+      )
+        and upper(coalesce(mo.recipient_kind, '')) = 'CANDIDATE'
+        and mo.recipient_id = pbc.candidate_id
+        and lower(coalesce(mo.context_kind, '')) = 'pay_batches'
+        and mo.context_id = p_pay_batch_id
     );
 
   select count(*)::int
@@ -16861,7 +19080,7 @@ begin
     select j.value
     from jsonb_array_elements(v_build_jobs) as j(value)
   loop
-    v_job_kind := upper(btrim(coalesce(v_job->>'job_kind', '')));
+    v_job_kind := upper(btrim(coalesce(v_job->>'job_kind', 'PAYOUT_NOTICE')));
     v_candidate_id_text := nullif(btrim(coalesce(v_job->>'candidate_id', '')), '');
     v_candidate_id := null;
     v_recipient_email := nullif(btrim(coalesce(v_job->>'recipient_email', '')), '');
@@ -16880,18 +19099,69 @@ begin
          from pg_temp.tmp_payout_notice_target_candidates tc
          where tc.candidate_id = v_candidate_id
        ) then
-      v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_job);
+      select
+        coalesce(jsonb_agg(it.value order by it.ord), '[]'::jsonb),
+        round(
+          coalesce(
+            sum(
+              case
+                when btrim(coalesce(it.value->>'amount', '')) ~ '^-?[0-9]+(\.[0-9]+)?$'
+                  then (it.value->>'amount')::numeric
+                else 0
+              end
+            ),
+            0
+          ),
+          2
+        )
+      into
+        v_pruned_job_items,
+        v_pruned_job_total
+      from jsonb_array_elements(coalesce(v_job->'items', '[]'::jsonb)) with ordinality as it(value, ord)
+      where nullif(btrim(coalesce(it.value->>'finance_case_id', '')), '') is not null
+        and exists (
+          select 1
+          from pg_temp.tmp_payout_notice_target_items ti
+          where ti.candidate_id = v_candidate_id
+            and ti.finance_case_id::text = btrim(it.value->>'finance_case_id')
+        );
 
-      insert into pg_temp.tmp_payout_notice_job_map(
-        candidate_id,
-        job_kind,
-        recipient_email
-      )
-      values (
-        v_candidate_id,
-        v_job_kind,
-        v_recipient_email
-      );
+      v_pruned_job_item_count := jsonb_array_length(coalesce(v_pruned_job_items, '[]'::jsonb));
+
+      if v_pruned_job_item_count > 0 then
+        v_first_label := nullif(btrim(coalesce(v_pruned_job_items->0->>'label', '')), '');
+
+        v_subject := case
+          when v_pruned_job_item_count = 1 and v_first_label = 'Payment Advance' then 'Payment Advance scheduled'
+          when v_pruned_job_item_count = 1 and v_first_label = 'Manual Credit Adjustment' then 'Manual Credit Adjustment scheduled'
+          else 'Payment scheduled'
+        end;
+
+        v_worker_message := case
+          when v_pruned_job_item_count = 1 and v_first_label = 'Payment Advance' then 'A Payment Advance has been scheduled.'
+          when v_pruned_job_item_count = 1 and v_first_label = 'Manual Credit Adjustment' then 'A Manual Credit Adjustment has been scheduled.'
+          else 'A payment has been scheduled.'
+        end;
+
+        v_work_job := coalesce(v_job, '{}'::jsonb) || jsonb_build_object('job_kind', 'PAYOUT_NOTICE');
+        v_work_job := jsonb_set(v_work_job, '{items}', coalesce(v_pruned_job_items, '[]'::jsonb), true);
+        v_work_job := jsonb_set(v_work_job, '{total_amount}', to_jsonb(coalesce(v_pruned_job_total, 0)), true);
+        v_work_job := jsonb_set(v_work_job, '{subject}', to_jsonb(v_subject), true);
+        v_work_job := jsonb_set(v_work_job, '{worker_message}', to_jsonb(v_worker_message), true);
+
+        v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
+
+        insert into pg_temp.tmp_payout_notice_job_map(
+          candidate_id,
+          job_kind,
+          recipient_email
+        )
+        values (
+          v_candidate_id,
+          v_job_kind,
+          v_recipient_email
+        );
+      end if;
     end if;
   end loop;
 
@@ -16903,19 +19173,6 @@ begin
   into v_job_count;
 
   if v_job_count > 0 then
-    update public.pay_batch_candidates pbc
-    set
-      remittance_trigger_status = 'PAYOUT_NOTICE_BUILD_READY',
-      last_remittance_error = null,
-      updated_at = now()
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbc.remittance_sent_at_utc is null
-      and exists (
-        select 1
-        from pg_temp.tmp_payout_notice_job_map jm
-        where jm.candidate_id = pbc.candidate_id
-      );
-
     v_trigger_status := 'PAYOUT_NOTICE_BUILD_READY';
   else
     v_trigger_status := 'NO_QUEUEABLE_PAYOUT_NOTICE_JOB';
@@ -16965,7 +19222,7 @@ begin
   select coalesce(
            jsonb_agg(
              jsonb_build_object(
-               'job_kind', upper(btrim(coalesce(j.job->>'job_kind', ''))),
+               'job_kind', upper(btrim(coalesce(j.job->>'job_kind', 'PAYOUT_NOTICE'))),
                'candidate_id', nullif(btrim(coalesce(j.job->>'candidate_id', '')), ''),
                'recipient_email', nullif(btrim(coalesce(j.job->>'recipient_email', '')), ''),
                'scheduled_payment_date', nullif(btrim(coalesce(j.job->>'scheduled_payment_date', '')), ''),
@@ -17011,809 +19268,6 @@ begin
   );
 end;
 $function$;
-
-
-
-create or replace function public.pay_payment_advance_create(
-  p_candidate_id uuid,
-  p_principal_amount numeric,
-  p_weekly_due numeric,
-  p_weeks_total int,
-  p_start_week_start date,
-  p_actor_user_id uuid,
-  p_note text default null,
-  p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_pay_date date := (now() at time zone 'Europe/London')::date;
-
-  v_settings record;
-  v_candidate record;
-
-  v_schedule_json jsonb := '[]'::jsonb;
-  v_next_due date := null;
-
-  v_finance_case_id uuid := null;
-  v_pay_batch_id uuid := null;
-  v_pay_batch_candidate_id uuid := null;
-  v_pay_batch_item_id uuid := null;
-  v_finance_component_id uuid := null;
-
-  v_warnings jsonb := '[]'::jsonb;
-
-  v_provider text := null;
-  v_env text := null;
-  v_need_name_check boolean := false;
-  v_requires_payee_map boolean := false;
-
-  v_bnc_status text := null;
-  v_bnc_has_override boolean := false;
-  v_bpm_present boolean := false;
-
-  v_required_weeks int := 0;
-  v_pay_channel text := null;
-  v_paye_treatment text := 'NONE';
-
-  v_principal_amount_norm numeric(12,2) := 0;
-  v_weekly_due_norm numeric(12,2) := null;
-  v_weeks_total_norm int := null;
-  v_schedule_input_mode text := null;
-  v_has_weekly_due_input boolean := false;
-  v_has_weeks_total_input boolean := false;
-
-  v_source_family_key text := null;
-  v_component_source_basis_json jsonb := '{}'::jsonb;
-  v_component_snapshot_json jsonb := '{}'::jsonb;
-  v_component_summary_json jsonb := '{}'::jsonb;
-begin
-  if p_candidate_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'CANDIDATE_ID_REQUIRED',
-      'message', 'pay_payment_advance_create: candidate_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'ACTOR_USER_ID_REQUIRED',
-      'message', 'pay_payment_advance_create: actor_user_id is required'
-    )::text;
-  end if;
-
-  if p_principal_amount is null or round(p_principal_amount,2) <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'PRINCIPAL_INVALID',
-      'message', 'pay_payment_advance_create: principal_amount must be > 0'
-    )::text;
-  end if;
-
-  if p_start_week_start is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'START_WEEK_START_REQUIRED',
-      'message', 'pay_payment_advance_create: start_week_start is required'
-    )::text;
-  end if;
-
-  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'START_WEEK_START_NOT_MONDAY',
-      'message', 'pay_payment_advance_create: start_week_start must be a Monday (week start)',
-      'start_week_start', p_start_week_start::text
-    )::text;
-  end if;
-
-  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
-      'message', 'pay_payment_advance_create: minimum_earnings_threshold must be >= 0'
-    )::text;
-  end if;
-
-  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'TAKE_HOME_FLOOR_INVALID',
-      'message', 'pay_payment_advance_create: take_home_floor_override must be >= 0'
-    )::text;
-  end if;
-
-  v_principal_amount_norm := round(p_principal_amount,2);
-  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
-  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
-
-  if not v_has_weekly_due_input and not v_has_weeks_total_input then
-    if p_weekly_due is not null and round(p_weekly_due,2) <= 0 then
-      raise exception '%', jsonb_build_object(
-        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-        'code', 'WEEKLY_DUE_INVALID',
-        'message', 'pay_payment_advance_create: weekly_due must be > 0 when provided'
-      )::text;
-    end if;
-
-    if p_weeks_total is not null and p_weeks_total < 1 then
-      raise exception '%', jsonb_build_object(
-        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-        'code', 'WEEKS_TOTAL_INVALID',
-        'message', 'pay_payment_advance_create: weeks_total must be >= 1 when provided'
-      )::text;
-    end if;
-
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'REPAYMENT_INPUT_REQUIRED',
-      'message', 'pay_payment_advance_create: supply either weekly_due or weeks_total'
-    )::text;
-  end if;
-
-  if v_has_weekly_due_input and v_has_weeks_total_input then
-    v_schedule_input_mode := 'LEGACY_BOTH';
-    v_weekly_due_norm := round(p_weekly_due,2);
-    v_weeks_total_norm := p_weeks_total;
-  elsif v_has_weeks_total_input then
-    v_schedule_input_mode := 'BY_WEEKS';
-    v_weeks_total_norm := p_weeks_total;
-    v_weekly_due_norm := round((ceil((v_principal_amount_norm / v_weeks_total_norm) * 100) / 100), 2);
-  else
-    v_schedule_input_mode := 'BY_WEEKLY_DUE';
-    v_weekly_due_norm := round(p_weekly_due,2);
-    v_weeks_total_norm := greatest(ceil(v_principal_amount_norm / v_weekly_due_norm)::int, 1);
-  end if;
-
-  if v_weekly_due_norm is null or v_weekly_due_norm <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'WEEKLY_DUE_INVALID',
-      'message', 'pay_payment_advance_create: normalized weekly_due must be > 0'
-    )::text;
-  end if;
-
-  if v_weeks_total_norm is null or v_weeks_total_norm < 1 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'WEEKS_TOTAL_INVALID',
-      'message', 'pay_payment_advance_create: normalized weeks_total must be >= 1'
-    )::text;
-  end if;
-
-  v_required_weeks := greatest(ceil(v_principal_amount_norm / v_weekly_due_norm)::int, 1);
-  if v_weeks_total_norm < v_required_weeks then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'WEEKS_TOTAL_TOO_SHORT',
-      'message', 'pay_payment_advance_create: repayment schedule does not cover the principal amount',
-      'required_weeks', v_required_weeks,
-      'weeks_total', v_weeks_total_norm
-    )::text;
-  end if;
-
-  select
-    sd.banking_system,
-    sd.external_paye_system,
-    sd.rail_provider_default,
-    sd.rail_env_default,
-    sd.rail_supports_name_check
-  into v_settings
-  from public.settings_defaults sd
-  where sd.id = 1
-  limit 1;
-
-  if v_settings.banking_system is null or v_settings.external_paye_system is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'SETTINGS_DEFAULTS_MISSING',
-      'message', 'pay_payment_advance_create: settings_defaults missing required banking defaults (id=1)'
-    )::text;
-  end if;
-
-  select
-    c.id,
-    c.active,
-    c.tms_ref,
-    c.display_name,
-    c.first_name,
-    c.last_name,
-    c.account_holder,
-    c.sort_code,
-    c.account_number,
-    c.bank_details_hash,
-    c.umbrella_id,
-    upper(coalesce(c.pay_method,'')) as pay_method
-  into v_candidate
-  from public.candidates c
-  where c.id = p_candidate_id
-  limit 1;
-
-  if v_candidate.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'CANDIDATE_NOT_FOUND',
-      'message', 'pay_payment_advance_create: candidate not found',
-      'candidate_id', p_candidate_id::text
-    )::text;
-  end if;
-
-  if coalesce(v_candidate.active,false) = false then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'CANDIDATE_INACTIVE',
-      'message', 'pay_payment_advance_create: candidate is not active',
-      'candidate_id', p_candidate_id::text
-    )::text;
-  end if;
-
-  if v_candidate.pay_method not in ('PAYE','UMBRELLA') then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
-      'code', 'PAY_METHOD_INVALID',
-      'message', 'pay_payment_advance_create: candidate pay_method must be PAYE or UMBRELLA',
-      'candidate_id', p_candidate_id::text,
-      'pay_method', v_candidate.pay_method
-    )::text;
-  end if;
-
-  v_pay_channel := v_candidate.pay_method;
-
-  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
-  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
-  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
-  v_requires_payee_map := (v_provider <> 'CSV');
-
-  select
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'week_start', (p_start_week_start + (gs.i * 7))::date,
-          'amount', round(
-            -least(
-              v_weekly_due_norm,
-              greatest(v_principal_amount_norm - (v_weekly_due_norm * gs.i), 0)
-            ),
-            2
-          )
-        )
-        order by (p_start_week_start + (gs.i * 7))::date asc
-      ),
-      '[]'::jsonb
-    )
-  into v_schedule_json
-  from generate_series(0, greatest(v_weeks_total_norm,1) - 1) as gs(i);
-
-  select min(x.week_start)
-  into v_next_due
-  from (
-    select
-      (p_start_week_start + (gs2.i * 7))::date as week_start,
-      round(
-        -least(
-          v_weekly_due_norm,
-          greatest(v_principal_amount_norm - (v_weekly_due_norm * gs2.i), 0)
-        ),
-        2
-      )::numeric as amt
-    from generate_series(0, greatest(v_weeks_total_norm,1) - 1) as gs2(i)
-  ) x
-  where x.amt < 0;
-
-  insert into public.pay_advances(
-    candidate_id,
-    client_id,
-    reason,
-    original_amount,
-    outstanding_amount,
-    linked_shift_date,
-    schedule_json,
-    next_due_week_start,
-    status,
-    best_guess_hours,
-    notes,
-    created_at,
-    created_by,
-    updated_at,
-    advance_kind,
-    linked_timesheet_id,
-    baseline_signature,
-    payout_status,
-    payout_pay_batch_id,
-    payout_transfer_id,
-    weekly_due,
-    weeks_total,
-    start_week_start,
-    case_type,
-    adjustment_comment,
-    source_original_paid_amount,
-    source_corrected_paid_amount,
-    minimum_earnings_threshold,
-    take_home_floor_override,
-    written_off_at_utc,
-    written_off_by_user_id,
-    write_off_reason,
-    cleared_at_utc,
-    cleared_by_user_id
-  )
-  values (
-    p_candidate_id,
-    null::uuid,
-    'LOAN'::public.pay_advance_reason_enum,
-    v_principal_amount_norm,
-    v_principal_amount_norm,
-    null::date,
-    coalesce(v_schedule_json,'[]'::jsonb),
-    v_next_due,
-    'ACTIVE'::public.pay_advance_status_enum,
-    null::jsonb,
-    nullif(btrim(coalesce(p_note,'')), ''),
-    v_now_utc,
-    p_actor_user_id,
-    v_now_utc,
-    'LOAN'::public.pay_advance_kind_enum,
-    null::uuid,
-    null::text,
-    'PENDING'::public.pay_advance_payout_status_enum,
-    null::uuid,
-    null::uuid,
-    v_weekly_due_norm,
-    v_weeks_total_norm,
-    p_start_week_start,
-    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
-    null::text,
-    null::numeric,
-    null::numeric,
-    case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
-    case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
-    null::timestamptz,
-    null::uuid,
-    null::text,
-    null::timestamptz,
-    null::uuid
-  )
-  returning id into v_finance_case_id;
-
-  v_source_family_key := 'case:' || v_finance_case_id::text;
-  v_component_source_basis_json := jsonb_strip_nulls(
-    jsonb_build_object(
-      'case_type', 'PAYMENT_ADVANCE',
-      'advance_kind', 'LOAN',
-      'principal_amount', v_principal_amount_norm,
-      'weekly_due', v_weekly_due_norm,
-      'weeks_total', v_weeks_total_norm,
-      'start_week_start', p_start_week_start::text,
-      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
-      'schedule_json', coalesce(v_schedule_json, '[]'::jsonb),
-      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
-      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
-      'note', nullif(btrim(coalesce(p_note,'')), '')
-    )
-  );
-
-  insert into public.pay_finance_case_components (
-    finance_case_id,
-    candidate_id,
-    client_id,
-    linked_timesheet_id,
-    source_family_key,
-    component_key_type,
-    component_key_value,
-    classification,
-    source_pay_method,
-    source_basis_json,
-    source_amount,
-    remaining_source_amount,
-    saved_target_pay_method,
-    saved_resolution_mode,
-    saved_resolution_payload_json,
-    saved_resolution_result_json,
-    resolution_fingerprint,
-    is_resolution_stale,
-    stale_reason,
-    allocation_priority_group,
-    allocation_priority_order,
-    created_at_utc,
-    updated_at_utc,
-    resolved_at_utc,
-    closed_at_utc
-  )
-  values (
-    v_finance_case_id,
-    p_candidate_id,
-    null::uuid,
-    null::uuid,
-    v_source_family_key,
-    'CASE_TOTAL',
-    'TOTAL',
-    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-    v_candidate.pay_method,
-    v_component_source_basis_json,
-    v_principal_amount_norm,
-    v_principal_amount_norm,
-    null,
-    null,
-    null,
-    null,
-    null,
-    false,
-    null,
-    0,
-    0,
-    v_now_utc,
-    v_now_utc,
-    null,
-    null
-  )
-  returning id into v_finance_component_id;
-
-  v_component_snapshot_json := jsonb_build_object(
-    'finance_component_id', v_finance_component_id::text,
-    'finance_case_id', v_finance_case_id::text,
-    'source_family_key', v_source_family_key,
-    'component_key_type', 'CASE_TOTAL',
-    'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
-    'source_pay_method', v_candidate.pay_method,
-    'target_pay_method', v_candidate.pay_method,
-    'source_basis_json', v_component_source_basis_json,
-    'source_amount', v_principal_amount_norm,
-    'remaining_source_amount', v_principal_amount_norm,
-    'current_component_fingerprint', public.pay_finance_component_fingerprint(
-      p_source_family_key => v_source_family_key,
-      p_component_key_type => 'CASE_TOTAL',
-      p_component_key_value => 'TOTAL',
-      p_classification => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-      p_source_pay_method => v_candidate.pay_method,
-      p_current_target_pay_method => v_candidate.pay_method,
-      p_source_basis_json => v_component_source_basis_json,
-      p_source_amount => v_principal_amount_norm,
-      p_relevant_erni_pct => null,
-      p_target_basis_json => jsonb_build_object('current_target_pay_method', v_candidate.pay_method)
-    )
-  );
-
-  insert into public.pay_batches(
-    pay_date,
-    created_at_utc,
-    created_by_user_id,
-    status,
-    banking_system_snapshot,
-    external_paye_system_snapshot,
-    rail_provider_snapshot,
-    rail_env_snapshot,
-    batch_kind_fixed
-  )
-  values (
-    v_pay_date,
-    v_now_utc,
-    p_actor_user_id,
-    'DRAFT',
-    v_settings.banking_system,
-    v_settings.external_paye_system,
-    v_settings.rail_provider_default,
-    v_settings.rail_env_default,
-    'LOANS'
-  )
-  returning id into v_pay_batch_id;
-
-  update public.pay_advances pa
-  set payout_pay_batch_id = v_pay_batch_id,
-      updated_at = v_now_utc
-  where pa.id = v_finance_case_id;
-
-  insert into public.pay_batch_candidates(
-    pay_batch_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    paye_state,
-    mismatch_settlement_choice,
-    gross_preview,
-    net_bank_amount,
-    debt_created,
-    loan_repayment_taken,
-    overpayment_recovery_taken,
-    awaiting_net_amount,
-    updated_at
-  )
-  values (
-    v_pay_batch_id,
-    p_candidate_id,
-    v_candidate.tms_ref,
-    v_candidate.display_name,
-    null,
-    null,
-    v_principal_amount_norm,
-    v_principal_amount_norm,
-    0,
-    0,
-    0,
-    false,
-    v_now_utc
-  )
-  returning id into v_pay_batch_candidate_id;
-
-  insert into public.pay_batch_items(
-    pay_batch_candidate_id,
-    item_type,
-    timesheet_id,
-    segment_key,
-    source_ref,
-    description,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    pay_channel,
-    umbrella_id,
-    bank_reference,
-    pay_bank_transfer_id,
-    repayment_week_start,
-    is_voided,
-    is_mismatch,
-    created_at,
-    updated_at,
-    finance_case_id,
-    reservation_id,
-    paye_treatment,
-    finance_component_id,
-    frozen_component_snapshot_json,
-    frozen_component_key_type,
-    frozen_component_key_value,
-    frozen_component_classification,
-    frozen_source_basis_json,
-    frozen_source_pay_method,
-    frozen_target_pay_method,
-    frozen_resolution_mode,
-    frozen_resolution_payload_json,
-    frozen_resolution_result_json,
-    frozen_source_amount,
-    frozen_target_amount_ex_vat,
-    frozen_target_amount_vat,
-    frozen_target_amount_inc_vat
-  )
-  values (
-    v_pay_batch_candidate_id,
-    'LOAN_PAYOUT',
-    null::uuid,
-    null::text,
-    ('advance:' || v_finance_case_id::text),
-    'Payment Advance',
-    v_principal_amount_norm,
-    0,
-    v_principal_amount_norm,
-    v_pay_channel,
-    case when v_pay_channel = 'UMBRELLA' then v_candidate.umbrella_id else null::uuid end,
-    null::text,
-    null::uuid,
-    null::date,
-    false,
-    false,
-    v_now_utc,
-    v_now_utc,
-    v_finance_case_id,
-    null::uuid,
-    v_paye_treatment,
-    v_finance_component_id,
-    v_component_snapshot_json,
-    'CASE_TOTAL',
-    'TOTAL',
-    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-    v_component_source_basis_json,
-    v_candidate.pay_method,
-    v_candidate.pay_method,
-    null,
-    null,
-    null,
-    v_principal_amount_norm,
-    v_principal_amount_norm,
-    0,
-    v_principal_amount_norm
-  )
-  returning id into v_pay_batch_item_id;
-
-  insert into public.pay_batch_item_breakdowns(
-    pay_batch_item_id,
-    line_kind,
-    bucket_code,
-    unit_name,
-    units,
-    rate,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    meta_json
-  )
-  values (
-    v_pay_batch_item_id,
-    'LOAN_PAYOUT',
-    null,
-    'Payment Advance',
-    null::numeric,
-    null::numeric,
-    v_principal_amount_norm,
-    0,
-    v_principal_amount_norm,
-    jsonb_build_object(
-      'case_type', 'PAYMENT_ADVANCE',
-      'worker_label', 'Payment Advance'
-    )
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    finance_component_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    v_finance_case_id,
-    null,
-    'CREATED',
-    v_now_utc,
-    p_actor_user_id,
-    v_pay_batch_id,
-    null::jsonb,
-    jsonb_build_object(
-      'case_type', 'PAYMENT_ADVANCE',
-      'original_amount', v_principal_amount_norm,
-      'outstanding_amount', v_principal_amount_norm,
-      'weekly_due', v_weekly_due_norm,
-      'weeks_total', v_weeks_total_norm,
-      'start_week_start', p_start_week_start::text,
-      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
-      'payout_pay_batch_id', v_pay_batch_id::text,
-      'payout_status', 'PENDING',
-      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
-      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
-      'schedule_input_mode', v_schedule_input_mode
-    ),
-    null::text,
-    'Payment Advance created'
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    finance_component_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    v_finance_case_id,
-    v_finance_component_id,
-    'COMPONENT_CREATED',
-    v_now_utc,
-    p_actor_user_id,
-    v_pay_batch_id,
-    null::jsonb,
-    v_component_snapshot_json,
-    'PAYMENT_ADVANCE_COMPONENT_CREATE',
-    'Created taxable finance component for Payment Advance principal'
-  );
-
-  if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
-    v_warnings := v_warnings || jsonb_build_array(
-      jsonb_build_object(
-        'code', 'BLOCKED_BANK_DETAILS',
-        'message', 'Candidate bank details are missing; batch can be created but will be blocked at prepare/schedule until bank details are present.',
-        'candidate_id', p_candidate_id::text
-      )
-    );
-  else
-    if v_need_name_check = true then
-      select
-        coalesce(bnc.status, 'UNVERIFIED') as status,
-        (bnc.override_reason is not null and bnc.override_hash = v_candidate.bank_details_hash) as has_override
-      into
-        v_bnc_status,
-        v_bnc_has_override
-      from public.bank_name_checks bnc
-      where bnc.rail_provider = v_settings.rail_provider_default
-        and bnc.rail_env = v_settings.rail_env_default
-        and bnc.entity_kind = 'CANDIDATE'
-        and bnc.entity_id = p_candidate_id
-        and bnc.bank_details_hash = v_candidate.bank_details_hash
-      limit 1;
-
-      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
-        v_warnings := v_warnings || jsonb_build_array(
-          jsonb_build_object(
-            'code', 'BLOCKED_NAME_CHECK',
-            'message', 'Name check has not passed (or override missing) for candidate bank details; scheduling/execution may be blocked until resolved.',
-            'candidate_id', p_candidate_id::text,
-            'rail_provider', v_settings.rail_provider_default,
-            'rail_env', v_settings.rail_env_default
-          )
-        );
-      end if;
-    end if;
-
-    if v_requires_payee_map = true then
-      select (bpm.payee_id is not null) as present
-      into v_bpm_present
-      from public.bank_payee_map bpm
-      where bpm.rail_provider = v_settings.rail_provider_default
-        and bpm.rail_env = v_settings.rail_env_default
-        and bpm.entity_kind = 'CANDIDATE'
-        and bpm.entity_id = p_candidate_id
-        and bpm.bank_details_hash = v_candidate.bank_details_hash
-      limit 1;
-
-      if coalesce(v_bpm_present,false) = false then
-        v_warnings := v_warnings || jsonb_build_array(
-          jsonb_build_object(
-            'code', 'BLOCKED_NO_PAYEE_MAP',
-            'message', 'Payee map is missing for candidate bank details on this rail; scheduling/execution may be blocked until payee mapping exists.',
-            'candidate_id', p_candidate_id::text,
-            'rail_provider', v_settings.rail_provider_default,
-            'rail_env', v_settings.rail_env_default
-          )
-        );
-      end if;
-    end if;
-  end if;
-
-  v_component_summary_json := jsonb_build_object(
-    'finance_component_id', v_finance_component_id::text,
-    'source_family_key', v_source_family_key,
-    'component_key_type', 'CASE_TOTAL',
-    'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
-    'source_pay_method', v_candidate.pay_method,
-    'source_amount', v_principal_amount_norm,
-    'remaining_source_amount', v_principal_amount_norm,
-    'saved_target_pay_method', null,
-    'saved_resolution_mode', null,
-    'is_resolution_stale', false,
-    'stale_reason', null,
-    'source_basis_json', v_component_source_basis_json
-  );
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', v_finance_case_id::text,
-    'advance_id', v_finance_case_id::text,
-    'pay_batch_id', v_pay_batch_id::text,
-    'pay_date', v_pay_date::text,
-    'batch_kind_fixed', 'LOANS',
-    'case_type', 'PAYMENT_ADVANCE',
-    'worker_label', 'Payment Advance',
-    'repayment_label', 'Payment Advance Repayment',
-    'schedule_input_mode', v_schedule_input_mode,
-    'principal_amount', v_principal_amount_norm,
-    'weekly_due', v_weekly_due_norm,
-    'weeks_total', v_weeks_total_norm,
-    'start_week_start', p_start_week_start::text,
-    'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
-    'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
-    'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
-    'schedule_json', coalesce(v_schedule_json,'[]'::jsonb),
-    'finance_component_id', v_finance_component_id::text,
-    'component_summary', v_component_summary_json,
-    'warnings', v_warnings
-  );
-end;
-$$;
-
 
 
 
@@ -18166,6 +19620,806 @@ end;
 $$;
 
 
+
+create or replace function public.pay_payment_advance_create(
+  p_candidate_id uuid,
+  p_principal_amount numeric,
+  p_weekly_due numeric,
+  p_weeks_total int,
+  p_start_week_start date,
+  p_actor_user_id uuid,
+  p_note text default null,
+  p_minimum_earnings_threshold numeric default null,
+  p_take_home_floor_override numeric default null,
+  p_beneficiary_name text default null,
+  p_sort_code text default null,
+  p_account_number text default null,
+  p_bank_details_note text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_pay_date date := (now() at time zone 'Europe/London')::date;
+
+  v_settings record;
+  v_candidate record;
+
+  v_schedule_json jsonb := '[]'::jsonb;
+  v_next_due date := null;
+
+  v_finance_case_id uuid := null;
+  v_finance_component_id uuid := null;
+
+  v_warnings jsonb := '[]'::jsonb;
+
+  v_provider text := null;
+  v_env text := null;
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+
+  v_bnc_status text := null;
+  v_bnc_has_override boolean := false;
+  v_bpm_present boolean := false;
+
+  v_required_weeks int := 0;
+  v_pay_channel text := null;
+  v_paye_treatment text := 'NONE';
+
+  v_principal_amount_norm numeric(12,2) := 0;
+  v_weekly_due_norm numeric(12,2) := null;
+  v_weeks_total_norm int := null;
+  v_schedule_input_mode text := null;
+  v_has_weekly_due_input boolean := false;
+  v_has_weeks_total_input boolean := false;
+
+  v_source_family_key text := null;
+  v_component_source_basis_json jsonb := '{}'::jsonb;
+  v_component_snapshot_json jsonb := '{}'::jsonb;
+  v_component_summary_json jsonb := '{}'::jsonb;
+
+  v_taxability public.pay_finance_taxability_enum := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_oneoff_required boolean := false;
+
+  v_beneficiary_name_norm text := null;
+  v_sort_code_norm text := null;
+  v_account_number_norm text := null;
+  v_oneoff_bank_hash text := null;
+  v_oneoff_before jsonb := null;
+  v_oneoff_after jsonb := null;
+
+  v_readiness_entity_kind text := 'CANDIDATE';
+  v_readiness_entity_id uuid := null;
+  v_readiness_bank_hash text := null;
+  v_readiness_payee_name text := null;
+  v_readiness_sort_code text := null;
+  v_readiness_account_number text := null;
+  v_readiness_account_type text := null;
+begin
+  if p_candidate_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'CANDIDATE_ID_REQUIRED',
+      'message', 'pay_payment_advance_create: candidate_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_payment_advance_create: actor_user_id is required'
+    )::text;
+  end if;
+
+  if p_principal_amount is null or round(p_principal_amount,2) <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'PRINCIPAL_INVALID',
+      'message', 'pay_payment_advance_create: principal_amount must be > 0'
+    )::text;
+  end if;
+
+  if p_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'START_WEEK_START_REQUIRED',
+      'message', 'pay_payment_advance_create: start_week_start is required'
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(p_start_week_start) <> p_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_payment_advance_create: start_week_start must be a Monday (week start)',
+      'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  if p_minimum_earnings_threshold is not null and round(p_minimum_earnings_threshold,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'MINIMUM_EARNINGS_THRESHOLD_INVALID',
+      'message', 'pay_payment_advance_create: minimum_earnings_threshold must be >= 0'
+    )::text;
+  end if;
+
+  if p_take_home_floor_override is not null and round(p_take_home_floor_override,2) < 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'TAKE_HOME_FLOOR_INVALID',
+      'message', 'pay_payment_advance_create: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  v_principal_amount_norm := round(p_principal_amount,2);
+  v_has_weekly_due_input := (p_weekly_due is not null and round(p_weekly_due,2) > 0);
+  v_has_weeks_total_input := (p_weeks_total is not null and p_weeks_total >= 1);
+
+  if not v_has_weekly_due_input and not v_has_weeks_total_input then
+    if p_weekly_due is not null and round(p_weekly_due,2) <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'WEEKLY_DUE_INVALID',
+        'message', 'pay_payment_advance_create: weekly_due must be > 0 when provided'
+      )::text;
+    end if;
+
+    if p_weeks_total is not null and p_weeks_total < 1 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'WEEKS_TOTAL_INVALID',
+        'message', 'pay_payment_advance_create: weeks_total must be >= 1 when provided'
+      )::text;
+    end if;
+
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'REPAYMENT_INPUT_REQUIRED',
+      'message', 'pay_payment_advance_create: supply either weekly_due or weeks_total'
+    )::text;
+  end if;
+
+  if v_has_weekly_due_input and v_has_weeks_total_input then
+    v_schedule_input_mode := 'LEGACY_BOTH';
+    v_weekly_due_norm := round(p_weekly_due,2);
+    v_weeks_total_norm := p_weeks_total;
+  elsif v_has_weeks_total_input then
+    v_schedule_input_mode := 'BY_WEEKS';
+    v_weeks_total_norm := p_weeks_total;
+    v_weekly_due_norm := round((ceil((v_principal_amount_norm / v_weeks_total_norm) * 100) / 100), 2);
+  else
+    v_schedule_input_mode := 'BY_WEEKLY_DUE';
+    v_weekly_due_norm := round(p_weekly_due,2);
+    v_weeks_total_norm := greatest(ceil(v_principal_amount_norm / v_weekly_due_norm)::int, 1);
+  end if;
+
+  if v_weekly_due_norm is null or v_weekly_due_norm <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'WEEKLY_DUE_INVALID',
+      'message', 'pay_payment_advance_create: normalized weekly_due must be > 0'
+    )::text;
+  end if;
+
+  if v_weeks_total_norm is null or v_weeks_total_norm < 1 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'WEEKS_TOTAL_INVALID',
+      'message', 'pay_payment_advance_create: normalized weeks_total must be >= 1'
+    )::text;
+  end if;
+
+  v_required_weeks := greatest(ceil(v_principal_amount_norm / v_weekly_due_norm)::int, 1);
+  if v_weeks_total_norm < v_required_weeks then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'WEEKS_TOTAL_TOO_SHORT',
+      'message', 'pay_payment_advance_create: repayment schedule does not cover the principal amount',
+      'required_weeks', v_required_weeks,
+      'weeks_total', v_weeks_total_norm
+    )::text;
+  end if;
+
+  select
+    sd.banking_system,
+    sd.external_paye_system,
+    sd.rail_provider_default,
+    sd.rail_env_default,
+    sd.rail_supports_name_check
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'SETTINGS_DEFAULTS_MISSING',
+      'message', 'pay_payment_advance_create: settings_defaults missing required banking defaults (id=1)'
+    )::text;
+  end if;
+
+  select
+    c.id,
+    c.active,
+    c.tms_ref,
+    c.display_name,
+    c.first_name,
+    c.last_name,
+    c.account_holder,
+    c.sort_code,
+    c.account_number,
+    c.bank_details_hash,
+    c.umbrella_id,
+    upper(coalesce(c.pay_method,'')) as pay_method
+  into v_candidate
+  from public.candidates c
+  where c.id = p_candidate_id
+  limit 1;
+
+  if v_candidate.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', 'pay_payment_advance_create: candidate not found',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  if coalesce(v_candidate.active,false) = false then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'CANDIDATE_INACTIVE',
+      'message', 'pay_payment_advance_create: candidate is not active',
+      'candidate_id', p_candidate_id::text
+    )::text;
+  end if;
+
+  if v_candidate.pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_payment_advance_create: candidate pay_method must be PAYE or UMBRELLA',
+      'candidate_id', p_candidate_id::text,
+      'pay_method', v_candidate.pay_method
+    )::text;
+  end if;
+
+  v_pay_channel := v_candidate.pay_method;
+
+  if v_pay_channel = 'PAYE' then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := false;
+
+    if nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+       or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+       or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+       or nullif(btrim(coalesce(p_bank_details_note,'')), '') is not null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'ONEOFF_BANK_DETAILS_NOT_ALLOWED_FOR_PAYE',
+        'message', 'pay_payment_advance_create: one-off bank fields are not allowed for PAYE loan payouts',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    v_readiness_bank_hash := nullif(btrim(coalesce(v_candidate.bank_details_hash,'')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce(v_candidate.account_holder, v_candidate.display_name, concat_ws(' ', v_candidate.first_name, v_candidate.last_name))), '');
+    v_readiness_sort_code := v_candidate.sort_code;
+    v_readiness_account_number := v_candidate.account_number;
+    v_readiness_account_type := 'Personal';
+  else
+    v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := true;
+
+    v_beneficiary_name_norm := nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), '');
+    v_sort_code_norm := case
+      when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+      else null
+    end;
+    v_account_number_norm := nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), '');
+
+    if v_beneficiary_name_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'BENEFICIARY_NAME_REQUIRED',
+        'message', 'pay_payment_advance_create: beneficiary_name is required for umbrella loan payouts',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    if v_sort_code_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'SORT_CODE_REQUIRED',
+        'message', 'pay_payment_advance_create: valid sort_code is required for umbrella loan payouts',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    if v_account_number_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'ACCOUNT_NUMBER_REQUIRED',
+        'message', 'pay_payment_advance_create: valid account_number is required for umbrella loan payouts',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    v_oneoff_bank_hash := public._bank_hash(v_sort_code_norm, v_account_number_norm, v_beneficiary_name_norm);
+    if v_oneoff_bank_hash is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_CREATE',
+        'code', 'BANK_DETAILS_HASH_FAILED',
+        'message', 'pay_payment_advance_create: unable to derive bank_details_hash for umbrella loan payout bank details',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    v_readiness_bank_hash := v_oneoff_bank_hash;
+    v_readiness_payee_name := v_beneficiary_name_norm;
+    v_readiness_sort_code := v_sort_code_norm;
+    v_readiness_account_number := v_account_number_norm;
+    v_readiness_account_type := 'Personal';
+  end if;
+
+  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
+  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
+  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
+  v_requires_payee_map := (v_provider <> 'CSV');
+
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (p_start_week_start + (gs.i * 7))::date,
+          'amount', round(
+            -least(
+              v_weekly_due_norm,
+              greatest(v_principal_amount_norm - (v_weekly_due_norm * gs.i), 0)
+            ),
+            2
+          )
+        )
+        order by (p_start_week_start + (gs.i * 7))::date asc
+      ),
+      '[]'::jsonb
+    )
+  into v_schedule_json
+  from generate_series(0, greatest(v_weeks_total_norm,1) - 1) as gs(i);
+
+  select min(x.week_start)
+  into v_next_due
+  from (
+    select
+      (p_start_week_start + (gs2.i * 7))::date as week_start,
+      round(
+        -least(
+          v_weekly_due_norm,
+          greatest(v_principal_amount_norm - (v_weekly_due_norm * gs2.i), 0)
+        ),
+        2
+      )::numeric as amt
+    from generate_series(0, greatest(v_weeks_total_norm,1) - 1) as gs2(i)
+  ) x
+  where x.amt < 0;
+
+  insert into public.pay_advances(
+    candidate_id,
+    client_id,
+    reason,
+    original_amount,
+    outstanding_amount,
+    linked_shift_date,
+    schedule_json,
+    next_due_week_start,
+    status,
+    best_guess_hours,
+    notes,
+    created_at,
+    created_by,
+    updated_at,
+    advance_kind,
+    linked_timesheet_id,
+    baseline_signature,
+    payout_status,
+    payout_pay_batch_id,
+    payout_transfer_id,
+    weekly_due,
+    weeks_total,
+    start_week_start,
+    case_type,
+    adjustment_comment,
+    source_original_paid_amount,
+    source_corrected_paid_amount,
+    minimum_earnings_threshold,
+    take_home_floor_override,
+    written_off_at_utc,
+    written_off_by_user_id,
+    write_off_reason,
+    cleared_at_utc,
+    cleared_by_user_id,
+    taxability,
+    routing_kind,
+    oneoff_bank_details_required
+  )
+  values (
+    p_candidate_id,
+    null::uuid,
+    'LOAN'::public.pay_advance_reason_enum,
+    v_principal_amount_norm,
+    v_principal_amount_norm,
+    null::date,
+    coalesce(v_schedule_json,'[]'::jsonb),
+    v_next_due,
+    'ACTIVE'::public.pay_advance_status_enum,
+    null::jsonb,
+    nullif(btrim(coalesce(p_note,'')), ''),
+    v_now_utc,
+    p_actor_user_id,
+    v_now_utc,
+    'LOAN'::public.pay_advance_kind_enum,
+    null::uuid,
+    null::text,
+    'PENDING'::public.pay_advance_payout_status_enum,
+    null::uuid,
+    null::uuid,
+    v_weekly_due_norm,
+    v_weeks_total_norm,
+    p_start_week_start,
+    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+    null::text,
+    null::numeric,
+    null::numeric,
+    case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+    case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+    null::timestamptz,
+    null::uuid,
+    null::text,
+    null::timestamptz,
+    null::uuid,
+    v_taxability,
+    v_routing_kind,
+    v_oneoff_required
+  )
+  returning id into v_finance_case_id;
+
+  if v_pay_channel = 'UMBRELLA' then
+    insert into public.pay_finance_case_oneoff_payout_bank_details(
+      finance_case_id,
+      candidate_id,
+      beneficiary_name,
+      sort_code,
+      account_number,
+      bank_details_hash,
+      note,
+      created_at_utc,
+      created_by_user_id,
+      updated_at_utc,
+      updated_by_user_id
+    )
+    values (
+      v_finance_case_id,
+      p_candidate_id,
+      v_beneficiary_name_norm,
+      v_sort_code_norm,
+      v_account_number_norm,
+      v_oneoff_bank_hash,
+      nullif(btrim(coalesce(p_bank_details_note,'')), ''),
+      v_now_utc,
+      p_actor_user_id,
+      v_now_utc,
+      p_actor_user_id
+    );
+
+    v_oneoff_after := jsonb_build_object(
+      'finance_case_id', v_finance_case_id::text,
+      'candidate_id', p_candidate_id::text,
+      'beneficiary_name', v_beneficiary_name_norm,
+      'sort_code_masked', case when v_sort_code_norm is null then null else 'XX-XX-' || right(v_sort_code_norm, 2) end,
+      'account_number_masked', case when v_account_number_norm is null then null else lpad(right(v_account_number_norm, 4), length(v_account_number_norm), '*') end,
+      'bank_details_hash', v_oneoff_bank_hash,
+      'note', nullif(btrim(coalesce(p_bank_details_note,'')), '')
+    );
+
+    perform public._audit_insert(
+      'finance_case',
+      v_finance_case_id::text,
+      'ONEOFF_BANK_DETAILS_CREATED',
+      v_oneoff_before,
+      v_oneoff_after,
+      'ONE_OFF_PAYOUT_BANK_DETAILS',
+      p_actor_user_id
+    );
+  end if;
+
+  v_source_family_key := 'case:' || v_finance_case_id::text;
+  v_component_source_basis_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'case_type', 'PAYMENT_ADVANCE',
+      'advance_kind', 'LOAN',
+      'principal_amount', v_principal_amount_norm,
+      'weekly_due', v_weekly_due_norm,
+      'weeks_total', v_weeks_total_norm,
+      'start_week_start', p_start_week_start::text,
+      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+      'schedule_json', coalesce(v_schedule_json, '[]'::jsonb),
+      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+      'note', nullif(btrim(coalesce(p_note,'')), '')
+    )
+  );
+
+  insert into public.pay_finance_case_components (
+    finance_case_id,
+    candidate_id,
+    client_id,
+    linked_timesheet_id,
+    source_family_key,
+    component_key_type,
+    component_key_value,
+    classification,
+    source_pay_method,
+    source_basis_json,
+    source_amount,
+    remaining_source_amount,
+    saved_target_pay_method,
+    saved_resolution_mode,
+    saved_resolution_payload_json,
+    saved_resolution_result_json,
+    resolution_fingerprint,
+    is_resolution_stale,
+    stale_reason,
+    allocation_priority_group,
+    allocation_priority_order,
+    created_at_utc,
+    updated_at_utc,
+    resolved_at_utc,
+    closed_at_utc
+  )
+  values (
+    v_finance_case_id,
+    p_candidate_id,
+    null::uuid,
+    null::uuid,
+    v_source_family_key,
+    'CASE_TOTAL',
+    'TOTAL',
+    'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
+    v_candidate.pay_method,
+    v_component_source_basis_json,
+    v_principal_amount_norm,
+    v_principal_amount_norm,
+    null,
+    null,
+    null,
+    null,
+    null,
+    false,
+    null,
+    0,
+    0,
+    v_now_utc,
+    v_now_utc,
+    null,
+    null
+  )
+  returning id into v_finance_component_id;
+
+  v_component_snapshot_json := jsonb_build_object(
+    'finance_component_id', v_finance_component_id::text,
+    'finance_case_id', v_finance_case_id::text,
+    'source_family_key', v_source_family_key,
+    'component_key_type', 'CASE_TOTAL',
+    'component_key_value', 'TOTAL',
+    'classification', 'REIMBURSEMENT_GROSS_FIXED',
+    'source_pay_method', v_candidate.pay_method,
+    'target_pay_method', v_candidate.pay_method,
+    'source_basis_json', v_component_source_basis_json,
+    'source_amount', v_principal_amount_norm,
+    'remaining_source_amount', v_principal_amount_norm,
+    'current_component_fingerprint', public.pay_finance_component_fingerprint(
+      p_source_family_key => v_source_family_key,
+      p_component_key_type => 'CASE_TOTAL',
+      p_component_key_value => 'TOTAL',
+      p_classification => 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
+      p_source_pay_method => v_candidate.pay_method,
+      p_current_target_pay_method => v_candidate.pay_method,
+      p_source_basis_json => v_component_source_basis_json,
+      p_source_amount => v_principal_amount_norm,
+      p_relevant_erni_pct => null,
+      p_target_basis_json => jsonb_build_object('current_target_pay_method', v_candidate.pay_method)
+    )
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    null,
+    'CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    null::jsonb,
+    jsonb_build_object(
+      'case_type', 'PAYMENT_ADVANCE',
+      'original_amount', v_principal_amount_norm,
+      'outstanding_amount', v_principal_amount_norm,
+      'weekly_due', v_weekly_due_norm,
+      'weeks_total', v_weeks_total_norm,
+      'start_week_start', p_start_week_start::text,
+      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+      'payout_pay_batch_id', null,
+      'payout_status', 'PENDING',
+      'taxability', v_taxability::text,
+      'routing_kind', v_routing_kind::text,
+      'oneoff_bank_details_required', v_oneoff_required,
+      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+      'schedule_input_mode', v_schedule_input_mode
+    ),
+    null::text,
+    'Payment Advance created'
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    v_finance_case_id,
+    v_finance_component_id,
+    'COMPONENT_CREATED',
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    null::jsonb,
+    v_component_snapshot_json,
+    'PAYMENT_ADVANCE_COMPONENT_CREATE',
+    'Created non-taxable fixed finance component for Payment Advance principal'
+  );
+
+  if v_readiness_bank_hash is null or btrim(coalesce(v_readiness_bank_hash,'')) = '' then
+    v_warnings := v_warnings || jsonb_build_array(
+      jsonb_build_object(
+        'code', 'BLOCKED_BANK_DETAILS',
+        'message', case when v_pay_channel = 'PAYE'
+                        then 'Candidate bank details are missing; the loan payout will appear as Blocked for Pay until bank details are present.'
+                        else 'One-off payout bank details are missing or incomplete; the loan payout will appear as Blocked for Pay until valid bank details are present.' end,
+        'candidate_id', p_candidate_id::text
+      )
+    );
+  else
+    if v_need_name_check = true then
+      select
+        coalesce(bnc.status, 'UNVERIFIED') as status,
+        (bnc.override_reason is not null and bnc.override_hash = v_readiness_bank_hash) as has_override
+      into
+        v_bnc_status,
+        v_bnc_has_override
+      from public.bank_name_checks bnc
+      where bnc.rail_provider = v_settings.rail_provider_default
+        and bnc.rail_env = v_settings.rail_env_default
+        and bnc.entity_kind = v_readiness_entity_kind
+        and bnc.entity_id = p_candidate_id
+        and bnc.bank_details_hash = v_readiness_bank_hash
+      limit 1;
+
+      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NAME_CHECK',
+            'message', 'Name check has not passed (or override missing) for the payout destination; the loan payout will appear as Blocked for Pay until resolved.',
+            'candidate_id', p_candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+
+    if v_requires_payee_map = true then
+      select (bpm.payee_id is not null) as present
+      into v_bpm_present
+      from public.bank_payee_map bpm
+      where bpm.rail_provider = v_settings.rail_provider_default
+        and bpm.rail_env = v_settings.rail_env_default
+        and bpm.entity_kind = v_readiness_entity_kind
+        and bpm.entity_id = p_candidate_id
+        and bpm.bank_details_hash = v_readiness_bank_hash
+      limit 1;
+
+      if coalesce(v_bpm_present,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NO_PAYEE_MAP',
+            'message', 'Payee map is missing for the payout destination on this rail; the loan payout will appear as Blocked for Pay until payee mapping exists.',
+            'candidate_id', p_candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+  end if;
+
+  v_component_summary_json := jsonb_build_object(
+    'finance_component_id', v_finance_component_id::text,
+    'source_family_key', v_source_family_key,
+    'component_key_type', 'CASE_TOTAL',
+    'component_key_value', 'TOTAL',
+    'classification', 'REIMBURSEMENT_GROSS_FIXED',
+    'source_pay_method', v_candidate.pay_method,
+    'source_amount', v_principal_amount_norm,
+    'remaining_source_amount', v_principal_amount_norm,
+    'saved_target_pay_method', null,
+    'saved_resolution_mode', null,
+    'is_resolution_stale', false,
+    'stale_reason', null,
+    'source_basis_json', v_component_source_basis_json
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', v_finance_case_id::text,
+    'advance_id', v_finance_case_id::text,
+    'pay_batch_id', null,
+    'pay_date', v_pay_date::text,
+    'batch_kind_fixed', null,
+    'case_type', 'PAYMENT_ADVANCE',
+    'worker_label', 'Payment Advance',
+    'repayment_label', 'Payment Advance Repayment',
+    'schedule_input_mode', v_schedule_input_mode,
+    'principal_amount', v_principal_amount_norm,
+    'weekly_due', v_weekly_due_norm,
+    'weeks_total', v_weeks_total_norm,
+    'start_week_start', p_start_week_start::text,
+    'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+    'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+    'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+    'schedule_json', coalesce(v_schedule_json,'[]'::jsonb),
+    'taxability', v_taxability::text,
+    'routing_kind', v_routing_kind::text,
+    'oneoff_bank_details_required', v_oneoff_required,
+    'oneoff_bank_details_present', case when v_pay_channel = 'UMBRELLA' then true else false end,
+    'bank_details_hash', v_readiness_bank_hash,
+    'beneficiary_name', case when v_pay_channel = 'UMBRELLA' then v_beneficiary_name_norm else null end,
+    'finance_component_id', v_finance_component_id::text,
+    'component_summary', v_component_summary_json,
+    'warnings', v_warnings
+  );
+end;
+$$;
+
+
 create or replace function public.pay_payment_advance_update(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -18175,7 +20429,12 @@ create or replace function public.pay_payment_advance_update(
   p_start_week_start date default null,
   p_note text default null,
   p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
+  p_take_home_floor_override numeric default null,
+  p_beneficiary_name text default null,
+  p_sort_code text default null,
+  p_account_number text default null,
+  p_bank_details_note text default null,
+  p_remove_oneoff_bank_details boolean default false
 )
 returns jsonb
 language plpgsql
@@ -18188,6 +20447,7 @@ declare
   v_batch public.pay_batches%rowtype;
   v_has_batch boolean := false;
   v_is_committed boolean := false;
+  v_has_newflow_draft_item boolean := false;
 
   v_new_principal numeric(12,2);
   v_new_weekly_due numeric(12,2);
@@ -18220,13 +20480,35 @@ declare
   v_component_source_basis_json jsonb := '{}'::jsonb;
   v_component_snapshot_json jsonb := '{}'::jsonb;
   v_component_summary_json jsonb := '{}'::jsonb;
-  v_component_has_saved_resolution boolean := false;
-  v_component_mark_stale boolean := false;
-  v_component_stale_reason text := null;
   v_component_remaining_amount numeric(12,2) := 0;
   v_source_family_key text := null;
 
   v_candidate_pay_method text := null;
+  v_taxability public.pay_finance_taxability_enum := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_oneoff_required boolean := false;
+
+  v_existing_oneoff public.pay_finance_case_oneoff_payout_bank_details%rowtype;
+  v_oneoff_before jsonb := null;
+  v_oneoff_after jsonb := null;
+  v_beneficiary_name_norm text := null;
+  v_sort_code_norm text := null;
+  v_account_number_norm text := null;
+  v_oneoff_bank_hash text := null;
+  v_oneoff_change_requested boolean := false;
+
+  v_readiness_bank_hash text := null;
+  v_readiness_payee_name text := null;
+
+  v_settings record;
+  v_provider text := null;
+  v_env text := null;
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+  v_bnc_status text := null;
+  v_bnc_has_override boolean := false;
+  v_bpm_present boolean := false;
+  v_warnings jsonb := '[]'::jsonb;
 begin
   if p_finance_case_id is null then
     raise exception '%', jsonb_build_object(
@@ -18266,6 +20548,17 @@ begin
   where c.id = v_case.candidate_id
   limit 1;
 
+  if v_candidate_pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_payment_advance_update: candidate pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'pay_method', v_candidate_pay_method
+    )::text;
+  end if;
+
   if v_case.payout_pay_batch_id is not null then
     select pb.*
     into v_batch
@@ -18285,7 +20578,47 @@ begin
     v_is_committed := false;
   end if;
 
-  v_can_edit_payout_details := (v_is_committed = false);
+  select exists (
+    select 1
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbi.source_ref = ('advance:' || p_finance_case_id::text)
+      and pbi.item_type = 'LOAN_PAYOUT'
+      and pbi.is_voided = false
+      and pb.cancelled_at_utc is null
+      and upper(coalesce(pb.status,'')) <> 'CANCELLED'
+  ) into v_has_newflow_draft_item;
+
+  if v_has_batch then
+    v_can_edit_payout_details := (v_is_committed = false);
+  else
+    v_can_edit_payout_details := (v_has_newflow_draft_item = false);
+  end if;
+
+  select *
+  into v_existing_oneoff
+  from public.pay_finance_case_oneoff_payout_bank_details d
+  where d.finance_case_id = p_finance_case_id
+  for update;
+
+  v_before_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'weekly_due', round(coalesce(v_case.weekly_due,0),2),
+    'weeks_total', v_case.weeks_total,
+    'start_week_start', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+    'next_due_week_start', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+    'notes', v_case.notes,
+    'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'schedule_input_mode', null,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', v_case.oneoff_bank_details_required
+  );
 
   v_new_principal := coalesce(round(p_principal_amount,2), round(coalesce(v_case.original_amount,0),2));
   v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
@@ -18310,13 +20643,12 @@ begin
 
   v_has_principal_change := round(v_new_principal,2) <> round(coalesce(v_case.original_amount,0),2);
 
-  if v_is_committed and v_has_principal_change then
+  if (not v_can_edit_payout_details) and v_has_principal_change then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
-      'code', 'PAYOUT_ALREADY_COMMITTED',
-      'message', 'pay_payment_advance_update: payout details can only be edited before commit; after commit only future repayment terms may be changed',
-      'finance_case_id', p_finance_case_id::text,
-      'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end
+      'code', 'PAYOUT_ALREADY_DRAFTED_OR_COMMITTED',
+      'message', 'pay_payment_advance_update: payout principal can only be edited while the item is Not processed yet',
+      'finance_case_id', p_finance_case_id::text
     )::text;
   end if;
 
@@ -18431,6 +20763,283 @@ begin
     )::text;
   end if;
 
+  if v_candidate_pay_method = 'PAYE' then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := false;
+
+    if nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+       or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+       or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+       or nullif(btrim(coalesce(p_bank_details_note,'')), '') is not null
+       or coalesce(p_remove_oneoff_bank_details, false) = true then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+        'code', 'ONEOFF_BANK_DETAILS_NOT_ALLOWED_FOR_PAYE',
+        'message', 'pay_payment_advance_update: one-off bank fields are not allowed for PAYE loan payouts',
+        'finance_case_id', p_finance_case_id::text
+      )::text;
+    end if;
+
+    if v_existing_oneoff.finance_case_id is not null then
+      v_oneoff_before := jsonb_build_object(
+        'finance_case_id', p_finance_case_id::text,
+        'candidate_id', v_case.candidate_id::text,
+        'beneficiary_name', v_existing_oneoff.beneficiary_name,
+        'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+        'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+        'bank_details_hash', v_existing_oneoff.bank_details_hash,
+        'note', v_existing_oneoff.note
+      );
+
+      delete from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id;
+
+      select *
+      into v_existing_oneoff
+      from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id;
+
+      perform public._audit_insert(
+        'finance_case',
+        p_finance_case_id::text,
+        'ONEOFF_BANK_DETAILS_REMOVED',
+        v_oneoff_before,
+        null::jsonb,
+        'PAY_METHOD_NOW_PAYE',
+        p_actor_user_id
+      );
+    end if;
+
+    v_readiness_bank_hash := nullif(btrim(coalesce((select c.bank_details_hash from public.candidates c where c.id = v_case.candidate_id limit 1), '')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce((select c.account_holder from public.candidates c where c.id = v_case.candidate_id limit 1), (select c.display_name from public.candidates c where c.id = v_case.candidate_id limit 1))), '');
+  else
+    v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := true;
+
+    v_oneoff_change_requested := (
+      nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+      or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+      or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+      or p_bank_details_note is not null
+      or coalesce(p_remove_oneoff_bank_details, false) = true
+    );
+
+    if v_oneoff_change_requested and not v_can_edit_payout_details then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+        'code', 'ONEOFF_BANK_DETAILS_LOCKED',
+        'message', 'pay_payment_advance_update: one-off bank details can only be edited while the item is Not processed yet',
+        'finance_case_id', p_finance_case_id::text
+      )::text;
+    end if;
+
+    if coalesce(p_remove_oneoff_bank_details, false) = true then
+      if v_existing_oneoff.finance_case_id is not null then
+        v_oneoff_before := jsonb_build_object(
+          'finance_case_id', p_finance_case_id::text,
+          'candidate_id', v_case.candidate_id::text,
+          'beneficiary_name', v_existing_oneoff.beneficiary_name,
+          'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+          'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+          'bank_details_hash', v_existing_oneoff.bank_details_hash,
+          'note', v_existing_oneoff.note
+        );
+
+        delete from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        select *
+        into v_existing_oneoff
+        from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        perform public._audit_insert(
+          'finance_case',
+          p_finance_case_id::text,
+          'ONEOFF_BANK_DETAILS_REMOVED',
+          v_oneoff_before,
+          null::jsonb,
+          'ONE_OFF_PAYOUT_BANK_DETAILS',
+          p_actor_user_id
+        );
+      end if;
+
+      v_readiness_bank_hash := null;
+      v_readiness_payee_name := null;
+    else
+      if v_existing_oneoff.finance_case_id is not null then
+        v_beneficiary_name_norm := coalesce(
+          nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), ''),
+          v_existing_oneoff.beneficiary_name
+        );
+        v_sort_code_norm := coalesce(
+          case
+            when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+            else null
+          end,
+          v_existing_oneoff.sort_code
+        );
+        v_account_number_norm := coalesce(
+          nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), ''),
+          v_existing_oneoff.account_number
+        );
+      else
+        v_beneficiary_name_norm := nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), '');
+        v_sort_code_norm := case
+          when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+          else null
+        end;
+        v_account_number_norm := nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), '');
+      end if;
+
+      if v_beneficiary_name_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+          'code', 'BENEFICIARY_NAME_REQUIRED',
+          'message', 'pay_payment_advance_update: beneficiary_name is required for umbrella loan payouts',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_sort_code_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+          'code', 'SORT_CODE_REQUIRED',
+          'message', 'pay_payment_advance_update: valid sort_code is required for umbrella loan payouts',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_account_number_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+          'code', 'ACCOUNT_NUMBER_REQUIRED',
+          'message', 'pay_payment_advance_update: valid account_number is required for umbrella loan payouts',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      v_oneoff_bank_hash := public._bank_hash(v_sort_code_norm, v_account_number_norm, v_beneficiary_name_norm);
+      if v_oneoff_bank_hash is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+          'code', 'BANK_DETAILS_HASH_FAILED',
+          'message', 'pay_payment_advance_update: unable to derive bank_details_hash for umbrella loan payout bank details',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_can_edit_payout_details then
+        v_oneoff_before := case
+          when v_existing_oneoff.finance_case_id is null then null
+          else jsonb_build_object(
+            'finance_case_id', p_finance_case_id::text,
+            'candidate_id', v_case.candidate_id::text,
+            'beneficiary_name', v_existing_oneoff.beneficiary_name,
+            'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+            'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+            'bank_details_hash', v_existing_oneoff.bank_details_hash,
+            'note', v_existing_oneoff.note
+          )
+        end;
+
+        insert into public.pay_finance_case_oneoff_payout_bank_details(
+          finance_case_id,
+          candidate_id,
+          beneficiary_name,
+          sort_code,
+          account_number,
+          bank_details_hash,
+          note,
+          created_at_utc,
+          created_by_user_id,
+          updated_at_utc,
+          updated_by_user_id
+        )
+        values (
+          p_finance_case_id,
+          v_case.candidate_id,
+          v_beneficiary_name_norm,
+          v_sort_code_norm,
+          v_account_number_norm,
+          v_oneoff_bank_hash,
+          case when p_bank_details_note is null then coalesce(v_existing_oneoff.note, null) else nullif(btrim(coalesce(p_bank_details_note,'')), '') end,
+          v_now_utc,
+          p_actor_user_id,
+          v_now_utc,
+          p_actor_user_id
+        )
+        on conflict (finance_case_id) do update
+        set candidate_id = excluded.candidate_id,
+            beneficiary_name = excluded.beneficiary_name,
+            sort_code = excluded.sort_code,
+            account_number = excluded.account_number,
+            bank_details_hash = excluded.bank_details_hash,
+            note = excluded.note,
+            updated_at_utc = excluded.updated_at_utc,
+            updated_by_user_id = excluded.updated_by_user_id;
+
+        select *
+        into v_existing_oneoff
+        from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        v_oneoff_after := jsonb_build_object(
+          'finance_case_id', p_finance_case_id::text,
+          'candidate_id', v_case.candidate_id::text,
+          'beneficiary_name', v_existing_oneoff.beneficiary_name,
+          'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+          'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+          'bank_details_hash', v_existing_oneoff.bank_details_hash,
+          'note', v_existing_oneoff.note
+        );
+
+        perform public._audit_insert(
+          'finance_case',
+          p_finance_case_id::text,
+          case when v_oneoff_before is null then 'ONEOFF_BANK_DETAILS_CREATED' else 'ONEOFF_BANK_DETAILS_UPDATED' end,
+          v_oneoff_before,
+          v_oneoff_after,
+          'ONE_OFF_PAYOUT_BANK_DETAILS',
+          p_actor_user_id
+        );
+      end if;
+
+      v_readiness_bank_hash := v_oneoff_bank_hash;
+      v_readiness_payee_name := v_beneficiary_name_norm;
+    end if;
+  end if;
+
+  select
+    sd.banking_system,
+    sd.external_paye_system,
+    sd.rail_provider_default,
+    sd.rail_env_default,
+    sd.rail_supports_name_check
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  if v_settings.banking_system is null or v_settings.external_paye_system is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_PAYMENT_ADVANCE_UPDATE',
+      'code', 'SETTINGS_DEFAULTS_MISSING',
+      'message', 'pay_payment_advance_update: settings_defaults missing required banking defaults (id=1)'
+    )::text;
+  end if;
+
+  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
+  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
+  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
+  v_requires_payee_map := (v_provider <> 'CSV');
+
   select
     coalesce(
       jsonb_agg(
@@ -18533,7 +21142,7 @@ begin
       v_source_family_key,
       'CASE_TOTAL',
       'TOTAL',
-      'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
       v_candidate_pay_method,
       v_component_source_basis_json,
       v_new_principal,
@@ -18555,27 +21164,10 @@ begin
     returning * into v_component;
   end if;
 
-  v_component_has_saved_resolution := (
-    v_component.saved_target_pay_method is not null
-    or v_component.saved_resolution_mode is not null
-    or v_component.saved_resolution_payload_json is not null
-    or v_component.saved_resolution_result_json is not null
-    or v_component.resolution_fingerprint is not null
-    or v_component.is_resolution_stale = true
-  );
-
   if v_can_edit_payout_details then
     v_component_remaining_amount := v_new_principal;
   else
     v_component_remaining_amount := round(coalesce(v_case.outstanding_amount,0),2);
-  end if;
-
-  if v_has_principal_change and v_component_has_saved_resolution then
-    v_component_mark_stale := true;
-    v_component_stale_reason := 'COMPONENT_BASIS_CHANGED';
-  else
-    v_component_mark_stale := coalesce(v_component.is_resolution_stale, false);
-    v_component_stale_reason := v_component.stale_reason;
   end if;
 
   v_component_before_json := jsonb_build_object(
@@ -18596,13 +21188,18 @@ begin
     candidate_id = v_case.candidate_id,
     client_id = v_case.client_id,
     linked_timesheet_id = v_case.linked_timesheet_id,
-    classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
     source_pay_method = v_candidate_pay_method,
     source_basis_json = v_component_source_basis_json,
     source_amount = v_new_principal,
     remaining_source_amount = v_component_remaining_amount,
-    is_resolution_stale = v_component_mark_stale,
-    stale_reason = v_component_stale_reason,
+    saved_target_pay_method = null,
+    saved_resolution_mode = null,
+    saved_resolution_payload_json = null,
+    saved_resolution_result_json = null,
+    resolution_fingerprint = null,
+    is_resolution_stale = false,
+    stale_reason = null,
     allocation_priority_group = 0,
     allocation_priority_order = 0,
     updated_at_utc = v_now_utc
@@ -18623,7 +21220,10 @@ begin
     start_week_start = v_new_start_week_start,
     minimum_earnings_threshold = v_new_minimum_earnings_threshold,
     take_home_floor_override = v_new_take_home_floor_override,
-    updated_at = v_now_utc
+    updated_at = v_now_utc,
+    taxability = v_taxability,
+    routing_kind = v_routing_kind,
+    oneoff_bank_details_required = v_oneoff_required
   where pa.id = p_finance_case_id;
 
   if v_can_edit_payout_details and v_has_batch then
@@ -18660,7 +21260,7 @@ begin
       'source_family_key', v_source_family_key,
       'component_key_type', 'CASE_TOTAL',
       'component_key_value', 'TOTAL',
-      'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+      'classification', 'REIMBURSEMENT_GROSS_FIXED',
       'source_pay_method', v_candidate_pay_method,
       'target_pay_method', v_candidate_pay_method,
       'source_basis_json', v_component_source_basis_json,
@@ -18674,7 +21274,7 @@ begin
         p_source_family_key => v_source_family_key,
         p_component_key_type => 'CASE_TOTAL',
         p_component_key_value => 'TOTAL',
-        p_classification => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+        p_classification => 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
         p_source_pay_method => v_candidate_pay_method,
         p_current_target_pay_method => v_candidate_pay_method,
         p_source_basis_json => v_component_source_basis_json,
@@ -18698,7 +21298,7 @@ begin
           frozen_component_snapshot_json = v_component_snapshot_json,
           frozen_component_key_type = 'CASE_TOTAL',
           frozen_component_key_value = 'TOTAL',
-          frozen_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+          frozen_component_classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
           frozen_source_basis_json = v_component_source_basis_json,
           frozen_source_pay_method = v_candidate_pay_method,
           frozen_target_pay_method = v_candidate_pay_method,
@@ -18708,7 +21308,26 @@ begin
           frozen_source_amount = v_new_principal,
           frozen_target_amount_ex_vat = v_new_principal,
           frozen_target_amount_vat = 0,
-          frozen_target_amount_inc_vat = v_new_principal
+          frozen_target_amount_inc_vat = v_new_principal,
+          payout_instruction_snapshot_json = case
+            when v_candidate_pay_method = 'UMBRELLA' and v_existing_oneoff.finance_case_id is not null then
+              jsonb_build_object(
+                'taxability', 'NON_TAXABLE',
+                'routing_kind', 'ONE_OFF_SPECIFIED_BANK_ACCOUNT',
+                'destination_label', 'one-off specified bank account',
+                'pay_channel', 'UMBRELLA',
+                'payee_entity_kind', 'CANDIDATE',
+                'payee_entity_id', v_case.candidate_id::text,
+                'beneficiary_name', v_existing_oneoff.beneficiary_name,
+                'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+                'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+                'bank_details_hash', v_existing_oneoff.bank_details_hash,
+                'bank_details_note', v_existing_oneoff.note,
+                'appears_on_umbrella_remittance', false,
+                'generates_candidate_payment_advice', true
+              )
+            else null
+          end
       where pbi.id = v_batch_item_id;
 
       update public.pay_batch_item_breakdowns pbib
@@ -18729,6 +21348,81 @@ begin
   from public.pay_advances pa
   where pa.id = p_finance_case_id;
 
+  if v_candidate_pay_method = 'PAYE' then
+    v_readiness_bank_hash := nullif(btrim(coalesce((select c.bank_details_hash from public.candidates c where c.id = v_case.candidate_id limit 1), '')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce((select c.account_holder from public.candidates c where c.id = v_case.candidate_id limit 1), (select c.display_name from public.candidates c where c.id = v_case.candidate_id limit 1))), '');
+  elsif v_existing_oneoff.finance_case_id is not null then
+    v_readiness_bank_hash := nullif(btrim(coalesce(v_existing_oneoff.bank_details_hash,'')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce(v_existing_oneoff.beneficiary_name,'')), '');
+  else
+    v_readiness_bank_hash := null;
+    v_readiness_payee_name := null;
+  end if;
+
+  if v_readiness_bank_hash is null or btrim(coalesce(v_readiness_bank_hash,'')) = '' then
+    v_warnings := v_warnings || jsonb_build_array(
+      jsonb_build_object(
+        'code', 'BLOCKED_BANK_DETAILS',
+        'message', case when v_candidate_pay_method = 'PAYE'
+                        then 'Candidate bank details are missing; the loan payout will appear as Blocked for Pay until bank details are present.'
+                        else 'One-off payout bank details are missing or incomplete; the loan payout will appear as Blocked for Pay until valid bank details are present.' end,
+        'candidate_id', v_case.candidate_id::text
+      )
+    );
+  else
+    if v_need_name_check = true then
+      select
+        coalesce(bnc.status, 'UNVERIFIED') as status,
+        (bnc.override_reason is not null and bnc.override_hash = v_readiness_bank_hash) as has_override
+      into
+        v_bnc_status,
+        v_bnc_has_override
+      from public.bank_name_checks bnc
+      where bnc.rail_provider = v_settings.rail_provider_default
+        and bnc.rail_env = v_settings.rail_env_default
+        and bnc.entity_kind = 'CANDIDATE'
+        and bnc.entity_id = v_case.candidate_id
+        and bnc.bank_details_hash = v_readiness_bank_hash
+      limit 1;
+
+      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NAME_CHECK',
+            'message', 'Name check has not passed (or override missing) for the payout destination; the loan payout will appear as Blocked for Pay until resolved.',
+            'candidate_id', v_case.candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+
+    if v_requires_payee_map = true then
+      select (bpm.payee_id is not null) as present
+      into v_bpm_present
+      from public.bank_payee_map bpm
+      where bpm.rail_provider = v_settings.rail_provider_default
+        and bpm.rail_env = v_settings.rail_env_default
+        and bpm.entity_kind = 'CANDIDATE'
+        and bpm.entity_id = v_case.candidate_id
+        and bpm.bank_details_hash = v_readiness_bank_hash
+      limit 1;
+
+      if coalesce(v_bpm_present,false) = false then
+        v_warnings := v_warnings || jsonb_build_array(
+          jsonb_build_object(
+            'code', 'BLOCKED_NO_PAYEE_MAP',
+            'message', 'Payee map is missing for the payout destination on this rail; the loan payout will appear as Blocked for Pay until payee mapping exists.',
+            'candidate_id', v_case.candidate_id::text,
+            'rail_provider', v_settings.rail_provider_default,
+            'rail_env', v_settings.rail_env_default
+          )
+        );
+      end if;
+    end if;
+  end if;
+
   v_after_json := jsonb_build_object(
     'original_amount', round(coalesce(v_case.original_amount,0),2),
     'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
@@ -18739,7 +21433,10 @@ begin
     'notes', v_case.notes,
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
-    'schedule_input_mode', v_schedule_input_mode
+    'schedule_input_mode', v_schedule_input_mode,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', v_case.oneoff_bank_details_required
   );
 
   v_component_after_json := jsonb_build_object(
@@ -18775,7 +21472,7 @@ begin
     v_before_json,
     v_after_json,
     null::text,
-    case when v_can_edit_payout_details then 'Payment Advance payout details updated before commit' else 'Payment Advance future repayment terms updated after commit' end
+    case when v_can_edit_payout_details then 'Payment Advance payout details updated while Not processed yet' else 'Payment Advance future repayment terms updated after draft/commit' end
   );
 
   insert into public.pay_finance_case_events(
@@ -18793,14 +21490,14 @@ begin
   values (
     p_finance_case_id,
     v_finance_component_id,
-    case when v_has_principal_change and v_component_has_saved_resolution then 'COMPONENT_STALE' else 'COMPONENT_UPDATED' end,
+    'COMPONENT_UPDATED',
     v_now_utc,
     p_actor_user_id,
     case when v_batch.id is null then null else v_batch.id end,
     v_component_before_json,
     v_component_after_json,
-    case when v_has_principal_change and v_component_has_saved_resolution then 'PAYMENT_ADVANCE_COMPONENT_BASIS_CHANGED' else 'PAYMENT_ADVANCE_COMPONENT_UPDATED' end,
-    case when v_has_principal_change and v_component_has_saved_resolution then 'Updated Payment Advance component and marked saved taxable resolution stale because principal/source basis changed' else 'Updated Payment Advance component state' end
+    'PAYMENT_ADVANCE_COMPONENT_UPDATED',
+    'Updated Payment Advance non-taxable fixed component state'
   );
 
   v_component_summary_json := jsonb_build_object(
@@ -18808,7 +21505,7 @@ begin
     'source_family_key', v_source_family_key,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'classification', 'REIMBURSEMENT_GROSS_FIXED',
     'source_pay_method', v_component_after.source_pay_method,
     'source_amount', round(coalesce(v_component_after.source_amount,0),2),
     'remaining_source_amount', round(coalesce(v_component_after.remaining_source_amount,0),2),
@@ -18838,14 +21535,38 @@ begin
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
     'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', v_case.oneoff_bank_details_required,
+    'oneoff_bank_details_present', exists(
+      select 1
+      from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id
+    ),
+    'bank_details_hash', v_readiness_bank_hash,
+    'beneficiary_name', case when v_existing_oneoff.finance_case_id is null then null else v_existing_oneoff.beneficiary_name end,
     'finance_component_id', v_finance_component_id::text,
-    'component_summary', v_component_summary_json
+    'component_summary', v_component_summary_json,
+    'warnings', v_warnings
   );
 end;
 $$;
 
 
-create or replace function public.pay_manual_debt_adjustment_create(
+DROP FUNCTION IF EXISTS public.pay_manual_debt_adjustment_create(
+  uuid,
+  numeric,
+  numeric,
+  int,
+  date,
+  uuid,
+  text,
+  text,
+  numeric,
+  numeric
+);
+
+CREATE OR REPLACE FUNCTION public.pay_manual_debt_adjustment_create(
   p_candidate_id uuid,
   p_amount numeric,
   p_weekly_due numeric,
@@ -18855,7 +21576,8 @@ create or replace function public.pay_manual_debt_adjustment_create(
   p_adjustment_comment text,
   p_note text default null,
   p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
+  p_take_home_floor_override numeric default null,
+  p_taxability text default null
 )
 returns jsonb
 language plpgsql
@@ -18878,9 +21600,15 @@ declare
   v_has_weekly_due_input boolean := false;
   v_has_weeks_total_input boolean := false;
 
+  v_taxability public.pay_finance_taxability_enum := null;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_component_classification public.pay_finance_component_classification_enum := null;
+  v_paye_treatment text := 'NONE';
+  v_oneoff_required boolean := false;
+
   v_component_source_basis_json jsonb := '{}'::jsonb;
-  v_component_resolution_payload_json jsonb := '{}'::jsonb;
-  v_component_resolution_result_json jsonb := '{}'::jsonb;
+  v_component_resolution_payload_json jsonb := null;
+  v_component_resolution_result_json jsonb := null;
   v_component_resolution_fingerprint text := null;
   v_component_summary_json jsonb := '{}'::jsonb;
 begin
@@ -18946,6 +21674,25 @@ begin
       'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
       'code', 'TAKE_HOME_FLOOR_INVALID',
       'message', 'pay_manual_debt_adjustment_create: take_home_floor_override must be >= 0'
+    )::text;
+  end if;
+
+  if p_taxability is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'TAXABILITY_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_create: taxability is required'
+    )::text;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'TAXABLE' then
+    v_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'NON_TAXABLE' then
+    v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  else
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'TAXABILITY_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: taxability must be TAXABLE or NON_TAXABLE',
+      'taxability', p_taxability
     )::text;
   end if;
 
@@ -19047,6 +21794,34 @@ begin
     )::text;
   end if;
 
+  if v_candidate.pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_CREATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_manual_debt_adjustment_create: candidate pay_method must be PAYE or UMBRELLA',
+      'candidate_id', p_candidate_id::text,
+      'pay_method', v_candidate.pay_method
+    )::text;
+  end if;
+
+  if v_candidate.pay_method = 'PAYE' and v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'GROSS_DEDUCT';
+  elsif v_candidate.pay_method = 'PAYE' and v_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NET_DEDUCT';
+  elsif v_candidate.pay_method = 'UMBRELLA' and v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+  else
+    v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+  end if;
+
   select
     coalesce(
       jsonb_agg(
@@ -19117,7 +21892,10 @@ begin
     written_off_by_user_id,
     write_off_reason,
     cleared_at_utc,
-    cleared_by_user_id
+    cleared_by_user_id,
+    taxability,
+    routing_kind,
+    oneoff_bank_details_required
   )
   values (
     p_candidate_id,
@@ -19153,41 +21931,64 @@ begin
     null::uuid,
     null::text,
     null::timestamptz,
-    null::uuid
+    null::uuid,
+    v_taxability,
+    v_routing_kind,
+    false
   )
   returning id into v_finance_case_id;
 
-  v_component_source_basis_json := jsonb_build_object(
-    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
-    'amount', v_amount_norm
+  v_component_source_basis_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+      'amount', v_amount_norm,
+      'taxability', v_taxability::text,
+      'routing_kind', v_routing_kind::text,
+      'paye_treatment', v_paye_treatment,
+      'weekly_due', v_weekly_due_norm,
+      'weeks_total', v_weeks_total_norm,
+      'start_week_start', p_start_week_start::text,
+      'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
+      'schedule_json', coalesce(v_schedule_json, '[]'::jsonb),
+      'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
+      'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
+      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+      'note', nullif(btrim(coalesce(p_note,'')), '')
+    )
   );
 
-  v_component_resolution_payload_json := jsonb_build_object(
-    'same_channel', true,
-    'target_amount', v_amount_norm,
-    'target_pay_method', v_candidate.pay_method
-  );
+  if v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+    v_component_resolution_payload_json := jsonb_build_object(
+      'same_channel', true,
+      'target_amount', v_amount_norm,
+      'target_pay_method', v_candidate.pay_method
+    );
 
-  v_component_resolution_result_json := jsonb_build_object(
-    'target_amount', v_amount_norm,
-    'target_amount_ex_vat', v_amount_norm,
-    'target_amount_vat', 0,
-    'target_amount_inc_vat', v_amount_norm,
-    'target_pay_method', v_candidate.pay_method
-  );
+    v_component_resolution_result_json := jsonb_build_object(
+      'target_amount', v_amount_norm,
+      'target_amount_ex_vat', v_amount_norm,
+      'target_amount_vat', 0,
+      'target_amount_inc_vat', v_amount_norm,
+      'target_pay_method', v_candidate.pay_method
+    );
 
-  v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
-    p_source_family_key         => 'case:' || v_finance_case_id::text,
-    p_component_key_type        => 'CASE_TOTAL',
-    p_component_key_value       => 'TOTAL',
-    p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-    p_source_pay_method         => v_candidate.pay_method,
-    p_current_target_pay_method => v_candidate.pay_method,
-    p_source_basis_json         => v_component_source_basis_json,
-    p_source_amount             => v_amount_norm,
-    p_relevant_erni_pct         => null::numeric,
-    p_target_basis_json         => jsonb_build_object('same_channel', true)
-  );
+    v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+      p_source_family_key         => 'case:' || v_finance_case_id::text,
+      p_component_key_type        => 'CASE_TOTAL',
+      p_component_key_value       => 'TOTAL',
+      p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      p_source_pay_method         => v_candidate.pay_method,
+      p_current_target_pay_method => v_candidate.pay_method,
+      p_source_basis_json         => v_component_source_basis_json,
+      p_source_amount             => v_amount_norm,
+      p_relevant_erni_pct         => null::numeric,
+      p_target_basis_json         => jsonb_build_object('same_channel', true)
+    );
+  else
+    v_component_resolution_payload_json := null;
+    v_component_resolution_result_json := null;
+    v_component_resolution_fingerprint := null;
+  end if;
 
   insert into public.pay_finance_case_components(
     finance_case_id,
@@ -19224,13 +22025,21 @@ begin
     'case:' || v_finance_case_id::text,
     'CASE_TOTAL',
     'TOTAL',
-    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    v_component_classification,
     v_candidate.pay_method,
     v_component_source_basis_json,
     v_amount_norm,
     v_amount_norm,
-    v_candidate.pay_method,
-    'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
+    case
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then v_candidate.pay_method
+      else null
+    end,
+    case
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
+      else null
+    end,
     v_component_resolution_payload_json,
     v_component_resolution_result_json,
     v_component_resolution_fingerprint,
@@ -19240,7 +22049,11 @@ begin
     0,
     v_now_utc,
     v_now_utc,
-    v_now_utc,
+    case
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then v_now_utc
+      else null::timestamptz
+    end,
     null::timestamptz
   )
   returning id into v_finance_component_id;
@@ -19250,13 +22063,16 @@ begin
     'source_family_key', 'case:' || v_finance_case_id::text,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'classification', v_component_classification::text,
     'source_pay_method', v_candidate.pay_method,
-    'saved_target_pay_method', v_candidate.pay_method,
-    'saved_resolution_mode', 'MANUAL_AMOUNT',
+    'saved_target_pay_method', case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then v_candidate.pay_method else null end,
+    'saved_resolution_mode', case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'MANUAL_AMOUNT' else null end,
     'source_amount', v_amount_norm,
     'remaining_source_amount', v_amount_norm,
-    'is_resolution_stale', false
+    'is_resolution_stale', false,
+    'taxability', v_taxability::text,
+    'routing_kind', v_routing_kind::text,
+    'paye_treatment', v_paye_treatment
   );
 
   insert into public.pay_finance_case_events(
@@ -19288,7 +22104,10 @@ begin
       'start_week_start', p_start_week_start::text,
       'next_due_week_start', case when v_next_due is null then null else v_next_due::text end,
       'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-      'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end,
+      'paye_treatment', v_paye_treatment,
+      'taxability', v_taxability::text,
+      'routing_kind', v_routing_kind::text,
+      'oneoff_bank_details_required', false,
       'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
       'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
       'schedule_input_mode', v_schedule_input_mode,
@@ -19320,7 +22139,11 @@ begin
     null::jsonb,
     v_component_summary_json,
     'MANUAL_DEBT_ADJUSTMENT_CREATE',
-    'Created taxable total component for manual debt adjustment'
+    case
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'Created taxable total component for manual debt adjustment'
+      else 'Created non-taxable fixed recovery component for manual debt adjustment'
+    end
   );
 
   return jsonb_build_object(
@@ -19330,7 +22153,7 @@ begin
     'case_type', 'MANUAL_DEBT_ADJUSTMENT',
     'worker_label', 'Manual debt adjustment',
     'recovery_label', 'Manual debt adjustment recovery',
-    'paye_treatment', case when v_candidate.pay_method = 'PAYE' then 'GROSS_DEDUCT' else 'NONE' end,
+    'paye_treatment', v_paye_treatment,
     'schedule_input_mode', v_schedule_input_mode,
     'amount', v_amount_norm,
     'outstanding_amount', v_amount_norm,
@@ -19341,11 +22164,28 @@ begin
     'minimum_earnings_threshold', case when p_minimum_earnings_threshold is null then null else round(p_minimum_earnings_threshold,2) end,
     'take_home_floor_override', case when p_take_home_floor_override is null then null else round(p_take_home_floor_override,2) end,
     'schedule_json', coalesce(v_schedule_json,'[]'::jsonb),
+    'taxability', v_taxability::text,
+    'routing_kind', v_routing_kind::text,
+    'oneoff_bank_details_required', false,
     'component_summary', v_component_summary_json
   );
 end;
 $$;
-create or replace function public.pay_manual_debt_adjustment_update(
+
+DROP FUNCTION IF EXISTS public.pay_manual_debt_adjustment_update(
+  uuid,
+  uuid,
+  numeric,
+  numeric,
+  int,
+  date,
+  text,
+  text,
+  numeric,
+  numeric
+);
+
+CREATE OR REPLACE FUNCTION public.pay_manual_debt_adjustment_update(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
   p_amount numeric default null,
@@ -19355,7 +22195,8 @@ create or replace function public.pay_manual_debt_adjustment_update(
   p_adjustment_comment text default null,
   p_note text default null,
   p_minimum_earnings_threshold numeric default null,
-  p_take_home_floor_override numeric default null
+  p_take_home_floor_override numeric default null,
+  p_taxability text default null
 )
 returns jsonb
 language plpgsql
@@ -19378,6 +22219,15 @@ declare
   v_component_is_resolution_stale boolean := false;
   v_component_stale_reason text := null;
   v_source_basis_changed boolean := false;
+
+  v_current_taxability public.pay_finance_taxability_enum := null;
+  v_requested_taxability public.pay_finance_taxability_enum := null;
+  v_current_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_requested_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_component_classification public.pay_finance_component_classification_enum := null;
+  v_paye_treatment text := 'NONE';
+  v_taxability_changed boolean := false;
+  v_has_active_batch_item boolean := false;
 
   v_new_original_amount numeric(12,2);
   v_new_outstanding_amount numeric(12,2);
@@ -19439,6 +22289,17 @@ begin
   where c.id = v_case.candidate_id
   limit 1;
 
+  if v_candidate_pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: candidate pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'pay_method', v_candidate_pay_method
+    )::text;
+  end if;
+
   if p_adjustment_comment is not null and nullif(btrim(coalesce(p_adjustment_comment,'')), '') is null then
     raise exception '%', jsonb_build_object(
       'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
@@ -19494,6 +22355,96 @@ begin
       'code', 'START_WEEK_START_NOT_MONDAY',
       'message', 'pay_manual_debt_adjustment_update: start_week_start must be a Monday (week start)',
       'start_week_start', p_start_week_start::text
+    )::text;
+  end if;
+
+  select pfc.*
+  into v_component
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.closed_at_utc is null
+    and pfc.component_key_type = 'CASE_TOTAL'
+    and pfc.component_key_value = 'TOTAL'
+  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
+  limit 1
+  for update;
+
+  v_has_component := (v_component.id is not null);
+
+  v_current_taxability := coalesce(
+    v_case.taxability,
+    case
+      when v_has_component and v_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'TAXABLE'::public.pay_finance_taxability_enum
+      else 'NON_TAXABLE'::public.pay_finance_taxability_enum
+    end
+  );
+
+  if p_taxability is null then
+    v_requested_taxability := v_current_taxability;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'TAXABLE' then
+    v_requested_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'NON_TAXABLE' then
+    v_requested_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  else
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'TAXABILITY_INVALID',
+      'message', 'pay_manual_debt_adjustment_update: taxability must be TAXABLE or NON_TAXABLE when provided',
+      'taxability', p_taxability
+    )::text;
+  end if;
+
+  if v_case.routing_kind is not null then
+    v_current_routing_kind := v_case.routing_kind;
+  elsif v_candidate_pay_method = 'UMBRELLA' then
+    v_current_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+  else
+    v_current_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+  end if;
+
+  if v_candidate_pay_method = 'PAYE' and v_requested_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'GROSS_DEDUCT';
+  elsif v_candidate_pay_method = 'PAYE' and v_requested_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NET_DEDUCT';
+  elsif v_candidate_pay_method = 'UMBRELLA' and v_requested_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+  else
+    v_requested_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_component_classification := 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+  end if;
+
+  v_taxability_changed := v_current_taxability is distinct from v_requested_taxability;
+
+  select exists (
+    select 1
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbi.source_ref = ('advance:' || p_finance_case_id::text)
+      and pbi.item_type = 'MANUAL_DEBT_RECOVERY'
+      and pbi.is_voided = false
+      and pb.cancelled_at_utc is null
+      and upper(coalesce(pb.status,'')) <> 'CANCELLED'
+  ) into v_has_active_batch_item;
+
+  if v_taxability_changed and v_has_active_batch_item then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_UPDATE',
+      'code', 'TAXABILITY_LOCKED_AFTER_DRAFT',
+      'message', 'pay_manual_debt_adjustment_update: taxability cannot be changed once a manual debt recovery is drafted or later',
+      'finance_case_id', p_finance_case_id::text,
+      'current_taxability', v_current_taxability::text,
+      'requested_taxability', v_requested_taxability::text
     )::text;
   end if;
 
@@ -19625,22 +22576,23 @@ begin
   ) x
   where x.amt < 0;
 
-  select pfc.*
-  into v_component
-  from public.pay_finance_case_components pfc
-  where pfc.finance_case_id = p_finance_case_id
-    and pfc.closed_at_utc is null
-    and pfc.component_key_type = 'CASE_TOTAL'
-    and pfc.component_key_value = 'TOTAL'
-  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
-  limit 1
-  for update;
-
-  v_has_component := (v_component.id is not null);
-
-  v_component_source_basis_json := jsonb_build_object(
-    'case_type', 'MANUAL_DEBT_ADJUSTMENT',
-    'amount', v_new_original_amount
+  v_component_source_basis_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+      'amount', v_new_original_amount,
+      'taxability', v_requested_taxability::text,
+      'routing_kind', v_requested_routing_kind::text,
+      'paye_treatment', v_paye_treatment,
+      'weekly_due', v_new_weekly_due,
+      'weeks_total', v_new_weeks_total,
+      'start_week_start', v_new_start_week_start::text,
+      'next_due_week_start', case when v_new_next_due is null then null else v_new_next_due::text end,
+      'schedule_json', coalesce(v_new_schedule_json, '[]'::jsonb),
+      'minimum_earnings_threshold', v_new_minimum_earnings_threshold,
+      'take_home_floor_override', v_new_take_home_floor_override,
+      'adjustment_comment', v_new_adjustment_comment,
+      'note', v_new_notes
+    )
   );
 
   v_before_json := jsonb_build_object(
@@ -19653,7 +22605,9 @@ begin
     'adjustment_comment', v_case.adjustment_comment,
     'notes', v_case.notes,
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
-    'take_home_floor_override', v_case.take_home_floor_override
+    'take_home_floor_override', v_case.take_home_floor_override,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end
   );
 
   update public.pay_advances pa
@@ -19668,12 +22622,16 @@ begin
       notes = v_new_notes,
       minimum_earnings_threshold = v_new_minimum_earnings_threshold,
       take_home_floor_override = v_new_take_home_floor_override,
-      updated_at = v_now_utc
+      updated_at = v_now_utc,
+      taxability = v_requested_taxability,
+      routing_kind = v_requested_routing_kind,
+      oneoff_bank_details_required = false
   where pa.id = p_finance_case_id;
 
   if v_has_component then
     v_component_before_json := jsonb_build_object(
       'finance_component_id', v_component.id::text,
+      'classification', v_component.classification::text,
       'source_amount', round(coalesce(v_component.source_amount,0),2),
       'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
       'source_pay_method', v_component.source_pay_method,
@@ -19688,39 +22646,111 @@ begin
     v_source_basis_changed := (
       round(coalesce(v_component.source_amount,0),2) is distinct from round(coalesce(v_new_original_amount,0),2)
       or v_component.source_basis_json is distinct from v_component_source_basis_json
+      or v_component.classification is distinct from v_component_classification
+      or coalesce(v_component.source_pay_method,'') is distinct from coalesce(v_candidate_pay_method,'')
     );
 
-    if v_source_basis_changed then
-      v_component_is_resolution_stale := (
-        v_component.saved_target_pay_method is not null
-        or v_component.saved_resolution_mode is not null
-        or v_component.saved_resolution_payload_json is not null
-        or v_component.saved_resolution_result_json is not null
-        or v_component.resolution_fingerprint is not null
-        or v_component.is_resolution_stale = true
+    if v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+      v_component_resolution_payload_json := jsonb_build_object(
+        'same_channel', true,
+        'target_amount', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
       );
 
-      if v_component_is_resolution_stale then
-        v_component_stale_reason := 'COMPONENT_BASIS_CHANGED';
-      else
-        v_component_stale_reason := null;
-      end if;
+      v_component_resolution_result_json := jsonb_build_object(
+        'target_amount', v_new_original_amount,
+        'target_amount_ex_vat', v_new_original_amount,
+        'target_amount_vat', 0,
+        'target_amount_inc_vat', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
+      );
+
+      v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+        p_source_family_key         => 'case:' || p_finance_case_id::text,
+        p_component_key_type        => 'CASE_TOTAL',
+        p_component_key_value       => 'TOTAL',
+        p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+        p_source_pay_method         => v_candidate_pay_method,
+        p_current_target_pay_method => v_candidate_pay_method,
+        p_source_basis_json         => v_component_source_basis_json,
+        p_source_amount             => v_new_original_amount,
+        p_relevant_erni_pct         => null::numeric,
+        p_target_basis_json         => jsonb_build_object('same_channel', true)
+      );
+
+      v_component_is_resolution_stale := false;
+      v_component_stale_reason := null;
     else
-      v_component_is_resolution_stale := coalesce(v_component.is_resolution_stale,false);
-      v_component_stale_reason := v_component.stale_reason;
+      v_component_resolution_payload_json := null;
+      v_component_resolution_result_json := null;
+      v_component_resolution_fingerprint := null;
+      v_component_is_resolution_stale := false;
+      v_component_stale_reason := null;
     end if;
 
     update public.pay_finance_case_components pfc
-    set
-      source_basis_json = v_component_source_basis_json,
-      source_amount = v_new_original_amount,
-      remaining_source_amount = v_new_outstanding_amount,
-      is_resolution_stale = v_component_is_resolution_stale,
-      stale_reason = v_component_stale_reason,
-      updated_at_utc = v_now_utc
+    set classification = v_component_classification,
+        source_pay_method = v_candidate_pay_method,
+        source_basis_json = v_component_source_basis_json,
+        source_amount = v_new_original_amount,
+        remaining_source_amount = v_new_outstanding_amount,
+        saved_target_pay_method = case
+          when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          then v_candidate_pay_method
+          else null
+        end,
+        saved_resolution_mode = case
+          when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          then 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
+          else null
+        end,
+        saved_resolution_payload_json = v_component_resolution_payload_json,
+        saved_resolution_result_json = v_component_resolution_result_json,
+        resolution_fingerprint = v_component_resolution_fingerprint,
+        is_resolution_stale = v_component_is_resolution_stale,
+        stale_reason = v_component_stale_reason,
+        updated_at_utc = v_now_utc,
+        resolved_at_utc = case
+          when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          then v_now_utc
+          else null::timestamptz
+        end
     where pfc.id = v_component.id
     returning pfc.* into v_component;
   else
+    if v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+      v_component_resolution_payload_json := jsonb_build_object(
+        'same_channel', true,
+        'target_amount', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
+      );
+
+      v_component_resolution_result_json := jsonb_build_object(
+        'target_amount', v_new_original_amount,
+        'target_amount_ex_vat', v_new_original_amount,
+        'target_amount_vat', 0,
+        'target_amount_inc_vat', v_new_original_amount,
+        'target_pay_method', v_candidate_pay_method
+      );
+
+      v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+        p_source_family_key         => 'case:' || p_finance_case_id::text,
+        p_component_key_type        => 'CASE_TOTAL',
+        p_component_key_value       => 'TOTAL',
+        p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+        p_source_pay_method         => v_candidate_pay_method,
+        p_current_target_pay_method => v_candidate_pay_method,
+        p_source_basis_json         => v_component_source_basis_json,
+        p_source_amount             => v_new_original_amount,
+        p_relevant_erni_pct         => null::numeric,
+        p_target_basis_json         => jsonb_build_object('same_channel', true)
+      );
+    else
+      v_component_resolution_payload_json := null;
+      v_component_resolution_result_json := null;
+      v_component_resolution_fingerprint := null;
+    end if;
+
     insert into public.pay_finance_case_components(
       finance_case_id,
       candidate_id,
@@ -19756,44 +22786,35 @@ begin
       'case:' || p_finance_case_id::text,
       'CASE_TOTAL',
       'TOTAL',
-      'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+      v_component_classification,
       v_candidate_pay_method,
       v_component_source_basis_json,
       v_new_original_amount,
       v_new_outstanding_amount,
-      v_candidate_pay_method,
-      'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
-      jsonb_build_object(
-        'same_channel', true,
-        'target_amount', v_new_original_amount,
-        'target_pay_method', v_candidate_pay_method
-      ),
-      jsonb_build_object(
-        'target_amount', v_new_original_amount,
-        'target_amount_ex_vat', v_new_original_amount,
-        'target_amount_vat', 0,
-        'target_amount_inc_vat', v_new_original_amount,
-        'target_pay_method', v_candidate_pay_method
-      ),
-      public.pay_finance_component_fingerprint(
-        p_source_family_key         => 'case:' || p_finance_case_id::text,
-        p_component_key_type        => 'CASE_TOTAL',
-        p_component_key_value       => 'TOTAL',
-        p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-        p_source_pay_method         => v_candidate_pay_method,
-        p_current_target_pay_method => v_candidate_pay_method,
-        p_source_basis_json         => v_component_source_basis_json,
-        p_source_amount             => v_new_original_amount,
-        p_relevant_erni_pct         => null::numeric,
-        p_target_basis_json         => jsonb_build_object('same_channel', true)
-      ),
+      case
+        when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        then v_candidate_pay_method
+        else null
+      end,
+      case
+        when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        then 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum
+        else null
+      end,
+      v_component_resolution_payload_json,
+      v_component_resolution_result_json,
+      v_component_resolution_fingerprint,
       false,
       null::text,
       0,
       0,
       v_now_utc,
       v_now_utc,
-      v_now_utc,
+      case
+        when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        then v_now_utc
+        else null::timestamptz
+      end,
       null::timestamptz
     )
     returning * into v_component;
@@ -19808,6 +22829,7 @@ begin
 
   v_component_after_json := jsonb_build_object(
     'finance_component_id', v_component.id::text,
+    'classification', v_component.classification::text,
     'source_amount', round(coalesce(v_component.source_amount,0),2),
     'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
     'source_pay_method', v_component.source_pay_method,
@@ -19831,6 +22853,8 @@ begin
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
     'schedule_input_mode', v_schedule_input_mode,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
     'component_summary', v_component_after_json
   );
 
@@ -19882,9 +22906,15 @@ begin
     v_component_after_json,
     case when v_source_basis_changed then 'COMPONENT_BASIS_CHANGED' else null::text end,
     case
-      when v_component_created then 'Created taxable total component for manual debt adjustment update'
-      when v_source_basis_changed then 'Updated taxable total component and marked saved resolution stale only because source basis changed'
-      else 'Updated taxable total component for manual debt adjustment without changing source basis'
+      when v_component_created and v_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'Created taxable total component for manual debt adjustment update'
+      when v_component_created
+      then 'Created non-taxable fixed recovery component for manual debt adjustment update'
+      when v_source_basis_changed and v_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      then 'Updated taxable total component for manual debt adjustment'
+      when v_source_basis_changed
+      then 'Updated non-taxable fixed recovery component for manual debt adjustment'
+      else 'Updated manual debt adjustment component'
     end
   );
 
@@ -19900,7 +22930,10 @@ begin
     'source_amount', round(coalesce(v_component.source_amount,0),2),
     'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
     'is_resolution_stale', v_component.is_resolution_stale,
-    'stale_reason', v_component.stale_reason
+    'stale_reason', v_component.stale_reason,
+    'taxability', v_requested_taxability::text,
+    'routing_kind', v_requested_routing_kind::text,
+    'paye_treatment', v_paye_treatment
   );
 
   return jsonb_build_object(
@@ -19910,6 +22943,7 @@ begin
     'case_type', 'MANUAL_DEBT_ADJUSTMENT',
     'worker_label', 'Manual debt adjustment',
     'recovery_label', 'Manual debt adjustment recovery',
+    'paye_treatment', v_paye_treatment,
     'schedule_input_mode', v_schedule_input_mode,
     'original_amount', round(coalesce(v_case.original_amount,0),2),
     'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
@@ -19920,436 +22954,13 @@ begin
     'minimum_earnings_threshold', v_case.minimum_earnings_threshold,
     'take_home_floor_override', v_case.take_home_floor_override,
     'schedule_json', coalesce(v_case.schedule_json,'[]'::jsonb),
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', false,
     'component_summary', v_component_summary_json
   );
 end;
 $$;
-
-create or replace function public.pay_manual_credit_adjustment_update(
-  p_finance_case_id uuid,
-  p_actor_user_id uuid,
-  p_amount numeric default null,
-  p_adjustment_comment text default null,
-  p_note text default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_now_utc timestamptz := now();
-  v_case public.pay_advances%rowtype;
-  v_batch public.pay_batches%rowtype;
-  v_has_batch boolean := false;
-  v_is_committed boolean := false;
-  v_new_amount numeric(12,2);
-  v_new_comment text;
-  v_new_notes text;
-  v_before_json jsonb := '{}'::jsonb;
-  v_after_json jsonb := '{}'::jsonb;
-  v_batch_item_id uuid := null;
-  v_pay_batch_candidate_id uuid := null;
-  v_component public.pay_finance_case_components%rowtype;
-  v_component_before_json jsonb := null;
-  v_component_after_json jsonb := null;
-  v_component_source_basis_json jsonb := '{}'::jsonb;
-  v_component_resolution_payload_json jsonb := '{}'::jsonb;
-  v_component_resolution_result_json jsonb := '{}'::jsonb;
-  v_component_resolution_fingerprint text := null;
-  v_component_summary_json jsonb := '{}'::jsonb;
-  v_component_changed boolean := false;
-  v_target_pay_method_for_rebuild text := null;
-  v_batch_item_pay_channel text := null;
-  v_batch_item_paye_treatment text := null;
-begin
-  if p_finance_case_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'FINANCE_CASE_ID_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_update: finance_case_id is required'
-    )::text;
-  end if;
-
-  if p_actor_user_id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'ACTOR_USER_ID_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_update: actor_user_id is required'
-    )::text;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id
-    and pa.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
-  for update;
-
-  if v_case.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'FINANCE_CASE_NOT_FOUND',
-      'message', 'pay_manual_credit_adjustment_update: Manual credit adjustment not found',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  if v_case.payout_pay_batch_id is not null then
-    select pb.*
-    into v_batch
-    from public.pay_batches pb
-    where pb.id = v_case.payout_pay_batch_id
-    limit 1;
-    v_has_batch := v_batch.id is not null;
-  end if;
-
-  if v_has_batch then
-    v_is_committed := (
-      coalesce(v_batch.authoritative_payment_date is not null, false)
-      or upper(coalesce(v_batch.status,'')) in ('SCHEDULED','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT','EXECUTING','SETTLED','COMPLETED','PARTIAL')
-    );
-  else
-    v_is_committed := false;
-  end if;
-
-  v_new_amount := coalesce(round(p_amount,2), round(coalesce(v_case.original_amount,0),2));
-  v_new_comment := case when p_adjustment_comment is null then v_case.adjustment_comment else nullif(btrim(p_adjustment_comment), '') end;
-  v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
-
-  if p_amount is not null and v_new_amount <= 0 then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'AMOUNT_INVALID',
-      'message', 'pay_manual_credit_adjustment_update: amount must be > 0'
-    )::text;
-  end if;
-
-  if p_adjustment_comment is not null and v_new_comment is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
-      'message', 'pay_manual_credit_adjustment_update: adjustment_comment is required'
-    )::text;
-  end if;
-
-  if v_is_committed and (
-    (p_amount is not null and v_new_amount <> round(coalesce(v_case.original_amount,0),2))
-    or (p_adjustment_comment is not null and coalesce(v_new_comment,'') <> coalesce(v_case.adjustment_comment,''))
-  ) then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'PAYOUT_ALREADY_COMMITTED',
-      'message', 'pay_manual_credit_adjustment_update: payout details can only be edited before commit',
-      'finance_case_id', p_finance_case_id::text,
-      'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end
-    )::text;
-  end if;
-
-  select pfc.*
-  into v_component
-  from public.pay_finance_case_components pfc
-  where pfc.finance_case_id = p_finance_case_id
-    and pfc.component_key_type = 'CASE_TOTAL'
-    and pfc.component_key_value = 'TOTAL'
-    and pfc.closed_at_utc is null
-  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
-  limit 1
-  for update;
-
-  if v_component.id is null then
-    raise exception '%', jsonb_build_object(
-      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
-      'code', 'FINANCE_COMPONENT_NOT_FOUND',
-      'message', 'pay_manual_credit_adjustment_update: linked taxable total component not found',
-      'finance_case_id', p_finance_case_id::text
-    )::text;
-  end if;
-
-  v_before_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'adjustment_comment', v_case.adjustment_comment,
-    'notes', v_case.notes,
-    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end
-  );
-
-  v_component_before_json := jsonb_build_object(
-    'finance_component_id', v_component.id::text,
-    'source_amount', round(coalesce(v_component.source_amount,0),2),
-    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
-    'source_pay_method', v_component.source_pay_method,
-    'saved_target_pay_method', v_component.saved_target_pay_method,
-    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
-    'resolution_fingerprint', v_component.resolution_fingerprint,
-    'is_resolution_stale', v_component.is_resolution_stale,
-    'stale_reason', v_component.stale_reason,
-    'source_basis_json', v_component.source_basis_json
-  );
-
-  update public.pay_advances pa
-  set original_amount = case when v_is_committed then pa.original_amount else v_new_amount end,
-      adjustment_comment = case when v_is_committed then pa.adjustment_comment else v_new_comment end,
-      notes = v_new_notes,
-      updated_at = v_now_utc
-  where pa.id = p_finance_case_id;
-
-  if v_is_committed = false then
-    v_component_source_basis_json := jsonb_build_object(
-      'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-      'amount', v_new_amount
-    );
-
-    if v_has_batch then
-      select pbc.id
-      into v_pay_batch_candidate_id
-      from public.pay_batch_candidates pbc
-      where pbc.pay_batch_id = v_batch.id
-        and pbc.candidate_id = v_case.candidate_id
-      limit 1;
-
-      select
-        pbi.id,
-        upper(coalesce(pbi.pay_channel,'')) as pay_channel,
-        coalesce(pbi.paye_treatment,'NONE') as paye_treatment
-      into
-        v_batch_item_id,
-        v_batch_item_pay_channel,
-        v_batch_item_paye_treatment
-      from public.pay_batch_items pbi
-      join public.pay_batch_candidates pbc2
-        on pbc2.id = pbi.pay_batch_candidate_id
-      where pbc2.pay_batch_id = v_batch.id
-        and pbc2.candidate_id = v_case.candidate_id
-        and pbi.source_ref = ('advance:' || p_finance_case_id::text)
-        and pbi.item_type = 'MANUAL_CREDIT_PAYOUT'
-        and pbi.is_voided = false
-      limit 1;
-    end if;
-
-    v_target_pay_method_for_rebuild := coalesce(nullif(v_batch_item_pay_channel,''), v_component.saved_target_pay_method, v_component.source_pay_method);
-    v_batch_item_paye_treatment := case when upper(coalesce(v_target_pay_method_for_rebuild,'')) = 'PAYE' then 'GROSS_ADD' else 'NONE' end;
-
-    v_component_resolution_payload_json := jsonb_build_object(
-      'same_channel', upper(coalesce(v_component.source_pay_method,'')) = upper(coalesce(v_target_pay_method_for_rebuild,'')),
-      'target_amount', v_new_amount,
-      'target_pay_method', v_target_pay_method_for_rebuild
-    );
-
-    v_component_resolution_result_json := jsonb_build_object(
-      'target_amount', v_new_amount,
-      'target_amount_ex_vat', v_new_amount,
-      'target_amount_vat', 0,
-      'target_amount_inc_vat', v_new_amount,
-      'target_pay_method', v_target_pay_method_for_rebuild
-    );
-
-    v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
-      p_source_family_key         => v_component.source_family_key,
-      p_component_key_type        => v_component.component_key_type,
-      p_component_key_value       => v_component.component_key_value,
-      p_classification            => v_component.classification,
-      p_source_pay_method         => v_component.source_pay_method,
-      p_current_target_pay_method => v_target_pay_method_for_rebuild,
-      p_source_basis_json         => v_component_source_basis_json,
-      p_source_amount             => v_new_amount,
-      p_relevant_erni_pct         => null::numeric,
-      p_target_basis_json         => jsonb_build_object('same_channel', upper(coalesce(v_component.source_pay_method,'')) = upper(coalesce(v_target_pay_method_for_rebuild,'')))
-    );
-
-    v_component_changed := (
-      round(coalesce(v_component.source_amount,0),2) is distinct from round(coalesce(v_new_amount,0),2)
-      or v_component.source_basis_json is distinct from v_component_source_basis_json
-      or coalesce(v_new_comment,'') is distinct from coalesce(v_case.adjustment_comment,'')
-    );
-
-    update public.pay_finance_case_components pfc
-    set source_basis_json = v_component_source_basis_json,
-        source_amount = v_new_amount,
-        remaining_source_amount = 0,
-        saved_target_pay_method = v_target_pay_method_for_rebuild,
-        saved_resolution_mode = 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
-        saved_resolution_payload_json = v_component_resolution_payload_json,
-        saved_resolution_result_json = v_component_resolution_result_json,
-        resolution_fingerprint = v_component_resolution_fingerprint,
-        is_resolution_stale = false,
-        stale_reason = null::text,
-        updated_at_utc = v_now_utc
-    where pfc.id = v_component.id
-    returning pfc.* into v_component;
-
-    if v_pay_batch_candidate_id is not null then
-      update public.pay_batch_candidates pbc
-      set gross_preview = v_new_amount,
-          net_bank_amount = v_new_amount,
-          updated_at = v_now_utc
-      where pbc.id = v_pay_batch_candidate_id;
-    end if;
-
-    if v_batch_item_id is not null then
-      update public.pay_batch_items pbi
-      set description = 'Manual credit adjustment',
-          amount_ex_vat = v_new_amount,
-          amount_vat = 0,
-          amount_inc_vat = v_new_amount,
-          updated_at = v_now_utc,
-          finance_case_id = p_finance_case_id,
-          finance_component_id = v_component.id,
-          reservation_id = null,
-          paye_treatment = v_batch_item_paye_treatment,
-          frozen_component_snapshot_json = jsonb_build_object(
-            'finance_component_id', v_component.id::text,
-            'source_family_key', v_component.source_family_key,
-            'component_key_type', v_component.component_key_type,
-            'component_key_value', v_component.component_key_value,
-            'classification', v_component.classification::text,
-            'source_pay_method', v_component.source_pay_method,
-            'source_basis_json', v_component.source_basis_json,
-            'source_amount', round(coalesce(v_component.source_amount,0),2),
-            'saved_target_pay_method', v_component.saved_target_pay_method,
-            'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
-            'saved_resolution_payload_json', v_component.saved_resolution_payload_json,
-            'saved_resolution_result_json', v_component.saved_resolution_result_json,
-            'resolution_fingerprint', v_component.resolution_fingerprint,
-            'is_resolution_stale', v_component.is_resolution_stale
-          ),
-          frozen_component_key_type = v_component.component_key_type,
-          frozen_component_key_value = v_component.component_key_value,
-          frozen_component_classification = v_component.classification,
-          frozen_source_basis_json = v_component.source_basis_json,
-          frozen_source_pay_method = v_component.source_pay_method,
-          frozen_target_pay_method = v_component.saved_target_pay_method,
-          frozen_resolution_mode = v_component.saved_resolution_mode,
-          frozen_resolution_payload_json = v_component.saved_resolution_payload_json,
-          frozen_resolution_result_json = v_component.saved_resolution_result_json,
-          frozen_source_amount = v_component.source_amount,
-          frozen_target_amount_ex_vat = v_new_amount,
-          frozen_target_amount_vat = 0,
-          frozen_target_amount_inc_vat = v_new_amount
-      where pbi.id = v_batch_item_id;
-
-      update public.pay_batch_item_breakdowns pbib
-      set unit_name = 'Manual credit adjustment',
-          amount_ex_vat = v_new_amount,
-          amount_vat = 0,
-          amount_inc_vat = v_new_amount,
-          meta_json = jsonb_build_object(
-            'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-            'worker_label', 'Manual credit adjustment',
-            'adjustment_comment', v_new_comment,
-            'finance_component_id', v_component.id::text
-          )
-      where pbib.pay_batch_item_id = v_batch_item_id;
-    end if;
-  end if;
-
-  select pa.*
-  into v_case
-  from public.pay_advances pa
-  where pa.id = p_finance_case_id;
-
-  v_component_after_json := jsonb_build_object(
-    'finance_component_id', v_component.id::text,
-    'source_amount', round(coalesce(v_component.source_amount,0),2),
-    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
-    'source_pay_method', v_component.source_pay_method,
-    'saved_target_pay_method', v_component.saved_target_pay_method,
-    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
-    'resolution_fingerprint', v_component.resolution_fingerprint,
-    'is_resolution_stale', v_component.is_resolution_stale,
-    'stale_reason', v_component.stale_reason,
-    'source_basis_json', v_component.source_basis_json
-  );
-
-  v_after_json := jsonb_build_object(
-    'original_amount', round(coalesce(v_case.original_amount,0),2),
-    'adjustment_comment', v_case.adjustment_comment,
-    'notes', v_case.notes,
-    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end,
-    'component_summary', v_component_after_json
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    finance_component_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    p_finance_case_id,
-    null::uuid,
-    'UPDATED',
-    v_now_utc,
-    p_actor_user_id,
-    case when v_batch.id is null then null else v_batch.id end,
-    v_before_json,
-    v_after_json,
-    null::text,
-    'Manual credit adjustment updated'
-  );
-
-  insert into public.pay_finance_case_events(
-    finance_case_id,
-    finance_component_id,
-    event_type,
-    event_at_utc,
-    actor_user_id,
-    pay_batch_id,
-    before_json,
-    after_json,
-    reason,
-    note
-  )
-  values (
-    p_finance_case_id,
-    v_component.id,
-    'COMPONENT_UPDATED',
-    v_now_utc,
-    p_actor_user_id,
-    case when v_batch.id is null then null else v_batch.id end,
-    v_component_before_json,
-    v_component_after_json,
-    case when v_component_changed then 'COMPONENT_BASIS_CHANGED' else null::text end,
-    case
-      when v_is_committed then 'Manual credit adjustment payout already committed; component left unchanged for payout basis'
-      when v_component_changed then 'Manual credit adjustment component source basis changed before commit and the payout snapshot was rebuilt from the component'
-      else 'Manual credit adjustment component refreshed without source-basis change'
-    end
-  );
-
-  v_component_summary_json := jsonb_build_object(
-    'finance_component_id', v_component.id::text,
-    'source_family_key', v_component.source_family_key,
-    'component_key_type', v_component.component_key_type,
-    'component_key_value', v_component.component_key_value,
-    'classification', v_component.classification::text,
-    'source_pay_method', v_component.source_pay_method,
-    'saved_target_pay_method', v_component.saved_target_pay_method,
-    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
-    'source_amount', round(coalesce(v_component.source_amount,0),2),
-    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
-    'is_resolution_stale', v_component.is_resolution_stale,
-    'stale_reason', v_component.stale_reason
-  );
-
-  return jsonb_build_object(
-    'ok', true,
-    'finance_case_id', p_finance_case_id::text,
-    'finance_component_id', v_component.id::text,
-    'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-    'worker_label', 'Manual credit adjustment',
-    'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end,
-    'payout_editable', (v_is_committed = false),
-    'component_summary', v_component_summary_json
-  );
-end;
-$$;
-
 
 
 create or replace function public.pay_manual_credit_adjustment_create(
@@ -20357,7 +22968,12 @@ create or replace function public.pay_manual_credit_adjustment_create(
   p_amount numeric,
   p_actor_user_id uuid,
   p_adjustment_comment text,
-  p_note text default null
+  p_note text default null,
+  p_taxability text default null,
+  p_beneficiary_name text default null,
+  p_sort_code text default null,
+  p_account_number text default null,
+  p_bank_details_note text default null
 )
 returns jsonb
 language plpgsql
@@ -20373,13 +22989,10 @@ declare
 
   v_finance_case_id uuid := null;
   v_finance_component_id uuid := null;
-  v_pay_batch_id uuid := null;
-  v_pay_batch_candidate_id uuid := null;
-  v_pay_batch_item_id uuid := null;
 
   v_component_source_basis_json jsonb := '{}'::jsonb;
-  v_component_resolution_payload_json jsonb := '{}'::jsonb;
-  v_component_resolution_result_json jsonb := '{}'::jsonb;
+  v_component_resolution_payload_json jsonb := null;
+  v_component_resolution_result_json jsonb := null;
   v_component_resolution_fingerprint text := null;
   v_component_snapshot_json jsonb := '{}'::jsonb;
   v_component_summary_json jsonb := '{}'::jsonb;
@@ -20395,6 +23008,23 @@ declare
 
   v_pay_channel text := null;
   v_paye_treatment text := 'NONE';
+  v_paye_net_effect text := null;
+
+  v_taxability public.pay_finance_taxability_enum := null;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_oneoff_required boolean := false;
+  v_component_classification public.pay_finance_component_classification_enum := null;
+
+  v_beneficiary_name_norm text := null;
+  v_sort_code_norm text := null;
+  v_account_number_norm text := null;
+  v_oneoff_bank_hash text := null;
+  v_oneoff_before jsonb := null;
+  v_oneoff_after jsonb := null;
+
+  v_readiness_entity_kind text := 'CANDIDATE';
+  v_readiness_bank_hash text := null;
+  v_readiness_payee_name text := null;
 begin
   if p_candidate_id is null then
     raise exception '%', jsonb_build_object(
@@ -20425,6 +23055,27 @@ begin
       'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
       'code', 'ADJUSTMENT_COMMENT_REQUIRED',
       'message', 'pay_manual_credit_adjustment_create: adjustment_comment is required'
+    )::text;
+  end if;
+
+  if nullif(upper(btrim(coalesce(p_taxability,''))), '') is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'TAXABILITY_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_create: taxability is required and must be TAXABLE or NON_TAXABLE'
+    )::text;
+  end if;
+
+  if upper(btrim(coalesce(p_taxability,''))) = 'TAXABLE' then
+    v_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'NON_TAXABLE' then
+    v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  else
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+      'code', 'TAXABILITY_INVALID',
+      'message', 'pay_manual_credit_adjustment_create: taxability must be TAXABLE or NON_TAXABLE',
+      'taxability', p_taxability
     )::text;
   end if;
 
@@ -20494,7 +23145,95 @@ begin
   end if;
 
   v_pay_channel := v_candidate.pay_method;
-  v_paye_treatment := case when v_pay_channel = 'PAYE' then 'GROSS_ADD' else 'NONE' end;
+
+  if v_pay_channel = 'PAYE' and v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := false;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'GROSS_ADD';
+    v_paye_net_effect := null;
+  elsif v_pay_channel = 'PAYE' and v_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := false;
+    v_component_classification := 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+    v_paye_net_effect := 'NET_ADD';
+  elsif v_pay_channel = 'UMBRELLA' and v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := false;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+    v_paye_net_effect := null;
+  else
+    v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+    v_oneoff_required := true;
+    v_component_classification := 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+    v_paye_net_effect := null;
+  end if;
+
+  if v_oneoff_required = false then
+    if nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+       or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+       or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+       or nullif(btrim(coalesce(p_bank_details_note,'')), '') is not null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+        'code', 'ONEOFF_BANK_DETAILS_NOT_ALLOWED',
+        'message', 'pay_manual_credit_adjustment_create: one-off bank fields are only allowed for umbrella non-taxable manual credits',
+        'candidate_id', p_candidate_id::text,
+        'pay_method', v_pay_channel,
+        'taxability', v_taxability::text
+      )::text;
+    end if;
+  else
+    v_beneficiary_name_norm := nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), '');
+    v_sort_code_norm := case
+      when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+        substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+      else null
+    end;
+    v_account_number_norm := nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), '');
+
+    if v_beneficiary_name_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+        'code', 'BENEFICIARY_NAME_REQUIRED',
+        'message', 'pay_manual_credit_adjustment_create: beneficiary_name is required for umbrella non-taxable manual credits',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    if v_sort_code_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+        'code', 'SORT_CODE_REQUIRED',
+        'message', 'pay_manual_credit_adjustment_create: valid sort_code is required for umbrella non-taxable manual credits',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    if v_account_number_norm is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+        'code', 'ACCOUNT_NUMBER_REQUIRED',
+        'message', 'pay_manual_credit_adjustment_create: valid account_number is required for umbrella non-taxable manual credits',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+
+    v_oneoff_bank_hash := public._bank_hash(v_sort_code_norm, v_account_number_norm, v_beneficiary_name_norm);
+    if v_oneoff_bank_hash is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_CREATE',
+        'code', 'BANK_DETAILS_HASH_FAILED',
+        'message', 'pay_manual_credit_adjustment_create: unable to derive bank_details_hash for umbrella non-taxable manual credit bank details',
+        'candidate_id', p_candidate_id::text
+      )::text;
+    end if;
+  end if;
 
   v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
   v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
@@ -20535,14 +23274,17 @@ begin
     written_off_by_user_id,
     write_off_reason,
     cleared_at_utc,
-    cleared_by_user_id
+    cleared_by_user_id,
+    taxability,
+    routing_kind,
+    oneoff_bank_details_required
   )
   values (
     p_candidate_id,
     null::uuid,
     'MANUAL_ADVANCE'::public.pay_advance_reason_enum,
     round(p_amount,2),
-    0,
+    round(p_amount,2),
     null::date,
     '[]'::jsonb,
     null::date,
@@ -20571,41 +23313,103 @@ begin
     null::uuid,
     null::text,
     null::timestamptz,
-    null::uuid
+    null::uuid,
+    v_taxability,
+    v_routing_kind,
+    v_oneoff_required
   )
   returning id into v_finance_case_id;
 
-  v_component_source_basis_json := jsonb_build_object(
-    'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-    'amount', round(p_amount,2)
+  if v_oneoff_required then
+    insert into public.pay_finance_case_oneoff_payout_bank_details(
+      finance_case_id,
+      candidate_id,
+      beneficiary_name,
+      sort_code,
+      account_number,
+      bank_details_hash,
+      note,
+      created_at_utc,
+      created_by_user_id,
+      updated_at_utc,
+      updated_by_user_id
+    )
+    values (
+      v_finance_case_id,
+      p_candidate_id,
+      v_beneficiary_name_norm,
+      v_sort_code_norm,
+      v_account_number_norm,
+      v_oneoff_bank_hash,
+      nullif(btrim(coalesce(p_bank_details_note,'')), ''),
+      v_now_utc,
+      p_actor_user_id,
+      v_now_utc,
+      p_actor_user_id
+    );
+
+    v_oneoff_after := jsonb_build_object(
+      'finance_case_id', v_finance_case_id::text,
+      'candidate_id', p_candidate_id::text,
+      'beneficiary_name', v_beneficiary_name_norm,
+      'sort_code_masked', case when v_sort_code_norm is null then null else 'XX-XX-' || right(v_sort_code_norm, 2) end,
+      'account_number_masked', case when v_account_number_norm is null then null else lpad(right(v_account_number_norm, 4), length(v_account_number_norm), '*') end,
+      'bank_details_hash', v_oneoff_bank_hash,
+      'note', nullif(btrim(coalesce(p_bank_details_note,'')), '')
+    );
+
+    perform public._audit_insert(
+      'finance_case',
+      v_finance_case_id::text,
+      'ONEOFF_BANK_DETAILS_CREATED',
+      v_oneoff_before,
+      v_oneoff_after,
+      'ONE_OFF_PAYOUT_BANK_DETAILS',
+      p_actor_user_id
+    );
+  end if;
+
+  v_component_source_basis_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+      'amount', round(p_amount,2),
+      'taxability', v_taxability::text,
+      'routing_kind', v_routing_kind::text,
+      'paye_treatment', v_paye_treatment,
+      'paye_net_effect', v_paye_net_effect,
+      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+      'note', nullif(btrim(coalesce(p_note,'')), '')
+    )
   );
 
-  v_component_resolution_payload_json := jsonb_build_object(
-    'same_channel', true,
-    'target_amount', round(p_amount,2),
-    'target_pay_method', v_pay_channel
-  );
+  if v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+    v_component_resolution_payload_json := jsonb_build_object(
+      'same_channel', true,
+      'target_amount', round(p_amount,2),
+      'target_pay_method', v_pay_channel
+    );
 
-  v_component_resolution_result_json := jsonb_build_object(
-    'target_amount', round(p_amount,2),
-    'target_amount_ex_vat', round(p_amount,2),
-    'target_amount_vat', 0,
-    'target_amount_inc_vat', round(p_amount,2),
-    'target_pay_method', v_pay_channel
-  );
+    v_component_resolution_result_json := jsonb_build_object(
+      'target_amount', round(p_amount,2),
+      'target_amount_ex_vat', round(p_amount,2),
+      'target_amount_vat', 0,
+      'target_amount_inc_vat', round(p_amount,2),
+      'target_pay_method', v_pay_channel
+    );
 
-  v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
-    p_source_family_key         => 'case:' || v_finance_case_id::text,
-    p_component_key_type        => 'CASE_TOTAL',
-    p_component_key_value       => 'TOTAL',
-    p_classification            => 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-    p_source_pay_method         => v_pay_channel,
-    p_current_target_pay_method => v_pay_channel,
-    p_source_basis_json         => v_component_source_basis_json,
-    p_source_amount             => round(p_amount,2),
-    p_relevant_erni_pct         => null::numeric,
-    p_target_basis_json         => jsonb_build_object('same_channel', true)
-  );
+    v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+      p_source_family_key         => 'case:' || v_finance_case_id::text,
+      p_component_key_type        => 'CASE_TOTAL',
+      p_component_key_value       => 'TOTAL',
+      p_classification            => v_component_classification,
+      p_source_pay_method         => v_pay_channel,
+      p_current_target_pay_method => v_pay_channel,
+      p_source_basis_json         => v_component_source_basis_json,
+      p_source_amount             => round(p_amount,2),
+      p_relevant_erni_pct         => null::numeric,
+      p_target_basis_json         => jsonb_build_object('same_channel', true)
+    );
+  end if;
 
   insert into public.pay_finance_case_components(
     finance_case_id,
@@ -20642,13 +23446,13 @@ begin
     'case:' || v_finance_case_id::text,
     'CASE_TOTAL',
     'TOTAL',
-    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
+    v_component_classification,
     v_pay_channel,
     v_component_source_basis_json,
     round(p_amount,2),
-    0,
-    v_pay_channel,
-    'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
+    round(p_amount,2),
+    case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then v_pay_channel else null end,
+    case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum else null end,
     v_component_resolution_payload_json,
     v_component_resolution_result_json,
     v_component_resolution_fingerprint,
@@ -20658,7 +23462,7 @@ begin
     0,
     v_now_utc,
     v_now_utc,
-    v_now_utc,
+    case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then v_now_utc else null end,
     null::timestamptz
   )
   returning id into v_finance_component_id;
@@ -20668,12 +23472,13 @@ begin
     'source_family_key', 'case:' || v_finance_case_id::text,
     'component_key_type', 'CASE_TOTAL',
     'component_key_value', 'TOTAL',
-    'classification', 'TAXABLE_CHANNEL_SENSITIVE',
+    'classification', v_component_classification::text,
     'source_pay_method', v_pay_channel,
     'source_basis_json', v_component_source_basis_json,
     'source_amount', round(p_amount,2),
-    'saved_target_pay_method', v_pay_channel,
-    'saved_resolution_mode', 'MANUAL_AMOUNT',
+    'remaining_source_amount', round(p_amount,2),
+    'saved_target_pay_method', case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then v_pay_channel else null end,
+    'saved_resolution_mode', case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'MANUAL_AMOUNT' else null end,
     'saved_resolution_payload_json', v_component_resolution_payload_json,
     'saved_resolution_result_json', v_component_resolution_result_json,
     'resolution_fingerprint', v_component_resolution_fingerprint,
@@ -20681,175 +23486,6 @@ begin
   );
 
   v_component_summary_json := v_component_snapshot_json;
-
-  insert into public.pay_batches(
-    pay_date,
-    created_at_utc,
-    created_by_user_id,
-    status,
-    banking_system_snapshot,
-    external_paye_system_snapshot,
-    rail_provider_snapshot,
-    rail_env_snapshot,
-    batch_kind_fixed
-  )
-  values (
-    v_pay_date,
-    v_now_utc,
-    p_actor_user_id,
-    'DRAFT',
-    v_settings.banking_system,
-    v_settings.external_paye_system,
-    v_settings.rail_provider_default,
-    v_settings.rail_env_default,
-    'LOANS'
-  )
-  returning id into v_pay_batch_id;
-
-  update public.pay_advances pa
-  set payout_pay_batch_id = v_pay_batch_id,
-      updated_at = v_now_utc
-  where pa.id = v_finance_case_id;
-
-  insert into public.pay_batch_candidates(
-    pay_batch_id,
-    candidate_id,
-    candidate_tms_ref,
-    candidate_display_name,
-    paye_state,
-    mismatch_settlement_choice,
-    gross_preview,
-    net_bank_amount,
-    debt_created,
-    loan_repayment_taken,
-    overpayment_recovery_taken,
-    awaiting_net_amount,
-    updated_at
-  )
-  values (
-    v_pay_batch_id,
-    p_candidate_id,
-    v_candidate.tms_ref,
-    v_candidate.display_name,
-    null,
-    null,
-    round(p_amount,2),
-    round(p_amount,2),
-    0,
-    0,
-    0,
-    false,
-    v_now_utc
-  )
-  returning id into v_pay_batch_candidate_id;
-
-  insert into public.pay_batch_items(
-    pay_batch_candidate_id,
-    item_type,
-    timesheet_id,
-    segment_key,
-    source_ref,
-    description,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    pay_channel,
-    umbrella_id,
-    bank_reference,
-    pay_bank_transfer_id,
-    repayment_week_start,
-    is_voided,
-    is_mismatch,
-    created_at,
-    updated_at,
-    finance_case_id,
-    reservation_id,
-    paye_treatment,
-    finance_component_id,
-    frozen_component_snapshot_json,
-    frozen_component_key_type,
-    frozen_component_key_value,
-    frozen_component_classification,
-    frozen_source_basis_json,
-    frozen_source_pay_method,
-    frozen_target_pay_method,
-    frozen_resolution_mode,
-    frozen_resolution_payload_json,
-    frozen_resolution_result_json,
-    frozen_source_amount,
-    frozen_target_amount_ex_vat,
-    frozen_target_amount_vat,
-    frozen_target_amount_inc_vat
-  )
-  values (
-    v_pay_batch_candidate_id,
-    'MANUAL_CREDIT_PAYOUT',
-    null::uuid,
-    null::text,
-    ('advance:' || v_finance_case_id::text),
-    'Manual credit adjustment',
-    round(p_amount,2),
-    0,
-    round(p_amount,2),
-    v_pay_channel,
-    case when v_pay_channel = 'UMBRELLA' then v_candidate.umbrella_id else null::uuid end,
-    null::text,
-    null::uuid,
-    null::date,
-    false,
-    false,
-    v_now_utc,
-    v_now_utc,
-    v_finance_case_id,
-    null::uuid,
-    v_paye_treatment,
-    v_finance_component_id,
-    v_component_snapshot_json,
-    'CASE_TOTAL',
-    'TOTAL',
-    'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
-    v_component_source_basis_json,
-    v_pay_channel,
-    v_pay_channel,
-    'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum,
-    v_component_resolution_payload_json,
-    v_component_resolution_result_json,
-    round(p_amount,2),
-    round(p_amount,2),
-    0,
-    round(p_amount,2)
-  )
-  returning id into v_pay_batch_item_id;
-
-  insert into public.pay_batch_item_breakdowns(
-    pay_batch_item_id,
-    line_kind,
-    bucket_code,
-    unit_name,
-    units,
-    rate,
-    amount_ex_vat,
-    amount_vat,
-    amount_inc_vat,
-    meta_json
-  )
-  values (
-    v_pay_batch_item_id,
-    'MANUAL_CREDIT_PAYOUT',
-    null,
-    'Manual credit adjustment',
-    null::numeric,
-    null::numeric,
-    round(p_amount,2),
-    0,
-    round(p_amount,2),
-    jsonb_build_object(
-      'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
-      'worker_label', 'Manual credit adjustment',
-      'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-      'finance_component_id', v_finance_component_id::text
-    )
-  );
 
   insert into public.pay_finance_case_events(
     finance_case_id,
@@ -20869,15 +23505,19 @@ begin
     'CREATED',
     v_now_utc,
     p_actor_user_id,
-    v_pay_batch_id,
+    null::uuid,
     null::jsonb,
     jsonb_build_object(
       'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
       'amount', round(p_amount,2),
       'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
-      'payout_pay_batch_id', v_pay_batch_id::text,
+      'payout_pay_batch_id', null,
       'payout_status', 'PENDING',
       'paye_treatment', v_paye_treatment,
+      'paye_net_effect', v_paye_net_effect,
+      'taxability', v_taxability::text,
+      'routing_kind', v_routing_kind::text,
+      'oneoff_bank_details_required', v_oneoff_required,
       'component_summary', v_component_summary_json
     ),
     null::text,
@@ -20902,71 +23542,89 @@ begin
     'COMPONENT_CREATED',
     v_now_utc,
     p_actor_user_id,
-    v_pay_batch_id,
+    null::uuid,
     null::jsonb,
     v_component_summary_json,
     'MANUAL_CREDIT_ADJUSTMENT_CREATE',
-    'Created taxable total component for manual credit adjustment'
+    case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+         then 'Created taxable total component for manual credit adjustment'
+         else 'Created non-taxable fixed component for manual credit adjustment'
+    end
   );
 
-  if v_candidate.bank_details_hash is null or btrim(coalesce(v_candidate.bank_details_hash,'')) = '' then
-    v_warnings := v_warnings || jsonb_build_array(
-      jsonb_build_object(
-        'code', 'BLOCKED_BANK_DETAILS',
-        'message', 'Candidate bank details are missing; batch can be created but will be blocked at prepare/schedule until bank details are present.',
-        'candidate_id', p_candidate_id::text
-      )
-    );
+  if v_routing_kind = 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum then
+    v_readiness_bank_hash := nullif(btrim(coalesce(v_candidate.bank_details_hash,'')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce(v_candidate.account_holder, v_candidate.display_name, concat_ws(' ', v_candidate.first_name, v_candidate.last_name))), '');
+  elsif v_routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum then
+    v_readiness_bank_hash := v_oneoff_bank_hash;
+    v_readiness_payee_name := v_beneficiary_name_norm;
   else
-    if v_need_name_check = true then
-      select
-        coalesce(bnc.status, 'UNVERIFIED') as status,
-        (bnc.override_reason is not null and bnc.override_hash = v_candidate.bank_details_hash) as has_override
-      into
-        v_bnc_status,
-        v_bnc_has_override
-      from public.bank_name_checks bnc
-      where bnc.rail_provider = v_settings.rail_provider_default
-        and bnc.rail_env = v_settings.rail_env_default
-        and bnc.entity_kind = 'CANDIDATE'
-        and bnc.entity_id = p_candidate_id
-        and bnc.bank_details_hash = v_candidate.bank_details_hash
-      limit 1;
+    v_readiness_bank_hash := null;
+    v_readiness_payee_name := null;
+  end if;
 
-      if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
-        v_warnings := v_warnings || jsonb_build_array(
-          jsonb_build_object(
-            'code', 'BLOCKED_NAME_CHECK',
-            'message', 'Name check has not passed (or override missing) for candidate bank details; scheduling/execution may be blocked until resolved.',
-            'candidate_id', p_candidate_id::text,
-            'rail_provider', v_settings.rail_provider_default,
-            'rail_env', v_settings.rail_env_default
-          )
-        );
+  if v_routing_kind in ('NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum, 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum) then
+    if v_readiness_bank_hash is null or btrim(coalesce(v_readiness_bank_hash,'')) = '' then
+      v_warnings := v_warnings || jsonb_build_array(
+        jsonb_build_object(
+          'code', 'BLOCKED_BANK_DETAILS',
+          'message', case when v_routing_kind = 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
+                          then 'Bank details are missing; the manual credit adjustment will appear as Blocked for Pay until valid bank details are present.'
+                          else 'One-off payout bank details are missing or incomplete; the manual credit adjustment will appear as Blocked for Pay until valid bank details are present.' end,
+          'candidate_id', p_candidate_id::text
+        )
+      );
+    else
+      if v_need_name_check = true then
+        select
+          coalesce(bnc.status, 'UNVERIFIED') as status,
+          (bnc.override_reason is not null and bnc.override_hash = v_readiness_bank_hash) as has_override
+        into
+          v_bnc_status,
+          v_bnc_has_override
+        from public.bank_name_checks bnc
+        where bnc.rail_provider = v_settings.rail_provider_default
+          and bnc.rail_env = v_settings.rail_env_default
+          and bnc.entity_kind = v_readiness_entity_kind
+          and bnc.entity_id = p_candidate_id
+          and bnc.bank_details_hash = v_readiness_bank_hash
+        limit 1;
+
+        if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
+          v_warnings := v_warnings || jsonb_build_array(
+            jsonb_build_object(
+              'code', 'BLOCKED_NAME_CHECK',
+              'message', 'Name check has not passed (or override missing) for the payout destination; the manual credit adjustment will appear as Blocked for Pay until resolved.',
+              'candidate_id', p_candidate_id::text,
+              'rail_provider', v_settings.rail_provider_default,
+              'rail_env', v_settings.rail_env_default
+            )
+          );
+        end if;
       end if;
-    end if;
 
-    if v_requires_payee_map = true then
-      select (bpm.payee_id is not null) as present
-      into v_bpm_present
-      from public.bank_payee_map bpm
-      where bpm.rail_provider = v_settings.rail_provider_default
-        and bpm.rail_env = v_settings.rail_env_default
-        and bpm.entity_kind = 'CANDIDATE'
-        and bpm.entity_id = p_candidate_id
-        and bpm.bank_details_hash = v_candidate.bank_details_hash
-      limit 1;
+      if v_requires_payee_map = true then
+        select (bpm.payee_id is not null) as present
+        into v_bpm_present
+        from public.bank_payee_map bpm
+        where bpm.rail_provider = v_settings.rail_provider_default
+          and bpm.rail_env = v_settings.rail_env_default
+          and bpm.entity_kind = v_readiness_entity_kind
+          and bpm.entity_id = p_candidate_id
+          and bpm.bank_details_hash = v_readiness_bank_hash
+        limit 1;
 
-      if coalesce(v_bpm_present,false) = false then
-        v_warnings := v_warnings || jsonb_build_array(
-          jsonb_build_object(
-            'code', 'BLOCKED_NO_PAYEE_MAP',
-            'message', 'Payee map is missing for candidate bank details on this rail; scheduling/execution may be blocked until payee mapping exists.',
-            'candidate_id', p_candidate_id::text,
-            'rail_provider', v_settings.rail_provider_default,
-            'rail_env', v_settings.rail_env_default
-          )
-        );
+        if coalesce(v_bpm_present,false) = false then
+          v_warnings := v_warnings || jsonb_build_array(
+            jsonb_build_object(
+              'code', 'BLOCKED_NO_PAYEE_MAP',
+              'message', 'Payee map is missing for the payout destination on this rail; the manual credit adjustment will appear as Blocked for Pay until payee mapping exists.',
+              'candidate_id', p_candidate_id::text,
+              'rail_provider', v_settings.rail_provider_default,
+              'rail_env', v_settings.rail_env_default
+            )
+          );
+        end if;
       end if;
     end if;
   end if;
@@ -20975,17 +23633,1088 @@ begin
     'ok', true,
     'finance_case_id', v_finance_case_id::text,
     'finance_component_id', v_finance_component_id::text,
-    'pay_batch_id', v_pay_batch_id::text,
+    'pay_batch_id', null,
     'pay_date', v_pay_date::text,
-    'batch_kind_fixed', 'LOANS',
+    'batch_kind_fixed', null,
     'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
     'worker_label', 'Manual credit adjustment',
     'adjustment_comment', nullif(btrim(coalesce(p_adjustment_comment,'')), ''),
+    'paye_treatment', v_paye_treatment,
+    'paye_net_effect', v_paye_net_effect,
+    'taxability', v_taxability::text,
+    'routing_kind', v_routing_kind::text,
+    'oneoff_bank_details_required', v_oneoff_required,
+    'oneoff_bank_details_present', v_oneoff_required,
+    'bank_details_hash', v_readiness_bank_hash,
+    'beneficiary_name', case when v_oneoff_required then v_beneficiary_name_norm else null end,
     'component_summary', v_component_summary_json,
     'warnings', v_warnings
   );
 end;
 $$;
+
+
+create or replace function public.pay_manual_credit_adjustment_update(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_amount numeric default null,
+  p_adjustment_comment text default null,
+  p_note text default null,
+  p_taxability text default null,
+  p_beneficiary_name text default null,
+  p_sort_code text default null,
+  p_account_number text default null,
+  p_bank_details_note text default null,
+  p_remove_oneoff_bank_details boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_utc timestamptz := now();
+  v_case public.pay_advances%rowtype;
+  v_batch public.pay_batches%rowtype;
+  v_has_batch boolean := false;
+  v_is_committed boolean := false;
+  v_has_newflow_draft_item boolean := false;
+  v_can_edit_pre_draft boolean := false;
+
+  v_new_amount numeric(12,2);
+  v_new_comment text;
+  v_new_notes text;
+  v_before_json jsonb := '{}'::jsonb;
+  v_after_json jsonb := '{}'::jsonb;
+  v_batch_item_id uuid := null;
+  v_pay_batch_candidate_id uuid := null;
+
+  v_component public.pay_finance_case_components%rowtype;
+  v_component_before_json jsonb := null;
+  v_component_after_json jsonb := null;
+  v_component_source_basis_json jsonb := '{}'::jsonb;
+  v_component_resolution_payload_json jsonb := null;
+  v_component_resolution_result_json jsonb := null;
+  v_component_resolution_fingerprint text := null;
+  v_component_snapshot_json jsonb := '{}'::jsonb;
+  v_component_summary_json jsonb := '{}'::jsonb;
+  v_component_changed boolean := false;
+  v_component_classification public.pay_finance_component_classification_enum := null;
+
+  v_candidate record;
+  v_candidate_pay_method text := null;
+  v_current_taxability public.pay_finance_taxability_enum := null;
+  v_requested_taxability public.pay_finance_taxability_enum := null;
+  v_current_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_requested_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_current_oneoff_required boolean := false;
+  v_requested_oneoff_required boolean := false;
+
+  v_paye_treatment text := 'NONE';
+  v_paye_net_effect text := null;
+  v_oneoff_change_requested boolean := false;
+  v_existing_oneoff public.pay_finance_case_oneoff_payout_bank_details%rowtype;
+  v_oneoff_before jsonb := null;
+  v_oneoff_after jsonb := null;
+  v_beneficiary_name_norm text := null;
+  v_sort_code_norm text := null;
+  v_account_number_norm text := null;
+  v_oneoff_bank_hash text := null;
+
+  v_settings record;
+  v_provider text := null;
+  v_env text := null;
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+  v_bnc_status text := null;
+  v_bnc_has_override boolean := false;
+  v_bpm_present boolean := false;
+  v_warnings jsonb := '[]'::jsonb;
+  v_readiness_entity_kind text := 'CANDIDATE';
+  v_readiness_bank_hash text := null;
+  v_readiness_payee_name text := null;
+
+  v_taxability_changed boolean := false;
+  v_routing_changed boolean := false;
+  v_amount_changed boolean := false;
+  v_comment_changed boolean := false;
+  v_effective_taxability_text text := null;
+begin
+  if p_finance_case_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_update: finance_case_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_update: actor_user_id is required'
+    )::text;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id
+    and pa.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+  for update;
+
+  if v_case.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', 'pay_manual_credit_adjustment_update: Manual credit adjustment not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  select
+    c.id,
+    c.active,
+    c.tms_ref,
+    c.display_name,
+    c.first_name,
+    c.last_name,
+    c.account_holder,
+    c.sort_code,
+    c.account_number,
+    c.bank_details_hash,
+    upper(coalesce(c.pay_method,'')) as pay_method,
+    c.umbrella_id
+  into v_candidate
+  from public.candidates c
+  where c.id = v_case.candidate_id
+  limit 1;
+
+  if v_candidate.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', 'pay_manual_credit_adjustment_update: candidate not found for finance case',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text
+    )::text;
+  end if;
+
+  v_candidate_pay_method := v_candidate.pay_method;
+  if v_candidate_pay_method not in ('PAYE','UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_manual_credit_adjustment_update: candidate pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'pay_method', v_candidate_pay_method
+    )::text;
+  end if;
+
+  if v_case.payout_pay_batch_id is not null then
+    select pb.*
+    into v_batch
+    from public.pay_batches pb
+    where pb.id = v_case.payout_pay_batch_id
+    limit 1;
+    v_has_batch := v_batch.id is not null;
+  end if;
+
+  if v_has_batch then
+    v_is_committed := (
+      coalesce(v_batch.authoritative_payment_date is not null, false)
+      or upper(coalesce(v_batch.status,'')) in ('SCHEDULED','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT','EXECUTING','SETTLED','COMPLETED','PARTIAL')
+    );
+  else
+    v_is_committed := false;
+  end if;
+
+  select exists (
+    select 1
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbi.source_ref = ('advance:' || p_finance_case_id::text)
+      and pbi.item_type = 'MANUAL_CREDIT_PAYOUT'
+      and pbi.is_voided = false
+      and pb.cancelled_at_utc is null
+      and upper(coalesce(pb.status,'')) <> 'CANCELLED'
+  ) into v_has_newflow_draft_item;
+
+  if v_has_batch then
+    v_can_edit_pre_draft := (v_is_committed = false);
+  else
+    v_can_edit_pre_draft := (v_has_newflow_draft_item = false);
+  end if;
+
+  select pfc.*
+  into v_component
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.component_key_type = 'CASE_TOTAL'
+    and pfc.component_key_value = 'TOTAL'
+    and pfc.closed_at_utc is null
+  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
+  limit 1
+  for update;
+
+  if v_component.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'FINANCE_COMPONENT_NOT_FOUND',
+      'message', 'pay_manual_credit_adjustment_update: linked total finance component not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  select *
+  into v_existing_oneoff
+  from public.pay_finance_case_oneoff_payout_bank_details d
+  where d.finance_case_id = p_finance_case_id
+  for update;
+
+  v_current_taxability := coalesce(
+    v_case.taxability,
+    case when v_component.classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum
+         then 'NON_TAXABLE'::public.pay_finance_taxability_enum
+         else 'TAXABLE'::public.pay_finance_taxability_enum
+    end
+  );
+
+  if p_taxability is null then
+    v_requested_taxability := v_current_taxability;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'TAXABLE' then
+    v_requested_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+  elsif upper(btrim(coalesce(p_taxability,''))) = 'NON_TAXABLE' then
+    v_requested_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+  else
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'TAXABILITY_INVALID',
+      'message', 'pay_manual_credit_adjustment_update: taxability must be TAXABLE or NON_TAXABLE when provided',
+      'taxability', p_taxability
+    )::text;
+  end if;
+
+  if v_case.routing_kind is not null then
+    v_current_routing_kind := v_case.routing_kind;
+  elsif v_candidate_pay_method = 'UMBRELLA' and v_current_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum then
+    v_current_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+  elsif v_candidate_pay_method = 'UMBRELLA' and v_current_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_current_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+  else
+    v_current_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+  end if;
+
+  if v_candidate_pay_method = 'PAYE' and v_requested_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_requested_oneoff_required := false;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'GROSS_ADD';
+    v_paye_net_effect := null;
+  elsif v_candidate_pay_method = 'PAYE' and v_requested_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    v_requested_oneoff_required := false;
+    v_component_classification := 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+    v_paye_net_effect := 'NET_ADD';
+  elsif v_candidate_pay_method = 'UMBRELLA' and v_requested_taxability = 'TAXABLE'::public.pay_finance_taxability_enum then
+    v_requested_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+    v_requested_oneoff_required := false;
+    v_component_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+    v_paye_net_effect := null;
+  else
+    v_requested_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+    v_requested_oneoff_required := true;
+    v_component_classification := 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum;
+    v_paye_treatment := 'NONE';
+    v_paye_net_effect := null;
+  end if;
+
+  v_new_amount := coalesce(round(p_amount,2), round(coalesce(v_case.original_amount,0),2));
+  v_new_comment := case when p_adjustment_comment is null then v_case.adjustment_comment else nullif(btrim(p_adjustment_comment), '') end;
+  v_new_notes := case when p_note is null then v_case.notes else nullif(btrim(p_note), '') end;
+
+  if p_amount is not null and v_new_amount <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'AMOUNT_INVALID',
+      'message', 'pay_manual_credit_adjustment_update: amount must be > 0'
+    )::text;
+  end if;
+
+  if p_adjustment_comment is not null and v_new_comment is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+      'code', 'ADJUSTMENT_COMMENT_REQUIRED',
+      'message', 'pay_manual_credit_adjustment_update: adjustment_comment is required'
+    )::text;
+  end if;
+
+  v_amount_changed := round(coalesce(v_case.original_amount,0),2) is distinct from v_new_amount;
+  v_comment_changed := coalesce(v_case.adjustment_comment,'') is distinct from coalesce(v_new_comment,'');
+  v_taxability_changed := v_current_taxability is distinct from v_requested_taxability;
+  v_routing_changed := v_current_routing_kind is distinct from v_requested_routing_kind;
+  v_oneoff_change_requested := (
+    nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+    or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+    or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+    or p_bank_details_note is not null
+    or coalesce(p_remove_oneoff_bank_details,false) = true
+  );
+
+  if not v_can_edit_pre_draft then
+    if v_amount_changed or v_comment_changed or v_taxability_changed or v_routing_changed or v_oneoff_change_requested then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+        'code', 'PAYOUT_ALREADY_DRAFTED_OR_COMMITTED',
+        'message', 'pay_manual_credit_adjustment_update: amount, adjustment_comment, taxability, destination and one-off bank details can only be edited while the item is Not processed yet',
+        'finance_case_id', p_finance_case_id::text
+      )::text;
+    end if;
+  end if;
+
+  v_before_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'adjustment_comment', v_case.adjustment_comment,
+    'notes', v_case.notes,
+    'taxability', case when v_current_taxability is null then null else v_current_taxability::text end,
+    'routing_kind', case when v_current_routing_kind is null then null else v_current_routing_kind::text end,
+    'oneoff_bank_details_required', coalesce(v_case.oneoff_bank_details_required, false),
+    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end
+  );
+
+  v_component_before_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'classification', v_component.classification::text,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'source_pay_method', v_component.source_pay_method,
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'resolution_fingerprint', v_component.resolution_fingerprint,
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason,
+    'source_basis_json', v_component.source_basis_json
+  );
+
+  if v_candidate_pay_method = 'PAYE' then
+    if nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+       or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+       or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+       or nullif(btrim(coalesce(p_bank_details_note,'')), '') is not null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+        'code', 'ONEOFF_BANK_DETAILS_NOT_ALLOWED_FOR_PAYE',
+        'message', 'pay_manual_credit_adjustment_update: one-off bank fields are not allowed for PAYE manual credits',
+        'finance_case_id', p_finance_case_id::text
+      )::text;
+    end if;
+
+    if v_existing_oneoff.finance_case_id is not null and v_can_edit_pre_draft = true then
+      v_oneoff_before := jsonb_build_object(
+        'finance_case_id', p_finance_case_id::text,
+        'candidate_id', v_case.candidate_id::text,
+        'beneficiary_name', v_existing_oneoff.beneficiary_name,
+        'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+        'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+        'bank_details_hash', v_existing_oneoff.bank_details_hash,
+        'note', v_existing_oneoff.note
+      );
+
+      delete from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id;
+
+      select *
+      into v_existing_oneoff
+      from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id;
+
+      perform public._audit_insert(
+        'finance_case',
+        p_finance_case_id::text,
+        'ONEOFF_BANK_DETAILS_REMOVED',
+        v_oneoff_before,
+        null::jsonb,
+        'PAY_METHOD_NOW_PAYE',
+        p_actor_user_id
+      );
+    end if;
+
+    v_readiness_bank_hash := nullif(btrim(coalesce(v_candidate.bank_details_hash,'')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce(v_candidate.account_holder, v_candidate.display_name, concat_ws(' ', v_candidate.first_name, v_candidate.last_name))), '');
+  elsif v_requested_routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then
+    if nullif(btrim(coalesce(p_beneficiary_name,'')), '') is not null
+       or nullif(btrim(coalesce(p_sort_code,'')), '') is not null
+       or nullif(btrim(coalesce(p_account_number,'')), '') is not null
+       or nullif(btrim(coalesce(p_bank_details_note,'')), '') is not null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+        'code', 'ONEOFF_BANK_DETAILS_NOT_ALLOWED_FOR_UMBRELLA_TAXABLE',
+        'message', 'pay_manual_credit_adjustment_update: one-off bank fields are only allowed for umbrella non-taxable manual credits',
+        'finance_case_id', p_finance_case_id::text
+      )::text;
+    end if;
+
+    if v_existing_oneoff.finance_case_id is not null and v_can_edit_pre_draft = true then
+      v_oneoff_before := jsonb_build_object(
+        'finance_case_id', p_finance_case_id::text,
+        'candidate_id', v_case.candidate_id::text,
+        'beneficiary_name', v_existing_oneoff.beneficiary_name,
+        'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+        'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+        'bank_details_hash', v_existing_oneoff.bank_details_hash,
+        'note', v_existing_oneoff.note
+      );
+
+      delete from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id;
+
+      select *
+      into v_existing_oneoff
+      from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id;
+
+      perform public._audit_insert(
+        'finance_case',
+        p_finance_case_id::text,
+        'ONEOFF_BANK_DETAILS_REMOVED',
+        v_oneoff_before,
+        null::jsonb,
+        'ROUTING_CHANGED_TO_UMBRELLA_COMPANY',
+        p_actor_user_id
+      );
+    end if;
+
+    v_readiness_bank_hash := null;
+    v_readiness_payee_name := null;
+  else
+    if v_oneoff_change_requested and not v_can_edit_pre_draft then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+        'code', 'ONEOFF_BANK_DETAILS_LOCKED',
+        'message', 'pay_manual_credit_adjustment_update: one-off bank details can only be edited while the item is Not processed yet',
+        'finance_case_id', p_finance_case_id::text
+      )::text;
+    end if;
+
+    if coalesce(p_remove_oneoff_bank_details,false) = true then
+      if v_existing_oneoff.finance_case_id is not null then
+        v_oneoff_before := jsonb_build_object(
+          'finance_case_id', p_finance_case_id::text,
+          'candidate_id', v_case.candidate_id::text,
+          'beneficiary_name', v_existing_oneoff.beneficiary_name,
+          'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+          'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+          'bank_details_hash', v_existing_oneoff.bank_details_hash,
+          'note', v_existing_oneoff.note
+        );
+
+        delete from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        select *
+        into v_existing_oneoff
+        from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        perform public._audit_insert(
+          'finance_case',
+          p_finance_case_id::text,
+          'ONEOFF_BANK_DETAILS_REMOVED',
+          v_oneoff_before,
+          null::jsonb,
+          'ONE_OFF_PAYOUT_BANK_DETAILS',
+          p_actor_user_id
+        );
+      end if;
+
+      v_readiness_bank_hash := null;
+      v_readiness_payee_name := null;
+    else
+      if v_existing_oneoff.finance_case_id is not null then
+        v_beneficiary_name_norm := coalesce(
+          nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), ''),
+          v_existing_oneoff.beneficiary_name
+        );
+        v_sort_code_norm := coalesce(
+          case
+            when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+              substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+            else null
+          end,
+          v_existing_oneoff.sort_code
+        );
+        v_account_number_norm := coalesce(
+          nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), ''),
+          v_existing_oneoff.account_number
+        );
+      else
+        v_beneficiary_name_norm := nullif(regexp_replace(btrim(coalesce(p_beneficiary_name,'')), '\s+', ' ', 'g'), '');
+        v_sort_code_norm := case
+          when length(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g')) = 6 then
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+            substr(regexp_replace(coalesce(p_sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+          else null
+        end;
+        v_account_number_norm := nullif(regexp_replace(coalesce(p_account_number,''), '[^0-9]', '', 'g'), '');
+      end if;
+
+      if v_beneficiary_name_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+          'code', 'BENEFICIARY_NAME_REQUIRED',
+          'message', 'pay_manual_credit_adjustment_update: beneficiary_name is required for umbrella non-taxable manual credits',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_sort_code_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+          'code', 'SORT_CODE_REQUIRED',
+          'message', 'pay_manual_credit_adjustment_update: valid sort_code is required for umbrella non-taxable manual credits',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_account_number_norm is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+          'code', 'ACCOUNT_NUMBER_REQUIRED',
+          'message', 'pay_manual_credit_adjustment_update: valid account_number is required for umbrella non-taxable manual credits',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      v_oneoff_bank_hash := public._bank_hash(v_sort_code_norm, v_account_number_norm, v_beneficiary_name_norm);
+      if v_oneoff_bank_hash is null then
+        raise exception '%', jsonb_build_object(
+          'error', 'PAY_MANUAL_CREDIT_ADJUSTMENT_UPDATE',
+          'code', 'BANK_DETAILS_HASH_FAILED',
+          'message', 'pay_manual_credit_adjustment_update: unable to derive bank_details_hash for umbrella non-taxable manual credit bank details',
+          'finance_case_id', p_finance_case_id::text
+        )::text;
+      end if;
+
+      if v_can_edit_pre_draft then
+        v_oneoff_before := case
+          when v_existing_oneoff.finance_case_id is null then null
+          else jsonb_build_object(
+            'finance_case_id', p_finance_case_id::text,
+            'candidate_id', v_case.candidate_id::text,
+            'beneficiary_name', v_existing_oneoff.beneficiary_name,
+            'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+            'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+            'bank_details_hash', v_existing_oneoff.bank_details_hash,
+            'note', v_existing_oneoff.note
+          )
+        end;
+
+        insert into public.pay_finance_case_oneoff_payout_bank_details(
+          finance_case_id,
+          candidate_id,
+          beneficiary_name,
+          sort_code,
+          account_number,
+          bank_details_hash,
+          note,
+          created_at_utc,
+          created_by_user_id,
+          updated_at_utc,
+          updated_by_user_id
+        )
+        values (
+          p_finance_case_id,
+          v_case.candidate_id,
+          v_beneficiary_name_norm,
+          v_sort_code_norm,
+          v_account_number_norm,
+          v_oneoff_bank_hash,
+          case when p_bank_details_note is null then coalesce(v_existing_oneoff.note, null) else nullif(btrim(coalesce(p_bank_details_note,'')), '') end,
+          v_now_utc,
+          p_actor_user_id,
+          v_now_utc,
+          p_actor_user_id
+        )
+        on conflict (finance_case_id) do update
+        set candidate_id = excluded.candidate_id,
+            beneficiary_name = excluded.beneficiary_name,
+            sort_code = excluded.sort_code,
+            account_number = excluded.account_number,
+            bank_details_hash = excluded.bank_details_hash,
+            note = excluded.note,
+            updated_at_utc = excluded.updated_at_utc,
+            updated_by_user_id = excluded.updated_by_user_id;
+
+        select *
+        into v_existing_oneoff
+        from public.pay_finance_case_oneoff_payout_bank_details d
+        where d.finance_case_id = p_finance_case_id;
+
+        v_oneoff_after := jsonb_build_object(
+          'finance_case_id', p_finance_case_id::text,
+          'candidate_id', v_case.candidate_id::text,
+          'beneficiary_name', v_existing_oneoff.beneficiary_name,
+          'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+          'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+          'bank_details_hash', v_existing_oneoff.bank_details_hash,
+          'note', v_existing_oneoff.note
+        );
+
+        perform public._audit_insert(
+          'finance_case',
+          p_finance_case_id::text,
+          case when v_oneoff_before is null then 'ONEOFF_BANK_DETAILS_CREATED' else 'ONEOFF_BANK_DETAILS_UPDATED' end,
+          v_oneoff_before,
+          v_oneoff_after,
+          'ONE_OFF_PAYOUT_BANK_DETAILS',
+          p_actor_user_id
+        );
+      end if;
+
+      v_readiness_bank_hash := v_oneoff_bank_hash;
+      v_readiness_payee_name := v_beneficiary_name_norm;
+    end if;
+  end if;
+
+  if v_can_edit_pre_draft then
+    v_component_source_basis_json := jsonb_strip_nulls(
+      jsonb_build_object(
+        'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+        'amount', v_new_amount,
+        'taxability', v_requested_taxability::text,
+        'routing_kind', v_requested_routing_kind::text,
+        'paye_treatment', v_paye_treatment,
+        'paye_net_effect', v_paye_net_effect,
+        'adjustment_comment', v_new_comment,
+        'note', v_new_notes
+      )
+    );
+
+    if v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+      v_component_resolution_payload_json := jsonb_build_object(
+        'same_channel', true,
+        'target_amount', v_new_amount,
+        'target_pay_method', v_candidate_pay_method
+      );
+
+      v_component_resolution_result_json := jsonb_build_object(
+        'target_amount', v_new_amount,
+        'target_amount_ex_vat', v_new_amount,
+        'target_amount_vat', 0,
+        'target_amount_inc_vat', v_new_amount,
+        'target_pay_method', v_candidate_pay_method
+      );
+
+      v_component_resolution_fingerprint := public.pay_finance_component_fingerprint(
+        p_source_family_key         => v_component.source_family_key,
+        p_component_key_type        => v_component.component_key_type,
+        p_component_key_value       => v_component.component_key_value,
+        p_classification            => v_component_classification,
+        p_source_pay_method         => v_candidate_pay_method,
+        p_current_target_pay_method => v_candidate_pay_method,
+        p_source_basis_json         => v_component_source_basis_json,
+        p_source_amount             => v_new_amount,
+        p_relevant_erni_pct         => null::numeric,
+        p_target_basis_json         => jsonb_build_object('same_channel', true)
+      );
+    else
+      v_component_resolution_payload_json := null;
+      v_component_resolution_result_json := null;
+      v_component_resolution_fingerprint := null;
+    end if;
+
+    v_component_changed := (
+      round(coalesce(v_component.source_amount,0),2) is distinct from v_new_amount
+      or coalesce(v_case.adjustment_comment,'') is distinct from coalesce(v_new_comment,'')
+      or v_current_taxability is distinct from v_requested_taxability
+      or v_current_routing_kind is distinct from v_requested_routing_kind
+      or v_component.classification is distinct from v_component_classification
+      or v_component.source_basis_json is distinct from v_component_source_basis_json
+    );
+
+    update public.pay_advances pa
+    set original_amount = v_new_amount,
+        outstanding_amount = v_new_amount,
+        adjustment_comment = v_new_comment,
+        notes = v_new_notes,
+        updated_at = v_now_utc,
+        taxability = v_requested_taxability,
+        routing_kind = v_requested_routing_kind,
+        oneoff_bank_details_required = v_requested_oneoff_required
+    where pa.id = p_finance_case_id;
+
+    update public.pay_finance_case_components pfc
+    set classification = v_component_classification,
+        source_pay_method = v_candidate_pay_method,
+        source_basis_json = v_component_source_basis_json,
+        source_amount = v_new_amount,
+        remaining_source_amount = v_new_amount,
+        saved_target_pay_method = case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then v_candidate_pay_method else null end,
+        saved_resolution_mode = case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum else null end,
+        saved_resolution_payload_json = v_component_resolution_payload_json,
+        saved_resolution_result_json = v_component_resolution_result_json,
+        resolution_fingerprint = v_component_resolution_fingerprint,
+        is_resolution_stale = false,
+        stale_reason = null::text,
+        updated_at_utc = v_now_utc,
+        resolved_at_utc = case when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then v_now_utc else null end
+    where pfc.id = v_component.id
+    returning pfc.* into v_component;
+
+    if v_has_batch then
+      select pbc.id
+      into v_pay_batch_candidate_id
+      from public.pay_batch_candidates pbc
+      where pbc.pay_batch_id = v_batch.id
+        and pbc.candidate_id = v_case.candidate_id
+      limit 1;
+
+      select pbi.id
+      into v_batch_item_id
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc2
+        on pbc2.id = pbi.pay_batch_candidate_id
+      where pbc2.pay_batch_id = v_batch.id
+        and pbc2.candidate_id = v_case.candidate_id
+        and pbi.source_ref = ('advance:' || p_finance_case_id::text)
+        and pbi.item_type = 'MANUAL_CREDIT_PAYOUT'
+        and pbi.is_voided = false
+      limit 1;
+
+      if v_pay_batch_candidate_id is not null then
+        update public.pay_batch_candidates pbc
+        set gross_preview = v_new_amount,
+            net_bank_amount = v_new_amount,
+            updated_at = v_now_utc
+        where pbc.id = v_pay_batch_candidate_id;
+      end if;
+
+      if v_batch_item_id is not null then
+        v_component_snapshot_json := jsonb_build_object(
+          'finance_component_id', v_component.id::text,
+          'source_family_key', v_component.source_family_key,
+          'component_key_type', v_component.component_key_type,
+          'component_key_value', v_component.component_key_value,
+          'classification', v_component.classification::text,
+          'source_pay_method', v_component.source_pay_method,
+          'source_basis_json', v_component.source_basis_json,
+          'source_amount', round(coalesce(v_component.source_amount,0),2),
+          'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+          'saved_target_pay_method', v_component.saved_target_pay_method,
+          'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+          'saved_resolution_payload_json', v_component.saved_resolution_payload_json,
+          'saved_resolution_result_json', v_component.saved_resolution_result_json,
+          'resolution_fingerprint', v_component.resolution_fingerprint,
+          'is_resolution_stale', v_component.is_resolution_stale
+        );
+
+        update public.pay_batch_items pbi
+        set description = 'Manual credit adjustment',
+            amount_ex_vat = v_new_amount,
+            amount_vat = 0,
+            amount_inc_vat = v_new_amount,
+            updated_at = v_now_utc,
+            finance_case_id = p_finance_case_id,
+            reservation_id = null,
+            paye_treatment = v_paye_treatment,
+            finance_component_id = v_component.id,
+            frozen_component_snapshot_json = v_component_snapshot_json,
+            frozen_component_key_type = v_component.component_key_type,
+            frozen_component_key_value = v_component.component_key_value,
+            frozen_component_classification = v_component.classification,
+            frozen_source_basis_json = v_component.source_basis_json,
+            frozen_source_pay_method = v_component.source_pay_method,
+            frozen_target_pay_method = v_component.saved_target_pay_method,
+            frozen_resolution_mode = v_component.saved_resolution_mode,
+            frozen_resolution_payload_json = v_component.saved_resolution_payload_json,
+            frozen_resolution_result_json = v_component.saved_resolution_result_json,
+            frozen_source_amount = v_component.source_amount,
+            frozen_target_amount_ex_vat = v_new_amount,
+            frozen_target_amount_vat = 0,
+            frozen_target_amount_inc_vat = v_new_amount,
+            payout_instruction_snapshot_json = case
+              when v_requested_routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum and v_existing_oneoff.finance_case_id is not null then
+                jsonb_build_object(
+                  'taxability', v_requested_taxability::text,
+                  'routing_kind', v_requested_routing_kind::text,
+                  'destination_label', 'one-off specified bank account',
+                  'pay_channel', 'UMBRELLA',
+                  'payee_entity_kind', 'CANDIDATE',
+                  'payee_entity_id', v_case.candidate_id::text,
+                  'beneficiary_name', v_existing_oneoff.beneficiary_name,
+                  'sort_code_masked', case when v_existing_oneoff.sort_code is null then null else 'XX-XX-' || right(v_existing_oneoff.sort_code, 2) end,
+                  'account_number_masked', case when v_existing_oneoff.account_number is null then null else lpad(right(v_existing_oneoff.account_number, 4), length(v_existing_oneoff.account_number), '*') end,
+                  'bank_details_hash', v_existing_oneoff.bank_details_hash,
+                  'bank_details_note', v_existing_oneoff.note,
+                  'appears_on_umbrella_remittance', false,
+                  'generates_candidate_payment_advice', true
+                )
+              else null
+            end,
+            pay_channel = v_candidate_pay_method,
+            umbrella_id = case when v_candidate_pay_method = 'UMBRELLA' then v_candidate.umbrella_id else null::uuid end
+        where pbi.id = v_batch_item_id;
+
+        update public.pay_batch_item_breakdowns pbib
+        set unit_name = 'Manual credit adjustment',
+            amount_ex_vat = v_new_amount,
+            amount_vat = 0,
+            amount_inc_vat = v_new_amount,
+            meta_json = jsonb_build_object(
+              'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+              'worker_label', 'Manual credit adjustment',
+              'adjustment_comment', v_new_comment,
+              'finance_component_id', v_component.id::text,
+              'taxability', v_requested_taxability::text,
+              'routing_kind', v_requested_routing_kind::text,
+              'paye_treatment', v_paye_treatment,
+              'paye_net_effect', v_paye_net_effect
+            )
+        where pbib.pay_batch_item_id = v_batch_item_id;
+      end if;
+    end if;
+  else
+    update public.pay_advances pa
+    set notes = v_new_notes,
+        updated_at = v_now_utc
+    where pa.id = p_finance_case_id;
+
+    select pa.*
+    into v_case
+    from public.pay_advances pa
+    where pa.id = p_finance_case_id;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id;
+
+  if v_requested_routing_kind = 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum then
+    v_readiness_bank_hash := nullif(btrim(coalesce(v_candidate.bank_details_hash,'')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce(v_candidate.account_holder, v_candidate.display_name, concat_ws(' ', v_candidate.first_name, v_candidate.last_name))), '');
+  elsif v_requested_routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum and v_existing_oneoff.finance_case_id is not null then
+    v_readiness_bank_hash := nullif(btrim(coalesce(v_existing_oneoff.bank_details_hash,'')), '');
+    v_readiness_payee_name := nullif(btrim(coalesce(v_existing_oneoff.beneficiary_name,'')), '');
+  else
+    v_readiness_bank_hash := null;
+    v_readiness_payee_name := null;
+  end if;
+
+  select
+    sd.banking_system,
+    sd.external_paye_system,
+    sd.rail_provider_default,
+    sd.rail_env_default,
+    sd.rail_supports_name_check
+  into v_settings
+  from public.settings_defaults sd
+  where sd.id = 1
+  limit 1;
+
+  v_provider := upper(btrim(coalesce(v_settings.rail_provider_default,'CSV')));
+  v_env := upper(btrim(coalesce(v_settings.rail_env_default,'PROD')));
+  v_need_name_check := (coalesce(v_settings.rail_supports_name_check,false) = true) and (v_provider <> 'CSV');
+  v_requires_payee_map := (v_provider <> 'CSV');
+
+  if v_requested_routing_kind in ('NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum, 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum) then
+    if v_readiness_bank_hash is null or btrim(coalesce(v_readiness_bank_hash,'')) = '' then
+      v_warnings := v_warnings || jsonb_build_array(
+        jsonb_build_object(
+          'code', 'BLOCKED_BANK_DETAILS',
+          'message', case when v_requested_routing_kind = 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
+                          then 'Bank details are missing; the manual credit adjustment will appear as Blocked for Pay until valid bank details are present.'
+                          else 'One-off payout bank details are missing or incomplete; the manual credit adjustment will appear as Blocked for Pay until valid bank details are present.' end,
+          'candidate_id', v_case.candidate_id::text
+        )
+      );
+    else
+      if v_need_name_check = true then
+        select
+          coalesce(bnc.status, 'UNVERIFIED') as status,
+          (bnc.override_reason is not null and bnc.override_hash = v_readiness_bank_hash) as has_override
+        into
+          v_bnc_status,
+          v_bnc_has_override
+        from public.bank_name_checks bnc
+        where bnc.rail_provider = v_settings.rail_provider_default
+          and bnc.rail_env = v_settings.rail_env_default
+          and bnc.entity_kind = v_readiness_entity_kind
+          and bnc.entity_id = v_case.candidate_id
+          and bnc.bank_details_hash = v_readiness_bank_hash
+        limit 1;
+
+        if coalesce(v_bnc_status,'UNVERIFIED') <> 'PASS' and coalesce(v_bnc_has_override,false) = false then
+          v_warnings := v_warnings || jsonb_build_array(
+            jsonb_build_object(
+              'code', 'BLOCKED_NAME_CHECK',
+              'message', 'Name check has not passed (or override missing) for the payout destination; the manual credit adjustment will appear as Blocked for Pay until resolved.',
+              'candidate_id', v_case.candidate_id::text,
+              'rail_provider', v_settings.rail_provider_default,
+              'rail_env', v_settings.rail_env_default
+            )
+          );
+        end if;
+      end if;
+
+      if v_requires_payee_map = true then
+        select (bpm.payee_id is not null) as present
+        into v_bpm_present
+        from public.bank_payee_map bpm
+        where bpm.rail_provider = v_settings.rail_provider_default
+          and bpm.rail_env = v_settings.rail_env_default
+          and bpm.entity_kind = v_readiness_entity_kind
+          and bpm.entity_id = v_case.candidate_id
+          and bpm.bank_details_hash = v_readiness_bank_hash
+        limit 1;
+
+        if coalesce(v_bpm_present,false) = false then
+          v_warnings := v_warnings || jsonb_build_array(
+            jsonb_build_object(
+              'code', 'BLOCKED_NO_PAYEE_MAP',
+              'message', 'Payee map is missing for the payout destination on this rail; the manual credit adjustment will appear as Blocked for Pay until payee mapping exists.',
+              'candidate_id', v_case.candidate_id::text,
+              'rail_provider', v_settings.rail_provider_default,
+              'rail_env', v_settings.rail_env_default
+            )
+          );
+        end if;
+      end if;
+    end if;
+  end if;
+
+  v_after_json := jsonb_build_object(
+    'original_amount', round(coalesce(v_case.original_amount,0),2),
+    'outstanding_amount', round(coalesce(v_case.outstanding_amount,0),2),
+    'adjustment_comment', v_case.adjustment_comment,
+    'notes', v_case.notes,
+    'paye_treatment', v_paye_treatment,
+    'paye_net_effect', v_paye_net_effect,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', coalesce(v_case.oneoff_bank_details_required,false),
+    'payout_pay_batch_id', case when v_case.payout_pay_batch_id is null then null else v_case.payout_pay_batch_id::text end
+  );
+
+  v_component_after_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'classification', v_component.classification::text,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'source_pay_method', v_component.source_pay_method,
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'resolution_fingerprint', v_component.resolution_fingerprint,
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason,
+    'source_basis_json', v_component.source_basis_json
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    null::uuid,
+    'UPDATED',
+    v_now_utc,
+    p_actor_user_id,
+    case when v_batch.id is null then null else v_batch.id end,
+    v_before_json,
+    v_after_json,
+    null::text,
+    case when v_can_edit_pre_draft then 'Manual credit adjustment updated while Not processed yet' else 'Manual credit adjustment notes updated after draft/commit' end
+  );
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    v_component.id,
+    'COMPONENT_UPDATED',
+    v_now_utc,
+    p_actor_user_id,
+    case when v_batch.id is null then null else v_batch.id end,
+    v_component_before_json,
+    v_component_after_json,
+    case when v_component_changed then 'COMPONENT_BASIS_CHANGED' else null::text end,
+    case
+      when v_can_edit_pre_draft = false then 'Manual credit adjustment draft or later; component basis preserved'
+      when v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'Manual credit adjustment taxable component updated before draft'
+      else 'Manual credit adjustment non-taxable fixed component updated before draft'
+    end
+  );
+
+  v_component_summary_json := jsonb_build_object(
+    'finance_component_id', v_component.id::text,
+    'source_family_key', v_component.source_family_key,
+    'component_key_type', v_component.component_key_type,
+    'component_key_value', v_component.component_key_value,
+    'classification', v_component.classification::text,
+    'source_pay_method', v_component.source_pay_method,
+    'saved_target_pay_method', v_component.saved_target_pay_method,
+    'saved_resolution_mode', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+    'source_amount', round(coalesce(v_component.source_amount,0),2),
+    'remaining_source_amount', round(coalesce(v_component.remaining_source_amount,0),2),
+    'is_resolution_stale', v_component.is_resolution_stale,
+    'stale_reason', v_component.stale_reason
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'finance_component_id', v_component.id::text,
+    'pay_batch_id', case when v_batch.id is null then null else v_batch.id::text end,
+    'case_type', 'MANUAL_CREDIT_ADJUSTMENT',
+    'worker_label', 'Manual credit adjustment',
+    'payout_editable', v_can_edit_pre_draft,
+    'paye_treatment', v_paye_treatment,
+    'paye_net_effect', v_paye_net_effect,
+    'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+    'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+    'oneoff_bank_details_required', coalesce(v_case.oneoff_bank_details_required,false),
+    'oneoff_bank_details_present', exists(
+      select 1
+      from public.pay_finance_case_oneoff_payout_bank_details d
+      where d.finance_case_id = p_finance_case_id
+    ),
+    'bank_details_hash', v_readiness_bank_hash,
+    'beneficiary_name', case when v_existing_oneoff.finance_case_id is null then null else v_existing_oneoff.beneficiary_name end,
+    'component_summary', v_component_summary_json,
+    'warnings', v_warnings
+  );
+end;
+$$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_finance_ledger_export_rows(
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -23029,7 +26758,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_finance_component_resolutions_apply(
   p_candidate_id uuid,
   p_component_resolutions jsonb,
@@ -23077,6 +26805,11 @@ DECLARE
   v_target_amount_vat numeric(12,2) := 0;
   v_target_amount_inc_vat numeric(12,2) := 0;
   v_rate_precision numeric := null;
+
+  v_target_amount_ex_vat_per_source numeric(18,10) := 0;
+  v_target_amount_vat_per_source numeric(18,10) := 0;
+  v_target_amount_inc_vat_per_source numeric(18,10) := 0;
+  v_target_units_per_source numeric(18,10) := null;
 
   v_target_amounts_json jsonb := '{}'::jsonb;
   v_target_basis_json jsonb := '{}'::jsonb;
@@ -23422,6 +27155,11 @@ BEGIN
     v_resolution_payload_json := '{}'::jsonb;
     v_resolution_result_json := '{}'::jsonb;
     v_resolution_fingerprint := null;
+    v_target_amount_ex_vat_per_source := 0;
+    v_target_amount_vat_per_source := 0;
+    v_target_amount_inc_vat_per_source := 0;
+    v_target_units_per_source := null;
+
     v_before_json := jsonb_build_object(
       'finance_component_id', v_component.id::text,
       'finance_case_id', v_component.finance_case_id::text,
@@ -23495,32 +27233,6 @@ BEGIN
       ELSE
         v_rate_precision := null;
       END IF;
-
-      v_target_basis_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'target_pay_method', v_target_pay_method,
-          'calculation_kind', 'SUGGESTED_EQUIVALENT_BASIS',
-          'basis_source_amount_ex_vat', v_basis_amount_ex_vat,
-          'relevant_erni_pct', round(v_relevant_erni_pct, 6),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
-          'target_units', v_target_units,
-          'suggested_target_rate', v_rate_precision
-        )
-      );
-
-      v_resolution_payload_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'resolution_mode', 'SUGGESTED_EQUIVALENT_BASIS',
-          'target_pay_method', v_target_pay_method,
-          'basis_source_amount_ex_vat', v_basis_amount_ex_vat,
-          'relevant_erni_pct', round(v_relevant_erni_pct, 6),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
-          'target_units', v_target_units,
-          'suggested_target_rate', v_rate_precision
-        )
-      );
     ELSIF v_resolution_mode = 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum THEN
       IF v_target_units IS NULL OR v_target_units <= 0 THEN
         RAISE EXCEPTION '%', jsonb_build_object(
@@ -23560,27 +27272,7 @@ BEGIN
         v_target_amount_inc_vat := round(coalesce((v_target_amounts_json->>'inc')::numeric, 0), 2);
       END IF;
 
-      v_target_basis_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'target_pay_method', v_target_pay_method,
-          'calculation_kind', 'MANUAL_REPLACEMENT_RATE',
-          'target_units', round(v_target_units, 6),
-          'replacement_rate', round(v_manual_replacement_rate, 6),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable
-        )
-      );
-
-      v_resolution_payload_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'resolution_mode', 'MANUAL_REPLACEMENT_RATE',
-          'target_pay_method', v_target_pay_method,
-          'target_units', round(v_target_units, 6),
-          'replacement_rate', round(v_manual_replacement_rate, 6),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable
-        )
-      );
+      v_rate_precision := round(v_manual_replacement_rate, 6);
     ELSE
       IF v_manual_amount_ex_vat IS NULL OR v_manual_amount_ex_vat < 0 THEN
         RAISE EXCEPTION '%', jsonb_build_object(
@@ -23609,26 +27301,59 @@ BEGIN
         v_target_amount_inc_vat := round(coalesce((v_target_amounts_json->>'inc')::numeric, 0), 2);
       END IF;
 
-      v_target_basis_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'target_pay_method', v_target_pay_method,
-          'calculation_kind', 'MANUAL_AMOUNT',
-          'manual_amount_ex_vat', round(v_manual_amount_ex_vat, 2),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable
-        )
-      );
-
-      v_resolution_payload_json := jsonb_strip_nulls(
-        jsonb_build_object(
-          'resolution_mode', 'MANUAL_AMOUNT',
-          'target_pay_method', v_target_pay_method,
-          'manual_amount_ex_vat', round(v_manual_amount_ex_vat, 2),
-          'vat_rate_pct', round(v_vat_rate_pct, 6),
-          'umbrella_vat_chargeable', v_umbrella_vat_chargeable
-        )
-      );
+      v_rate_precision := null;
     END IF;
+
+    IF v_basis_amount_ex_vat <= 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_COMPONENT_RESOLUTIONS_APPLY',
+        'code', 'BASIS_AMOUNT_INVALID',
+        'message', 'pay_finance_component_resolutions_apply: basis_source_amount_ex_vat must be > 0',
+        'row_index', v_row_seq,
+        'finance_component_id', v_component.id::text,
+        'basis_source_amount_ex_vat', v_basis_amount_ex_vat
+      )::text;
+    END IF;
+
+    v_target_amount_ex_vat_per_source := round(v_target_amount_ex_vat / v_basis_amount_ex_vat, 10);
+    v_target_amount_vat_per_source := round(v_target_amount_vat / v_basis_amount_ex_vat, 10);
+    v_target_amount_inc_vat_per_source := round(v_target_amount_inc_vat / v_basis_amount_ex_vat, 10);
+    v_target_units_per_source := CASE
+      WHEN v_target_units IS NOT NULL THEN round(v_target_units / v_basis_amount_ex_vat, 10)
+      ELSE NULL
+    END;
+
+    v_target_basis_json := jsonb_strip_nulls(
+      jsonb_build_object(
+        'target_pay_method', v_target_pay_method,
+        'calculation_kind', v_resolution_mode::text,
+        'relevant_erni_pct', round(v_relevant_erni_pct, 6),
+        'vat_rate_pct', round(v_vat_rate_pct, 6),
+        'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'replacement_rate', CASE WHEN v_resolution_mode = 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum THEN round(v_manual_replacement_rate, 6) ELSE NULL END,
+        'target_amount_ex_vat_per_source_ex_vat', v_target_amount_ex_vat_per_source,
+        'target_amount_vat_per_source_ex_vat', v_target_amount_vat_per_source,
+        'target_amount_inc_vat_per_source_ex_vat', v_target_amount_inc_vat_per_source,
+        'target_units_per_source_ex_vat', v_target_units_per_source,
+        'suggested_target_rate', CASE WHEN v_resolution_mode = 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum THEN v_rate_precision ELSE NULL END
+      )
+    );
+
+    v_resolution_payload_json := jsonb_strip_nulls(
+      jsonb_build_object(
+        'resolution_mode', v_resolution_mode::text,
+        'target_pay_method', v_target_pay_method,
+        'applied_basis_source_amount_ex_vat', round(v_basis_amount_ex_vat, 2),
+        'relevant_erni_pct', round(v_relevant_erni_pct, 6),
+        'vat_rate_pct', round(v_vat_rate_pct, 6),
+        'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'target_units', CASE WHEN v_target_units IS NULL THEN NULL ELSE round(v_target_units, 6) END,
+        'replacement_rate', CASE WHEN v_manual_replacement_rate IS NULL THEN NULL ELSE round(v_manual_replacement_rate, 6) END,
+        'manual_amount_ex_vat', CASE WHEN v_manual_amount_ex_vat IS NULL THEN NULL ELSE round(v_manual_amount_ex_vat, 2) END,
+        'suggested_target_rate', CASE WHEN v_resolution_mode = 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum THEN v_rate_precision ELSE NULL END,
+        'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT'
+      )
+    );
 
     v_resolution_result_json := jsonb_strip_nulls(
       jsonb_build_object(
@@ -23637,9 +27362,17 @@ BEGIN
         'target_amount_vat', round(v_target_amount_vat, 2),
         'target_amount_inc_vat', round(v_target_amount_inc_vat, 2),
         'basis_source_amount_ex_vat', round(v_basis_amount_ex_vat, 2),
+        'applied_basis_source_amount_ex_vat', round(v_basis_amount_ex_vat, 2),
         'relevant_erni_pct', round(v_relevant_erni_pct, 6),
         'vat_rate_pct', round(v_vat_rate_pct, 6),
-        'umbrella_vat_chargeable', v_umbrella_vat_chargeable
+        'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'target_units', CASE WHEN v_target_units IS NULL THEN NULL ELSE round(v_target_units, 6) END,
+        'replacement_rate', CASE WHEN v_manual_replacement_rate IS NULL THEN NULL ELSE round(v_manual_replacement_rate, 6) END,
+        'target_amount_ex_vat_per_source_ex_vat', v_target_amount_ex_vat_per_source,
+        'target_amount_vat_per_source_ex_vat', v_target_amount_vat_per_source,
+        'target_amount_inc_vat_per_source_ex_vat', v_target_amount_inc_vat_per_source,
+        'target_units_per_source_ex_vat', v_target_units_per_source,
+        'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT'
       )
     );
 
@@ -23739,6 +27472,1240 @@ BEGIN
     'finance_case_id', CASE WHEN p_finance_case_id IS NULL THEN NULL ELSE p_finance_case_id::text END,
     'applied_count', jsonb_array_length(v_applied_components),
     'components', v_applied_components
+  );
+END;
+$function$;
+
+
+DROP FUNCTION IF EXISTS public._pay_finance_case_oneoff_bank_remove(uuid,uuid,text);
+
+CREATE OR REPLACE FUNCTION public._pay_finance_case_oneoff_bank_remove(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_reason text default null
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_case public.pay_advances%rowtype;
+  v_existing public.pay_finance_case_oneoff_payout_bank_details%rowtype;
+
+  v_has_noncancelled_batch_item boolean := false;
+  v_before_json jsonb := null;
+  v_after_json jsonb := null;
+  v_preview_blocked_until_reentered boolean := false;
+BEGIN
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_REMOVE',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_finance_case_oneoff_bank_remove: finance_case_id is required'
+    )::text;
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_REMOVE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', '_pay_finance_case_oneoff_bank_remove: actor_user_id is required'
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  FOR UPDATE;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_REMOVE',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_finance_case_oneoff_bank_remove: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  IF v_case.case_type NOT IN (
+    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+    'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+  ) THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_REMOVE',
+      'code', 'CASE_TYPE_NOT_ELIGIBLE',
+      'message', '_pay_finance_case_oneoff_bank_remove: one-off bank details can only be removed for payment advances or manual credit adjustments',
+      'finance_case_id', p_finance_case_id::text,
+      'case_type', v_case.case_type::text
+    )::text;
+  END IF;
+
+  SELECT exists (
+    SELECT 1
+    FROM public.pay_batch_items AS pbi
+    JOIN public.pay_batch_candidates AS pbc
+      ON pbc.id = pbi.pay_batch_candidate_id
+    JOIN public.pay_batches AS pb
+      ON pb.id = pbc.pay_batch_id
+    WHERE (
+        pbi.finance_case_id = p_finance_case_id
+        OR pbi.source_ref = ('advance:'::text || p_finance_case_id::text)
+      )
+      AND coalesce(pbi.is_voided, false) = false
+      AND pb.cancelled_at_utc IS NULL
+      AND upper(coalesce(pb.status, '')) <> 'CANCELLED'
+  )
+  INTO v_has_noncancelled_batch_item;
+
+  IF v_case.payout_pay_batch_id IS NOT NULL OR v_has_noncancelled_batch_item THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_REMOVE',
+      'code', 'ONEOFF_BANK_DETAILS_LOCKED',
+      'message', '_pay_finance_case_oneoff_bank_remove: one-off bank details can only be removed while the item is Not processed yet',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  SELECT d.*
+  INTO v_existing
+  FROM public.pay_finance_case_oneoff_payout_bank_details AS d
+  WHERE d.finance_case_id = p_finance_case_id
+  FOR UPDATE;
+
+  v_preview_blocked_until_reentered := coalesce(v_case.oneoff_bank_details_required, false);
+
+  IF v_existing.finance_case_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'finance_case_id', p_finance_case_id::text,
+      'removed', false,
+      'preview_blocked_until_reentered', v_preview_blocked_until_reentered
+    );
+  END IF;
+
+  v_before_json := jsonb_build_object(
+    'finance_case_id', p_finance_case_id::text,
+    'candidate_id', v_case.candidate_id::text,
+    'beneficiary_name', v_existing.beneficiary_name,
+    'sort_code_masked', CASE WHEN v_existing.sort_code IS NULL THEN NULL ELSE 'XX-XX-' || right(v_existing.sort_code, 2) END,
+    'account_number_masked', CASE WHEN v_existing.account_number IS NULL THEN NULL ELSE lpad(right(v_existing.account_number, 4), length(v_existing.account_number), '*') END,
+    'bank_details_hash', v_existing.bank_details_hash,
+    'note', v_existing.note
+  );
+
+  DELETE FROM public.pay_finance_case_oneoff_payout_bank_details AS d
+  WHERE d.finance_case_id = p_finance_case_id;
+
+  v_after_json := jsonb_build_object(
+    'finance_case_id', p_finance_case_id::text,
+    'candidate_id', v_case.candidate_id::text,
+    'oneoff_bank_details_present', false,
+    'preview_blocked_until_reentered', v_preview_blocked_until_reentered
+  );
+
+  PERFORM public._audit_insert(
+    'finance_case',
+    p_finance_case_id::text,
+    'ONEOFF_BANK_DETAILS_REMOVED',
+    v_before_json,
+    v_after_json,
+    coalesce(nullif(btrim(coalesce(p_reason, '')), ''), 'ONE_OFF_PAYOUT_BANK_DETAILS'),
+    p_actor_user_id
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'removed', true,
+    'preview_blocked_until_reentered', v_preview_blocked_until_reentered
+  );
+END;
+$function$;
+
+DROP FUNCTION IF EXISTS public._pay_finance_case_oneoff_bank_upsert(uuid,uuid,text,text,text,text,text);
+
+CREATE OR REPLACE FUNCTION public._pay_finance_case_oneoff_bank_upsert(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_beneficiary_name text,
+  p_sort_code text,
+  p_account_number text,
+  p_note text default null,
+  p_reason text default null
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_case public.pay_advances%rowtype;
+  v_candidate public.candidates%rowtype;
+  v_existing public.pay_finance_case_oneoff_payout_bank_details%rowtype;
+
+  v_effective jsonb := '{}'::jsonb;
+
+  v_beneficiary_name_norm text := null;
+  v_sort_digits text := null;
+  v_sort_code_norm text := null;
+  v_account_number_norm text := null;
+  v_bank_details_hash text := null;
+  v_note_norm text := null;
+
+  v_before_json jsonb := null;
+  v_after_json jsonb := null;
+  v_action text := null;
+
+  v_has_noncancelled_batch_item boolean := false;
+BEGIN
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_finance_case_oneoff_bank_upsert: finance_case_id is required'
+    )::text;
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', '_pay_finance_case_oneoff_bank_upsert: actor_user_id is required'
+    )::text;
+  END IF;
+
+  v_beneficiary_name_norm := nullif(regexp_replace(btrim(coalesce(p_beneficiary_name, '')), '\s+', ' ', 'g'), '');
+  v_sort_digits := nullif(regexp_replace(coalesce(p_sort_code, ''), '[^0-9]+', '', 'g'), '');
+  v_account_number_norm := nullif(regexp_replace(coalesce(p_account_number, ''), '[^0-9]+', '', 'g'), '');
+  v_note_norm := nullif(btrim(coalesce(p_note, '')), '');
+
+  IF v_beneficiary_name_norm IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'BENEFICIARY_NAME_REQUIRED',
+      'message', '_pay_finance_case_oneoff_bank_upsert: beneficiary_name is required'
+    )::text;
+  END IF;
+
+  IF v_sort_digits IS NULL OR length(v_sort_digits) <> 6 THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'SORT_CODE_INVALID',
+      'message', '_pay_finance_case_oneoff_bank_upsert: sort_code must contain exactly 6 digits'
+    )::text;
+  END IF;
+
+  IF v_account_number_norm IS NULL OR length(v_account_number_norm) < 6 OR length(v_account_number_norm) > 10 THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'ACCOUNT_NUMBER_INVALID',
+      'message', '_pay_finance_case_oneoff_bank_upsert: account_number must contain between 6 and 10 digits'
+    )::text;
+  END IF;
+
+  v_sort_code_norm := substr(v_sort_digits, 1, 2) || '-' || substr(v_sort_digits, 3, 2) || '-' || substr(v_sort_digits, 5, 2);
+  v_bank_details_hash := public._bank_hash(v_sort_code_norm, v_account_number_norm, v_beneficiary_name_norm);
+
+  IF nullif(btrim(coalesce(v_bank_details_hash, '')), '') IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'BANK_HASH_FAILED',
+      'message', '_pay_finance_case_oneoff_bank_upsert: unable to compute bank_details_hash'
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  FOR UPDATE;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_finance_case_oneoff_bank_upsert: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  SELECT c.*
+  INTO v_candidate
+  FROM public.candidates AS c
+  WHERE c.id = v_case.candidate_id
+  LIMIT 1;
+
+  IF v_candidate.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', '_pay_finance_case_oneoff_bank_upsert: candidate not found for finance case',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text
+    )::text;
+  END IF;
+
+  v_effective := public._pay_finance_case_effective_payout_instruction(p_finance_case_id);
+
+  IF upper(coalesce(v_candidate.pay_method, '')) <> 'UMBRELLA' THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'PAY_METHOD_NOT_UMBRELLA',
+      'message', '_pay_finance_case_oneoff_bank_upsert: one-off payout bank details are only valid for umbrella-routed one-off payouts',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_candidate.id::text,
+      'pay_method', v_candidate.pay_method
+    )::text;
+  END IF;
+
+  IF coalesce(v_effective ->> 'routing_kind', '') <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'ROUTING_KIND_NOT_ONEOFF',
+      'message', '_pay_finance_case_oneoff_bank_upsert: finance case is not currently routed to a one-off specified bank account',
+      'finance_case_id', p_finance_case_id::text,
+      'routing_kind', v_effective ->> 'routing_kind'
+    )::text;
+  END IF;
+
+  SELECT exists (
+    SELECT 1
+    FROM public.pay_batch_items AS pbi
+    JOIN public.pay_batch_candidates AS pbc
+      ON pbc.id = pbi.pay_batch_candidate_id
+    JOIN public.pay_batches AS pb
+      ON pb.id = pbc.pay_batch_id
+    WHERE (
+        pbi.finance_case_id = p_finance_case_id
+        OR pbi.source_ref = ('advance:'::text || p_finance_case_id::text)
+      )
+      AND coalesce(pbi.is_voided, false) = false
+      AND pb.cancelled_at_utc IS NULL
+      AND upper(coalesce(pb.status, '')) <> 'CANCELLED'
+  )
+  INTO v_has_noncancelled_batch_item;
+
+  IF v_case.payout_pay_batch_id IS NOT NULL OR v_has_noncancelled_batch_item THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_ONEOFF_BANK_UPSERT',
+      'code', 'ONEOFF_BANK_DETAILS_LOCKED',
+      'message', '_pay_finance_case_oneoff_bank_upsert: one-off bank details can only be edited while the item is Not processed yet',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  SELECT d.*
+  INTO v_existing
+  FROM public.pay_finance_case_oneoff_payout_bank_details AS d
+  WHERE d.finance_case_id = p_finance_case_id
+  FOR UPDATE;
+
+  IF v_existing.finance_case_id IS NOT NULL THEN
+    v_before_json := jsonb_build_object(
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'beneficiary_name', v_existing.beneficiary_name,
+      'sort_code_masked', CASE WHEN v_existing.sort_code IS NULL THEN NULL ELSE 'XX-XX-' || right(v_existing.sort_code, 2) END,
+      'account_number_masked', CASE WHEN v_existing.account_number IS NULL THEN NULL ELSE lpad(right(v_existing.account_number, 4), length(v_existing.account_number), '*') END,
+      'bank_details_hash', v_existing.bank_details_hash,
+      'note', v_existing.note
+    );
+  END IF;
+
+  INSERT INTO public.pay_finance_case_oneoff_payout_bank_details(
+    finance_case_id,
+    candidate_id,
+    beneficiary_name,
+    sort_code,
+    account_number,
+    bank_details_hash,
+    note,
+    created_at_utc,
+    created_by_user_id,
+    updated_at_utc,
+    updated_by_user_id
+  )
+  VALUES (
+    p_finance_case_id,
+    v_case.candidate_id,
+    v_beneficiary_name_norm,
+    v_sort_code_norm,
+    v_account_number_norm,
+    v_bank_details_hash,
+    v_note_norm,
+    now(),
+    p_actor_user_id,
+    now(),
+    p_actor_user_id
+  )
+  ON CONFLICT (finance_case_id) DO UPDATE
+  SET candidate_id = EXCLUDED.candidate_id,
+      beneficiary_name = EXCLUDED.beneficiary_name,
+      sort_code = EXCLUDED.sort_code,
+      account_number = EXCLUDED.account_number,
+      bank_details_hash = EXCLUDED.bank_details_hash,
+      note = EXCLUDED.note,
+      updated_at_utc = EXCLUDED.updated_at_utc,
+      updated_by_user_id = EXCLUDED.updated_by_user_id;
+
+  SELECT d.*
+  INTO v_existing
+  FROM public.pay_finance_case_oneoff_payout_bank_details AS d
+  WHERE d.finance_case_id = p_finance_case_id
+  LIMIT 1;
+
+  v_after_json := jsonb_build_object(
+    'finance_case_id', p_finance_case_id::text,
+    'candidate_id', v_case.candidate_id::text,
+    'beneficiary_name', v_existing.beneficiary_name,
+    'sort_code_masked', CASE WHEN v_existing.sort_code IS NULL THEN NULL ELSE 'XX-XX-' || right(v_existing.sort_code, 2) END,
+    'account_number_masked', CASE WHEN v_existing.account_number IS NULL THEN NULL ELSE lpad(right(v_existing.account_number, 4), length(v_existing.account_number), '*') END,
+    'bank_details_hash', v_existing.bank_details_hash,
+    'note', v_existing.note
+  );
+
+  IF v_before_json IS NULL THEN
+    v_action := 'ONEOFF_BANK_DETAILS_CREATED';
+  ELSIF v_before_json IS DISTINCT FROM v_after_json THEN
+    v_action := 'ONEOFF_BANK_DETAILS_UPDATED';
+  ELSE
+    v_action := 'ONEOFF_BANK_DETAILS_UNCHANGED';
+  END IF;
+
+  IF v_action <> 'ONEOFF_BANK_DETAILS_UNCHANGED' THEN
+    PERFORM public._audit_insert(
+      'finance_case',
+      p_finance_case_id::text,
+      v_action,
+      v_before_json,
+      v_after_json,
+      coalesce(nullif(btrim(coalesce(p_reason, '')), ''), 'ONE_OFF_PAYOUT_BANK_DETAILS'),
+      p_actor_user_id
+    );
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'candidate_id', v_case.candidate_id::text,
+    'action', v_action,
+    'beneficiary_name', v_existing.beneficiary_name,
+    'sort_code_masked', CASE WHEN v_existing.sort_code IS NULL THEN NULL ELSE 'XX-XX-' || right(v_existing.sort_code, 2) END,
+    'account_number_masked', CASE WHEN v_existing.account_number IS NULL THEN NULL ELSE lpad(right(v_existing.account_number, 4), length(v_existing.account_number), '*') END,
+    'bank_details_hash', v_existing.bank_details_hash,
+    'note', v_existing.note,
+    'preview_blocked_until_reentered', false
+  );
+END;
+$function$;
+
+DROP FUNCTION IF EXISTS public._pay_finance_case_effective_payout_instruction(uuid);
+
+CREATE OR REPLACE FUNCTION public._pay_finance_case_effective_payout_instruction(
+  p_finance_case_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_case public.pay_advances%rowtype;
+  v_candidate public.candidates%rowtype;
+  v_umbrella public.umbrellas%rowtype;
+  v_oneoff public.pay_finance_case_oneoff_payout_bank_details%rowtype;
+
+  v_component_classification public.pay_finance_component_classification_enum := null;
+  v_taxability public.pay_finance_taxability_enum := null;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+
+  v_pay_method text := null;
+  v_pay_channel text := null;
+  v_destination_label text := null;
+  v_payee_entity_kind text := null;
+  v_payee_entity_id uuid := null;
+
+  v_bank_details_hash text := null;
+  v_beneficiary_name text := null;
+  v_masked_bank_account text := null;
+
+  v_oneoff_bank_details_present boolean := false;
+  v_oneoff_bank_details_required boolean := false;
+  v_oneoff_bank_details_editable boolean := false;
+  v_is_candidate_directed_oneoff_payout boolean := false;
+  v_appears_on_umbrella_remittance boolean := false;
+  v_generates_candidate_payment_advice boolean := false;
+
+  v_has_noncancelled_batch_item boolean := false;
+BEGIN
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_EFFECTIVE_PAYOUT_INSTRUCTION',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_finance_case_effective_payout_instruction: finance_case_id is required'
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  LIMIT 1;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_EFFECTIVE_PAYOUT_INSTRUCTION',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_finance_case_effective_payout_instruction: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  SELECT c.*
+  INTO v_candidate
+  FROM public.candidates AS c
+  WHERE c.id = v_case.candidate_id
+  LIMIT 1;
+
+  IF v_candidate.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_EFFECTIVE_PAYOUT_INSTRUCTION',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', '_pay_finance_case_effective_payout_instruction: candidate not found for finance case',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text
+    )::text;
+  END IF;
+
+  v_pay_method := upper(coalesce(v_candidate.pay_method, ''));
+  IF v_pay_method NOT IN ('PAYE', 'UMBRELLA') THEN
+    v_pay_method := null;
+  END IF;
+
+  IF v_candidate.umbrella_id IS NOT NULL THEN
+    SELECT u.*
+    INTO v_umbrella
+    FROM public.umbrellas AS u
+    WHERE u.id = v_candidate.umbrella_id
+    LIMIT 1;
+  END IF;
+
+  SELECT pfc.classification
+  INTO v_component_classification
+  FROM public.pay_finance_case_components AS pfc
+  WHERE pfc.finance_case_id = p_finance_case_id
+    AND pfc.component_key_type = 'CASE_TOTAL'
+    AND pfc.component_key_value = 'TOTAL'
+    AND pfc.closed_at_utc IS NULL
+  ORDER BY pfc.updated_at_utc DESC, pfc.created_at_utc DESC, pfc.id DESC
+  LIMIT 1;
+
+  v_taxability := v_case.taxability;
+  IF v_taxability IS NULL THEN
+    IF v_case.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum THEN
+      v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+    ELSIF v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum THEN
+      v_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+    ELSIF v_component_classification IN (
+      'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
+      'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum
+    ) THEN
+      v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+    END IF;
+  END IF;
+
+  v_routing_kind := v_case.routing_kind;
+  IF v_routing_kind IS NULL THEN
+    IF v_case.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSIF v_pay_method = 'UMBRELLA' THEN
+        v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+      END IF;
+    ELSIF v_case.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSIF v_pay_method = 'UMBRELLA' AND v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum THEN
+        v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+      ELSIF v_pay_method = 'UMBRELLA' AND v_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum THEN
+        v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+      END IF;
+    ELSIF v_case.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSIF v_pay_method = 'UMBRELLA' THEN
+        v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+      END IF;
+    END IF;
+  END IF;
+
+  v_oneoff_bank_details_required := coalesce(v_case.oneoff_bank_details_required, false);
+  IF v_oneoff_bank_details_required = false THEN
+    v_oneoff_bank_details_required := (
+      v_routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum
+      AND v_case.case_type IN (
+        'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+        'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+      )
+    );
+  END IF;
+
+  SELECT d.*
+  INTO v_oneoff
+  FROM public.pay_finance_case_oneoff_payout_bank_details AS d
+  WHERE d.finance_case_id = p_finance_case_id
+  LIMIT 1;
+
+  v_oneoff_bank_details_present := (v_oneoff.finance_case_id IS NOT NULL);
+
+  SELECT exists (
+    SELECT 1
+    FROM public.pay_batch_items AS pbi
+    JOIN public.pay_batch_candidates AS pbc
+      ON pbc.id = pbi.pay_batch_candidate_id
+    JOIN public.pay_batches AS pb
+      ON pb.id = pbc.pay_batch_id
+    WHERE (
+        pbi.finance_case_id = p_finance_case_id
+        OR pbi.source_ref = ('advance:'::text || p_finance_case_id::text)
+      )
+      AND coalesce(pbi.is_voided, false) = false
+      AND pb.cancelled_at_utc IS NULL
+      AND upper(coalesce(pb.status, '')) <> 'CANCELLED'
+  )
+  INTO v_has_noncancelled_batch_item;
+
+  v_oneoff_bank_details_editable := (
+    v_oneoff_bank_details_required = true
+    AND v_case.case_type IN (
+      'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+      'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+    )
+    AND v_case.payout_pay_batch_id IS NULL
+    AND v_has_noncancelled_batch_item = false
+  );
+
+  IF v_routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum THEN
+    v_destination_label := 'one-off specified bank account';
+    v_payee_entity_kind := 'CANDIDATE';
+    v_payee_entity_id := v_candidate.id;
+    v_bank_details_hash := v_oneoff.bank_details_hash;
+    v_beneficiary_name := v_oneoff.beneficiary_name;
+    IF nullif(coalesce(v_oneoff.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_oneoff.account_number, 4), length(v_oneoff.account_number), '*');
+    END IF;
+  ELSIF v_routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum THEN
+    v_destination_label := 'umbrella company';
+    v_payee_entity_kind := 'UMBRELLA';
+    v_payee_entity_id := v_candidate.umbrella_id;
+    v_bank_details_hash := v_umbrella.bank_details_hash;
+    v_beneficiary_name := v_umbrella.name;
+    IF nullif(coalesce(v_umbrella.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_umbrella.account_number, 4), length(v_umbrella.account_number), '*');
+    END IF;
+  ELSE
+    v_destination_label := 'normal PAYE route';
+    v_payee_entity_kind := 'CANDIDATE';
+    v_payee_entity_id := v_candidate.id;
+    v_bank_details_hash := v_candidate.bank_details_hash;
+    v_beneficiary_name := nullif(btrim(coalesce(v_candidate.account_holder, v_candidate.display_name, concat_ws(' ', v_candidate.first_name, v_candidate.last_name))), '');
+    IF nullif(coalesce(v_candidate.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_candidate.account_number, 4), length(v_candidate.account_number), '*');
+    END IF;
+  END IF;
+
+  v_pay_channel := v_pay_method;
+
+  v_is_candidate_directed_oneoff_payout := (
+    v_routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum
+    AND v_case.case_type IN (
+      'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+      'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+    )
+    AND (
+      v_case.case_type <> 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+      OR v_taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum
+    )
+  );
+
+  v_appears_on_umbrella_remittance := (
+    v_routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum
+    AND v_case.case_type IN (
+      'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+      'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+    )
+  );
+
+  v_generates_candidate_payment_advice := v_is_candidate_directed_oneoff_payout;
+
+  RETURN jsonb_build_object(
+    'finance_case_id', p_finance_case_id::text,
+    'case_type', v_case.case_type::text,
+    'candidate_id', v_candidate.id::text,
+    'client_id', CASE WHEN v_case.client_id IS NULL THEN NULL ELSE v_case.client_id::text END,
+    'pay_method', v_pay_method,
+    'pay_channel', v_pay_channel,
+    'taxability', CASE WHEN v_taxability IS NULL THEN NULL ELSE v_taxability::text END,
+    'routing_kind', CASE WHEN v_routing_kind IS NULL THEN NULL ELSE v_routing_kind::text END,
+    'destination_label', v_destination_label,
+    'payee_entity_kind', v_payee_entity_kind,
+    'payee_entity_id', CASE WHEN v_payee_entity_id IS NULL THEN NULL ELSE v_payee_entity_id::text END,
+    'beneficiary_name', v_beneficiary_name,
+    'bank_details_hash', v_bank_details_hash,
+    'masked_bank_account', v_masked_bank_account,
+    'oneoff_bank_details_required', v_oneoff_bank_details_required,
+    'oneoff_bank_details_present', v_oneoff_bank_details_present,
+    'oneoff_bank_details_editable', v_oneoff_bank_details_editable,
+    'is_candidate_directed_oneoff_payout', v_is_candidate_directed_oneoff_payout,
+    'appears_on_umbrella_remittance', v_appears_on_umbrella_remittance,
+    'generates_candidate_payment_advice', v_generates_candidate_payment_advice
+  );
+END;
+$function$;
+
+
+DROP FUNCTION IF EXISTS public._pay_repayment_schedule_restore_after_snooze_clear(uuid,date);
+
+CREATE OR REPLACE FUNCTION public._pay_repayment_schedule_restore_after_snooze_clear(
+  p_finance_case_id uuid,
+  p_effective_from_date date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_case public.pay_advances%rowtype;
+  v_before_schedule_json jsonb := '[]'::jsonb;
+  v_after_schedule_json jsonb := '[]'::jsonb;
+  v_before_next_due_week_start date := null;
+  v_after_next_due_week_start date := null;
+  v_requested_week_start date := null;
+  v_current_operating_week_start date := null;
+  v_target_week_start date := null;
+  v_installment_count integer := 0;
+BEGIN
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: finance_case_id is required'
+    )::text;
+  END IF;
+
+  IF p_effective_from_date IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'EFFECTIVE_FROM_DATE_REQUIRED',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: effective_from_date is required'
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  IF v_case.case_type NOT IN (
+    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+    'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+  ) THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'CASE_TYPE_NOT_SNOOZEABLE',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: only repayment-type finance cases may be restored after snooze clear',
+      'finance_case_id', p_finance_case_id::text,
+      'case_type', v_case.case_type::text
+    )::text;
+  END IF;
+
+  v_before_schedule_json := coalesce(v_case.schedule_json, '[]'::jsonb);
+  v_before_next_due_week_start := v_case.next_due_week_start;
+  v_requested_week_start := public._pay_week_start_monday(p_effective_from_date);
+  v_current_operating_week_start := public._pay_week_start_monday((now() at time zone 'Europe/London')::date);
+
+  IF v_requested_week_start < v_current_operating_week_start THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_RESTORE_AFTER_SNOOZE_CLEAR',
+      'code', 'EFFECTIVE_FROM_DATE_BEFORE_NOW',
+      'message', '_pay_repayment_schedule_restore_after_snooze_clear: effective_from_date cannot restore the repayment schedule earlier than the current operating week',
+      'finance_case_id', p_finance_case_id::text,
+      'requested_week_start', v_requested_week_start::text,
+      'current_operating_week_start', v_current_operating_week_start::text
+    )::text;
+  END IF;
+
+  v_target_week_start := v_requested_week_start;
+
+  WITH schedule_rows AS (
+    SELECT
+      row_number() OVER (ORDER BY (elem.value ->> 'week_start')::date ASC, elem.ordinality ASC) AS seq_no,
+      round(coalesce((elem.value ->> 'amount')::numeric, 0), 2) AS amount_value
+    FROM jsonb_array_elements(v_before_schedule_json) WITH ORDINALITY AS elem(value, ordinality)
+    WHERE coalesce((elem.value ->> 'amount')::numeric, 0) < 0
+  )
+  SELECT
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+          'amount', sr.amount_value
+        )
+        ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+      ),
+      '[]'::jsonb
+    ),
+    count(*)::integer
+  INTO v_after_schedule_json, v_installment_count
+  FROM schedule_rows AS sr;
+
+  v_after_next_due_week_start := CASE WHEN v_installment_count > 0 THEN v_target_week_start ELSE null END;
+
+  UPDATE public.pay_advances AS pa
+  SET schedule_json = v_after_schedule_json,
+      next_due_week_start = v_after_next_due_week_start,
+      updated_at = now()
+  WHERE pa.id = p_finance_case_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'schedule_before_restore_json', v_before_schedule_json,
+    'next_due_week_start_before_restore', case when v_before_next_due_week_start is null then null else v_before_next_due_week_start::text end,
+    'requested_week_start', v_requested_week_start::text,
+    'current_operating_week_start', v_current_operating_week_start::text,
+    'schedule_after_restore_json', v_after_schedule_json,
+    'next_due_week_start_after_restore', case when v_after_next_due_week_start is null then null else v_after_next_due_week_start::text end,
+    'installment_count', v_installment_count
+  );
+END;
+$function$;
+
+
+DROP FUNCTION IF EXISTS public._pay_repayment_schedule_rebase_for_snooze(uuid,date);
+
+CREATE OR REPLACE FUNCTION public._pay_repayment_schedule_rebase_for_snooze(
+  p_finance_case_id uuid,
+  p_snooze_until_date date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_case public.pay_advances%rowtype;
+  v_before_schedule_json jsonb := '[]'::jsonb;
+  v_after_schedule_json jsonb := '[]'::jsonb;
+  v_before_next_due_week_start date := null;
+  v_after_next_due_week_start date := null;
+  v_requested_week_start date := null;
+  v_target_week_start date := null;
+  v_installment_count integer := 0;
+BEGIN
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: finance_case_id is required'
+    )::text;
+  END IF;
+
+  IF p_snooze_until_date IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'SNOOZE_UNTIL_DATE_REQUIRED',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: snooze_until_date is required'
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  IF v_case.case_type NOT IN (
+    'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+    'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+  ) THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'CASE_TYPE_NOT_SNOOZEABLE',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: only repayment-type finance cases may be rebased for snooze',
+      'finance_case_id', p_finance_case_id::text,
+      'case_type', v_case.case_type::text
+    )::text;
+  END IF;
+
+  v_before_schedule_json := coalesce(v_case.schedule_json, '[]'::jsonb);
+  v_before_next_due_week_start := v_case.next_due_week_start;
+  v_requested_week_start := public._pay_week_start_monday(p_snooze_until_date);
+
+  IF v_before_next_due_week_start IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'NEXT_DUE_MISSING',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: next_due_week_start is required on the finance case'
+    )::text;
+  END IF;
+
+  IF v_requested_week_start < v_before_next_due_week_start THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_REPAYMENT_SCHEDULE_REBASE_FOR_SNOOZE',
+      'code', 'SNOOZE_DATE_BEFORE_NEXT_DUE',
+      'message', '_pay_repayment_schedule_rebase_for_snooze: snooze_until_date cannot move the repayment schedule earlier than the current next due week',
+      'finance_case_id', p_finance_case_id::text,
+      'current_next_due_week_start', v_before_next_due_week_start::text,
+      'requested_week_start', v_requested_week_start::text
+    )::text;
+  END IF;
+
+  v_target_week_start := CASE
+    WHEN v_requested_week_start = v_before_next_due_week_start THEN (v_before_next_due_week_start + 7)
+    ELSE v_requested_week_start
+  END;
+
+  WITH schedule_rows AS (
+    SELECT
+      row_number() OVER (ORDER BY (elem.value ->> 'week_start')::date ASC, elem.ordinality ASC) AS seq_no,
+      round(coalesce((elem.value ->> 'amount')::numeric, 0), 2) AS amount_value
+    FROM jsonb_array_elements(v_before_schedule_json) WITH ORDINALITY AS elem(value, ordinality)
+    WHERE coalesce((elem.value ->> 'amount')::numeric, 0) < 0
+  )
+  SELECT
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+          'amount', sr.amount_value
+        )
+        ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+      ),
+      '[]'::jsonb
+    ),
+    count(*)::integer
+  INTO v_after_schedule_json, v_installment_count
+  FROM schedule_rows AS sr;
+
+  v_after_next_due_week_start := CASE WHEN v_installment_count > 0 THEN v_target_week_start ELSE null END;
+
+  UPDATE public.pay_advances AS pa
+  SET schedule_json = v_after_schedule_json,
+      next_due_week_start = v_after_next_due_week_start,
+      updated_at = now()
+  WHERE pa.id = p_finance_case_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'schedule_before_snooze_json', v_before_schedule_json,
+    'next_due_week_start_before_snooze', case when v_before_next_due_week_start is null then null else v_before_next_due_week_start::text end,
+    'requested_week_start', v_requested_week_start::text,
+    'schedule_after_snooze_json', v_after_schedule_json,
+    'next_due_week_start_after_snooze', case when v_after_next_due_week_start is null then null else v_after_next_due_week_start::text end,
+    'installment_count', v_installment_count
+  );
+END;
+$function$;
+
+
+DROP FUNCTION IF EXISTS public._pay_finance_case_freeze_payout_instruction_to_batch_item(uuid,uuid);
+
+CREATE OR REPLACE FUNCTION public._pay_finance_case_freeze_payout_instruction_to_batch_item(
+  p_pay_batch_item_id uuid,
+  p_finance_case_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_item public.pay_batch_items%rowtype;
+  v_case public.pay_advances%rowtype;
+  v_candidate public.candidates%rowtype;
+  v_umbrella public.umbrellas%rowtype;
+  v_oneoff public.pay_finance_case_oneoff_payout_bank_details%rowtype;
+  v_component_classification public.pay_finance_component_classification_enum := null;
+  v_taxability public.pay_finance_taxability_enum := null;
+  v_routing_kind public.pay_finance_routing_kind_enum := null;
+  v_pay_method text := null;
+  v_pay_channel text := null;
+  v_destination_label text := null;
+  v_payee_entity_kind text := null;
+  v_payee_entity_id uuid := null;
+  v_beneficiary_name text := null;
+  v_masked_bank_account text := null;
+  v_bank_details_hash text := null;
+  v_bank_details_note text := null;
+  v_bank_details_created_by_user_id uuid := null;
+  v_bank_details_updated_by_user_id uuid := null;
+  v_is_candidate_directed_oneoff_payout boolean := false;
+  v_appears_on_umbrella_remittance boolean := false;
+  v_generates_candidate_payment_advice boolean := false;
+  v_snapshot jsonb := '{}'::jsonb;
+BEGIN
+  IF p_pay_batch_item_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'PAY_BATCH_ITEM_ID_REQUIRED',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: pay_batch_item_id is required'
+    )::text;
+  END IF;
+
+  IF p_finance_case_id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: finance_case_id is required'
+    )::text;
+  END IF;
+
+  SELECT pbi.*
+  INTO v_item
+  FROM public.pay_batch_items AS pbi
+  WHERE pbi.id = p_pay_batch_item_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF v_item.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'PAY_BATCH_ITEM_NOT_FOUND',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: pay batch item not found',
+      'pay_batch_item_id', p_pay_batch_item_id::text
+    )::text;
+  END IF;
+
+  IF v_item.finance_case_id IS NOT NULL AND v_item.finance_case_id <> p_finance_case_id THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'FINANCE_CASE_ID_MISMATCH',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: item finance_case_id does not match input finance_case_id',
+      'pay_batch_item_id', p_pay_batch_item_id::text,
+      'item_finance_case_id', v_item.finance_case_id::text,
+      'input_finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  SELECT pa.*
+  INTO v_case
+  FROM public.pay_advances AS pa
+  WHERE pa.id = p_finance_case_id
+  LIMIT 1;
+
+  IF v_case.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  END IF;
+
+  SELECT c.*
+  INTO v_candidate
+  FROM public.candidates AS c
+  WHERE c.id = v_case.candidate_id
+  LIMIT 1;
+
+  IF v_candidate.id IS NULL THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: candidate not found for finance case',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text
+    )::text;
+  END IF;
+
+  v_pay_method := upper(coalesce(v_candidate.pay_method, ''));
+  IF v_pay_method NOT IN ('PAYE', 'UMBRELLA') THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+      'code', 'PAY_METHOD_INVALID',
+      'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: candidate pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'pay_method', v_pay_method
+    )::text;
+  END IF;
+
+  IF v_candidate.umbrella_id IS NOT NULL THEN
+    SELECT u.*
+    INTO v_umbrella
+    FROM public.umbrellas AS u
+    WHERE u.id = v_candidate.umbrella_id
+    LIMIT 1;
+  END IF;
+
+  SELECT pfc.classification
+  INTO v_component_classification
+  FROM public.pay_finance_case_components AS pfc
+  WHERE pfc.finance_case_id = p_finance_case_id
+    AND pfc.component_key_type = 'CASE_TOTAL'
+    AND pfc.component_key_value = 'TOTAL'
+    AND pfc.closed_at_utc IS NULL
+  ORDER BY pfc.updated_at_utc DESC, pfc.created_at_utc DESC, pfc.id DESC
+  LIMIT 1;
+
+  v_taxability := v_case.taxability;
+  IF v_taxability IS NULL THEN
+    IF v_case.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum THEN
+      v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+    ELSIF v_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum THEN
+      v_taxability := 'TAXABLE'::public.pay_finance_taxability_enum;
+    ELSIF v_component_classification IN (
+      'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
+      'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum
+    ) THEN
+      v_taxability := 'NON_TAXABLE'::public.pay_finance_taxability_enum;
+    END IF;
+  END IF;
+
+  v_routing_kind := v_case.routing_kind;
+  IF v_routing_kind IS NULL THEN
+    IF v_case.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSE
+        v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+      END IF;
+    ELSIF v_case.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSIF v_taxability = 'TAXABLE'::public.pay_finance_taxability_enum THEN
+        v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+      ELSE
+        v_routing_kind := 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum;
+      END IF;
+    ELSIF v_case.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum THEN
+      IF v_pay_method = 'PAYE' THEN
+        v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+      ELSE
+        v_routing_kind := 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum;
+      END IF;
+    ELSE
+      v_routing_kind := 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum;
+    END IF;
+  END IF;
+
+  v_pay_channel := v_pay_method;
+
+  IF v_routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum THEN
+    SELECT d.*
+    INTO v_oneoff
+    FROM public.pay_finance_case_oneoff_payout_bank_details AS d
+    WHERE d.finance_case_id = p_finance_case_id
+    LIMIT 1;
+
+    IF v_oneoff.finance_case_id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_CASE_FREEZE_PAYOUT_INSTRUCTION_TO_BATCH_ITEM',
+        'code', 'ONEOFF_BANK_DETAILS_MISSING',
+        'message', '_pay_finance_case_freeze_payout_instruction_to_batch_item: one-off bank details are required for this finance case routing',
+        'finance_case_id', p_finance_case_id::text,
+        'routing_kind', v_routing_kind::text
+      )::text;
+    END IF;
+
+    v_destination_label := 'one-off specified bank account';
+    v_payee_entity_kind := 'CANDIDATE';
+    v_payee_entity_id := v_candidate.id;
+    v_beneficiary_name := v_oneoff.beneficiary_name;
+    v_bank_details_hash := v_oneoff.bank_details_hash;
+    v_bank_details_note := v_oneoff.note;
+    v_bank_details_created_by_user_id := v_oneoff.created_by_user_id;
+    v_bank_details_updated_by_user_id := v_oneoff.updated_by_user_id;
+    IF nullif(coalesce(v_oneoff.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_oneoff.account_number, 4), length(v_oneoff.account_number), '*');
+    END IF;
+    v_is_candidate_directed_oneoff_payout := true;
+    v_appears_on_umbrella_remittance := false;
+    v_generates_candidate_payment_advice := true;
+  ELSIF v_routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum THEN
+    v_destination_label := 'umbrella company';
+    v_payee_entity_kind := 'UMBRELLA';
+    v_payee_entity_id := v_candidate.umbrella_id;
+    v_beneficiary_name := nullif(btrim(coalesce(v_umbrella.name, '')), '');
+    v_bank_details_hash := v_umbrella.bank_details_hash;
+    IF nullif(coalesce(v_umbrella.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_umbrella.account_number, 4), length(v_umbrella.account_number), '*');
+    END IF;
+    v_is_candidate_directed_oneoff_payout := false;
+    v_appears_on_umbrella_remittance := true;
+    v_generates_candidate_payment_advice := false;
+  ELSE
+    v_destination_label := 'normal PAYE route';
+    v_payee_entity_kind := 'CANDIDATE';
+    v_payee_entity_id := v_candidate.id;
+    v_beneficiary_name := nullif(btrim(coalesce(v_candidate.account_holder, v_candidate.display_name, concat_ws(' ', v_candidate.first_name, v_candidate.last_name))), '');
+    v_bank_details_hash := v_candidate.bank_details_hash;
+    IF nullif(coalesce(v_candidate.account_number, ''), '') IS NOT NULL THEN
+      v_masked_bank_account := lpad(right(v_candidate.account_number, 4), length(v_candidate.account_number), '*');
+    END IF;
+    v_is_candidate_directed_oneoff_payout := false;
+    v_appears_on_umbrella_remittance := false;
+    v_generates_candidate_payment_advice := false;
+  END IF;
+
+  v_snapshot := jsonb_strip_nulls(
+    jsonb_build_object(
+      'taxability', case when v_taxability is null then null else v_taxability::text end,
+      'routing_kind', case when v_routing_kind is null then null else v_routing_kind::text end,
+      'destination_label', v_destination_label,
+      'pay_channel', v_pay_channel,
+      'payee_entity_kind', v_payee_entity_kind,
+      'payee_entity_id', case when v_payee_entity_id is null then null else v_payee_entity_id::text end,
+      'beneficiary_name', v_beneficiary_name,
+      'masked_bank_account', v_masked_bank_account,
+      'bank_details_hash', v_bank_details_hash,
+      'bank_details_note', v_bank_details_note,
+      'bank_details_created_by_user_id', case when v_bank_details_created_by_user_id is null then null else v_bank_details_created_by_user_id::text end,
+      'bank_details_updated_by_user_id', case when v_bank_details_updated_by_user_id is null then null else v_bank_details_updated_by_user_id::text end,
+      'appears_on_umbrella_remittance', v_appears_on_umbrella_remittance,
+      'generates_candidate_payment_advice', v_generates_candidate_payment_advice,
+      'is_candidate_directed_oneoff_payout', v_is_candidate_directed_oneoff_payout,
+      'locked_at_draft', true,
+      'finance_case_id', p_finance_case_id::text,
+      'pay_batch_item_id', p_pay_batch_item_id::text
+    )
+  );
+
+  UPDATE public.pay_batch_items AS pbi
+  SET payout_instruction_snapshot_json = v_snapshot
+  WHERE pbi.id = p_pay_batch_item_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'pay_batch_item_id', p_pay_batch_item_id::text,
+    'finance_case_id', p_finance_case_id::text,
+    'payout_instruction_snapshot_json', v_snapshot
   );
 END;
 $function$;

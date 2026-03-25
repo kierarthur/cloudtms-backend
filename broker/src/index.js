@@ -2438,11 +2438,7 @@ async function resolveSummarySelection(section, filters, selectionMode, included
     throw new Error('unsupported_section');
   }
 
-  const rpcResult = await sbRpc(env, rpcName, { p_filters: effectiveFilters });
-  const rows = Array.isArray(rpcResult)
-    ? rpcResult
-    : ((rpcResult && typeof rpcResult === 'object' && Array.isArray(rpcResult.rows)) ? rpcResult.rows : (rpcResult == null ? [] : [rpcResult]));
-
+  const rows = await sbRpcAllRows(env, rpcName, { p_filters: effectiveFilters }, { pageSize: 1000 });
   const membershipRowIds = normalizeIdArray(
     rows.map((row) => {
       if (row == null) return '';
@@ -8841,6 +8837,7 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   }
 }
 
+
 async function handleBankingFinanceLedgerExportCsv(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -9014,7 +9011,13 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
       'active_snooze_created_at',
       'active_snooze_updated_at',
       'active_snooze_visibility_status',
-      'schedule_json'
+      'schedule_json',
+      'is_mixed_case',
+      'open_taxable_count',
+      'open_reimbursement_count',
+      'unresolved_taxable_count',
+      'stale_count',
+      'component_resolution_summary_json'
     ];
 
     const lines = [];
@@ -9082,7 +9085,13 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
         r?.active_snooze_created_at_utc ?? '',
         r?.active_snooze_updated_at_utc ?? '',
         r?.active_snooze_visibility_status ?? '',
-        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json)
+        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json),
+        r?.is_mixed_case === true ? 'true' : 'false',
+        r?.open_taxable_count ?? '',
+        r?.open_reimbursement_count ?? '',
+        r?.unresolved_taxable_count ?? '',
+        r?.stale_count ?? '',
+        r?.component_resolution_summary_json == null ? '' : JSON.stringify(r.component_resolution_summary_json)
       ].map(csvEscape).join(','));
     }
 
@@ -9183,6 +9192,93 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
       }
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const normalizeRowLabel = (row) => {
+    const raw = String(row?.row_label || '').trim();
+    if (raw) return raw;
+    const caseType = String(row?.case_type || '').trim().toUpperCase();
+    if (caseType === 'UNDERPAYMENT') return 'Underpayment';
+    if (caseType === 'OVERPAYMENT') return 'Overpayment';
+    if (caseType === 'PAYMENT_ADVANCE') return 'Payment Advance';
+    if (caseType === 'MANUAL_DEBT_ADJUSTMENT') return 'Manual Debt Adjustment';
+    if (caseType === 'MANUAL_CREDIT_ADJUSTMENT') return 'Manual Credit Adjustment';
+    return 'Finance Case';
+  };
+
+  const parseComponentSummary = (raw) => {
+    if (raw == null) return null;
+    if (typeof raw === 'object') return raw;
+    const s = String(raw).trim();
+    if (!s) return null;
+    try {
+      return JSON.parse(s);
+    } catch {
+      return s;
+    }
+  };
+
+  const summarizeComponentResolution = (raw) => {
+    const parsed = parseComponentSummary(raw);
+    if (!parsed) return '';
+    if (typeof parsed === 'string') return parsed;
+
+    if (Array.isArray(parsed)) {
+      const parts = [];
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object') continue;
+        const label =
+          String(item.label || item.component_label || item.component_key_value || item.component_key_type || '').trim();
+        const classification = String(item.classification || item.component_classification || '').trim();
+        const resolutionMode = String(item.resolution_mode || item.saved_resolution_mode || '').trim();
+        const stale = item.is_stale === true || item.stale === true;
+        const unresolved =
+          item.is_unresolved === true ||
+          item.unresolved === true ||
+          (String(item.status || '').trim().toUpperCase() === 'UNRESOLVED');
+        const bits = [];
+        if (label) bits.push(label);
+        if (classification) bits.push(classification);
+        if (resolutionMode) bits.push(resolutionMode);
+        if (unresolved) bits.push('UNRESOLVED');
+        if (stale) bits.push('STALE');
+        if (bits.length) parts.push(bits.join(' / '));
+      }
+      return parts.join(' | ');
+    }
+
+    if (typeof parsed === 'object') {
+      const parts = [];
+      const mixed = parsed.is_mixed_case === true || parsed.mixed === true;
+      const openTaxable = Number(parsed.open_taxable_count);
+      const openReimbursement = Number(parsed.open_reimbursement_count);
+      const unresolved = Number(parsed.unresolved_taxable_count);
+      const stale = Number(parsed.stale_count);
+
+      if (mixed) parts.push('Mixed');
+      if (Number.isFinite(openTaxable)) parts.push(`Taxable open: ${openTaxable}`);
+      if (Number.isFinite(openReimbursement)) parts.push(`Reimbursement open: ${openReimbursement}`);
+      if (Number.isFinite(unresolved)) parts.push(`Unresolved taxable: ${unresolved}`);
+      if (Number.isFinite(stale)) parts.push(`Stale: ${stale}`);
+
+      const modeCounts = parsed.mode_counts && typeof parsed.mode_counts === 'object' ? parsed.mode_counts : null;
+      if (modeCounts) {
+        const modeBits = [];
+        for (const [k, v] of Object.entries(modeCounts)) {
+          const n = Number(v);
+          if (!Number.isFinite(n)) continue;
+          modeBits.push(`${k}: ${n}`);
+        }
+        if (modeBits.length) parts.push(`Modes: ${modeBits.join(', ')}`);
+      }
+
+      const summaryText = String(parsed.summary_text || parsed.text || '').trim();
+      if (summaryText) parts.push(summaryText);
+
+      return parts.join(' • ');
+    }
+
+    return '';
   };
 
   const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
@@ -9303,6 +9399,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
       `Fully paid: ${safeStr(summary?.fully_paid_count ?? 0)}`,
       `Payment Advances: ${safeStr(summary?.payment_advance_count ?? 0)}`,
       `Overpayments: ${safeStr(summary?.overpayment_count ?? 0)}`,
+      `Underpayments: ${safeStr(summary?.underpayment_count ?? 0)}`,
       `Manual Debt Adjustments: ${safeStr(summary?.manual_debt_adjustment_count ?? 0)}`,
       `Manual Credit Adjustments: ${safeStr(summary?.manual_credit_adjustment_count ?? 0)}`,
       `Original amount total: ${asMoney(summary?.original_amount_total)}`,
@@ -9349,6 +9446,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
       y -= 12;
 
       for (const r of list) {
+        const rowLabel = normalizeRowLabel(r);
         const candidateTxt =
           safeStr(r?.candidate_display_name || '').trim() ||
           [safeStr(r?.candidate_first_name || '').trim(), safeStr(r?.candidate_last_name || '').trim()].filter(Boolean).join(' ').trim() ||
@@ -9398,6 +9496,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
         y -= rowHeight - 2;
 
         const subBits = [];
+        subBits.push(`Label: ${rowLabel}`);
         if (r?.candidate_tms_ref) subBits.push(`Ref: ${safeStr(r.candidate_tms_ref)}`);
         if (r?.linked_timesheet_booking_id) subBits.push(`Booking: ${safeStr(r.linked_timesheet_booking_id)}`);
         if (r?.linked_timesheet_shift_label_norm) subBits.push(`Shift: ${safeStr(r.linked_timesheet_shift_label_norm)}`);
@@ -9409,6 +9508,17 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
         if (r?.notes) subBits.push(`Note: ${safeStr(r.notes)}`);
         if (r?.latest_remittance_trigger_status) subBits.push(`Remittance: ${safeStr(r.latest_remittance_trigger_status)}`);
         if (r?.payout_status) subBits.push(`Payout: ${safeStr(r.payout_status)}`);
+
+        const componentStateBits = [];
+        if (r?.is_mixed_case === true) componentStateBits.push('Mixed case');
+        if (Number.isFinite(Number(r?.open_taxable_count))) componentStateBits.push(`Taxable open: ${Number(r.open_taxable_count)}`);
+        if (Number.isFinite(Number(r?.open_reimbursement_count))) componentStateBits.push(`Reimbursement open: ${Number(r.open_reimbursement_count)}`);
+        if (Number.isFinite(Number(r?.unresolved_taxable_count))) componentStateBits.push(`Unresolved taxable: ${Number(r.unresolved_taxable_count)}`);
+        if (Number.isFinite(Number(r?.stale_count))) componentStateBits.push(`Stale: ${Number(r.stale_count)}`);
+        if (componentStateBits.length) subBits.push(`Components: ${componentStateBits.join(', ')}`);
+
+        const componentSummary = summarizeComponentResolution(r?.component_resolution_summary_json);
+        if (componentSummary) subBits.push(`Resolution: ${componentSummary}`);
 
         if (subBits.length) {
           ensureSpace(lineH);
@@ -9519,6 +9629,18 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   };
 
+  const normalizeRowLabel = (row) => {
+    const raw = String(row?.row_label || '').trim();
+    if (raw) return raw;
+    const caseTypeRaw = String(row?.case_type || '').trim().toUpperCase();
+    if (caseTypeRaw === 'UNDERPAYMENT') return 'Underpayment';
+    if (caseTypeRaw === 'OVERPAYMENT') return 'Overpayment';
+    if (caseTypeRaw === 'PAYMENT_ADVANCE') return 'Payment Advance';
+    if (caseTypeRaw === 'MANUAL_DEBT_ADJUSTMENT') return 'Manual Debt Adjustment';
+    if (caseTypeRaw === 'MANUAL_CREDIT_ADJUSTMENT') return 'Manual Credit Adjustment';
+    return '';
+  };
+
   const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
   const createdToRaw = parseNullableText(q('created_to'), q('createdTo'), q('date_to'), q('dateTo'));
   const statusRaw = parseNullableText(q('status'));
@@ -9593,16 +9715,23 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
       'start_week_start',
       'next_due_week_start',
       'adjustment_comment',
-      'schedule_json'
+      'schedule_json',
+      'is_mixed_case',
+      'open_taxable_count',
+      'open_reimbursement_count',
+      'unresolved_taxable_count',
+      'stale_count',
+      'component_resolution_summary_json'
     ];
 
     const lines = [];
     lines.push(cols.map(csvEscape).join(','));
 
     for (const r of rows) {
+      const isFinanceCase = String(r?.snooze_scope || '').trim().toUpperCase() === 'FINANCE_CASE';
       lines.push([
         r?.snooze_scope ?? '',
-        r?.row_label ?? '',
+        normalizeRowLabel(r),
         r?.case_type ?? '',
         r?.candidate_tms_ref ?? '',
         r?.candidate_tms_ref_num ?? '',
@@ -9634,7 +9763,15 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
         r?.start_week_start ?? '',
         r?.next_due_week_start ?? '',
         r?.adjustment_comment ?? '',
-        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json)
+        r?.schedule_json == null ? '' : JSON.stringify(r.schedule_json),
+        isFinanceCase ? String(r?.is_mixed_case === true) : '',
+        isFinanceCase && r?.open_taxable_count != null ? r.open_taxable_count : '',
+        isFinanceCase && r?.open_reimbursement_count != null ? r.open_reimbursement_count : '',
+        isFinanceCase && r?.unresolved_taxable_count != null ? r.unresolved_taxable_count : '',
+        isFinanceCase && r?.stale_count != null ? r.stale_count : '',
+        isFinanceCase
+          ? (r?.component_resolution_summary_json == null ? '' : JSON.stringify(r.component_resolution_summary_json))
+          : ''
       ].map(csvEscape).join(','));
     }
 
@@ -9653,6 +9790,7 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_CSV_FAILED')));
   }
 }
+
 async function handleBankingSnoozesExportPdf(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -9734,6 +9872,72 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
       }
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const normalizeRowLabel = (row) => {
+    const raw = String(row?.row_label || '').trim();
+    if (raw) return raw;
+    const caseTypeRaw = String(row?.case_type || '').trim().toUpperCase();
+    if (caseTypeRaw === 'UNDERPAYMENT') return 'Underpayment';
+    if (caseTypeRaw === 'OVERPAYMENT') return 'Overpayment';
+    if (caseTypeRaw === 'PAYMENT_ADVANCE') return 'Payment Advance';
+    if (caseTypeRaw === 'MANUAL_DEBT_ADJUSTMENT') return 'Manual Debt Adjustment';
+    if (caseTypeRaw === 'MANUAL_CREDIT_ADJUSTMENT') return 'Manual Credit Adjustment';
+    return 'Finance Case';
+  };
+
+  const parseComponentSummary = (raw) => {
+    if (raw == null) return null;
+    if (typeof raw === 'object') return raw;
+    const s = String(raw).trim();
+    if (!s) return null;
+    try {
+      return JSON.parse(s);
+    } catch {
+      return s;
+    }
+  };
+
+  const summarizeComponentResolution = (raw) => {
+    const parsed = parseComponentSummary(raw);
+    if (!parsed) return '';
+    if (typeof parsed === 'string') return parsed;
+
+    if (Array.isArray(parsed)) {
+      const parts = [];
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object') continue;
+        const label =
+          String(item.label || item.component_label || item.component_key_value || item.component_key_type || '').trim();
+        const resolutionMode = String(item.resolution_mode || item.saved_resolution_mode || '').trim();
+        const stale = item.is_stale === true || item.stale === true;
+        const unresolved =
+          item.is_unresolved === true ||
+          item.unresolved === true ||
+          (String(item.status || '').trim().toUpperCase() === 'UNRESOLVED');
+        const bits = [];
+        if (label) bits.push(label);
+        if (resolutionMode) bits.push(resolutionMode);
+        if (unresolved) bits.push('UNRESOLVED');
+        if (stale) bits.push('STALE');
+        if (bits.length) parts.push(bits.join(' / '));
+      }
+      return parts.join(' | ');
+    }
+
+    if (typeof parsed === 'object') {
+      const parts = [];
+      if (parsed.is_mixed_case === true || parsed.mixed === true) parts.push('Mixed');
+      if (Number.isFinite(Number(parsed.open_taxable_count))) parts.push(`Taxable open: ${Number(parsed.open_taxable_count)}`);
+      if (Number.isFinite(Number(parsed.open_reimbursement_count))) parts.push(`Reimbursement open: ${Number(parsed.open_reimbursement_count)}`);
+      if (Number.isFinite(Number(parsed.unresolved_taxable_count))) parts.push(`Unresolved taxable: ${Number(parsed.unresolved_taxable_count)}`);
+      if (Number.isFinite(Number(parsed.stale_count))) parts.push(`Stale: ${Number(parsed.stale_count)}`);
+      const summaryText = String(parsed.summary_text || parsed.text || '').trim();
+      if (summaryText) parts.push(summaryText);
+      return parts.join(' • ');
+    }
+
+    return '';
   };
 
   const createdFromRaw = parseNullableText(q('created_from'), q('createdFrom'), q('date_from'), q('dateFrom'));
@@ -9897,6 +10101,8 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
       y -= 12;
 
       for (const r of list) {
+        const isFinanceCase = String(r?.snooze_scope || '').trim().toUpperCase() === 'FINANCE_CASE';
+        const rowLabel = normalizeRowLabel(r);
         const candidateTxt =
           safeStr(r?.candidate_display_name || '').trim() ||
           [safeStr(r?.candidate_first_name || '').trim(), safeStr(r?.candidate_last_name || '').trim()].filter(Boolean).join(' ').trim() ||
@@ -9910,7 +10116,7 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
         const visibilityTxt = safeStr(r?.current_visibility_status || '').trim() || '—';
         const linkedTxt = r?.snooze_scope === 'TIMESHEET_PAYMENT'
           ? (safeStr(r?.linked_timesheet_booking_id || '').trim() || safeStr(r?.linked_timesheet_reference_number || '').trim() || 'Timesheet payment')
-          : (safeStr(r?.row_label || '').trim() || 'Finance case');
+          : rowLabel;
 
         const candidateLines = wrapText(candidateTxt, cols.candidate.w, small, false);
         const clientLines = wrapText(clientTxt, cols.client.w, small, false);
@@ -9957,6 +10163,19 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
         if (Number.isFinite(Number(r?.outstanding_amount))) subBits.push(`Outstanding: ${asMoney(r.outstanding_amount)}`);
         if (Number.isFinite(Number(r?.weekly_due)) && Number(r.weekly_due) > 0) subBits.push(`Weekly due: ${asMoney(r.weekly_due)}`);
 
+        if (isFinanceCase) {
+          const componentStateBits = [];
+          if (r?.is_mixed_case === true) componentStateBits.push('Mixed case');
+          if (Number.isFinite(Number(r?.open_taxable_count))) componentStateBits.push(`Taxable open: ${Number(r.open_taxable_count)}`);
+          if (Number.isFinite(Number(r?.open_reimbursement_count))) componentStateBits.push(`Reimbursement open: ${Number(r.open_reimbursement_count)}`);
+          if (Number.isFinite(Number(r?.unresolved_taxable_count))) componentStateBits.push(`Unresolved taxable: ${Number(r.unresolved_taxable_count)}`);
+          if (Number.isFinite(Number(r?.stale_count))) componentStateBits.push(`Stale: ${Number(r.stale_count)}`);
+          if (componentStateBits.length) subBits.push(`Components: ${componentStateBits.join(', ')}`);
+
+          const componentSummary = summarizeComponentResolution(r?.component_resolution_summary_json);
+          if (componentSummary) subBits.push(`Resolution: ${componentSummary}`);
+        }
+
         if (subBits.length) {
           ensureSpace(lineH);
           drawText(subBits.join('   •   '), margin + 10, y, 7.5, false, rgb(0.35, 0.35, 0.35));
@@ -9993,6 +10212,8 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_PDF_FAILED')));
   }
 }
+
+
 
 async function handleBankingRailAccountsList(env, req, user) {
   try {
@@ -10451,19 +10672,61 @@ async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
     return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
   }
 
+  const buildCommunicationsSummary = (res) => {
+    const communicationMode = String(res?.communication_mode || 'NONE').trim().toUpperCase() || 'NONE';
+
+    const remittanceResult = (res && typeof res === 'object' && res.remittance_result && typeof res.remittance_result === 'object')
+      ? res.remittance_result
+      : null;
+
+    const payoutNoticeResult = (res && typeof res === 'object' && res.payout_notice_result && typeof res.payout_notice_result === 'object')
+      ? res.payout_notice_result
+      : null;
+
+    const remittanceQueuedCount = Number(remittanceResult?.queued_count || 0);
+    const remittanceSkippedCount = Number(remittanceResult?.skipped_count || 0);
+    const payoutNoticeQueuedCount = Number(payoutNoticeResult?.queued_count || 0);
+    const payoutNoticeSkippedCount = Number(payoutNoticeResult?.skipped_count || 0);
+
+    const queuedCount = Number(res?.queued_count || (remittanceQueuedCount + payoutNoticeQueuedCount) || 0);
+    const skippedCount = Number(res?.skipped_count || (remittanceSkippedCount + payoutNoticeSkippedCount) || 0);
+
+    return {
+      communication_mode: communicationMode,
+      sent_or_queued: queuedCount > 0,
+      queued_count: queuedCount,
+      skipped_count: skippedCount,
+      remittances: {
+        trigger_status: String(remittanceResult?.trigger_status || '').trim() || null,
+        queued_count: remittanceQueuedCount,
+        skipped_count: remittanceSkippedCount
+      },
+      payout_notices: {
+        trigger_status: String(payoutNoticeResult?.trigger_status || '').trim() || null,
+        queued_count: payoutNoticeQueuedCount,
+        skipped_count: payoutNoticeSkippedCount
+      }
+    };
+  };
+
   try {
     const res = await sendPayBatchRemittancesInternal(env, {
       payBatchId,
       scope,
       actorUserId: user.id
     });
-    return withCORS(env, req, ok(res));
+
+    const communicationsSummary = buildCommunicationsSummary(res);
+
+    return withCORS(env, req, ok({
+      ...res,
+      communications_summary: communicationsSummary
+    }));
   } catch (e) {
     const msg = String(e?.message || e || 'REM_SEND_FAILED');
     return withCORS(env, req, serverError(msg));
   }
 }
-
 async function sendPayBatchRemittancesInternal(env, opts) {
   const payBatchId = opts && opts.payBatchId ? String(opts.payBatchId) : '';
   const actorUserId = opts && opts.actorUserId ? String(opts.actorUserId) : '';
@@ -10494,9 +10757,6 @@ async function sendPayBatchRemittancesInternal(env, opts) {
   }
 
   const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
-  const batchKindFixed = String(batchObj?.batch_kind_fixed || '').trim().toUpperCase();
-  const isPayoutNoticeBatch = batchKindFixed === 'LOANS';
-  const messageKind = isPayoutNoticeBatch ? 'PAYOUT_NOTICE' : 'REMITTANCE';
 
   let payrollTesting = false;
   let settingsHeaderMsg = null;
@@ -10536,83 +10796,58 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     testTo = remittanceTestRecipientEmail.trim();
   }
 
-  let helperRes = null;
-  try {
-    const helperRpcRes = isPayoutNoticeBatch
-      ? await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
-          p_pay_batch_id: payBatchId,
-          p_actor_user_id: actorUserId
-        })
-      : await sbRpc(env, 'pay_remittance_queue_commit_stage', {
-          p_pay_batch_id: payBatchId,
-          p_scope: scope,
-          p_actor_user_id: actorUserId
-        });
+  const callQueueStage = async (commKind) => {
+    try {
+      const helperRpcRes = (commKind === 'PAYOUT_NOTICE')
+        ? await sbRpc(env, 'pay_finance_payout_notice_queue_commit_stage', {
+            p_pay_batch_id: payBatchId,
+            p_actor_user_id: actorUserId
+          })
+        : await sbRpc(env, 'pay_remittance_queue_commit_stage', {
+            p_pay_batch_id: payBatchId,
+            p_scope: scope,
+            p_actor_user_id: actorUserId
+          });
 
-    helperRes = unwrapRpc(
-      helperRpcRes,
-      isPayoutNoticeBatch ? 'pay_finance_payout_notice_queue_commit_stage' : 'pay_remittance_queue_commit_stage'
-    );
-  } catch (e) {
-    const msg = (e && e.message) ? String(e.message) : String(e || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED'));
-    throw new Error(msg);
-  }
+      const helperRes = unwrapRpc(
+        helperRpcRes,
+        commKind === 'PAYOUT_NOTICE'
+          ? 'pay_finance_payout_notice_queue_commit_stage'
+          : 'pay_remittance_queue_commit_stage'
+      );
 
-  if (!helperRes || typeof helperRes !== 'object') {
-    throw new Error(isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED');
-  }
+      if (!helperRes || typeof helperRes !== 'object') {
+        throw new Error(commKind === 'PAYOUT_NOTICE' ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED');
+      }
 
-  if (helperRes.ok === false) {
-    throw new Error(String(helperRes.error || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED')));
-  }
+      if (helperRes.ok === false) {
+        throw new Error(String(helperRes.error || (commKind === 'PAYOUT_NOTICE' ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED')));
+      }
+
+      return helperRes;
+    } catch (e) {
+      const fallback = commKind === 'PAYOUT_NOTICE' ? 'PAYOUT_NOTICE_BUILD_FAILED' : 'REM_BUILD_FAILED';
+      const msg = (e && e.message) ? String(e.message) : String(e || fallback);
+      throw new Error(msg);
+    }
+  };
+
+  const remittanceHelperRes = await callQueueStage('REMITTANCE');
+  const payoutNoticeHelperRes = await callQueueStage('PAYOUT_NOTICE');
 
   let headerMsgFromBuild = null;
   let footerMsgFromBuild = null;
 
-  if (!isPayoutNoticeBatch) {
-    try {
-      const buildRes0 = await sbRpc(env, 'pay_remittance_build', {
-        p_pay_batch_id: payBatchId,
-        p_scope: scope
-      });
-      const buildRes = unwrapRpc(buildRes0, 'pay_remittance_build');
+  try {
+    const buildRes0 = await sbRpc(env, 'pay_remittance_build', {
+      p_pay_batch_id: payBatchId,
+      p_scope: scope
+    });
+    const buildRes = unwrapRpc(buildRes0, 'pay_remittance_build');
 
-      headerMsgFromBuild = (buildRes && typeof buildRes.remittance_header_message === 'string') ? buildRes.remittance_header_message : null;
-      footerMsgFromBuild = (buildRes && typeof buildRes.remittance_footer_message === 'string') ? buildRes.remittance_footer_message : null;
-    } catch {}
-  }
-
-  const jobs = Array.isArray(helperRes?.jobs) ? helperRes.jobs : [];
-  const helperCandidateResults = Array.isArray(helperRes?.candidate_results) ? helperRes.candidate_results : [];
-  const authoritativePaymentDate =
-    (helperRes && helperRes.authoritative_payment_date != null && String(helperRes.authoritative_payment_date).trim())
-      ? String(helperRes.authoritative_payment_date).trim()
-      : ((batchObj && batchObj.authoritative_payment_date != null && String(batchObj.authoritative_payment_date).trim())
-          ? String(batchObj.authoritative_payment_date).trim()
-          : null);
-
-  const payDate =
-    (helperRes && helperRes.pay_date != null && String(helperRes.pay_date).trim())
-      ? String(helperRes.pay_date).trim()
-      : ((helperRes && helperRes.scheduled_payment_date != null && String(helperRes.scheduled_payment_date).trim())
-          ? String(helperRes.scheduled_payment_date).trim()
-          : (authoritativePaymentDate || ((batchObj && batchObj.pay_date != null && String(batchObj.pay_date).trim()) ? String(batchObj.pay_date).trim() : null)));
-
-  const bulkRef =
-    (helperRes && helperRes.bulk_reference != null && String(helperRes.bulk_reference).trim())
-      ? String(helperRes.bulk_reference).trim()
-      : ((batchObj && batchObj.bulk_reference != null && String(batchObj.bulk_reference).trim()) ? String(batchObj.bulk_reference).trim() : null);
-
-  const headerMsg = (headerMsgFromBuild && headerMsgFromBuild.trim().length)
-    ? headerMsgFromBuild
-    : (settingsHeaderMsg && settingsHeaderMsg.trim().length ? settingsHeaderMsg : null);
-
-  const footerMsg = (footerMsgFromBuild && footerMsgFromBuild.trim().length)
-    ? footerMsgFromBuild
-    : (settingsFooterMsg && settingsFooterMsg.trim().length ? settingsFooterMsg : null);
-
-  const queued = [];
-  const skipped = [];
+    headerMsgFromBuild = (buildRes && typeof buildRes.remittance_header_message === 'string') ? buildRes.remittance_header_message : null;
+    footerMsgFromBuild = (buildRes && typeof buildRes.remittance_footer_message === 'string') ? buildRes.remittance_footer_message : null;
+  } catch {}
 
   const asMoney = (v) => {
     const n = Number(v);
@@ -10884,220 +11119,336 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     }
   };
 
-  for (const helperCandidate of helperCandidateResults) {
-    const hasJob = helperCandidate && helperCandidate.has_job === true;
-    if (hasJob) continue;
+  const resolveResultMeta = (helperRes) => {
+    const authoritativePaymentDate =
+      (helperRes && helperRes.authoritative_payment_date != null && String(helperRes.authoritative_payment_date).trim())
+        ? String(helperRes.authoritative_payment_date).trim()
+        : ((batchObj && batchObj.authoritative_payment_date != null && String(batchObj.authoritative_payment_date).trim())
+            ? String(batchObj.authoritative_payment_date).trim()
+            : null);
 
-    const candidateIdText = (helperCandidate && helperCandidate.candidate_id != null) ? String(helperCandidate.candidate_id).trim() : '';
-    const candidateDisplayName = (helperCandidate && helperCandidate.candidate_display_name != null) ? String(helperCandidate.candidate_display_name).trim() : '';
-    const candidateTmsRef = (helperCandidate && helperCandidate.candidate_tms_ref != null) ? String(helperCandidate.candidate_tms_ref).trim() : '';
-    const triggerStatusText = (helperCandidate && helperCandidate.trigger_status != null) ? String(helperCandidate.trigger_status).trim().toUpperCase() : 'NO_QUEUEABLE_JOB';
+    const payDate =
+      (helperRes && helperRes.pay_date != null && String(helperRes.pay_date).trim())
+        ? String(helperRes.pay_date).trim()
+        : ((helperRes && helperRes.scheduled_payment_date != null && String(helperRes.scheduled_payment_date).trim())
+            ? String(helperRes.scheduled_payment_date).trim()
+            : (authoritativePaymentDate || ((batchObj && batchObj.pay_date != null && String(batchObj.pay_date).trim()) ? String(batchObj.pay_date).trim() : null)));
 
-    skipped.push({
-      job_kind: messageKind,
-      payee_entity_kind: 'CANDIDATE',
-      payee_entity_id: candidateIdText || null,
-      candidate_id: candidateIdText || null,
-      candidate_display_name: candidateDisplayName || null,
-      candidate_tms_ref: candidateTmsRef || null,
-      reason: triggerStatusText || 'NO_QUEUEABLE_JOB',
-      trigger_status: triggerStatusText || 'NO_QUEUEABLE_JOB'
-    });
-  }
+    const bulkRef =
+      (helperRes && helperRes.bulk_reference != null && String(helperRes.bulk_reference).trim())
+        ? String(helperRes.bulk_reference).trim()
+        : ((batchObj && batchObj.bulk_reference != null && String(batchObj.bulk_reference).trim()) ? String(batchObj.bulk_reference).trim() : null);
 
-  for (const job of jobs) {
-    const jobKindRaw = String(job?.job_kind || '').trim().toUpperCase();
+    return {
+      authoritativePaymentDate,
+      payDate,
+      bulkRef
+    };
+  };
 
-    const isUmbrellaJob = !isPayoutNoticeBatch && (jobKindRaw === 'UMBRELLA_REMITTANCE');
-    const isPayeJob = !isPayoutNoticeBatch && (jobKindRaw === 'PAYE_REMITTANCE');
-    const isUmbrellaCopyJob = !isPayoutNoticeBatch && (jobKindRaw === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE');
+  const processHelperResult = async (commKind, helperRes) => {
+    const isPayoutNotice = commKind === 'PAYOUT_NOTICE';
+    const jobs = Array.isArray(helperRes?.jobs) ? helperRes.jobs : [];
+    const helperCandidateResults = Array.isArray(helperRes?.candidate_results) ? helperRes.candidate_results : [];
+    const { authoritativePaymentDate, payDate, bulkRef } = resolveResultMeta(helperRes);
 
-    if (!isPayoutNoticeBatch && !isUmbrellaJob && !isPayeJob && !isUmbrellaCopyJob) {
+    const headerMsg = (!isPayoutNotice && headerMsgFromBuild && headerMsgFromBuild.trim().length)
+      ? headerMsgFromBuild
+      : (settingsHeaderMsg && settingsHeaderMsg.trim().length ? settingsHeaderMsg : null);
+
+    const footerMsg = (!isPayoutNotice && footerMsgFromBuild && footerMsgFromBuild.trim().length)
+      ? footerMsgFromBuild
+      : (settingsFooterMsg && settingsFooterMsg.trim().length ? settingsFooterMsg : null);
+
+    const queued = [];
+    const skipped = [];
+
+    for (const helperCandidate of helperCandidateResults) {
+      const hasJob = helperCandidate && helperCandidate.has_job === true;
+      if (hasJob) continue;
+
+      const candidateIdText = (helperCandidate && helperCandidate.candidate_id != null) ? String(helperCandidate.candidate_id).trim() : '';
+      const candidateDisplayName = (helperCandidate && helperCandidate.candidate_display_name != null) ? String(helperCandidate.candidate_display_name).trim() : '';
+      const candidateTmsRef = (helperCandidate && helperCandidate.candidate_tms_ref != null) ? String(helperCandidate.candidate_tms_ref).trim() : '';
+      const triggerStatusText = (helperCandidate && helperCandidate.trigger_status != null) ? String(helperCandidate.trigger_status).trim().toUpperCase() : 'NO_QUEUEABLE_JOB';
+
       skipped.push({
-        job_kind: jobKindRaw || null,
-        reason: 'UNKNOWN_JOB_KIND',
-        trigger_status: 'UNKNOWN_JOB_KIND'
+        comm_kind: commKind,
+        job_kind: commKind,
+        payee_entity_kind: 'CANDIDATE',
+        payee_entity_id: candidateIdText || null,
+        candidate_id: candidateIdText || null,
+        candidate_display_name: candidateDisplayName || null,
+        candidate_tms_ref: candidateTmsRef || null,
+        reason: triggerStatusText || 'NO_QUEUEABLE_JOB',
+        trigger_status: triggerStatusText || 'NO_QUEUEABLE_JOB'
       });
-      continue;
     }
 
-    const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
-    const detailed = !!(job && job.detailed_breakdown === true);
+    for (const job of jobs) {
+      const jobKindRaw = String(job?.job_kind || '').trim().toUpperCase();
 
-    const toEmailRaw =
-      isPayoutNoticeBatch
-        ? (job?.recipient_email ?? job?.email ?? recipient?.email ?? recipient?.remittance_email ?? null)
-        : (isUmbrellaJob
-            ? (recipient?.remittance_email ?? recipient?.email ?? null)
-            : (recipient?.email ?? recipient?.remittance_email ?? null));
+      const isUmbrellaJob = !isPayoutNotice && (jobKindRaw === 'UMBRELLA_REMITTANCE');
+      const isPayeJob = !isPayoutNotice && (jobKindRaw === 'PAYE_REMITTANCE');
+      const isUmbrellaCopyJob = !isPayoutNotice && (jobKindRaw === 'CANDIDATE_UMBRELLA_COPY_REMITTANCE');
 
-    const intendedToEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
-    const toEmail = testTo ? testTo : intendedToEmail;
+      if (!isPayoutNotice && !isUmbrellaJob && !isPayeJob && !isUmbrellaCopyJob) {
+        skipped.push({
+          comm_kind: commKind,
+          job_kind: jobKindRaw || null,
+          reason: 'UNKNOWN_JOB_KIND',
+          trigger_status: 'UNKNOWN_JOB_KIND'
+        });
+        continue;
+      }
 
-    const candidateIdFromJob = isPayoutNoticeBatch
-      ? String(job?.candidate_id ?? recipient?.candidate_id ?? '').trim()
-      : String(recipient?.candidate_id || '').trim();
+      const recipient = (job && typeof job.recipient === 'object' && job.recipient) ? job.recipient : {};
+      const detailed = !!(job && job.detailed_breakdown === true);
 
-    const umbrellaIdFromJob = !isPayoutNoticeBatch
-      ? String(recipient?.umbrella_id || '').trim()
-      : '';
+      const toEmailRaw =
+        isPayoutNotice
+          ? (job?.recipient_email ?? job?.email ?? recipient?.email ?? recipient?.remittance_email ?? null)
+          : (isUmbrellaJob
+              ? (recipient?.remittance_email ?? recipient?.email ?? null)
+              : (recipient?.email ?? recipient?.remittance_email ?? null));
 
-    if (!toEmail) {
-      skipped.push({
-        job_kind: jobKindRaw || (isPayoutNoticeBatch ? 'PAYOUT_NOTICE' : null),
-        payee_entity_kind: isPayoutNoticeBatch ? 'CANDIDATE' : (recipient?.entity_kind ?? null),
-        payee_entity_id: isPayoutNoticeBatch ? (candidateIdFromJob || null) : (recipient?.candidate_id ?? recipient?.umbrella_id ?? null),
-        candidate_id: candidateIdFromJob || null,
-        umbrella_id: umbrellaIdFromJob || null,
-        reason: 'NO_EMAIL',
-        trigger_status: 'NO_EMAIL'
-      });
-      continue;
-    }
+      const intendedToEmail = (toEmailRaw && String(toEmailRaw).trim()) ? String(toEmailRaw).trim() : null;
+      const toEmail = testTo ? testTo : intendedToEmail;
 
-    const jobTestMode = !!(job && job.test_mode === true);
-    const effectiveTestMode = !!(jobTestMode || payrollTesting);
+      const candidateIdFromJob = isPayoutNotice
+        ? String(job?.candidate_id ?? recipient?.candidate_id ?? '').trim()
+        : String(recipient?.candidate_id || '').trim();
 
-    const payPeriodLabel = payDate ? payDate : 'Pay run';
+      const umbrellaIdFromJob = !isPayoutNotice
+        ? String(recipient?.umbrella_id || '').trim()
+        : '';
 
-    let subjectSuffix = 'Remittance Advice';
-    if (isUmbrellaJob) subjectSuffix = 'Remittance Advice – Umbrella';
-    if (isPayeJob) subjectSuffix = 'Remittance Advice – PAYE';
-    if (isUmbrellaCopyJob) subjectSuffix = 'Remittance Advice – Umbrella copy';
+      if (!toEmail) {
+        skipped.push({
+          comm_kind: commKind,
+          job_kind: jobKindRaw || commKind,
+          payee_entity_kind: isPayoutNotice ? 'CANDIDATE' : (recipient?.entity_kind ?? null),
+          payee_entity_id: isPayoutNotice ? (candidateIdFromJob || null) : (recipient?.candidate_id ?? recipient?.umbrella_id ?? null),
+          candidate_id: candidateIdFromJob || null,
+          umbrella_id: umbrellaIdFromJob || null,
+          reason: 'NO_EMAIL',
+          trigger_status: 'NO_EMAIL'
+        });
+        continue;
+      }
 
-    const defaultSubject = effectiveTestMode ? `[TEST MODE] ${subjectSuffix} – ${payPeriodLabel}` : `${subjectSuffix} – ${payPeriodLabel}`;
-    const basePayoutSubject = String(job?.subject || '').trim();
-    const payoutSubject = (() => {
-      if (!isPayoutNoticeBatch) return defaultSubject;
-      const seed = basePayoutSubject || `Payment notice – ${payPeriodLabel}`;
-      if (!effectiveTestMode) return seed;
-      return /^\[TEST MODE\]/i.test(seed) ? seed : `[TEST MODE] ${seed}`;
-    })();
+      const jobTestMode = !!(job && job.test_mode === true);
+      const effectiveTestMode = !!(jobTestMode || payrollTesting);
 
-    const subject = isPayoutNoticeBatch ? payoutSubject : defaultSubject;
+      const payPeriodLabel = payDate ? payDate : 'Pay run';
 
-    const lines = [];
-    if (headerMsg) {
-      lines.push(headerMsg);
-      lines.push('');
-    }
+      let subjectSuffix = 'Remittance Advice';
+      if (!isPayoutNotice && isUmbrellaJob) subjectSuffix = 'Remittance Advice – Umbrella';
+      if (!isPayoutNotice && isPayeJob) subjectSuffix = 'Remittance Advice – PAYE';
+      if (!isPayoutNotice && isUmbrellaCopyJob) subjectSuffix = 'Remittance Advice – Umbrella copy';
 
-    if (effectiveTestMode) {
-      if (payrollTesting) {
-        lines.push('PAYROLL TEST MODE — remittances routed to test recipient');
-        lines.push(`Test recipient: ${testTo}`);
-        if (intendedToEmail) lines.push(`Intended recipient: ${intendedToEmail}`);
-        lines.push('');
-      } else {
-        lines.push('SIMULATED / TEST MODE — no bank payment was submitted');
+      const defaultSubject = effectiveTestMode ? `[TEST MODE] ${subjectSuffix} – ${payPeriodLabel}` : `${subjectSuffix} – ${payPeriodLabel}`;
+      const basePayoutSubject = String(job?.subject || '').trim();
+      const payoutSubject = (() => {
+        if (!isPayoutNotice) return defaultSubject;
+        const seed = basePayoutSubject || `Payment notice – ${payPeriodLabel}`;
+        if (!effectiveTestMode) return seed;
+        return /^\[TEST MODE\]/i.test(seed) ? seed : `[TEST MODE] ${seed}`;
+      })();
+
+      const subject = isPayoutNotice ? payoutSubject : defaultSubject;
+
+      const lines = [];
+      if (headerMsg) {
+        lines.push(headerMsg);
         lines.push('');
       }
-    }
 
-    if (isPayoutNoticeBatch) {
-      const payoutScheduledDate =
-        String(job?.scheduled_payment_date || authoritativePaymentDate || payDate || '').trim();
-
-      const candidateDisplay = [
-        String(job?.candidate_display_name || job?.display_name || recipient?.display_name || '').trim(),
-        String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()
-          ? `(${String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()})`
-          : ''
-      ].filter(Boolean).join(' ') || '(unknown)';
-
-      lines.push('Payment Notice');
-      if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
-      if (payoutScheduledDate) lines.push(`Scheduled payment date: ${payoutScheduledDate}`);
-      lines.push(`Pay batch: ${payBatchId}`);
-      lines.push(`Scope: ${scope}`);
-      lines.push(`Candidate: ${candidateDisplay}`);
-      lines.push('');
-
-      const items = Array.isArray(job?.items) ? job.items : [];
-      if (items.length) {
-        lines.push('Items');
-        for (const item of items) {
-          const label = String(
-            item?.label ??
-            item?.title ??
-            item?.kind ??
-            item?.type ??
-            item?.item_type ??
-            'Payment item'
-          ).trim();
-
-          const amountVal =
-            item?.amount ??
-            item?.total ??
-            item?.value ??
-            item?.scheduled_amount ??
-            item?.payment_amount ??
-            null;
-          const amountNum = asNum(amountVal);
-
-          const commentText = String(
-            item?.adjustment_comment ??
-            item?.comment ??
-            item?.note ??
-            ''
-          ).trim();
-
-          const scheduleText = stringifyPayoutSchedule(
-            item?.repayment_arrangement ??
-            item?.repayment_schedule ??
-            item?.schedule ??
-            job?.repayment_arrangement ??
-            job?.repayment_schedule
-          );
-
-          const lineMain = `${label}${amountNum != null ? ` — £${asMoney(amountNum)}` : ''}`;
-          lines.push(lineMain);
-          if (commentText) lines.push(`Comment: ${commentText}`);
-          if (scheduleText) lines.push(`Repayment arrangement: ${scheduleText}`);
-          lines.push('');
-        }
-      } else {
-        const bodyLines = Array.isArray(job?.body_lines) ? job.body_lines : [];
-        if (bodyLines.length) {
-          pushPayoutBodyLines(lines, bodyLines);
+      if (effectiveTestMode) {
+        if (payrollTesting) {
+          lines.push('PAYROLL TEST MODE — communications routed to test recipient');
+          lines.push(`Test recipient: ${testTo}`);
+          if (intendedToEmail) lines.push(`Intended recipient: ${intendedToEmail}`);
           lines.push('');
         } else {
-          const rootScheduleText = stringifyPayoutSchedule(job?.repayment_arrangement ?? job?.repayment_schedule);
-          const rootCommentText = String(job?.adjustment_comment ?? job?.comment ?? '').trim();
-
-          if (rootCommentText) {
-            lines.push(`Comment: ${rootCommentText}`);
-          }
-          if (rootScheduleText) {
-            lines.push(`Repayment arrangement: ${rootScheduleText}`);
-          }
+          lines.push('SIMULATED / TEST MODE — communication generated without live dispatch');
           lines.push('');
         }
       }
 
-      lines.push('This payment notice was generated from frozen pay batch artifacts in CloudTMS.');
-    } else {
-      lines.push('Remittance Advice');
-      if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
-      if (payDate) lines.push(`Pay date: ${payDate}`);
-      lines.push(`Pay batch: ${payBatchId}`);
-      lines.push(`Scope: ${scope}`);
-      lines.push('');
+      if (isPayoutNotice) {
+        const payoutScheduledDate = String(job?.scheduled_payment_date || authoritativePaymentDate || payDate || '').trim();
 
-      if (isUmbrellaJob) {
-        const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
-        if (umbName) {
-          lines.push(`Umbrella: ${umbName}`);
-          lines.push('');
+        const candidateDisplay = [
+          String(job?.candidate_display_name || job?.display_name || recipient?.display_name || '').trim(),
+          String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()
+            ? `(${String(job?.candidate_tms_ref || job?.tms_ref || recipient?.tms_ref || '').trim()})`
+            : ''
+        ].filter(Boolean).join(' ') || '(unknown)';
+
+        lines.push('Payment Notice');
+        if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
+        if (payoutScheduledDate) lines.push(`Scheduled payment date: ${payoutScheduledDate}`);
+        lines.push(`Pay batch: ${payBatchId}`);
+        lines.push(`Scope: ${scope}`);
+        lines.push(`Candidate: ${candidateDisplay}`);
+        lines.push('');
+
+        const items = Array.isArray(job?.items) ? job.items : [];
+        if (items.length) {
+          lines.push('Items');
+          for (const item of items) {
+            const label = String(
+              item?.label ??
+              item?.title ??
+              item?.kind ??
+              item?.type ??
+              item?.item_type ??
+              'Payment item'
+            ).trim();
+
+            const amountVal =
+              item?.amount ??
+              item?.total ??
+              item?.value ??
+              item?.scheduled_amount ??
+              item?.payment_amount ??
+              null;
+            const amountNum = asNum(amountVal);
+
+            const commentText = String(
+              item?.adjustment_comment ??
+              item?.comment ??
+              item?.note ??
+              ''
+            ).trim();
+
+            const scheduleText = stringifyPayoutSchedule(
+              item?.repayment_arrangement ??
+              item?.repayment_schedule ??
+              item?.schedule ??
+              job?.repayment_arrangement ??
+              job?.repayment_schedule
+            );
+
+            const lineMain = `${label}${amountNum != null ? ` — £${asMoney(amountNum)}` : ''}`;
+            lines.push(lineMain);
+            if (commentText) lines.push(`Comment: ${commentText}`);
+            if (scheduleText) lines.push(`Repayment arrangement: ${scheduleText}`);
+            lines.push('');
+          }
+        } else {
+          const bodyLines = Array.isArray(job?.body_lines) ? job.body_lines : [];
+          if (bodyLines.length) {
+            pushPayoutBodyLines(lines, bodyLines);
+            lines.push('');
+          } else {
+            const rootScheduleText = stringifyPayoutSchedule(job?.repayment_arrangement ?? job?.repayment_schedule);
+            const rootCommentText = String(job?.adjustment_comment ?? job?.comment ?? '').trim();
+
+            if (rootCommentText) {
+              lines.push(`Comment: ${rootCommentText}`);
+            }
+            if (rootScheduleText) {
+              lines.push(`Repayment arrangement: ${rootScheduleText}`);
+            }
+            lines.push('');
+          }
         }
 
-        const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
-        for (const c of candidates) {
-          const dn = (c?.display_name && String(c.display_name).trim()) ? String(c.display_name).trim() : '';
-          const tr = (c?.tms_ref && String(c.tms_ref).trim()) ? String(c.tms_ref).trim() : '';
-          const candidateDisplay = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ') || '(unknown)';
+        lines.push('This payment notice was generated from frozen pay batch artifacts in CloudTMS.');
+      } else {
+        lines.push('Remittance Advice');
+        if (bulkRef) lines.push(`Bank reference: ${bulkRef}`);
+        if (payDate) lines.push(`Pay date: ${payDate}`);
+        lines.push(`Pay batch: ${payBatchId}`);
+        lines.push(`Scope: ${scope}`);
+        lines.push('');
 
-          const timesheets = Array.isArray(c?.timesheets) ? c.timesheets : [];
+        if (isUmbrellaJob) {
+          const umbName = (recipient?.name && String(recipient.name).trim()) ? String(recipient.name).trim() : '';
+          if (umbName) {
+            lines.push(`Umbrella: ${umbName}`);
+            lines.push('');
+          }
+
+          const candidates = Array.isArray(job?.candidates) ? job.candidates : [];
+          for (const c of candidates) {
+            const dn = (c?.display_name && String(c.display_name).trim()) ? String(c.display_name).trim() : '';
+            const tr = (c?.tms_ref && String(c.tms_ref).trim()) ? String(c.tms_ref).trim() : '';
+            const candidateDisplay = [dn, tr ? `(${tr})` : ''].filter(Boolean).join(' ') || '(unknown)';
+
+            const timesheets = Array.isArray(c?.timesheets) ? c.timesheets : [];
+            for (const ts of timesheets) {
+              const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
+              renderTimesheetSection(lines, {
+                candidateDisplay,
+                clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
+                weekEnding,
+                jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
+                band: (ts?.band != null) ? String(ts.band) : '',
+                timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
+                renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
+                detailed,
+                unit_rows: ts?.unit_rows,
+                additional_units_rows: ts?.additional_units_rows,
+                expenses_rows: ts?.expenses_rows,
+                other_rows: ts?.other_rows,
+                totals: ts?.totals,
+                schedule_rows: ts?.schedule_rows,
+                schedule_changes: ts?.schedule_changes
+              });
+            }
+          }
+        } else {
+          const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
+          const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
+          const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
+
+          if (isPayeJob) {
+            const adv = (job && typeof job.paye_net_advisory === 'object' && job.paye_net_advisory) ? job.paye_net_advisory : null;
+
+            const originalNet = asNum(adv?.original_net_input);
+            const loanTaken = asNum(adv?.loan_repayment_taken);
+            const overpayTaken = asNum(adv?.overpayment_recovery_taken);
+            const finalNetPaid = asNum(adv?.final_net_paid);
+
+            const hasLoan = (loanTaken != null && loanTaken > 1e-9);
+            const hasOverpay = (overpayTaken != null && overpayTaken > 1e-9);
+
+            const dedTotal = Number(loanTaken || 0) + Number(overpayTaken || 0);
+            const hasAnyDeduction = (dedTotal > 1e-9);
+            const netMissing = (originalNet == null);
+
+            if (adv && (hasAnyDeduction || netMissing)) {
+              lines.push('PAYE net summary');
+
+              if (netMissing) {
+                lines.push('PAYE net not provided\t(advisory — final paid cannot be confirmed until net is entered)');
+              }
+
+              if (originalNet != null) lines.push(`Original PAYE net\t£${asMoney(originalNet) ?? ''}`);
+              else lines.push('Original PAYE net\t(not provided)');
+
+              if (hasLoan) lines.push(`Loan repayment\t-£${asMoney(loanTaken) ?? ''}`);
+              if (hasOverpay) lines.push(`Overpayment recovery\t-£${asMoney(overpayTaken) ?? ''}`);
+
+              if (originalNet != null && hasAnyDeduction) {
+                const computedFinal = Number(originalNet) - Number(dedTotal || 0);
+                lines.push(`Final paid\t£${asMoney(originalNet) ?? ''} − £${asMoney(dedTotal) ?? ''} = £${asMoney(computedFinal) ?? ''}`);
+              } else if (finalNetPaid != null) {
+                lines.push(`Final paid\t£${asMoney(finalNetPaid) ?? ''}`);
+              } else if (originalNet != null) {
+                lines.push(`Final paid\t£${asMoney(originalNet) ?? ''}`);
+              } else {
+                lines.push('Final paid\t(unknown — PAYE net not provided)');
+              }
+
+              lines.push('');
+            }
+          }
+
+          const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
           for (const ts of timesheets) {
             const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
             renderTimesheetSection(lines, {
@@ -11119,116 +11470,138 @@ async function sendPayBatchRemittancesInternal(env, opts) {
             });
           }
         }
-      } else {
-        const displayName = (recipient?.display_name && String(recipient.display_name).trim()) ? String(recipient.display_name).trim() : '';
-        const tmsRef = (recipient?.tms_ref && String(recipient.tms_ref).trim()) ? String(recipient.tms_ref).trim() : '';
-        const candidateDisplay = [displayName, tmsRef ? `(${tmsRef})` : ''].filter(Boolean).join(' ') || '(unknown)';
 
-        if (isPayeJob) {
-          const adv = (job && typeof job.paye_net_advisory === 'object' && job.paye_net_advisory) ? job.paye_net_advisory : null;
-
-          const originalNet = asNum(adv?.original_net_input);
-          const loanTaken = asNum(adv?.loan_repayment_taken);
-          const overpayTaken = asNum(adv?.overpayment_recovery_taken);
-          const finalNetPaid = asNum(adv?.final_net_paid);
-
-          const hasLoan = (loanTaken != null && loanTaken > 1e-9);
-          const hasOverpay = (overpayTaken != null && overpayTaken > 1e-9);
-
-          const dedTotal = Number(loanTaken || 0) + Number(overpayTaken || 0);
-          const hasAnyDeduction = (dedTotal > 1e-9);
-          const netMissing = (originalNet == null);
-
-          if (adv && (hasAnyDeduction || netMissing)) {
-            lines.push('PAYE net summary');
-
-            if (netMissing) {
-              lines.push('PAYE net not provided\t(advisory — final paid cannot be confirmed until net is entered)');
-            }
-
-            if (originalNet != null) lines.push(`Original PAYE net\t£${asMoney(originalNet) ?? ''}`);
-            else lines.push('Original PAYE net\t(not provided)');
-
-            if (hasLoan) lines.push(`Loan repayment\t-£${asMoney(loanTaken) ?? ''}`);
-            if (hasOverpay) lines.push(`Overpayment recovery\t-£${asMoney(overpayTaken) ?? ''}`);
-
-            if (originalNet != null && hasAnyDeduction) {
-              const computedFinal = Number(originalNet) - Number(dedTotal || 0);
-              lines.push(`Final paid\t£${asMoney(originalNet) ?? ''} − £${asMoney(dedTotal) ?? ''} = £${asMoney(computedFinal) ?? ''}`);
-            } else if (finalNetPaid != null) {
-              lines.push(`Final paid\t£${asMoney(finalNetPaid) ?? ''}`);
-            } else if (originalNet != null) {
-              lines.push(`Final paid\t£${asMoney(originalNet) ?? ''}`);
-            } else {
-              lines.push('Final paid\t(unknown — PAYE net not provided)');
-            }
-
-            lines.push('');
-          }
-        }
-
-        const timesheets = Array.isArray(job?.timesheets) ? job.timesheets : [];
-        for (const ts of timesheets) {
-          const weekEnding = ts?.week_ending_date ? fmtDateShort(ts.week_ending_date) : '';
-          renderTimesheetSection(lines, {
-            candidateDisplay,
-            clientName: (ts?.client_name != null) ? String(ts.client_name) : '',
-            weekEnding,
-            jobTitle: (ts?.job_title != null) ? String(ts.job_title) : '',
-            band: (ts?.band != null) ? String(ts.band) : '',
-            timesheetType: (ts?.timesheet_type != null) ? String(ts.timesheet_type) : 'Standard',
-            renderMode: (ts?.timesheet_render_mode != null) ? String(ts.timesheet_render_mode) : 'AGGREGATE',
-            detailed,
-            unit_rows: ts?.unit_rows,
-            additional_units_rows: ts?.additional_units_rows,
-            expenses_rows: ts?.expenses_rows,
-            other_rows: ts?.other_rows,
-            totals: ts?.totals,
-            schedule_rows: ts?.schedule_rows,
-            schedule_changes: ts?.schedule_changes
-          });
-        }
+        lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
       }
 
-      lines.push('This remittance was generated from frozen pay batch artifacts in CloudTMS.');
-    }
+      if (footerMsg) {
+        lines.push('');
+        lines.push(footerMsg);
+      }
 
-    if (footerMsg) {
-      lines.push('');
-      lines.push(footerMsg);
-    }
+      const bodyText = lines.join('\n');
+      const bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
 
-    const bodyText = lines.join('\n');
-    const bodyHtml = `<pre>${escapeHtml(bodyText)}</pre>`;
+      const payeeEntityKind = isPayoutNotice
+        ? 'CANDIDATE'
+        : ((recipient?.entity_kind && String(recipient.entity_kind).trim())
+            ? String(recipient.entity_kind).trim()
+            : (isUmbrellaJob ? 'UMBRELLA' : 'CANDIDATE'));
 
-    const payeeEntityKind = isPayoutNoticeBatch
-      ? 'CANDIDATE'
-      : ((recipient?.entity_kind && String(recipient.entity_kind).trim())
-          ? String(recipient.entity_kind).trim()
-          : (isUmbrellaJob ? 'UMBRELLA' : 'CANDIDATE'));
+      const payeeEntityId = isPayoutNotice
+        ? (candidateIdFromJob || null)
+        : (isUmbrellaJob ? (recipient?.umbrella_id ?? null) : (recipient?.candidate_id ?? null));
 
-    const payeeEntityId = isPayoutNoticeBatch
-      ? (candidateIdFromJob || null)
-      : (isUmbrellaJob ? (recipient?.umbrella_id ?? null) : (recipient?.candidate_id ?? null));
+      const payeeEntityIdText = (payeeEntityId != null) ? String(payeeEntityId).trim() : 'UNKNOWN';
+      const referencePrefix = isPayoutNotice ? 'payout_notice' : 'remit';
+      const reference = `${referencePrefix}:pay_batch:${payBatchId}:${jobKindRaw || commKind}:${payeeEntityKind}:${payeeEntityIdText}`;
 
-    const payeeEntityIdText = (payeeEntityId != null) ? String(payeeEntityId).trim() : 'UNKNOWN';
-    const referencePrefix = isPayoutNoticeBatch ? 'payout_notice' : 'remit';
-    const reference = `${referencePrefix}:pay_batch:${payBatchId}:${jobKindRaw || messageKind}:${payeeEntityKind}:${payeeEntityIdText}`;
+      try {
+        const qType = encodeURIComponent('REMITTANCE');
+        const qTo = encodeURIComponent(toEmail);
+        const qRef = encodeURIComponent(reference);
 
-    try {
-      const qType = encodeURIComponent('REMITTANCE');
-      const qTo = encodeURIComponent(toEmail);
-      const qRef = encodeURIComponent(reference);
+        const { rows: existing } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=id,status,created_at_utc&type=eq.${qType}&to=eq.${qTo}&reference=eq.${qRef}&limit=1`
+        );
 
-      const { rows: existing } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=id,status,created_at_utc&type=eq.${qType}&to=eq.${qTo}&reference=eq.${qRef}&limit=1`
-      );
-
-      if (Array.isArray(existing) && existing.length > 0) {
-        const ex0 = existing[0] || {};
+        if (Array.isArray(existing) && existing.length > 0) {
+          const ex0 = existing[0] || {};
+          skipped.push({
+            comm_kind: commKind,
+            job_kind: jobKindRaw || commKind,
+            payee_entity_kind: payeeEntityKind,
+            payee_entity_id: payeeEntityIdText,
+            candidate_id: candidateIdFromJob || null,
+            umbrella_id: umbrellaIdFromJob || null,
+            to: toEmail,
+            intended_to: intendedToEmail,
+            subject,
+            reference,
+            reason: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
+            trigger_status: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
+            existing_mail_outbox_id: ex0.id ? String(ex0.id) : null,
+            existing_status: ex0.status ? String(ex0.status) : null
+          });
+          continue;
+        }
+      } catch (e) {
         skipped.push({
-          job_kind: jobKindRaw || messageKind,
+          comm_kind: commKind,
+          job_kind: jobKindRaw || commKind,
+          payee_entity_kind: payeeEntityKind,
+          payee_entity_id: payeeEntityIdText,
+          candidate_id: candidateIdFromJob || null,
+          umbrella_id: umbrellaIdFromJob || null,
+          to: toEmail,
+          intended_to: intendedToEmail,
+          reason: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
+          trigger_status: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
+          error: String(e?.message || e || 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED').slice(0, 500)
+        });
+        continue;
+      }
+
+      const recipientKindLower = (String(payeeEntityKind || '').trim().toUpperCase() === 'UMBRELLA') ? 'umbrella' : 'candidate';
+      const contextId = isUuid(payBatchId) ? payBatchId : null;
+
+      const outboxRow = {
+        type: 'REMITTANCE',
+        to: toEmail,
+        cc: null,
+        bcc: null,
+        reply_to: null,
+        importance: 'Normal',
+        email_type: 'html',
+        subject,
+        body_text: bodyText,
+        body_html: bodyHtml,
+        attachments: null,
+        status: 'QUEUED',
+        reference,
+        created_by: actorUserId || null,
+        created_at_utc: nowIso,
+        recipient_kind: recipientKindLower,
+        recipient_id: (payeeEntityId != null && isUuid(payeeEntityIdText)) ? payeeEntityIdText : null,
+        context_kind: 'pay_batches',
+        context_id: contextId,
+        mailshot_run_id: null,
+        document_template_id: null
+      };
+
+      try {
+        const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
+          method: 'POST',
+          headers: { ...sbHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify(outboxRow)
+        });
+
+        if (!ins.ok) {
+          const errTxt = await ins.text().catch(() => '');
+          skipped.push({
+            comm_kind: commKind,
+            job_kind: jobKindRaw || commKind,
+            payee_entity_kind: payeeEntityKind,
+            payee_entity_id: payeeEntityIdText,
+            candidate_id: candidateIdFromJob || null,
+            umbrella_id: umbrellaIdFromJob || null,
+            to: toEmail,
+            intended_to: intendedToEmail,
+            reason: 'MAIL_OUTBOX_INSERT_FAILED',
+            trigger_status: 'MAIL_OUTBOX_INSERT_FAILED',
+            error: (errTxt || '').slice(0, 500)
+          });
+          continue;
+        }
+
+        const insJson = await ins.json().catch(() => []);
+        const mail = Array.isArray(insJson) ? insJson[0] : insJson;
+        const mailId = mail?.id ? String(mail.id) : null;
+
+        queued.push({
+          comm_kind: commKind,
+          job_kind: jobKindRaw || commKind,
           payee_entity_kind: payeeEntityKind,
           payee_entity_id: payeeEntityIdText,
           candidate_id: candidateIdFromJob || null,
@@ -11237,133 +11610,121 @@ async function sendPayBatchRemittancesInternal(env, opts) {
           intended_to: intendedToEmail,
           subject,
           reference,
-          reason: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
-          trigger_status: 'MAIL_OUTBOX_DUPLICATE_EXISTS',
-          existing_mail_outbox_id: ex0.id ? String(ex0.id) : null,
-          existing_status: ex0.status ? String(ex0.status) : null
+          trigger_status: 'QUEUED_TO_MAIL_OUTBOX',
+          mail_outbox_id: mailId
         });
-        continue;
-      }
-    } catch (e) {
-      skipped.push({
-        job_kind: jobKindRaw || messageKind,
-        payee_entity_kind: payeeEntityKind,
-        payee_entity_id: payeeEntityIdText,
-        candidate_id: candidateIdFromJob || null,
-        umbrella_id: umbrellaIdFromJob || null,
-        to: toEmail,
-        intended_to: intendedToEmail,
-        reason: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
-        trigger_status: 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED',
-        error: String(e?.message || e || 'MAIL_OUTBOX_DEDUPE_CHECK_FAILED').slice(0, 500)
-      });
-      continue;
-    }
-
-    const recipientKindLower = (String(payeeEntityKind || '').trim().toUpperCase() === 'UMBRELLA') ? 'umbrella' : 'candidate';
-    const contextId = isUuid(payBatchId) ? payBatchId : null;
-
-    const outboxRow = {
-      type: 'REMITTANCE',
-      to: toEmail,
-      cc: null,
-      bcc: null,
-      reply_to: null,
-      importance: 'Normal',
-      email_type: 'html',
-      subject,
-      body_text: bodyText,
-      body_html: bodyHtml,
-      attachments: null,
-      status: 'QUEUED',
-      reference,
-      created_by: actorUserId || null,
-      created_at_utc: nowIso,
-      recipient_kind: recipientKindLower,
-      recipient_id: (payeeEntityId != null && isUuid(payeeEntityIdText)) ? payeeEntityIdText : null,
-      context_kind: 'pay_batches',
-      context_id: contextId,
-      mailshot_run_id: null,
-      document_template_id: null
-    };
-
-    try {
-      const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
-        body: JSON.stringify(outboxRow)
-      });
-
-      if (!ins.ok) {
-        const errTxt = await ins.text().catch(() => '');
+      } catch (e) {
         skipped.push({
-          job_kind: jobKindRaw || messageKind,
+          comm_kind: commKind,
+          job_kind: jobKindRaw || commKind,
           payee_entity_kind: payeeEntityKind,
           payee_entity_id: payeeEntityIdText,
           candidate_id: candidateIdFromJob || null,
           umbrella_id: umbrellaIdFromJob || null,
           to: toEmail,
           intended_to: intendedToEmail,
-          reason: 'MAIL_OUTBOX_INSERT_FAILED',
-          trigger_status: 'MAIL_OUTBOX_INSERT_FAILED',
-          error: (errTxt || '').slice(0, 500)
+          reason: 'MAIL_OUTBOX_EXCEPTION',
+          trigger_status: 'MAIL_OUTBOX_EXCEPTION',
+          error: String(e?.message || e || 'MAIL_OUTBOX_EXCEPTION').slice(0, 500)
         });
         continue;
       }
-
-      const insJson = await ins.json().catch(() => []);
-      const mail = Array.isArray(insJson) ? insJson[0] : insJson;
-      const mailId = mail?.id ? String(mail.id) : null;
-
-      queued.push({
-        job_kind: jobKindRaw || messageKind,
-        payee_entity_kind: payeeEntityKind,
-        payee_entity_id: payeeEntityIdText,
-        candidate_id: candidateIdFromJob || null,
-        umbrella_id: umbrellaIdFromJob || null,
-        to: toEmail,
-        intended_to: intendedToEmail,
-        subject,
-        reference,
-        trigger_status: 'QUEUED_TO_MAIL_OUTBOX',
-        mail_outbox_id: mailId
-      });
-    } catch (e) {
-      skipped.push({
-        job_kind: jobKindRaw || messageKind,
-        payee_entity_kind: payeeEntityKind,
-        payee_entity_id: payeeEntityIdText,
-        candidate_id: candidateIdFromJob || null,
-        umbrella_id: umbrellaIdFromJob || null,
-        to: toEmail,
-        intended_to: intendedToEmail,
-        reason: 'MAIL_OUTBOX_EXCEPTION',
-        trigger_status: 'MAIL_OUTBOX_EXCEPTION',
-        error: String(e?.message || e || 'MAIL_OUTBOX_EXCEPTION').slice(0, 500)
-      });
-      continue;
     }
-  }
 
-  if ((queued.length || skipped.length) && typeof sbRpc === 'function') {
+    return {
+      ok: true,
+      pay_batch_id: payBatchId,
+      scope,
+      message_kind: commKind,
+      trigger_status: String(helperRes?.trigger_status || '').trim() || (queued.length ? 'QUEUED_TO_MAIL_OUTBOX' : 'NO_QUEUEABLE_JOB'),
+      error: null,
+      pay_date: payDate,
+      authoritative_payment_date: authoritativePaymentDate,
+      bulk_reference: bulkRef,
+      payroll_testing: payrollTesting,
+      test_recipient: testTo,
+      queued_count: queued.length,
+      skipped_count: skipped.length,
+      queued,
+      skipped
+    };
+  };
+
+  const remittanceResult = await processHelperResult('REMITTANCE', remittanceHelperRes);
+  const payoutNoticeResult = await processHelperResult('PAYOUT_NOTICE', payoutNoticeHelperRes);
+
+  const hasRemittanceChannel =
+    (remittanceResult.queued_count > 0)
+    || (remittanceResult.skipped_count > 0)
+    || (String(remittanceHelperRes?.trigger_status || '').trim().length > 0);
+
+  const hasPayoutNoticeChannel =
+    (payoutNoticeResult.queued_count > 0)
+    || (payoutNoticeResult.skipped_count > 0)
+    || (String(payoutNoticeHelperRes?.trigger_status || '').trim().length > 0);
+
+  const communicationMode =
+    hasRemittanceChannel && hasPayoutNoticeChannel
+      ? 'MIXED'
+      : hasPayoutNoticeChannel
+        ? 'PAYOUT_NOTICE'
+        : hasRemittanceChannel
+          ? 'REMITTANCE'
+          : 'NONE';
+
+  const combinedQueued = [
+    ...(Array.isArray(remittanceResult.queued) ? remittanceResult.queued : []),
+    ...(Array.isArray(payoutNoticeResult.queued) ? payoutNoticeResult.queued : [])
+  ];
+
+  const combinedSkipped = [
+    ...(Array.isArray(remittanceResult.skipped) ? remittanceResult.skipped : []),
+    ...(Array.isArray(payoutNoticeResult.skipped) ? payoutNoticeResult.skipped : [])
+  ];
+
+  const combinedTriggerStatus = (() => {
+    const parts = [];
+    const remStatus = String(remittanceResult?.trigger_status || '').trim();
+    const pnStatus = String(payoutNoticeResult?.trigger_status || '').trim();
+    if (remStatus) parts.push(`REMITTANCE:${remStatus}`);
+    if (pnStatus) parts.push(`PAYOUT_NOTICE:${pnStatus}`);
+    return parts.join('|') || (combinedQueued.length ? 'QUEUED_TO_MAIL_OUTBOX' : 'NO_QUEUEABLE_JOB');
+  })();
+
+  const combinedPayDate =
+    remittanceResult?.pay_date
+      ? remittanceResult.pay_date
+      : (payoutNoticeResult?.pay_date || null);
+
+  const combinedAuthoritativePaymentDate =
+    remittanceResult?.authoritative_payment_date
+      ? remittanceResult.authoritative_payment_date
+      : (payoutNoticeResult?.authoritative_payment_date || null);
+
+  const combinedBulkReference =
+    remittanceResult?.bulk_reference
+      ? remittanceResult.bulk_reference
+      : (payoutNoticeResult?.bulk_reference || null);
+
+  if ((combinedQueued.length || combinedSkipped.length) && typeof sbRpc === 'function') {
     try {
       await sbRpc(env, 'pay_remittance_mark_sent', {
         p_pay_batch_id: payBatchId,
         p_scope: scope,
         p_results_json: {
-          message_kind: messageKind,
-          queued,
-          skipped,
-          pay_date: payDate,
-          authoritative_payment_date: authoritativePaymentDate,
-          bulk_reference: bulkRef,
+          communication_mode: communicationMode,
+          remittance_result: remittanceResult,
+          payout_notice_result: payoutNoticeResult,
+          pay_date: combinedPayDate,
+          authoritative_payment_date: combinedAuthoritativePaymentDate,
+          bulk_reference: combinedBulkReference,
           payroll_testing: payrollTesting,
           test_recipient: testTo
         },
         p_actor_user_id: actorUserId
       });
     } catch (e) {
-      console.warn('[banking][remittances] pay_remittance_mark_sent failed:', e?.message || e);
+      console.warn('[banking][communications] pay_remittance_mark_sent failed:', e?.message || e);
     }
   }
 
@@ -11371,18 +11732,20 @@ async function sendPayBatchRemittancesInternal(env, opts) {
     ok: true,
     pay_batch_id: payBatchId,
     scope,
-    message_kind: messageKind,
-    trigger_status: String(helperRes?.trigger_status || '').trim() || (queued.length ? 'QUEUED_TO_MAIL_OUTBOX' : 'NO_QUEUEABLE_JOB'),
+    communication_mode: communicationMode,
+    trigger_status: combinedTriggerStatus,
     error: null,
-    pay_date: payDate,
-    authoritative_payment_date: authoritativePaymentDate,
-    bulk_reference: bulkRef,
+    pay_date: combinedPayDate,
+    authoritative_payment_date: combinedAuthoritativePaymentDate,
+    bulk_reference: combinedBulkReference,
     payroll_testing: payrollTesting,
     test_recipient: testTo,
-    queued_count: queued.length,
-    skipped_count: skipped.length,
-    queued,
-    skipped
+    queued_count: combinedQueued.length,
+    skipped_count: combinedSkipped.length,
+    queued: combinedQueued,
+    skipped: combinedSkipped,
+    remittance_result: remittanceResult,
+    payout_notice_result: payoutNoticeResult
   };
 }
 
@@ -11743,8 +12106,9 @@ async function buildPayBatchDetailPdfFromRows(exportObj) {
   return pdfBytes;
 }
 
-
 async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) {
+  if (!user) return withCORS(env, req, unauthorized());
+
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
 
@@ -11812,6 +12176,22 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     return null;
   };
 
+  const safeStr = (v) => (v == null ? '' : String(v));
+  const asNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const asMoney = (v) => {
+    const n = asNum(v);
+    if (n == null) return '';
+    return n.toFixed(2);
+  };
+  const boolLabel = (v) => {
+    if (v === true) return 'Yes';
+    if (v === false) return 'No';
+    return '';
+  };
+
   try {
     const raw0 = await sbRpc(env, 'pay_batch_export_csv_rows', {
       p_pay_batch_id: id,
@@ -11820,7 +12200,240 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
 
     const exportObj = unwrapRpc(raw0, 'pay_batch_export_csv_rows');
 
-    const pdfBytes = await buildPayBatchDetailPdfFromRows(exportObj);
+    const batch = (exportObj && typeof exportObj === 'object' && exportObj.batch && typeof exportObj.batch === 'object')
+      ? exportObj.batch
+      : {};
+
+    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+
+    const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
+    const PAGE_W_MM = 210;
+    const PAGE_H_MM = 297;
+    const yFromTopMm = (yTopMm) => PAGE_H_MM - (Number(yTopMm) || 0);
+
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const M = 10;
+    const lineH = 4.2;
+    const small = 8;
+    const tiny = 7;
+    const title = 12;
+
+    const state = { page: null, yTop: 0, pageNo: 0 };
+
+    const drawText = (page, f, text, xMm, yTopMm, size, opts = {}) => {
+      const s = safeStr(text);
+      if (!s) return;
+      page.drawText(s, {
+        x: mmToPt(xMm),
+        y: mmToPt(yFromTopMm(yTopMm)),
+        size,
+        font: f,
+        ...opts
+      });
+    };
+
+    const drawLine = (page, x1Mm, yTopMm, x2Mm) => {
+      page.drawLine({
+        start: { x: mmToPt(x1Mm), y: mmToPt(yFromTopMm(yTopMm)) },
+        end: { x: mmToPt(x2Mm), y: mmToPt(yFromTopMm(yTopMm)) },
+        thickness: 0.6,
+        color: rgb(0.85, 0.85, 0.85)
+      });
+    };
+
+    const textWidthMm = (f, text, size) => {
+      const s = safeStr(text);
+      if (!s) return 0;
+      return (f.widthOfTextAtSize(s, size) * 25.4) / 72;
+    };
+
+    const fitText = (f, text, size, maxWmm) => {
+      const s = safeStr(text);
+      if (!s) return '';
+      if (textWidthMm(f, s, size) <= maxWmm) return s;
+      const ell = '…';
+      let out = s;
+      while (out.length > 1 && textWidthMm(f, out + ell, size) > maxWmm) {
+        out = out.slice(0, -1);
+      }
+      return out.length ? `${out}${ell}` : ell;
+    };
+
+    const ensureSpace = (neededMm) => {
+      const bottom = PAGE_H_MM - M;
+      if ((state.yTop + neededMm) > bottom) {
+        newPage();
+        return true;
+      }
+      return false;
+    };
+
+    const drawHeader = () => {
+      const batchId = safeStr(batch.id || id);
+      const batchStatus = safeStr(batch.status || '');
+      const payDate = safeStr(batch.pay_date || '');
+      const batchKind = safeStr(batch.batch_kind_fixed || batch.batch_kind || '');
+      const generatedAt = safeStr(batch.generated_at_utc || '');
+      const y = state.yTop;
+
+      drawText(state.page, fontBold, 'Pay Batch Detail Export', M, y, title);
+      drawText(state.page, font, `Batch: ${batchId}`, M, y + 7, small);
+      drawText(state.page, font, `Status: ${batchStatus}`, M, y + 12, small);
+      drawText(state.page, font, `Pay date: ${payDate}`, M, y + 17, small);
+      drawText(state.page, font, `Kind: ${batchKind}`, M, y + 22, small);
+      if (generatedAt) drawText(state.page, font, `Generated: ${generatedAt}`, M, y + 27, tiny);
+      drawText(state.page, font, `Page ${state.pageNo}`, PAGE_W_MM - M - 20, y, small);
+      drawLine(state.page, M, y + 31, PAGE_W_MM - M);
+      state.yTop = y + 35;
+    };
+
+    const newPage = () => {
+      state.pageNo += 1;
+      state.page = pdfDoc.addPage([mmToPt(PAGE_W_MM), mmToPt(PAGE_H_MM)]);
+      state.yTop = M;
+      drawHeader();
+    };
+
+    const grouped = new Map();
+    for (const row of rows) {
+      const candidateId = safeStr(row?.candidate_id || '');
+      const key = candidateId || `__no_candidate__:${grouped.size}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(row);
+    }
+
+    const sortGroupKey = (arr) => {
+      const first = Array.isArray(arr) && arr.length ? arr[0] : {};
+      const ln = safeStr(first?.candidate_last_name).toLowerCase();
+      const fn = safeStr(first?.candidate_first_name).toLowerCase();
+      const dn = safeStr(first?.candidate_display_name).toLowerCase();
+      const ref = safeStr(first?.candidate_tms_ref || first?.candidate_tms_ref_snap).toLowerCase();
+      return `${ln}|${fn}|${dn}|${ref}`;
+    };
+
+    const candidateGroups = [...grouped.values()].sort((a, b) => sortGroupKey(a).localeCompare(sortGroupKey(b)));
+
+    newPage();
+
+    const topCols = {
+      date: { x: M, w: 18 },
+      client: { x: M + 20, w: 32 },
+      type: { x: M + 54, w: 24 },
+      dir: { x: M + 80, w: 16 },
+      tax: { x: M + 98, w: 18 },
+      method: { x: M + 118, w: 18 },
+      destination: { x: M + 138, w: 34 },
+      amount: { x: M + 174, w: 20 }
+    };
+
+    const drawMainHeader = () => {
+      drawText(state.page, fontBold, 'Date', topCols.date.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Client', topCols.client.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Type', topCols.type.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Dir', topCols.dir.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Tax', topCols.tax.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Method', topCols.method.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Destination', topCols.destination.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Amount', topCols.amount.x, state.yTop, tiny);
+      state.yTop += 4.5;
+      drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
+      state.yTop += 2.0;
+    };
+
+    drawMainHeader();
+
+    for (const groupRows of candidateGroups) {
+      const first = groupRows[0] || {};
+      const candidateName = safeStr(first?.candidate_display_name || [safeStr(first?.candidate_first_name), safeStr(first?.candidate_last_name)].filter(Boolean).join(' ').trim() || first?.candidate_id || '');
+      const candidateRef = safeStr(first?.candidate_tms_ref || first?.candidate_tms_ref_snap || '');
+      const candidateDisplay = candidateRef ? `${candidateName} (${candidateRef})` : candidateName;
+
+      ensureSpace(12);
+      drawText(state.page, fontBold, candidateDisplay || '(unknown candidate)', M, state.yTop, small);
+      state.yTop += 5.0;
+
+      for (const row of groupRows) {
+        const amountText = (() => {
+          const deductionAmount = asNum(row?.deduction_amount ?? row?.deduction_amount_ex_vat);
+          const amountEx = asNum(row?.amount_ex_vat);
+          const paymentOrDeduction = safeStr(row?.payment_or_deduction).trim().toUpperCase();
+          if (paymentOrDeduction === 'DEDUCTION' && deductionAmount != null) return `£${asMoney(deductionAmount)}`;
+          if (amountEx != null) return `£${asMoney(amountEx)}`;
+          return '';
+        })();
+
+        const dateText = safeStr(row?.work_date || row?.seg_work_date || row?.sort_work_date || row?.week_ending_date || '');
+        const clientText = safeStr(row?.client_name || '');
+        const typeText = safeStr(row?.item_type_label || row?.item_type || row?.line_kind || '');
+        const directionText = safeStr(row?.payment_or_deduction || '');
+        const taxText = safeStr(row?.taxability || row?.finance_taxability || '');
+        const methodText = safeStr(row?.pay_method || row?.pay_channel || '');
+        const destinationText = safeStr(row?.payout_destination || row?.routing_kind || row?.finance_routing_kind || '');
+
+        ensureSpace(16);
+
+        drawText(state.page, font, fitText(font, dateText, tiny, topCols.date.w), topCols.date.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, clientText, tiny, topCols.client.w), topCols.client.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, typeText, tiny, topCols.type.w), topCols.type.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, directionText, tiny, topCols.dir.w), topCols.dir.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, taxText, tiny, topCols.tax.w), topCols.tax.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, methodText, tiny, topCols.method.w), topCols.method.x, state.yTop, tiny);
+        drawText(state.page, font, fitText(font, destinationText, tiny, topCols.destination.w), topCols.destination.x, state.yTop, tiny);
+        drawText(state.page, fontBold, amountText, topCols.amount.x, state.yTop, tiny);
+        state.yTop += 4.5;
+
+        const detailLine1 = [
+          safeStr(row?.finance_case_reference) ? `Ref: ${safeStr(row.finance_case_reference)}` : '',
+          safeStr(row?.comment_or_note) ? `Note: ${safeStr(row.comment_or_note)}` : '',
+          safeStr(row?.description) ? `Desc: ${safeStr(row.description)}` : ''
+        ].filter(Boolean).join('   ');
+
+        const detailLine2 = [
+          safeStr(row?.masked_bank_account_paid_to || row?.masked_bank_account) ? `Masked account: ${safeStr(row.masked_bank_account_paid_to || row.masked_bank_account)}` : '',
+          safeStr(row?.beneficiary_name) ? `Beneficiary: ${safeStr(row.beneficiary_name)}` : '',
+          safeStr(row?.bank_details_created_by_display_name || row?.bank_details_created_by) ? `Entered by: ${safeStr(row.bank_details_created_by_display_name || row.bank_details_created_by)}` : '',
+          safeStr(row?.bank_details_updated_by_display_name || row?.bank_details_updated_by) ? `Last changed by: ${safeStr(row.bank_details_updated_by_display_name || row.bank_details_updated_by)}` : ''
+        ].filter(Boolean).join('   ');
+
+        const detailLine3 = [
+          safeStr(row?.lifecycle_status_display || row?.finance_lifecycle_status_display || row?.lifecycle_status) ? `Lifecycle: ${safeStr(row.lifecycle_status_display || row.finance_lifecycle_status_display || row.lifecycle_status)}` : '',
+          safeStr(row?.finance_status) ? `Finance status: ${safeStr(row.finance_status)}` : '',
+          safeStr(row?.finance_payout_status) ? `Payout status: ${safeStr(row.finance_payout_status)}` : '',
+          row?.is_candidate_directed_oneoff_payout !== undefined ? `Candidate-directed one-off: ${boolLabel(row.is_candidate_directed_oneoff_payout)}` : '',
+          row?.appears_on_umbrella_remittance !== undefined ? `On umbrella remittance: ${boolLabel(row.appears_on_umbrella_remittance)}` : '',
+          row?.generates_candidate_payment_advice !== undefined ? `Generates payout advice: ${boolLabel(row.generates_candidate_payment_advice)}` : ''
+        ].filter(Boolean).join('   ');
+
+        if (detailLine1) {
+          ensureSpace(4.0);
+          drawText(state.page, font, fitText(font, detailLine1, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
+          state.yTop += 3.8;
+        }
+
+        if (detailLine2) {
+          ensureSpace(4.0);
+          drawText(state.page, font, fitText(font, detailLine2, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
+          state.yTop += 3.8;
+        }
+
+        if (detailLine3) {
+          ensureSpace(4.0);
+          drawText(state.page, font, fitText(font, detailLine3, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
+          state.yTop += 3.8;
+        }
+
+        state.yTop += 1.5;
+      }
+
+      state.yTop += 2.5;
+      drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
+      state.yTop += 4.0;
+    }
+
+    const pdfBytes = await pdfDoc.save();
 
     const filename = `pay_batch_${id}_detail.pdf`;
     const res = new Response(pdfBytes, {
@@ -11838,8 +12451,6 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_PDF_FAILED')));
   }
 }
-
-
 
 /**
  * Minimal HTML escape for safe <pre> usage.
@@ -12666,6 +13277,7 @@ async function handleBankingPayPreview(env, req, user) {
     }));
   }
 }
+
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -12705,6 +13317,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
   const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
   if (!cutoffIso) return withCORS(env, req, badRequest('week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
 
   const previewDecisionsIn =
     (body.preview_decisions_json && typeof body.preview_decisions_json === 'object' && !Array.isArray(body.preview_decisions_json))
@@ -12747,7 +13363,39 @@ async function handleBankingPayCreateDraft(env, req, user) {
     ''
   ).trim();
 
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const normalizeUuidArray = (raw, label) => {
+    if (!Array.isArray(raw)) return null;
+    const out = [];
+    for (const x of raw) {
+      const s = String(x || '').trim();
+      if (!s) continue;
+      if (!uuidRe.test(s)) {
+        return { error: `${label} must contain UUIDs (bad value: ${s})` };
+      }
+      out.push(s);
+    }
+    return out;
+  };
+
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const normalizeComponentResolutionsShape = (value) => {
+    if (Array.isArray(value)) {
+      const cloned = cloneJson(value);
+      return Array.isArray(cloned) ? cloned : null;
+    }
+    if (isPlainObject(value)) {
+      const cloned = cloneJson(value);
+      return (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) ? cloned : null;
+    }
+    return null;
+  };
 
   const candidateId = candRaw ? candRaw : null;
   const clientId = clientRaw ? clientRaw : null;
@@ -12767,20 +13415,19 @@ async function handleBankingPayCreateDraft(env, req, user) {
     : Array.isArray(body.candidateIds) ? body.candidateIds
     : null;
 
-  const includeSet = (() => {
-    if (!Array.isArray(includeSetIn)) return null;
-    const out = [];
-    for (const x of includeSetIn) {
-      const s = String(x || '').trim();
-      if (!s) continue;
-      if (!uuidRe.test(s)) return { error: `include_set/candidate_ids must contain UUIDs (bad value: ${s})` };
-      out.push(s);
-    }
-    return out;
-  })();
-
+  const includeSet = normalizeUuidArray(includeSetIn, 'include_set/candidate_ids');
   if (includeSet && includeSet.error) {
     return withCORS(env, req, badRequest(includeSet.error));
+  }
+
+  const excludeTimesheetIdsIn =
+    Array.isArray(body.exclude_timesheet_ids) ? body.exclude_timesheet_ids
+    : Array.isArray(body.excludeTimesheetIds) ? body.excludeTimesheetIds
+    : null;
+
+  const excludeTimesheetIds = normalizeUuidArray(excludeTimesheetIdsIn, 'exclude_timesheet_ids');
+  if (excludeTimesheetIds && excludeTimesheetIds.error) {
+    return withCORS(env, req, badRequest(excludeTimesheetIds.error));
   }
 
   const previewDecisions =
@@ -12788,13 +13435,61 @@ async function handleBankingPayCreateDraft(env, req, user) {
       ? { ...previewDecisionsIn }
       : {};
 
+  if (
+    body.component_resolutions != null &&
+    !Array.isArray(body.component_resolutions) &&
+    (typeof body.component_resolutions !== 'object' || body.component_resolutions === null)
+  ) {
+    return withCORS(env, req, badRequest('component_resolutions must be an array or object when provided'));
+  }
+
+  if (
+    previewDecisions.component_resolutions != null &&
+    !Array.isArray(previewDecisions.component_resolutions) &&
+    (typeof previewDecisions.component_resolutions !== 'object' || previewDecisions.component_resolutions === null)
+  ) {
+    return withCORS(env, req, badRequest('preview_decisions_json.component_resolutions must be an array or object when provided'));
+  }
+
+  const componentResolutionsIn =
+    previewDecisions.component_resolutions != null
+      ? normalizeComponentResolutionsShape(previewDecisions.component_resolutions)
+      : (
+          body.component_resolutions != null
+            ? normalizeComponentResolutionsShape(body.component_resolutions)
+            : null
+        );
+
+  if (
+    (previewDecisions.component_resolutions != null && componentResolutionsIn == null) ||
+    (body.component_resolutions != null && componentResolutionsIn == null)
+  ) {
+    return withCORS(env, req, badRequest('component_resolutions must be a valid JSON array or object when provided'));
+  }
+
+  if (componentResolutionsIn != null) {
+    previewDecisions.component_resolutions = componentResolutionsIn;
+  }
+
   if (candidateId && !previewDecisions.candidate_filter_id) previewDecisions.candidate_filter_id = candidateId;
   if (clientId && !previewDecisions.client_filter_id) previewDecisions.client_filter_id = clientId;
 
   if (Array.isArray(includeSet) && includeSet.length) {
-    if (!Array.isArray(previewDecisions.candidate_ids) || previewDecisions.candidate_ids.length === 0) {
-      previewDecisions.candidate_ids = [...includeSet];
+    previewDecisions.candidate_ids = [...includeSet];
+  }
+
+  if (Array.isArray(excludeTimesheetIds) && excludeTimesheetIds.length) {
+    const mergedExclude = new Set();
+    const existingExclude = Array.isArray(previewDecisions.exclude_timesheet_ids) ? previewDecisions.exclude_timesheet_ids : [];
+    for (const x of existingExclude) {
+      const s = String(x || '').trim();
+      if (uuidRe.test(s)) mergedExclude.add(s);
     }
+    for (const x of excludeTimesheetIds) {
+      const s = String(x || '').trim();
+      if (uuidRe.test(s)) mergedExclude.add(s);
+    }
+    previewDecisions.exclude_timesheet_ids = Array.from(mergedExclude);
   }
 
   if (overrideReason && !previewDecisions.same_week_paye_override_reason) {
@@ -12915,10 +13610,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return unwrapPayPreviewRpc(rpcRes);
   };
 
-  const countEligibleCandidates = (preview, decisions, includeCandidateIds) => {
-    const dec = (decisions && typeof decisions === 'object') ? decisions : {};
-    const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object') ? dec.mismatch_choices : {};
-
+  const countEligibleCandidates = (preview, includeCandidateIds) => {
     const includeSetNorm = (() => {
       if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
       const s = new Set();
@@ -12944,18 +13636,15 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
       if (includeSetNorm && !includeSetNorm.has(candId)) continue;
 
-      const hasAnyDelta = (c.has_any_delta === true);
-      if (!hasAnyDelta) continue;
-
       const isReadyForDraft = (c.is_ready_for_draft === true);
       if (!isReadyForDraft) continue;
 
-      const hasMismatch = !!(c.mismatch && typeof c.mismatch === 'object' && c.mismatch.has_mismatch === true);
-      if (hasMismatch) {
-        const choiceRaw = mismatchChoices[candId];
-        const choice = String(choiceRaw || '').trim().toUpperCase();
-        if (choice !== 'PAYE' && choice !== 'UMBRELLA') continue;
-      }
+      const hasAnyDelta = (c.has_any_delta === true);
+      const safeCaseCount = Number(c.safe_case_count || 0);
+      const financeSafeDueTotal = Number(c.finance_safe_due_total_ex_vat || 0);
+      const itemisation = Array.isArray(c.itemisation) ? c.itemisation : [];
+
+      if (!hasAnyDelta && safeCaseCount <= 0 && financeSafeDueTotal === 0 && itemisation.length === 0) continue;
 
       eligible += 1;
     }
@@ -12963,10 +13652,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return eligible;
   };
 
-  const collectEligibleTimesheetsForDraft = (preview, decisions, includeCandidateIds) => {
-    const dec = (decisions && typeof decisions === 'object') ? decisions : {};
-    const mismatchChoices = (dec.mismatch_choices && typeof dec.mismatch_choices === 'object') ? dec.mismatch_choices : {};
-
+  const collectEligibleTimesheetsForDraft = (preview, includeCandidateIds) => {
     const includeSetNorm = (() => {
       if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
       const s = new Set();
@@ -12992,18 +13678,15 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
       if (includeSetNorm && !includeSetNorm.has(candId)) continue;
 
-      const hasAnyDelta = (c.has_any_delta === true);
-      if (!hasAnyDelta) continue;
-
       const isReadyForDraft = (c.is_ready_for_draft === true);
       if (!isReadyForDraft) continue;
 
-      const hasMismatch = !!(c.mismatch && typeof c.mismatch === 'object' && c.mismatch.has_mismatch === true);
-      if (hasMismatch) {
-        const choiceRaw = mismatchChoices[candId];
-        const choice = String(choiceRaw || '').trim().toUpperCase();
-        if (choice !== 'PAYE' && choice !== 'UMBRELLA') continue;
-      }
+      const hasAnyDelta = (c.has_any_delta === true);
+      const safeCaseCount = Number(c.safe_case_count || 0);
+      const financeSafeDueTotal = Number(c.finance_safe_due_total_ex_vat || 0);
+      const itemisation = Array.isArray(c.itemisation) ? c.itemisation : [];
+
+      if (!hasAnyDelta && safeCaseCount <= 0 && financeSafeDueTotal === 0 && itemisation.length === 0) continue;
 
       eligibleCandidateIds.add(candId);
     }
@@ -13029,6 +13712,141 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
 
     return { eligibleCandidateIds, timesheetIds: Array.from(timesheetIds), timesheetToCandidateId };
+  };
+
+  const extractCaseStateEntries = (raw) => {
+    const out = [];
+
+    const pushValue = (value) => {
+      if (value == null) return;
+
+      if (Array.isArray(value)) {
+        for (const item of value) pushValue(item);
+        return;
+      }
+
+      if (typeof value !== 'object') return;
+
+      if (value.case && typeof value.case === 'object' && !Array.isArray(value.case)) {
+        out.push(value);
+        return;
+      }
+
+      const asCase = value.raw_case && typeof value.raw_case === 'object' && !Array.isArray(value.raw_case)
+        ? value.raw_case
+        : value;
+
+      const candidateIdLocal = String(
+        value.candidate_id ||
+        value.candidateId ||
+        asCase.candidate_id ||
+        ''
+      ).trim();
+
+      const financeCaseIdLocal = String(
+        value.finance_case_id ||
+        value.financeCaseId ||
+        asCase.finance_case_id ||
+        asCase.case_id ||
+        ''
+      ).trim();
+
+      const timesheetIdLocal = String(
+        value.linked_timesheet_id ||
+        value.linkedTimesheetId ||
+        value.timesheet_id ||
+        value.timesheetId ||
+        asCase.linked_timesheet_id ||
+        asCase.timesheet_id ||
+        ''
+      ).trim();
+
+      const caseKeyLocal = String(
+        value.case_key ||
+        value.caseKey ||
+        asCase.case_key ||
+        ''
+      ).trim();
+
+      if (candidateIdLocal || financeCaseIdLocal || timesheetIdLocal || caseKeyLocal) {
+        out.push(value);
+        return;
+      }
+
+      for (const nested of Object.values(value)) {
+        pushValue(nested);
+      }
+    };
+
+    pushValue(raw);
+    return out;
+  };
+
+  const collectDecisionAwareScope = (decisionsObj, includeCandidateIds) => {
+    const includeSetNorm = (() => {
+      if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
+      const s = new Set();
+      for (const x of includeCandidateIds) s.add(String(x));
+      return s;
+    })();
+
+    const hasSafeSnapshot = (
+      decisionsObj &&
+      typeof decisionsObj === 'object' &&
+      Object.prototype.hasOwnProperty.call(decisionsObj, 'safe_case_states') &&
+      decisionsObj.safe_case_states != null
+    );
+
+    const safeEntries = hasSafeSnapshot ? extractCaseStateEntries(decisionsObj.safe_case_states) : [];
+    const eligibleCandidateIds = new Set();
+    const timesheetIds = new Set();
+    const timesheetToCandidateId = new Map();
+
+    for (const entry of safeEntries) {
+      if (!entry || typeof entry !== 'object') continue;
+
+      const caseObj = (entry.case && typeof entry.case === 'object' && !Array.isArray(entry.case))
+        ? entry.case
+        : (
+            entry.raw_case && typeof entry.raw_case === 'object' && !Array.isArray(entry.raw_case)
+              ? entry.raw_case
+              : entry
+          );
+
+      const candId = String(
+        entry.candidate_id ||
+        entry.candidateId ||
+        caseObj.candidate_id ||
+        ''
+      ).trim();
+
+      if (!candId) continue;
+      if (includeSetNorm && !includeSetNorm.has(candId)) continue;
+
+      eligibleCandidateIds.add(candId);
+
+      const tid = String(
+        entry.linked_timesheet_id ||
+        entry.linkedTimesheetId ||
+        entry.timesheet_id ||
+        entry.timesheetId ||
+        caseObj.linked_timesheet_id ||
+        caseObj.timesheet_id ||
+        ''
+      ).trim();
+
+      if (tid && uuidRe.test(tid)) {
+        timesheetIds.add(tid);
+        if (!timesheetToCandidateId.has(tid)) timesheetToCandidateId.set(tid, candId);
+      }
+    }
+
+    return {
+      hasSafeSnapshot,
+      eligibleCandidateIds,
+      timesheetIds: Array.from(timesheetIds),
+      timesheetToCandidateId
+    };
   };
 
   const chunk = (arr, n) => {
@@ -13161,34 +13979,51 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
   try {
     const preview0 = await callPayPreview();
-    const eligibleCount = countEligibleCandidates(preview0, previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
 
-    if (eligibleCount <= 0) {
-      return withCORS(env, req, badRequest('Nothing eligible to draft; resolve Review required items and refresh preview.'));
+    const decisionAwareScope = collectDecisionAwareScope(previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+
+    const effectiveEligibleCandidateIds = decisionAwareScope.hasSafeSnapshot
+      ? decisionAwareScope.eligibleCandidateIds
+      : null;
+
+    const effectiveEligibleCount = decisionAwareScope.hasSafeSnapshot
+      ? decisionAwareScope.eligibleCandidateIds.size
+      : countEligibleCandidates(preview0, (Array.isArray(includeSet) ? includeSet : null));
+
+    if (effectiveEligibleCount <= 0) {
+      return withCORS(env, req, badRequest('Nothing is currently Ready to Pay for draft creation. Resolve Blocked for Pay items or refresh preview.'));
     }
 
-    const { timesheetIds: inScopeTimesheetIds, timesheetToCandidateId } =
-      collectEligibleTimesheetsForDraft(preview0, previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+    const rawEligibleScope =
+      collectEligibleTimesheetsForDraft(preview0, (Array.isArray(includeSet) ? includeSet : null));
+
+    const effectiveTimesheetToCandidateId = decisionAwareScope.hasSafeSnapshot
+      ? decisionAwareScope.timesheetToCandidateId
+      : rawEligibleScope.timesheetToCandidateId;
+
+    const inScopeTimesheetIds = decisionAwareScope.hasSafeSnapshot
+      ? decisionAwareScope.timesheetIds
+      : rawEligibleScope.timesheetIds;
 
     const uniqueInScopeIds = Array.isArray(inScopeTimesheetIds)
       ? Array.from(new Set(inScopeTimesheetIds.filter(x => uuidRe.test(String(x || '').trim()))))
       : [];
 
     const tsfinAttempt = await bestEffortDrainTsfinForTimesheets(uniqueInScopeIds);
-    const excludedTimesheetIds = Array.isArray(tsfinAttempt?.excludedTimesheetIds) ? tsfinAttempt.excludedTimesheetIds : [];
+    const excludedTimesheetIdsFromDrain = Array.isArray(tsfinAttempt?.excludedTimesheetIds) ? tsfinAttempt.excludedTimesheetIds : [];
     const outboxRowsFinal = Array.isArray(tsfinAttempt?.outboxRowsFinal) ? tsfinAttempt.outboxRowsFinal : [];
 
-    const excludedSet = new Set(excludedTimesheetIds.map(x => String(x)));
+    const excludedSet = new Set(excludedTimesheetIdsFromDrain.map(x => String(x)));
     const remainingInScope = uniqueInScopeIds.filter(tid => !excludedSet.has(String(tid)));
 
-    if (uniqueInScopeIds.length > 0 && remainingInScope.length === 0 && excludedTimesheetIds.length > 0) {
+    if (uniqueInScopeIds.length > 0 && remainingInScope.length === 0 && excludedTimesheetIdsFromDrain.length > 0) {
       return withCORS(env, req, new Response(
         JSON.stringify({
           error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
-          message: 'No timesheets were ready to draft (calculations still processing). Please try again shortly.',
-          excluded_timesheets: excludedTimesheetIds.map((tid) => ({
+          message: 'No Ready to Pay timesheets were ready to draft because calculations are still processing. Please try again shortly.',
+          excluded_timesheets: excludedTimesheetIdsFromDrain.map((tid) => ({
             timesheet_id: tid,
-            candidate_id: timesheetToCandidateId.get(tid) || null,
+            candidate_id: effectiveTimesheetToCandidateId.get(tid) || null,
             reason_summary: 'CALCULATIONS_STILL_PROCESSING'
           }))
         }),
@@ -13196,14 +14031,14 @@ async function handleBankingPayCreateDraft(env, req, user) {
       ));
     }
 
-    if (excludedTimesheetIds.length > 0) {
-      const existing = Array.isArray(previewDecisions.exclude_timesheet_ids) ? previewDecisions.exclude_timesheet_ids : [];
+    if (excludedTimesheetIdsFromDrain.length > 0) {
       const exSet = new Set();
+      const existing = Array.isArray(previewDecisions.exclude_timesheet_ids) ? previewDecisions.exclude_timesheet_ids : [];
       for (const x of existing) {
         const s = String(x || '').trim();
         if (uuidRe.test(s)) exSet.add(s);
       }
-      for (const s of excludedTimesheetIds) {
+      for (const s of excludedTimesheetIdsFromDrain) {
         const id = String(s || '').trim();
         if (uuidRe.test(id)) exSet.add(id);
       }
@@ -13240,11 +14075,24 @@ async function handleBankingPayCreateDraft(env, req, user) {
       }
     } catch {}
 
-    const outPayload = (payload && typeof payload === 'object') ? payload : {};
+    const outPayload = (payload && typeof payload === 'object') ? { ...payload } : {};
 
     outPayload.override_verification = overrideVerification;
 
-    if (excludedTimesheetIds.length > 0) {
+    if (Array.isArray(outPayload.blocked_case_ids)) {
+      outPayload.blocked_case_ids = Array.from(new Set(outPayload.blocked_case_ids.map((x) => String(x || '').trim()).filter(Boolean)));
+    }
+    if (Array.isArray(outPayload.safe_case_ids)) {
+      outPayload.safe_case_ids = Array.from(new Set(outPayload.safe_case_ids.map((x) => String(x || '').trim()).filter(Boolean)));
+    }
+    if (Array.isArray(outPayload.blocked_cases)) {
+      outPayload.blocked_cases = outPayload.blocked_cases.filter((x) => x && typeof x === 'object');
+    }
+    if (Array.isArray(outPayload.safe_cases)) {
+      outPayload.safe_cases = outPayload.safe_cases.filter((x) => x && typeof x === 'object');
+    }
+
+    if (excludedTimesheetIdsFromDrain.length > 0) {
       const rowsByTimesheet = new Map();
       for (const r of outboxRowsFinal || []) {
         const tid = String(r?.timesheet_id || '').trim();
@@ -13253,8 +14101,8 @@ async function handleBankingPayCreateDraft(env, req, user) {
         rowsByTimesheet.get(tid).push(r);
       }
 
-      outPayload.excluded_timesheets = excludedTimesheetIds.map((tid) => {
-        const cid = timesheetToCandidateId.get(tid) || null;
+      outPayload.excluded_timesheets = excludedTimesheetIdsFromDrain.map((tid) => {
+        const cid = effectiveTimesheetToCandidateId.get(tid) || null;
 
         const rs = rowsByTimesheet.get(tid) || [];
         const reasons = Array.from(new Set(rs.map(x => String(x?.reason || '').trim()).filter(Boolean)));
@@ -13279,6 +14127,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -14299,7 +15148,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       user_message = 'Banking rail is not configured for this environment.';
     } else if (rawU === 'HAS_HARD_BLOCKERS') {
       error_code = 'HAS_HARD_BLOCKERS';
-      user_message = 'This batch has hard blockers and cannot proceed until they are resolved.';
+      user_message = 'This batch has hard blockers and cannot proceed until the Blocked for Pay items are resolved.';
     } else if (raw) {
       user_message = raw;
     }
@@ -14312,6 +15161,43 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         error: user_message,
         message: user_message,
         error_code
+      }
+    };
+  };
+
+  const buildCommunicationsSummary = (res) => {
+    const communicationMode = String(res?.communication_mode || 'NONE').trim().toUpperCase() || 'NONE';
+
+    const remittanceResult = (res && typeof res === 'object' && res.remittance_result && typeof res.remittance_result === 'object')
+      ? res.remittance_result
+      : null;
+
+    const payoutNoticeResult = (res && typeof res === 'object' && res.payout_notice_result && typeof res.payout_notice_result === 'object')
+      ? res.payout_notice_result
+      : null;
+
+    const remittanceQueuedCount = Number(remittanceResult?.queued_count || 0);
+    const remittanceSkippedCount = Number(remittanceResult?.skipped_count || 0);
+    const payoutNoticeQueuedCount = Number(payoutNoticeResult?.queued_count || 0);
+    const payoutNoticeSkippedCount = Number(payoutNoticeResult?.skipped_count || 0);
+
+    const queuedCount = Number(res?.queued_count || (remittanceQueuedCount + payoutNoticeQueuedCount) || 0);
+    const skippedCount = Number(res?.skipped_count || (remittanceSkippedCount + payoutNoticeSkippedCount) || 0);
+
+    return {
+      communication_mode: communicationMode,
+      sent_or_queued: queuedCount > 0,
+      queued_count: queuedCount,
+      skipped_count: skippedCount,
+      remittances: {
+        trigger_status: String(remittanceResult?.trigger_status || '').trim() || null,
+        queued_count: remittanceQueuedCount,
+        skipped_count: remittanceSkippedCount
+      },
+      payout_notices: {
+        trigger_status: String(payoutNoticeResult?.trigger_status || '').trim() || null,
+        queued_count: payoutNoticeQueuedCount,
+        skipped_count: payoutNoticeSkippedCount
       }
     };
   };
@@ -14370,7 +15256,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }
       const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
 
-      const msg = 'PREVIEW_GATE_NOT_SATISFIED: batch has hard blockers; rerun preview and resolve Review required items.';
+      const msg = 'PREVIEW_GATE_NOT_SATISFIED: batch has hard blockers; rerun preview and resolve Blocked for Pay items.';
       return withCORS(env, req, jsonResponse(400, {
         error: msg,
         message: msg,
@@ -14394,8 +15280,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
     const providerRaw = String(batchObj?.rail_provider_snapshot || 'CSV').trim().toUpperCase();
     const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
-    const batchKindFixed = String(batchObj?.batch_kind_fixed || '').trim().toUpperCase();
-    const messageKindForBatch = (batchKindFixed === 'LOANS') ? 'PAYOUT_NOTICE' : 'REMITTANCE';
     const adapter = getRailAdapter(provider);
 
     if (!adapter) {
@@ -14479,9 +15363,30 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       attempted: false,
       sent_or_queued: false,
       trigger_status: scheduleAttempted ? 'NOT_YET_AUTHORISED' : 'SCHEDULING_NOT_APPLICABLE',
-      message_kind: messageKindForBatch,
+      communication_mode: 'NONE',
+      message_kind: null,
       error: null,
       scope: payChannelScope,
+      queued_count: 0,
+      skipped_count: 0,
+      remittance_result: null,
+      payout_notice_result: null,
+      communications_summary: {
+        communication_mode: 'NONE',
+        sent_or_queued: false,
+        queued_count: 0,
+        skipped_count: 0,
+        remittances: {
+          trigger_status: null,
+          queued_count: 0,
+          skipped_count: 0
+        },
+        payout_notices: {
+          trigger_status: null,
+          queued_count: 0,
+          skipped_count: 0
+        }
+      },
       result: null
     };
 
@@ -14502,15 +15407,28 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
         const sendTriggerStatus = String(sendResult?.trigger_status || '').trim();
         const queuedCount = Number(sendResult?.queued_count || 0);
+        const skippedCount = Number(sendResult?.skipped_count || 0);
         const sentOrQueued = Number.isFinite(queuedCount) && queuedCount > 0;
+        const communicationMode = String(sendResult?.communication_mode || 'NONE').trim().toUpperCase() || 'NONE';
+        const communicationsSummary = buildCommunicationsSummary(sendResult);
 
         workerCommunications = {
           attempted: true,
           sent_or_queued: sentOrQueued,
           trigger_status: sendTriggerStatus || 'COMMIT_STAGE_SEND_COMPLETED',
-          message_kind: String(sendResult?.message_kind || messageKindForBatch).trim().toUpperCase() || messageKindForBatch,
+          communication_mode: communicationMode,
+          message_kind: null,
           error: null,
           scope: payChannelScope,
+          queued_count: queuedCount,
+          skipped_count: skippedCount,
+          remittance_result: (sendResult && typeof sendResult === 'object' && sendResult.remittance_result && typeof sendResult.remittance_result === 'object')
+            ? sendResult.remittance_result
+            : null,
+          payout_notice_result: (sendResult && typeof sendResult === 'object' && sendResult.payout_notice_result && typeof sendResult.payout_notice_result === 'object')
+            ? sendResult.payout_notice_result
+            : null,
+          communications_summary: communicationsSummary,
           result: sendResult
         };
       } catch (e) {
@@ -14518,9 +15436,30 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
           attempted: true,
           sent_or_queued: false,
           trigger_status: 'COMMIT_STAGE_SEND_ERROR',
-          message_kind: messageKindForBatch,
+          communication_mode: 'NONE',
+          message_kind: null,
           error: String(e?.message || e || 'COMMIT_STAGE_SEND_ERROR'),
           scope: payChannelScope,
+          queued_count: 0,
+          skipped_count: 0,
+          remittance_result: null,
+          payout_notice_result: null,
+          communications_summary: {
+            communication_mode: 'NONE',
+            sent_or_queued: false,
+            queued_count: 0,
+            skipped_count: 0,
+            remittances: {
+              trigger_status: null,
+              queued_count: 0,
+              skipped_count: 0
+            },
+            payout_notices: {
+              trigger_status: null,
+              queued_count: 0,
+              skipped_count: 0
+            }
+          },
           result: null
         };
       }
@@ -14543,6 +15482,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       scheduled: scheduledOut,
       schedule_attempted: scheduleAttempted,
       remittances: workerCommunications,
+      communications: workerCommunications,
       worker_communications: workerCommunications,
       batch_get: afterGet
     }));
@@ -14560,7 +15500,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
-
 async function handleBankingPaySnoozeUpsert(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -14569,22 +15508,154 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const trimStr = (v) => String(v == null ? '' : v).trim();
 
-  const candidateId = String(body.candidate_id || body.candidateId || '').trim();
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    let bodyOut = '';
+    try {
+      bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' });
+    } catch {
+      bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize error payload' });
+    }
+    return new Response(bodyOut, { status, headers });
+  };
+
+  const safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      if (ej && typeof ej === 'object') {
+        if (ej.detail && typeof ej.detail === 'object') return ej.detail;
+        if (typeof ej.detail === 'string') {
+          const parsedDetail = safeJsonParse(ej.detail);
+          if (parsedDetail && typeof parsedDetail === 'object') return parsedDetail;
+        }
+        if (typeof ej.message === 'string') {
+          const t = ej.message.trim();
+          if (t.startsWith('{') && t.endsWith('}')) {
+            const parsedMessage = safeJsonParse(t);
+            if (parsedMessage && typeof parsedMessage === 'object') return parsedMessage;
+          }
+          const i1 = t.indexOf('{');
+          const i2 = t.lastIndexOf('}');
+          if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+            const parsedSlice = safeJsonParse(t.slice(i1, i2 + 1));
+            if (parsedSlice && typeof parsedSlice === 'object') return parsedSlice;
+          }
+          if (/^[A-Z0-9_]+$/.test(t)) return { error_code: t, message: t };
+        }
+        if (typeof ej.code === 'string' && /^[A-Z0-9_]+$/.test(ej.code)) {
+          return { error_code: ej.code, message: ej.code };
+        }
+      }
+
+      if (e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object') {
+          if (envObj.detail && typeof envObj.detail === 'object') return envObj.detail;
+          if (typeof envObj.detail === 'string') {
+            const parsedDetail = safeJsonParse(envObj.detail);
+            if (parsedDetail && typeof parsedDetail === 'object') return parsedDetail;
+          }
+          if (typeof envObj.message === 'string') {
+            const t = envObj.message.trim();
+            if (t.startsWith('{') && t.endsWith('}')) {
+              const parsedMessage = safeJsonParse(t);
+              if (parsedMessage && typeof parsedMessage === 'object') return parsedMessage;
+            }
+            const i1 = t.indexOf('{');
+            const i2 = t.lastIndexOf('}');
+            if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+              const parsedSlice = safeJsonParse(t.slice(i1, i2 + 1));
+              if (parsedSlice && typeof parsedSlice === 'object') return parsedSlice;
+            }
+            if (/^[A-Z0-9_]+$/.test(t)) return { error_code: t, message: t };
+          }
+          if (typeof envObj.code === 'string' && /^[A-Z0-9_]+$/.test(envObj.code)) {
+            return { error_code: envObj.code, message: envObj.code };
+          }
+        }
+      }
+
+      if (e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message.trim();
+        if (m.startsWith('{') && m.endsWith('}')) {
+          const parsedMessage = safeJsonParse(m);
+          if (parsedMessage && typeof parsedMessage === 'object') return parsedMessage;
+        }
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const parsedSlice = safeJsonParse(m.slice(i1, i2 + 1));
+          if (parsedSlice && typeof parsedSlice === 'object') return parsedSlice;
+        }
+        if (/^[A-Z0-9_]+$/.test(m)) return { error_code: m, message: m };
+      }
+    } catch {}
+    return null;
+  };
+
+  const normalizeConflictPayload = (payload) => {
+    const src = (payload && typeof payload === 'object') ? payload : null;
+    if (!src) return null;
+
+    const rawCode = trimStr(
+      src.error_code ||
+      src.code ||
+      src.error ||
+      src.message
+    ).toUpperCase();
+
+    if (rawCode !== 'WHOLE_TIMESHEET_ALREADY_SNOOZED' && rawCode !== 'SEGMENT_SNOOZES_ALREADY_EXIST') {
+      return null;
+    }
+
+    const defaultMessage =
+      rawCode === 'WHOLE_TIMESHEET_ALREADY_SNOOZED'
+        ? 'The whole timesheet is already snoozed. Unsnooze it first if you want to snooze a specific shift.'
+        : 'Specific shifts are already snoozed on this timesheet. Unsnooze them first if you want to snooze the whole timesheet.';
+
+    return {
+      ok: false,
+      conflict: true,
+      error: rawCode,
+      error_code: rawCode,
+      message: trimStr(src.user_message || src.message) || defaultMessage,
+      candidate_id: trimStr(src.candidate_id) || null,
+      timesheet_id: trimStr(src.timesheet_id) || null,
+      booking_id: trimStr(src.booking_id) || null,
+      segment_id: trimStr(src.segment_id) || null,
+      segment_stable_key: trimStr(src.segment_stable_key) || null,
+      conflict_snooze_id: trimStr(src.conflict_snooze_id) || null
+    };
+  };
+
+  const candidateId = trimStr(body.candidate_id || body.candidateId);
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
 
-  const timesheetIdRaw = (body.timesheet_id === null || body.timesheet_id === undefined) ? '' : String(body.timesheet_id).trim();
-  const timesheetId = timesheetIdRaw ? timesheetIdRaw : null;
-  if (timesheetId && !uuidRe.test(timesheetId)) return withCORS(env, req, badRequest('timesheet_id must be a UUID (or null)'));
+  const timesheetIdRaw = trimStr(body.timesheet_id);
+  const timesheetIdAlt = trimStr(body.timesheetId);
+  const timesheetId = timesheetIdRaw || timesheetIdAlt || null;
+  if (timesheetId && !uuidRe.test(timesheetId)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID (or null)'));
+  }
 
-  const segmentIdRaw = (body.segment_id === null || body.segment_id === undefined) ? '' : String(body.segment_id).trim();
-  const segmentId = segmentIdRaw ? segmentIdRaw : null;
+  // Advisory only: the installed pay_snooze_upsert(...) derives stable identity
+  // server-side from the current timesheet / segment and does not accept these
+  // fields as authoritative RPC parameters.
+  const bookingIdHint = trimStr(body.booking_id || body.bookingId) || null;
+  const segmentId = trimStr(body.segment_id || body.segmentId) || null;
+  const segmentStableKeyHint = trimStr(body.segment_stable_key || body.segmentStableKey) || null;
+  const sourceRef = trimStr(body.source_ref || body.sourceRef) || null;
 
-  const sourceRefRaw = (body.source_ref === null || body.source_ref === undefined) ? '' : String(body.source_ref).trim();
-  const sourceRef = sourceRefRaw ? sourceRefRaw : null;
-
-  const snoozeKindInput = String(body.snooze_kind || body.snoozeKind || 'DO_NOT_PAY').trim().toUpperCase();
+  const snoozeKindInput = trimStr(body.snooze_kind || body.snoozeKind || 'DO_NOT_PAY').toUpperCase();
   const snoozeKindAliases = {
     BLOCKED: 'BLOCKED_TIMESHEET',
     LOAN_REPAYMENT: 'PAYMENT_ADVANCE_REPAYMENT'
@@ -14608,11 +15679,37 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     );
   }
 
-  const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
+  if (bookingIdHint && !timesheetId) {
+    return withCORS(env, req, badRequest('booking_id requires timesheet_id'));
+  }
+
+  if (segmentStableKeyHint && !timesheetId) {
+    return withCORS(env, req, badRequest('segment_stable_key requires timesheet_id'));
+  }
+
+  if (sourceRef) {
+    if (timesheetId || segmentId || segmentStableKeyHint || bookingIdHint) {
+      return withCORS(env, req, badRequest('source_ref snoozes must not also provide timesheet/segment identity fields'));
+    }
+  } else {
+    if (!timesheetId) {
+      return withCORS(env, req, badRequest('timesheet_id is required for timesheet/segment snoozes'));
+    }
+  }
+
+  if (snoozeKindNormalized === 'TIMESHEET_PAYMENT' && sourceRef) {
+    return withCORS(env, req, badRequest('TIMESHEET_PAYMENT snoozes must not provide source_ref'));
+  }
+
+  if (snoozeKindNormalized === 'TIMESHEET_PAYMENT' && (segmentId || segmentStableKeyHint)) {
+    return withCORS(env, req, badRequest('TIMESHEET_PAYMENT snoozes must not provide segment_id or segment_stable_key; use a segment-level snooze kind instead'));
+  }
+
+  const noteRaw = trimStr(body.note);
   const note = noteRaw ? noteRaw : null;
 
   const parseIsoOrUkDateToIso = (raw) => {
-    const s = String(raw || '').trim();
+    const s = trimStr(raw);
     if (!s) return null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
     const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -14620,9 +15717,29 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     return null;
   };
 
-  const untilRaw = (body.snooze_until_date === null || body.snooze_until_date === undefined) ? '' : String(body.snooze_until_date).trim();
-  const untilIso = untilRaw ? parseIsoOrUkDateToIso(untilRaw) : null;
-  if (untilRaw && !untilIso) return withCORS(env, req, badRequest('snooze_until_date must be YYYY-MM-DD, DD/MM/YYYY, or null'));
+  const untilRaw = trimStr(body.snooze_until_date);
+  const untilRawAlt = trimStr(body.snoozeUntilDate);
+  const untilInput = untilRaw || untilRawAlt || '';
+  const untilIso = untilInput ? parseIsoOrUkDateToIso(untilInput) : null;
+  if (untilInput && !untilIso) {
+    return withCORS(env, req, badRequest('snooze_until_date must be YYYY-MM-DD, DD/MM/YYYY, or null'));
+  }
+
+  const fetchStoredSnoozeById = async (snoozeId) => {
+    const id = trimStr(snoozeId);
+    if (!id || !uuidRe.test(id)) return null;
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?id=eq.${encodeURIComponent(id)}` +
+          `&select=id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,source_ref,snooze_kind,snooze_until_date,note,cleared_at_utc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
 
   try {
     const rpcRes = await sbRpc(env, 'pay_snooze_upsert', {
@@ -14644,13 +15761,631 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const resolvedSnoozeId = trimStr(
+      payloadObj.snooze_id ||
+      payloadObj.active_snooze_id ||
+      payloadObj.id
+    );
+
+    const storedRow = resolvedSnoozeId ? await fetchStoredSnoozeById(resolvedSnoozeId) : null;
+
+    const resolvedUntilIso =
+      parseIsoOrUkDateToIso(
+        payloadObj.snooze_until_date ||
+        payloadObj.active_snooze_until_date ||
+        (storedRow && storedRow.snooze_until_date) ||
+        untilIso ||
+        null
+      ) || null;
+
+    const snoozeMode =
+      trimStr(
+        payloadObj.snooze_mode ||
+        (resolvedUntilIso ? 'DATED' : 'INDEFINITE')
+      ).toUpperCase() || 'INDEFINITE';
+
+    const shouldRemainVisibleInLivePayWorkbench =
+      (typeof payloadObj.should_remain_visible_in_live_pay_workbench === 'boolean')
+        ? payloadObj.should_remain_visible_in_live_pay_workbench
+        : (snoozeMode === 'DATED');
+
+    const livePayBucket =
+      trimStr(
+        payloadObj.live_pay_bucket ||
+        (shouldRemainVisibleInLivePayWorkbench ? 'BLOCKED_FOR_PAY' : 'LOANS_SNOOZES_ONLY')
+      ).toUpperCase();
+
+    const activeSnooze =
+      (typeof payloadObj.active_snooze === 'boolean')
+        ? payloadObj.active_snooze
+        : true;
+
+    const canonical = {
+      ...payloadObj,
+      candidate_id: trimStr((storedRow && storedRow.candidate_id) || payloadObj.candidate_id || candidateId || ''),
+      timesheet_id: (() => {
+        const v = trimStr((storedRow && storedRow.timesheet_id) || payloadObj.timesheet_id || timesheetId || '');
+        return v || null;
+      })(),
+      booking_id: (() => {
+        const v = trimStr((storedRow && storedRow.booking_id) || payloadObj.booking_id || '');
+        return v || null;
+      })(),
+      segment_id: (() => {
+        const v = trimStr((storedRow && storedRow.segment_id) || payloadObj.segment_id || segmentId || '');
+        return v || null;
+      })(),
+      segment_stable_key: (() => {
+        const v = trimStr((storedRow && storedRow.segment_stable_key) || payloadObj.segment_stable_key || '');
+        return v || null;
+      })(),
+      source_ref: (() => {
+        const v = trimStr((storedRow && storedRow.source_ref) || payloadObj.source_ref || sourceRef || '');
+        return v || null;
+      })(),
+      snooze_kind: trimStr((storedRow && storedRow.snooze_kind) || payloadObj.snooze_kind || snoozeKindNormalized || '').toUpperCase(),
+      snooze_id: resolvedSnoozeId || null,
+      active_snooze: activeSnooze,
+      snooze_until_date: resolvedUntilIso,
+      snooze_mode: snoozeMode,
+      should_remain_visible_in_live_pay_workbench: shouldRemainVisibleInLivePayWorkbench,
+      live_pay_bucket: livePayBucket || (snoozeMode === 'DATED' ? 'BLOCKED_FOR_PAY' : 'LOANS_SNOOZES_ONLY'),
+      note: (() => {
+        const v = trimStr((storedRow && storedRow.note) || payloadObj.note || note || '');
+        return v || null;
+      })()
+    };
+
+    return withCORS(env, req, ok(canonical));
   } catch (e) {
+    const conflictPayload = normalizeConflictPayload(extractDbRaisedJson(e));
+    if (conflictPayload) {
+      return withCORS(env, req, jsonResponse(409, conflictPayload));
+    }
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
+  const enc = encodeURIComponent;
 
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const idIn = String(timesheetId || '').trim();
+  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(idIn)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
+
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const fetchPayState = async (currentTimesheetId) => {
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: currentTimesheetId,
+        p_actor_user_id: user.id
+      });
+      return unwrapRpc(ps0, 'timesheet_pay_state');
+    } catch {
+      return null;
+    }
+  };
+
+  let resolved = null;
+  try {
+    resolved = await resolveTimesheetToCurrent(env, idIn);
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
+  }
+
+  if (!resolved || !resolved.current_timesheet_id) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  const currentTimesheetId = String(resolved.current_timesheet_id).trim();
+  const currentBookingId = trimStr(resolved.booking_id);
+
+  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  let tsfin = null;
+  try {
+    tsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,candidate_id,client_id` +
+        `&limit=1`
+    );
+  } catch {
+    tsfin = null;
+  }
+
+  const candidateId = (tsfin?.candidate_id != null && trimStr(tsfin.candidate_id)) ? trimStr(tsfin.candidate_id) : null;
+
+  const fetchWholeTimesheetSnoozeByBooking = async () => {
+    if (!currentBookingId || !candidateId) return null;
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?candidate_id=eq.${enc(candidateId)}` +
+          `&booking_id=eq.${enc(currentBookingId)}` +
+          `&segment_id=is.null` +
+          `&segment_stable_key=is.null` +
+          `&source_ref=is.null` +
+          `&snooze_kind=eq.TIMESHEET_PAYMENT` +
+          `&cleared_at_utc=is.null` +
+          `&select=id,timesheet_id,booking_id,candidate_id,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc` +
+          `&order=created_at_utc.desc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchWholeTimesheetSnoozeByTimesheet = async () => {
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+          `&segment_id=is.null` +
+          `&segment_stable_key=is.null` +
+          `&source_ref=is.null` +
+          `&snooze_kind=eq.TIMESHEET_PAYMENT` +
+          `&cleared_at_utc=is.null` +
+          `&select=id,timesheet_id,booking_id,candidate_id,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc` +
+          `&order=created_at_utc.desc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  let activeSnooze = await fetchWholeTimesheetSnoozeByBooking();
+  if (!activeSnooze || !activeSnooze.id) {
+    activeSnooze = await fetchWholeTimesheetSnoozeByTimesheet();
+  }
+
+  if (!activeSnooze || !activeSnooze.id) {
+    const payState = await fetchPayState(currentTimesheetId);
+    return withCORS(env, req, ok({
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      booking_id: currentBookingId || null,
+      candidate_id: candidateId || null,
+      already_cleared: true,
+      pay_state: payState
+    }));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
+      p_snooze_id: String(activeSnooze.id).trim(),
+      p_actor_user_id: user.id
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_snooze_clear');
+    const payState = await fetchPayState(currentTimesheetId);
+
+    return withCORS(env, req, ok({
+      ...((payload && typeof payload === 'object') ? payload : {}),
+      ok: true,
+      timesheet_id: currentTimesheetId,
+      booking_id: currentBookingId || trimStr(activeSnooze.booking_id) || null,
+      candidate_id: candidateId || trimStr(activeSnooze.candidate_id) || null,
+      pay_state: payState
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear timesheet payment snooze')));
+  }
+}
 async function handleBankingPaySnoozeClear(env, req, user) {
+  const authUser = user || await requireUser(env, req, ['admin']);
+  if (!authUser) return withCORS(env, req, unauthorized());
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const snoozeId = trimStr(body.snooze_id || body.snoozeId);
+  if (!snoozeId) {
+    return withCORS(env, req, badRequest('snooze_id is required'));
+  }
+  if (!uuidRe.test(snoozeId)) {
+    return withCORS(env, req, badRequest('snooze_id must be a UUID'));
+  }
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const fetchPayState = async (currentTimesheetId) => {
+    const tsId = trimStr(currentTimesheetId);
+    if (!tsId || !uuidRe.test(tsId)) return null;
+    try {
+      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
+        p_timesheet_id: tsId,
+        p_actor_user_id: authUser.id
+      });
+      return unwrapRpc(ps0, 'timesheet_pay_state');
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchStoredSnoozeById = async (id) => {
+    try {
+      return await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?id=eq.${enc(id)}` +
+          `&select=id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,source_ref,snooze_kind,snooze_until_date,note,cleared_at_utc,created_at_utc,updated_at_utc` +
+          `&limit=1`
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  const storedRow = await fetchStoredSnoozeById(snoozeId);
+
+  if (!storedRow) {
+    return withCORS(env, req, ok({
+      ok: true,
+      snooze_id: snoozeId,
+      already_cleared: true,
+      cleared: true,
+      candidate_id: null,
+      timesheet_id: null,
+      booking_id: null,
+      segment_id: null,
+      segment_stable_key: null,
+      source_ref: null,
+      snooze_kind: null,
+      snooze_until_date: null,
+      note: null,
+      pay_state: null
+    }));
+  }
+
+  if (storedRow.cleared_at_utc) {
+    const payState = await fetchPayState(storedRow.timesheet_id);
+    return withCORS(env, req, ok({
+      ok: true,
+      snooze_id: trimStr(storedRow.id) || snoozeId,
+      already_cleared: true,
+      cleared: true,
+      candidate_id: trimStr(storedRow.candidate_id) || null,
+      timesheet_id: trimStr(storedRow.timesheet_id) || null,
+      booking_id: trimStr(storedRow.booking_id) || null,
+      segment_id: trimStr(storedRow.segment_id) || null,
+      segment_stable_key: trimStr(storedRow.segment_stable_key) || null,
+      source_ref: trimStr(storedRow.source_ref) || null,
+      snooze_kind: trimStr(storedRow.snooze_kind).toUpperCase() || null,
+      snooze_until_date: trimStr(storedRow.snooze_until_date) || null,
+      note: trimStr(storedRow.note) || null,
+      pay_state: payState
+    }));
+  }
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
+      p_snooze_id: snoozeId,
+      p_actor_user_id: authUser.id
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_snooze_clear');
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const payState = await fetchPayState(storedRow.timesheet_id);
+
+    return withCORS(env, req, ok({
+      ...payloadObj,
+      ok: true,
+      snooze_id: trimStr(payloadObj.snooze_id || storedRow.id || snoozeId) || snoozeId,
+      already_cleared: false,
+      cleared: true,
+      candidate_id: trimStr(payloadObj.candidate_id || storedRow.candidate_id) || null,
+      timesheet_id: trimStr(payloadObj.timesheet_id || storedRow.timesheet_id) || null,
+      booking_id: trimStr(payloadObj.booking_id || storedRow.booking_id) || null,
+      segment_id: trimStr(payloadObj.segment_id || storedRow.segment_id) || null,
+      segment_stable_key: trimStr(payloadObj.segment_stable_key || storedRow.segment_stable_key) || null,
+      source_ref: trimStr(payloadObj.source_ref || storedRow.source_ref) || null,
+      snooze_kind: trimStr(payloadObj.snooze_kind || storedRow.snooze_kind).toUpperCase() || null,
+      snooze_until_date: trimStr(payloadObj.snooze_until_date || storedRow.snooze_until_date) || null,
+      note: trimStr(
+        Object.prototype.hasOwnProperty.call(payloadObj, 'note')
+          ? payloadObj.note
+          : storedRow.note
+      ) || null,
+      pay_state: payState
+    }));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear snooze')));
+  }
+}
+
+
+async function ensureRailPayeeMapForHash(env, { provider, rail_env, entity_kind, entity_id, bank_details_hash, actor_user_id } = {}) {
+  const railProvider = String(provider || '').trim().toUpperCase();
+  const railEnv = String(rail_env || '').trim().toUpperCase();
+  const entityKind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const bankDetailsHash = String(bank_details_hash || '').trim();
+  const actorUserId = String(actor_user_id || '').trim() || null;
+
+  if (!railProvider) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'PROVIDER_REQUIRED',
+      rail_provider: null,
+      rail_env: railEnv || null,
+      entity_kind: entityKind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null
+    };
+  }
+
+  if (!railEnv) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'ENV_REQUIRED',
+      rail_provider: railProvider,
+      rail_env: null,
+      entity_kind: entityKind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null
+    };
+  }
+
+  if (entityKind !== 'CANDIDATE' && entityKind !== 'UMBRELLA') {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'PAYEE_ENTITY_KIND_INVALID',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null
+    };
+  }
+
+  if (!entityId || !bankDetailsHash) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'MISSING_PAYEE_IDENTITY',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null
+    };
+  }
+
+  const target = await resolveRailPayeeTargetByHash(env, {
+    entity_kind: entityKind,
+    entity_id: entityId,
+    bank_details_hash: bankDetailsHash
+  });
+
+  if (!target || target.found !== true) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: String(target?.reason || 'PAYEE_TARGET_NOT_FOUND'),
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: bankDetailsHash
+    };
+  }
+
+  const resolvedHash = String(target.bank_details_hash || '').trim();
+  const payeeName = String(target.bank_fields?.payee_name || '').trim();
+  const sortCode = String(target.bank_fields?.sort_code || '').trim();
+  const accountNumber = String(target.bank_fields?.account_number || '').trim();
+  const accountType = String(target.bank_fields?.account_type || '').trim();
+
+  const sortDigits = sortCode.replace(/[^0-9]/g, '');
+  const acctDigits = accountNumber.replace(/[^0-9]/g, '');
+
+  if (!resolvedHash || !payeeName || sortDigits.length !== 6 || !acctDigits) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'MISSING_BANK_FIELDS',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash || bankDetailsHash
+    };
+  }
+
+  let checkRow = null;
+  try {
+    const q = new URLSearchParams();
+    q.set('select', 'status,override_reason,override_hash');
+    q.set('rail_provider', `eq.${railProvider}`);
+    q.set('rail_env', `eq.${railEnv}`);
+    q.set('entity_kind', `eq.${entityKind}`);
+    q.set('entity_id', `eq.${entityId}`);
+    q.set('bank_details_hash', `eq.${resolvedHash}`);
+    q.set('limit', '1');
+
+    const url = `${env.SUPABASE_URL}/rest/v1/bank_name_checks?${q.toString()}`;
+    const res = await sbFetch(env, url);
+    checkRow = (res && Array.isArray(res.rows) && res.rows.length) ? res.rows[0] : null;
+  } catch {
+    checkRow = null;
+  }
+
+  const nameCheckStatus = String(checkRow?.status || '').trim().toUpperCase();
+  const overrideHash = String(checkRow?.override_hash || '').trim();
+  const overrideReason = String(checkRow?.override_reason || '').trim();
+  const hasOverride = (!!overrideHash && overrideHash === resolvedHash) || !!overrideReason;
+  const nameGateSatisfied = (nameCheckStatus === 'PASS') || hasOverride;
+
+  if (!nameGateSatisfied) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'NAME_CHECK_REQUIRED',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  }
+
+  const adapter = getRailAdapter(railProvider);
+  if (!adapter || typeof adapter.ensurePayeeMapped !== 'function') {
+    return {
+      attempted: false,
+      ok: true,
+      skipped: true,
+      reason: 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP',
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  }
+
+  try {
+    if (typeof adapter.capabilities === 'function') {
+      const caps = await adapter.capabilities(env);
+      if (caps && typeof caps === 'object' && caps.available === false) {
+        return {
+          attempted: false,
+          ok: false,
+          skipped: true,
+          reason: String(caps.reason || 'RAIL_NOT_AVAILABLE'),
+          rail_provider: railProvider,
+          rail_env: railEnv,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash: resolvedHash
+        };
+      }
+    }
+  } catch (e) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'RAIL_CAPABILITIES_FAILED',
+      error: String(e?.message || e),
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  }
+
+  try {
+    const setupRes = await adapter.ensurePayeeMapped(env, {
+      rail_env: railEnv,
+      actor_user_id: actorUserId,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash,
+      bank_fields: {
+        payee_name: payeeName,
+        bank_name: String(target.bank_fields?.bank_name || '').trim(),
+        sort_code: sortCode,
+        account_number: accountNumber,
+        account_type: accountType
+      }
+    });
+
+    if (setupRes && typeof setupRes === 'object') {
+      return setupRes;
+    }
+
+    return {
+      attempted: true,
+      ok: true,
+      skipped: false,
+      reason: null,
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  } catch (e) {
+    return {
+      attempted: true,
+      ok: false,
+      skipped: false,
+      reason: 'RAIL_PROVIDER_SETUP_FAILED',
+      error: String(e?.message || e),
+      rail_provider: railProvider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedHash
+    };
+  }
+}
+
+async function handleBankingPayEnsurePayeeMap(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -14659,29 +16394,239 @@ async function handleBankingPaySnoozeClear(env, req, user) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-  const snoozeId = String(body.snooze_id || body.snoozeId || '').trim();
-  if (!snoozeId) return withCORS(env, req, badRequest('snooze_id is required'));
-  if (!uuidRe.test(snoozeId)) return withCORS(env, req, badRequest('snooze_id must be a UUID'));
+  let provider = String(body.provider || body.rail_provider || '').trim().toUpperCase();
+  let railEnv = String(body.env || body.rail_env || '').trim().toUpperCase();
+
+  const entityKind = String(body.entity_kind || body.payee_entity_kind || '').trim().toUpperCase();
+  const entityId = String(body.entity_id || body.payee_entity_id || '').trim();
+  const bankDetailsHash = String(body.bank_details_hash || body.payee_bank_hash || body.bank_details_hash_snapshot || body.snapshot_bank_details_hash || '').trim();
+
+  if (!entityKind) return withCORS(env, req, badRequest('entity_kind is required (CANDIDATE|UMBRELLA)'));
+  if (!(entityKind === 'CANDIDATE' || entityKind === 'UMBRELLA')) return withCORS(env, req, badRequest('entity_kind must be CANDIDATE or UMBRELLA'));
+  if (!entityId) return withCORS(env, req, badRequest('entity_id is required'));
+  if (!uuidRe.test(entityId)) return withCORS(env, req, badRequest('entity_id must be a UUID'));
+  if (!bankDetailsHash) return withCORS(env, req, badRequest('bank_details_hash is required'));
+
+  if (!provider || !railEnv) {
+    try {
+      const sel = ['rail_provider_default', 'rail_env_default'].join(',');
+      const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=${sel}`);
+      const r0 = (rows && rows[0]) ? rows[0] : null;
+
+      if (!provider) provider = String(r0?.rail_provider_default || 'CSV').trim().toUpperCase();
+      if (!railEnv) railEnv = String(r0?.rail_env_default || 'PROD').trim().toUpperCase();
+    } catch {
+      if (!provider) provider = 'CSV';
+      if (!railEnv) railEnv = 'PROD';
+    }
+  }
+
+  if (!provider) return withCORS(env, req, badRequest('provider is required'));
+  if (!railEnv) return withCORS(env, req, badRequest('env is required'));
 
   try {
-    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
-      p_snooze_id: snoozeId,
-      p_actor_user_id: user.id
+    const railSetup = await ensureRailPayeeMapForHash(env, {
+      provider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: bankDetailsHash,
+      actor_user_id: user && user.id ? user.id : null
     });
 
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_snooze_clear')) {
-        payload = payload.pay_snooze_clear;
-      }
-    } catch {}
+    if (railSetup && railSetup.ok === true) {
+      return withCORS(env, req, ok({ ok: true, rail_setup: railSetup }));
+    }
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    if (railSetup && railSetup.skipped === true && railSetup.reason === 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP') {
+      return withCORS(env, req, ok({ ok: true, rail_setup: railSetup }));
+    }
+
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({ ok: false, rail_setup: railSetup }),
+        { status: 400, headers: JSON_HEADERS }
+      )
+    );
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+async function resolveRailPayeeTargetByHash(env, { entity_kind, entity_id, bank_details_hash } = {}) {
+  const entityKind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const bankDetailsHash = String(bank_details_hash || '').trim();
+
+  if (entityKind !== 'CANDIDATE' && entityKind !== 'UMBRELLA') {
+    return {
+      found: false,
+      entity_kind: entityKind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankDetailsHash || null,
+      bank_fields: null,
+      reason: 'PAYEE_ENTITY_KIND_INVALID'
+    };
+  }
+
+  if (!entityId) {
+    return {
+      found: false,
+      entity_kind: entityKind,
+      entity_id: null,
+      bank_details_hash: bankDetailsHash || null,
+      bank_fields: null,
+      reason: 'ENTITY_ID_REQUIRED'
+    };
+  }
+
+  if (!bankDetailsHash) {
+    return {
+      found: false,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: null,
+      bank_fields: null,
+      reason: 'BANK_DETAILS_HASH_REQUIRED'
+    };
+  }
+
+  if (entityKind === 'CANDIDATE') {
+    try {
+      const qs = new URLSearchParams();
+      qs.set('select', 'id,display_name,account_holder,bank_name,sort_code,account_number,bank_details_hash');
+      qs.set('id', `eq.${entityId}`);
+      qs.set('limit', '1');
+
+      const url = `${env.SUPABASE_URL}/rest/v1/candidates?${qs.toString()}`;
+      const fetchRes = await sbFetch(env, url);
+      const row0 = (fetchRes && Array.isArray(fetchRes.rows) && fetchRes.rows.length) ? fetchRes.rows[0] : null;
+
+      if (row0 && typeof row0 === 'object') {
+        const currentHash = String(row0.bank_details_hash || '').trim();
+        if (currentHash && currentHash === bankDetailsHash) {
+          const payeeName = String(row0.account_holder || row0.display_name || '').trim();
+          return {
+            found: true,
+            entity_kind: entityKind,
+            entity_id: entityId,
+            bank_details_hash: currentHash,
+            bank_fields: {
+              payee_name: payeeName,
+              bank_name: String(row0.bank_name || '').trim(),
+              sort_code: String(row0.sort_code || '').trim(),
+              account_number: String(row0.account_number || '').trim(),
+              account_type: 'personal'
+            },
+            source: 'CANDIDATE_CURRENT'
+          };
+        }
+      }
+    } catch {}
+
+    try {
+      const oneoffQs = new URLSearchParams();
+      oneoffQs.set('select', 'finance_case_id,candidate_id,beneficiary_name,sort_code,account_number,bank_details_hash,note');
+      oneoffQs.set('candidate_id', `eq.${entityId}`);
+      oneoffQs.set('bank_details_hash', `eq.${bankDetailsHash}`);
+      oneoffQs.set('limit', '25');
+
+      const oneoffUrl = `${env.SUPABASE_URL}/rest/v1/pay_finance_case_oneoff_payout_bank_details?${oneoffQs.toString()}`;
+      const oneoffRes = await sbFetch(env, oneoffUrl);
+      const oneoffRows = (oneoffRes && Array.isArray(oneoffRes.rows)) ? oneoffRes.rows : [];
+
+      for (const row0 of oneoffRows) {
+        const financeCaseId = String(row0 && row0.finance_case_id ? row0.finance_case_id : '').trim();
+        if (!financeCaseId) continue;
+
+        try {
+          const viewQs = new URLSearchParams();
+          viewQs.set('select', 'finance_case_id,candidate_id,routing_kind,edit_bank_details_allowed,oneoff_bank_details_present,oneoff_bank_details_editable');
+          viewQs.set('finance_case_id', `eq.${financeCaseId}`);
+          viewQs.set('candidate_id', `eq.${entityId}`);
+          viewQs.set('routing_kind', 'eq.ONE_OFF_SPECIFIED_BANK_ACCOUNT');
+          viewQs.set('edit_bank_details_allowed', 'eq.true');
+          viewQs.set('limit', '1');
+
+          const viewUrl = `${env.SUPABASE_URL}/rest/v1/v_finance_cases_register?${viewQs.toString()}`;
+          const viewRes = await sbFetch(env, viewUrl);
+          const financeRow = (viewRes && Array.isArray(viewRes.rows) && viewRes.rows.length) ? viewRes.rows[0] : null;
+
+          if (!financeRow || typeof financeRow !== 'object') continue;
+
+          return {
+            found: true,
+            entity_kind: entityKind,
+            entity_id: entityId,
+            bank_details_hash: String(row0.bank_details_hash || '').trim(),
+            bank_fields: {
+              payee_name: String(row0.beneficiary_name || '').trim(),
+              bank_name: '',
+              sort_code: String(row0.sort_code || '').trim(),
+              account_number: String(row0.account_number || '').trim(),
+              account_type: 'personal'
+            },
+            source: 'CANDIDATE_ONEOFF_PAYOUT',
+            finance_case_id: financeCaseId
+          };
+        } catch {}
+      }
+    } catch {}
+
+    return {
+      found: false,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: bankDetailsHash,
+      bank_fields: null,
+      reason: 'PAYEE_TARGET_NOT_FOUND'
+    };
+  }
+
+  try {
+    const qs = new URLSearchParams();
+    qs.set('select', 'id,name,bank_name,sort_code,account_number,bank_details_hash');
+    qs.set('id', `eq.${entityId}`);
+    qs.set('limit', '1');
+
+    const url = `${env.SUPABASE_URL}/rest/v1/umbrellas?${qs.toString()}`;
+    const fetchRes = await sbFetch(env, url);
+    const row0 = (fetchRes && Array.isArray(fetchRes.rows) && fetchRes.rows.length) ? fetchRes.rows[0] : null;
+
+    if (row0 && typeof row0 === 'object') {
+      const currentHash = String(row0.bank_details_hash || '').trim();
+      if (currentHash && currentHash === bankDetailsHash) {
+        return {
+          found: true,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash: currentHash,
+          bank_fields: {
+            payee_name: String(row0.name || '').trim(),
+            bank_name: String(row0.bank_name || '').trim(),
+            sort_code: String(row0.sort_code || '').trim(),
+            account_number: String(row0.account_number || '').trim(),
+            account_type: 'business'
+          },
+          source: 'UMBRELLA_CURRENT'
+        };
+      }
+    }
+  } catch {}
+
+  return {
+    found: false,
+    entity_kind: entityKind,
+    entity_id: entityId,
+    bank_details_hash: bankDetailsHash,
+    bank_fields: null,
+    reason: 'PAYEE_TARGET_NOT_FOUND'
+  };
+}
+
+
 
 async function handleBankingBankNameCheckSetOverride(env, req, user) {
   let body = null;
@@ -14697,6 +16642,13 @@ async function handleBankingBankNameCheckSetOverride(env, req, user) {
 
   const entityKind = String(body.entity_kind || body.payee_entity_kind || '').trim().toUpperCase();
   const entityId = String(body.entity_id || body.payee_entity_id || '').trim();
+  const bankDetailsHash = String(
+    body.bank_details_hash ||
+    body.payee_bank_hash ||
+    body.bank_details_hash_snapshot ||
+    body.snapshot_bank_details_hash ||
+    ''
+  ).trim();
   const reason = String(body.reason || '').trim();
 
   if (!entityKind) return withCORS(env, req, badRequest('entity_kind is required (CANDIDATE|UMBRELLA)'));
@@ -14730,7 +16682,8 @@ async function handleBankingBankNameCheckSetOverride(env, req, user) {
       p_entity_kind: entityKind,
       p_entity_id: entityId,
       p_reason: reason,
-      p_actor_user_id: user.id
+      p_actor_user_id: user.id,
+      p_bank_details_hash: bankDetailsHash || null
     });
 
     let payload = rpcRes;
@@ -14741,7 +16694,71 @@ async function handleBankingBankNameCheckSetOverride(env, req, user) {
       }
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    const payloadRow = (payload && typeof payload === 'object' && payload.row && typeof payload.row === 'object')
+      ? payload.row
+      : null;
+
+    const resolvedTargetHash = String(
+      payloadRow?.bank_details_hash ||
+      bankDetailsHash ||
+      ''
+    ).trim();
+
+    let railSetup = {
+      attempted: false,
+      ok: true,
+      skipped: true,
+      reason: 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP',
+      rail_provider: provider,
+      rail_env: railEnv,
+      entity_kind: entityKind,
+      entity_id: entityId,
+      bank_details_hash: resolvedTargetHash || null
+    };
+
+    if (resolvedTargetHash) {
+      try {
+        railSetup = await ensureRailPayeeMapForHash(env, {
+          provider,
+          rail_env: railEnv,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash: resolvedTargetHash,
+          actor_user_id: user.id
+        });
+      } catch (e) {
+        railSetup = {
+          attempted: false,
+          ok: false,
+          skipped: true,
+          reason: 'RAIL_PROVIDER_SETUP_FAILED',
+          error: String(e?.message || e),
+          rail_provider: provider,
+          rail_env: railEnv,
+          entity_kind: entityKind,
+          entity_id: entityId,
+          bank_details_hash: resolvedTargetHash || null
+        };
+      }
+    } else {
+      railSetup = {
+        attempted: false,
+        ok: false,
+        skipped: true,
+        reason: 'BANK_DETAILS_HASH_REQUIRED',
+        rail_provider: provider,
+        rail_env: railEnv,
+        entity_kind: entityKind,
+        entity_id: entityId,
+        bank_details_hash: null
+      };
+    }
+
+    const responsePayload = (payload && typeof payload === 'object')
+      ? { ...payload, rail_setup: railSetup }
+      : { rail_setup: railSetup };
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
@@ -14761,6 +16778,13 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
 
   const entityKind = String(body.entity_kind || body.payee_entity_kind || '').trim().toUpperCase();
   const entityId = String(body.entity_id || body.payee_entity_id || '').trim();
+  const bankDetailsHash = String(
+    body.bank_details_hash ||
+    body.payee_bank_hash ||
+    body.bank_details_hash_snapshot ||
+    body.snapshot_bank_details_hash ||
+    ''
+  ).trim();
 
   if (!entityKind) return withCORS(env, req, badRequest('entity_kind is required (CANDIDATE|UMBRELLA)'));
   if (!(entityKind === 'CANDIDATE' || entityKind === 'UMBRELLA')) return withCORS(env, req, badRequest('entity_kind must be CANDIDATE or UMBRELLA'));
@@ -14791,7 +16815,8 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
       p_env: railEnv,
       p_entity_kind: entityKind,
       p_entity_id: entityId,
-      p_actor_user_id: user.id
+      p_actor_user_id: user.id,
+      p_bank_details_hash: bankDetailsHash || null
     });
 
     let payload = rpcRes;
@@ -14807,6 +16832,7 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -16228,133 +18254,7 @@ async function handleTimesheetUnadvancePayment(env, req, timesheetId) {
   }
 }
 
-async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
-  const enc = encodeURIComponent;
 
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const idIn = String(timesheetId || '').trim();
-  if (!idIn) return withCORS(env, req, badRequest('timesheet_id is required'));
-
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!uuidRe.test(idIn)) {
-    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
-  }
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
-  };
-
-  const fetchPayState = async (currentTimesheetId) => {
-    try {
-      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
-        p_timesheet_id: currentTimesheetId,
-        p_actor_user_id: user.id
-      });
-      return unwrapRpc(ps0, 'timesheet_pay_state');
-    } catch {
-      return null;
-    }
-  };
-
-  let resolved = null;
-  try {
-    resolved = await resolveTimesheetToCurrent(env, idIn);
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve timesheet')));
-  }
-
-  if (!resolved || !resolved.current_timesheet_id) {
-    return withCORS(env, req, notFound('Timesheet not found'));
-  }
-
-  if (!resolved.booking_id) {
-    return withCORS(env, req, badRequest('Timesheet booking_id missing; cannot resolve series'));
-  }
-
-  const currentTimesheetId = String(resolved.current_timesheet_id);
-  if (resolved.was_stale === true && currentTimesheetId !== idIn) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetId }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
-
-  let tsfin = null;
-  try {
-    tsfin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=timesheet_id,candidate_id,client_id` +
-        `&limit=1`
-    );
-  } catch {
-    tsfin = null;
-  }
-
-  const candidateId = (tsfin?.candidate_id != null && String(tsfin.candidate_id).trim()) ? String(tsfin.candidate_id).trim() : null;
-
-  let activeSnooze = null;
-  try {
-    activeSnooze = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&segment_id=is.null` +
-        `&source_ref=is.null` +
-        `&snooze_kind=eq.TIMESHEET_PAYMENT` +
-        `&cleared_at_utc=is.null` +
-        `&select=id,timesheet_id,candidate_id,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc` +
-        `&order=created_at_utc.desc` +
-        `&limit=1`
-    );
-  } catch {
-    activeSnooze = null;
-  }
-
-  if (!activeSnooze || !activeSnooze.id) {
-    const payState = await fetchPayState(currentTimesheetId);
-    return withCORS(env, req, ok({
-      ok: true,
-      timesheet_id: currentTimesheetId,
-      candidate_id: candidateId || null,
-      already_cleared: true,
-      pay_state: payState
-    }));
-  }
-
-  try {
-    const rpcRes = await sbRpc(env, 'pay_snooze_clear', {
-      p_snooze_id: String(activeSnooze.id).trim(),
-      p_actor_user_id: user.id
-    });
-
-    const payload = unwrapRpc(rpcRes, 'pay_snooze_clear');
-    const payState = await fetchPayState(currentTimesheetId);
-
-    return withCORS(env, req, ok({
-      ...((payload && typeof payload === 'object') ? payload : {}),
-      ok: true,
-      timesheet_id: currentTimesheetId,
-      candidate_id: candidateId || null,
-      pay_state: payState
-    }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear timesheet payment snooze')));
-  }
-}
 async function handleTimesheetSnoozePayment(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -17216,14 +19116,11 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
 
 
+async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
+  if (!user) return withCORS(env, req, unauthorized());
 
-async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
-
-  const url = new URL(req.url);
-  const scopeRaw = String(url.searchParams.get('scope') || 'ALL').trim().toUpperCase();
-  const scope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -17247,6 +19144,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
         const envObj = _safeJsonParse(e.body);
         if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
       }
 
       if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
@@ -17288,93 +19186,232 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return null;
   };
 
+  const csvEscape = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const asBoolText = (v) => {
+    return v === true ? 'true' : (v === false ? 'false' : '');
+  };
+
+  const normalizeText = (v) => {
+    return (v === null || v === undefined) ? '' : String(v);
+  };
+
+  const coalesce = (...vals) => {
+    for (const v of vals) {
+      if (v !== null && v !== undefined && String(v) !== '') return v;
+    }
+    return '';
+  };
+
   try {
-    // ✅ Freshness gate (bank CSV should not export stale batches)
-    try {
-      const fr0 = await sbRpc(env, 'pay_batch_validate_freshness', {
-        p_pay_batch_id: id,
-        p_actor_user_id: user && user.id ? user.id : null
-      });
-      const fr = unwrapRpc(fr0, 'pay_batch_validate_freshness');
-      const isStale = !!(fr && typeof fr === 'object' && fr.is_stale === true);
-      if (isStale) {
-        const payload = (fr && typeof fr === 'object') ? fr : { is_stale: true, stale_reasons: [], diff: [] };
-        const headers = new Headers();
-        headers.set('Content-Type', 'application/json; charset=utf-8');
-        return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
-      }
-    } catch (e) {
-      const stale409 = _maybeStale409(e);
-      if (stale409) return stale409;
-      // If freshness RPC fails for any other reason, treat as server error (do not risk exporting stale).
-      return withCORS(env, req, serverError(String(e?.message || e)));
+    const raw0 = await sbRpc(env, 'pay_batch_export_csv_rows', {
+      p_pay_batch_id: id,
+      p_actor_user_id: user.id
+    });
+
+    const exportObj = unwrapRpc(raw0, 'pay_batch_export_csv_rows');
+
+    const batch = (exportObj && typeof exportObj === 'object' && exportObj.batch && typeof exportObj.batch === 'object')
+      ? exportObj.batch
+      : {};
+
+    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+
+    const batchId = (batch && batch.id != null) ? String(batch.id) : id;
+    const batchStatus = (batch && batch.status != null) ? String(batch.status) : '';
+    const payDate = (batch && batch.pay_date != null) ? String(batch.pay_date) : '';
+    const batchKind = (batch && batch.batch_kind != null) ? String(batch.batch_kind) : '';
+    const batchKindFixed = (batch && batch.batch_kind_fixed != null) ? String(batch.batch_kind_fixed) : '';
+
+    const cols = [
+      'batch_id',
+      'batch_status',
+      'pay_date',
+      'batch_kind',
+      'batch_kind_fixed',
+
+      'candidate_last_name',
+      'candidate_first_name',
+      'candidate_ref',
+      'candidate_display_name',
+      'client_name',
+      'client_id',
+      'timesheet_id',
+      'work_date',
+      'week_ending_date',
+      'reference_number',
+
+      'line_kind',
+      'bucket_code',
+      'unit_name',
+      'units',
+      'rate',
+      'amount_ex_vat',
+      'amount_vat',
+      'amount_inc_vat',
+      'signed_amount_ex_vat',
+
+      'item_type',
+      'item_type_label',
+      'payment_or_deduction',
+      'is_deduction',
+      'deduction_kind',
+      'deduction_amount',
+
+      'taxability',
+      'pay_channel',
+      'pay_method',
+
+      'finance_case_reference',
+      'source_ref',
+      'comment_or_note',
+      'description',
+      'item_description',
+
+      'payout_destination',
+      'routing_kind',
+      'finance_routing_kind',
+      'appears_on_umbrella_remittance',
+      'generates_candidate_payment_advice',
+      'is_candidate_directed_oneoff_payout',
+
+      'masked_bank_account',
+      'masked_bank_account_paid_to',
+      'beneficiary_name',
+
+      'bank_details_created_by',
+      'bank_details_created_by_display_name',
+      'bank_details_created_by_email',
+      'bank_details_created_by_user_id',
+      'bank_details_updated_by',
+      'bank_details_updated_by_display_name',
+      'bank_details_updated_by_email',
+      'bank_details_updated_by_user_id',
+
+      'lifecycle_status',
+      'lifecycle_status_display',
+      'finance_lifecycle_status_display',
+      'finance_status',
+      'finance_payout_status',
+
+      'paye_net_amount',
+      'repayment_week_start'
+    ];
+
+    const lines = [];
+    lines.push(cols.map(csvEscape).join(','));
+
+    for (const row of rows) {
+      const itemType = normalizeText(coalesce(row?.item_type, ''));
+      const paymentOrDeduction = normalizeText(coalesce(row?.payment_or_deduction, ''));
+      const deductionKind = normalizeText(coalesce(row?.deduction_kind, itemType));
+      const deductionAmount = coalesce(row?.deduction_amount, row?.deduction_amount_ex_vat, '');
+      const isDeduction = (String(paymentOrDeduction).trim().toUpperCase() === 'DEDUCTION')
+        ? 'true'
+        : (String(paymentOrDeduction).trim().toUpperCase() === 'PAYMENT' ? 'false' : asBoolText(row?.is_deduction));
+
+      const vals = [
+        batchId,
+        batchStatus,
+        payDate,
+        batchKind,
+        batchKindFixed,
+
+        normalizeText(row?.candidate_last_name),
+        normalizeText(row?.candidate_first_name),
+        normalizeText(coalesce(row?.candidate_tms_ref, row?.candidate_tms_ref_snap, '')),
+        normalizeText(coalesce(row?.candidate_display_name, row?.candidate_display_name_snap, '')),
+        normalizeText(row?.client_name),
+        normalizeText(row?.client_id),
+        normalizeText(row?.timesheet_id),
+        normalizeText(coalesce(row?.work_date, row?.seg_work_date, row?.sort_work_date, '')),
+        normalizeText(row?.week_ending_date),
+        normalizeText(row?.reference_number),
+
+        normalizeText(row?.line_kind),
+        normalizeText(coalesce(row?.bucket_code, row?.sort_bucket_code, '')),
+        normalizeText(coalesce(row?.unit_name, row?.sort_unit_name, '')),
+        normalizeText(row?.units),
+        normalizeText(row?.rate),
+        normalizeText(row?.amount_ex_vat),
+        normalizeText(row?.amount_vat),
+        normalizeText(row?.amount_inc_vat),
+        normalizeText(row?.signed_amount_ex_vat),
+
+        itemType,
+        normalizeText(row?.item_type_label),
+        paymentOrDeduction,
+        isDeduction,
+        deductionKind,
+        normalizeText(deductionAmount),
+
+        normalizeText(coalesce(row?.taxability, row?.finance_taxability, '')),
+        normalizeText(row?.pay_channel),
+        normalizeText(row?.pay_method),
+
+        normalizeText(row?.finance_case_reference),
+        normalizeText(row?.source_ref),
+        normalizeText(row?.comment_or_note),
+        normalizeText(row?.description),
+        normalizeText(row?.item_description),
+
+        normalizeText(row?.payout_destination),
+        normalizeText(coalesce(row?.routing_kind, row?.finance_routing_kind, '')),
+        normalizeText(row?.finance_routing_kind),
+        asBoolText(row?.appears_on_umbrella_remittance),
+        asBoolText(row?.generates_candidate_payment_advice),
+        asBoolText(row?.is_candidate_directed_oneoff_payout),
+
+        normalizeText(row?.masked_bank_account),
+        normalizeText(row?.masked_bank_account_paid_to),
+        normalizeText(row?.beneficiary_name),
+
+        normalizeText(row?.bank_details_created_by),
+        normalizeText(row?.bank_details_created_by_display_name),
+        normalizeText(row?.bank_details_created_by_email),
+        normalizeText(row?.bank_details_created_by_user_id),
+        normalizeText(row?.bank_details_updated_by),
+        normalizeText(row?.bank_details_updated_by_display_name),
+        normalizeText(row?.bank_details_updated_by_email),
+        normalizeText(row?.bank_details_updated_by_user_id),
+
+        normalizeText(row?.lifecycle_status),
+        normalizeText(row?.lifecycle_status_display),
+        normalizeText(row?.finance_lifecycle_status_display),
+        normalizeText(row?.finance_status),
+        normalizeText(row?.finance_payout_status),
+
+        normalizeText(row?.paye_net_amount),
+        normalizeText(row?.repayment_week_start)
+      ];
+
+      lines.push(vals.map(csvEscape).join(','));
     }
 
-    // Resolve provider from batch snapshot; delegate export to adapter if supported.
-    const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    const csvText = lines.join('\r\n');
 
-    let batchPayload = batchRes;
-    try {
-      if (Array.isArray(batchRes) && batchRes.length === 1 && batchRes[0] && typeof batchRes[0] === 'object') batchPayload = batchRes[0];
-      if (batchPayload && typeof batchPayload === 'object' && Object.prototype.hasOwnProperty.call(batchPayload, 'pay_batch_get')) {
-        batchPayload = batchPayload.pay_batch_get;
+    const filename = `pay_batch_${batchId}_detail.csv`;
+    const res = new Response(csvText, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`
       }
-    } catch {}
+    });
 
-    const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
-    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
-
-    const adapter = getRailAdapter(provider);
-    if (!adapter || typeof adapter.exportCsv !== 'function') {
-      return withCORS(env, req, badRequest('EXPORT_NOT_SUPPORTED_FOR_THIS_RAIL'));
-    }
-
-    // ✅ Generic availability gate via adapter.capabilities() (no provider-specific checks here)
-    try {
-      if (adapter && typeof adapter.capabilities === 'function') {
-        const caps = await adapter.capabilities(env);
-        if (caps && typeof caps === 'object' && caps.available === false) {
-          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
-          return withCORS(env, req, badRequest(reason));
-        }
-      }
-    } catch (e) {
-      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
-      return withCORS(env, req, badRequest(msg));
-    }
-
-    let csvText = null;
-    try {
-      csvText = await adapter.exportCsv(env, id, { scope }, user && user.id ? user.id : null);
-    } catch (e) {
-      const stale409 = _maybeStale409(e);
-      if (stale409) return stale409;
-
-      const msg = (e && e.message) ? String(e.message) : String(e || 'EXPORT_FAILED');
-      if (msg.includes('RAIL_ENV_MISMATCH')) {
-        return withCORS(env, req, badRequest(msg));
-      }
-      throw e;
-    }
-
-    const txt = (csvText === null || csvText === undefined) ? '' : String(csvText);
-
-    const headers = new Headers();
-    headers.set('Content-Type', 'text/csv; charset=utf-8');
-    headers.set('Content-Disposition', `attachment; filename="pay_batch_${id}_${scope}.csv"`);
-    // CORS
-    headers.set('Access-Control-Allow-Origin', '*');
-    headers.set('Access-Control-Allow-Headers', '*');
-    headers.set('Access-Control-Allow-Methods', '*');
-
-    return new Response(txt, { status: 200, headers });
+    return withCORS(env, req, res);
   } catch (e) {
     const stale409 = _maybeStale409(e);
     if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
   }
 }
-
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -18765,224 +20802,6 @@ async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   }
 
   return withCORS(env, req, ok({ replaced: true, r2_key: newKey }));
-}
-
-
-async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
-
-  const unwrapRpc = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
-  };
-
-  const _safeJsonParse = (s) => {
-    try { return JSON.parse(String(s || '')); } catch { return null; }
-  };
-
-  const _extractDbRaisedJson = (e) => {
-    try {
-      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
-
-      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
-
-      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
-        const envObj = _safeJsonParse(e.body);
-        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-        if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
-      }
-
-      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
-        const m = e.message;
-        const i1 = m.indexOf('{');
-        const i2 = m.lastIndexOf('}');
-        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
-          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
-          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
-        }
-      }
-
-      if (!msg || typeof msg !== 'string') return null;
-      const t = msg.trim();
-
-      if (t.startsWith('{') && t.endsWith('}')) {
-        const payload = _safeJsonParse(t);
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-
-      const j1 = t.indexOf('{');
-      const j2 = t.lastIndexOf('}');
-      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
-        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-    } catch {}
-    return null;
-  };
-
-  const _maybeStale409 = (e) => {
-    const payload = _extractDbRaisedJson(e);
-    if (payload && typeof payload === 'object' && String(payload.code || '').toUpperCase() === 'BATCH_STALE') {
-      const headers = new Headers();
-      headers.set('Content-Type', 'application/json; charset=utf-8');
-      return withCORS(env, req, new Response(JSON.stringify(payload), { status: 409, headers }));
-    }
-    return null;
-  };
-
-  const csvEscape = (v) => {
-    const s = (v === null || v === undefined) ? '' : String(v);
-    if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
-  };
-
-  try {
-    const raw0 = await sbRpc(env, 'pay_batch_export_csv_rows', {
-      p_pay_batch_id: id,
-      p_actor_user_id: user.id
-    });
-
-    const exportObj = unwrapRpc(raw0, 'pay_batch_export_csv_rows');
-
-    const batch = (exportObj && typeof exportObj === 'object' && exportObj.batch && typeof exportObj.batch === 'object')
-      ? exportObj.batch
-      : {};
-
-    const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
-
-    const batchId = (batch && batch.id != null) ? String(batch.id) : id;
-    const batchStatus = (batch && batch.status != null) ? String(batch.status) : '';
-    const payDate = (batch && batch.pay_date != null) ? String(batch.pay_date) : '';
-    const batchKind = (batch && batch.batch_kind != null) ? String(batch.batch_kind) : '';
-
-    const cols = [
-      'batch_id',
-      'batch_status',
-      'pay_date',
-      'batch_kind',
-
-      'candidate_last_name',
-      'candidate_first_name',
-      'candidate_ref',
-      'candidate_display_name',
-
-      'client_name',
-      'client_id',
-
-      'timesheet_id',
-      'work_date',
-      'week_ending_date',
-      'reference_number',
-
-      'line_kind',
-      'bucket_code',
-      'unit_name',
-      'units',
-      'rate',
-
-      'amount_ex_vat',
-      'vat_amount',
-      'amount_inc_vat',
-
-      'is_deduction',
-      'deduction_kind',
-      'deduction_amount',
-
-      'paye_net_amount',
-
-      'pay_channel',
-      'item_type',
-      'source_ref',
-      'repayment_week_start'
-    ];
-
-    const lines = [];
-    lines.push(cols.map(csvEscape).join(','));
-
-    for (const r of rows) {
-      const isOverpay = (r && r.is_overpayment_recovery === true);
-      const isLoanRepay = (r && r.is_loan_repayment === true);
-      const isDed = (isOverpay || isLoanRepay);
-
-      const deductionKind = isDed
-        ? (r && r.item_type != null ? String(r.item_type) : (isOverpay ? 'OVERPAYMENT_RECOVERY' : 'LOAN_REPAYMENT'))
-        : '';
-
-      const deductionAmount = isDed
-        ? (r && r.deduction_amount_ex_vat != null ? r.deduction_amount_ex_vat : '')
-        : '';
-
-      const vals = [
-        batchId,
-        batchStatus,
-        payDate,
-        batchKind,
-
-        (r && r.candidate_last_name != null) ? r.candidate_last_name : '',
-        (r && r.candidate_first_name != null) ? r.candidate_first_name : '',
-        (r && r.candidate_tms_ref != null) ? r.candidate_tms_ref : '',
-        (r && r.candidate_display_name != null) ? r.candidate_display_name : '',
-
-        (r && r.client_name != null) ? r.client_name : '',
-        (r && r.client_id != null) ? r.client_id : '',
-
-        (r && r.timesheet_id != null) ? r.timesheet_id : '',
-        (r && r.work_date != null) ? r.work_date : '',
-        (r && r.week_ending_date != null) ? r.week_ending_date : '',
-        (r && r.reference_number != null) ? r.reference_number : '',
-
-        (r && r.line_kind != null) ? r.line_kind : '',
-        (r && r.bucket_code != null) ? r.bucket_code : '',
-        (r && r.unit_name != null) ? r.unit_name : '',
-        (r && r.units != null) ? r.units : '',
-        (r && r.rate != null) ? r.rate : '',
-
-        (r && r.amount_ex_vat != null) ? r.amount_ex_vat : '',
-        (r && r.amount_vat != null) ? r.amount_vat : '',
-        (r && r.amount_inc_vat != null) ? r.amount_inc_vat : '',
-
-        isDed ? 'true' : 'false',
-        deductionKind,
-        deductionAmount,
-
-        (r && r.paye_net_amount != null) ? r.paye_net_amount : '',
-
-        (r && r.pay_channel != null) ? r.pay_channel : '',
-        (r && r.item_type != null) ? r.item_type : '',
-        (r && r.source_ref != null) ? r.source_ref : '',
-        (r && r.repayment_week_start != null) ? r.repayment_week_start : ''
-      ];
-
-      lines.push(vals.map(csvEscape).join(','));
-    }
-
-    const csvText = lines.join('\r\n');
-
-    const filename = `pay_batch_${batchId}_detail.csv`;
-    const res = new Response(csvText, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`
-      }
-    });
-
-    return withCORS(env, req, res);
-  } catch (e) {
-    const stale409 = _maybeStale409(e);
-    if (stale409) return stale409;
-    return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
-  }
 }
 
 
@@ -21021,9 +22840,82 @@ async function handleTimesheetDetails(env, req, timesheetId) {
           snooze_note:
             (payState.snooze_note != null && String(payState.snooze_note).trim())
               ? String(payState.snooze_note).trim()
-              : null
+              : null,
+          segment_snoozes: Array.isArray(payState.segment_snoozes)
+            ? payState.segment_snoozes
+                .filter((row) => row && typeof row === 'object' && !Array.isArray(row))
+                .map((row) => ({
+                  ...row,
+                  snooze_id:
+                    (row.snooze_id != null && String(row.snooze_id).trim())
+                      ? String(row.snooze_id).trim()
+                      : null,
+                  candidate_id:
+                    (row.candidate_id != null && String(row.candidate_id).trim())
+                      ? String(row.candidate_id).trim()
+                      : null,
+                  timesheet_id:
+                    (row.timesheet_id != null && String(row.timesheet_id).trim())
+                      ? String(row.timesheet_id).trim()
+                      : null,
+                  booking_id:
+                    (row.booking_id != null && String(row.booking_id).trim())
+                      ? String(row.booking_id).trim()
+                      : null,
+                  segment_id:
+                    (row.segment_id != null && String(row.segment_id).trim())
+                      ? String(row.segment_id).trim()
+                      : null,
+                  segment_stable_key:
+                    (row.segment_stable_key != null && String(row.segment_stable_key).trim())
+                      ? String(row.segment_stable_key).trim()
+                      : null,
+                  snooze_kind:
+                    (row.snooze_kind != null && String(row.snooze_kind).trim())
+                      ? String(row.snooze_kind).trim()
+                      : null,
+                  snooze_until_date:
+                    (row.snooze_until_date != null && String(row.snooze_until_date).trim())
+                      ? String(row.snooze_until_date).trim()
+                      : null,
+                  note:
+                    (row.note != null && String(row.note).trim())
+                      ? String(row.note).trim()
+                      : null,
+                  snooze_note:
+                    (row.snooze_note != null && String(row.snooze_note).trim())
+                      ? String(row.snooze_note).trim()
+                      : ((row.note != null && String(row.note).trim())
+                          ? String(row.note).trim()
+                          : null),
+                  date:
+                    (row.date != null && String(row.date).trim())
+                      ? String(row.date).trim()
+                      : null,
+                  work_date:
+                    (row.work_date != null && String(row.work_date).trim())
+                      ? String(row.work_date).trim()
+                      : ((row.date != null && String(row.date).trim())
+                          ? String(row.date).trim()
+                          : null),
+                  ref_num:
+                    (row.ref_num != null && String(row.ref_num).trim())
+                      ? String(row.ref_num).trim()
+                      : null,
+                  snooze_state:
+                    (row.snooze_state != null && String(row.snooze_state).trim())
+                      ? String(row.snooze_state).trim()
+                      : (((row.snooze_until_date != null && String(row.snooze_until_date).trim()))
+                          ? 'DATED_SNOOZED'
+                          : 'INDEFINITE_SNOOZED')
+                }))
+            : []
         }
       : null;
+
+    const segmentSnoozesOut = (payStateOut && Array.isArray(payStateOut.segment_snoozes))
+      ? payStateOut.segment_snoozes
+      : [];
 
     // ─────────────────────────────────────────────────────────────
     // Contract-resolved EFFECTIVE flags (source of truth = v_timesheets_summary)
@@ -21431,6 +23323,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       evidence: [],
 
       pay_state: payStateOut,
+      segment_snoozes: segmentSnoozesOut,
       is_advanced: !!(payStateOut && payStateOut.is_advanced === true),
       can_unadvance: !!(payStateOut && payStateOut.can_unadvance === true),
       advanced_consumed_by_batch_id:
@@ -21458,7 +23351,6 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
-
 
 async function handleTimesheetUnauthorise(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -22488,6 +24380,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   if (!weekId) return withCORS(env, req, badRequest('contract_week_id is required'));
 
   const enc = encodeURIComponent;
+  const trimStr = (v) => String(v || '').trim();
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -22500,7 +24393,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, notFound('Week not found'));
   }
 
-  // ✅ HARD BLOCK: this endpoint must NEVER operate on adjustment weeks (prevents orphan adjustment contract_weeks)
   const cwAdditionalSeq = Number(cw.additional_seq ?? 0) || 0;
   const cwIsAdjustment = cw.is_adjustment === true;
   if (cwIsAdjustment || cwAdditionalSeq > 0) {
@@ -22511,8 +24403,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     );
   }
 
-  // ✅ planned-only delete (no timesheet_id) → SQL RPC contract_week_delete_planned(...)
-  // (No expected_timesheet_id required here; if the week has gained a timesheet_id, it will go down the guarded branch below.)
   if (!cw.timesheet_id) {
     try {
       const rpcRes = await fetch(
@@ -22532,24 +24422,46 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         return withCORS(env, req, serverError(`Planned delete failed: ${t}`));
       }
 
-      return withCORS(env, req, ok({ deleted: true, planned: true }));
+      return withCORS(env, req, ok({
+        deleted: true,
+        planned: true,
+        contract_week_id: weekId,
+        timesheet_id: null,
+        contract_week_status: (cw.status != null ? String(cw.status) : null),
+        reopened_submission_mode_snapshot: (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot) : null),
+        week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+        contract_week: {
+          id: weekId,
+          contract_id: cw.contract_id || null,
+          week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+          status: (cw.status != null ? String(cw.status) : null),
+          submission_mode_snapshot: (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot) : null),
+          timesheet_id: null
+        },
+        summary_row_hint: {
+          id: weekId,
+          contract_week_id: weekId,
+          timesheet_id: null,
+          contract_id: cw.contract_id || null,
+          week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+          status: (cw.status != null ? String(cw.status) : null),
+          submission_mode_snapshot: (cw.submission_mode_snapshot != null ? String(cw.submission_mode_snapshot) : null)
+        }
+      }));
     } catch (e) {
       return withCORS(env, req, serverError(`Planned delete failed: ${e?.message || String(e)}`));
     }
   }
 
-  // ✅ Guarded delete for a week that currently has a timesheet
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
-  // Resolve CW-linked timesheet to CURRENT
   const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
   if (!resolved?.current_timesheet_id) {
     return withCORS(env, req, serverError('Failed to resolve current timesheet for contract week'));
   }
   const currentTimesheetId = String(resolved.current_timesheet_id);
 
-  // Guard mismatch → 409 moved
   if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
       env,
@@ -22561,14 +24473,11 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     );
   }
 
-  // booking_id is required to delete the whole rotation series safely
   if (!resolved.booking_id) {
     return withCORS(env, req, serverError('Failed to resolve booking_id for contract week timesheet'));
   }
   const bookingId = String(resolved.booking_id);
 
-  // ✅ Determine submission_mode_snapshot to restore on the reopened planned week.
-  // Prefer CURRENT timesheet submission_mode (before deletion), else fall back to existing CW snapshot, else MANUAL.
   let reopenSnapshot = '';
   try {
     const tsRow = await sbGetOne(
@@ -22583,7 +24492,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   }
   if (reopenSnapshot !== 'ELECTRONIC') reopenSnapshot = 'MANUAL';
 
-  // Fetch all timesheet_ids in this booking_id series
   const { rows: tsRowsAll } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -22592,7 +24500,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   );
   const allIds = (tsRowsAll || []).map(r => r.timesheet_id).filter(Boolean);
 
-  // Guard: no current TSFIN in this series may be paid or invoiced
   if (allIds.length) {
     const inList = allIds.map(x => `"${String(x).replace(/"/g, '')}"`).join(',');
     const { rows: finRows } = await sbFetch(
@@ -22612,7 +24519,125 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     }
   }
 
-  // Delete all timesheet rows in the series
+  const collectActiveTimesheetSnoozes = async (bookingIdArg, timesheetIdsArg) => {
+    const merged = new Map();
+    const baseSelect = 'id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,snooze_kind';
+    const seriesIds = Array.isArray(timesheetIdsArg)
+      ? timesheetIdsArg.map(x => trimStr(x)).filter(Boolean)
+      : [];
+
+    const collect = async (url) => {
+      try {
+        const { rows: fetchedRows } = await sbFetch(env, url);
+        for (const row of (Array.isArray(fetchedRows) ? fetchedRows : [])) {
+          const id = trimStr(row?.id);
+          if (!id) continue;
+          merged.set(id, row);
+        }
+      } catch {}
+    };
+
+    if (bookingIdArg) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?booking_id=eq.${enc(String(bookingIdArg))}` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    if (seriesIds.length) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=in.(${seriesIds.map(enc).join(',')})` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    return Array.from(merged.values());
+  };
+
+  const clearCollectedSnoozes = async (snoozeRows, clearReason) => {
+    const clearedIds = [];
+    const failedIds = [];
+
+    for (const snoozeRow of (Array.isArray(snoozeRows) ? snoozeRows : [])) {
+      const snoozeId = trimStr(snoozeRow?.id);
+      if (!snoozeId) continue;
+
+      let cleared = false;
+
+      try {
+        await sbRpc(env, 'pay_snooze_clear', {
+          p_snooze_id: snoozeId,
+          p_actor_user_id: user.id
+        });
+        cleared = true;
+      } catch {}
+
+      if (!cleared) {
+        const now = nowIso();
+        try {
+          const patchRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({
+                cleared_at_utc: now,
+                cleared_by_user_id: user.id,
+                updated_at_utc: now,
+                updated_by_user_id: user.id
+              })
+            }
+          );
+
+          if (!patchRes.ok) {
+            const txt = await patchRes.text().catch(() => '');
+            throw new Error(txt || `Failed to clear snooze ${snoozeId}`);
+          }
+
+          try {
+            await writeAudit(
+              env,
+              user,
+              'SNOOZE_CLEARED',
+              {
+                snooze_id: snoozeId,
+                booking_id: bookingIdArg || null,
+                timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+                segment_id: trimStr(snoozeRow?.segment_id) || null,
+                segment_stable_key: trimStr(snoozeRow?.segment_stable_key) || null,
+                snooze_kind: trimStr(snoozeRow?.snooze_kind) || null,
+                clear_reason: clearReason || null
+              },
+              {
+                entity: 'pay_item_snoozes',
+                subject_id: snoozeId,
+                req,
+                reason: clearReason || null
+              }
+            );
+          } catch {}
+
+          cleared = true;
+        } catch {}
+      }
+
+      if (cleared) clearedIds.push(snoozeId);
+      else failedIds.push(snoozeId);
+    }
+
+    return { clearedIds, failedIds };
+  };
+
+  const snoozesToClear = await collectActiveTimesheetSnoozes(bookingId, allIds);
+
   const delTs = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?booking_id=eq.${enc(bookingId)}`,
     { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
@@ -22621,7 +24646,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, serverError(await delTs.text()));
   }
 
-  // Delete TSFIN rows for those timesheet_ids (avoid orphan snapshots)
   if (allIds.length) {
     const inList = allIds.map(x => `"${String(x).replace(/"/g, '')}"`).join(',');
     await fetch(
@@ -22630,7 +24654,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     ).catch(() => {});
   }
 
-  // Reset week to OPEN (+ restore snapshot mode)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
     {
@@ -22645,13 +24668,69 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     }
   ).catch(() => {});
 
-  // Audit
+  const snoozeClearResult = await clearCollectedSnoozes(
+    snoozesToClear,
+    'TIMESHEET_DELETED_NOT_REQUIRED'
+  );
+
+  let reopenedContractWeek = null;
+  try {
+    reopenedContractWeek = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}` +
+        `&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,additional_seq,is_adjustment,planned_schedule_json,updated_at`
+    );
+  } catch {
+    reopenedContractWeek = null;
+  }
+
+  if (!reopenedContractWeek) {
+    reopenedContractWeek = {
+      id: weekId,
+      contract_id: cw.contract_id || null,
+      week_ending_date: (cw.week_ending_date != null ? String(cw.week_ending_date) : null),
+      status: 'OPEN',
+      submission_mode_snapshot: reopenSnapshot,
+      timesheet_id: null,
+      additional_seq: Number(cw.additional_seq ?? 0) || 0,
+      is_adjustment: cw.is_adjustment === true,
+      planned_schedule_json: (cw.planned_schedule_json ?? null),
+      updated_at: nowIso()
+    };
+  }
+
+  const summaryRowHint = {
+    id: weekId,
+    contract_week_id: weekId,
+    timesheet_id: null,
+    contract_id: reopenedContractWeek.contract_id || cw.contract_id || null,
+    week_ending_date:
+      (reopenedContractWeek.week_ending_date != null
+        ? String(reopenedContractWeek.week_ending_date)
+        : (cw.week_ending_date != null ? String(cw.week_ending_date) : null)),
+    status:
+      (reopenedContractWeek.status != null
+        ? String(reopenedContractWeek.status)
+        : 'OPEN'),
+    submission_mode_snapshot:
+      (reopenedContractWeek.submission_mode_snapshot != null
+        ? String(reopenedContractWeek.submission_mode_snapshot)
+        : reopenSnapshot)
+  };
+
   try {
     await writeAudit(
       env,
       user,
       'CONTRACT_WEEK_TIMESHEET_DELETED',
-      { contract_week_id: weekId, booking_id: bookingId, timesheet_id: currentTimesheetId, reopened_submission_mode_snapshot: reopenSnapshot },
+      {
+        contract_week_id: weekId,
+        booking_id: bookingId,
+        timesheet_id: currentTimesheetId,
+        reopened_submission_mode_snapshot: reopenSnapshot,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
+      },
       { entity: 'contract_weeks', subject_id: weekId, req }
     );
   } catch {}
@@ -22659,15 +24738,30 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   return withCORS(env, req, ok({
     deleted: true,
     planned: false,
+    contract_week_id: weekId,
+    timesheet_id: null,
+    contract_week_status:
+      (reopenedContractWeek.status != null
+        ? String(reopenedContractWeek.status)
+        : 'OPEN'),
+    reopened_submission_mode_snapshot:
+      (reopenedContractWeek.submission_mode_snapshot != null
+        ? String(reopenedContractWeek.submission_mode_snapshot)
+        : reopenSnapshot),
+    week_ending_date:
+      (reopenedContractWeek.week_ending_date != null
+        ? String(reopenedContractWeek.week_ending_date)
+        : (cw.week_ending_date != null ? String(cw.week_ending_date) : null)),
+    contract_week: reopenedContractWeek,
+    summary_row_hint: summaryRowHint,
     booking_id: bookingId,
     requested_timesheet_id: cw.timesheet_id,
     current_timesheet_id: currentTimesheetId,
     was_stale: !!resolved?.was_stale,
-    reopened_submission_mode_snapshot: reopenSnapshot
+    cleared_snooze_ids: snoozeClearResult.clearedIds,
+    snooze_clear_failed_ids: snoozeClearResult.failedIds
   }));
 }
-
-
 async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -27035,17 +29129,52 @@ async function handleTimesheetsSubmitWeekly(env, req) {
 async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
   const enc = encodeURIComponent;
   const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
+  const trimStr = (v) => String(v || '').trim();
   const bucket = env.R2_BUCKET || env.R2;
 
   if (!bookingId || !String(bookingId).trim()) {
     return { ok: false, reason: 'booking_id missing' };
   }
 
-  // If bucket isn't configured, we can still clean DB evidence rows/keys,
-  // but we cannot actually reclaim R2 space.
+  const parseJsonObject = (value) => {
+    if (value && typeof value === 'object') return value;
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return (parsed && typeof parsed === 'object') ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const deriveSegmentStableKey = (seg) => {
+    const src = (seg && typeof seg === 'object') ? seg : {};
+    const candidates = [
+      src.segment_stable_key,
+      src.date,
+      src.ref_num,
+      src.segment_key,
+      src.segment_id
+    ];
+    for (const candidate of candidates) {
+      const s = trimStr(candidate);
+      if (s) return s;
+    }
+    return '';
+  };
+
+  const parseSortMillis = (row) => {
+    const updated = Date.parse(String(row?.updated_at_utc || ''));
+    if (Number.isFinite(updated)) return updated;
+    const created = Date.parse(String(row?.created_at_utc || ''));
+    if (Number.isFinite(created)) return created;
+    return 0;
+  };
+
   const canR2 = !!(bucket && typeof bucket.delete === 'function');
 
-  // 1) Load all versions for this booking_id
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -27057,10 +29186,18 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
 
   const rows = Array.isArray(tsRows) ? tsRows : [];
   if (rows.length <= 1) {
-    return { ok: true, booking_id: String(bookingId), purged_timesheet_ids: [], deleted_keys: 0, deleted_evidence_rows: 0 };
+    return {
+      ok: true,
+      booking_id: String(bookingId),
+      purged_timesheet_ids: [],
+      deleted_keys: 0,
+      deleted_evidence_rows: 0,
+      rebound_snooze_ids: [],
+      cleared_snooze_ids: [],
+      failed_snooze_ids: []
+    };
   }
 
-  // 2) Identify keep set
   const keep = new Set();
 
   let currentId = null;
@@ -27080,7 +29217,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     }
 
     if (r?.is_current === false) {
-      // most recent non-current safety net (highest version)
       if (!keepMostRecentNonCurrent) {
         keepMostRecentNonCurrent = id;
         keep.add(id);
@@ -27089,7 +29225,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
       const status = String(r?.status || '').toUpperCase();
       const hasScan = !!r?.qr_scanned_at;
 
-      // matches your SQL restore selectors: status='REVOKED' + scan null vs not null
       if (status === 'REVOKED') {
         if (!hasScan && !keepPendingRevoked) {
           keepPendingRevoked = id;
@@ -27101,7 +29236,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
         }
       }
 
-      // electronic restore safety: authorised_at_server exists on a non-current version
       if (!keepElectronicNonCurrent && r?.authorised_at_server) {
         keepElectronicNonCurrent = id;
         keep.add(id);
@@ -27109,12 +29243,10 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     }
   }
 
-  // If somehow no current id was found, do not purge (avoid accidental wipe)
   if (!currentId) {
     return { ok: false, booking_id: String(bookingId), reason: 'no current timesheet found for booking_id' };
   }
 
-  // 3) Determine purge candidates (all other non-current)
   const purgeRows = rows
     .filter(r => r?.is_current === false)
     .filter(r => {
@@ -27123,13 +29255,277 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     });
 
   if (!purgeRows.length) {
-    return { ok: true, booking_id: String(bookingId), purged_timesheet_ids: [], deleted_keys: 0, deleted_evidence_rows: 0 };
+    return {
+      ok: true,
+      booking_id: String(bookingId),
+      purged_timesheet_ids: [],
+      deleted_keys: 0,
+      deleted_evidence_rows: 0,
+      rebound_snooze_ids: [],
+      cleared_snooze_ids: [],
+      failed_snooze_ids: []
+    };
   }
+
+  const allSeriesIds = rows
+    .map(r => trimStr(r?.timesheet_id))
+    .filter(Boolean);
 
   const purgeIds = purgeRows.map(r => String(r.timesheet_id));
   const purgeIdsParam = purgeIds.map(enc).join(',');
 
-  // 4) Gather R2 keys to delete (dedupe)
+  let currentTsfin = null;
+  try {
+    currentTsfin = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(currentId)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,invoice_breakdown_json` +
+        `&limit=1`
+    );
+  } catch {
+    currentTsfin = null;
+  }
+
+  const currentSegmentMap = new Map();
+  try {
+    const invoiceBreakdown = parseJsonObject(currentTsfin?.invoice_breakdown_json);
+    const segments = Array.isArray(invoiceBreakdown?.segments) ? invoiceBreakdown.segments : [];
+    for (const seg of segments) {
+      if (!seg || typeof seg !== 'object') continue;
+      const stableKey = deriveSegmentStableKey(seg);
+      if (!stableKey || currentSegmentMap.has(stableKey)) continue;
+      currentSegmentMap.set(stableKey, {
+        segment_id: trimStr(seg.segment_id) || null,
+        segment_stable_key: stableKey
+      });
+    }
+  } catch {}
+
+  const fetchActiveTimesheetSnoozes = async () => {
+    const merged = new Map();
+    const baseSelect =
+      'id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,snooze_kind,snooze_until_date,note,created_at_utc,updated_at_utc';
+
+    const collect = async (url) => {
+      try {
+        const { rows: fetchedRows } = await sbFetch(env, url);
+        for (const row of (Array.isArray(fetchedRows) ? fetchedRows : [])) {
+          const id = trimStr(row?.id);
+          if (!id) continue;
+          merged.set(id, row);
+        }
+      } catch {}
+    };
+
+    await collect(
+      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+        `?booking_id=eq.${enc(String(bookingId))}` +
+        `&source_ref=is.null` +
+        `&cleared_at_utc=is.null` +
+        `&select=${baseSelect}` +
+        `&limit=2000`
+    );
+
+    if (allSeriesIds.length) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=in.(${allSeriesIds.map(enc).join(',')})` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    return Array.from(merged.values()).sort((a, b) => {
+      const diff = parseSortMillis(b) - parseSortMillis(a);
+      if (diff !== 0) return diff;
+      return String(b?.id || '').localeCompare(String(a?.id || ''));
+    });
+  };
+
+  const writeSystemAudit = async (action, snoozeId, details, reason) => {
+    try {
+      await writeAudit(
+        env,
+        null,
+        action,
+        details,
+        {
+          entity: 'pay_item_snoozes',
+          subject_id: snoozeId,
+          reason: reason || null
+        }
+      );
+    } catch {}
+  };
+
+  const clearActiveSnoozeDirect = async (snoozeRow, reason) => {
+    const snoozeId = trimStr(snoozeRow?.id);
+    if (!snoozeId) return false;
+
+    const now = nowIso();
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          cleared_at_utc: now,
+          cleared_by_user_id: null,
+          updated_at_utc: now,
+          updated_by_user_id: null
+        })
+      }
+    );
+
+    if (!patchRes.ok) {
+      const txt = await patchRes.text().catch(() => '');
+      throw new Error(txt || `Failed to clear snooze ${snoozeId}`);
+    }
+
+    await writeSystemAudit(
+      'SNOOZE_CLEARED',
+      snoozeId,
+      {
+        snooze_id: snoozeId,
+        booking_id: String(bookingId),
+        current_timesheet_id: currentId,
+        previous_timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+        snooze_kind: trimStr(snoozeRow?.snooze_kind) || null,
+        segment_id: trimStr(snoozeRow?.segment_id) || null,
+        segment_stable_key: trimStr(snoozeRow?.segment_stable_key) || null,
+        clear_reason: reason || null
+      },
+      reason || null
+    );
+
+    return true;
+  };
+
+  const rebindActiveSnooze = async (snoozeRow, targetTimesheetId, targetSegmentId, targetSegmentStableKey) => {
+    const snoozeId = trimStr(snoozeRow?.id);
+    if (!snoozeId) return false;
+
+    const now = nowIso();
+    const patchRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: targetTimesheetId || null,
+          booking_id: String(bookingId),
+          segment_id: targetSegmentId || null,
+          segment_stable_key: targetSegmentStableKey || null,
+          updated_at_utc: now,
+          updated_by_user_id: null
+        })
+      }
+    );
+
+    if (!patchRes.ok) {
+      const txt = await patchRes.text().catch(() => '');
+      throw new Error(txt || `Failed to rebind snooze ${snoozeId}`);
+    }
+
+    await writeSystemAudit(
+      'SNOOZE_REBOUND_TO_CURRENT_TIMESHEET',
+      snoozeId,
+      {
+        snooze_id: snoozeId,
+        booking_id: String(bookingId),
+        previous_timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+        current_timesheet_id: targetTimesheetId || null,
+        previous_segment_id: trimStr(snoozeRow?.segment_id) || null,
+        current_segment_id: targetSegmentId || null,
+        segment_stable_key: targetSegmentStableKey || null,
+        snooze_kind: trimStr(snoozeRow?.snooze_kind) || null
+      },
+      'ROTATED_TO_CURRENT_TIMESHEET'
+    );
+
+    return true;
+  };
+
+  const activeSnoozes = await fetchActiveTimesheetSnoozes();
+  const reboundSnoozeIds = [];
+  const clearedSnoozeIds = [];
+  const failedSnoozeIds = [];
+
+  const groupKeepers = new Map();
+
+  for (const snoozeRow of activeSnoozes) {
+    const snoozeId = trimStr(snoozeRow?.id);
+    const candidateId = trimStr(snoozeRow?.candidate_id);
+    const snoozeKind = trimStr(snoozeRow?.snooze_kind).toUpperCase();
+    const stableKey = trimStr(snoozeRow?.segment_stable_key) || trimStr(snoozeRow?.segment_id);
+    const isSegmentSnooze = !!stableKey;
+
+    const groupKey = isSegmentSnooze
+      ? `${candidateId}::${snoozeKind}::SEGMENT::${stableKey}`
+      : `${candidateId}::${snoozeKind}::WHOLE_TIMESHEET`;
+
+    if (!groupKeepers.has(groupKey)) {
+      groupKeepers.set(groupKey, snoozeRow);
+      continue;
+    }
+
+    try {
+      await clearActiveSnoozeDirect(snoozeRow, 'SUPERSEDED_DUPLICATE_ON_ROTATION');
+      clearedSnoozeIds.push(snoozeId);
+    } catch {
+      failedSnoozeIds.push(snoozeId);
+    }
+  }
+
+  for (const snoozeRow of groupKeepers.values()) {
+    const snoozeId = trimStr(snoozeRow?.id);
+    const stableKey = trimStr(snoozeRow?.segment_stable_key) || trimStr(snoozeRow?.segment_id);
+    const isSegmentSnooze = !!stableKey;
+
+    try {
+      if (!isSegmentSnooze) {
+        const needsRebind =
+          trimStr(snoozeRow?.timesheet_id) !== String(currentId) ||
+          trimStr(snoozeRow?.booking_id) !== String(bookingId) ||
+          trimStr(snoozeRow?.segment_id) !== '' ||
+          trimStr(snoozeRow?.segment_stable_key) !== '';
+
+        if (needsRebind) {
+          await rebindActiveSnooze(snoozeRow, String(currentId), null, null);
+          reboundSnoozeIds.push(snoozeId);
+        }
+        continue;
+      }
+
+      const currentSeg = currentSegmentMap.get(stableKey);
+      if (!currentSeg) {
+        await clearActiveSnoozeDirect(snoozeRow, 'SEGMENT_MISSING_AFTER_ROTATION');
+        clearedSnoozeIds.push(snoozeId);
+        continue;
+      }
+
+      const targetSegmentId = trimStr(currentSeg.segment_id) || null;
+      const targetStableKey = trimStr(currentSeg.segment_stable_key) || stableKey;
+
+      const needsRebind =
+        trimStr(snoozeRow?.timesheet_id) !== String(currentId) ||
+        trimStr(snoozeRow?.booking_id) !== String(bookingId) ||
+        trimStr(snoozeRow?.segment_id) !== trimStr(targetSegmentId || '') ||
+        trimStr(snoozeRow?.segment_stable_key) !== trimStr(targetStableKey || '');
+
+      if (needsRebind) {
+        await rebindActiveSnooze(snoozeRow, String(currentId), targetSegmentId, targetStableKey);
+        reboundSnoozeIds.push(snoozeId);
+      }
+    } catch {
+      failedSnoozeIds.push(snoozeId);
+    }
+  }
+
   const keysToDelete = new Set();
 
   for (const r of purgeRows) {
@@ -27144,7 +29540,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     if (qrKey && qrKey !== canonical && qrKey !== manualKey) keysToDelete.add(qrKey);
   }
 
-  // 5) Load and delete timesheet_evidence rows for purged versions, and delete their storage keys
   let evidenceRows = [];
   try {
     const { rows: evRows } = await sbFetch(
@@ -27164,7 +29559,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     if (k) keysToDelete.add(k);
   }
 
-  // 6) Best-effort delete R2 keys
   let deletedKeys = 0;
   let failedKeys = 0;
 
@@ -27182,8 +29576,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     }
   }
 
-  // 7) Delete evidence DB rows (so they don’t show up anywhere)
-  // (Even if R2 delete failed, removing DB rows avoids UI dangling pointers.)
   let deletedEvidenceRows = 0;
   try {
     const delEvRes = await fetch(
@@ -27193,7 +29585,6 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     if (delEvRes.ok) deletedEvidenceRows = evidenceRows.length;
   } catch {}
 
-  // 8) Null out blob pointers on those old timesheets (safety)
   try {
     const now = nowIso();
     await fetch(
@@ -27218,6 +29609,9 @@ async function purgeSupersededTimesheetArtifactsForBooking(env, bookingId) {
     deleted_keys: deletedKeys,
     failed_keys: failedKeys,
     deleted_evidence_rows: deletedEvidenceRows,
+    rebound_snooze_ids: reboundSnoozeIds,
+    cleared_snooze_ids: clearedSnoozeIds,
+    failed_snooze_ids: failedSnoozeIds,
     r2_configured: canR2
   };
 }
@@ -27226,14 +29620,14 @@ async function handleMailshotRunsList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
 
-  const enc = encodeURIComponent;
-
   const urlObj = new URL(req.url);
   const q = (k) => urlObj.searchParams.get(k);
 
-  const page = Math.max(1, parseInt(q('page') || '1', 10));
-  const pageSize = Math.max(1, Math.min(100, parseInt(q('page_size') || '25', 10)));
-  const offset = (page - 1) * pageSize;
+  const pageRaw = Number(q('page'));
+  const pageSizeRaw = Number(q('page_size'));
+
+  const page = Number.isFinite(pageRaw) ? Math.max(1, Math.trunc(pageRaw)) : 1;
+  const pageSize = Number.isFinite(pageSizeRaw) ? Math.max(1, Math.min(100, Math.trunc(pageSizeRaw))) : 25;
 
   const orderByRaw = String(q('order_by') || 'created_at_utc').trim().toLowerCase();
   const orderDirRaw = String(q('order_dir') || 'desc').trim().toLowerCase();
@@ -27242,279 +29636,60 @@ async function handleMailshotRunsList(env, req) {
   const orderBy = allowedSort.has(orderByRaw) ? orderByRaw : 'created_at_utc';
   const orderDir = (orderDirRaw === 'asc') ? 'asc' : 'desc';
 
-  const fetchRestRows = async (path, { countExact = false } = {}) => {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
-      headers: {
-        ...sbHeaders(env),
-        ...(countExact ? { Prefer: 'count=exact' } : {})
-      }
-    });
-
-    const txt = await res.text().catch(() => '');
-    let json = null;
-    try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
-
-    if (!res.ok) {
-      throw new Error(txt || `REST ${res.status}`);
-    }
-
-    let total = null;
-    if (countExact) {
-      const cr = String(res.headers.get('content-range') || '');
-      const m = cr.match(/\/(\d+|\*)$/);
-      if (m && m[1] !== '*') total = parseInt(m[1], 10);
-    }
-
-    return {
-      rows: Array.isArray(json) ? json : [],
-      total
-    };
-  };
-
-  const classifyChildRows = (rows) => {
-    const out = {
-      total_rows: 0,
-      pending_total: 0,
-      failed_total: 0,
-      sent_total: 0,
-      delivered_total: 0,
-      read_total: 0,
-      blocking_total: 0,
-      cancelable_total: 0
-    };
-
-    for (const r of (Array.isArray(rows) ? rows : [])) {
-      out.total_rows += 1;
-
-      if (r && r.read_at) {
-        out.read_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.delivered_at) {
-        out.delivered_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.sent_at) {
-        out.sent_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.failed_at) {
-        out.failed_total += 1;
-        out.cancelable_total += 1;
-      } else {
-        out.pending_total += 1;
-        out.cancelable_total += 1;
-      }
-    }
-
-    return out;
-  };
-
   try {
-    const runsPath =
-      `mailshot_runs` +
-      `?select=id,context_kind,output_type,document_template_id,created_by,created_at_utc,result_json,delivery_timing_json` +
-      `&order=${enc(orderBy)}.${enc(orderDir)}` +
-      `&limit=${pageSize}` +
-      `&offset=${offset}`;
-
-    const runRes = await fetchRestRows(runsPath, { countExact: true });
-    const runRows = Array.isArray(runRes.rows) ? runRes.rows : [];
-    const totalCount = (typeof runRes.total === 'number') ? runRes.total : runRows.length;
-
-    const runIds = runRows.map(r => String(r && r.id ? r.id : '')).filter(Boolean);
-    const templateIds = Array.from(new Set(
-      runRows.map(r => String(r && r.document_template_id ? r.document_template_id : '')).filter(Boolean)
-    ));
-
-    let templateRows = [];
-    if (templateIds.length) {
-      const templatePath =
-        `document_templates` +
-        `?select=id,filename` +
-        `&id=in.(${templateIds.map(enc).join(',')})`;
-      const tplRes = await fetchRestRows(templatePath);
-      templateRows = Array.isArray(tplRes.rows) ? tplRes.rows : [];
-    }
-
-    const templateNameById = new Map(
-      templateRows.map(r => [String(r.id), String(r.filename || '')])
+    const rpcRes = await sbRpc(
+      env,
+      'mailshot_runs_list',
+      {
+        p_page: page,
+        p_page_size: pageSize,
+        p_order_by: orderBy,
+        p_order_dir: orderDir
+      },
+      { timeoutMs: 30000 }
     );
 
-    let mailChildRows = [];
-    let commsChildRows = [];
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_runs_list')) {
+        payload = payload.mailshot_runs_list;
+      }
+    } catch {}
 
-    if (runIds.length) {
-      const mailPath =
-        `mail_outbox` +
-        `?select=id,mailshot_run_id,sent_at,delivered_at,read_at,failed_at` +
-        `&mailshot_run_id=in.(${runIds.map(enc).join(',')})`;
-      const commsPath =
-        `comms_outbox` +
-        `?select=id,mailshot_run_id,sent_at,delivered_at,read_at,failed_at` +
-        `&mailshot_run_id=in.(${runIds.map(enc).join(',')})`;
-
-      const [mailRes, commsRes] = await Promise.all([
-        fetchRestRows(mailPath),
-        fetchRestRows(commsPath)
-      ]);
-
-      mailChildRows = Array.isArray(mailRes.rows) ? mailRes.rows : [];
-      commsChildRows = Array.isArray(commsRes.rows) ? commsRes.rows : [];
-    }
-
-    const mailByRun = new Map();
-    const commsByRun = new Map();
-
-    for (const r of mailChildRows) {
-      const k = String(r && r.mailshot_run_id ? r.mailshot_run_id : '');
-      if (!k) continue;
-      if (!mailByRun.has(k)) mailByRun.set(k, []);
-      mailByRun.get(k).push(r);
-    }
-
-    for (const r of commsChildRows) {
-      const k = String(r && r.mailshot_run_id ? r.mailshot_run_id : '');
-      if (!k) continue;
-      if (!commsByRun.has(k)) commsByRun.set(k, []);
-      commsByRun.get(k).push(r);
-    }
-
-    const items = runRows.map((r) => {
-      const runId = String(r && r.id ? r.id : '');
-      const resultJson = (r && r.result_json && typeof r.result_json === 'object' && !Array.isArray(r.result_json))
-        ? r.result_json
-        : {};
-      const deliveryTimingJson = (r && r.delivery_timing_json && typeof r.delivery_timing_json === 'object' && !Array.isArray(r.delivery_timing_json))
-        ? r.delivery_timing_json
-        : {};
-
-      const mailCounts = classifyChildRows(mailByRun.get(runId) || []);
-      const commsCounts = classifyChildRows(commsByRun.get(runId) || []);
-
-      const totalRows = mailCounts.total_rows + commsCounts.total_rows;
-      const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
-      const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
-
-      return {
-        id: runId,
-        mailshot_run_id: runId,
-        context_kind: r.context_kind || null,
-        output_type: r.output_type || null,
-        document_template_id: r.document_template_id || null,
-        template_filename: r.document_template_id ? (templateNameById.get(String(r.document_template_id)) || null) : null,
-        created_by: r.created_by || null,
-        created_at_utc: r.created_at_utc || null,
-        delivery_timing_json: deliveryTimingJson,
-        initial_counts: {
-          queued: Number(resultJson.queued || 0),
-          skipped: Number(resultJson.skipped || 0),
-          failed: Number(resultJson.failed || 0)
-        },
-        live_counts: {
-          total_rows: totalRows,
-          mail_rows: mailCounts.total_rows,
-          comms_rows: commsCounts.total_rows,
-          pending_total: mailCounts.pending_total + commsCounts.pending_total,
-          failed_total: mailCounts.failed_total + commsCounts.failed_total,
-          sent_total: mailCounts.sent_total + commsCounts.sent_total,
-          delivered_total: mailCounts.delivered_total + commsCounts.delivered_total,
-          read_total: mailCounts.read_total + commsCounts.read_total,
-          blocking_total: blockingTotal,
-          cancelable_total: cancelableTotal
-        },
-        can_cancel_pending: cancelableTotal > 0,
-        can_delete_if_unsent: blockingTotal === 0,
-        result_json: resultJson
-      };
-    });
-
-    return withCORS(env, req, ok({
-      ok: true,
-      items,
-      page,
-      page_size: pageSize,
-      total_count: totalCount,
-      has_more: (offset + items.length) < totalCount,
-      order_by: orderBy,
-      order_dir: orderDir
-    }));
+    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
   } catch (e) {
     const msg = String(e?.message || e || 'MAILSHOT_RUNS_LIST_FAILED');
     return withCORS(env, req, serverError(msg));
   }
 }
-
 async function handleMailshotRunGet(env, req, id) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
 
-  const enc = encodeURIComponent;
   const runId = String(id || '').trim();
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!runId) return withCORS(env, req, badRequest('id is required'));
   if (!uuidRe.test(runId)) return withCORS(env, req, badRequest('invalid_id'));
 
-  const fetchRestRows = async (path) => {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
-      headers: { ...sbHeaders(env) }
+  try {
+    let payload = await sbRpc(env, 'mailshot_run_get', {
+      p_mailshot_run_id: runId
     });
 
-    const txt = await res.text().catch(() => '');
-    let json = null;
-    try { json = txt ? JSON.parse(txt) : []; } catch { json = []; }
+    try {
+      if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_run_get')) payload = payload.mailshot_run_get;
+    } catch {}
 
-    if (!res.ok) {
-      throw new Error(txt || `REST ${res.status}`);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return withCORS(env, req, serverError('MAILSHOT_RUN_GET_FAILED'));
     }
 
-    return Array.isArray(json) ? json : [];
-  };
-
-  const classifyChildRows = (rows) => {
-    const out = {
-      total_rows: 0,
-      pending_total: 0,
-      failed_total: 0,
-      sent_total: 0,
-      delivered_total: 0,
-      read_total: 0,
-      blocking_total: 0,
-      cancelable_total: 0
-    };
-
-    for (const r of (Array.isArray(rows) ? rows : [])) {
-      out.total_rows += 1;
-
-      if (r && r.read_at) {
-        out.read_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.delivered_at) {
-        out.delivered_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.sent_at) {
-        out.sent_total += 1;
-        out.blocking_total += 1;
-      } else if (r && r.failed_at) {
-        out.failed_total += 1;
-        out.cancelable_total += 1;
-      } else {
-        out.pending_total += 1;
-        out.cancelable_total += 1;
-      }
-    }
-
-    return out;
-  };
-
-  try {
-    const runRows = await fetchRestRows(
-      `mailshot_runs` +
-      `?select=id,context_kind,output_type,document_template_id,created_by,created_at_utc,selection_json,result_json,delivery_timing_json` +
-      `&id=eq.${enc(runId)}` +
-      `&limit=1`
-    );
-
-    const runRow = Array.isArray(runRows) && runRows.length ? runRows[0] : null;
-    if (!runRow) {
+    if (payload.ok === false && String(payload.error || '').trim() === 'mailshot_run_not_found') {
       return withCORS(
         env,
         req,
@@ -27525,116 +29700,17 @@ async function handleMailshotRunGet(env, req, id) {
       );
     }
 
-    let templateFilename = null;
-    if (runRow.document_template_id) {
-      const templateRows = await fetchRestRows(
-        `document_templates` +
-        `?select=id,filename` +
-        `&id=eq.${enc(String(runRow.document_template_id))}` +
-        `&limit=1`
-      );
-      if (Array.isArray(templateRows) && templateRows.length) {
-        templateFilename = templateRows[0].filename || null;
-      }
+    if (payload.ok === false) {
+      return withCORS(env, req, serverError(String(payload.error || 'MAILSHOT_RUN_GET_FAILED')));
     }
 
-    const [mailChildRows, commsChildRows] = await Promise.all([
-      fetchRestRows(
-        `mail_outbox` +
-        `?select=id,mailshot_run_id,status,to,sent_at,delivered_at,read_at,failed_at` +
-        `&mailshot_run_id=eq.${enc(runId)}`
-      ),
-      fetchRestRows(
-        `comms_outbox` +
-        `?select=id,mailshot_run_id,channel,status,to_address,sent_at,delivered_at,read_at,failed_at` +
-        `&mailshot_run_id=eq.${enc(runId)}`
-      )
-    ]);
-
-    const mailCounts = classifyChildRows(mailChildRows);
-    const commsCounts = classifyChildRows(commsChildRows);
-
-    const resultJson = (runRow.result_json && typeof runRow.result_json === 'object' && !Array.isArray(runRow.result_json))
-      ? runRow.result_json
-      : {};
-    const deliveryTimingJson = (runRow.delivery_timing_json && typeof runRow.delivery_timing_json === 'object' && !Array.isArray(runRow.delivery_timing_json))
-      ? runRow.delivery_timing_json
-      : {};
-    const selectionJson = (runRow.selection_json && typeof runRow.selection_json === 'object' && !Array.isArray(runRow.selection_json))
-      ? runRow.selection_json
-      : {};
-
-    const totalRows = mailCounts.total_rows + commsCounts.total_rows;
-    const blockingTotal = mailCounts.blocking_total + commsCounts.blocking_total;
-    const cancelableTotal = mailCounts.cancelable_total + commsCounts.cancelable_total;
-
-    return withCORS(env, req, ok({
-      ok: true,
-      item: {
-        id: String(runRow.id),
-        mailshot_run_id: String(runRow.id),
-        context_kind: runRow.context_kind || null,
-        output_type: runRow.output_type || null,
-        document_template_id: runRow.document_template_id || null,
-        template_filename: templateFilename,
-        created_by: runRow.created_by || null,
-        created_at_utc: runRow.created_at_utc || null,
-        delivery_timing_json: deliveryTimingJson,
-        selection_json: selectionJson,
-        result_json: resultJson,
-        initial_counts: {
-          queued: Number(resultJson.queued || 0),
-          skipped: Number(resultJson.skipped || 0),
-          failed: Number(resultJson.failed || 0)
-        },
-        live_counts: {
-          total_rows: totalRows,
-          mail_rows: mailCounts.total_rows,
-          comms_rows: commsCounts.total_rows,
-          pending_total: mailCounts.pending_total + commsCounts.pending_total,
-          failed_total: mailCounts.failed_total + commsCounts.failed_total,
-          sent_total: mailCounts.sent_total + commsCounts.sent_total,
-          delivered_total: mailCounts.delivered_total + commsCounts.delivered_total,
-          read_total: mailCounts.read_total + commsCounts.read_total,
-          blocking_total: blockingTotal,
-          cancelable_total: cancelableTotal,
-          blocking_mail_sent: mailCounts.sent_total,
-          blocking_mail_delivered: mailCounts.delivered_total,
-          blocking_mail_read: mailCounts.read_total,
-          blocking_comms_sent: commsCounts.sent_total,
-          blocking_comms_delivered: commsCounts.delivered_total,
-          blocking_comms_read: commsCounts.read_total
-        },
-        can_cancel_pending: cancelableTotal > 0,
-        can_delete_if_unsent: blockingTotal === 0,
-        child_preview: {
-          mail_items: (Array.isArray(mailChildRows) ? mailChildRows : []).slice(0, 25).map(r => ({
-            id: r.id,
-            status: r.status || null,
-            to_address: r.to || null,
-            sent_at: r.sent_at || null,
-            delivered_at: r.delivered_at || null,
-            read_at: r.read_at || null,
-            failed_at: r.failed_at || null
-          })),
-          comms_items: (Array.isArray(commsChildRows) ? commsChildRows : []).slice(0, 25).map(r => ({
-            id: r.id,
-            channel: r.channel || null,
-            status: r.status || null,
-            to_address: r.to_address || null,
-            sent_at: r.sent_at || null,
-            delivered_at: r.delivered_at || null,
-            read_at: r.read_at || null,
-            failed_at: r.failed_at || null
-          }))
-        }
-      }
-    }));
+    return withCORS(env, req, ok(payload));
   } catch (e) {
     const msg = String(e?.message || e || 'MAILSHOT_RUN_GET_FAILED');
     return withCORS(env, req, serverError(msg));
   }
 }
+
 
 
 function renderMailshotTimingStep() {
@@ -27787,13 +29863,42 @@ function buildOutboxFiltersFromUi() {
   return { filters, sort };
 }
 
-
 function renderOutboxTable(content, rows) {
-  currentRows = Array.isArray(rows) ? rows.map((r) => {
+  const normalizeOutboxChannel = (value) => String(value == null ? '' : value).trim().toUpperCase();
+  const normalizeOutboxId = (value) => String(value == null ? '' : value).trim();
+  const makeOutboxSelectionKey = (channel, id) => {
+    const ch = normalizeOutboxChannel(channel);
+    const oid = normalizeOutboxId(id);
+    return (ch && oid) ? `${ch}::${oid}` : '';
+  };
+  const parseOutboxSelectionKey = (value) => {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return null;
+    const idx = raw.indexOf('::');
+    if (idx <= 0) return null;
+    const channel = normalizeOutboxChannel(raw.slice(0, idx));
+    const id = normalizeOutboxId(raw.slice(idx + 2));
+    if (!channel || !id) return null;
+    return {
+      key: makeOutboxSelectionKey(channel, id),
+      channel,
+      id,
+      outbox_id: id
+    };
+  };
+
+  const normalizedRows = Array.isArray(rows) ? rows.map((r) => {
     const raw = (r && typeof r === 'object') ? r : {};
-    const channel = String(raw.channel || '').trim().toUpperCase();
-    const outboxId = String(raw.outbox_id || raw.id || '').trim();
+    const channel = normalizeOutboxChannel(raw.channel || '');
+    const outboxId = normalizeOutboxId(raw.outbox_id || raw.id || '');
+    const outboxKey = makeOutboxSelectionKey(channel, outboxId);
     const toAddress = String(raw.to_address || raw.to || '').trim();
+    const recipientDisplayName = String(
+      raw.recipient_display_name ||
+      raw.candidate_name ||
+      raw.display_name ||
+      ''
+    ).trim();
     const subject = String(raw.subject || '').trim();
     const preview = String(
       raw.body_preview ||
@@ -27807,8 +29912,10 @@ function renderOutboxTable(content, rows) {
       ...raw,
       id: outboxId,
       outbox_id: outboxId,
+      outbox_key: outboxKey,
       channel,
       to_address: toAddress,
+      recipient_display_name: recipientDisplayName,
       subject,
       preview,
       status: String(raw.status || '').trim().toUpperCase(),
@@ -27828,38 +29935,272 @@ function renderOutboxTable(content, rows) {
     };
   }) : [];
 
+  const rowBySelectionKey = new Map();
+  normalizedRows.forEach((row) => {
+    if (row && row.outbox_key) {
+      rowBySelectionKey.set(String(row.outbox_key), row);
+    }
+  });
+
   currentSelection = null;
 
   window.__listState = window.__listState || {};
+  const canonicalOutboxSort = { key: 'created_at_utc', dir: 'desc' };
+  const normalizeOutboxSort = (sortValue) => {
+    const raw = (sortValue && typeof sortValue === 'object') ? sortValue : {};
+    const key = String(raw.key || '').trim();
+    const dir = String(raw.dir || '').trim().toLowerCase();
+    return {
+      key: key || canonicalOutboxSort.key,
+      dir: (dir === 'asc' || dir === 'desc') ? dir : canonicalOutboxSort.dir
+    };
+  };
+
   const st = (window.__listState.outbox ||= {
     page: 1,
     pageSize: 50,
     total: null,
     hasMore: false,
     filters: null,
-    sort: { key: null, dir: 'asc' }
+    sort: { ...canonicalOutboxSort }
   });
-  if (!st.sort || typeof st.sort !== 'object') {
-    st.sort = { key: null, dir: 'asc' };
-  }
+  st.sort = normalizeOutboxSort(st.sort);
 
   window.__selection = window.__selection || {};
-  const sel = (window.__selection.outbox ||= { fingerprint:'', ids:new Set() });
+  const normalizeStringSet = (value) => {
+    const out = new Set();
+    if (value instanceof Set) {
+      Array.from(value)
+        .map(v => String(v == null ? '' : v).trim())
+        .filter(Boolean)
+        .forEach(v => out.add(v));
+      return out;
+    }
+    if (Array.isArray(value)) {
+      value
+        .map(v => String(v == null ? '' : v).trim())
+        .filter(Boolean)
+        .forEach(v => out.add(v));
+      return out;
+    }
+    return out;
+  };
 
-  const getFp = () => (typeof getSummaryFingerprint === 'function') ? getSummaryFingerprint('outbox') : JSON.stringify({ section:'outbox', filters: st.filters || {}, sort: st.sort || {} });
+  const sel = (window.__selection.outbox ||= {
+    fingerprint: '',
+    ids: new Set(),
+    keys: new Set(),
+    row_refs: {},
+    row_refs_by_id: {}
+  });
+
+  sel.ids = normalizeStringSet(sel.ids);
+  sel.keys = normalizeStringSet(sel.keys);
+  if (!sel.row_refs || typeof sel.row_refs !== 'object' || Array.isArray(sel.row_refs)) {
+    sel.row_refs = {};
+  }
+  if (!sel.row_refs_by_id || typeof sel.row_refs_by_id !== 'object' || Array.isArray(sel.row_refs_by_id)) {
+    sel.row_refs_by_id = {};
+  }
+
+  const getFp = () => (typeof getSummaryFingerprint === 'function')
+    ? getSummaryFingerprint('outbox')
+    : JSON.stringify({ section: 'outbox', filters: st.filters || {}, sort: st.sort || canonicalOutboxSort });
+
   const fp = getFp();
   if (sel.fingerprint !== fp) {
     sel.fingerprint = fp;
     sel.ids.clear();
+    sel.keys.clear();
+    sel.row_refs = {};
+    sel.row_refs_by_id = {};
   }
 
-  const isRowSelected = (id) => sel.ids.has(String(id || ''));
-  const setRowSelected = (id, on) => {
-    const k = String(id || '').trim();
-    if (!k) return;
-    if (on) sel.ids.add(k);
-    else sel.ids.delete(k);
+  const normalizeOutboxRowRef = (rowLike) => {
+    const raw = (rowLike && typeof rowLike === 'object') ? rowLike : {};
+    const id = normalizeOutboxId(raw.outbox_id != null ? raw.outbox_id : raw.id);
+    const channel = normalizeOutboxChannel(raw.channel != null ? raw.channel : raw.row_channel);
+    const key = makeOutboxSelectionKey(channel, id);
+    if (!id || !channel || !key) return null;
+    return {
+      key,
+      channel,
+      id,
+      outbox_id: id
+    };
   };
+
+  const rememberOutboxRowRef = (rowLike) => {
+    const ref = normalizeOutboxRowRef(rowLike);
+    if (!ref) return null;
+
+    sel.row_refs[ref.key] = {
+      key: ref.key,
+      channel: ref.channel,
+      id: ref.id,
+      outbox_id: ref.outbox_id
+    };
+
+    const existingKeys = Array.isArray(sel.row_refs_by_id[ref.id])
+      ? sel.row_refs_by_id[ref.id]
+          .map(v => String(v == null ? '' : v).trim())
+          .filter(Boolean)
+      : [];
+
+    if (!existingKeys.includes(ref.key)) existingKeys.push(ref.key);
+    sel.row_refs_by_id[ref.id] = existingKeys;
+
+    return ref;
+  };
+
+  const removeOutboxSelectionRef = (rowLike) => {
+    const ref = normalizeOutboxRowRef(rowLike);
+    if (!ref) return;
+
+    try {
+      sel.keys.delete(ref.key);
+    } catch {}
+
+    try {
+      if (sel.row_refs && typeof sel.row_refs === 'object') {
+        delete sel.row_refs[ref.key];
+      }
+    } catch {}
+
+    try {
+      if (sel.row_refs_by_id && typeof sel.row_refs_by_id === 'object') {
+        const nextKeys = (Array.isArray(sel.row_refs_by_id[ref.id]) ? sel.row_refs_by_id[ref.id] : [])
+          .map(v => String(v == null ? '' : v).trim())
+          .filter(Boolean)
+          .filter(v => v !== ref.key);
+
+        if (nextKeys.length) {
+          sel.row_refs_by_id[ref.id] = nextKeys;
+        } else {
+          delete sel.row_refs_by_id[ref.id];
+        }
+
+        const stillSelectedForId = nextKeys.some((key) => sel.keys.has(key));
+        if (!stillSelectedForId) {
+          sel.ids.delete(ref.id);
+        }
+      } else {
+        sel.ids.delete(ref.id);
+      }
+    } catch {}
+  };
+
+  const setRowSelected = (rowLike, on) => {
+    const ref = rememberOutboxRowRef(rowLike);
+    if (!ref) return;
+
+    if (on) {
+      sel.ids.add(ref.id);
+      sel.keys.add(ref.key);
+      return;
+    }
+
+    removeOutboxSelectionRef(ref);
+  };
+
+  const getSelectedSnapshot = () => {
+    const refs = [];
+    const seenKeys = new Set();
+    const resolvedIds = new Set();
+    const unresolvedIds = [];
+
+    const pushRef = (rowLike) => {
+      const ref = normalizeOutboxRowRef(rowLike);
+      if (!ref) return;
+      if (seenKeys.has(ref.key)) return;
+      seenKeys.add(ref.key);
+      refs.push({
+        key: ref.key,
+        channel: ref.channel,
+        id: ref.id,
+        outbox_id: ref.outbox_id
+      });
+      resolvedIds.add(ref.id);
+    };
+
+    sel.keys.forEach((rawKey) => {
+      const key = String(rawKey == null ? '' : rawKey).trim();
+      if (!key) return;
+
+      const storedRef = (sel.row_refs && typeof sel.row_refs === 'object')
+        ? sel.row_refs[key]
+        : null;
+
+      if (storedRef) {
+        pushRef(storedRef);
+        return;
+      }
+
+      const parsedRef = parseOutboxSelectionKey(key);
+      if (parsedRef) {
+        pushRef(parsedRef);
+      }
+    });
+
+    sel.ids.forEach((rawId) => {
+      const id = normalizeOutboxId(rawId);
+      if (!id) return;
+
+      const linkedKeys = Array.isArray(sel.row_refs_by_id[id])
+        ? sel.row_refs_by_id[id]
+            .map(v => String(v == null ? '' : v).trim())
+            .filter(Boolean)
+        : [];
+
+      if (linkedKeys.length) {
+        linkedKeys.forEach((linkedKey) => {
+          const storedRef = (sel.row_refs && typeof sel.row_refs === 'object')
+            ? sel.row_refs[linkedKey]
+            : null;
+
+          if (storedRef) {
+            pushRef(storedRef);
+            return;
+          }
+
+          const parsedRef = parseOutboxSelectionKey(linkedKey);
+          if (parsedRef) {
+            pushRef(parsedRef);
+          }
+        });
+        return;
+      }
+
+      if (!resolvedIds.has(id)) {
+        unresolvedIds.push(id);
+      }
+    });
+
+    return {
+      refs,
+      unresolvedIds: Array.from(new Set(
+        unresolvedIds
+          .map(v => normalizeOutboxId(v))
+          .filter(Boolean)
+          .filter(v => !resolvedIds.has(v))
+      ))
+    };
+  };
+
+  const getSelectedCount = () => {
+    const snapshot = getSelectedSnapshot();
+    return snapshot.refs.length + snapshot.unresolvedIds.length;
+  };
+
+  const isRowSelected = (rowLike) => {
+    const ref = normalizeOutboxRowRef(rowLike);
+    if (!ref) return false;
+    return sel.keys.has(ref.key) || sel.ids.has(ref.id);
+  };
+
+  normalizedRows.forEach((row) => {
+    rememberOutboxRowRef(row);
+  });
 
   const fmtDt = (v) => {
     try {
@@ -27885,11 +30226,11 @@ function renderOutboxTable(content, rows) {
   const safeHtml = (typeof escapeHtml === 'function')
     ? escapeHtml
     : (s) => String(s ?? '')
-        .replaceAll('&','&amp;')
-        .replaceAll('<','&lt;')
-        .replaceAll('>','&gt;')
-        .replaceAll('"','&quot;')
-        .replaceAll("'","&#39;");
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
 
   const statusPill = (status) => {
     const s = String(status || '').trim().toUpperCase();
@@ -27910,6 +30251,67 @@ function renderOutboxTable(content, rows) {
     return `<span class="${cls}">${safeHtml(s || '—')}</span>`;
   };
 
+  const getActionState = (row) => {
+    const raw = (row && typeof row === 'object') ? row : {};
+    const status = String(raw.status || '').trim().toUpperCase();
+    const queueState = String(raw.queue_state || '').trim().toUpperCase();
+
+    const isFailed = status === 'FAILED';
+    const isCompleted =
+      status === 'SENT' ||
+      status === 'DELIVERED' ||
+      status === 'READ' ||
+      !!String(raw.sent_at || '').trim() ||
+      !!String(raw.delivered_at || '').trim() ||
+      !!String(raw.read_at || '').trim();
+
+    const isPending =
+      !isFailed &&
+      !isCompleted &&
+      (
+        status === 'QUEUED' ||
+        queueState === 'QUEUED' ||
+        queueState === 'READY' ||
+        queueState === 'SCHEDULED'
+      );
+
+    return {
+      isFailed,
+      isCompleted,
+      isPending,
+      canRetry: isFailed,
+      canReschedule: isFailed || isPending,
+      canDelete: isPending
+    };
+  };
+
+  const renderActionButtons = (row) => {
+    const actionState = getActionState(row);
+    const bits = [];
+
+    if (actionState.canRetry) {
+      bits.push(
+        `<button type="button" class="btn btn-sm btn-outline" data-act="retry" data-outbox-key="${safeHtml(row.outbox_key)}" data-outbox-id="${safeHtml(row.id)}" data-channel="${safeHtml(row.channel)}">Retry</button>`
+      );
+    }
+    if (actionState.canReschedule) {
+      bits.push(
+        `<button type="button" class="btn btn-sm btn-primary" data-act="reschedule" data-outbox-key="${safeHtml(row.outbox_key)}" data-outbox-id="${safeHtml(row.id)}" data-channel="${safeHtml(row.channel)}">Reschedule</button>`
+      );
+    }
+    if (actionState.canDelete) {
+      bits.push(
+        `<button type="button" class="btn btn-sm btn-warn" data-act="delete" data-outbox-key="${safeHtml(row.outbox_key)}" data-outbox-id="${safeHtml(row.id)}" data-channel="${safeHtml(row.channel)}">Delete</button>`
+      );
+    }
+
+    if (!bits.length) {
+      return `<span class="mini" style="opacity:.7;">—</span>`;
+    }
+
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;">${bits.join('')}</div>`;
+  };
+
   const updateToolButtons = () => {
     try {
       if (typeof window.__refreshOutboxToolsButtons === 'function') {
@@ -27923,333 +30325,579 @@ function renderOutboxTable(content, rows) {
     renderSummary(data);
   };
 
+  const memKey = 'summary:outbox';
+  window.__scrollMemory = window.__scrollMemory || {};
+  const prevScrollY = window.__scrollMemory[memKey] ?? 0;
+
   content.innerHTML = '';
 
-  const top = document.createElement('div');
-  top.className = 'card';
-  top.style.padding = '12px';
-  top.style.marginBottom = '12px';
-  top.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-      <div>
-        <div style="font-weight:700;font-size:14px;">Unified Outbox</div>
-        <div class="mini" style="opacity:.8;">
-          Search, filter, sort, and action queued / scheduled / sent communications.
-        </div>
-      </div>
-      <div class="mini" style="opacity:.75;">
-        Selected: <strong id="outboxSelectedCount">${sel.ids.size}</strong>
-      </div>
-    </div>
+  const topControls = document.createElement('div');
+  topControls.style.cssText = 'display:flex;align-items:end;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap;';
 
-    <div style="display:grid;grid-template-columns:minmax(220px,1.4fr) 160px 160px 160px 180px 120px;gap:10px;align-items:end;margin-top:12px;">
-      <div>
-        <label class="inline mini" style="opacity:.85;">Search</label>
-        <input id="outboxSearchText" class="input" type="text" value="${safeHtml(String((st.filters && (st.filters.q || st.filters.search)) || ''))}" placeholder="Search recipient / subject / preview…" />
-      </div>
+  const sizeLabel = document.createElement('span');
+  sizeLabel.className = 'mini';
+  sizeLabel.textContent = 'Page size:';
+  topControls.appendChild(sizeLabel);
 
-      <div>
-        <label class="inline mini" style="opacity:.85;">Channel</label>
-        <select id="outboxFilterChannel" class="input">
-          <option value="ALL">All</option>
-          <option value="EMAIL" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'EMAIL' ? 'selected' : ''}>Email</option>
-          <option value="WHATSAPP" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'WHATSAPP' ? 'selected' : ''}>WhatsApp</option>
-          <option value="SMS" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'SMS' ? 'selected' : ''}>SMS</option>
-          <option value="VOICE" ${String(st.filters && st.filters.channel || '').toUpperCase() === 'VOICE' ? 'selected' : ''}>Voice</option>
-        </select>
-      </div>
+  const sizeSel = document.createElement('select');
+  sizeSel.id = 'outboxPageSize';
+  sizeSel.classList.add('dark-control');
+  ['50', '100', '200', 'ALL'].forEach((optVal) => {
+    const opt = document.createElement('option');
+    opt.value = optVal;
+    opt.textContent = (optVal === 'ALL') ? 'All' : `First ${optVal}`;
+    if (String(st.pageSize) === optVal) opt.selected = true;
+    sizeSel.appendChild(opt);
+  });
+  sizeSel.addEventListener('change', async () => {
+    const val = String(sizeSel.value || '50');
+    st.pageSize = (val === 'ALL') ? 'ALL' : Number(val);
+    st.page = 1;
+    await rerenderWithFreshData();
+  });
+  topControls.appendChild(sizeSel);
 
-      <div>
-        <label class="inline mini" style="opacity:.85;">Status</label>
-        <select id="outboxFilterStatus" class="input">
-          <option value="ALL">All</option>
-          <option value="QUEUED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'QUEUED' ? 'selected' : ''}>Queued</option>
-          <option value="SENT" ${String(st.filters && st.filters.status || '').toUpperCase() === 'SENT' ? 'selected' : ''}>Sent</option>
-          <option value="DELIVERED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'DELIVERED' ? 'selected' : ''}>Delivered</option>
-          <option value="READ" ${String(st.filters && st.filters.status || '').toUpperCase() === 'READ' ? 'selected' : ''}>Read</option>
-          <option value="FAILED" ${String(st.filters && st.filters.status || '').toUpperCase() === 'FAILED' ? 'selected' : ''}>Failed</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="inline mini" style="opacity:.85;">Queue state</label>
-        <select id="outboxFilterQueueState" class="input">
-          <option value="ALL">All</option>
-          <option value="QUEUED" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'QUEUED' ? 'selected' : ''}>Queued</option>
-          <option value="READY" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'READY' ? 'selected' : ''}>Ready</option>
-          <option value="SCHEDULED" ${String(st.filters && st.filters.queue_state || '').toUpperCase() === 'SCHEDULED' ? 'selected' : ''}>Scheduled</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="inline mini" style="opacity:.85;">Sort by</label>
-        <select id="outboxSortKey" class="input">
-          <option value="created_at_utc" ${String(st.sort && st.sort.key || 'created_at_utc') === 'created_at_utc' ? 'selected' : ''}>Created</option>
-          <option value="scheduled_for_utc" ${String(st.sort && st.sort.key || '') === 'scheduled_for_utc' ? 'selected' : ''}>Scheduled</option>
-          <option value="effective_ready_at_utc" ${String(st.sort && st.sort.key || '') === 'effective_ready_at_utc' ? 'selected' : ''}>Ready at</option>
-          <option value="status" ${String(st.sort && st.sort.key || '') === 'status' ? 'selected' : ''}>Status</option>
-          <option value="channel" ${String(st.sort && st.sort.key || '') === 'channel' ? 'selected' : ''}>Channel</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="inline mini" style="opacity:.85;">Direction</label>
-        <select id="outboxSortDir" class="input">
-          <option value="desc" ${String(st.sort && st.sort.dir || 'desc').toLowerCase() === 'desc' ? 'selected' : ''}>Desc</option>
-          <option value="asc" ${String(st.sort && st.sort.dir || '').toLowerCase() === 'asc' ? 'selected' : ''}>Asc</option>
-        </select>
-      </div>
-    </div>
-
-    <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap;">
-      <button type="button" class="btn btn-outline" id="outboxApplyFiltersBtn">Apply</button>
-      <button type="button" class="btn btn-outline" id="outboxClearSelectionBtn" ${sel.ids.size ? '' : 'disabled style="opacity:.6"'}>Clear selection</button>
-    </div>
-  `;
-  content.appendChild(top);
-
-  const tableWrap = document.createElement('div');
-  tableWrap.className = 'card';
-  tableWrap.style.padding = '12px';
-  tableWrap.innerHTML = `
-    <div class="picker-table-wrap">
-      <table class="grid" id="outboxGrid">
-        <thead>
-          <tr>
-            <th style="width:40px;"><input type="checkbox" id="outboxSelectAll" /></th>
-            <th>Channel</th>
-            <th>Recipient</th>
-            <th>Content</th>
-            <th>Status</th>
-            <th>Queue</th>
-            <th>Scheduled</th>
-            <th>Ready at</th>
-            <th style="width:190px;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${
-            currentRows.length
-              ? currentRows.map((r) => `
-                <tr data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">
-                  <td><input type="checkbox" class="outbox-row-select" data-outbox-id="${safeHtml(r.id)}" ${isRowSelected(r.id) ? 'checked' : ''} /></td>
-                  <td>${safeHtml(r.channel || '—')}</td>
-                  <td>
-                    <div style="font-weight:600;">${safeHtml(r.to_address || '—')}</div>
-                    <div class="mini" style="opacity:.75;">${safeHtml(r.recipient_kind || '')}</div>
-                  </td>
-                  <td>
-                    <div style="font-weight:600;">${safeHtml(r.subject || r.preview || '—')}</div>
-                    <div class="mini" style="opacity:.75;white-space:pre-wrap;">${safeHtml(r.channel === 'EMAIL' ? r.preview : r.preview || r.subject || '')}</div>
-                  </td>
-                  <td>${statusPill(r.status)}</td>
-                  <td>${queueStatePill(r.queue_state)}</td>
-                  <td>${safeHtml(fmtDt(r.scheduled_for_utc) || '—')}</td>
-                  <td>${safeHtml(fmtDt(r.effective_ready_at_utc || r.next_attempt_at_utc) || '—')}</td>
-                  <td>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                      <button type="button" class="btn btn-sm btn-outline" data-act="retry" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Retry</button>
-                      <button type="button" class="btn btn-sm btn-outline" data-act="reschedule" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Reschedule</button>
-                      <button type="button" class="btn btn-sm btn-outline" data-act="delete" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              `).join('')
-              : `
-                <tr>
-                  <td colspan="9" class="mini" style="opacity:.75;">No Outbox rows found.</td>
-                </tr>
-              `
-          }
-        </tbody>
-      </table>
-    </div>
-  `;
-  content.appendChild(tableWrap);
-
-  const pager = document.createElement('div');
-  pager.className = 'card';
-  pager.style.padding = '12px';
-  const pageNum = Number(st.page || 1);
-  const pageSize = st.pageSize === 'ALL' ? 'ALL' : Number(st.pageSize || 50);
-  const totalKnown = (typeof st.total === 'number');
-  const hasMore = !!st.hasMore;
-
-  let infoText = '';
-  if (pageSize === 'ALL') {
-    infoText = `Showing all ${currentRows.length} rows.`;
-  } else if (totalKnown) {
-    const start = ((pageNum - 1) * pageSize) + 1;
-    const end = Math.min(start + currentRows.length - 1, Number(st.total || 0));
-    infoText = `Showing ${start}–${end} of ${st.total}`;
-  } else {
-    const start = ((pageNum - 1) * pageSize) + 1;
-    const end = start + currentRows.length - 1;
-    infoText = `Showing ${start}–${end}${hasMore ? '+' : ''}`;
-  }
-
-  pager.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button type="button" class="btn btn-outline" id="outboxPrevPageBtn" ${pageNum <= 1 ? 'disabled style="opacity:.6"' : ''}>Prev</button>
-        <button type="button" class="btn btn-outline" id="outboxNextPageBtn" ${(!hasMore && totalKnown && (pageNum * Number(pageSize || 50) >= Number(st.total || 0))) || pageSize === 'ALL' ? 'disabled style="opacity:.6"' : ''}>Next</button>
-      </div>
-      <div class="mini" style="opacity:.8;">${safeHtml(infoText)}</div>
-    </div>
-  `;
-  content.appendChild(pager);
-
-  const getRowByBtn = (btn) => {
-    const oid = String(btn.getAttribute('data-outbox-id') || '').trim();
-    const ch = String(btn.getAttribute('data-channel') || '').trim().toUpperCase();
-    return currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
+  const mkField = (labelText, controlEl) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+    const lab = document.createElement('span');
+    lab.className = 'mini';
+    lab.style.opacity = '.85';
+    lab.textContent = labelText;
+    wrap.appendChild(lab);
+    wrap.appendChild(controlEl);
+    return wrap;
   };
 
-  const topEl = content.querySelector('.card');
-  const applyBtn = document.getElementById('outboxApplyFiltersBtn');
-  const clearSelBtn = document.getElementById('outboxClearSelectionBtn');
+  const searchEl = document.createElement('input');
+  searchEl.id = 'outboxSearchText';
+  searchEl.className = 'input';
+  searchEl.classList.add('dark-control');
+  searchEl.type = 'text';
+  searchEl.placeholder = 'Search recipient / subject / preview…';
+  searchEl.style.cssText = 'width:280px;min-width:280px;';
+  searchEl.value = String((st.filters && (st.filters.q || st.filters.search)) || '');
+  topControls.appendChild(mkField('Search', searchEl));
+
+  const channelEl = document.createElement('select');
+  channelEl.id = 'outboxFilterChannel';
+  channelEl.className = 'input';
+  channelEl.classList.add('dark-control');
+  [
+    ['ALL', 'All'],
+    ['EMAIL', 'Email'],
+    ['WHATSAPP', 'WhatsApp'],
+    ['SMS', 'SMS'],
+    ['VOICE', 'Voice']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.filters && st.filters.channel || '').toUpperCase() === v) o.selected = true;
+    channelEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Channel', channelEl));
+
+  const statusEl = document.createElement('select');
+  statusEl.id = 'outboxFilterStatus';
+  statusEl.className = 'input';
+  statusEl.classList.add('dark-control');
+  [
+    ['ALL', 'All'],
+    ['QUEUED', 'Queued'],
+    ['SENT', 'Sent'],
+    ['DELIVERED', 'Delivered'],
+    ['READ', 'Read'],
+    ['FAILED', 'Failed']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.filters && st.filters.status || '').toUpperCase() === v) o.selected = true;
+    statusEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Status', statusEl));
+
+  const queueStateEl = document.createElement('select');
+  queueStateEl.id = 'outboxFilterQueueState';
+  queueStateEl.className = 'input';
+  queueStateEl.classList.add('dark-control');
+  [
+    ['ALL', 'All'],
+    ['QUEUED', 'Queued'],
+    ['READY', 'Ready'],
+    ['SCHEDULED', 'Scheduled']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.filters && st.filters.queue_state || '').toUpperCase() === v) o.selected = true;
+    queueStateEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Queue state', queueStateEl));
+
+  const sortKeyEl = document.createElement('select');
+  sortKeyEl.id = 'outboxSortKey';
+  sortKeyEl.className = 'input';
+  sortKeyEl.classList.add('dark-control');
+  [
+    ['created_at_utc', 'Created'],
+    ['scheduled_for_utc', 'Scheduled'],
+    ['effective_ready_at_utc', 'Ready at'],
+    ['status', 'Status'],
+    ['channel', 'Channel']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.sort && st.sort.key || canonicalOutboxSort.key) === v) o.selected = true;
+    sortKeyEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Sort by', sortKeyEl));
+
+  const sortDirEl = document.createElement('select');
+  sortDirEl.id = 'outboxSortDir';
+  sortDirEl.className = 'input';
+  sortDirEl.classList.add('dark-control');
+  [
+    ['desc', 'Desc'],
+    ['asc', 'Asc']
+  ].forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = l;
+    if (String(st.sort && st.sort.dir || canonicalOutboxSort.dir).toLowerCase() === v) o.selected = true;
+    sortDirEl.appendChild(o);
+  });
+  topControls.appendChild(mkField('Direction', sortDirEl));
+
+  const applyBtn = document.createElement('button');
+  applyBtn.type = 'button';
+  applyBtn.id = 'outboxApplyFiltersBtn';
+  applyBtn.className = 'btn btn-outline';
+  applyBtn.textContent = 'Apply';
+  topControls.appendChild(applyBtn);
+
+  const spacerTop = document.createElement('div');
+  spacerTop.style.flex = '1';
+  topControls.appendChild(spacerTop);
+
+  const selectedInfo = document.createElement('div');
+  selectedInfo.className = 'mini';
+  selectedInfo.style.opacity = '.8';
+  selectedInfo.innerHTML = `Selected: <strong id="outboxSelectedCount">${getSelectedCount()}</strong>`;
+  topControls.appendChild(selectedInfo);
+
+  const clearSelBtn = document.createElement('button');
+  clearSelBtn.type = 'button';
+  clearSelBtn.id = 'outboxClearSelectionBtn';
+  clearSelBtn.className = 'btn btn-outline';
+  clearSelBtn.textContent = 'Clear selection';
+  topControls.appendChild(clearSelBtn);
+
+  content.appendChild(topControls);
+
+  const bodyWrap = document.createElement('div');
+  bodyWrap.className = 'summary-body';
+  content.appendChild(bodyWrap);
+
+  const tbl = document.createElement('table');
+  tbl.className = 'grid';
+  tbl.style.width = '100%';
+  tbl.style.tableLayout = 'fixed';
+  bodyWrap.appendChild(tbl);
+
+  const thead = document.createElement('thead');
+  thead.style.borderBottom = '1px solid var(--line)';
+  tbl.appendChild(thead);
+
+  const trh = document.createElement('tr');
+  thead.appendChild(trh);
+
+  const thSel = document.createElement('th');
+  thSel.style.width = '40px';
+  thSel.style.minWidth = '40px';
+  thSel.style.maxWidth = '40px';
+  thSel.innerHTML = `<input type="checkbox" id="outboxSelectAll" />`;
+  trh.appendChild(thSel);
+
+  [
+    'Channel',
+    'Recipient',
+    'Content',
+    'Status',
+    'Queue',
+    'Created',
+    'Scheduled',
+    'Ready at',
+    'Actions'
+  ].forEach((label, idx) => {
+    const th = document.createElement('th');
+    th.textContent = label;
+    if (idx === 1) {
+      th.style.width = '260px';
+      th.style.minWidth = '260px';
+      th.style.maxWidth = '260px';
+    }
+    if (idx === 2) {
+      th.style.width = '320px';
+      th.style.minWidth = '320px';
+    }
+    if (idx === 8) {
+      th.style.width = '260px';
+      th.style.minWidth = '260px';
+    }
+    trh.appendChild(th);
+  });
+
+  const tb = document.createElement('tbody');
+  tbl.appendChild(tb);
+
+  if (normalizedRows.length) {
+    normalizedRows.forEach((r) => {
+      const tr = document.createElement('tr');
+      tr.dataset.outboxId = String(r.id || '');
+      tr.dataset.channel = String(r.channel || '').toUpperCase();
+      tr.dataset.outboxKey = String(r.outbox_key || '');
+
+      tr.innerHTML = `
+        <td style="width:40px;min-width:40px;max-width:40px;">
+          <input type="checkbox" class="outbox-row-select" data-outbox-key="${safeHtml(r.outbox_key)}" data-outbox-id="${safeHtml(r.id)}" data-channel="${safeHtml(r.channel)}" ${isRowSelected(r) ? 'checked' : ''} />
+        </td>
+        <td style="vertical-align:top;">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;max-width:100%;">
+            <div style="font-weight:600;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word;" title="${safeHtml(r.channel || '—')}">${safeHtml(r.channel || '—')}</div>
+          </div>
+        </td>
+        <td style="width:260px;max-width:260px;vertical-align:top;">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;max-width:100%;">
+            <div style="font-weight:600;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word;" title="${safeHtml(r.recipient_display_name || r.to_address || '—')}">${safeHtml(r.recipient_display_name || r.to_address || '—')}</div>
+            <div class="mini" style="opacity:.75;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word;">${safeHtml(r.recipient_kind || '')}</div>
+          </div>
+        </td>
+        <td style="width:320px;max-width:320px;vertical-align:top;">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;max-width:100%;">
+            <div style="font-weight:600;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word;" title="${safeHtml(r.subject || r.preview || '—')}">${safeHtml(r.subject || r.preview || '—')}</div>
+            <div class="mini" style="opacity:.75;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;min-width:0;max-width:100%;">${safeHtml(r.channel === 'EMAIL' ? r.preview : (r.preview || r.subject || ''))}</div>
+          </div>
+        </td>
+        <td>${statusPill(r.status)}</td>
+        <td>${queueStatePill(r.queue_state)}</td>
+        <td>${safeHtml(fmtDt(r.created_at_utc) || '—')}</td>
+        <td>${safeHtml(fmtDt(r.scheduled_for_utc) || '—')}</td>
+        <td>${safeHtml(fmtDt(r.effective_ready_at_utc || r.next_attempt_at_utc) || '—')}</td>
+        <td>${renderActionButtons(r)}</td>
+      `;
+      tb.appendChild(tr);
+    });
+  } else {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="10" class="mini" style="opacity:.75;">No Outbox rows found.</td>`;
+    tb.appendChild(tr);
+  }
+
+  const getRowByBtn = (btn) => {
+    const key = String(btn.getAttribute('data-outbox-key') || '').trim();
+    if (!key) return null;
+    return rowBySelectionKey.get(key) || null;
+  };
+
   const selectAll = document.getElementById('outboxSelectAll');
   const selectedCountEl = document.getElementById('outboxSelectedCount');
 
   const updateSelectionUi = () => {
-    const visibleIds = currentRows.map(r => String(r.id || ''));
-    const selectedVisible = visibleIds.filter(id => sel.ids.has(id)).length;
+    const visibleSelected = normalizedRows.filter((row) => isRowSelected(row)).length;
 
     if (selectAll) {
-      selectAll.checked = (visibleIds.length > 0 && selectedVisible === visibleIds.length);
-      selectAll.indeterminate = (selectedVisible > 0 && selectedVisible < visibleIds.length);
+      selectAll.checked = (normalizedRows.length > 0 && visibleSelected === normalizedRows.length);
+      selectAll.indeterminate = (visibleSelected > 0 && visibleSelected < normalizedRows.length);
     }
 
-    if (selectedCountEl) selectedCountEl.textContent = String(sel.ids.size);
+    if (selectedCountEl) selectedCountEl.textContent = String(getSelectedCount());
+
     if (clearSelBtn) {
-      clearSelBtn.disabled = (sel.ids.size === 0);
-      clearSelBtn.style.opacity = (sel.ids.size === 0) ? '0.6' : '';
+      clearSelBtn.disabled = (getSelectedCount() === 0);
+      clearSelBtn.style.opacity = (getSelectedCount() === 0) ? '0.6' : '';
     }
 
     updateToolButtons();
   };
 
-  if (applyBtn) {
-    applyBtn.onclick = async () => {
-      const built = buildOutboxFiltersFromUi();
-      st.filters = built.filters;
-      st.sort = built.sort;
-      st.page = 1;
-      await rerenderWithFreshData();
-    };
-  }
+  const applyFiltersNow = async () => {
+    const built = buildOutboxFiltersFromUi();
+    st.filters = built.filters;
+    st.sort = normalizeOutboxSort(built.sort);
+    st.page = 1;
+    await rerenderWithFreshData();
+  };
 
-  if (clearSelBtn) {
-    clearSelBtn.onclick = () => {
-      sel.ids.clear();
-      updateSelectionUi();
-      content.querySelectorAll('.outbox-row-select').forEach((cb) => { cb.checked = false; });
-    };
-  }
+  applyBtn.onclick = async () => {
+    await applyFiltersNow();
+  };
+
+  clearSelBtn.onclick = () => {
+    sel.ids.clear();
+    sel.keys.clear();
+    currentSelection = null;
+    updateSelectionUi();
+    bodyWrap.querySelectorAll('.outbox-row-select').forEach((cb) => {
+      cb.checked = false;
+    });
+  };
 
   if (selectAll) {
     selectAll.onclick = (ev) => {
       ev.stopPropagation();
       const wantOn = !!selectAll.checked;
-      currentRows.forEach(r => setRowSelected(r.id, wantOn));
-      content.querySelectorAll('.outbox-row-select').forEach((cb) => { cb.checked = wantOn; });
+      normalizedRows.forEach((row) => setRowSelected(row, wantOn));
+      bodyWrap.querySelectorAll('.outbox-row-select').forEach((cb) => {
+        cb.checked = wantOn;
+      });
       updateSelectionUi();
     };
   }
 
-  content.querySelectorAll('.outbox-row-select').forEach((cb) => {
+  bodyWrap.querySelectorAll('.outbox-row-select').forEach((cb) => {
     cb.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      const oid = String(cb.getAttribute('data-outbox-id') || '').trim();
-      setRowSelected(oid, !!cb.checked);
+      const key = String(cb.getAttribute('data-outbox-key') || '').trim();
+      const row = rowBySelectionKey.get(key) || null;
+      if (!row) return;
+      setRowSelected(row, !!cb.checked);
       updateSelectionUi();
     });
   });
 
-  const tbody = content.querySelector('#outboxGrid tbody');
-  if (tbody) {
-    tbody.addEventListener('dblclick', async (ev) => {
-      const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-id]') : null;
-      if (!tr) return;
-      const oid = String(tr.getAttribute('data-outbox-id') || '').trim();
-      const ch = String(tr.getAttribute('data-channel') || '').trim().toUpperCase();
-      const row = currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
+  tb.addEventListener('dblclick', async (ev) => {
+    if (ev.target && ev.target.closest && ev.target.closest('button, input, a')) return;
+    const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-key]') : null;
+    if (!tr) return;
+
+    const key = String(tr.getAttribute('data-outbox-key') || '').trim();
+    const row = rowBySelectionKey.get(key) || null;
+    if (!row) return;
+
+    if (typeof openOutboxDetailModal === 'function') {
+      await openOutboxDetailModal({
+        outbox_id: row.outbox_id,
+        channel: row.channel
+      });
+    }
+  });
+
+  tb.addEventListener('click', async (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-act]') : null;
+    if (btn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      const row = getRowByBtn(btn);
       if (!row) return;
-      await openOutboxDetailModal(row);
-    });
 
-    tbody.addEventListener('click', async (ev) => {
-      const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-act]') : null;
-      if (btn) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        const row = getRowByBtn(btn);
-        if (!row) return;
+      const actionState = getActionState(row);
+      const act = String(btn.getAttribute('data-act') || '').trim();
 
-        const act = String(btn.getAttribute('data-act') || '').trim();
-        if (act === 'retry') {
+      if (act === 'retry' && actionState.canRetry) {
+        if (typeof handleOutboxRetryAction === 'function') {
           await handleOutboxRetryAction(row, {
             onDone: async () => { await rerenderWithFreshData(); }
           });
-          return;
         }
-        if (act === 'reschedule') {
+        return;
+      }
+
+      if (act === 'reschedule' && actionState.canReschedule) {
+        if (typeof handleOutboxRescheduleAction === 'function') {
           await handleOutboxRescheduleAction(row, {
             onDone: async () => { await rerenderWithFreshData(); }
           });
-          return;
         }
-        if (act === 'delete') {
-          await handleOutboxDeleteAction(row, {
-            onDone: async () => { await rerenderWithFreshData(); }
-          });
-          return;
-        }
+        return;
       }
 
-      const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-id]') : null;
-      if (!tr) return;
-      tbody.querySelectorAll('tr.selected').forEach(n => n.classList.remove('selected'));
-      tr.classList.add('selected');
+      if (act === 'delete' && actionState.canDelete) {
+        if (typeof handleOutboxDeleteAction === 'function') {
+          await handleOutboxDeleteAction(row, {
+            onDone: async () => {
+              removeOutboxSelectionRef(row);
+              try {
+                if (
+                  currentSelection &&
+                  typeof currentSelection === 'object' &&
+                  String(currentSelection.outbox_id || currentSelection.id || '').trim() === String(row.outbox_id || row.id || '').trim() &&
+                  String(currentSelection.channel || '').trim().toUpperCase() === String(row.channel || '').trim().toUpperCase()
+                ) {
+                  currentSelection = null;
+                }
+              } catch {}
+              await rerenderWithFreshData();
+            }
+          });
+        } else {
+          console.warn('[OUTBOX][DELETE] handleOutboxDeleteAction is not defined');
+        }
+        return;
+      }
 
-      const oid = String(tr.getAttribute('data-outbox-id') || '').trim();
-      const ch = String(tr.getAttribute('data-channel') || '').trim().toUpperCase();
-      currentSelection = currentRows.find(r => String(r.id || '') === oid && String(r.channel || '').toUpperCase() === ch) || null;
-    });
-  }
+      return;
+    }
 
-  const prevBtn = document.getElementById('outboxPrevPageBtn');
-  if (prevBtn) {
-    prevBtn.onclick = async () => {
-      if (Number(st.page || 1) <= 1) return;
-      st.page = Math.max(1, Number(st.page || 1) - 1);
-      await rerenderWithFreshData();
+    const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-outbox-key]') : null;
+    if (!tr) return;
+
+    tb.querySelectorAll('tr.selected').forEach((n) => n.classList.remove('selected'));
+    tr.classList.add('selected');
+
+    const key = String(tr.getAttribute('data-outbox-key') || '').trim();
+    const row = rowBySelectionKey.get(key) || null;
+    if (!row) {
+      currentSelection = null;
+      return;
+    }
+
+    currentSelection = {
+      outbox_id: row.outbox_id,
+      id: row.id,
+      channel: row.channel,
+      outbox_key: row.outbox_key
     };
+  });
+
+  const pager = document.createElement('div');
+  pager.classList.add('pager');
+  pager.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--line);';
+
+  const info = document.createElement('span');
+  info.className = 'mini';
+
+  const pageNum = Number(st.page || 1);
+  const pageSize = st.pageSize === 'ALL' ? 'ALL' : Number(st.pageSize || 50);
+  const totalKnown = (typeof st.total === 'number');
+  const hasMore = !!st.hasMore;
+
+  const mkBtn = (label, disabled, onClick, isActive) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.disabled = !!disabled;
+    b.classList.add('pager-btn');
+    if (isActive) b.classList.add('active');
+    b.style.cssText = 'border:1px solid var(--line);background:#0b152a;color:var(--text);padding:4px 8px;border-radius:8px;cursor:pointer';
+    if (!disabled && typeof onClick === 'function') b.addEventListener('click', onClick);
+    return b;
+  };
+
+  let maxPageToShow;
+  if (totalKnown && pageSize !== 'ALL') {
+    maxPageToShow = Math.max(1, Math.ceil(st.total / Number(pageSize)));
+  } else if (pageSize === 'ALL') {
+    maxPageToShow = 1;
+  } else {
+    maxPageToShow = hasMore ? (pageNum + 1) : pageNum;
   }
 
-  const nextBtn = document.getElementById('outboxNextPageBtn');
-  if (nextBtn) {
-    nextBtn.onclick = async () => {
-      st.page = Number(st.page || 1) + 1;
+  if (pageSize !== 'ALL') {
+    const prevBtn = mkBtn('Prev', pageNum <= 1, async () => {
+      st.page = Math.max(1, pageNum - 1);
       await rerenderWithFreshData();
+    }, false);
+    pager.appendChild(prevBtn);
+
+    const makePageLink = (n) => {
+      const isActive = (n === pageNum);
+      return mkBtn(String(n), false, isActive ? null : async () => {
+        st.page = n;
+        await rerenderWithFreshData();
+      }, isActive);
     };
+
+    const pages = [];
+    if (maxPageToShow <= 7) {
+      for (let n = 1; n <= maxPageToShow; n++) pages.push(n);
+    } else {
+      pages.push(1);
+      if (pageNum > 3) pages.push('…');
+      for (let n = Math.max(2, pageNum - 1); n <= Math.min(maxPageToShow - 1, pageNum + 1); n++) pages.push(n);
+      if (hasMore || pageNum + 1 < maxPageToShow) pages.push('…');
+      pages.push(maxPageToShow);
+    }
+
+    pages.forEach((pn) => {
+      if (pn === '…') {
+        const span = document.createElement('span');
+        span.textContent = '…';
+        span.className = 'mini';
+        pager.appendChild(span);
+      } else {
+        pager.appendChild(makePageLink(pn));
+      }
+    });
+
+    const nextDisabled = (!hasMore && (!totalKnown || pageNum >= maxPageToShow));
+    const nextBtn = mkBtn('Next', nextDisabled, async () => {
+      st.page = pageNum + 1;
+      await rerenderWithFreshData();
+    }, false);
+    pager.appendChild(nextBtn);
   }
 
-  const searchEl = document.getElementById('outboxSearchText');
-  if (searchEl) {
-    searchEl.addEventListener('keydown', async (ev) => {
-      if (ev.key !== 'Enter') return;
-      const built = buildOutboxFiltersFromUi();
-      st.filters = built.filters;
-      st.sort = built.sort;
-      st.page = 1;
-      await rerenderWithFreshData();
-    });
+  if (pageSize === 'ALL') {
+    info.textContent = `Showing all ${normalizedRows.length} rows.`;
+  } else if (totalKnown) {
+    const start = ((pageNum - 1) * pageSize) + 1;
+    const end = Math.min(start + normalizedRows.length - 1, Number(st.total || 0));
+    info.textContent = `Showing ${start}–${end} of ${st.total}`;
+  } else {
+    const start = ((pageNum - 1) * pageSize) + 1;
+    const end = start + normalizedRows.length - 1;
+    info.textContent = `Showing ${start}–${end}${hasMore ? '+' : ''}`;
+  }
+
+  const spacer = document.createElement('div');
+  spacer.style.flex = '1';
+  pager.appendChild(spacer);
+  pager.appendChild(info);
+  content.appendChild(pager);
+
+  searchEl.addEventListener('keydown', async (ev) => {
+    if (ev.key !== 'Enter') return;
+    await applyFiltersNow();
+  });
+
+  channelEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  statusEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  queueStateEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  sortKeyEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  sortDirEl.addEventListener('change', async () => {
+    await applyFiltersNow();
+  });
+
+  const scrollHost = bodyWrap;
+  if (scrollHost) {
+    scrollHost.__activeMemKey = memKey;
+    scrollHost.scrollTop = prevScrollY;
+    if (!scrollHost.__scrollMemHooked) {
+      scrollHost.addEventListener('scroll', () => {
+        const k = scrollHost.__activeMemKey || memKey;
+        window.__scrollMemory[k] = scrollHost.scrollTop || 0;
+      });
+      scrollHost.__scrollMemHooked = true;
+    }
   }
 
   updateSelectionUi();
 }
-
 async function handleBankingFinanceLoansSnoozesList(env, req, user) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -28270,6 +30918,43 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
   };
 
+  const asInt = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : 0;
+  };
+
+  const defaultRowLabelForCaseType = (caseType) => {
+    const s = String(caseType || '').trim().toUpperCase();
+    if (s === 'PAYMENT_ADVANCE') return 'Payment advance';
+    if (s === 'OVERPAYMENT') return 'Overpayment';
+    if (s === 'MANUAL_DEBT_ADJUSTMENT') return 'Manual debt adjustment';
+    if (s === 'MANUAL_CREDIT_ADJUSTMENT') return 'Manual credit adjustment';
+    if (s === 'UNDERPAYMENT') return 'Underpayment';
+    return s || 'Finance case';
+  };
+
+  const blockedStateForRow = (row) => {
+    const explicit = String(row?.blocked_state || row?.blocked_status || '').trim().toUpperCase();
+    if (explicit) return explicit;
+
+    const unresolvedTaxableCount = asInt(row?.unresolved_taxable_count);
+    const staleCount = asInt(row?.stale_count);
+    if (unresolvedTaxableCount > 0 || staleCount > 0) return 'BLOCKED';
+    return 'SAFE';
+  };
+
+  const blockedReasonForRow = (row) => {
+    const explicit = String(row?.blocked_reason || row?.blocked_reason_code || row?.blocked_reason_summary || '').trim();
+    if (explicit) return explicit;
+
+    const unresolvedTaxableCount = asInt(row?.unresolved_taxable_count);
+    const staleCount = asInt(row?.stale_count);
+
+    if (staleCount > 0) return 'STALE_COMPONENT_RESOLUTION';
+    if (unresolvedTaxableCount > 0) return 'UNRESOLVED_TAXABLE_COMPONENTS';
+    return null;
+  };
+
   const u = new URL(req.url);
 
   const candidateIdRaw = String(u.searchParams.get('candidate_id') || u.searchParams.get('candidateId') || '').trim();
@@ -28282,20 +30967,35 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
     return withCORS(env, req, badRequest('client_id must be a UUID'));
   }
 
-  const includePaidOff = parseBool(u.searchParams.get('include_paid_off') ?? u.searchParams.get('includePaidOff'), true);
-  const includeClearedSnoozes = parseBool(u.searchParams.get('include_cleared_snoozes') ?? u.searchParams.get('includeClearedSnoozes'), false);
+  const hideCompletedNonCurrentItems = parseBool(
+    u.searchParams.get('hide_completed_non_current_items') ?? u.searchParams.get('hideCompletedNonCurrentItems'),
+    true
+  );
 
   try {
     const rpcRes = await sbRpc(env, 'pay_loans_snoozes_list', {
       p_candidate_id: candidateIdRaw || null,
       p_client_id: clientIdRaw || null,
-      p_include_paid_off: includePaidOff,
-      p_include_cleared_snoozes: includeClearedSnoozes
+      p_hide_completed_non_current_items: hideCompletedNonCurrentItems
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_loans_snoozes_list');
-    const financeCasesIn = Array.isArray(payload?.finance_cases) ? payload.finance_cases : [];
-    const timesheetSnoozesIn = Array.isArray(payload?.timesheet_snoozes) ? payload.timesheet_snoozes : [];
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const filtersIn = (payloadObj.filters && typeof payloadObj.filters === 'object' && !Array.isArray(payloadObj.filters))
+      ? payloadObj.filters
+      : {};
+
+    const {
+      include_paid_off: _dropIncludePaidOffSnake,
+      includePaidOff: _dropIncludePaidOffCamel,
+      include_cleared_snoozes: _dropIncludeClearedSnoozesSnake,
+      includeClearedSnoozes: _dropIncludeClearedSnoozesCamel,
+      ...filtersRest
+    } = filtersIn;
+
+    const financeCasesIn = Array.isArray(payloadObj.finance_cases) ? payloadObj.finance_cases : [];
+    const timesheetSnoozesIn = Array.isArray(payloadObj.timesheet_snoozes) ? payloadObj.timesheet_snoozes : [];
 
     const financeCases = financeCasesIn.map((row) => {
       const caseType = String(row?.case_type || '').trim().toUpperCase();
@@ -28304,15 +31004,23 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
       const outstandingAmount = Number(row?.outstanding_amount || 0);
       const writtenOff = !!row?.written_off_at_utc || !!String(row?.write_off_reason || '').trim();
       const activeSnoozeId = (row?.active_snooze_id != null && String(row.active_snooze_id).trim()) ? String(row.active_snooze_id).trim() : null;
+      const blockedState = blockedStateForRow(row);
+      const blockedReason = blockedReasonForRow(row);
+      const rowLabel = String(row?.row_label || '').trim() || defaultRowLabelForCaseType(caseType);
+
+      const existingActionFlags = (row?.action_flags && typeof row.action_flags === 'object' && !Array.isArray(row.action_flags))
+        ? row.action_flags
+        : {};
+
       const isRepayable =
         caseType === 'PAYMENT_ADVANCE' ||
         caseType === 'OVERPAYMENT' ||
         caseType === 'MANUAL_DEBT_ADJUSTMENT';
 
       const canEditCase =
-        (caseType === 'PAYMENT_ADVANCE') ||
-        (caseType === 'MANUAL_CREDIT_ADJUSTMENT') ||
-        (caseType === 'MANUAL_DEBT_ADJUSTMENT');
+        caseType === 'PAYMENT_ADVANCE' ||
+        caseType === 'MANUAL_CREDIT_ADJUSTMENT' ||
+        caseType === 'MANUAL_DEBT_ADJUSTMENT';
 
       const canRestructure =
         (caseType === 'PAYMENT_ADVANCE' || caseType === 'MANUAL_DEBT_ADJUSTMENT') &&
@@ -28337,46 +31045,83 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
         !writtenOff;
 
       const canSnooze =
-        isRepayable &&
-        outstandingAmount > 0 &&
-        !writtenOff &&
-        !activeSnoozeId;
+        (row?.snooze_allowed === true) ||
+        (
+          row?.snooze_allowed == null &&
+          isRepayable &&
+          outstandingAmount > 0 &&
+          !writtenOff &&
+          !activeSnoozeId
+        );
 
-      const canClearSnooze = !!activeSnoozeId;
-      const canEditSnooze = !!activeSnoozeId;
+      const canClearSnooze = existingActionFlags.can_clear_snooze === true || !!activeSnoozeId;
+      const canEditSnooze = existingActionFlags.can_edit_snooze === true || !!activeSnoozeId;
 
       const canEditPayout =
         (caseType === 'PAYMENT_ADVANCE' || caseType === 'MANUAL_CREDIT_ADJUSTMENT') &&
         payoutStatus !== 'PAID';
 
+      const canEditBankDetails =
+        existingActionFlags.can_edit_bank_details === true ||
+        row?.edit_bank_details_allowed === true ||
+        row?.oneoff_bank_details_editable === true;
+
       return {
         ...row,
+        row_label: rowLabel,
+        blocked_state: blockedState,
+        blocked_reason: blockedReason,
+        is_mixed_case: row?.is_mixed_case === true,
+        open_taxable_count: asInt(row?.open_taxable_count),
+        open_reimbursement_count: asInt(row?.open_reimbursement_count),
+        unresolved_taxable_count: asInt(row?.unresolved_taxable_count),
+        stale_count: asInt(row?.stale_count),
+        component_resolution_summary_json:
+          (row?.component_resolution_summary_json && typeof row.component_resolution_summary_json === 'object')
+            ? row.component_resolution_summary_json
+            : null,
         action_flags: {
-          can_edit_case: canEditCase,
-          can_edit_payout: canEditPayout,
-          can_restructure: canRestructure,
-          can_pause: canPause,
-          can_resume: canResume,
-          can_write_off: canWriteOff,
-          can_snooze: canSnooze,
-          can_clear_snooze: canClearSnooze,
-          can_edit_snooze: canEditSnooze,
-          can_open_audit: true
+          ...existingActionFlags,
+          can_edit_case: existingActionFlags.can_edit_case ?? canEditCase,
+          can_edit_payout: existingActionFlags.can_edit_payout ?? canEditPayout,
+          can_edit_bank_details: canEditBankDetails,
+          can_restructure: existingActionFlags.can_restructure ?? canRestructure,
+          can_pause: existingActionFlags.can_pause ?? canPause,
+          can_resume: existingActionFlags.can_resume ?? canResume,
+          can_write_off: existingActionFlags.can_write_off ?? canWriteOff,
+          can_snooze: existingActionFlags.can_snooze ?? canSnooze,
+          can_unsnooze: existingActionFlags.can_unsnooze ?? canClearSnooze,
+          can_clear_snooze: existingActionFlags.can_clear_snooze ?? canClearSnooze,
+          can_edit_snooze: existingActionFlags.can_edit_snooze ?? canEditSnooze,
+          can_open_audit: existingActionFlags.can_open_audit ?? true
         }
       };
     });
 
-    const timesheetSnoozes = timesheetSnoozesIn.map((row) => ({
-      ...row,
-      action_flags: {
-        can_clear_snooze: !row?.cleared_at_utc,
-        can_open_audit: false
-      }
-    }));
+    const timesheetSnoozes = timesheetSnoozesIn.map((row) => {
+      const existingActionFlags = (row?.action_flags && typeof row.action_flags === 'object' && !Array.isArray(row.action_flags))
+        ? row.action_flags
+        : {};
+      const canClearSnooze = existingActionFlags.can_clear_snooze ?? !row?.cleared_at_utc;
+
+      return {
+        ...row,
+        action_flags: {
+          ...existingActionFlags,
+          can_unsnooze: existingActionFlags.can_unsnooze ?? canClearSnooze,
+          can_clear_snooze: existingActionFlags.can_clear_snooze ?? canClearSnooze,
+          can_open_audit: existingActionFlags.can_open_audit ?? false
+        }
+      };
+    });
 
     return withCORS(env, req, ok({
-      ...((payload && typeof payload === 'object') ? payload : {}),
+      ...payloadObj,
       ok: true,
+      filters: {
+        ...filtersRest,
+        hide_completed_non_current_items: hideCompletedNonCurrentItems
+      },
       finance_cases: financeCases,
       timesheet_snoozes: timesheetSnoozes
     }));
@@ -28384,6 +31129,7 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to load banking finance loans/snoozes list')));
   }
 }
+
 
 async function handleBankingPaymentAdvanceCreate(env, req, user) {
   let body = null;
@@ -28425,6 +31171,16 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
       }
     }
     return false;
+  };
+
+  const optionalTrimmedOrNull = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        const trimmed = String(value).trim();
+        return trimmed ? trimmed : null;
+      }
+    }
+    return null;
   };
 
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
@@ -28510,6 +31266,11 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
+  const beneficiaryName = optionalTrimmedOrNull(body.beneficiary_name, body.beneficiaryName);
+  const sortCode = optionalTrimmedOrNull(body.sort_code, body.sortCode);
+  const accountNumber = optionalTrimmedOrNull(body.account_number, body.accountNumber);
+  const bankDetailsNote = optionalTrimmedOrNull(body.bank_details_note, body.bankDetailsNote);
+
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
@@ -28529,7 +31290,11 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
       p_actor_user_id: user.id,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
-      p_take_home_floor_override: takeHomeFloorOverrideRaw
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_beneficiary_name: beneficiaryName,
+      p_sort_code: sortCode,
+      p_account_number: accountNumber,
+      p_bank_details_note: bankDetailsNote
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_payment_advance_create');
@@ -28538,7 +31303,6 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create payment advance')));
   }
 }
-
 async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -28583,6 +31347,25 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
       }
     }
     return false;
+  };
+
+  const optionalTrimmedOrNull = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        const trimmed = String(value).trim();
+        return trimmed ? trimmed : null;
+      }
+    }
+    return null;
+  };
+
+  const normalizeBoolean = (raw) => {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (typeof raw === 'boolean') return raw;
+    const s = String(raw).trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
+    return null;
   };
 
   const principalAmountProvided = hasOwnValue(body, ['principal_amount', 'principalAmount', 'amount']);
@@ -28667,6 +31450,21 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
     return withCORS(env, req, badRequest('take_home_floor_override must be a valid number or null'));
   }
 
+  const beneficiaryName = optionalTrimmedOrNull(body.beneficiary_name, body.beneficiaryName);
+  const sortCode = optionalTrimmedOrNull(body.sort_code, body.sortCode);
+  const accountNumber = optionalTrimmedOrNull(body.account_number, body.accountNumber);
+  const bankDetailsNote = optionalTrimmedOrNull(body.bank_details_note, body.bankDetailsNote);
+
+  const removeOneoffBankDetailsProvided =
+    Object.prototype.hasOwnProperty.call(body, 'remove_oneoff_bank_details') ||
+    Object.prototype.hasOwnProperty.call(body, 'removeOneoffBankDetails');
+  const removeOneoffBankDetails = removeOneoffBankDetailsProvided
+    ? normalizeBoolean(body.remove_oneoff_bank_details ?? body.removeOneoffBankDetails)
+    : false;
+  if (removeOneoffBankDetailsProvided && removeOneoffBankDetails === null) {
+    return withCORS(env, req, badRequest('remove_oneoff_bank_details must be true or false when provided'));
+  }
+
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
@@ -28686,7 +31484,12 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
       p_start_week_start: startWeekStartIso,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
-      p_take_home_floor_override: takeHomeFloorOverrideRaw
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_beneficiary_name: beneficiaryName,
+      p_sort_code: sortCode,
+      p_account_number: accountNumber,
+      p_bank_details_note: bankDetailsNote,
+      p_remove_oneoff_bank_details: removeOneoffBankDetails
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_payment_advance_update');
@@ -28695,7 +31498,6 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update payment advance')));
   }
 }
-
 async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -28704,6 +31506,24 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const normalizeTaxability = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!s) return null;
+    if (s === 'TAXABLE') return 'TAXABLE';
+    if (s === 'NON_TAXABLE' || s === 'NONTAXABLE') return 'NON_TAXABLE';
+    return null;
+  };
+
+  const optionalTrimmedOrNull = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        const trimmed = String(value).trim();
+        return trimmed ? trimmed : null;
+      }
+    }
+    return null;
+  };
 
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
@@ -28719,8 +31539,18 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
     return withCORS(env, req, badRequest('adjustment_comment is required'));
   }
 
+  const taxability = normalizeTaxability(body.taxability);
+  if (!taxability) {
+    return withCORS(env, req, badRequest('taxability must be TAXABLE or NON_TAXABLE'));
+  }
+
   const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
   const note = noteRaw ? noteRaw : null;
+
+  const beneficiaryName = optionalTrimmedOrNull(body.beneficiary_name, body.beneficiaryName);
+  const sortCode = optionalTrimmedOrNull(body.sort_code, body.sortCode);
+  const accountNumber = optionalTrimmedOrNull(body.account_number, body.accountNumber);
+  const bankDetailsNote = optionalTrimmedOrNull(body.bank_details_note, body.bankDetailsNote);
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -28737,7 +31567,12 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
       p_amount: amount,
       p_actor_user_id: user.id,
       p_adjustment_comment: adjustmentComment,
-      p_note: note
+      p_note: note,
+      p_taxability: taxability,
+      p_beneficiary_name: beneficiaryName,
+      p_sort_code: sortCode,
+      p_account_number: accountNumber,
+      p_bank_details_note: bankDetailsNote
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_credit_adjustment_create');
@@ -28746,7 +31581,6 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create manual credit adjustment')));
   }
 }
-
 
 async function handleBankingManualCreditAdjustmentUpdate(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
@@ -28760,6 +31594,33 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
+
+  const normalizeTaxability = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!s) return null;
+    if (s === 'TAXABLE') return 'TAXABLE';
+    if (s === 'NON_TAXABLE' || s === 'NONTAXABLE') return 'NON_TAXABLE';
+    return null;
+  };
+
+  const optionalTrimmedOrNull = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null) {
+        const trimmed = String(value).trim();
+        return trimmed ? trimmed : null;
+      }
+    }
+    return null;
+  };
+
+  const normalizeBoolean = (raw) => {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (typeof raw === 'boolean') return raw;
+    const s = String(raw).trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on') return true;
+    if (s === 'false' || s === '0' || s === 'no' || s === 'n' || s === 'off') return false;
+    return null;
+  };
 
   const amount =
     (body.amount === null || body.amount === undefined)
@@ -28778,10 +31639,31 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
     return withCORS(env, req, badRequest('adjustment_comment cannot be blank when provided'));
   }
 
+  const taxabilityProvided = Object.prototype.hasOwnProperty.call(body, 'taxability');
+  const taxability = taxabilityProvided ? normalizeTaxability(body.taxability) : null;
+  if (taxabilityProvided && !taxability) {
+    return withCORS(env, req, badRequest('taxability must be TAXABLE or NON_TAXABLE when provided'));
+  }
+
   const note =
     (body.note === null || body.note === undefined)
       ? null
       : String(body.note).trim();
+
+  const beneficiaryName = optionalTrimmedOrNull(body.beneficiary_name, body.beneficiaryName);
+  const sortCode = optionalTrimmedOrNull(body.sort_code, body.sortCode);
+  const accountNumber = optionalTrimmedOrNull(body.account_number, body.accountNumber);
+  const bankDetailsNote = optionalTrimmedOrNull(body.bank_details_note, body.bankDetailsNote);
+
+  const removeOneoffBankDetailsProvided =
+    Object.prototype.hasOwnProperty.call(body, 'remove_oneoff_bank_details') ||
+    Object.prototype.hasOwnProperty.call(body, 'removeOneoffBankDetails');
+  const removeOneoffBankDetails = removeOneoffBankDetailsProvided
+    ? normalizeBoolean(body.remove_oneoff_bank_details ?? body.removeOneoffBankDetails)
+    : false;
+  if (removeOneoffBankDetailsProvided && removeOneoffBankDetails === null) {
+    return withCORS(env, req, badRequest('remove_oneoff_bank_details must be true or false when provided'));
+  }
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -28798,7 +31680,13 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
       p_actor_user_id: user.id,
       p_amount: amount,
       p_adjustment_comment: adjustmentComment,
-      p_note: note
+      p_note: note,
+      p_taxability: taxability,
+      p_beneficiary_name: beneficiaryName,
+      p_sort_code: sortCode,
+      p_account_number: accountNumber,
+      p_bank_details_note: bankDetailsNote,
+      p_remove_oneoff_bank_details: removeOneoffBankDetails
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_credit_adjustment_update');
@@ -28807,7 +31695,6 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update manual credit adjustment')));
   }
 }
-
 async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -28837,6 +31724,14 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     if (!s) return null;
     if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
     if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const normalizeTaxability = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!s) return null;
+    if (s === 'TAXABLE') return 'TAXABLE';
+    if (s === 'NON_TAXABLE' || s === 'NONTAXABLE') return 'NON_TAXABLE';
     return null;
   };
 
@@ -28917,6 +31812,11 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     return withCORS(env, req, badRequest('adjustment_comment is required'));
   }
 
+  const taxability = normalizeTaxability(body.taxability);
+  if (!taxability) {
+    return withCORS(env, req, badRequest('taxability must be TAXABLE or NON_TAXABLE'));
+  }
+
   const noteRaw = (body.note === null || body.note === undefined) ? '' : String(body.note).trim();
   const note = noteRaw ? noteRaw : null;
 
@@ -28958,7 +31858,8 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
       p_adjustment_comment: adjustmentComment,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
-      p_take_home_floor_override: takeHomeFloorOverrideRaw
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_taxability: taxability
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_create');
@@ -28967,7 +31868,6 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create manual debt adjustment')));
   }
 }
-
 async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -29001,6 +31901,14 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
     if (!s) return null;
     if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
     if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const normalizeTaxability = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (!s) return null;
+    if (s === 'TAXABLE') return 'TAXABLE';
+    if (s === 'NON_TAXABLE' || s === 'NONTAXABLE') return 'NON_TAXABLE';
     return null;
   };
 
@@ -29081,6 +31989,12 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
     return withCORS(env, req, badRequest('adjustment_comment cannot be blank when provided'));
   }
 
+  const taxabilityProvided = Object.prototype.hasOwnProperty.call(body, 'taxability');
+  const taxability = taxabilityProvided ? normalizeTaxability(body.taxability) : null;
+  if (taxabilityProvided && !taxability) {
+    return withCORS(env, req, badRequest('taxability must be TAXABLE or NON_TAXABLE when provided'));
+  }
+
   const note =
     (body.note === null || body.note === undefined)
       ? null
@@ -29122,7 +32036,8 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
       p_adjustment_comment: adjustmentComment,
       p_note: note,
       p_minimum_earnings_threshold: minimumEarningsThresholdRaw,
-      p_take_home_floor_override: takeHomeFloorOverrideRaw
+      p_take_home_floor_override: takeHomeFloorOverrideRaw,
+      p_taxability: taxability
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_update');
@@ -29131,7 +32046,6 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update manual debt adjustment')));
   }
 }
-
 async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -29445,8 +32359,102 @@ async function handleBankingFinanceCaseAudit(env, req, user, financeCaseId) {
   }
 }
 
+async function sbRpcAllRows(env, fn, args, opts) {
+  const baseUrl = `${env.SUPABASE_URL}/rest/v1/rpc/${encodeURIComponent(fn)}`;
 
+  const pageSize =
+    (opts && Number.isFinite(Number(opts.pageSize)) && Number(opts.pageSize) > 0)
+      ? Math.trunc(Number(opts.pageSize))
+      : 1000;
 
+  const timeoutMs =
+    (opts && Number.isFinite(Number(opts.timeoutMs)) && Number(opts.timeoutMs) > 0)
+      ? Number(opts.timeoutMs)
+      : null;
+
+  const controller = timeoutMs ? new AbortController() : null;
+  const t = timeoutMs ? setTimeout(() => {
+    try { controller.abort(new Error(`RPC ${fn} timed out after ${timeoutMs}ms`)); } catch {}
+  }, timeoutMs) : null;
+
+  const normalizeRows = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (payload && typeof payload === 'object' && Array.isArray(payload.rows)) return payload.rows;
+    if (payload == null) return [];
+    return [payload];
+  };
+
+  let start = 0;
+  let total = null;
+  const out = [];
+
+  try {
+    while (true) {
+      const requestUrl = new URL(baseUrl);
+      requestUrl.searchParams.set('limit', String(pageSize));
+      requestUrl.searchParams.set('offset', String(start));
+
+      const res = await fetch(requestUrl.toString(), {
+        method: 'POST',
+        headers: {
+          ...sbHeaders(env),
+          Prefer: 'count=exact'
+        },
+        body: JSON.stringify(args || {}),
+        signal: controller ? controller.signal : undefined
+      });
+
+      const txt = await res.text().catch(() => '');
+      let json = null;
+      try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
+
+      if (!res.ok) {
+        const err = new Error(`RPC ${fn} failed ${res.status}: ${txt}`);
+        err.status = res.status;
+        err.body = txt;
+        err.json = json;
+        throw err;
+      }
+
+      const rows = normalizeRows(json);
+      out.push(...rows);
+
+      const contentRange = String(res.headers.get('content-range') || '').trim();
+      const m = contentRange && /\/(\d+)$/.exec(contentRange);
+      if (m) {
+        const parsedTotal = Number(m[1]);
+        if (Number.isFinite(parsedTotal) && parsedTotal >= 0) {
+          total = Math.trunc(parsedTotal);
+        }
+      }
+
+      if (rows.length === 0) {
+        break;
+      }
+
+      if (total != null) {
+        if (out.length >= total) break;
+      } else if (rows.length < pageSize) {
+        break;
+      }
+
+      start += rows.length;
+    }
+
+    return out;
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || /timed out/i.test(String(e.message || '')))) {
+      const err = new Error(`RPC ${fn} failed 408: ${timeoutMs ? `timeout after ${timeoutMs}ms` : 'timeout'}`);
+      err.status = 408;
+      err.body = '';
+      err.json = null;
+      throw err;
+    }
+    throw e;
+  } finally {
+    if (t) clearTimeout(t);
+  }
+}
 
 async function openOutboxDetailModal(rowOrRef) {
   const trimStr = (v) => String(v == null ? '' : v).trim();
@@ -32316,25 +35324,25 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
 
   return withCORS(env, req, ok({ ok:true, safe_end: safeEnd, clamped }));
 }
+
+
 async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
   const enc = encodeURIComponent;
+  const trimStr = (v) => String(v || '').trim();
 
-  // ✅ Guarded write: require expected_timesheet_id in JSON body
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
-  // ✅ stale-safe resolve
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
   if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
   const currentTimesheetId = String(resolved.current_timesheet_id);
 
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
   if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
       env,
@@ -32346,8 +35354,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     );
   }
 
-  // Guard: current TSFIN must not be paid or invoiced (and respect other hard locks defensively)
-  // ✅ NOTE: schema-aligned columns only (locked_by_invoice_id, locked_at_utc, paid_at_utc)
   const tsfin = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
@@ -32366,7 +35372,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     if (hardLocked) return withCORS(env, req, badRequest('Cannot delete: invoiced or paid'));
   }
 
-  // Load current timesheet row (classification + existence check)
   const ts = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -32379,6 +35384,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   const scopeUpper = String(ts.sheet_scope || '').trim().toUpperCase();
   const isWeekly = scopeUpper === 'WEEKLY';
   const isAdjustment = ts.is_adjustment === true;
+  const bookingId = trimStr(ts.booking_id) || trimStr(resolved.booking_id) || '';
 
   const originUpper = String(ts.adjustment_origin || '').trim().toUpperCase();
   const hasCorrectionId = ts.correction_id != null && String(ts.correction_id).trim() !== '';
@@ -32394,7 +35400,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       hasCorrectionKind
     );
 
-  // 1) Import-derived child adjustment → refuse
   if (isImportDerivedChild) {
     return withCORS(
       env,
@@ -32405,7 +35410,137 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     );
   }
 
-  // 2) Weekly parent → call timesheet_weekly_chain_delete_apply
+  const collectActiveTimesheetSnoozes = async (bookingIdArg, timesheetIdsArg) => {
+    const merged = new Map();
+    const baseSelect = 'id,candidate_id,timesheet_id,booking_id,segment_id,segment_stable_key,snooze_kind';
+    const seriesIds = Array.isArray(timesheetIdsArg)
+      ? timesheetIdsArg.map(x => trimStr(x)).filter(Boolean)
+      : [];
+
+    const collect = async (url) => {
+      try {
+        const { rows: fetchedRows } = await sbFetch(env, url);
+        for (const row of (Array.isArray(fetchedRows) ? fetchedRows : [])) {
+          const id = trimStr(row?.id);
+          if (!id) continue;
+          merged.set(id, row);
+        }
+      } catch {}
+    };
+
+    if (bookingIdArg) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?booking_id=eq.${enc(String(bookingIdArg))}` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    if (seriesIds.length) {
+      await collect(
+        `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes` +
+          `?timesheet_id=in.(${seriesIds.map(enc).join(',')})` +
+          `&source_ref=is.null` +
+          `&cleared_at_utc=is.null` +
+          `&select=${baseSelect}` +
+          `&limit=2000`
+      );
+    }
+
+    return Array.from(merged.values());
+  };
+
+  const clearCollectedSnoozes = async (snoozeRows, clearReason) => {
+    const clearedIds = [];
+    const failedIds = [];
+
+    for (const snoozeRow of (Array.isArray(snoozeRows) ? snoozeRows : [])) {
+      const snoozeId = trimStr(snoozeRow?.id);
+      if (!snoozeId) continue;
+
+      let cleared = false;
+
+      try {
+        await sbRpc(env, 'pay_snooze_clear', {
+          p_snooze_id: snoozeId,
+          p_actor_user_id: user.id
+        });
+        cleared = true;
+      } catch {}
+
+      if (!cleared) {
+        const now = nowIso();
+        try {
+          const patchRes = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/pay_item_snoozes?id=eq.${enc(snoozeId)}&cleared_at_utc=is.null`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+              body: JSON.stringify({
+                cleared_at_utc: now,
+                cleared_by_user_id: user.id,
+                updated_at_utc: now,
+                updated_by_user_id: user.id
+              })
+            }
+          );
+
+          if (!patchRes.ok) {
+            const txt = await patchRes.text().catch(() => '');
+            throw new Error(txt || `Failed to clear snooze ${snoozeId}`);
+          }
+
+          try {
+            await writeAudit(
+              env,
+              user,
+              'SNOOZE_CLEARED',
+              {
+                snooze_id: snoozeId,
+                booking_id: bookingId || null,
+                timesheet_id: trimStr(snoozeRow?.timesheet_id) || null,
+                segment_id: trimStr(snoozeRow?.segment_id) || null,
+                segment_stable_key: trimStr(snoozeRow?.segment_stable_key) || null,
+                snooze_kind: trimStr(snoozeRow?.snooze_kind) || null,
+                clear_reason: clearReason || null
+              },
+              {
+                entity: 'pay_item_snoozes',
+                subject_id: snoozeId,
+                req,
+                reason: clearReason || null
+              }
+            );
+          } catch {}
+
+          cleared = true;
+        } catch {}
+      }
+
+      if (cleared) clearedIds.push(snoozeId);
+      else failedIds.push(snoozeId);
+    }
+
+    return { clearedIds, failedIds };
+  };
+
+  const weeklySeriesIds = bookingId
+    ? (await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?booking_id=eq.${enc(bookingId)}` +
+          `&select=timesheet_id`
+      )).rows?.map(r => r?.timesheet_id).filter(Boolean) || []
+    : [currentTimesheetId];
+
+  const snoozesToClear = await collectActiveTimesheetSnoozes(
+    bookingId || null,
+    weeklySeriesIds.length ? weeklySeriesIds : [currentTimesheetId]
+  );
+
   if (isWeekly && !isAdjustment) {
     try {
       const rpcRes = await sbRpc(env, 'timesheet_weekly_chain_delete_apply', {
@@ -32418,13 +35553,23 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         (rpcRes && typeof rpcRes === 'object' && Object.prototype.hasOwnProperty.call(rpcRes, 'data')) ? rpcRes.data :
         rpcRes;
 
-      // Audit (best-effort, keep existing behaviour)
+      const snoozeClearResult = await clearCollectedSnoozes(
+        snoozesToClear,
+        'TIMESHEET_DELETED_NOT_REQUIRED'
+      );
+
       try {
         await writeAudit(
           env,
           user,
           'TIMESHEET_DELETED',
-          { kind: 'WEEKLY_CHAIN_DELETE_PARENT', timesheet_id: currentTimesheetId, result: rpcOut },
+          {
+            kind: 'WEEKLY_CHAIN_DELETE_PARENT',
+            timesheet_id: currentTimesheetId,
+            result: rpcOut,
+            cleared_snooze_ids: snoozeClearResult.clearedIds,
+            snooze_clear_failed_ids: snoozeClearResult.failedIds
+          },
           { entity: 'timesheets', subject_id: currentTimesheetId, req }
         );
       } catch (e) {
@@ -32438,7 +35583,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         timesheet_id: currentTimesheetId,
         current_timesheet_id: currentTimesheetId,
         requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-        was_stale: !!resolved.was_stale
+        was_stale: !!resolved.was_stale,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
       }));
     } catch (e) {
       const msg = e?.message ? String(e.message) : String(e || 'Delete failed');
@@ -32447,7 +35594,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   }
 
-  // 3) Manual weekly adjustment → call timesheet_weekly_manual_adjustment_delete_apply
   if (isWeekly && isAdjustment) {
     try {
       const rpcRes = await sbRpc(env, 'timesheet_weekly_manual_adjustment_delete_apply', {
@@ -32460,13 +35606,23 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         (rpcRes && typeof rpcRes === 'object' && Object.prototype.hasOwnProperty.call(rpcRes, 'data')) ? rpcRes.data :
         rpcRes;
 
-      // Audit (best-effort, keep existing behaviour)
+      const snoozeClearResult = await clearCollectedSnoozes(
+        snoozesToClear,
+        'TIMESHEET_DELETED_NOT_REQUIRED'
+      );
+
       try {
         await writeAudit(
           env,
           user,
           'TIMESHEET_DELETED',
-          { kind: 'WEEKLY_MANUAL_ADJUSTMENT_DELETE', timesheet_id: currentTimesheetId, result: rpcOut },
+          {
+            kind: 'WEEKLY_MANUAL_ADJUSTMENT_DELETE',
+            timesheet_id: currentTimesheetId,
+            result: rpcOut,
+            cleared_snooze_ids: snoozeClearResult.clearedIds,
+            snooze_clear_failed_ids: snoozeClearResult.failedIds
+          },
           { entity: 'timesheets', subject_id: currentTimesheetId, req }
         );
       } catch (e) {
@@ -32480,7 +35636,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         timesheet_id: currentTimesheetId,
         current_timesheet_id: currentTimesheetId,
         requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-        was_stale: !!resolved.was_stale
+        was_stale: !!resolved.was_stale,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
       }));
     } catch (e) {
       const msg = e?.message ? String(e.message) : String(e || 'Delete failed');
@@ -32489,8 +35647,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   }
 
-  // 4) Daily/other → keep existing delete behaviour unchanged
-  // Confirm the timesheet row exists (chain/version record)
   const { rows: tsRows } = await sbFetch(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -32500,7 +35656,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   const versions = tsRows || [];
   if (!versions.length) return withCORS(env, req, notFound('Timesheet not found'));
 
-  // Unlink any contract_weeks that point at this timesheet_id (defensive)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -32514,7 +35669,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Unlink any nhsp_shifts that point at this timesheet_id (defensive)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/nhsp_shifts?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -32527,7 +35681,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Delete validations (defensive cleanup)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheet_validations?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -32536,7 +35689,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Delete TSFIN snapshots (avoid orphaned financials)
   await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -32545,7 +35697,6 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
   ).catch(() => {});
 
-  // Delete timesheet row (current version id)
   const del = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}`,
     {
@@ -32555,13 +35706,22 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   );
   if (!del.ok) return withCORS(env, req, serverError(await del.text()));
 
-  // Audit
+  const snoozeClearResult = await clearCollectedSnoozes(
+    snoozesToClear,
+    'TIMESHEET_DELETED_NOT_REQUIRED'
+  );
+
   try {
     await writeAudit(
       env,
       user,
       'TIMESHEET_DELETED',
-      { kind: 'STANDARD_DELETE', timesheet_id: currentTimesheetId },
+      {
+        kind: 'STANDARD_DELETE',
+        timesheet_id: currentTimesheetId,
+        cleared_snooze_ids: snoozeClearResult.clearedIds,
+        snooze_clear_failed_ids: snoozeClearResult.failedIds
+      },
       { entity: 'timesheets', subject_id: currentTimesheetId, req }
     );
   } catch (e) {
@@ -32574,10 +35734,11 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     timesheet_id: currentTimesheetId,
     current_timesheet_id: currentTimesheetId,
     requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-    was_stale: !!resolved.was_stale
+    was_stale: !!resolved.was_stale,
+    cleared_snooze_ids: snoozeClearResult.clearedIds,
+    snooze_clear_failed_ids: snoozeClearResult.failedIds
   }));
 }
-
 
 // ----------------------------------------------------------------------------
 // E) Funnel & Prechecks (read-only views)
@@ -52790,22 +55951,116 @@ async function buildHealthRosterPdf(env, invoiceId) {
     let body;
     try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-    const section   = (body?.section || '').trim();
-    const name      = (body?.name || '').trim();
-    const filters   = body?.filters || {};
-    const selection = body?.selection; // may be undefined or an object
+    const section   = String(body?.section || '').trim();
+    const name      = String(body?.name || '').trim();
+    const filters   = body?.filters ?? {};
+    const selection = body?.selection;
     const isDefault = !!body?.is_default;
     const isShared  = !!body?.is_shared;
     const kindRaw   = (body?.kind ?? 'search');
     const kind      = String(kindRaw).trim().toLowerCase();
 
-    // ⬅️ include 'selection' kind
     const KIND_ALLOWED = new Set(['search','report','dashboard','selection']);
+
+    const clonePlain = (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch {
+        const out = {};
+        Object.keys(value).forEach((key) => {
+          out[key] = value[key];
+        });
+        return out;
+      }
+    };
+
+    const normalizeIdArray = (value) => Array.from(new Set(
+      (Array.isArray(value) ? value : [])
+        .map((v) => String(v == null ? '' : v).trim())
+        .filter(Boolean)
+    ));
+
+    const normalizeExplicitSelectionPayload = (rawSelection, effectiveSection) => {
+      if (!rawSelection || typeof rawSelection !== 'object' || Array.isArray(rawSelection)) {
+        throw new Error('selection must be an object for kind=selection');
+      }
+
+      const selectionSection = String(rawSelection.section || '').trim();
+      if (selectionSection && selectionSection !== effectiveSection) {
+        throw new Error('selection.section must match section');
+      }
+
+      const rawMode = String(rawSelection.mode || rawSelection.selection_mode || '').trim().toLowerCase();
+      if (rawMode === 'all_filtered') {
+        throw new Error('selection presets must be stored as explicit ids only');
+      }
+
+      const explicitIds = normalizeIdArray(
+        Array.isArray(rawSelection.resolved_ids)
+          ? rawSelection.resolved_ids
+          : (Array.isArray(rawSelection.included_ids)
+              ? rawSelection.included_ids
+              : (Array.isArray(rawSelection.ids) ? rawSelection.ids : []))
+      );
+
+      if (!explicitIds.length) {
+        throw new Error('selection must contain at least one explicit row id');
+      }
+
+      const excludedIds = normalizeIdArray(rawSelection.excluded_ids);
+      if (excludedIds.length) {
+        throw new Error('selection.excluded_ids must be empty for kind=selection');
+      }
+
+      const selectionFilters =
+        (rawSelection.filters && typeof rawSelection.filters === 'object' && !Array.isArray(rawSelection.filters))
+          ? clonePlain(rawSelection.filters)
+          : ((rawSelection.effective_filters && typeof rawSelection.effective_filters === 'object' && !Array.isArray(rawSelection.effective_filters))
+              ? clonePlain(rawSelection.effective_filters)
+              : {});
+
+      const datasetKey = String(rawSelection.dataset_key || rawSelection.fingerprint || '').trim();
+
+      const normalized = {
+        section: effectiveSection,
+        dataset_key: datasetKey,
+        fingerprint: datasetKey,
+        mode: 'explicit',
+        included_ids: explicitIds.slice(),
+        excluded_ids: [],
+        ids: explicitIds.slice(),
+        resolved_ids: explicitIds.slice(),
+        membership_total: explicitIds.length
+      };
+
+      if (Object.keys(selectionFilters).length) {
+        normalized.filters = clonePlain(selectionFilters);
+        normalized.effective_filters = clonePlain(selectionFilters);
+      }
+
+      return normalized;
+    };
 
     if (!section) return withCORS(env, req, badRequest('section is required'));
     if (!name)    return withCORS(env, req, badRequest('name is required'));
-    if (typeof filters !== 'object') return withCORS(env, req, badRequest('filters must be an object'));
-    if (!KIND_ALLOWED.has(kind))     return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
+    if (!filters || typeof filters !== 'object' || Array.isArray(filters)) {
+      return withCORS(env, req, badRequest('filters must be an object'));
+    }
+    if (!KIND_ALLOWED.has(kind)) {
+      return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
+    }
+
+    let selectionToStore = undefined;
+    if (kind === 'selection') {
+      try {
+        selectionToStore = normalizeExplicitSelectionPayload(selection, section);
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid selection payload')));
+      }
+    } else if (typeof selection === 'object' && selection && !Array.isArray(selection)) {
+      selectionToStore = selection;
+    }
 
     if (isDefault) {
       await fetch(
@@ -52814,7 +56069,11 @@ async function buildHealthRosterPdf(env, invoiceId) {
         `&section=eq.${enc(section)}` +
         `&kind=eq.${enc(kind)}` +
         `&is_default=eq.true`,
-        { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({ is_default: false })
+        }
       );
     }
 
@@ -52823,8 +56082,8 @@ async function buildHealthRosterPdf(env, invoiceId) {
       section,
       kind,
       name,
-      filters_json: filters,                          // for searches
-      ...(typeof selection === 'object' ? { selection_json: selection } : {}), // for selections
+      filters_json: filters,
+      ...(selectionToStore !== undefined ? { selection_json: selectionToStore } : {}),
       is_default: isDefault,
       is_shared: isShared
     };
@@ -52846,13 +56105,13 @@ async function buildHealthRosterPdf(env, invoiceId) {
   }
 }
 
- async function handleReportPresetsUpdate(env, req, routeId) {
+async function handleReportPresetsUpdate(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   try {
-    const urlObj  = new URL(req.url);
-    const qsId    = urlObj.searchParams.get('id');
+    const urlObj = new URL(req.url);
+    const qsId = urlObj.searchParams.get('id');
     let body;
     try { body = await parseJSONBody(req); } catch { body = {}; }
 
@@ -52861,38 +56120,157 @@ async function buildHealthRosterPdf(env, invoiceId) {
 
     const { rows: existingRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,kind,is_default&id=eq.${enc(id)}`
+      `${env.SUPABASE_URL}/rest/v1/report_presets?select=id,user_id,section,kind,is_default,selection_json&id=eq.${enc(id)}`
     );
     const existing = existingRows?.[0];
     if (!existing) return withCORS(env, req, notFound('Preset not found'));
     if (existing.user_id !== user.id) return withCORS(env, req, unauthorized());
 
-    // ⬅️ include 'selection' kind
     const KIND_ALLOWED = new Set(['search','report','dashboard','selection']);
 
-    const patch = {};
-    if (typeof body.name === 'string')    patch.name = body.name.trim();
-    if (typeof body.section === 'string') patch.section = body.section.trim();
-    if (body.filters && typeof body.filters === 'object') patch.filters_json = body.filters;
+    const clonePlain = (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch {
+        const out = {};
+        Object.keys(value).forEach((key) => {
+          out[key] = value[key];
+        });
+        return out;
+      }
+    };
 
-    // allow updating/clearing selection
-    if ('selection' in body) {
-      if (body.selection === null) patch.selection_json = null;
-      else if (typeof body.selection === 'object') patch.selection_json = body.selection;
-      else return withCORS(env, req, badRequest('selection must be an object or null'));
+    const normalizeIdArray = (value) => Array.from(new Set(
+      (Array.isArray(value) ? value : [])
+        .map((v) => String(v == null ? '' : v).trim())
+        .filter(Boolean)
+    ));
+
+    const normalizeExplicitSelectionPayload = (rawSelection, effectiveSection) => {
+      if (!rawSelection || typeof rawSelection !== 'object' || Array.isArray(rawSelection)) {
+        throw new Error('selection must be an explicit selection object for kind=selection');
+      }
+
+      const selectionSection = String(rawSelection.section || '').trim();
+      if (selectionSection && selectionSection !== effectiveSection) {
+        throw new Error('selection.section must match section');
+      }
+
+      const rawMode = String(rawSelection.mode || rawSelection.selection_mode || '').trim().toLowerCase();
+      if (rawMode === 'all_filtered') {
+        throw new Error('selection presets must be stored as explicit ids only');
+      }
+
+      const explicitIds = normalizeIdArray(
+        Array.isArray(rawSelection.resolved_ids)
+          ? rawSelection.resolved_ids
+          : (Array.isArray(rawSelection.included_ids)
+              ? rawSelection.included_ids
+              : (Array.isArray(rawSelection.ids) ? rawSelection.ids : []))
+      );
+
+      if (!explicitIds.length) {
+        throw new Error('selection must contain at least one explicit row id');
+      }
+
+      const excludedIds = normalizeIdArray(rawSelection.excluded_ids);
+      if (excludedIds.length) {
+        throw new Error('selection.excluded_ids must be empty for kind=selection');
+      }
+
+      const selectionFilters =
+        (rawSelection.filters && typeof rawSelection.filters === 'object' && !Array.isArray(rawSelection.filters))
+          ? clonePlain(rawSelection.filters)
+          : ((rawSelection.effective_filters && typeof rawSelection.effective_filters === 'object' && !Array.isArray(rawSelection.effective_filters))
+              ? clonePlain(rawSelection.effective_filters)
+              : {});
+
+      const datasetKey = String(rawSelection.dataset_key || rawSelection.fingerprint || '').trim();
+
+      const normalized = {
+        section: effectiveSection,
+        dataset_key: datasetKey,
+        fingerprint: datasetKey,
+        mode: 'explicit',
+        included_ids: explicitIds.slice(),
+        excluded_ids: [],
+        ids: explicitIds.slice(),
+        resolved_ids: explicitIds.slice(),
+        membership_total: explicitIds.length
+      };
+
+      if (Object.keys(selectionFilters).length) {
+        normalized.filters = clonePlain(selectionFilters);
+        normalized.effective_filters = clonePlain(selectionFilters);
+      }
+
+      return normalized;
+    };
+
+    const patch = {};
+
+    if ('name' in body) {
+      if (typeof body.name !== 'string') return withCORS(env, req, badRequest('name must be a string'));
+      patch.name = body.name.trim();
     }
 
-    if (typeof body.is_shared === 'boolean')  patch.is_shared = body.is_shared;
+    if ('section' in body) {
+      if (typeof body.section !== 'string') return withCORS(env, req, badRequest('section must be a string'));
+      patch.section = body.section.trim();
+    }
+
+    if ('filters' in body) {
+      if (!body.filters || typeof body.filters !== 'object' || Array.isArray(body.filters)) {
+        return withCORS(env, req, badRequest('filters must be an object'));
+      }
+      patch.filters_json = body.filters;
+    }
+
+    if (typeof body.is_shared === 'boolean') patch.is_shared = body.is_shared;
     if (typeof body.is_default === 'boolean') patch.is_default = body.is_default;
+
     if (typeof body.kind === 'string') {
       const k = body.kind.trim().toLowerCase();
-      if (!KIND_ALLOWED.has(k)) return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
+      if (!KIND_ALLOWED.has(k)) {
+        return withCORS(env, req, badRequest('kind must be one of search|report|dashboard|selection'));
+      }
       patch.kind = k;
     }
 
+    const effectiveSection = String(
+      (typeof patch.section === 'string' && patch.section.trim()) ||
+      existing.section ||
+      ''
+    ).trim();
+
+    const effectiveKind = String(
+      (typeof patch.kind === 'string' && patch.kind.trim()) ||
+      existing.kind ||
+      ''
+    ).trim().toLowerCase();
+
+    if (effectiveKind === 'selection' && existing.kind !== 'selection' && !('selection' in body)) {
+      return withCORS(env, req, badRequest('selection is required when changing kind to selection'));
+    }
+
+    if ('selection' in body) {
+      if (effectiveKind === 'selection') {
+        try {
+          patch.selection_json = normalizeExplicitSelectionPayload(body.selection, effectiveSection);
+        } catch (e) {
+          return withCORS(env, req, badRequest(String(e?.message || e || 'Invalid selection payload')));
+        }
+      } else {
+        if (body.selection === null) patch.selection_json = null;
+        else if (typeof body.selection === 'object' && body.selection && !Array.isArray(body.selection)) patch.selection_json = body.selection;
+        else return withCORS(env, req, badRequest('selection must be an object or null'));
+      }
+    }
+
     if (patch.is_default === true) {
-      const sectionEff = patch.section || existing.section;
-      const kindEff    = patch.kind    || existing.kind;
+      const sectionEff = effectiveSection || existing.section;
+      const kindEff = effectiveKind || existing.kind;
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/report_presets` +
         `?user_id=eq.${enc(user.id)}` +
@@ -52900,7 +56278,11 @@ async function buildHealthRosterPdf(env, invoiceId) {
         `&kind=eq.${enc(kindEff)}` +
         `&is_default=eq.true` +
         `&id=neq.${enc(id)}`,
-        { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ is_default: false }) }
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({ is_default: false })
+        }
       );
     }
 
@@ -52908,7 +56290,11 @@ async function buildHealthRosterPdf(env, invoiceId) {
       env,
       `${env.SUPABASE_URL}/rest/v1/report_presets?id=eq.${enc(id)}`,
       true,
-      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return=representation' }, body: JSON.stringify(patch) }
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+        body: JSON.stringify(patch)
+      }
     );
 
     return withCORS(env, req, ok({ row: rows?.[0] || null }));
@@ -52917,6 +56303,264 @@ async function buildHealthRosterPdf(env, invoiceId) {
   }
 }
 
+async function handleSummaryTypeAheadLookup(env, req, section) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  try {
+    let body;
+    try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
+
+    const trimStr = (v) => String(v == null ? '' : v).trim();
+
+    const clonePlain = (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch {
+        const out = {};
+        Object.keys(value).forEach((key) => {
+          out[key] = value[key];
+        });
+        return out;
+      }
+    };
+
+    const normalizeIdArray = (arr) => Array.from(new Set(
+      (Array.isArray(arr) ? arr : [])
+        .map((v) => trimStr(v))
+        .filter(Boolean)
+    ));
+
+    const normalizeDatasetValue = (value) => {
+      if (value === undefined) return undefined;
+      if (value === null) return undefined;
+
+      if (Array.isArray(value)) {
+        const arr = value
+          .map(normalizeDatasetValue)
+          .filter((v) => v !== undefined)
+          .map((v) => (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v);
+
+        if (!arr.length) return undefined;
+
+        return arr.sort((leftValue, rightValue) => {
+          const leftJson = JSON.stringify(leftValue);
+          const rightJson = JSON.stringify(rightValue);
+          if (leftJson < rightJson) return -1;
+          if (leftJson > rightJson) return 1;
+          return 0;
+        });
+      }
+
+      if (value && typeof value === 'object') {
+        const out = {};
+        Object.keys(value).sort().forEach((key) => {
+          const normalized = normalizeDatasetValue(value[key]);
+          if (normalized !== undefined) out[key] = normalized;
+        });
+        return Object.keys(out).length ? out : undefined;
+      }
+
+      if (typeof value === 'string') {
+        const s = trimStr(value);
+        return s ? s : undefined;
+      }
+
+      if (typeof value === 'number' && !Number.isFinite(value)) return undefined;
+      return value;
+    };
+
+    const sectionFromRoute = trimStr(section).toLowerCase();
+    const sectionFromBody = trimStr(body?.section).toLowerCase();
+
+    const normalizeSection = (rawSection) => {
+      const s = trimStr(rawSection).toLowerCase();
+      if (s === 'candidate' || s === 'candidates') return 'candidates';
+      if (s === 'client' || s === 'clients') return 'clients';
+      if (s === 'contract' || s === 'contracts') return 'contracts';
+      if (s === 'timesheet' || s === 'timesheets') return 'timesheets';
+      if (s === 'invoice' || s === 'invoices') return 'invoices';
+      if (s === 'umbrella' || s === 'umbrellas') return 'umbrellas';
+      return '';
+    };
+
+    const routeSectionKey = normalizeSection(sectionFromRoute);
+    const bodySectionKey = normalizeSection(sectionFromBody);
+
+    if (routeSectionKey && bodySectionKey && routeSectionKey !== bodySectionKey) {
+      return withCORS(env, req, badRequest('section in route must match section in body'));
+    }
+
+    const sectionKey = routeSectionKey || bodySectionKey;
+    if (!sectionKey) {
+      return withCORS(env, req, badRequest('section is required'));
+    }
+
+    const rawFilters =
+      (body?.effective_filters && typeof body.effective_filters === 'object' && !Array.isArray(body.effective_filters))
+        ? body.effective_filters
+        : ((body?.filters && typeof body.filters === 'object' && !Array.isArray(body.filters))
+            ? body.filters
+            : {});
+
+    const sortKey = trimStr(body?.sort_key);
+    const sortDir = trimStr(body?.sort_dir).toLowerCase() === 'desc' ? 'desc' : 'asc';
+    const prefix = trimStr(body?.prefix);
+    const requestDatasetKey = trimStr(body?.dataset_key);
+
+    if (!sortKey) {
+      return withCORS(env, req, badRequest('sort_key is required'));
+    }
+
+    if (!prefix) {
+      return withCORS(env, req, badRequest('prefix is required'));
+    }
+
+    const pageSizeRaw = body?.page_size;
+    const pageSize =
+      (String(pageSizeRaw || '').trim().toUpperCase() === 'ALL')
+        ? 'ALL'
+        : Number(pageSizeRaw);
+
+    if (pageSize !== 'ALL' && (!Number.isFinite(pageSize) || pageSize < 1)) {
+      return withCORS(env, req, badRequest('page_size must be a positive integer or ALL'));
+    }
+
+    const normalizeFiltersBySection = (targetSection, sourceFilters) => {
+      const clean = clonePlain(sourceFilters);
+      if (targetSection === 'candidates') return buildCandidateSummaryFilterSpec(clean);
+      if (targetSection === 'clients') return buildClientSummaryFilterSpec(clean);
+      if (targetSection === 'umbrellas') return buildUmbrellaSummaryFilterSpec(clean);
+      if (targetSection === 'contracts') return buildContractSummaryFilterSpec(clean);
+      if (targetSection === 'timesheets') return buildTimesheetSummaryFilterSpec(clean);
+      if (targetSection === 'invoices') return buildInvoiceSummaryFilterSpec(clean);
+      return clean;
+    };
+
+    const buildCanonicalDatasetKey = (targetSection, sourceFilters) => {
+      const normalizedSection = normalizeSection(targetSection) || sectionKey;
+      const normalizedSourceFilters = normalizeFiltersBySection(normalizedSection, sourceFilters);
+
+      if (Object.prototype.hasOwnProperty.call(normalizedSourceFilters, 'ids')) {
+        normalizedSourceFilters.ids = normalizeIdArray(normalizedSourceFilters.ids);
+        if (!normalizedSourceFilters.ids.length) delete normalizedSourceFilters.ids;
+      }
+
+      return JSON.stringify({
+        section: normalizedSection,
+        filters: normalizeDatasetValue(normalizedSourceFilters) || {}
+      });
+    };
+
+    const normalizedFilters = normalizeFiltersBySection(sectionKey, rawFilters);
+
+    if (Object.prototype.hasOwnProperty.call(normalizedFilters, 'ids')) {
+      normalizedFilters.ids = normalizeIdArray(normalizedFilters.ids);
+      if (!normalizedFilters.ids.length) delete normalizedFilters.ids;
+    }
+
+    const serverDatasetKey = buildCanonicalDatasetKey(sectionKey, normalizedFilters);
+
+    let normalizedRequestDatasetKey = '';
+    if (requestDatasetKey) {
+      try {
+        const parsedRequestKey = JSON.parse(requestDatasetKey);
+        const parsedSectionKey = normalizeSection(parsedRequestKey?.section) || sectionKey;
+        const parsedFilters =
+          (parsedRequestKey?.filters && typeof parsedRequestKey.filters === 'object' && !Array.isArray(parsedRequestKey.filters))
+            ? parsedRequestKey.filters
+            : {};
+        normalizedRequestDatasetKey = buildCanonicalDatasetKey(parsedSectionKey, parsedFilters);
+      } catch {
+        normalizedRequestDatasetKey = requestDatasetKey;
+      }
+    }
+
+    const rpcRes = await sbRpc(env, 'summary_typeahead_lookup', {
+      p_section: sectionKey,
+      p_filters: normalizedFilters,
+      p_sort_key: sortKey,
+      p_sort_dir: sortDir,
+      p_prefix: prefix,
+      p_page_size: (pageSize === 'ALL') ? null : Number(pageSize)
+    });
+
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'summary_typeahead_lookup')) {
+        payload = payload.summary_typeahead_lookup;
+      }
+      if (payload && typeof payload === 'object' && Array.isArray(payload.rows) && payload.rows.length === 1) {
+        payload = payload.rows[0];
+      }
+    } catch {}
+
+    const target = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    const responseDatasetKey = serverDatasetKey;
+
+    if (normalizedRequestDatasetKey && responseDatasetKey && normalizedRequestDatasetKey !== responseDatasetKey) {
+      return withCORS(env, req, ok({
+        row_id: null,
+        ordinal_index: null,
+        target_page: (pageSize === 'ALL') ? 1 : null,
+        matched_value: '',
+        dataset_key: responseDatasetKey,
+        section: sectionKey,
+        dataset_key_mismatch: true,
+        requested_dataset_key: requestDatasetKey
+      }));
+    }
+
+    const rowId = trimStr(
+      target.row_id ??
+      target.id ??
+      target.target_row_id ??
+      ''
+    );
+
+    const ordinalIndexRaw = Number(
+      target.ordinal_index ??
+      target.ordinal ??
+      target.row_ordinal ??
+      null
+    );
+
+    const targetPageRaw = Number(
+      target.target_page ??
+      target.page ??
+      null
+    );
+
+    const hasValidOrdinal = Number.isFinite(ordinalIndexRaw) && ordinalIndexRaw >= 0;
+    const hasValidTargetPage = Number.isFinite(targetPageRaw) && targetPageRaw >= 1;
+
+    const computedTargetPage = (() => {
+      if (!rowId) return null;
+      if (pageSize === 'ALL') return 1;
+      if (hasValidTargetPage) return Math.max(1, targetPageRaw);
+      if (hasValidOrdinal) {
+        return Math.floor(ordinalIndexRaw / Number(pageSize)) + 1;
+      }
+      return null;
+    })();
+
+    return withCORS(env, req, ok({
+      row_id: (rowId && computedTargetPage !== null) ? rowId : null,
+      ordinal_index: hasValidOrdinal ? ordinalIndexRaw : null,
+      target_page: (rowId && computedTargetPage !== null) ? computedTargetPage : ((pageSize === 'ALL') ? 1 : null),
+      matched_value: trimStr(target.matched_value ?? target.value ?? ''),
+      dataset_key: responseDatasetKey,
+      section: sectionKey
+    }));
+  } catch (err) {
+    return withCORS(env, req, serverError('Failed to resolve summary type-ahead target'));
+  }
+}
 
  async function handleReportPresetsDelete(env, req, routeId) {
   const user = await requireUser(env, req, ['admin']);
@@ -53400,9 +57044,12 @@ async function limitOrLinkAttachments(env, { payload }) {
   const newPayload = { ...payload, attachments: kept, htmlBody, body };
   return { payload: newPayload, trimmed: true };
 }
+
 async function handleMailshotEnqueue(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -53770,15 +57417,34 @@ async function handleMailshotEnqueue(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const enc = encodeURIComponent;
 
-  const take = Math.max(
+  const toPositiveInt = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
+  };
+
+  const maxPerCall = Math.max(
     1,
-    Math.min(Number(limit) || Number(env.EMAIL_DRAIN_LIMIT_DEFAULT) || DEFAULT_DRAIN_LIMIT, 100)
+    toPositiveInt(env.EMAIL_DRAIN_MAX_PER_CALL) || 200
   );
+  const maxCallsPerDrain = Math.max(
+    1,
+    toPositiveInt(env.EMAIL_DRAIN_MAX_CALLS_PER_DRAIN) || 25
+  );
+  const maxDrainJobs = Math.max(1, maxPerCall * maxCallsPerDrain);
+
+  const requestedTake =
+    toPositiveInt(limit) ||
+    toPositiveInt(env.EMAIL_DRAIN_LIMIT_DEFAULT) ||
+    maxDrainJobs;
+
+  const take = Math.max(1, Math.min(requestedTake, maxDrainJobs));
   const typeFilter = Array.isArray(types) && types.length ? types : null;
+  const typeFilterSet = typeFilter
+    ? new Set(typeFilter.map((tp) => String(tp || '').trim().toUpperCase()).filter(Boolean))
+    : null;
 
   let sent = 0;
   let failed = 0;
@@ -53791,39 +57457,153 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return new Date(ms).toISOString();
   };
 
-  const getEmailOutboxReadyBatch = async (takeCount, selectedTypes) => {
-    const readyIso = nowIsoUtc();
+  const leaseMinutes = 5;
+  const attemptLeaseToken =
+    (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+      ? globalThis.crypto.randomUUID()
+      : `lease_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
-    let url =
-      `${env.SUPABASE_URL}/rest/v1/mail_outbox?select=*` +
-      `&status=eq.QUEUED` +
-      `&or=(` +
-        `and(next_attempt_at_utc.not.is.null,next_attempt_at_utc.lte.${enc(readyIso)}),` +
-        `and(next_attempt_at_utc.is.null,scheduled_for_utc.not.is.null,scheduled_for_utc.lte.${enc(readyIso)}),` +
-        `and(next_attempt_at_utc.is.null,scheduled_for_utc.is.null)` +
-      `)` +
-      `&order=next_attempt_at_utc.asc.nullslast` +
-      `&order=scheduled_for_utc.asc.nullslast` +
-      `&order=created_at_utc.asc` +
-      `&limit=${takeCount}`;
+  const patchMailOutboxRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?${query}`, {
+      method: 'PATCH',
+      headers: {
+        ...sbHeaders(env),
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(body)
+    });
 
-    if (selectedTypes) {
-      const t = selectedTypes.map((tp) => `"${enc(tp)}"`).join(",");
-      url += `&type=in.(${t})`;
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `mail_outbox patch failed (${res.status})`);
     }
 
-    const { rows } = await sbFetch(env, url, false);
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const clearClaimedLease = async (rowId, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}`,
+      {
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const patchClaimedRowFailed = async (rowId, msg, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
+      {
+        status: 'FAILED',
+        failed_at: nowIsoUtc(),
+        last_error: String(msg || 'FAILED'),
+        provider_status: 'FAILED',
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const patchClaimedRowSent = async (rowId, providerMessageId, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}`,
+      {
+        status: 'SENT',
+        sent_at: nowIsoUtc(),
+        provider_message_id: providerMessageId || null,
+        provider_status: 'ACCEPTED',
+        delivered_at: null,
+        read_at: null,
+        last_error: null,
+        failed_at: null,
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const patchClaimedRowDeferred = async (rowId, msg, currentLeaseToken) => {
+    const rows = await patchMailOutboxRows(
+      `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
+      {
+        status: 'QUEUED',
+        last_error: String(msg || 'DEFERRED'),
+        next_attempt_at_utc: nowPlusMinutesIso(10),
+        failed_at: null,
+        provider_status: null,
+        provider_message_id: null,
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const claimEmailOutboxReadyBatch = async (takeCount) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/email_outbox_claim_ready_batch`, {
+      method: 'POST',
+      headers: sbHeaders(env),
+      body: JSON.stringify({
+        p_limit: takeCount,
+        p_attempt_lease_token: attemptLeaseToken,
+        p_lease_minutes: leaseMinutes
+      })
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `email_outbox_claim_ready_batch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
     return Array.isArray(rows) ? rows : [];
   };
 
-  const picked = await getEmailOutboxReadyBatch(take, typeFilter);
+  const claimTake = typeFilterSet ? maxDrainJobs : take;
+  const claimed = await claimEmailOutboxReadyBatch(claimTake);
+
+  if (claimed.length === 0) {
+    return { picked: 0, sent: 0, failed: 0, deferred: 0, errors: [] };
+  }
+
+  const picked = [];
+  const toRelease = [];
+
+  if (typeFilterSet) {
+    for (const row of claimed) {
+      const rowType = String(row && row.type ? row.type : '').trim().toUpperCase();
+      if (typeFilterSet.has(rowType) && picked.length < take) {
+        picked.push(row);
+      } else {
+        toRelease.push(row);
+      }
+    }
+  } else {
+    picked.push(...claimed.slice(0, take));
+    toRelease.push(...claimed.slice(take));
+  }
+
+  for (const row of toRelease) {
+    try {
+      await clearClaimedLease(row.id, attemptLeaseToken);
+    } catch {}
+  }
+
   if (picked.length === 0) {
     return { picked: 0, sent: 0, failed: 0, deferred: 0, errors: [] };
   }
 
-  const BATCH_MAX = 25;
   const routeBuckets = new Map();
-  let queuedJobCount = 0;
 
   const addJobToBucket = (bucketKey, bucketChannel, rowId, payload) => {
     if (!routeBuckets.has(bucketKey)) {
@@ -53838,29 +57618,19 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     bucket.rowIds.push(rowId);
   };
 
-  const patchRowFailed = async (rowId, msg) => {
-    try {
-      await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-        method: 'PATCH',
-        headers: sbHeaders(env),
-        body: JSON.stringify({
-          status: 'FAILED',
-          failed_at: nowIsoUtc(),
-          last_error: String(msg || 'FAILED'),
-          provider_status: 'FAILED'
-        }),
-      });
-    } catch {}
-  };
-
-  const reconcileBatchResult = async (res, rowIds) => {
-    if (!res.ok) {
-      const errMsg = String(res.body || `HTTP ${res.status}`);
+  const reconcileBatchResult = async (res, rowIds, currentLeaseToken) => {
+    if (!res || !res.ok) {
+      const errMsg = String((res && res.body) || (res && `HTTP ${res.status}`) || 'Provider transport failure');
       for (const rowId of rowIds) {
-        await patchRowFailed(rowId, errMsg);
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
-        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
       }
       return;
     }
@@ -53876,110 +57646,130 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     if (!Array.isArray(results) || results.length === 0) {
       const errMsg = 'Provider returned no per-item results (cannot reconcile)';
       for (const rowId of rowIds) {
-        await patchRowFailed(rowId, errMsg);
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
-        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
       }
       return;
     }
 
     const byOutboxId = new Map();
     for (const r of results) {
-      const oid = r?.meta?.outbox_id || r?.meta?.outboxId || r?.meta?.id || null;
-      if (oid) byOutboxId.set(String(oid), r);
+      const oid =
+        r?.outbox_id ||
+        r?.outboxId ||
+        r?.meta?.outbox_id ||
+        r?.meta?.outboxId ||
+        r?.meta?.id ||
+        null;
+      if (!oid) continue;
+      byOutboxId.set(String(oid), r);
     }
 
-    for (let i = 0; i < rowIds.length; i++) {
-      const rowId = rowIds[i];
-      const r = byOutboxId.get(String(rowId)) || results[i] || null;
+    for (const rowId of rowIds) {
+      const r = byOutboxId.get(String(rowId)) || null;
+
+      if (!r) {
+        const errMsg = 'PROVIDER_RESULT_MISSING_FOR_ITEM';
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
+        failed += 1;
+        errors.push({ id: rowId, error: errMsg });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
+        continue;
+      }
 
       const status = String(r?.status || '').toUpperCase();
       const isSuccess = status === 'SUCCESS';
       const isFailed = status === 'FAILED' || status === 'FAIL' || status === 'ERROR';
 
       if (isSuccess) {
-        const providerMessageId = r?.provider_message_id || r?.providerMessageId || res.provider_message_id || null;
+        const providerMessageId =
+          r?.provider_message_id ||
+          r?.providerMessageId ||
+          null;
 
-        const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: 'PATCH',
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: 'SENT',
-            sent_at: nowIsoUtc(),
-            provider_message_id: providerMessageId || null,
-            provider_status: 'ACCEPTED',
-            delivered_at: null,
-            read_at: null,
-            last_error: null,
-            failed_at: null,
-          }),
-        });
-
-        if (!upd.ok) {
-          const errTxt = await upd.text();
-          throw new Error(`Sent but failed to update status: ${errTxt}`);
-        }
+        const updatedRow = await patchClaimedRowSent(rowId, providerMessageId, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
 
         sent += 1;
         await recordEmailAudit(env, null, 'EMAIL_SENT', {
           outbox_id: rowId,
           provider_message_id: providerMessageId,
-          type: r?.meta?.type || 'BATCH',
+          type: r?.meta?.type || 'BATCH'
         });
         continue;
       }
 
       if (isFailed) {
         const errMsg = String(r?.error || r?.body || r?.message || 'Provider failed');
-        const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(rowId)}`, {
-          method: 'PATCH',
-          headers: sbHeaders(env),
-          body: JSON.stringify({
-            status: 'FAILED',
-            failed_at: nowIsoUtc(),
-            last_error: errMsg,
-            provider_status: 'FAILED'
-          }),
-        });
-
-        if (!upd.ok) {
-          const errTxt = await upd.text();
-          throw new Error(`Provider fail and update fail: ${errTxt}`);
-        }
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
 
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
         await recordEmailAudit(env, null, 'EMAIL_FAILED', {
           outbox_id: rowId,
           error: errMsg,
-          type: r?.meta?.type || 'BATCH',
+          type: r?.meta?.type || 'BATCH'
         });
         continue;
       }
 
       {
         const errMsg = String(r?.error || r?.body || r?.message || 'Unknown provider status');
-        await patchRowFailed(rowId, errMsg);
+        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
+
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
-        await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: rowId, error: errMsg, type: 'BATCH' });
+        await recordEmailAudit(env, null, 'EMAIL_FAILED', {
+          outbox_id: rowId,
+          error: errMsg,
+          type: 'BATCH'
+        });
       }
     }
   };
 
   for (const row of picked) {
-    if (queuedJobCount >= BATCH_MAX) break;
-
     try {
-      const payload = await buildEmailPayloadFromOutboxRow(env, row);
+      const payloadBase = await buildEmailPayloadFromOutboxRow(env, row);
+      const payload = {
+        ...payloadBase,
+        meta: {
+          ...((payloadBase && payloadBase.meta && typeof payloadBase.meta === 'object') ? payloadBase.meta : {}),
+          outbox_id: row.id || null,
+          type: row.type || null,
+          reference: row.reference || null,
+          sender_user_id: row.created_by || null,
+          recipient_kind: row.recipient_kind || null,
+          recipient_id: row.recipient_id || null,
+          context_kind: row.context_kind || null,
+          context_id: row.context_id || null,
+          mailshot_run_id: row.mailshot_run_id || null,
+          document_template_id: row.document_template_id || null
+        }
+      };
+
       const rowType = String(row && row.type ? row.type : '').trim().toUpperCase();
       const senderUserId = (row && row.created_by != null) ? String(row.created_by).trim() : '';
 
       if (rowType === 'MAILSHOT_EMAIL') {
         if (!senderUserId) {
           const msg = 'MAILSHOT_SENDER_USER_MISSING';
-          await patchRowFailed(row.id, msg);
+          const updatedRow = await patchClaimedRowFailed(row.id, msg, attemptLeaseToken).catch(() => null);
+          if (!updatedRow) continue;
           failed += 1;
           errors.push({ id: row.id, error: msg });
           await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
@@ -53990,23 +57780,12 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       } else {
         addJobToBucket('finance', 'finance', row.id, payload);
       }
-
-      queuedJobCount += 1;
     } catch (e) {
       const msg = String(e?.message || e);
 
       if (msg.startsWith('PDF_NOT_READY:')) {
-        try {
-          await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(row.id)}`, {
-            method: 'PATCH',
-            headers: sbHeaders(env),
-            body: JSON.stringify({
-              status: 'QUEUED',
-              last_error: msg,
-              next_attempt_at_utc: nowPlusMinutesIso(10),
-            }),
-          });
-        } catch {}
+        const updatedRow = await patchClaimedRowDeferred(row.id, msg, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         deferred += 1;
         errors.push({ id: row.id, error: msg, deferred: true });
         await recordEmailAudit(env, null, 'EMAIL_DEFERRED', {
@@ -54017,7 +57796,8 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         continue;
       }
 
-      await patchRowFailed(row.id, msg);
+      const updatedRow = await patchClaimedRowFailed(row.id, msg, attemptLeaseToken).catch(() => null);
+      if (!updatedRow) continue;
       failed += 1;
       errors.push({ id: row.id, error: msg });
       await recordEmailAudit(env, null, 'EMAIL_FAILED', { outbox_id: row.id, error: msg, type: row.type });
@@ -54028,10 +57808,34 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return { picked: picked.length, sent, failed, deferred, errors };
   }
 
+  let outboundCallCount = 0;
+
   for (const bucket of routeBuckets.values()) {
-    const batchPayload = { items: bucket.jobs };
-    const res = await postToPowerAutomate(env, batchPayload, bucket.channel);
-    await reconcileBatchResult(res, bucket.rowIds);
+    for (let start = 0; start < bucket.jobs.length; start += maxPerCall) {
+      if (outboundCallCount >= maxCallsPerDrain) break;
+
+      const batchJobs = bucket.jobs.slice(start, start + maxPerCall);
+      const batchRowIds = bucket.rowIds.slice(start, start + maxPerCall);
+      if (!batchJobs.length) continue;
+
+      const batchPayload = { items: batchJobs };
+
+      let res = null;
+      try {
+        res = await postToPowerAutomate(env, batchPayload, bucket.channel);
+      } catch (e) {
+        res = {
+          ok: false,
+          status: 0,
+          body: String(e?.message || e || 'Provider transport failure')
+        };
+      }
+
+      await reconcileBatchResult(res, batchRowIds, attemptLeaseToken);
+      outboundCallCount += 1;
+    }
+
+    if (outboundCallCount >= maxCallsPerDrain) break;
   }
 
   return { picked: picked.length, sent, failed, deferred, errors };
@@ -54052,6 +57856,12 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   };
 
   const isPlainObject = (x) => !!(x && typeof x === 'object' && !Array.isArray(x));
+
+  const leaseMinutes = 5;
+  const attemptLeaseToken =
+    (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+      ? globalThis.crypto.randomUUID()
+      : `lease_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
   let cfgAll = {};
   try {
@@ -54125,38 +57935,62 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
     return take;
   };
 
-  const getCommsOutboxReadyBatch = async (channel, take) => {
+  const patchCommsOutboxRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
+      method: 'PATCH',
+      headers: {
+        ...sbHeaders(env),
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const claimCommsOutboxReadyBatch = async (channel, take) => {
     if (!take || take <= 0) return [];
-    const readyIso = nowIso();
-    const url =
-      `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
-      `?select=*` +
-      `&status=eq.QUEUED` +
-      `&channel=eq.${enc(String(channel || '').toUpperCase())}` +
-      `&or=(` +
-        `and(next_attempt_at_utc.not.is.null,next_attempt_at_utc.lte.${enc(readyIso)}),` +
-        `and(next_attempt_at_utc.is.null,scheduled_for_utc.not.is.null,scheduled_for_utc.lte.${enc(readyIso)}),` +
-        `and(next_attempt_at_utc.is.null,scheduled_for_utc.is.null)` +
-      `)` +
-      `&order=next_attempt_at_utc.asc.nullslast` +
-      `&order=scheduled_for_utc.asc.nullslast` +
-      `&order=created_at_utc.asc` +
-      `&limit=${take}`;
-    const { rows } = await sbFetch(env, url, false);
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/comms_outbox_claim_ready_batch`, {
+      method: 'POST',
+      headers: sbHeaders(env),
+      body: JSON.stringify({
+        p_channel: String(channel || '').toUpperCase(),
+        p_limit: take,
+        p_attempt_lease_token: attemptLeaseToken,
+        p_lease_minutes: leaseMinutes
+      })
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox_claim_ready_batch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
     return Array.isArray(rows) ? rows : [];
   };
 
-  const patchFailRow = async (id, msg, providerKey) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
+  const patchFailRow = async (id, msg, providerKey, currentLeaseToken) => {
+    const rows = await patchCommsOutboxRows(
+      `id=eq.${enc(id)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
+      {
         status: 'FAILED',
         failed_at: nowIso(),
         last_error: String(msg || 'FAILED').slice(0, 500),
-        provider_key: providerKey || null
-      })
-    });
+        provider_key: providerKey || null,
+        attempt_lease_token: null,
+        attempt_leased_at_utc: null,
+        attempt_lease_expires_at_utc: null
+      }
+    );
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const report = {
@@ -54172,9 +58006,9 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
     now_utc: null
   };
 
-  const pickedWhatsapp = await getCommsOutboxReadyBatch('WHATSAPP', alloc('WHATSAPP'));
-  const pickedSms = await getCommsOutboxReadyBatch('SMS', alloc('SMS'));
-  const pickedVoice = await getCommsOutboxReadyBatch('VOICE', alloc('VOICE'));
+  const pickedWhatsapp = await claimCommsOutboxReadyBatch('WHATSAPP', alloc('WHATSAPP'));
+  const pickedSms = await claimCommsOutboxReadyBatch('SMS', alloc('SMS'));
+  const pickedVoice = await claimCommsOutboxReadyBatch('VOICE', alloc('VOICE'));
 
   report.by_channel.WHATSAPP.picked = pickedWhatsapp.length;
   report.by_channel.SMS.picked = pickedSms.length;
@@ -54184,7 +58018,7 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   if (pickedWhatsapp.length) {
     const ad = channelToAdaptor.WHATSAPP;
     if (ad === 'wati') {
-      const r = await sendViaWatiBulkTemplate(env, watiCfg, pickedWhatsapp);
+      const r = await sendViaWatiBulkTemplate(env, watiCfg, pickedWhatsapp, { attemptLeaseToken });
       report.sent += r.sent;
       report.failed += r.failed;
       report.errors.push(...(r.errors || []));
@@ -54194,7 +58028,8 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
       for (const row of pickedWhatsapp) {
         const id = row && row.id ? String(row.id) : '';
         if (!id) continue;
-        await patchFailRow(id, `NO_ADAPTOR_FOR_WHATSAPP:${ad || 'missing'}`, null);
+        const updatedRow = await patchFailRow(id, `NO_ADAPTOR_FOR_WHATSAPP:${ad || 'missing'}`, null, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         report.failed += 1;
         report.by_channel.WHATSAPP.failed += 1;
         report.errors.push({ id, error: `NO_ADAPTOR_FOR_WHATSAPP:${ad || 'missing'}` });
@@ -54205,7 +58040,7 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   if (pickedSms.length) {
     const ad = channelToAdaptor.SMS;
     if (ad === 'clicksend') {
-      const r = await sendViaClicksendSmsBulk(env, csCfg, pickedSms);
+      const r = await sendViaClicksendSmsBulk(env, csCfg, pickedSms, { attemptLeaseToken });
       report.sent += r.sent;
       report.failed += r.failed;
       report.errors.push(...(r.errors || []));
@@ -54215,7 +58050,8 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
       for (const row of pickedSms) {
         const id = row && row.id ? String(row.id) : '';
         if (!id) continue;
-        await patchFailRow(id, `NO_ADAPTOR_FOR_SMS:${ad || 'missing'}`, null);
+        const updatedRow = await patchFailRow(id, `NO_ADAPTOR_FOR_SMS:${ad || 'missing'}`, null, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         report.failed += 1;
         report.by_channel.SMS.failed += 1;
         report.errors.push({ id, error: `NO_ADAPTOR_FOR_SMS:${ad || 'missing'}` });
@@ -54226,7 +58062,7 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   if (pickedVoice.length) {
     const ad = channelToAdaptor.VOICE;
     if (ad === 'clicksend') {
-      const r = await sendViaClicksendVoiceBulk(env, csCfg, pickedVoice);
+      const r = await sendViaClicksendVoiceBulk(env, csCfg, pickedVoice, { attemptLeaseToken });
       report.sent += r.sent;
       report.failed += r.failed;
       report.errors.push(...(r.errors || []));
@@ -54236,7 +58072,8 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
       for (const row of pickedVoice) {
         const id = row && row.id ? String(row.id) : '';
         if (!id) continue;
-        await patchFailRow(id, `NO_ADAPTOR_FOR_VOICE:${ad || 'missing'}`, null);
+        const updatedRow = await patchFailRow(id, `NO_ADAPTOR_FOR_VOICE:${ad || 'missing'}`, null, attemptLeaseToken).catch(() => null);
+        if (!updatedRow) continue;
         report.failed += 1;
         report.by_channel.VOICE.failed += 1;
         report.errors.push({ id, error: `NO_ADAPTOR_FOR_VOICE:${ad || 'missing'}` });
@@ -54248,10 +58085,7 @@ async function drainCommsOutboxOnce(env, { limit } = {}) {
   return report;
 }
 
-
-
-
-async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
+async function sendViaWatiBulkTemplate(env, watiCfg, rows, opts = {}) {
   const enc = encodeURIComponent;
 
   const nowIso = () => new Date().toISOString();
@@ -54281,7 +58115,6 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     if (!s) return '';
     if (s.startsWith('+')) s = s.slice(1);
     s = s.replace(/[^\d]/g, '');
-    // UK convenience: 07xxxxxxxxx -> 44xxxxxxxxxx
     if (s.length === 11 && s.startsWith('07')) s = '44' + s.slice(1);
     return s;
   };
@@ -54326,34 +58159,68 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     return { provider, templateName, paramName };
   };
 
-  const patchSuccess = async (id, providerMessageId, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+  const attemptLeaseToken = (opts && typeof opts === 'object' && opts.attemptLeaseToken != null)
+    ? String(opts.attemptLeaseToken || '').trim()
+    : '';
+
+  const patchClaimedRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'WATI',
-        status: 'SENT',
-        sent_at: nowIso(),
-        provider_message_id: providerMessageId || null,
-        provider_response_json: respJson || {},
-        last_error: null,
-        failed_at: null
-      })
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(body)
     });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '');
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'WATI',
+      status: 'SENT',
+      sent_at: nowIso(),
+      provider_message_id: providerMessageId || null,
+      provider_response_json: respJson || {},
+      last_error: null,
+      failed_at: null,
+      delivered_at: null,
+      read_at: null,
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
+    });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const patchFailure = async (id, errMsg, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'WATI',
-        status: 'FAILED',
-        failed_at: nowIso(),
-        provider_response_json: respJson || {},
-        last_error: String(errMsg || 'FAILED').slice(0, 500)
-      })
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '') +
+      `&sent_at=is.null`;
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'WATI',
+      status: 'FAILED',
+      failed_at: nowIso(),
+      provider_response_json: respJson || {},
+      last_error: String(errMsg || 'FAILED').slice(0, 500),
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
     });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const cfg = isPlainObject(watiCfg) ? watiCfg : {};
@@ -54367,22 +58234,34 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
 
   if (!baseUrlRaw) {
     const msg = 'WATI_CONFIG_MISSING';
+    const detail = {
+      error: msg,
+      missing_field: 'base_url',
+      missing_config_path: 'settings_defaults.comms_adaptors_json.wati.base_url'
+    };
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      const updatedRow = await patchFailure(r.id, msg, detail).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id: r.id, error: msg });
+      report.errors.push({ id: r.id, error: msg, missing_field: 'base_url', missing_config_path: 'settings_defaults.comms_adaptors_json.wati.base_url' });
     }
     return report;
   }
 
   if (!bearerRaw) {
     const msg = 'WATI_API_TOKEN_MISSING';
+    const detail = {
+      error: msg,
+      missing_field: 'WATI_API_TOKEN',
+      missing_config_path: 'env.WATI_API_TOKEN'
+    };
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      const updatedRow = await patchFailure(r.id, msg, detail).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id: r.id, error: msg });
+      report.errors.push({ id: r.id, error: msg, missing_field: 'WATI_API_TOKEN', missing_config_path: 'env.WATI_API_TOKEN' });
     }
     return report;
   }
@@ -54408,35 +58287,40 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
     const paramName = String(contract.paramName || '').trim();
 
     if (!waNum) {
-      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      const updatedRow = await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'MISSING_TO' });
       continue;
     }
 
     if (!msg) {
-      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
+      const updatedRow = await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'EMPTY_MESSAGE' });
       continue;
     }
 
     if (provider && provider !== 'WATI') {
-      await patchFailure(id, 'INVALID_WATI_PROVIDER_CONTRACT', { error: 'INVALID_WATI_PROVIDER_CONTRACT', provider_contract: contract });
+      const updatedRow = await patchFailure(id, 'INVALID_WATI_PROVIDER_CONTRACT', { error: 'INVALID_WATI_PROVIDER_CONTRACT', provider_contract: contract }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'INVALID_WATI_PROVIDER_CONTRACT' });
       continue;
     }
 
     if (!templateName) {
-      await patchFailure(id, 'WATI_TEMPLATE_NAME_MISSING', { error: 'WATI_TEMPLATE_NAME_MISSING', provider_contract: contract });
+      const updatedRow = await patchFailure(id, 'WATI_TEMPLATE_NAME_MISSING', { error: 'WATI_TEMPLATE_NAME_MISSING', provider_contract: contract }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'WATI_TEMPLATE_NAME_MISSING' });
       continue;
     }
 
     if (!paramName) {
-      await patchFailure(id, 'WATI_PARAM_NAME_MISSING', { error: 'WATI_PARAM_NAME_MISSING', provider_contract: contract });
+      const updatedRow = await patchFailure(id, 'WATI_PARAM_NAME_MISSING', { error: 'WATI_PARAM_NAME_MISSING', provider_contract: contract }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'WATI_PARAM_NAME_MISSING' });
       continue;
@@ -54502,7 +58386,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
       } catch (e) {
         const errMsg = String(e?.message || e || 'WATI_REQUEST_FAILED');
         for (const item of chunk) {
-          await patchFailure(item.id, errMsg, { error: errMsg });
+          const updatedRow = await patchFailure(item.id, errMsg, { error: errMsg }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: errMsg });
         }
@@ -54512,7 +58397,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
       if (!httpOk) {
         const errMsg = `WATI_HTTP_${httpStatus}`;
         for (const item of chunk) {
-          await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null });
+          const updatedRow = await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: errMsg });
         }
@@ -54525,7 +58411,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
       if (!topResult || receiversResp.length === 0) {
         const errMsg = topResult ? 'WATI_NO_RECEIVER_RESULTS' : (respJson && respJson.error ? String(respJson.error) : 'WATI_RESULT_FALSE');
         for (const item of chunk) {
-          await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+          const updatedRow = await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: errMsg });
         }
@@ -54538,7 +58425,8 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
 
         if (!(rr && typeof rr === 'object')) {
           const msg = 'WATI_MISSING_RECEIVER_RESULT';
-          await patchFailure(item.id, msg, { full: respJson });
+          const updatedRow = await patchFailure(item.id, msg, { full: respJson }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: msg });
           continue;
@@ -54553,13 +58441,15 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
 
         if (!isValid || errStr) {
           const msg = errStr || 'WATI_INVALID_WHATSAPP_NUMBER';
-          await patchFailure(item.id, msg, { wati: rr, full: respJson });
+          const updatedRow = await patchFailure(item.id, msg, { wati: rr, full: respJson }).catch(() => null);
+          if (!updatedRow) continue;
           report.failed += 1;
           report.errors.push({ id: item.id, error: msg });
           continue;
         }
 
-        await patchSuccess(item.id, localMessageId, { wati: rr, full: respJson });
+        const updatedRow = await patchSuccess(item.id, localMessageId, { wati: rr, full: respJson }).catch(() => null);
+        if (!updatedRow) continue;
         report.sent += 1;
       }
     }
@@ -54568,8 +58458,7 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows) {
   return report;
 }
 
-
-async function sendViaClicksendSmsBulk(env, csCfg, rows) {
+async function sendViaClicksendSmsBulk(env, csCfg, rows, opts = {}) {
   const enc = encodeURIComponent;
 
   const nowIso = () => new Date().toISOString();
@@ -54595,40 +58484,78 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
     }
     const digits = s.replace(/[^\d]/g, '');
     if (!digits) return '';
-    // UK convenience
     if (digits.length === 11 && digits.startsWith('07')) return '+44' + digits.slice(1);
     if (digits.startsWith('44')) return '+' + digits;
     return '+' + digits;
   };
 
-  const patchSuccess = async (id, providerMessageId, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+  const attemptLeaseToken = (opts && typeof opts === 'object' && opts.attemptLeaseToken != null)
+    ? String(opts.attemptLeaseToken || '').trim()
+    : '';
+
+  const makeScopedCustomString = (id) => {
+    const rowId = String(id || '').trim();
+    if (!rowId) return '';
+    if (!attemptLeaseToken) return rowId;
+    return `${rowId}|${attemptLeaseToken}`;
+  };
+
+  const patchClaimedRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'CLICKSEND',
-        status: 'SENT',
-        sent_at: nowIso(),
-        provider_message_id: providerMessageId || null,
-        provider_response_json: respJson || {},
-        last_error: null,
-        failed_at: null
-      })
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(body)
     });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '');
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'CLICKSEND',
+      status: 'SENT',
+      sent_at: nowIso(),
+      provider_message_id: providerMessageId || null,
+      provider_response_json: respJson || {},
+      last_error: null,
+      failed_at: null,
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
+    });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const patchFailure = async (id, errMsg, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'CLICKSEND',
-        status: 'FAILED',
-        failed_at: nowIso(),
-        provider_response_json: respJson || {},
-        last_error: String(errMsg || 'FAILED').slice(0, 500)
-      })
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '') +
+      `&sent_at=is.null`;
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'CLICKSEND',
+      status: 'FAILED',
+      failed_at: nowIso(),
+      provider_response_json: respJson || {},
+      last_error: String(errMsg || 'FAILED').slice(0, 500),
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
     });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const cfg = isPlainObject(csCfg) ? csCfg : {};
@@ -54648,7 +58575,8 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
     const msg = (missingEnv.length === 1) ? `${missingEnv[0]}_MISSING` : 'CLICKSEND_API_CREDENTIALS_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      const updatedRow = await patchFailure(r.id, msg, { error: msg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id: r.id, error: msg });
     }
@@ -54660,8 +58588,7 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
 
   const slice = (Array.isArray(rows) ? rows : []).slice(0, batchMax);
 
-  const messages = [];
-  const rowIds = [];
+  const items = [];
 
   for (const r of slice) {
     const id = r && r.id ? String(r.id) : '';
@@ -54672,7 +58599,8 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
 
     const to = normalizeE164(toRaw);
     if (!to) {
-      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      const updatedRow = await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'MISSING_TO' });
       continue;
@@ -54681,23 +58609,31 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
     if (bodyRaw.length > smsMax) bodyRaw = bodyRaw.slice(0, smsMax);
 
     if (!String(bodyRaw).trim()) {
-      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
+      const updatedRow = await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'EMPTY_MESSAGE' });
       continue;
     }
 
-    messages.push({
-      source: 'cloudtms',
-      body: bodyRaw,
-      to,
-      custom_string: id
-    });
+    const customString = makeScopedCustomString(id);
 
-    rowIds.push(id);
+    items.push({
+      id,
+      customString,
+      message: {
+        source: 'cloudtms',
+        body: bodyRaw,
+        to,
+        custom_string: customString
+      }
+    });
   }
 
-  if (messages.length === 0) return report;
+  if (items.length === 0) return report;
+
+  const messages = items.map((item) => item.message);
+  const rowIds = items.map((item) => item.id);
 
   let respText = '';
   let respJson = null;
@@ -54720,20 +58656,22 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
     try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
   } catch (e) {
     const errMsg = String(e?.message || e || 'CLICKSEND_REQUEST_FAILED');
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { error: errMsg });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, { error: errMsg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
 
   if (!httpOk) {
     const errMsg = `CLICKSEND_HTTP_${httpStatus}`;
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { http_status: httpStatus, body: respText || null });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
@@ -54744,44 +58682,45 @@ async function sendViaClicksendSmsBulk(env, csCfg, rows) {
 
   if (!okTop) {
     const errMsg = (respJson && respJson.response_msg) ? String(respJson.response_msg) : 'CLICKSEND_RESPONSE_NOT_SUCCESS';
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
 
-  // Map by custom_string if possible; otherwise index
   const byCustom = new Map();
   for (const m of msgsResp) {
     const cs = (m && m.custom_string != null) ? String(m.custom_string) : '';
     if (cs) byCustom.set(cs, m);
   }
 
-  for (let i = 0; i < rowIds.length; i++) {
-    const id = rowIds[i];
-    const m = byCustom.get(id) || msgsResp[i] || null;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const m = byCustom.get(item.customString) || msgsResp[i] || null;
 
     const messageId = m && (m.message_id || m.messageId) ? String(m.message_id || m.messageId) : null;
     const status = m && m.status ? String(m.status).toUpperCase() : '';
 
     if (status && status !== 'SUCCESS' && status !== 'QUEUED') {
       const msg = m && m.status ? `CLICKSEND_${status}` : 'CLICKSEND_MESSAGE_FAILED';
-      await patchFailure(id, msg, { clicksend: m, full: respJson });
+      const updatedRow = await patchFailure(item.id, msg, { clicksend: m, full: respJson }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: msg });
+      report.errors.push({ id: item.id, error: msg });
       continue;
     }
 
-    await patchSuccess(id, messageId, { clicksend: m, full: respJson });
+    const updatedRow = await patchSuccess(item.id, messageId, { clicksend: m, full: respJson }).catch(() => null);
+    if (!updatedRow) continue;
     report.sent += 1;
   }
 
   return report;
 }
-
-async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
+async function sendViaClicksendVoiceBulk(env, csCfg, rows, opts = {}) {
   const enc = encodeURIComponent;
 
   const nowIso = () => new Date().toISOString();
@@ -54807,40 +58746,78 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     }
     const digits = s.replace(/[^\d]/g, '');
     if (!digits) return '';
-    // UK convenience
     if (digits.length === 11 && digits.startsWith('07')) return '+44' + digits.slice(1);
     if (digits.startsWith('44')) return '+' + digits;
     return '+' + digits;
   };
 
-  const patchSuccess = async (id, providerMessageId, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
+  const attemptLeaseToken = (opts && typeof opts === 'object' && opts.attemptLeaseToken != null)
+    ? String(opts.attemptLeaseToken || '').trim()
+    : '';
+
+  const makeScopedCustomString = (id) => {
+    const rowId = String(id || '').trim();
+    if (!rowId) return '';
+    if (!attemptLeaseToken) return rowId;
+    return `${rowId}|${attemptLeaseToken}`;
+  };
+
+  const patchClaimedRows = async (query, body) => {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
       method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'CLICKSEND',
-        status: 'SENT',
-        sent_at: nowIso(),
-        provider_message_id: providerMessageId || null,
-        provider_response_json: respJson || {},
-        last_error: null,
-        failed_at: null
-      })
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(body)
     });
+
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      throw new Error(errTxt || `comms_outbox patch failed (${res.status})`);
+    }
+
+    const rows = await res.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
+  const patchSuccess = async (id, providerMessageId, respJson) => {
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '');
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'CLICKSEND',
+      status: 'SENT',
+      sent_at: nowIso(),
+      provider_message_id: providerMessageId || null,
+      provider_response_json: respJson || {},
+      last_error: null,
+      failed_at: null,
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
+    });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const patchFailure = async (id, errMsg, respJson) => {
-    await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        provider_key: 'CLICKSEND',
-        status: 'FAILED',
-        failed_at: nowIso(),
-        provider_response_json: respJson || {},
-        last_error: String(errMsg || 'FAILED').slice(0, 500)
-      })
+    const query =
+      `id=eq.${enc(id)}` +
+      (attemptLeaseToken ? `&attempt_lease_token=eq.${enc(attemptLeaseToken)}` : '') +
+      `&sent_at=is.null`;
+
+    const rows = await patchClaimedRows(query, {
+      provider_key: 'CLICKSEND',
+      status: 'FAILED',
+      failed_at: nowIso(),
+      provider_response_json: respJson || {},
+      last_error: String(errMsg || 'FAILED').slice(0, 500),
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
     });
+
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
   const cfg = isPlainObject(csCfg) ? csCfg : {};
@@ -54864,7 +58841,8 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     const msg = (missingEnv.length === 1) ? `${missingEnv[0]}_MISSING` : 'CLICKSEND_API_CREDENTIALS_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      const updatedRow = await patchFailure(r.id, msg, { error: msg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id: r.id, error: msg });
     }
@@ -54875,7 +58853,8 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     const msg = 'CLICKSEND_VOICE_CONFIG_MISSING';
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.id) continue;
-      await patchFailure(r.id, msg, { error: msg });
+      const updatedRow = await patchFailure(r.id, msg, { error: msg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id: r.id, error: msg });
     }
@@ -54887,8 +58866,7 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
 
   const slice = (Array.isArray(rows) ? rows : []).slice(0, batchMax);
 
-  const messages = [];
-  const rowIds = [];
+  const items = [];
 
   for (const r of slice) {
     const id = r && r.id ? String(r.id) : '';
@@ -54899,7 +58877,8 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
 
     const to = normalizeE164(toRaw);
     if (!to) {
-      await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' });
+      const updatedRow = await patchFailure(id, 'MISSING_TO', { error: 'MISSING_TO' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'MISSING_TO' });
       continue;
@@ -54908,28 +58887,35 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     if (bodyRaw.length > voiceMax) bodyRaw = bodyRaw.slice(0, voiceMax);
 
     if (!String(bodyRaw).trim()) {
-      await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' });
+      const updatedRow = await patchFailure(id, 'EMPTY_MESSAGE', { error: 'EMPTY_MESSAGE' }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
       report.errors.push({ id, error: 'EMPTY_MESSAGE' });
       continue;
     }
 
+    const customString = makeScopedCustomString(id);
     const msg = {
       source: 'cloudtms',
       body: bodyRaw,
       to,
       voice,
-      custom_string: id,
+      custom_string: customString,
       country
     };
 
     if (lang && String(lang).trim()) msg.lang = String(lang).trim();
 
-    messages.push(msg);
-    rowIds.push(id);
+    items.push({
+      id,
+      customString,
+      message: msg
+    });
   }
 
-  if (messages.length === 0) return report;
+  if (items.length === 0) return report;
+
+  const messages = items.map((item) => item.message);
 
   let respText = '';
   let respJson = null;
@@ -54952,20 +58938,22 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     try { respJson = respText ? JSON.parse(respText) : null; } catch { respJson = null; }
   } catch (e) {
     const errMsg = String(e?.message || e || 'CLICKSEND_REQUEST_FAILED');
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { error: errMsg });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, { error: errMsg }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
 
   if (!httpOk) {
     const errMsg = `CLICKSEND_HTTP_${httpStatus}`;
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, { http_status: httpStatus, body: respText || null });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, { http_status: httpStatus, body: respText || null }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
@@ -54976,10 +58964,11 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
 
   if (!okTop) {
     const errMsg = (respJson && respJson.response_msg) ? String(respJson.response_msg) : 'CLICKSEND_RESPONSE_NOT_SUCCESS';
-    for (const id of rowIds) {
-      await patchFailure(id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null });
+    for (const item of items) {
+      const updatedRow = await patchFailure(item.id, errMsg, isPlainObject(respJson) ? respJson : { error: errMsg, body: respText || null }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: errMsg });
+      report.errors.push({ id: item.id, error: errMsg });
     }
     return report;
   }
@@ -54990,22 +58979,24 @@ async function sendViaClicksendVoiceBulk(env, csCfg, rows) {
     if (cs) byCustom.set(cs, m);
   }
 
-  for (let i = 0; i < rowIds.length; i++) {
-    const id = rowIds[i];
-    const m = byCustom.get(id) || msgsResp[i] || null;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const m = byCustom.get(item.customString) || msgsResp[i] || null;
 
     const messageId = m && (m.message_id || m.messageId) ? String(m.message_id || m.messageId) : null;
     const status = m && m.status ? String(m.status).toUpperCase() : '';
 
     if (status && status !== 'SUCCESS' && status !== 'QUEUED') {
       const msg = m && m.status ? `CLICKSEND_${status}` : 'CLICKSEND_MESSAGE_FAILED';
-      await patchFailure(id, msg, { clicksend: m, full: respJson });
+      const updatedRow = await patchFailure(item.id, msg, { clicksend: m, full: respJson }).catch(() => null);
+      if (!updatedRow) continue;
       report.failed += 1;
-      report.errors.push({ id, error: msg });
+      report.errors.push({ id: item.id, error: msg });
       continue;
     }
 
-    await patchSuccess(id, messageId, { clicksend: m, full: respJson });
+    const updatedRow = await patchSuccess(item.id, messageId, { clicksend: m, full: respJson }).catch(() => null);
+    if (!updatedRow) continue;
     report.sent += 1;
   }
 
@@ -55047,7 +59038,51 @@ async function handleMailshotPrepare(env, req) {
   const normalizeAttachmentArray = (arr) => Array.isArray(arr)
     ? arr.filter(v => v && typeof v === 'object' && !Array.isArray(v))
     : [];
+  const toNonNegativeIntOrNull = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.trunc(n);
+  };
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const dedupePlainObjectArray = (arr) => {
+    const out = [];
+    const seen = new Set();
+    (Array.isArray(arr) ? arr : []).forEach((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return;
+      let signature = '';
+      try {
+        signature = JSON.stringify(item);
+      } catch {
+        signature = '';
+      }
+      if (!signature || seen.has(signature)) return;
+      seen.add(signature);
+      out.push(item);
+    });
+    return out;
+  };
+
+  const addNullableInts = (...vals) => {
+    let hasValue = false;
+    let total = 0;
+    vals.forEach((value) => {
+      const normalized = toNonNegativeIntOrNull(value);
+      if (normalized == null) return;
+      hasValue = true;
+      total += normalized;
+    });
+    return hasValue ? total : null;
+  };
+
+  const chunkArray = (arr, size) => {
+    const out = [];
+    const pageSize = Math.max(1, Math.trunc(Number(size) || 1));
+    for (let i = 0; i < arr.length; i += pageSize) {
+      out.push(arr.slice(i, i + pageSize));
+    }
+    return out;
+  };
 
   const singularContextKind = (v) => {
     const s = trimStr(v).toLowerCase();
@@ -55106,6 +59141,13 @@ async function handleMailshotPrepare(env, req) {
     templateId = t;
   }
 
+  const prepareBatchSize = (() => {
+    const raw = body.prepare_batch_size ?? body.prepareBatchSize ?? 250;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return 250;
+    return Math.max(25, Math.min(500, Math.trunc(n)));
+  })();
+
   const makeSkippedRow = (selectedRowId, skipReason, extra = {}) => {
     return {
       context_id: null,
@@ -55117,6 +59159,8 @@ async function handleMailshotPrepare(env, req) {
       to: null,
       recipient_kind: null,
       recipient_id: null,
+      recipient_display_name: null,
+      candidate_name: null,
       eligible: false,
       skip_reason: String(skipReason || 'SKIPPED'),
       field_values: {},
@@ -55128,6 +59172,221 @@ async function handleMailshotPrepare(env, req) {
       selected_row_id: selectedRowId == null ? null : String(selectedRowId),
       ...extra
     };
+  };
+
+  const normalizePreparePayload = (payloadInput) => {
+    const payload = (payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)) ? payloadInput : {};
+
+    const normalized = { ...payload };
+
+    normalized.context_kind = normalized.context_kind != null ? singularContextKind(normalized.context_kind) || contextKind : contextKind;
+    normalized.output_type = normalized.output_type != null ? String(normalized.output_type).trim().toUpperCase() : outputType;
+    normalized.document_template_id = normalized.document_template_id == null ? templateId : String(normalized.document_template_id);
+
+    normalized.selected_field_keys = normalizeSelectedKeys(normalized.selected_field_keys);
+
+    normalized.accepted_selected_field_keys = Array.isArray(normalized.accepted_selected_field_keys)
+      ? normalizeSelectedKeys(normalized.accepted_selected_field_keys)
+      : normalized.selected_field_keys;
+
+    normalized.rejected_selected_field_keys = Array.isArray(normalized.rejected_selected_field_keys)
+      ? normalizeSelectedKeys(normalized.rejected_selected_field_keys)
+      : [];
+
+    normalized.rejected_selected_field_details = Array.isArray(normalized.rejected_selected_field_details)
+      ? dedupePlainObjectArray(normalized.rejected_selected_field_details)
+      : [];
+
+    normalized.warnings = normalizeWarnings(normalized.warnings);
+
+    const topLevelAttachmentInstructions = normalizeAttachmentArray(
+      Array.isArray(normalized.attachment_instructions)
+        ? normalized.attachment_instructions
+        : (Array.isArray(normalized.attachments) ? normalized.attachments : [])
+    );
+
+    normalized.attachment_instructions = dedupePlainObjectArray(topLevelAttachmentInstructions);
+    normalized.attachments = normalized.attachment_instructions;
+
+    normalized.requested_context_count = toNonNegativeIntOrNull(normalized.requested_context_count);
+    normalized.resolved_context_count = toNonNegativeIntOrNull(normalized.resolved_context_count);
+    normalized.returned_row_count = toNonNegativeIntOrNull(normalized.returned_row_count);
+    normalized.eligible_count = toNonNegativeIntOrNull(normalized.eligible_count);
+    normalized.skipped_count = toNonNegativeIntOrNull(normalized.skipped_count);
+
+    const payloadPrepareCounts = (normalized.prepare_counts && typeof normalized.prepare_counts === 'object' && !Array.isArray(normalized.prepare_counts))
+      ? normalized.prepare_counts
+      : {};
+
+    normalized.prepare_counts = {
+      requested_context_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.requested_context_count != null
+          ? payloadPrepareCounts.requested_context_count
+          : normalized.requested_context_count
+      ),
+      resolved_context_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.resolved_context_count != null
+          ? payloadPrepareCounts.resolved_context_count
+          : normalized.resolved_context_count
+      ),
+      returned_row_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.returned_row_count != null
+          ? payloadPrepareCounts.returned_row_count
+          : normalized.returned_row_count
+      ),
+      eligible_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.eligible_count != null
+          ? payloadPrepareCounts.eligible_count
+          : normalized.eligible_count
+      ),
+      skipped_count: toNonNegativeIntOrNull(
+        payloadPrepareCounts.skipped_count != null
+          ? payloadPrepareCounts.skipped_count
+          : normalized.skipped_count
+      )
+    };
+
+    normalized.rows = Array.isArray(normalized.rows) ? normalized.rows : [];
+
+    normalized.rows = normalized.rows.map((row) => {
+      const rawRow = (row && typeof row === 'object') ? row : {};
+
+      const rowAttachmentInstructions = normalizeAttachmentArray(
+        Array.isArray(rawRow.attachment_instructions)
+          ? rawRow.attachment_instructions
+          : (Array.isArray(rawRow.attachments) ? rawRow.attachments : [])
+      );
+
+      return {
+        ...rawRow,
+        context_id: rawRow.context_id == null ? null : String(rawRow.context_id),
+        context_kind: rawRow.context_kind != null ? singularContextKind(rawRow.context_kind) || normalized.context_kind : normalized.context_kind,
+        entity_type: rawRow.entity_type == null ? null : String(rawRow.entity_type).trim().toLowerCase(),
+        output_type: rawRow.output_type != null ? String(rawRow.output_type).trim().toUpperCase() : normalized.output_type,
+        document_template_id: rawRow.document_template_id == null ? normalized.document_template_id : String(rawRow.document_template_id),
+        to_field_key: rawRow.to_field_key == null ? null : String(rawRow.to_field_key),
+        to: rawRow.to == null ? null : String(rawRow.to),
+        recipient_kind: rawRow.recipient_kind == null ? null : String(rawRow.recipient_kind).trim().toLowerCase(),
+        recipient_id: rawRow.recipient_id == null ? null : String(rawRow.recipient_id),
+        recipient_display_name: rawRow.recipient_display_name == null ? null : String(rawRow.recipient_display_name),
+        candidate_name: rawRow.candidate_name == null ? null : String(rawRow.candidate_name),
+        eligible: rawRow.eligible == null ? false : !!rawRow.eligible,
+        skip_reason: rawRow.skip_reason == null ? null : String(rawRow.skip_reason),
+        field_values: rawRow.field_values && typeof rawRow.field_values === 'object' && !Array.isArray(rawRow.field_values)
+          ? rawRow.field_values
+          : {},
+        template_content_json: rawRow.template_content_json && typeof rawRow.template_content_json === 'object' && !Array.isArray(rawRow.template_content_json)
+          ? rawRow.template_content_json
+          : {},
+        email_type: rawRow.email_type == null ? null : String(rawRow.email_type).trim().toLowerCase(),
+        warning_messages: normalizeWarnings(rawRow.warning_messages),
+        attachment_instructions: dedupePlainObjectArray(rowAttachmentInstructions),
+        attachments: dedupePlainObjectArray(rowAttachmentInstructions),
+        selected_row_id: rawRow.selected_row_id == null ? null : String(rawRow.selected_row_id)
+      };
+    });
+
+    return normalized;
+  };
+
+  const mergePreparedPayloads = (payloads) => {
+    const chunks = Array.isArray(payloads) ? payloads.filter((x) => x && typeof x === 'object' && !Array.isArray(x)) : [];
+    if (!chunks.length) {
+      return {
+        context_kind: contextKind,
+        output_type: outputType,
+        document_template_id: templateId,
+        selected_field_keys: [],
+        accepted_selected_field_keys: [],
+        rejected_selected_field_keys: [],
+        rejected_selected_field_details: [],
+        warnings: [],
+        attachment_instructions: [],
+        attachments: [],
+        requested_context_count: 0,
+        resolved_context_count: 0,
+        returned_row_count: 0,
+        eligible_count: 0,
+        skipped_count: 0,
+        prepare_counts: {
+          requested_context_count: 0,
+          resolved_context_count: 0,
+          returned_row_count: 0,
+          eligible_count: 0,
+          skipped_count: 0
+        },
+        rows: []
+      };
+    }
+
+    const first = clonePlain(chunks[0]);
+    const merged = {
+      ...first,
+      rows: Array.isArray(first.rows) ? first.rows.slice() : [],
+      warnings: normalizeWarnings(first.warnings),
+      selected_field_keys: normalizeSelectedKeys(first.selected_field_keys),
+      accepted_selected_field_keys: normalizeSelectedKeys(first.accepted_selected_field_keys),
+      rejected_selected_field_keys: normalizeSelectedKeys(first.rejected_selected_field_keys),
+      rejected_selected_field_details: dedupePlainObjectArray(first.rejected_selected_field_details),
+      attachment_instructions: dedupePlainObjectArray(first.attachment_instructions),
+      attachments: dedupePlainObjectArray(first.attachments),
+      prepare_counts: {
+        requested_context_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.requested_context_count),
+        resolved_context_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.resolved_context_count),
+        returned_row_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.returned_row_count),
+        eligible_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.eligible_count),
+        skipped_count: toNonNegativeIntOrNull(first.prepare_counts && first.prepare_counts.skipped_count)
+      }
+    };
+
+    merged.requested_context_count = toNonNegativeIntOrNull(first.requested_context_count);
+    merged.resolved_context_count = toNonNegativeIntOrNull(first.resolved_context_count);
+    merged.returned_row_count = toNonNegativeIntOrNull(first.returned_row_count);
+    merged.eligible_count = toNonNegativeIntOrNull(first.eligible_count);
+    merged.skipped_count = toNonNegativeIntOrNull(first.skipped_count);
+
+    for (let i = 1; i < chunks.length; i += 1) {
+      const chunk = chunks[i];
+
+      merged.rows = merged.rows.concat(Array.isArray(chunk.rows) ? chunk.rows : []);
+      merged.warnings = Array.from(new Set(merged.warnings.concat(normalizeWarnings(chunk.warnings))));
+      merged.selected_field_keys = normalizeSelectedKeys(merged.selected_field_keys.concat(normalizeSelectedKeys(chunk.selected_field_keys)));
+      merged.accepted_selected_field_keys = normalizeSelectedKeys(merged.accepted_selected_field_keys.concat(normalizeSelectedKeys(chunk.accepted_selected_field_keys)));
+      merged.rejected_selected_field_keys = normalizeSelectedKeys(merged.rejected_selected_field_keys.concat(normalizeSelectedKeys(chunk.rejected_selected_field_keys)));
+      merged.rejected_selected_field_details = dedupePlainObjectArray(
+        merged.rejected_selected_field_details.concat(
+          Array.isArray(chunk.rejected_selected_field_details) ? chunk.rejected_selected_field_details : []
+        )
+      );
+      merged.attachment_instructions = dedupePlainObjectArray(
+        merged.attachment_instructions.concat(
+          normalizeAttachmentArray(chunk.attachment_instructions).length
+            ? normalizeAttachmentArray(chunk.attachment_instructions)
+            : normalizeAttachmentArray(chunk.attachments)
+        )
+      );
+      merged.attachments = merged.attachment_instructions;
+
+      merged.requested_context_count = addNullableInts(merged.requested_context_count, chunk.requested_context_count);
+      merged.resolved_context_count = addNullableInts(merged.resolved_context_count, chunk.resolved_context_count);
+      merged.returned_row_count = addNullableInts(merged.returned_row_count, chunk.returned_row_count);
+      merged.eligible_count = addNullableInts(merged.eligible_count, chunk.eligible_count);
+      merged.skipped_count = addNullableInts(merged.skipped_count, chunk.skipped_count);
+
+      const chunkPrepareCounts = (chunk.prepare_counts && typeof chunk.prepare_counts === 'object' && !Array.isArray(chunk.prepare_counts))
+        ? chunk.prepare_counts
+        : {};
+
+      merged.prepare_counts = {
+        requested_context_count: addNullableInts(merged.prepare_counts.requested_context_count, chunkPrepareCounts.requested_context_count),
+        resolved_context_count: addNullableInts(merged.prepare_counts.resolved_context_count, chunkPrepareCounts.resolved_context_count),
+        returned_row_count: addNullableInts(merged.prepare_counts.returned_row_count, chunkPrepareCounts.returned_row_count),
+        eligible_count: addNullableInts(merged.prepare_counts.eligible_count, chunkPrepareCounts.eligible_count),
+        skipped_count: addNullableInts(merged.prepare_counts.skipped_count, chunkPrepareCounts.skipped_count)
+      };
+    }
+
+    return merged;
   };
 
   const selectionScope = (body.selection_scope && typeof body.selection_scope === 'object' && !Array.isArray(body.selection_scope))
@@ -55197,13 +59456,28 @@ async function handleMailshotPrepare(env, req) {
           ? selectionScope.selected_count_context
           : {});
 
-    let membershipTotal = Number(
-      selectionScope.membership_total ??
-      selectionScope.total_count ??
-      selectionScope.total ??
-      selectedCountContextRaw.membership_total
-    );
-    if (!Number.isFinite(membershipTotal) || membershipTotal < 0) membershipTotal = null;
+      const membershipTotal = (() => {
+      const membershipCandidates = [
+        selectionScope.membership_total,
+        selectionScope.membership_known_total,
+        selectionScope.total_count,
+        selectionScope.total,
+        selectedCountContextRaw.membership_total,
+        selectedCountContextRaw.membership_known_total,
+        selectedCountContextRaw.total_count,
+        selectedCountContextRaw.total
+      ];
+
+      for (const membershipCandidate of membershipCandidates) {
+        if (membershipCandidate == null) continue;
+        if (typeof membershipCandidate === 'string' && trimStr(membershipCandidate) === '') continue;
+
+        const normalizedMembershipTotal = toNonNegativeIntOrNull(membershipCandidate);
+        if (normalizedMembershipTotal != null) return normalizedMembershipTotal;
+      }
+
+      return null;
+    })();
 
     const bulkResolved = await resolveBulkContextIdsFromSummarySelection(
       sectionKey,
@@ -55224,6 +59498,32 @@ async function handleMailshotPrepare(env, req) {
 
     const summarySelectedCount = summaryRowIds.length;
     const actionableContextCount = contextIds.length;
+
+    if (selectionMode === 'all_filtered' && membershipTotal != null) {
+      const expectedSummarySelectedCount = Math.max(0, membershipTotal - excludedIds.length);
+      if (summarySelectedCount !== expectedSummarySelectedCount) {
+        throw new Error(`SELECTION_RESOLUTION_INCOMPLETE: expected ${expectedSummarySelectedCount} summary rows, got ${summarySelectedCount}`);
+      }
+    }
+
+    if (selectionMode === 'explicit') {
+      const expectedExplicitSelectedCount = includedIds.length;
+      const explicitResolvedCount = actionableContextCount + skippedRows.length;
+      if (explicitResolvedCount !== expectedExplicitSelectedCount) {
+        throw new Error(`SELECTION_RESOLUTION_INCOMPLETE: expected ${expectedExplicitSelectedCount} selected rows, got ${explicitResolvedCount}`);
+      }
+    }
+
+    if (sectionKey !== 'timesheets') {
+      if (actionableContextCount !== summarySelectedCount) {
+        throw new Error(`SELECTION_CONTEXT_RESOLUTION_MISMATCH: expected ${summarySelectedCount} actionable contexts, got ${actionableContextCount}`);
+      }
+    } else if (selectionMode === 'all_filtered') {
+      const timesheetResolvedCount = actionableContextCount + skippedRows.length;
+      if (timesheetResolvedCount !== summarySelectedCount) {
+        throw new Error(`SELECTION_CONTEXT_RESOLUTION_MISMATCH: expected ${summarySelectedCount} resolved timesheet rows, got ${timesheetResolvedCount}`);
+      }
+    }
 
     const selectionEcho = {
       section: sectionKey,
@@ -55271,95 +59571,36 @@ async function handleMailshotPrepare(env, req) {
     let normalized = null;
 
     if (ctxIdsClean.length > 0) {
-      let payload = await sbRpc(env, 'mailshot_prepare', {
-        p_context_kind: contextKind,
-        p_context_ids: ctxIdsClean,
-        p_output_type: outputType,
-        p_document_template_id: templateId,
-        p_actor_user_id: user.id
-      });
+      const contextIdChunks = chunkArray(ctxIdsClean, prepareBatchSize);
+      const normalizedChunkPayloads = [];
 
-      try {
-        if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
-        if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_prepare')) payload = payload.mailshot_prepare;
-      } catch {}
+      for (let chunkIndex = 0; chunkIndex < contextIdChunks.length; chunkIndex += 1) {
+        const contextIdChunk = contextIdChunks[chunkIndex];
 
-      if (!(payload && typeof payload === 'object')) {
-        return withCORS(env, req, ok({ ok: true, result: payload }));
+        let payload = await sbRpc(env, 'mailshot_prepare', {
+          p_context_kind: contextKind,
+          p_context_ids: contextIdChunk,
+          p_output_type: outputType,
+          p_document_template_id: templateId,
+          p_actor_user_id: user.id
+        });
+
+        try {
+          if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
+          if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'mailshot_prepare')) payload = payload.mailshot_prepare;
+        } catch {}
+
+        if (!(payload && typeof payload === 'object')) {
+          if (contextIdChunks.length === 1) {
+            return withCORS(env, req, ok({ ok: true, result: payload }));
+          }
+          throw new Error(`MAILSHOT_PREPARE_BATCH_INVALID: chunk ${chunkIndex + 1} of ${contextIdChunks.length} did not return an object payload`);
+        }
+
+        normalizedChunkPayloads.push(normalizePreparePayload(payload));
       }
 
-      normalized = { ...payload };
-
-      normalized.context_kind = normalized.context_kind != null ? singularContextKind(normalized.context_kind) || contextKind : contextKind;
-      normalized.output_type = normalized.output_type != null ? String(normalized.output_type).trim().toUpperCase() : outputType;
-      normalized.document_template_id = normalized.document_template_id == null ? templateId : String(normalized.document_template_id);
-
-      normalized.selected_field_keys = Array.isArray(normalized.selected_field_keys)
-        ? normalized.selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
-        : [];
-
-      normalized.accepted_selected_field_keys = Array.isArray(normalized.accepted_selected_field_keys)
-        ? normalized.accepted_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
-        : normalized.selected_field_keys;
-
-      normalized.rejected_selected_field_keys = Array.isArray(normalized.rejected_selected_field_keys)
-        ? normalized.rejected_selected_field_keys.map((x) => String(x == null ? '' : x).trim()).filter(Boolean)
-        : [];
-
-      normalized.rejected_selected_field_details = Array.isArray(normalized.rejected_selected_field_details)
-        ? normalized.rejected_selected_field_details
-        : [];
-
-      normalized.warnings = Array.isArray(normalized.warnings)
-        ? normalized.warnings.map((x) => String(x == null ? '' : x)).filter((x) => x.length > 0)
-        : [];
-
-      const topLevelAttachmentInstructions = Array.isArray(normalized.attachment_instructions)
-        ? normalized.attachment_instructions
-        : (Array.isArray(normalized.attachments) ? normalized.attachments : []);
-
-      normalized.attachment_instructions = topLevelAttachmentInstructions;
-      normalized.attachments = Array.isArray(normalized.attachments)
-        ? normalized.attachments
-        : topLevelAttachmentInstructions;
-
-      normalized.rows = Array.isArray(normalized.rows) ? normalized.rows : [];
-
-      normalized.rows = normalized.rows.map((row) => {
-        const rawRow = (row && typeof row === 'object') ? row : {};
-
-        const rowAttachmentInstructions = Array.isArray(rawRow.attachment_instructions)
-          ? rawRow.attachment_instructions
-          : (Array.isArray(rawRow.attachments) ? rawRow.attachments : []);
-
-        return {
-          ...rawRow,
-          context_id: rawRow.context_id == null ? null : String(rawRow.context_id),
-          context_kind: rawRow.context_kind != null ? singularContextKind(rawRow.context_kind) || normalized.context_kind : normalized.context_kind,
-          entity_type: rawRow.entity_type == null ? null : String(rawRow.entity_type).trim().toLowerCase(),
-          output_type: rawRow.output_type != null ? String(rawRow.output_type).trim().toUpperCase() : normalized.output_type,
-          document_template_id: rawRow.document_template_id == null ? normalized.document_template_id : String(rawRow.document_template_id),
-          to_field_key: rawRow.to_field_key == null ? null : String(rawRow.to_field_key),
-          to: rawRow.to == null ? null : String(rawRow.to),
-          recipient_kind: rawRow.recipient_kind == null ? null : String(rawRow.recipient_kind).trim().toLowerCase(),
-          recipient_id: rawRow.recipient_id == null ? null : String(rawRow.recipient_id),
-          eligible: rawRow.eligible == null ? false : !!rawRow.eligible,
-          skip_reason: rawRow.skip_reason == null ? null : String(rawRow.skip_reason),
-          field_values: rawRow.field_values && typeof rawRow.field_values === 'object' && !Array.isArray(rawRow.field_values)
-            ? rawRow.field_values
-            : {},
-          template_content_json: rawRow.template_content_json && typeof rawRow.template_content_json === 'object' && !Array.isArray(rawRow.template_content_json)
-            ? rawRow.template_content_json
-            : {},
-          email_type: rawRow.email_type == null ? null : String(rawRow.email_type).trim().toLowerCase(),
-          warning_messages: normalizeWarnings(rawRow.warning_messages),
-          attachment_instructions: rowAttachmentInstructions,
-          attachments: Array.isArray(rawRow.attachments)
-            ? rawRow.attachments
-            : rowAttachmentInstructions,
-          selected_row_id: rawRow.selected_row_id == null ? null : String(rawRow.selected_row_id)
-        };
-      });
+      normalized = mergePreparedPayloads(normalizedChunkPayloads);
     } else {
       normalized = {
         context_kind: contextKind,
@@ -55372,6 +59613,18 @@ async function handleMailshotPrepare(env, req) {
         warnings: [],
         attachment_instructions: [],
         attachments: [],
+        requested_context_count: 0,
+        resolved_context_count: 0,
+        returned_row_count: 0,
+        eligible_count: 0,
+        skipped_count: 0,
+        prepare_counts: {
+          requested_context_count: 0,
+          resolved_context_count: 0,
+          returned_row_count: 0,
+          eligible_count: 0,
+          skipped_count: 0
+        },
         rows: []
       };
     }
@@ -55383,20 +59636,34 @@ async function handleMailshotPrepare(env, req) {
 
     if (resolved.selectionEcho) {
       normalized.selection_scope = resolved.selectionEcho;
+      normalized.selection_echo = resolved.selectionEcho;
     }
     if (resolved.selectedCountContext) {
       normalized.selected_count_context = resolved.selectedCountContext;
     }
 
-    const eligibleCount = Array.isArray(normalized.rows)
-      ? normalized.rows.filter((row) => !!(row && row.eligible)).length
-      : 0;
-    const skippedCount = Array.isArray(normalized.rows)
-      ? normalized.rows.filter((row) => !(row && row.eligible)).length
-      : 0;
+    const finalRows = Array.isArray(normalized.rows) ? normalized.rows : [];
+    const eligibleCount = finalRows.filter((row) => !!(row && row.eligible)).length;
+    const skippedCount = finalRows.filter((row) => !(row && row.eligible)).length;
+    const returnedRowCount = finalRows.length;
 
+    if (normalized.requested_context_count == null) {
+      normalized.requested_context_count = ctxIdsClean.length;
+    }
+    if (normalized.resolved_context_count == null) {
+      normalized.resolved_context_count = ctxIdsClean.length;
+    }
+
+    normalized.returned_row_count = returnedRowCount;
     normalized.eligible_count = eligibleCount;
     normalized.skipped_count = skippedCount;
+    normalized.prepare_counts = {
+      requested_context_count: toNonNegativeIntOrNull(normalized.requested_context_count),
+      resolved_context_count: toNonNegativeIntOrNull(normalized.resolved_context_count),
+      returned_row_count: returnedRowCount,
+      eligible_count: eligibleCount,
+      skipped_count: skippedCount
+    };
 
     return withCORS(env, req, ok(normalized));
   } catch (e) {
@@ -55404,7 +59671,6 @@ async function handleMailshotPrepare(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
 
 async function handleMailshotExport(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -55931,7 +60197,6 @@ async function handleWebhookWati(env, req) {
   }));
 }
 
-
 async function handleWebhookClicksend(env, req) {
   const enc = encodeURIComponent;
 
@@ -56025,6 +60290,34 @@ async function handleWebhookClicksend(env, req) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+  const parseAttemptScopedCustomString = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    const idx = raw.indexOf('|');
+    if (idx <= 0) return null;
+    const rowId = raw.slice(0, idx).trim();
+    const leaseToken = raw.slice(idx + 1).trim();
+    if (!uuidRe.test(rowId) || !leaseToken) return null;
+    return { rowId, leaseToken };
+  };
+
+  const patchCommsOutboxRows = async (query, body) => {
+    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?${query}`, {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => '');
+      throw new Error(txt || `comms_outbox patch failed (${resp.status})`);
+    }
+
+    const rows = await resp.json().catch(() => []);
+    if (Array.isArray(rows)) return rows;
+    return rows ? [rows] : [];
+  };
+
   const results = [];
   let updated = 0;
   let ignored = 0;
@@ -56049,6 +60342,8 @@ async function handleWebhookClicksend(env, req) {
       payload.customString,
       payload.customstring
     );
+
+    const customStringScope = parseAttemptScopedCustomString(customString);
 
     const messageId = firstNonEmpty(
       payload.message_id,
@@ -56102,18 +60397,21 @@ async function handleWebhookClicksend(env, req) {
     let rowSource = null;
     let rowLookupAmbiguous = false;
 
-    if (customString && uuidRe.test(customString)) {
+    if (customStringScope) {
       try {
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
-            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error` +
-            `&id=eq.${enc(customString)}` +
+            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error,attempt_lease_token` +
+            `&id=eq.${enc(customStringScope.rowId)}` +
+            `&attempt_lease_token=eq.${enc(customStringScope.leaseToken)}` +
+            `&channel=in.(SMS,VOICE)` +
+            `&or=(provider_key.eq.AUTO,provider_key.eq.CLICKSEND,provider_key.is.null)` +
             `&limit=1`,
           false
         );
         row = Array.isArray(rows) && rows.length ? rows[0] : null;
-        if (row) rowSource = 'CUSTOM_STRING';
+        if (row) rowSource = 'CUSTOM_STRING_ATTEMPT';
       } catch {
         row = null;
         rowSource = null;
@@ -56125,7 +60423,7 @@ async function handleWebhookClicksend(env, req) {
         const { rows } = await sbFetch(
           env,
           `${env.SUPABASE_URL}/rest/v1/comms_outbox` +
-            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error` +
+            `?select=id,channel,status,provider_key,provider_message_id,sent_at,delivered_at,read_at,failed_at,last_error,attempt_lease_token` +
             `&provider_message_id=eq.${enc(messageId)}` +
             `&channel=in.(SMS,VOICE)` +
             `&or=(provider_key.eq.AUTO,provider_key.eq.CLICKSEND,provider_key.is.null)` +
@@ -56217,7 +60515,10 @@ async function handleWebhookClicksend(env, req) {
 
     const patch = {
       provider_key: 'CLICKSEND',
-      provider_response_json: payload
+      provider_response_json: payload,
+      attempt_lease_token: null,
+      attempt_leased_at_utc: null,
+      attempt_lease_expires_at_utc: null
     };
 
     if (messageId) patch.provider_message_id = messageId;
@@ -56252,21 +60553,38 @@ async function handleWebhookClicksend(env, req) {
       patch.last_error = null;
     }
 
-    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/comms_outbox?id=eq.${enc(row.id)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify(patch)
-    });
+    let patchQuery = `id=eq.${enc(row.id)}`;
+    if (rowSource === 'CUSTOM_STRING_ATTEMPT' && customStringScope) {
+      patchQuery += `&attempt_lease_token=eq.${enc(customStringScope.leaseToken)}`;
+    } else if (rowSource === 'PROVIDER_MESSAGE_ID' && messageId) {
+      patchQuery += `&provider_message_id=eq.${enc(messageId)}`;
+    }
 
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => '');
+    let patchedRows = [];
+    try {
+      patchedRows = await patchCommsOutboxRows(patchQuery, patch);
+    } catch (e) {
       results.push({
         ok: false,
         reason: 'PATCH_FAILED',
         custom_string: customString || null,
         message_id: messageId || null,
         mappedStatus,
-        error: txt || null
+        error: String(e?.message || e || 'PATCH_FAILED')
+      });
+      continue;
+    }
+
+    if (!Array.isArray(patchedRows) || patchedRows.length === 0) {
+      ignored += 1;
+      results.push({
+        ok: false,
+        reason: 'STALE_OR_ALREADY_SETTLED',
+        outbox_id: row.id,
+        custom_string: customString || null,
+        message_id: messageId || null,
+        mappedStatus,
+        lookup_source: rowSource
       });
       continue;
     }
@@ -56290,8 +60608,6 @@ async function handleWebhookClicksend(env, req) {
     results
   }));
 }
-
-
 
 
 async function handleOutboxUnifiedDelete(env, req, channel, id) {
@@ -56935,31 +61251,6 @@ async function handleEmailSend(env, req) {
 
 
 
-async function handleOutboxRetry(env, req, outboxId) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  try {
-    const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(outboxId)}`, {
-      method: 'PATCH', headers: sbHeaders(env),
-      body: JSON.stringify({
-        status: 'QUEUED',
-        sent_at: null,
-        delivered_at: null,
-        read_at: null,
-        failed_at: null,
-        last_error: null,
-        provider_message_id: null,
-        provider_status: null
-      })
-    });
-    if (!upd.ok) return withCORS(env, req, serverError(`Failed to retry: ${await upd.text()}`));
-    await recordEmailAudit(env, user, 'EMAIL_RETRY', { outbox_id: outboxId });
-    return withCORS(env, req, ok({ queued: true }));
-  } catch (e) {
-    return withCORS(env, req, serverError(String(e?.message || e)));
-  }
-}
 
 async function handleListOutbox(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -57001,60 +61292,6 @@ async function handleListOutbox(env, req) {
   return withCORS(env, req, ok(rows[0]));
 }
 
-async function handleOutboxMarkSent(env, req) {
-  // Optional callback for provider -> system reconciliation
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
-  const { id, provider_message_id } = body || {};
-  if (!isNonEmptyString(id)) return withCORS(env, req, badRequest('id is required'));
-
-  const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(id)}`, {
-    method: 'PATCH', headers: sbHeaders(env),
-    body: JSON.stringify({
-      status: 'SENT',
-      sent_at: nowIso(),
-      provider_message_id: provider_message_id || null,
-      provider_status: 'ACCEPTED',
-      delivered_at: null,
-      read_at: null,
-      last_error: null,
-      failed_at: null
-    })
-  });
-  if (!upd.ok) return withCORS(env, req, serverError(`Failed to mark sent: ${await upd.text()}`));
-
-  await recordEmailAudit(env, user, 'EMAIL_MARK_SENT', { outbox_id: id, provider_message_id });
-  return withCORS(env, req, ok({ ok: true }));
-}
-
-
-async function handleOutboxMarkFailed(env, req) {
-  // Optional callback for provider -> system reconciliation
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  let body;
-  try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
-  const { id, error } = body || {};
-  if (!isNonEmptyString(id)) return withCORS(env, req, badRequest('id is required'));
-
-  const upd = await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox?id=eq.${enc(id)}`, {
-    method: 'PATCH', headers: sbHeaders(env),
-    body: JSON.stringify({
-      status: 'FAILED',
-      failed_at: nowIso(),
-      last_error: String(error || 'Unknown error'),
-      provider_status: 'FAILED'
-    })
-  });
-  if (!upd.ok) return withCORS(env, req, serverError(`Failed to mark failed: ${await upd.text()}`));
-
-  await recordEmailAudit(env, user, 'EMAIL_MARK_FAILED', { outbox_id: id, error: String(error || 'Unknown error') });
-  return withCORS(env, req, ok({ ok: true }));
-}
 
 // ------------------------------
 // HTTP handler – TSO failure email queueing
@@ -58039,16 +62276,26 @@ function buildCandidateSummaryFilterSpec(input = {}) {
 
   const normalizeIdArray = (arr) => Array.from(new Set(
     (Array.isArray(arr) ? arr : [])
+      .flatMap(v => Array.isArray(v) ? v : String(v == null ? '' : v).split(','))
       .map(v => trimStr(v))
       .filter(Boolean)
   ));
 
   const normalizeUpperTokenArray = (arr) => Array.from(new Set(
     (Array.isArray(arr) ? arr : [])
-      .flatMap(v => String(v == null ? '' : v).split(','))
+      .flatMap(v => Array.isArray(v) ? v : String(v == null ? '' : v).split(','))
       .map(v => trimStr(v).toUpperCase())
       .filter(Boolean)
   ));
+
+  const normalizeBool = (v) => {
+    if (v === true || v === false) return v;
+    const raw = trimStr(v).toLowerCase();
+    if (!raw) return null;
+    if (raw === 'true' || raw === '1' || raw === 'yes' || raw === 'y' || raw === 'on') return true;
+    if (raw === 'false' || raw === '0' || raw === 'no' || raw === 'n' || raw === 'off') return false;
+    return null;
+  };
 
   const clonePlain = (value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -58105,8 +62352,10 @@ function buildCandidateSummaryFilterSpec(input = {}) {
   const updatedFrom = trimStr(getOne('updated_from')) || null;
   const updatedTo = trimStr(getOne('updated_to')) || null;
 
-  const jobTitleContains = trimStr(getOne('job_title_contains')) || null;
-  const primaryJobTitleContains = trimStr(getOne('primary_job_title_contains')) || null;
+  const jobTitleIncludeNodeIds = normalizeIdArray(getAll('job_title_include_node_ids'));
+  const jobTitleExcludeNodeIds = normalizeIdArray(getAll('job_title_exclude_node_ids'));
+  const jobTitleRoleIds = normalizeIdArray(getAll('job_title_role_ids'));
+  const jobTitlePrimaryOnly = normalizeBool(getOne('job_title_primary_only'));
 
   const profRegNumber = trimStr(getOne('prof_reg_number')) || null;
   const profRegTypeRaw = trimStr(getOne('prof_reg_type')) || null;
@@ -58158,8 +62407,12 @@ function buildCandidateSummaryFilterSpec(input = {}) {
   if (createdTo) out.created_to = createdTo;
   if (updatedFrom) out.updated_from = updatedFrom;
   if (updatedTo) out.updated_to = updatedTo;
-  if (jobTitleContains) out.job_title_contains = jobTitleContains;
-  if (primaryJobTitleContains) out.primary_job_title_contains = primaryJobTitleContains;
+  if (jobTitleRoleIds.length) {
+    out.job_title_include_node_ids = jobTitleIncludeNodeIds;
+    out.job_title_exclude_node_ids = jobTitleExcludeNodeIds;
+    out.job_title_role_ids = jobTitleRoleIds;
+    out.job_title_primary_only = !!jobTitlePrimaryOnly;
+  }
   if (profRegNumber) out.prof_reg_number = profRegNumber;
   if (profRegType) out.prof_reg_type = profRegType;
   if (dob) out.dob = dob;
@@ -58179,7 +62432,6 @@ function buildCandidateSummaryFilterSpec(input = {}) {
 
   return clonePlain(out);
 }
-
 function buildClientSummaryFilterSpec(input = {}) {
   const trimStr = (v) => String(v == null ? '' : v).trim();
 
@@ -60927,6 +65179,33 @@ async function handleSummaryMembership(env, req, section) {
   });
 
   try {
+    if (sectionKey === 'candidates') {
+      const rpcRows = await sbRpcAllRows(env, 'candidate_list_ids', {
+        p_filters: clonePlain(effectiveFilters)
+      }, {
+        pageSize: 1000
+      });
+
+      const rowIds = normalizeIdArray(
+        (Array.isArray(rpcRows) ? rpcRows : [])
+          .map((row) => {
+            if (row && typeof row === 'object') return row.id ?? row.candidate_id ?? '';
+            return row == null ? '' : row;
+          })
+      );
+
+      const totalCount = rowIds.length;
+
+      return withCORS(env, req, ok({
+        section: sectionKey,
+        dataset_key: datasetKey,
+        row_ids: rowIds,
+        ids: rowIds.slice(),
+        total_count: totalCount,
+        total: totalCount
+      }));
+    }
+
     const pathMap = {
       candidates: '/api/search/candidates',
       clients: '/api/search/clients',
@@ -60962,7 +65241,6 @@ async function handleSummaryMembership(env, req, section) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SUMMARY_MEMBERSHIP_FAILED')));
   }
 }
-
 
 async function handleSubmit(env, req) {
   const pre = preflightIfNeeded(env, req);
@@ -66051,7 +70329,7 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     // 1) Load current umbrella (for change detection)
     const { rows: beforeRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(umbrellaId)}&select=name,bank_name,sort_code,account_number`
+      `${env.SUPABASE_URL}/rest/v1/umbrellas?id=eq.${encodeURIComponent(umbrellaId)}&select=name,bank_name,sort_code,account_number,bank_details_hash`
     );
     const before = beforeRows?.[0] || {};
 
@@ -66068,6 +70346,9 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
     }
     const json = await res.json().catch(() => ({}));
     const umbrella = Array.isArray(json) ? json[0] : json;
+
+    const oldHash = (before && before.bank_details_hash != null) ? String(before.bank_details_hash).trim() : '';
+    const newHash = (umbrella && umbrella.bank_details_hash != null) ? String(umbrella.bank_details_hash).trim() : '';
 
     // 3) Detect pay-channel impacting changes
     const watched = ['name','bank_name','sort_code','account_number'];
@@ -66107,13 +70388,25 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
       }
     }
 
+    if (oldHash && oldHash !== newHash) {
+      try {
+        await cleanupStaleRailPayeeMappingsForHash(env, {
+          entity_kind: 'UMBRELLA',
+          entity_id: umbrellaId,
+          old_bank_details_hash: oldHash,
+          new_bank_details_hash: newHash || null,
+          actor_user_id: user.id
+        });
+      } catch (cleanupErr) {
+        console.warn('[BANK_PAYEE_CLEANUP] umbrella cleanup failed (non-fatal)', cleanupErr?.message || cleanupErr);
+      }
+    }
+
     return withCORS(env, req, ok({ umbrella }));
   } catch {
     return withCORS(env, req, serverError("Failed to update umbrella"));
   }
 }
-
-
 // ====================== CANDIDATES ======================
 /**
  * @openapi
@@ -66253,8 +70546,6 @@ async function handleUpdateUmbrella(env, req, umbrellaId) {
 // Add pass-through support for PostgREST 'id=in.(...)' filter
 // ======================================
 
-
-
 async function handleSearchCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -66282,6 +70573,8 @@ async function handleSearchCandidates(env, req) {
     pay_method: 'pay_method',
     active: 'active',
     created_at: 'created_at',
+    primary_job_title: 'primary_job_title',
+    job_titles_display: 'job_titles_display',
     tms_ref: '__tms_ref',
     tms_ref_num: 'tms_ref_num'
   };
@@ -66289,6 +70582,7 @@ async function handleSearchCandidates(env, req) {
   const defaultOrderCol = 'display_name';
   const orderCol = allowedSort[orderByParam] || defaultOrderCol;
   const orderDir = (orderDirParam === 'desc') ? 'desc' : 'asc';
+  const useDerivedSecondaryJobTitlesSort = (orderByParam === 'job_titles_display');
 
   const spec = buildCandidateSummaryFilterSpec(urlObj.searchParams);
 
@@ -66301,8 +70595,10 @@ async function handleSearchCandidates(env, req) {
   const createdFrom = spec.created_from || null;
   const createdTo = spec.created_to || null;
   const notesExact = spec.notes || null;
-  const jobTitleContainsAll = spec.job_title_contains || null;
-  const primaryJobTitleContains = spec.primary_job_title_contains || null;
+  const jobTitleIncludeNodeIds = Array.isArray(spec.job_title_include_node_ids) ? spec.job_title_include_node_ids.map(String).map((s) => s.trim()).filter(Boolean) : [];
+  const jobTitleExcludeNodeIds = Array.isArray(spec.job_title_exclude_node_ids) ? spec.job_title_exclude_node_ids.map(String).map((s) => s.trim()).filter(Boolean) : [];
+  const jobTitleRoleIds = Array.isArray(spec.job_title_role_ids) ? spec.job_title_role_ids.map(String).map((s) => s.trim()).filter(Boolean) : [];
+  const jobTitlePrimaryOnly = !!spec.job_title_primary_only;
   const profRegNumber = spec.prof_reg_number || null;
   const profRegType = spec.prof_reg_type || null;
   const dobExact = spec.dob || null;
@@ -66341,7 +70637,7 @@ async function handleSearchCandidates(env, req) {
       month: '2-digit',
       day: '2-digit'
     }).formatToParts(new Date());
-    const get = (type) => (parts.find(p => p.type === type)?.value || '');
+    const get = (type) => (parts.find((p) => p.type === type)?.value || '');
     return `${get('year')}-${get('month')}-${get('day')}`;
   };
 
@@ -66359,7 +70655,7 @@ async function handleSearchCandidates(env, req) {
     const daysInTargetMonth = new Date(Date.UTC(y1, m1 + 1, 0)).getUTCDate();
     const d1 = Math.min(d0, daysInTargetMonth);
 
-    return `${String(y1).padStart(4,'0')}-${String(m1 + 1).padStart(2,'0')}-${String(d1).padStart(2,'0')}`;
+    return `${String(y1).padStart(4, '0')}-${String(m1 + 1).padStart(2, '0')}-${String(d1).padStart(2, '0')}`;
   };
 
   const cutoffYMD = ((workStatus === 'RECENT' && !recentAll) || workStatus === 'NOT')
@@ -66382,10 +70678,278 @@ async function handleSearchCandidates(env, req) {
         phone: row.phone == null ? '' : String(row.phone),
         tms_ref: row.tms_ref == null ? '' : String(row.tms_ref),
         roles: row.roles == null ? null : row.roles,
+        primary_job_title: row.primary_job_title == null ? '' : String(row.primary_job_title),
         job_titles_display: row.job_titles_display == null ? '' : String(row.job_titles_display),
         active: !!row.active,
         match_rank: Number.isFinite(Number(row.match_rank)) ? Number(row.match_rank) : null
       }));
+  };
+
+  const normalizeTextForSort = (value) => String(value == null ? '' : value).trim().toLowerCase();
+
+  const deriveSecondaryJobTitlesSortValue = (row) => {
+    const primaryTitle = String(row && row.primary_job_title == null ? '' : row && row.primary_job_title || '').trim();
+    const primaryTitleNorm = normalizeTextForSort(primaryTitle);
+
+    const parts = String(row && row.job_titles_display == null ? '' : row && row.job_titles_display || '')
+      .split(';')
+      .map((part) => String(part || '').trim())
+      .filter(Boolean);
+
+    const seen = new Set();
+    const secondary = [];
+
+    for (const part of parts) {
+      const norm = normalizeTextForSort(part);
+      if (!norm) continue;
+      if (primaryTitleNorm && norm === primaryTitleNorm) continue;
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      secondary.push(part);
+    }
+
+    secondary.sort((a, b) => {
+      const aa = normalizeTextForSort(a);
+      const bb = normalizeTextForSort(b);
+      if (aa < bb) return -1;
+      if (aa > bb) return 1;
+      return 0;
+    });
+
+    return secondary.join('; ');
+  };
+
+  const compareNullableText = (leftValue, rightValue, dir) => {
+    const leftNorm = normalizeTextForSort(leftValue);
+    const rightNorm = normalizeTextForSort(rightValue);
+
+    const leftBlank = !leftNorm;
+    const rightBlank = !rightNorm;
+
+    if (leftBlank && rightBlank) return 0;
+    if (leftBlank) return 1;
+    if (rightBlank) return -1;
+
+    if (leftNorm < rightNorm) return dir === 'desc' ? 1 : -1;
+    if (leftNorm > rightNorm) return dir === 'desc' ? -1 : 1;
+    return 0;
+  };
+
+  const compareNullableBoolean = (leftValue, rightValue, dir) => {
+    const leftNorm = leftValue === true ? 1 : (leftValue === false ? 0 : null);
+    const rightNorm = rightValue === true ? 1 : (rightValue === false ? 0 : null);
+
+    const leftBlank = leftNorm == null;
+    const rightBlank = rightNorm == null;
+
+    if (leftBlank && rightBlank) return 0;
+    if (leftBlank) return 1;
+    if (rightBlank) return -1;
+
+    if (leftNorm < rightNorm) return dir === 'desc' ? 1 : -1;
+    if (leftNorm > rightNorm) return dir === 'desc' ? -1 : 1;
+    return 0;
+  };
+
+  const compareCandidateRows = (leftRow, rightRow) => {
+    let cmp = 0;
+
+    if (useDerivedSecondaryJobTitlesSort) {
+      cmp = compareNullableText(
+        deriveSecondaryJobTitlesSortValue(leftRow),
+        deriveSecondaryJobTitlesSortValue(rightRow),
+        orderDir
+      );
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.last_name, rightRow && rightRow.last_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.first_name, rightRow && rightRow.first_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.display_name, rightRow && rightRow.display_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+    }
+
+    if (orderCol === 'primary_job_title') {
+      cmp = compareNullableText(
+        leftRow && leftRow.primary_job_title,
+        rightRow && rightRow.primary_job_title,
+        orderDir
+      );
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.last_name, rightRow && rightRow.last_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.first_name, rightRow && rightRow.first_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      cmp = compareNullableText(leftRow && leftRow.display_name, rightRow && rightRow.display_name, 'asc');
+      if (cmp !== 0) return cmp;
+
+      return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+    }
+
+    if (orderCol === '__tms_ref') {
+      const leftRefNum = Number(leftRow && leftRow.tms_ref_num);
+      const rightRefNum = Number(rightRow && rightRow.tms_ref_num);
+      const leftHasRefNum = Number.isFinite(leftRefNum);
+      const rightHasRefNum = Number.isFinite(rightRefNum);
+
+      if (leftHasRefNum && rightHasRefNum && leftRefNum !== rightRefNum) {
+        cmp = orderDir === 'desc' ? (rightRefNum - leftRefNum) : (leftRefNum - rightRefNum);
+      } else if (leftHasRefNum && !rightHasRefNum) {
+        cmp = -1;
+      } else if (!leftHasRefNum && rightHasRefNum) {
+        cmp = 1;
+      } else {
+        cmp = compareNullableText(
+          leftRow && leftRow.tms_ref,
+          rightRow && rightRow.tms_ref,
+          orderDir
+        );
+      }
+
+      if (cmp !== 0) return cmp;
+      return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+    }
+
+    if (orderCol === 'active') {
+      cmp = compareNullableBoolean(
+        leftRow && leftRow.active,
+        rightRow && rightRow.active,
+        orderDir
+      );
+      if (cmp !== 0) return cmp;
+      return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+    }
+
+    cmp = compareNullableText(
+      leftRow && leftRow[orderCol],
+      rightRow && rightRow[orderCol],
+      orderDir
+    );
+    if (cmp !== 0) return cmp;
+
+    return compareNullableText(leftRow && leftRow.id, rightRow && rightRow.id, 'asc');
+  };
+
+  const hasCanonicalJobTitleFilter =
+    jobTitleIncludeNodeIds.length > 0 ||
+    jobTitleExcludeNodeIds.length > 0 ||
+    jobTitleRoleIds.length > 0;
+
+  let canonicalCandidateIdsPromise = null;
+
+  const loadCanonicalCandidateIds = async () => {
+    if (!hasCanonicalJobTitleFilter) return [];
+
+    if (!canonicalCandidateIdsPromise) {
+      canonicalCandidateIdsPromise = (async () => {
+        const rpcFilters = (() => {
+          try {
+            return JSON.parse(JSON.stringify(spec || {}));
+          } catch {
+            return { ...(spec || {}) };
+          }
+        })();
+
+        const rpcRows = await sbRpcAllRows(env, 'candidate_list_ids', {
+          p_filters: rpcFilters
+        }, {
+          pageSize: 1000
+        });
+
+        const rows = Array.isArray(rpcRows)
+          ? rpcRows
+          : ((rpcRows && typeof rpcRows === 'object' && Array.isArray(rpcRows.rows)) ? rpcRows.rows : []);
+
+        const outIds = [];
+        const seenIds = new Set();
+
+        for (const row of rows) {
+          const id = String(
+            (row && typeof row === 'object')
+              ? (row.id ?? row.candidate_id ?? '')
+              : (row == null ? '' : row)
+          ).trim();
+
+          if (!id || seenIds.has(id)) continue;
+          seenIds.add(id);
+          outIds.push(id);
+        }
+
+        return outIds;
+      })();
+    }
+
+    return canonicalCandidateIdsPromise;
+  };
+
+  const canonicalCandidateSortSelectClause = 'id,display_name,first_name,last_name,email,phone,pay_method,active,created_at,primary_job_title,job_titles_display,tms_ref,tms_ref_num,roles';
+
+  const fetchCanonicalCandidateRows = async ({ selectClause = '*' } = {}) => {
+    const canonicalIds = await loadCanonicalCandidateIds();
+    if (!Array.isArray(canonicalIds) || !canonicalIds.length) return [];
+
+    const outRows = [];
+    const seenRowIds = new Set();
+    const chunkSize = 100;
+
+    for (let index = 0; index < canonicalIds.length; index += chunkSize) {
+      const chunkIds = canonicalIds.slice(index, index + chunkSize).map((value) => String(value || '').trim()).filter(Boolean);
+      if (!chunkIds.length) continue;
+
+      const api =
+        `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
+        `?select=${selectClause}` +
+        `&id=${enc(`in.(${chunkIds.join(',')})`)}`;
+
+      const res = await sbFetch(env, api, false);
+      const batchRows = Array.isArray(res && res.rows) ? res.rows : [];
+
+      for (const row of batchRows) {
+        const rowId = String(row && row.id ? row.id : '').trim();
+        if (!rowId || seenRowIds.has(rowId)) continue;
+        seenRowIds.add(rowId);
+        outRows.push(row);
+      }
+    }
+
+    return outRows;
+  };
+
+  const fetchAllCandidateRows = async ({
+    selectClause = '*',
+    withJobTitleFilters = true
+  } = {}) => {
+    const outRows = [];
+    let offsetValue = 0;
+    const batchSize = 1000;
+
+    while (true) {
+      const api = buildCandidatesApi({
+        selectClause,
+        withPaging: true,
+        limitValue: batchSize,
+        offsetValue,
+        withOrder: false,
+        withJobTitleFilters
+      });
+
+      const res = await sbFetch(env, api, false);
+      const batch = Array.isArray(res && res.rows) ? res.rows : [];
+      outRows.push(...batch);
+
+      if (batch.length < batchSize) break;
+      offsetValue += batchSize;
+    }
+
+    return outRows;
   };
 
   const buildCandidatesApi = ({
@@ -66393,12 +70957,17 @@ async function handleSearchCandidates(env, req) {
     withPaging = true,
     limitValue = pageSize,
     offsetValue = (page - 1) * pageSize,
-    withOrder = true
+    withOrder = true,
+    withJobTitleFilters = true
   }) => {
     const orderExpr =
       (orderCol === '__tms_ref')
         ? `${enc('tms_ref_num')}.${orderDir},${enc('tms_ref')}.${orderDir},id.asc`
-        : `${enc(orderCol)}.${orderDir},id.asc`;
+        : (
+            orderCol === 'primary_job_title'
+              ? `${enc('primary_job_title')}.${orderDir},${enc('last_name')}.asc,${enc('first_name')}.asc,id.asc`
+              : `${enc(orderCol)}.${orderDir},id.asc`
+          );
 
     let api =
       `${env.SUPABASE_URL}/rest/v1/candidates_summary_activity` +
@@ -66435,10 +71004,10 @@ async function handleSearchCandidates(env, req) {
       orParts = parts;
     }
 
-    if (firstName)   api += `&first_name=ilike.*${enc(firstName)}*`;
-    if (lastName)    api += `&last_name=ilike.*${enc(lastName)}*`;
-    if (email)       api += `&email=ilike.*${enc(email)}*`;
-    if (phone)       api += `&phone=ilike.*${enc(phone)}*`;
+    if (firstName) api += `&first_name=ilike.*${enc(firstName)}*`;
+    if (lastName) api += `&last_name=ilike.*${enc(lastName)}*`;
+    if (email) api += `&email=ilike.*${enc(email)}*`;
+    if (phone) api += `&phone=ilike.*${enc(phone)}*`;
 
     if (notesExact) {
       const escMid = String(notesExact)
@@ -66461,11 +71030,12 @@ async function handleSearchCandidates(env, req) {
     if (createdFrom) api += `&created_at=gte.${enc(createdFrom)}`;
     if (createdTo) api += `&created_at=lte.${enc(createdTo)}`;
 
-    if (primaryJobTitleContains) {
-      api += `&primary_job_title=ilike.*${enc(primaryJobTitleContains)}*`;
-    }
-    if (jobTitleContainsAll) {
-      api += `&job_titles_display=ilike.*${enc(jobTitleContainsAll)}*`;
+    if (withJobTitleFilters && jobTitleRoleIds.length) {
+      if (jobTitlePrimaryOnly) {
+        api += `&primary_job_title_id=${enc(`in.(${jobTitleRoleIds.join(',')})`)}`;
+      } else {
+        api += `&job_title_ids=${enc(`ov.{${jobTitleRoleIds.join(',')}}`)}`;
+      }
     }
 
     if (profRegNumber) {
@@ -66565,16 +71135,46 @@ async function handleSearchCandidates(env, req) {
     }
 
     try {
-      const pickerApi = buildCandidatesApi({
-        selectClause: 'id,display_name,first_name,last_name,email,phone,tms_ref,roles,job_titles_display,active',
-        withPaging: true,
-        limitValue: pickerPageSize + 1,
-        offsetValue: (pickerPage - 1) * pickerPageSize,
-        withOrder: true
-      });
+      let pickerRows = [];
 
-      const { rows } = await sbFetch(env, pickerApi, false);
-      const pickerRows = normalizePickerRows(rows);
+      if (hasCanonicalJobTitleFilter) {
+        const allPickerRows = await fetchCanonicalCandidateRows({
+          selectClause: canonicalCandidateSortSelectClause
+        });
+        pickerRows = normalizePickerRows(allPickerRows).sort(compareCandidateRows);
+      } else if (useDerivedSecondaryJobTitlesSort) {
+        const allPickerRows = await fetchAllCandidateRows({
+          selectClause: 'id,display_name,first_name,last_name,email,phone,tms_ref,roles,primary_job_title,job_titles_display,active'
+        });
+        pickerRows = normalizePickerRows(allPickerRows).sort(compareCandidateRows);
+      } else {
+        const pickerApi = buildCandidatesApi({
+          selectClause: 'id,display_name,first_name,last_name,email,phone,tms_ref,roles,primary_job_title,job_titles_display,active',
+          withPaging: true,
+          limitValue: pickerPageSize + 1,
+          offsetValue: (pickerPage - 1) * pickerPageSize,
+          withOrder: true,
+          withJobTitleFilters: true
+        });
+
+        const { rows } = await sbFetch(env, pickerApi, false);
+        pickerRows = normalizePickerRows(rows);
+      }
+
+      if (hasCanonicalJobTitleFilter || useDerivedSecondaryJobTitlesSort) {
+        const start = (pickerPage - 1) * pickerPageSize;
+        const outRows = pickerRows.slice(start, start + pickerPageSize);
+        const hasMore = (start + pickerPageSize) < pickerRows.length;
+
+        return withCORS(env, req, ok({
+          rows: outRows,
+          page: pickerPage,
+          page_size: pickerPageSize,
+          count: outRows.length,
+          has_more: hasMore
+        }));
+      }
+
       const hasMore = pickerRows.length > pickerPageSize;
       const outRows = pickerRows.slice(0, pickerPageSize);
 
@@ -66598,27 +71198,42 @@ async function handleSearchCandidates(env, req) {
     const batchSize = 1000;
 
     try {
-      while (true) {
-        const api = buildCandidatesApi({
-          selectClause: 'id',
-          withPaging: true,
-          limitValue: batchSize,
-          offsetValue: offset,
-          withOrder: true
+      if (hasCanonicalJobTitleFilter) {
+        const membershipRows = await fetchCanonicalCandidateRows({
+          selectClause: canonicalCandidateSortSelectClause
         });
+        membershipRows.sort(compareCandidateRows);
 
-        const { rows } = await sbFetch(env, api, false);
-        const batch = Array.isArray(rows) ? rows : [];
-
-        for (const row of batch) {
+        for (const row of membershipRows) {
           const id = row && row.id ? String(row.id).trim() : '';
           if (!id || seen.has(id)) continue;
           seen.add(id);
           idsOut.push(id);
         }
+      } else {
+        while (true) {
+          const api = buildCandidatesApi({
+            selectClause: 'id',
+            withPaging: true,
+            limitValue: batchSize,
+            offsetValue: offset,
+            withOrder: true,
+            withJobTitleFilters: true
+          });
 
-        if (batch.length < batchSize) break;
-        offset += batchSize;
+          const { rows } = await sbFetch(env, api, false);
+          const batch = Array.isArray(rows) ? rows : [];
+
+          for (const row of batch) {
+            const id = row && row.id ? String(row.id).trim() : '';
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            idsOut.push(id);
+          }
+
+          if (batch.length < batchSize) break;
+          offset += batchSize;
+        }
       }
     } catch (err) {
       const msg = String(err?.message || err || 'Supabase fetch failed');
@@ -66631,21 +71246,38 @@ async function handleSearchCandidates(env, req) {
     return withCORS(env, req, ok({ ids: idsOut, count: idsOut.length }));
   }
 
-  const api = buildCandidatesApi({
-    selectClause: '*',
-    withPaging: true,
-    limitValue: pageSize,
-    offsetValue: (page - 1) * pageSize,
-    withOrder: true
-  });
-
   let rows = [];
   let total = undefined;
 
   try {
-    const res = await sbFetch(env, api, includeCount);
-    rows = res?.rows || [];
-    total = res?.total;
+    if (hasCanonicalJobTitleFilter) {
+      const allRows = await fetchCanonicalCandidateRows({ selectClause: '*' });
+      allRows.sort(compareCandidateRows);
+
+      const start = (page - 1) * pageSize;
+      rows = allRows.slice(start, start + pageSize);
+      total = allRows.length;
+    } else if (useDerivedSecondaryJobTitlesSort) {
+      const allRows = await fetchAllCandidateRows({ selectClause: '*' });
+      allRows.sort(compareCandidateRows);
+
+      const start = (page - 1) * pageSize;
+      rows = allRows.slice(start, start + pageSize);
+      total = allRows.length;
+    } else {
+      const api = buildCandidatesApi({
+        selectClause: '*',
+        withPaging: true,
+        limitValue: pageSize,
+        offsetValue: (page - 1) * pageSize,
+        withOrder: true,
+        withJobTitleFilters: true
+      });
+
+      const res = await sbFetch(env, api, includeCount);
+      rows = res?.rows || [];
+      total = res?.total;
+    }
   } catch (err) {
     const msg = String(err?.message || err || 'Supabase fetch failed');
 
@@ -66655,7 +71287,15 @@ async function handleSearchCandidates(env, req) {
         req,
         badRequest(
           `Supabase fetch failed: ${msg}`,
-          { order_by: (orderByParam || null), order_dir: orderDir, url: api }
+          {
+            order_by: (orderByParam || null),
+            order_dir: orderDir,
+            use_derived_secondary_job_titles_sort: useDerivedSecondaryJobTitlesSort,
+            job_title_include_node_ids: jobTitleIncludeNodeIds,
+            job_title_exclude_node_ids: jobTitleExcludeNodeIds,
+            job_title_role_ids: jobTitleRoleIds,
+            job_title_primary_only: jobTitlePrimaryOnly
+          }
         )
       );
     }
@@ -66704,7 +71344,7 @@ async function handleSearchCandidates(env, req) {
   }
 
   if (format === 'print') {
-    const rowsHtml = (rows || []).map(r => `
+    const rowsHtml = (rows || []).map((r) => `
       <tr>
         <td>${r.display_name || [r.first_name, r.last_name].filter(Boolean).join(' ')}</td>
         <td>${r.email || ''}</td>
@@ -67542,8 +72182,6 @@ return withCORS(env, req, ok({
   }
 }
 
-
-
 async function handleUpdateCandidate(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -67759,6 +72397,7 @@ async function handleUpdateCandidate(env, req, candidateId) {
       'bank_name',
       'sort_code',
       'account_number',
+      'bank_details_hash',
       'key_norm',
       'nhsp_hr_name_aliases'
     ].join(',');
@@ -67843,6 +72482,9 @@ async function handleUpdateCandidate(env, req, candidateId) {
     }
     const json = await res.json().catch(() => ({}));
     const candidate = Array.isArray(json) ? json[0] : json;
+
+    const oldHash = (before && before.bank_details_hash != null) ? String(before.bank_details_hash).trim() : '';
+    const newHash = (candidate && candidate.bank_details_hash != null) ? String(candidate.bank_details_hash).trim() : '';
 
     // 2b) Upsert candidate_job_titles if job_titles were explicitly provided
     if (jtArray !== null) {
@@ -67970,6 +72612,20 @@ const tsfinRun = await tsfinTargetedDrainNow(env, {
   chunkSize: 50
 });
 
+    if (oldHash && oldHash !== newHash) {
+      try {
+        await cleanupStaleRailPayeeMappingsForHash(env, {
+          entity_kind: 'CANDIDATE',
+          entity_id: candidateId,
+          old_bank_details_hash: oldHash,
+          new_bank_details_hash: newHash || null,
+          actor_user_id: user.id
+        });
+      } catch (cleanupErr) {
+        console.warn('[BANK_PAYEE_CLEANUP] candidate cleanup failed (non-fatal)', cleanupErr?.message || cleanupErr);
+      }
+    }
+
 return withCORS(env, req, ok({
   candidate,
   tsfin: {
@@ -67987,7 +72643,6 @@ return withCORS(env, req, ok({
     return withCORS(env, req, serverError("Failed to update candidate"));
   }
 }
-
 
 async function handleGetCandidate(env, req, candidateId) {
   const enc  = encodeURIComponent;
@@ -68244,42 +72899,123 @@ async function handleRolesGlobal(env, req) {
     const cache = g.__ROLES_GLOBAL_CACHE__;
     const now = Date.now();
 
-    if (Array.isArray(cache.roles) && cache.roles.length && (now - (cache.ts || 0) < TTL_MS)) {
+    if (Array.isArray(cache.roles) && (now - (cache.ts || 0) < TTL_MS)) {
       return withCORS(env, req, ok({ roles: cache.roles }));
     }
 
-    // Source of truth: enabled client defaults view (already excludes disabled rows)
-    // Keep it single request; dedupe in JS.
-    const limit = 100000; // safe upper bound; roles are few but windows may be many
-    const url =
+    const limit = 100000;
+
+    const collectRoles = (rows) => {
+      const set = new Set();
+      for (const r of (Array.isArray(rows) ? rows : [])) {
+        const s = String(r?.role || '').trim();
+        if (!s) continue;
+        set.add(s);
+      }
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    };
+
+    const trimLogBody = (value, maxLen = 1200) => {
+      const s = String(value == null ? '' : value);
+      return s.length > maxLen ? `${s.slice(0, maxLen)}…` : s;
+    };
+
+    const fetchRolesRows = async (url, sourceLabel) => {
+      try {
+        const res = await sbFetch(env, url);
+        return Array.isArray(res?.rows) ? res.rows : [];
+      } catch (err) {
+        const wrapped = new Error(err?.message || String(err) || `Failed to fetch roles from ${sourceLabel}`);
+        wrapped.sourceLabel = sourceLabel;
+        wrapped.url = url;
+        wrapped.status = err?.status;
+        wrapped.body = err?.body;
+        throw wrapped;
+      }
+    };
+
+    const viewUrl =
       `${env.SUPABASE_URL}/rest/v1/v_rates_client_defaults_enabled` +
       `?select=role` +
-      `&role=is.not.null` +
+      `&role=not.is.null` +
       `&order=role.asc` +
       `&limit=${limit}`;
 
-    const { rows } = await sbFetch(env, url);
+    const tableUrl =
+      `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
+      `?select=role` +
+      `&disabled_at_utc=is.null` +
+      `&role=not.is.null` +
+      `&order=role.asc` +
+      `&limit=${limit}`;
 
-    const set = new Set();
-    for (const r of (rows || [])) {
-      const s = String(r?.role || '').trim();
-      if (!s) continue;
-      set.add(s);
+    let rows = null;
+    let primaryErr = null;
+
+    try {
+      rows = await fetchRolesRows(viewUrl, 'v_rates_client_defaults_enabled');
+    } catch (err) {
+      primaryErr = err;
+      console.error('[ROLES_GLOBAL] primary source failed', {
+        source: err?.sourceLabel || 'v_rates_client_defaults_enabled',
+        url: err?.url || viewUrl,
+        status: err?.status ?? null,
+        body: trimLogBody(err?.body),
+        err: err?.message || String(err)
+      });
     }
 
-    const roles = Array.from(set).sort((a, b) => a.localeCompare(b));
+    if (!Array.isArray(rows) || rows.length === 0) {
+      try {
+        const fallbackRows = await fetchRolesRows(tableUrl, 'rates_client_defaults');
+        if (!Array.isArray(rows) || fallbackRows.length > 0) {
+          rows = fallbackRows;
+        } else if (!Array.isArray(rows)) {
+          rows = fallbackRows;
+        }
+      } catch (fallbackErr) {
+        console.error('[ROLES_GLOBAL] fallback source failed', {
+          source: fallbackErr?.sourceLabel || 'rates_client_defaults',
+          url: fallbackErr?.url || tableUrl,
+          status: fallbackErr?.status ?? null,
+          body: trimLogBody(fallbackErr?.body),
+          err: fallbackErr?.message || String(fallbackErr)
+        });
+
+        if (!Array.isArray(rows)) {
+          console.error('[ROLES_GLOBAL] failed', {
+            primary_source: primaryErr?.sourceLabel || 'v_rates_client_defaults_enabled',
+            primary_url: primaryErr?.url || viewUrl,
+            primary_status: primaryErr?.status ?? null,
+            primary_body: trimLogBody(primaryErr?.body),
+            primary_err: primaryErr?.message || String(primaryErr || ''),
+            fallback_source: fallbackErr?.sourceLabel || 'rates_client_defaults',
+            fallback_url: fallbackErr?.url || tableUrl,
+            fallback_status: fallbackErr?.status ?? null,
+            fallback_body: trimLogBody(fallbackErr?.body),
+            fallback_err: fallbackErr?.message || String(fallbackErr)
+          });
+
+          return withCORS(env, req, serverError('Failed to load global roles'));
+        }
+      }
+    }
+
+    const roles = collectRoles(rows);
 
     cache.ts = now;
     cache.roles = roles;
 
     return withCORS(env, req, ok({ roles }));
   } catch (e) {
-    console.error('[ROLES_GLOBAL] failed', { err: e?.message || String(e) });
+    console.error('[ROLES_GLOBAL] failed', {
+      err: e?.message || String(e),
+      status: e?.status ?? null,
+      body: String(e?.body == null ? '' : e.body).slice(0, 1200)
+    });
     return withCORS(env, req, serverError('Failed to load global roles'));
   }
 }
-
-
 async function handleCandidateAliasesDelete(env, req, candidateId) {
   const enc  = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
@@ -68564,7 +73300,8 @@ async function handleFilesDownload(env, req) {
       'files/',                     // evidence uploads
       'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
       'docs-pdf/',
-      'Assets/', 'assets/'
+      'Assets/', 'assets/',
+      'mailshot-template-attachments/'
     ];
     if (!ALLOWED_PREFIXES.some(p => key.startsWith(p))) {
       if (LOG) console.warn('[FILES][DL] deny: prefix', { key });
@@ -68666,7 +73403,6 @@ async function handleFilesDownload(env, req) {
     return withCORS(env, req, serverError("Failed to download file"));
   }
 }
-
 
 // ====================== TIMESHEETS FINANCE PREVIEW ======================
 /**
@@ -82876,7 +87612,6 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId) {
   }));
 }
 
-
 async function handleContractWeekManualAuthorise(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -82899,14 +87634,79 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
 
-  const cw = await sbGetOne(
+  let cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,timesheet_id`
   );
-  if (!cw?.timesheet_id) return withCORS(env, req, badRequest('No timesheet linked to this week'));
+  if (!cw?.id) return withCORS(env, req, notFound('Week not found'));
+
+  let linkedTimesheetId = cw?.timesheet_id ? String(cw.timesheet_id) : '';
+  let repairedLinkageFromExpected = false;
+
+  // ✅ stale-resolution path: re-read the week once in case FE just created the timesheet
+  if (!linkedTimesheetId) {
+    const cwReload = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,timesheet_id`
+    ).catch(() => null);
+
+    if (cwReload?.id) {
+      cw = cwReload;
+      linkedTimesheetId = cwReload?.timesheet_id ? String(cwReload.timesheet_id) : '';
+    }
+  }
+
+  // ✅ stale-resolution path: if the week still has no linked timesheet, try the FE expected/current id
+  if (!linkedTimesheetId && expected) {
+    const resolvedExpected = await resolveTimesheetToCurrent(env, expected).catch(() => null);
+    const expectedCurrentTimesheetId =
+      resolvedExpected?.current_timesheet_id ? String(resolvedExpected.current_timesheet_id) : '';
+
+    if (expectedCurrentTimesheetId) {
+      const expectedTsRow = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(expectedCurrentTimesheetId)}` +
+          `&is_current=eq.true` +
+          `&select=timesheet_id,contract_id`
+      ).catch(() => null);
+
+      const contractMatches =
+        !!expectedTsRow &&
+        (
+          !cw?.contract_id ||
+          !expectedTsRow?.contract_id ||
+          String(expectedTsRow.contract_id) === String(cw.contract_id)
+        );
+
+      if (contractMatches) {
+        linkedTimesheetId = expectedCurrentTimesheetId;
+        repairedLinkageFromExpected = true;
+      }
+    }
+  }
+
+  if (!linkedTimesheetId) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error: 'TIMESHEET_NOT_LINKED_YET',
+          contract_week_id: weekId,
+          current_timesheet_id: null,
+          expected_timesheet_id: expected || null
+        }),
+        {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    );
+  }
 
   // Resolve + guard
-  const resolved = await resolveTimesheetToCurrent(env, cw.timesheet_id);
+  const resolved = await resolveTimesheetToCurrent(env, linkedTimesheetId);
   const currentTimesheetId = resolved?.current_timesheet_id ? String(resolved.current_timesheet_id) : '';
   if (!currentTimesheetId) return withCORS(env, req, notFound('Timesheet not found'));
 
@@ -82922,6 +87722,21 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
   }
 
   const now = nowIso();
+
+  // ✅ heal week linkage if we recovered via expected/current id
+  if (repairedLinkageFromExpected && String(cw?.timesheet_id || '') !== String(currentTimesheetId)) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: currentTimesheetId,
+          updated_at: now
+        })
+      }
+    ).catch(() => {});
+  }
 
   // Load CURRENT TS + TSFIN (include QR fields for unsigned gating)
   const tsBefore = await sbGetOne(
@@ -83113,7 +87928,13 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
     }
   } catch {}
 
-  return withCORS(env, req, ok({ authorised: true, timesheet_id: currentTimesheetId, warnings }));
+  return withCORS(env, req, ok({
+    authorised: true,
+    timesheet_id: currentTimesheetId,
+    contract_week_id: weekId,
+    linkage_repaired_from_expected: repairedLinkageFromExpected,
+    warnings
+  }));
 }
 
 
@@ -90148,6 +94969,346 @@ async function handleClientDeleteApply(env, req, clientId) {
   }
 }
 
+async function revolutCounterparty_deleteIfMapped(env, token, { rail_env, entity_kind, entity_id, bank_details_hash, payee_id, payee_account_id, actor_user_id } = {}) {
+  const kind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const bankHash = String(bank_details_hash || '').trim();
+
+  const railEnvRaw = (rail_env !== undefined && rail_env !== null) ? String(rail_env).trim() : '';
+  const railEnv = (railEnvRaw ? railEnvRaw : 'PROD').toUpperCase();
+
+  const providedPayeeId = (payee_id !== undefined && payee_id !== null) ? String(payee_id).trim() : '';
+  const providedPayeeAccountId = (payee_account_id !== undefined && payee_account_id !== null) ? String(payee_account_id).trim() : '';
+  const actorRaw = (actor_user_id !== undefined && actor_user_id !== null) ? String(actor_user_id).trim() : '';
+  const actorUserId = actorRaw ? actorRaw : null;
+
+  if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'REVOLUT_PAYEE_KIND_INVALID',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind || null,
+      entity_id: entityId || null,
+      bank_details_hash: bankHash || null,
+      payee_id: null
+    };
+  }
+
+  if (!entityId) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'REVOLUT_PAYEE_ID_REQUIRED',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: null,
+      bank_details_hash: bankHash || null,
+      payee_id: null
+    };
+  }
+
+  if (!bankHash) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'REVOLUT_BANK_HASH_REQUIRED',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: null,
+      payee_id: null
+    };
+  }
+
+  const t = token ? String(token).trim() : '';
+  if (!t) {
+    return {
+      attempted: false,
+      ok: false,
+      skipped: true,
+      reason: 'REVOLUT_COUNTERPARTY_NO_TOKEN',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: bankHash,
+      payee_id: null
+    };
+  }
+
+  const apiBase = (env && env.REVOLUT_API_BASE && String(env.REVOLUT_API_BASE).trim())
+    ? String(env.REVOLUT_API_BASE).trim()
+    : 'https://b2b.revolut.com/api/1.0';
+
+  const q = new URLSearchParams();
+  q.set('select', 'payee_id,payee_account_id');
+  q.set('rail_provider', 'eq.REVOLUT');
+  q.set('rail_env', `eq.${railEnv}`);
+  q.set('entity_kind', `eq.${kind}`);
+  q.set('entity_id', `eq.${entityId}`);
+  q.set('bank_details_hash', `eq.${bankHash}`);
+  q.set('limit', '1');
+
+  const mapUrl = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${q.toString()}`;
+  const mapRes = await sbFetch(env, mapUrl);
+  const row = (mapRes && Array.isArray(mapRes.rows) && mapRes.rows.length) ? mapRes.rows[0] : null;
+
+  if (!row) {
+    return {
+      attempted: false,
+      ok: true,
+      skipped: true,
+      reason: 'PAYEE_MAP_NOT_FOUND',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: bankHash,
+      payee_id: null
+    };
+  }
+
+  const storedPayeeId = row && row.payee_id ? String(row.payee_id).trim() : '';
+  const storedPayeeAccountId = row && row.payee_account_id ? String(row.payee_account_id).trim() : '';
+
+  if (!storedPayeeId) {
+    return {
+      attempted: false,
+      ok: true,
+      skipped: true,
+      reason: 'PAYEE_MAP_MISSING_PAYEE_ID',
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: bankHash,
+      payee_id: null
+    };
+  }
+
+  const deleteUrl = `${apiBase}/counterparty/${encodeURIComponent(storedPayeeId)}`;
+  const res = await fetch(deleteUrl, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${t}`,
+      Accept: 'application/json'
+    }
+  });
+
+  const text = await res.text();
+
+  if (res.status === 204 || res.status === 404) {
+    return {
+      attempted: true,
+      ok: true,
+      skipped: false,
+      reason: null,
+      rail_provider: 'REVOLUT',
+      rail_env: railEnv,
+      entity_kind: kind,
+      entity_id: entityId,
+      bank_details_hash: bankHash,
+      payee_id: storedPayeeId
+    };
+  }
+
+  if (!res.ok) {
+    throw new Error(`REVOLUT_COUNTERPARTY_DELETE_FAILED_${res.status}: ${text}`);
+  }
+
+  return {
+    attempted: true,
+    ok: true,
+    skipped: false,
+    reason: null,
+    rail_provider: 'REVOLUT',
+    rail_env: railEnv,
+    entity_kind: kind,
+    entity_id: entityId,
+    bank_details_hash: bankHash,
+    payee_id: storedPayeeId
+  };
+}
+
+async function cleanupStaleRailPayeeMappingsForHash(env, { entity_kind, entity_id, old_bank_details_hash, new_bank_details_hash, actor_user_id } = {}) {
+  const kind = String(entity_kind || '').trim().toUpperCase();
+  const entityId = String(entity_id || '').trim();
+  const oldBankHash = String(old_bank_details_hash || '').trim();
+  const newBankHash = String(new_bank_details_hash || '').trim();
+  const actorUserId = (actor_user_id === undefined || actor_user_id === null) ? null : String(actor_user_id).trim() || null;
+
+  const out = {
+    ok: true,
+    attempted: false,
+    entity_kind: kind || null,
+    entity_id: entityId || null,
+    old_bank_details_hash: oldBankHash || null,
+    new_bank_details_hash: newBankHash || null,
+    rows_found: 0,
+    rows_processed: 0,
+    local_deleted_count: 0,
+    skipped_reason: null,
+    results: []
+  };
+
+  if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') {
+    out.skipped_reason = 'PAYEE_ENTITY_KIND_INVALID';
+    return out;
+  }
+
+  if (!entityId) {
+    out.skipped_reason = 'MISSING_ENTITY_ID';
+    return out;
+  }
+
+  if (!oldBankHash) {
+    out.skipped_reason = 'OLD_BANK_HASH_REQUIRED';
+    return out;
+  }
+
+  if (newBankHash && oldBankHash === newBankHash) {
+    out.skipped_reason = 'BANK_HASH_UNCHANGED';
+    return out;
+  }
+
+  let rows = [];
+  try {
+    const q = new URLSearchParams();
+    q.set('select', 'id,rail_provider,rail_env,entity_kind,entity_id,bank_details_hash,payee_id,payee_account_id,meta_json');
+    q.set('entity_kind', `eq.${kind}`);
+    q.set('entity_id', `eq.${entityId}`);
+    q.set('bank_details_hash', `eq.${oldBankHash}`);
+
+    const url = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${q.toString()}`;
+    const res = await sbFetch(env, url);
+    rows = (res && Array.isArray(res.rows)) ? res.rows : [];
+  } catch (e) {
+    try {
+      console.warn('[BANK_PAYEE_CLEANUP] lookup failed (non-fatal)', {
+        entity_kind: kind,
+        entity_id: entityId,
+        old_bank_details_hash: oldBankHash,
+        error: String(e?.message || e)
+      });
+    } catch {}
+    out.skipped_reason = 'LOOKUP_FAILED';
+    return out;
+  }
+
+  out.rows_found = rows.length;
+
+  if (!rows.length) {
+    out.skipped_reason = 'PAYEE_MAP_NOT_FOUND';
+    return out;
+  }
+
+  out.attempted = true;
+
+  for (const row of rows) {
+    const rowId = (row && row.id !== undefined && row.id !== null) ? String(row.id).trim() : '';
+    const provider = (row && row.rail_provider !== undefined && row.rail_provider !== null) ? String(row.rail_provider).trim().toUpperCase() : '';
+    const railEnv = (row && row.rail_env !== undefined && row.rail_env !== null) ? String(row.rail_env).trim().toUpperCase() : '';
+    const rowKind = (row && row.entity_kind !== undefined && row.entity_kind !== null) ? String(row.entity_kind).trim().toUpperCase() : kind;
+    const rowEntityId = (row && row.entity_id !== undefined && row.entity_id !== null) ? String(row.entity_id).trim() : entityId;
+    const rowBankHash = (row && row.bank_details_hash !== undefined && row.bank_details_hash !== null) ? String(row.bank_details_hash).trim() : oldBankHash;
+    const rowPayeeId = (row && row.payee_id !== undefined && row.payee_id !== null) ? String(row.payee_id).trim() : '';
+    const rowPayeeAccountId = (row && row.payee_account_id !== undefined && row.payee_account_id !== null) ? String(row.payee_account_id).trim() : '';
+    const rowMetaJson = (row && row.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json)) ? row.meta_json : null;
+
+    const rowResult = {
+      id: rowId || null,
+      rail_provider: provider || null,
+      rail_env: railEnv || null,
+      entity_kind: rowKind || null,
+      entity_id: rowEntityId || null,
+      bank_details_hash: rowBankHash || null,
+      payee_id: rowPayeeId || null,
+      attempted_delete: false,
+      local_deleted: false,
+      skipped: false,
+      reason: null
+    };
+
+    try {
+      const adapter = getRailAdapter(provider || 'CSV');
+
+      if (!adapter || typeof adapter.deletePayeeIfMapped !== 'function') {
+        rowResult.skipped = true;
+        rowResult.reason = 'RAIL_DOES_NOT_SUPPORT_DELETE_PAYEE';
+        out.results.push(rowResult);
+        continue;
+      }
+
+      const deleteRes = await adapter.deletePayeeIfMapped(env, {
+        rail_env: railEnv,
+        actor_user_id: actorUserId,
+        entity_kind: rowKind,
+        entity_id: rowEntityId,
+        bank_details_hash: rowBankHash,
+        payee_id: rowPayeeId || null,
+        payee_account_id: rowPayeeAccountId || null,
+        meta_json: rowMetaJson
+      });
+
+      rowResult.attempted_delete = !!(deleteRes && deleteRes.attempted === true);
+      rowResult.skipped = !!(deleteRes && deleteRes.skipped === true);
+      rowResult.reason = (deleteRes && deleteRes.reason !== undefined && deleteRes.reason !== null)
+        ? String(deleteRes.reason)
+        : null;
+
+      const deleteOk = !!(deleteRes && deleteRes.ok === true);
+      const confirmedMissing =
+        rowResult.reason === 'PAYEE_MAP_NOT_FOUND' ||
+        rowResult.reason === 'PAYEE_MAP_MISSING_PAYEE_ID';
+
+      const shouldDeleteLocal = deleteOk && (!rowResult.skipped || confirmedMissing);
+
+      if (shouldDeleteLocal && rowId) {
+        const delQ = new URLSearchParams();
+        delQ.set('id', `eq.${rowId}`);
+
+        const delUrl = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${delQ.toString()}`;
+        await sbFetch(env, delUrl, {
+          method: 'DELETE',
+          headers: {
+            Prefer: 'return=minimal'
+          }
+        });
+
+        rowResult.local_deleted = true;
+        out.local_deleted_count += 1;
+      }
+
+      out.rows_processed += 1;
+      out.results.push(rowResult);
+    } catch (e) {
+      rowResult.reason = `DELETE_FAILED: ${String(e?.message || e)}`;
+      out.results.push(rowResult);
+      try {
+        console.warn('[BANK_PAYEE_CLEANUP] row delete failed (non-fatal)', {
+          id: rowId || null,
+          rail_provider: provider || null,
+          rail_env: railEnv || null,
+          entity_kind: rowKind || null,
+          entity_id: rowEntityId || null,
+          bank_details_hash: rowBankHash || null,
+          payee_id: rowPayeeId || null,
+          error: String(e?.message || e)
+        });
+      } catch {}
+    }
+  }
+
+  return out;
+}
+
 function getRailAdapter(provider) {
   // -----------------------------
   // Single source of truth registry
@@ -90221,6 +95382,7 @@ function getRailAdapter(provider) {
             supports_scheduling: true,
             supports_name_check: true,
             supports_auto_execute: true,
+            supports_delete_payee: true,
             api_base: apiBase,
             worker_env: workerEnv
           };
@@ -90323,6 +95485,322 @@ function getRailAdapter(provider) {
           }
 
           return { ok: true, valid: true, reason: null, account: match, worker_env: workerEnv, expected_env: expectedEnv, api_base: apiBase || null };
+        },
+
+        async ensurePayeeMapped(env, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, bank_fields } = {}) {
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
+          const expectedEnv = normalizeEnv(rail_env, workerEnv);
+
+          const kind = String(entity_kind || '').trim().toUpperCase();
+          const entityId = String(entity_id || '').trim();
+          const bankHash = String(bank_details_hash || '').trim();
+
+          if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'PAYEE_ENTITY_KIND_INVALID',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind || null,
+              entity_id: entityId || null,
+              bank_details_hash: bankHash || null
+            };
+          }
+
+          if (!entityId || !bankHash) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'MISSING_PAYEE_IDENTITY',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId || null,
+              bank_details_hash: bankHash || null
+            };
+          }
+
+          if (expectedEnv !== workerEnv) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'RAIL_ENV_MISMATCH',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash
+            };
+          }
+
+          const caps = await this.capabilities(env);
+          if (caps && typeof caps === 'object' && caps.available === false) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: String(caps.reason || 'RAIL_NOT_AVAILABLE'),
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash
+            };
+          }
+
+          const payeeName = String(bank_fields?.payee_name || '').trim();
+          const sortCode = String(bank_fields?.sort_code || '').trim();
+          const accountNumber = String(bank_fields?.account_number || '').trim();
+          const accountType = String(bank_fields?.account_type || '').trim();
+
+          const sortDigits = sortCode.replace(/[^0-9]/g, '');
+          const acctDigits = accountNumber.replace(/[^0-9]/g, '');
+
+          if (!payeeName || sortDigits.length !== 6 || !acctDigits) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'MISSING_BANK_FIELDS',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash
+            };
+          }
+
+          const token = await revolutAuth_getAccessToken(env);
+
+          const mapped = await revolutCounterparty_ensureMapped(env, token, {
+            rail_env: expectedEnv,
+            actor_user_id: actor_user_id,
+            entity_kind: kind,
+            entity_id: entityId,
+            bank_details_hash: bankHash,
+            bank_fields: {
+              payee_name: payeeName,
+              sort_code: sortCode,
+              account_number: accountNumber,
+              account_type: accountType
+            }
+          });
+
+          return {
+            attempted: true,
+            ok: true,
+            skipped: false,
+            reason: null,
+            rail_provider: 'REVOLUT',
+            rail_env: expectedEnv,
+            worker_env: workerEnv,
+            api_base: apiBase || null,
+            entity_kind: kind,
+            entity_id: entityId,
+            bank_details_hash: bankHash,
+            payee_id: mapped && mapped.payee_id ? String(mapped.payee_id).trim() : null,
+            payee_account_id: mapped && mapped.payee_account_id ? String(mapped.payee_account_id).trim() : null,
+            reused: !!(mapped && mapped.reused === true)
+          };
+        },
+
+        async deletePayeeIfMapped(env, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, payee_id, payee_account_id, meta_json } = {}) {
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const workerEnv = getRevolutWorkerEnv(env);
+          const expectedEnv = normalizeEnv(rail_env, workerEnv);
+
+          const kind = String(entity_kind || '').trim().toUpperCase();
+          const entityId = String(entity_id || '').trim();
+          const bankHash = String(bank_details_hash || '').trim();
+
+          const providedPayeeId =
+            (payee_id === undefined || payee_id === null) ? '' : String(payee_id).trim();
+
+          const providedPayeeAccountId =
+            (payee_account_id === undefined || payee_account_id === null) ? '' : String(payee_account_id).trim();
+
+          const providedMetaJson =
+            (meta_json && typeof meta_json === 'object' && !Array.isArray(meta_json)) ? meta_json : null;
+
+          if (kind !== 'CANDIDATE' && kind !== 'UMBRELLA') {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'PAYEE_ENTITY_KIND_INVALID',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind || null,
+              entity_id: entityId || null,
+              bank_details_hash: bankHash || null,
+              payee_id: providedPayeeId || null,
+              payee_account_id: providedPayeeAccountId || null,
+              meta_json: providedMetaJson
+            };
+          }
+
+          if (!entityId || !bankHash) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'MISSING_PAYEE_IDENTITY',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId || null,
+              bank_details_hash: bankHash || null,
+              payee_id: providedPayeeId || null,
+              payee_account_id: providedPayeeAccountId || null,
+              meta_json: providedMetaJson
+            };
+          }
+
+          if (expectedEnv !== workerEnv) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: 'RAIL_ENV_MISMATCH',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash,
+              payee_id: providedPayeeId || null,
+              payee_account_id: providedPayeeAccountId || null,
+              meta_json: providedMetaJson
+            };
+          }
+
+          const caps = await this.capabilities(env);
+          if (caps && typeof caps === 'object' && caps.available === false) {
+            return {
+              attempted: false,
+              ok: false,
+              skipped: true,
+              reason: String(caps.reason || 'RAIL_NOT_AVAILABLE'),
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash,
+              payee_id: providedPayeeId || null,
+              payee_account_id: providedPayeeAccountId || null,
+              meta_json: providedMetaJson
+            };
+          }
+
+          const q = new URLSearchParams();
+          q.set('select', 'id,payee_id,payee_account_id,meta_json');
+          q.set('rail_provider', 'eq.REVOLUT');
+          q.set('rail_env', `eq.${expectedEnv}`);
+          q.set('entity_kind', `eq.${kind}`);
+          q.set('entity_id', `eq.${entityId}`);
+          q.set('bank_details_hash', `eq.${bankHash}`);
+          q.set('limit', '1');
+
+          const mapUrl = `${env.SUPABASE_URL}/rest/v1/bank_payee_map?${q.toString()}`;
+          const mapRes = await sbFetch(env, mapUrl);
+          const row = (mapRes && Array.isArray(mapRes.rows) && mapRes.rows.length) ? mapRes.rows[0] : null;
+
+          const mapRowId = row && row.id ? String(row.id).trim() : '';
+          const mappedPayeeId = row && row.payee_id ? String(row.payee_id).trim() : '';
+          const mappedPayeeAccountId = row && row.payee_account_id ? String(row.payee_account_id).trim() : '';
+          const mappedMetaJson = (row && row.meta_json && typeof row.meta_json === 'object' && !Array.isArray(row.meta_json)) ? row.meta_json : null;
+
+          const targetPayeeId = providedPayeeId || mappedPayeeId;
+          const targetPayeeAccountId = providedPayeeAccountId || mappedPayeeAccountId || null;
+          const targetMetaJson = mappedMetaJson || providedMetaJson || null;
+
+          if (!mapRowId && !targetPayeeId) {
+            return {
+              attempted: false,
+              ok: true,
+              skipped: true,
+              reason: 'PAYEE_MAP_NOT_FOUND',
+              rail_provider: 'REVOLUT',
+              rail_env: expectedEnv,
+              worker_env: workerEnv,
+              api_base: apiBase || null,
+              entity_kind: kind,
+              entity_id: entityId,
+              bank_details_hash: bankHash,
+              payee_id: null,
+              payee_account_id: null,
+              meta_json: targetMetaJson,
+              external_deleted: false,
+              local_deleted: false
+            };
+          }
+
+          let externalDeleted = false;
+
+          if (targetPayeeId) {
+            const token = await revolutAuth_getAccessToken(env);
+            const base = (apiBase && String(apiBase).trim()) ? String(apiBase).trim() : 'https://b2b.revolut.com/api/1.0';
+            const deleteUrl = `${base}/counterparty/${encodeURIComponent(targetPayeeId)}`;
+
+            const res = await fetch(deleteUrl, {
+              method: 'DELETE',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/json'
+              }
+            });
+
+            const text = await res.text();
+
+            if (res.status === 204 || res.status === 404) {
+              externalDeleted = true;
+            } else if (!res.ok) {
+              throw new Error(`REVOLUT_COUNTERPARTY_DELETE_FAILED_${res.status}: ${text}`);
+            } else {
+              externalDeleted = true;
+            }
+          }
+
+              return {
+            attempted: true,
+            ok: true,
+            skipped: false,
+            reason: null,
+            rail_provider: 'REVOLUT',
+            rail_env: expectedEnv,
+            worker_env: workerEnv,
+            api_base: apiBase || null,
+            entity_kind: kind,
+            entity_id: entityId,
+            bank_details_hash: bankHash,
+            payee_id: targetPayeeId || null,
+            payee_account_id: targetPayeeAccountId,
+            meta_json: targetMetaJson,
+            external_deleted: externalDeleted,
+            local_deleted: false
+          };
         },
 
         async prepareBatch(env, batchId, actorUserId) {
@@ -90957,6 +96435,7 @@ function getRailAdapter(provider) {
             supports_scheduling: false,
             supports_name_check: false,
             supports_auto_execute: false,
+            supports_delete_payee: false,
             api_base: null,
             worker_env: null
           };
@@ -90977,6 +96456,39 @@ function getRailAdapter(provider) {
             return { ok: true, valid: false, reason: 'FUNDING_ACCOUNT_REF_REQUIRED', account: null };
           }
           return { ok: true, valid: false, reason: 'CSV_HAS_NO_FUNDING_ACCOUNTS', account: null };
+        },
+
+        async ensurePayeeMapped(env, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, bank_fields } = {}) {
+          return {
+            attempted: false,
+            ok: true,
+            skipped: true,
+            reason: 'RAIL_DOES_NOT_REQUIRE_PROVIDER_PAYEE_SETUP',
+            rail_provider: 'CSV',
+            rail_env: (rail_env === undefined || rail_env === null) ? null : String(rail_env).trim().toUpperCase(),
+            entity_kind: (entity_kind === undefined || entity_kind === null) ? null : String(entity_kind).trim().toUpperCase(),
+            entity_id: (entity_id === undefined || entity_id === null) ? null : String(entity_id).trim(),
+            bank_details_hash: (bank_details_hash === undefined || bank_details_hash === null) ? null : String(bank_details_hash).trim()
+          };
+        },
+
+        async deletePayeeIfMapped(env, { rail_env, actor_user_id, entity_kind, entity_id, bank_details_hash, payee_id, payee_account_id, meta_json } = {}) {
+          return {
+            attempted: false,
+            ok: true,
+            skipped: true,
+            reason: 'RAIL_DOES_NOT_SUPPORT_DELETE_PAYEE',
+            rail_provider: 'CSV',
+            rail_env: (rail_env === undefined || rail_env === null) ? null : String(rail_env).trim().toUpperCase(),
+            entity_kind: (entity_kind === undefined || entity_kind === null) ? null : String(entity_kind).trim().toUpperCase(),
+            entity_id: (entity_id === undefined || entity_id === null) ? null : String(entity_id).trim(),
+            bank_details_hash: (bank_details_hash === undefined || bank_details_hash === null) ? null : String(bank_details_hash).trim(),
+            payee_id: (payee_id === undefined || payee_id === null) ? null : String(payee_id).trim(),
+            payee_account_id: (payee_account_id === undefined || payee_account_id === null) ? null : String(payee_account_id).trim(),
+            meta_json: (meta_json && typeof meta_json === 'object' && !Array.isArray(meta_json)) ? meta_json : null,
+            external_deleted: false,
+            local_deleted: false
+          };
         },
 
         async prepareBatch() {
@@ -91048,8 +96560,6 @@ function getRailAdapter(provider) {
   const mk = getRailAdapter.__RAIL_REGISTRY[p] || getRailAdapter.__RAIL_REGISTRY.CSV;
   return mk();
 }
-
-
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
   const nowMs = Date.now();
@@ -93208,9 +98718,6 @@ async function handleMailshotFieldsSeedFromSchema(env, req) {
     return withCORS(env, req, serverError(msg));
   }
 }
-
-
-
 async function handleDocumentTemplatesUpsert(env, req, templateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -93281,6 +98788,242 @@ async function handleDocumentTemplatesUpsert(env, req, templateId) {
     return withCORS(env, req, badRequest('template_content_json must be an object'));
   }
 
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+  const isPlainObject = (v) => !!(v && typeof v === 'object' && !Array.isArray(v));
+  const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+
+  const failBadRequest = (message) => {
+    const err = new Error(String(message || 'Invalid request'));
+    err.__badRequest = true;
+    throw err;
+  };
+
+  const parseBooleanField = (obj, snakeKey, camelKey, path) => {
+    if (own(obj, snakeKey)) {
+      if (typeof obj[snakeKey] !== 'boolean') failBadRequest(`${path} must be boolean`);
+      return !!obj[snakeKey];
+    }
+    if (own(obj, camelKey)) {
+      if (typeof obj[camelKey] !== 'boolean') failBadRequest(`${path.replace(snakeKey, camelKey)} must be boolean`);
+      return !!obj[camelKey];
+    }
+    return false;
+  };
+
+  const parseOptionalNonNegativeInteger = (obj, snakeKey, camelKey, path) => {
+    const rawSnake = trimStr(obj && obj[snakeKey]);
+    const rawCamel = trimStr(obj && obj[camelKey]);
+
+    if (rawSnake) {
+      if (!/^\d+$/.test(rawSnake)) failBadRequest(`${path} must be non-negative integer`);
+      return Math.trunc(Number(rawSnake));
+    }
+    if (rawCamel) {
+      const camelPath = path.replace(snakeKey, camelKey);
+      if (!/^\d+$/.test(rawCamel)) failBadRequest(`${camelPath} must be non-negative integer`);
+      return Math.trunc(Number(rawCamel));
+    }
+    return null;
+  };
+
+  const sanitizeFilenameSegment = (name) => {
+    const base = trimStr(name)
+      .replace(/[/\\?%*:|"<>]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return base || 'attachment';
+  };
+
+  const decodeBase64Payload = (value, path) => {
+    const rawInput = trimStr(value);
+    if (!rawInput) failBadRequest(`${path}.r2_key required`);
+
+    let contentTypeFromDataUrl = '';
+    let base64Part = rawInput;
+
+    const dataUrlMatch = /^data:([^;,]+)?;base64,(.*)$/is.exec(rawInput);
+    if (dataUrlMatch) {
+      contentTypeFromDataUrl = trimStr(dataUrlMatch[1] || '');
+      base64Part = trimStr(dataUrlMatch[2] || '');
+    }
+
+    const cleanBase64 = base64Part.replace(/[\r\n\s]/g, '');
+    if (!cleanBase64) failBadRequest(`${path}.r2_key required`);
+
+    const padLen = (4 - (cleanBase64.length % 4)) % 4;
+    const paddedBase64 = cleanBase64 + '='.repeat(padLen);
+
+    let binary = '';
+    try {
+      binary = atob(paddedBase64);
+    } catch {
+      failBadRequest(`${path}.contentBase64 must be valid base64`);
+    }
+
+    const bytes = new Uint8Array(binary.length);
+    for (let idx = 0; idx < binary.length; idx += 1) {
+      bytes[idx] = binary.charCodeAt(idx);
+    }
+
+    return {
+      bytes,
+      contentTypeFromDataUrl
+    };
+  };
+
+  try {
+    if (own(templateContent, 'mailshot_attachments')) {
+      if (!isPlainObject(templateContent.mailshot_attachments)) {
+        return withCORS(env, req, badRequest('mailshot_attachments must be object'));
+      }
+
+      const bucket = env.DOCS_BUCKET || env.R2 || env.R2_BUCKET || env.FILES_BUCKET;
+      const attachmentCfg = templateContent.mailshot_attachments || {};
+
+      if (own(attachmentCfg, 'attachments') && !Array.isArray(attachmentCfg.attachments)) {
+        return withCORS(env, req, badRequest('mailshot_attachments.attachments must be array'));
+      }
+      if (own(attachmentCfg, 'template_files') && !Array.isArray(attachmentCfg.template_files)) {
+        return withCORS(env, req, badRequest('mailshot_attachments.template_files must be array'));
+      }
+      if (own(attachmentCfg, 'files') && !Array.isArray(attachmentCfg.files)) {
+        return withCORS(env, req, badRequest('mailshot_attachments.files must be array'));
+      }
+
+      const attachTimesheetPdf = parseBooleanField(
+        attachmentCfg,
+        'attach_authoritative_timesheet_pdf',
+        'attachAuthoritativeTimesheetPdf',
+        'mailshot_attachments.attach_authoritative_timesheet_pdf'
+      );
+      const attachInvoicePdf = parseBooleanField(
+        attachmentCfg,
+        'attach_authoritative_invoice_pdf',
+        'attachAuthoritativeInvoicePdf',
+        'mailshot_attachments.attach_authoritative_invoice_pdf'
+      );
+
+      const attachmentsRaw = Array.isArray(attachmentCfg.attachments) ? attachmentCfg.attachments : [];
+      const templateFilesRaw = Array.isArray(attachmentCfg.template_files) ? attachmentCfg.template_files : [];
+      const filesRaw = Array.isArray(attachmentCfg.files) ? attachmentCfg.files : [];
+      const totalInlineAttachmentItems = attachmentsRaw.length + templateFilesRaw.length + filesRaw.length;
+
+      if (outputType !== 'EMAIL' && totalInlineAttachmentItems > 0) {
+        return withCORS(env, req, badRequest('mailshot attachments are only supported for EMAIL templates'));
+      }
+
+      const normalizeAttachmentArray = async (items, arrayName) => {
+        const out = [];
+
+        for (let idx = 0; idx < items.length; idx += 1) {
+          const raw = items[idx];
+          const path = `mailshot_attachments.${arrayName}[${idx + 1}]`;
+
+          if (!isPlainObject(raw)) failBadRequest(`${path} must be object`);
+
+          const existingR2Key = trimStr(raw.r2_key ?? raw.r2Key ?? '');
+          const rawContentBase64 = trimStr(raw.contentBase64 ?? raw.content_base64 ?? '');
+          const filenameValue = trimStr(raw.filename ?? raw.file_name ?? raw.name ?? '');
+          const sourceValue = trimStr(raw.source ?? '');
+          const sourceLabelValue = trimStr(raw.source_label ?? raw.sourceLabel ?? '');
+          const readOnlyValue = parseBooleanField(raw, 'read_only', 'readOnly', `${path}.read_only`);
+          const sizeBytesValue = parseOptionalNonNegativeInteger(raw, 'size_bytes', 'sizeBytes', `${path}.size_bytes`);
+
+          let contentTypeValue = trimStr(raw.content_type ?? raw.contentType ?? '');
+          let normalizedR2Key = existingR2Key ? normalizeKey(existingR2Key) : '';
+
+          if (normalizedR2Key) {
+            if (!filenameValue) failBadRequest(`${path}.filename required`);
+
+            out.push({
+              r2_key: normalizedR2Key,
+              filename: filenameValue,
+              content_type: contentTypeValue || null,
+              source: sourceValue || null,
+              source_label: sourceLabelValue || null,
+              read_only: readOnlyValue,
+              size_bytes: sizeBytesValue
+            });
+            continue;
+          }
+
+          if (!rawContentBase64) {
+            failBadRequest(`${path}.r2_key required`);
+          }
+
+          if (!filenameValue) {
+            failBadRequest(`${path}.filename required`);
+          }
+
+          if (!bucket || typeof bucket.put !== 'function') {
+            throw new Error('Storage not configured for template attachments (expected DOCS_BUCKET, R2, R2_BUCKET, or FILES_BUCKET with put())');
+          }
+
+          const decoded = decodeBase64Payload(rawContentBase64, path);
+          if (!contentTypeValue) {
+            contentTypeValue = trimStr(decoded.contentTypeFromDataUrl || '') || 'application/octet-stream';
+          }
+
+          const sizeBytesFinal = sizeBytesValue == null ? decoded.bytes.byteLength : sizeBytesValue;
+          const safeFilename = sanitizeFilenameSegment(filenameValue);
+          const dayPart = new Date().toISOString().slice(0, 10);
+          const hashSeed = `${user.id}|${entityType}|${outputType}|${filenameValue}|${contentTypeValue}|${rawContentBase64}`;
+          const contentHash = await sha256Hex(hashSeed);
+          const generatedKey = normalizeKey(
+            `mailshot-template-attachments/${dayPart}/${user.id}/${contentHash}_${crypto.randomUUID()}_${safeFilename}`
+          );
+
+          await bucket.put(generatedKey, decoded.bytes, {
+            httpMetadata: { contentType: contentTypeValue || 'application/octet-stream' },
+            customMetadata: {
+              uploaded_by_user_id: String(user.id || ''),
+              entity_type: entityType,
+              output_type: outputType,
+              template_id: String(idFromPath || ''),
+              original_filename: filenameValue
+            }
+          });
+
+          out.push({
+            r2_key: generatedKey,
+            filename: filenameValue,
+            content_type: contentTypeValue || null,
+            source: sourceValue || 'template_upload',
+            source_label: sourceLabelValue || 'Uploaded with template',
+            read_only: readOnlyValue,
+            size_bytes: sizeBytesFinal
+          });
+        }
+
+        return out;
+      };
+
+      const attachmentsNorm = await normalizeAttachmentArray(attachmentsRaw, 'attachments');
+      const templateFilesNorm = await normalizeAttachmentArray(templateFilesRaw, 'template_files');
+      const filesNorm = await normalizeAttachmentArray(filesRaw, 'files');
+
+      templateContent = {
+        ...templateContent,
+        mailshot_attachments: {
+          ...attachmentCfg,
+          attach_authoritative_timesheet_pdf: attachTimesheetPdf,
+          attach_authoritative_invoice_pdf: attachInvoicePdf,
+          attachments: [...attachmentsNorm, ...templateFilesNorm, ...filesNorm]
+        }
+      };
+
+      delete templateContent.mailshot_attachments.template_files;
+      delete templateContent.mailshot_attachments.files;
+    }
+  } catch (e) {
+    const msg = String(e?.message || e || 'Failed to normalize template attachments');
+    if (e && e.__badRequest) {
+      return withCORS(env, req, badRequest(msg));
+    }
+    return withCORS(env, req, serverError(msg));
+  }
+
   const p_template_id = idFromPath || null;
 
   try {
@@ -93296,7 +99039,6 @@ async function handleDocumentTemplatesUpsert(env, req, templateId) {
       p_actor_user_id: user.id
     });
 
-    // Normalize possible wrappers
     try {
       if (Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === 'object') payload = payload[0];
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'document_templates_upsert')) {
@@ -93310,6 +99052,7 @@ async function handleDocumentTemplatesUpsert(env, req, templateId) {
     return withCORS(env, req, serverError(msg));
   }
 }
+
 
 async function handleDocumentTemplatesDuplicate(env, req, templateId) {
   const user = await requireUser(env, req, ['admin']);
@@ -96079,6 +101822,9 @@ if (req.method === 'GET' && p === '/api/banking/pay/authorisers') {
   return withCORS(env, req, await handlePaymentAuthorisersList(env, req, user));
 }
 
+if (req.method === 'POST' && p === '/api/banking/pay/payee-map/ensure') {
+  return handleBankingPayEnsurePayeeMap(env, req, user);
+}
 // ROUTERS (insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
 // alongside the other /api/banking/pay/batch/:id/* routes, after `user` has been resolved.)
 // ROUTERS (insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
@@ -96494,7 +102240,10 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
         const clientDetails = matchPath(p, '/api/clients/:id/details');
         if (clientDetails && req.method === 'GET')                          return handleGetClient(env, req, clientDetails.id);
       }
-
+{
+  const m = matchPath(p, '/api/summary-typeahead/:section');
+  if (m && req.method === 'POST') return handleSummaryTypeAheadLookup(env, req, m.section);
+}
 {
   const m = matchPath(p, '/api/summary-membership/:section');
   if (m && req.method === 'POST') return handleSummaryMembership(env, req, m.section);
@@ -97061,13 +102810,8 @@ if (req.method === 'GET' && p === '/api/mailshots') {
   if (m && req.method === 'GET') return handleMailshotRunGet(env, req, m.id);
 }
       if (req.method === 'POST' && p === '/api/email/outbox/drain')          return handleOutboxDrain(env, req);
-      {
-        const outRetry = matchPath(p, '/api/email/outbox/:id/retry');
-        if (outRetry && req.method === 'POST')                               return handleOutboxRetry(env, req, outRetry.id);
-      }
+   
 
-      if (req.method === 'POST' && p === '/api/email/outbox/mark-sent')      return handleOutboxMarkSent(env, req);
-      if (req.method === 'POST' && p === '/api/email/outbox/mark-failed')    return handleOutboxMarkFailed(env, req);
 
       if (req.method === 'POST' && p === '/api/email/send')                  return handleEmailSend(env, req);
       if (req.method === 'POST' && p === '/api/email/broadcast')             return handleEmailSend(env, req);

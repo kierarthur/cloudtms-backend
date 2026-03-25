@@ -292,6 +292,8 @@ begin
 end;
 $function$;
 
+
+
 create or replace function public.document_templates_upsert(
   p_template_id uuid,
   p_entity_type text,
@@ -325,6 +327,17 @@ declare
 
   v_content jsonb := coalesce(p_template_content_json, '{}'::jsonb);
   v_attachment_cfg jsonb := '{}'::jsonb;
+  v_attachment_items_raw jsonb := '[]'::jsonb;
+  v_attachment_items_norm jsonb := '[]'::jsonb;
+  v_attachment_item jsonb := '{}'::jsonb;
+  v_attachment_item_idx integer := 0;
+  v_attachment_item_r2_key text;
+  v_attachment_item_filename text;
+  v_attachment_item_content_type text;
+  v_attachment_item_source text;
+  v_attachment_item_source_label text;
+  v_attachment_item_read_only boolean := false;
+  v_attachment_item_size_bytes bigint;
   v_attach_timesheet_pdf boolean := false;
   v_attach_invoice_pdf boolean := false;
 
@@ -407,11 +420,111 @@ begin
     raise exception 'mailshot_attachments.attach_authoritative_invoice_pdf must be boolean';
   end if;
 
+  if v_attachment_cfg ? 'attachments'
+     and jsonb_typeof(v_attachment_cfg->'attachments') <> 'array' then
+    raise exception 'mailshot_attachments.attachments must be array';
+  end if;
+
+  if v_attachment_cfg ? 'template_files'
+     and jsonb_typeof(v_attachment_cfg->'template_files') <> 'array' then
+    raise exception 'mailshot_attachments.template_files must be array';
+  end if;
+
+  if v_attachment_cfg ? 'files'
+     and jsonb_typeof(v_attachment_cfg->'files') <> 'array' then
+    raise exception 'mailshot_attachments.files must be array';
+  end if;
+
+  v_attachment_items_raw :=
+    coalesce(case when v_attachment_cfg ? 'attachments' then v_attachment_cfg->'attachments' else '[]'::jsonb end, '[]'::jsonb)
+    ||
+    coalesce(case when v_attachment_cfg ? 'template_files' then v_attachment_cfg->'template_files' else '[]'::jsonb end, '[]'::jsonb)
+    ||
+    coalesce(case when v_attachment_cfg ? 'files' then v_attachment_cfg->'files' else '[]'::jsonb end, '[]'::jsonb);
+
+  v_attachment_items_norm := '[]'::jsonb;
+  v_attachment_item_idx := 0;
+
+  for v_attachment_item in
+    select jbe.value
+    from jsonb_array_elements(v_attachment_items_raw) as jbe(value)
+  loop
+    v_attachment_item_idx := v_attachment_item_idx + 1;
+
+    if jsonb_typeof(v_attachment_item) <> 'object' then
+      raise exception 'mailshot_attachments.attachments[%] must be object', v_attachment_item_idx;
+    end if;
+
+    v_attachment_item_r2_key := nullif(btrim(coalesce(v_attachment_item->>'r2_key', '')), '');
+    v_attachment_item_filename := coalesce(
+      nullif(btrim(coalesce(v_attachment_item->>'filename', '')), ''),
+      nullif(btrim(coalesce(v_attachment_item->>'name', '')), '')
+    );
+    v_attachment_item_content_type := coalesce(
+      nullif(btrim(coalesce(v_attachment_item->>'content_type', '')), ''),
+      nullif(btrim(coalesce(v_attachment_item->>'contentType', '')), '')
+    );
+    v_attachment_item_source := nullif(btrim(coalesce(v_attachment_item->>'source', '')), '');
+    v_attachment_item_source_label := coalesce(
+      nullif(btrim(coalesce(v_attachment_item->>'source_label', '')), ''),
+      nullif(btrim(coalesce(v_attachment_item->>'sourceLabel', '')), '')
+    );
+
+    if v_attachment_item_r2_key is null then
+      raise exception 'mailshot_attachments.attachments[%].r2_key required', v_attachment_item_idx;
+    end if;
+
+    if v_attachment_item_filename is null then
+      raise exception 'mailshot_attachments.attachments[%].filename required', v_attachment_item_idx;
+    end if;
+
+    if v_attachment_item ? 'read_only' then
+      if jsonb_typeof(v_attachment_item->'read_only') <> 'boolean' then
+        raise exception 'mailshot_attachments.attachments[%].read_only must be boolean', v_attachment_item_idx;
+      end if;
+      v_attachment_item_read_only := coalesce((v_attachment_item->>'read_only')::boolean, false);
+    elsif v_attachment_item ? 'readOnly' then
+      if jsonb_typeof(v_attachment_item->'readOnly') <> 'boolean' then
+        raise exception 'mailshot_attachments.attachments[%].readOnly must be boolean', v_attachment_item_idx;
+      end if;
+      v_attachment_item_read_only := coalesce((v_attachment_item->>'readOnly')::boolean, false);
+    else
+      v_attachment_item_read_only := false;
+    end if;
+
+    v_attachment_item_size_bytes := null;
+    if nullif(btrim(coalesce(v_attachment_item->>'size_bytes', '')), '') is not null then
+      if btrim(coalesce(v_attachment_item->>'size_bytes', '')) !~ '^\d+$' then
+        raise exception 'mailshot_attachments.attachments[%].size_bytes must be non-negative integer', v_attachment_item_idx;
+      end if;
+      v_attachment_item_size_bytes := (v_attachment_item->>'size_bytes')::bigint;
+    elsif nullif(btrim(coalesce(v_attachment_item->>'sizeBytes', '')), '') is not null then
+      if btrim(coalesce(v_attachment_item->>'sizeBytes', '')) !~ '^\d+$' then
+        raise exception 'mailshot_attachments.attachments[%].sizeBytes must be non-negative integer', v_attachment_item_idx;
+      end if;
+      v_attachment_item_size_bytes := (v_attachment_item->>'sizeBytes')::bigint;
+    end if;
+
+    v_attachment_items_norm := v_attachment_items_norm || jsonb_build_array(
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'r2_key', v_attachment_item_r2_key,
+          'filename', v_attachment_item_filename,
+          'content_type', v_attachment_item_content_type,
+          'source', v_attachment_item_source,
+          'source_label', v_attachment_item_source_label,
+          'read_only', v_attachment_item_read_only,
+          'size_bytes', v_attachment_item_size_bytes
+        )
+      )
+    );
+  end loop;
+
   v_attach_timesheet_pdf := coalesce((v_attachment_cfg->>'attach_authoritative_timesheet_pdf')::boolean, false);
   v_attach_invoice_pdf := coalesce((v_attachment_cfg->>'attach_authoritative_invoice_pdf')::boolean, false);
 
   if v_output_type_norm <> 'EMAIL' then
-    if v_attach_timesheet_pdf or v_attach_invoice_pdf then
+    if v_attach_timesheet_pdf or v_attach_invoice_pdf or jsonb_array_length(v_attachment_items_norm) > 0 then
       raise exception 'mailshot attachments are only supported for EMAIL templates';
     end if;
 
@@ -437,7 +550,8 @@ begin
         'attach_authoritative_timesheet_pdf',
         case when v_entity_type_norm = 'timesheet' then v_attach_timesheet_pdf else false end,
         'attach_authoritative_invoice_pdf',
-        case when v_entity_type_norm = 'invoice' then v_attach_invoice_pdf else false end
+        case when v_entity_type_norm = 'invoice' then v_attach_invoice_pdf else false end,
+        'attachments', coalesce(v_attachment_items_norm, '[]'::jsonb)
       )
     );
   end if;
@@ -772,8 +886,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
@@ -1487,9 +1599,6 @@ as $$
     )
   order by lower(coalesce(o.label_override, f.label_default)) asc, lower(f.field_key) asc;
 $$;
-
-
-
 create or replace function public.mailshot_fields_seed_from_schema(
   p_actor_user_id uuid
 )
@@ -1637,6 +1746,37 @@ begin
     msc.source_family,
     msc.column_name;
 
+  insert into tmp_mailshot_discovered_fields(
+    field_key,
+    label_default,
+    enabled_global,
+    allowed_entity_types,
+    resolver_spec_json,
+    source_family,
+    source_view_name,
+    source_column_name
+  )
+  values (
+    'system.sender_display_name',
+    'System — Sender Display Name',
+    true,
+    array['candidate','client','contract','timesheet','invoice','umbrella']::text[],
+    jsonb_build_object(
+      'managed_by', 'system_seed',
+      'source_family', 'system',
+      'source_view_name', 'runtime_system',
+      'source_column_name', 'sender_display_name',
+      'path', 'system.sender_display_name',
+      'resolution_mode', 'runtime_injected',
+      'runtime_source_function', 'public.mailshot_prepare',
+      'runtime_value_key', 'sender_display_name',
+      'stale', false
+    ),
+    'system',
+    'runtime_system',
+    'sender_display_name'
+  );
+
   select count(*) into v_discovered_total
   from tmp_mailshot_discovered_fields as mdf;
 
@@ -1720,10 +1860,6 @@ begin
   );
 end;
 $function$;
-
-
-
-
 
 
 
@@ -1966,6 +2102,15 @@ begin
       u.created_by,
       u.recipient_kind,
       u.recipient_id,
+      coalesce(
+        case
+          when lower(coalesce(u.recipient_kind, '')) = 'candidate' then nullif(btrim(coalesce(c_rec.display_name, concat_ws(' ', c_rec.first_name, c_rec.last_name), c_rec.email, c_rec.phone, u.to_address)), '')
+          when lower(coalesce(u.recipient_kind, '')) = 'client' then nullif(btrim(coalesce(cl_rec.name, cl_rec.primary_invoice_email, cl_rec.contact_email, u.to_address)), '')
+          when lower(coalesce(u.recipient_kind, '')) = 'umbrella' then nullif(btrim(coalesce(um_rec.name, um_rec.remittance_email, u.to_address)), '')
+          else null
+        end,
+        nullif(btrim(coalesce(u.to_address, '')), '')
+      ) as recipient_display_name,
       u.context_kind,
       u.context_id,
       u.mailshot_run_id,
@@ -1985,6 +2130,15 @@ begin
       end as queue_state,
       (u.scheduled_for_utc is not null) as is_scheduled
     from public.v_outbox_unified as u
+    left join public.candidates as c_rec
+      on lower(coalesce(u.recipient_kind, '')) = 'candidate'
+     and u.recipient_id = c_rec.id
+    left join public.clients as cl_rec
+      on lower(coalesce(u.recipient_kind, '')) = 'client'
+     and u.recipient_id = cl_rec.id
+    left join public.umbrellas as um_rec
+      on lower(coalesce(u.recipient_kind, '')) = 'umbrella'
+     and u.recipient_id = um_rec.id
   ),
   filtered as (
     select
@@ -2007,6 +2161,7 @@ begin
       b.created_by,
       b.recipient_kind,
       b.recipient_id,
+      b.recipient_display_name,
       b.context_kind,
       b.context_id,
       b.mailshot_run_id,
@@ -2024,6 +2179,7 @@ begin
       and (
         v_search is null
         or coalesce(b.to_address,'') ilike ('%' || v_search || '%')
+        or coalesce(b.recipient_display_name,'') ilike ('%' || v_search || '%')
         or coalesce(b.subject,'') ilike ('%' || v_search || '%')
         or coalesce(b.body_text,'') ilike ('%' || v_search || '%')
         or coalesce(b.reference,'') ilike ('%' || v_search || '%')
@@ -2055,6 +2211,7 @@ begin
       f.created_by,
       f.recipient_kind,
       f.recipient_id,
+      f.recipient_display_name,
       f.context_kind,
       f.context_id,
       f.mailshot_run_id,
@@ -2113,6 +2270,7 @@ begin
           'created_by', case when p.created_by is null then null else p.created_by::text end,
           'recipient_kind', p.recipient_kind,
           'recipient_id', case when p.recipient_id is null then null else p.recipient_id::text end,
+          'recipient_display_name', p.recipient_display_name,
           'context_kind', p.context_kind,
           'context_id', case when p.context_id is null then null else p.context_id::text end,
           'mailshot_run_id', case when p.mailshot_run_id is null then null else p.mailshot_run_id::text end,
@@ -2166,7 +2324,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.outbox_unified_get(
   p_channel text,
   p_id uuid
@@ -2217,6 +2374,15 @@ begin
     u.created_by,
     u.recipient_kind,
     u.recipient_id,
+    coalesce(
+      case
+        when lower(coalesce(u.recipient_kind, '')) = 'candidate' then nullif(btrim(coalesce(c_rec.display_name, concat_ws(' ', c_rec.first_name, c_rec.last_name), c_rec.email, c_rec.phone, u.to_address)), '')
+        when lower(coalesce(u.recipient_kind, '')) = 'client' then nullif(btrim(coalesce(cl_rec.name, cl_rec.primary_invoice_email, cl_rec.contact_email, u.to_address)), '')
+        when lower(coalesce(u.recipient_kind, '')) = 'umbrella' then nullif(btrim(coalesce(um_rec.name, um_rec.remittance_email, u.to_address)), '')
+        else null
+      end,
+      nullif(btrim(coalesce(u.to_address, '')), '')
+    ) as recipient_display_name,
     u.context_kind,
     u.context_id,
     u.mailshot_run_id,
@@ -2237,6 +2403,15 @@ begin
     (u.scheduled_for_utc is not null) as is_scheduled
   into v_row
   from public.v_outbox_unified as u
+  left join public.candidates as c_rec
+    on lower(coalesce(u.recipient_kind, '')) = 'candidate'
+   and u.recipient_id = c_rec.id
+  left join public.clients as cl_rec
+    on lower(coalesce(u.recipient_kind, '')) = 'client'
+   and u.recipient_id = cl_rec.id
+  left join public.umbrellas as um_rec
+    on lower(coalesce(u.recipient_kind, '')) = 'umbrella'
+   and u.recipient_id = um_rec.id
   where upper(coalesce(u.channel,'')) = v_channel
     and u.outbox_id = p_id;
 
@@ -2273,6 +2448,7 @@ begin
       'created_by', case when v_row.created_by is null then null else v_row.created_by::text end,
       'recipient_kind', v_row.recipient_kind,
       'recipient_id', case when v_row.recipient_id is null then null else v_row.recipient_id::text end,
+      'recipient_display_name', v_row.recipient_display_name,
       'context_kind', v_row.context_kind,
       'context_id', case when v_row.context_id is null then null else v_row.context_id::text end,
       'mailshot_run_id', case when v_row.mailshot_run_id is null then null else v_row.mailshot_run_id::text end,
@@ -2286,7 +2462,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.comms_by_recipient(
   p_recipient_kind text,
   p_recipient_id uuid,
@@ -3213,7 +3388,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.outbox_unified_retry(
   p_channel text,
   p_id uuid,
@@ -3302,6 +3476,12 @@ begin
       raise exception 'outbox row is not retryable because it has already been sent';
     end if;
 
+    if coalesce(v_mail_row.attempt_lease_token, '') <> ''
+       and v_mail_row.attempt_lease_expires_at_utc is not null
+       and v_mail_row.attempt_lease_expires_at_utc > v_now then
+      raise exception 'outbox row is not retryable because it is currently being sent';
+    end if;
+
     if upper(coalesce(v_mail_row.status::text,'')) not in ('QUEUED','FAILED') then
       raise exception 'outbox row status is not retryable';
     end if;
@@ -3343,6 +3523,9 @@ begin
         last_error = null,
         provider_message_id = null,
         provider_status = null,
+        attempt_lease_token = null,
+        attempt_leased_at_utc = null,
+        attempt_lease_expires_at_utc = null,
         next_attempt_at_utc = v_effective_retry_at_utc
     where mo.id = v_mail_row.id;
 
@@ -3708,8 +3891,6 @@ begin
 end;
 $$;
 
-
-
 create or replace function public.mailshot_enqueue(
   p_prepare_json jsonb,
   p_final_edits_json jsonb,
@@ -3812,6 +3993,14 @@ declare
   v_max_future_days int := 365;
   v_allow_past_grace_minutes int := 15;
   v_scheduled_text text;
+
+  v_prepare_counts jsonb := '{}'::jsonb;
+  v_selected_count_context jsonb := '{}'::jsonb;
+  v_requested_selected_count int := null;
+  v_resolved_context_count int := null;
+  v_prepare_row_count int := null;
+  v_prepare_eligible_count int := null;
+  v_prepare_skipped_count int := null;
 begin
   if p_actor_user_id is null then
     raise exception 'actor_user_id required';
@@ -3840,6 +4029,69 @@ begin
   v_rows := p_prepare_json->'rows';
   if v_rows is null or jsonb_typeof(v_rows) <> 'array' then
     raise exception 'prepare_json.rows must be array';
+  end if;
+
+  if p_prepare_json ? 'prepare_counts' and jsonb_typeof(p_prepare_json->'prepare_counts') = 'object' then
+    v_prepare_counts := coalesce(p_prepare_json->'prepare_counts', '{}'::jsonb);
+  else
+    v_prepare_counts := '{}'::jsonb;
+  end if;
+
+  if p_prepare_json ? 'selected_count_context' and jsonb_typeof(p_prepare_json->'selected_count_context') = 'object' then
+    v_selected_count_context := coalesce(p_prepare_json->'selected_count_context', '{}'::jsonb);
+  else
+    v_selected_count_context := '{}'::jsonb;
+  end if;
+
+  if nullif(coalesce(v_selected_count_context->>'summary_selected_count',''), '') is not null then
+    v_requested_selected_count := (v_selected_count_context->>'summary_selected_count')::int;
+  elsif nullif(coalesce(v_selected_count_context->>'selected_count',''), '') is not null then
+    v_requested_selected_count := (v_selected_count_context->>'selected_count')::int;
+  elsif nullif(coalesce(v_prepare_counts->>'requested_context_count',''), '') is not null then
+    v_requested_selected_count := (v_prepare_counts->>'requested_context_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'requested_context_count',''), '') is not null then
+    v_requested_selected_count := (p_prepare_json->>'requested_context_count')::int;
+  else
+    v_requested_selected_count := jsonb_array_length(v_rows);
+  end if;
+
+  if nullif(coalesce(v_selected_count_context->>'actionable_context_count',''), '') is not null then
+    v_resolved_context_count := (v_selected_count_context->>'actionable_context_count')::int;
+  elsif nullif(coalesce(v_prepare_counts->>'resolved_context_count',''), '') is not null then
+    v_resolved_context_count := (v_prepare_counts->>'resolved_context_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'resolved_context_count',''), '') is not null then
+    v_resolved_context_count := (p_prepare_json->>'resolved_context_count')::int;
+  elsif nullif(coalesce(v_selected_count_context->>'selected_count',''), '') is not null then
+    v_resolved_context_count := (v_selected_count_context->>'selected_count')::int;
+  else
+    v_resolved_context_count := jsonb_array_length(v_rows);
+  end if;
+
+  if nullif(coalesce(v_prepare_counts->>'returned_row_count',''), '') is not null then
+    v_prepare_row_count := (v_prepare_counts->>'returned_row_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'returned_row_count',''), '') is not null then
+    v_prepare_row_count := (p_prepare_json->>'returned_row_count')::int;
+  else
+    v_prepare_row_count := jsonb_array_length(v_rows);
+  end if;
+
+  if nullif(coalesce(v_prepare_counts->>'eligible_count',''), '') is not null then
+    v_prepare_eligible_count := (v_prepare_counts->>'eligible_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'eligible_count',''), '') is not null then
+    v_prepare_eligible_count := (p_prepare_json->>'eligible_count')::int;
+  else
+    select count(*)
+    into v_prepare_eligible_count
+    from jsonb_array_elements(v_rows) as jbe(value)
+    where coalesce((jbe.value->>'eligible')::boolean, false) = true;
+  end if;
+
+  if nullif(coalesce(v_prepare_counts->>'skipped_count',''), '') is not null then
+    v_prepare_skipped_count := (v_prepare_counts->>'skipped_count')::int;
+  elsif nullif(coalesce(p_prepare_json->>'skipped_count',''), '') is not null then
+    v_prepare_skipped_count := (p_prepare_json->>'skipped_count')::int;
+  else
+    v_prepare_skipped_count := greatest(coalesce(v_prepare_row_count, 0) - coalesce(v_prepare_eligible_count, 0), 0);
   end if;
 
   v_to_field_key := nullif(btrim(coalesce(p_prepare_json->>'to_field_key','')), '');
@@ -3945,7 +4197,7 @@ begin
       v_scheduled_for_utc := v_now + make_interval(mins => v_relative_minutes);
     end if;
 
-    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_futureDays)) then
+    if v_scheduled_for_utc > (v_now + make_interval(days => v_max_future_days)) then
       raise exception 'delivery_timing_json.scheduled_for_utc exceeds max_future_days';
     end if;
 
@@ -4116,7 +4368,7 @@ begin
       v_email_type_override,
       nullif(coalesce(v_row_template_content->>'email_type',''), ''),
       nullif(btrim(coalesce(v_row->>'email_type','')), ''),
-      'plain'
+      'html'
     );
 
     v_rendered_subject := coalesce(v_row_subject_tpl, '');
@@ -4383,6 +4635,27 @@ begin
     'queued', v_queued,
     'skipped', v_skipped,
     'failed', v_failed,
+    'requested_selected_count', v_requested_selected_count,
+    'resolved_context_count', v_resolved_context_count,
+    'prepare_row_count', v_prepare_row_count,
+    'eligible_count', v_prepare_eligible_count,
+    'prepare_skipped_count', v_prepare_skipped_count,
+    'prepare_counts', jsonb_build_object(
+      'requested_selected_count', v_requested_selected_count,
+      'resolved_context_count', v_resolved_context_count,
+      'prepare_row_count', v_prepare_row_count,
+      'eligible_count', v_prepare_eligible_count,
+      'prepare_skipped_count', v_prepare_skipped_count
+    ),
+    'parity_snapshot', jsonb_build_object(
+      'requested_selected_count', v_requested_selected_count,
+      'resolved_context_count', v_resolved_context_count,
+      'prepare_row_count', v_prepare_row_count,
+      'eligible_count', v_prepare_eligible_count,
+      'queued_count', v_queued,
+      'skipped_count', v_skipped,
+      'failed_count', v_failed
+    ),
     'skips', v_skip_list,
     'delivery_timing', v_delivery_timing_json
   )
@@ -4394,10 +4667,797 @@ begin
     'queued', v_queued,
     'skipped', v_skipped,
     'failed', v_failed,
+    'requested_selected_count', v_requested_selected_count,
+    'resolved_context_count', v_resolved_context_count,
+    'prepare_row_count', v_prepare_row_count,
+    'eligible_count', v_prepare_eligible_count,
+    'prepare_skipped_count', v_prepare_skipped_count,
+    'prepare_counts', jsonb_build_object(
+      'requested_selected_count', v_requested_selected_count,
+      'resolved_context_count', v_resolved_context_count,
+      'prepare_row_count', v_prepare_row_count,
+      'eligible_count', v_prepare_eligible_count,
+      'prepare_skipped_count', v_prepare_skipped_count
+    ),
+    'parity_snapshot', jsonb_build_object(
+      'requested_selected_count', v_requested_selected_count,
+      'resolved_context_count', v_resolved_context_count,
+      'prepare_row_count', v_prepare_row_count,
+      'eligible_count', v_prepare_eligible_count,
+      'queued_count', v_queued,
+      'skipped_count', v_skipped,
+      'failed_count', v_failed
+    ),
     'skips', v_skip_list,
     'delivery_timing', v_delivery_timing_json
   );
 end;
 $$;
 
+create or replace function public.mailshot_run_get(
+  p_mailshot_run_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payload jsonb;
+begin
+  if p_mailshot_run_id is null then
+    raise exception 'mailshot_run_id required';
+  end if;
 
+  with run_row as (
+    select
+      mr.id,
+      mr.context_kind,
+      mr.output_type,
+      mr.document_template_id,
+      mr.created_by,
+      mr.created_at_utc,
+      case
+        when jsonb_typeof(mr.selection_json) = 'object' then mr.selection_json
+        else '{}'::jsonb
+      end as selection_json,
+      case
+        when jsonb_typeof(mr.result_json) = 'object' then mr.result_json
+        else '{}'::jsonb
+      end as result_json,
+      case
+        when jsonb_typeof(mr.delivery_timing_json) = 'object' then mr.delivery_timing_json
+        else '{}'::jsonb
+      end as delivery_timing_json,
+      dt.filename as template_filename
+    from public.mailshot_runs as mr
+    left join public.document_templates as dt
+      on dt.id = mr.document_template_id
+    where mr.id = p_mailshot_run_id
+    limit 1
+  ),
+  initial_counts as (
+    select
+      rr.id,
+      case
+        when jsonb_typeof(rr.result_json->'queued') = 'number' then (rr.result_json->>'queued')::int
+        when coalesce(rr.result_json->>'queued', '') ~ '^-?\d+$' then (rr.result_json->>'queued')::int
+        else 0
+      end as initial_queued,
+      case
+        when jsonb_typeof(rr.result_json->'skipped') = 'number' then (rr.result_json->>'skipped')::int
+        when coalesce(rr.result_json->>'skipped', '') ~ '^-?\d+$' then (rr.result_json->>'skipped')::int
+        else 0
+      end as initial_skipped,
+      case
+        when jsonb_typeof(rr.result_json->'failed') = 'number' then (rr.result_json->>'failed')::int
+        when coalesce(rr.result_json->>'failed', '') ~ '^-?\d+$' then (rr.result_json->>'failed')::int
+        else 0
+      end as initial_failed
+    from run_row as rr
+  ),
+  mail_counts as (
+    select
+      count(*)::int as total_rows,
+      count(*) filter (
+        where mo.read_at is null
+          and mo.delivered_at is null
+          and mo.sent_at is null
+          and mo.failed_at is null
+      )::int as pending_total,
+      count(*) filter (
+        where mo.read_at is null
+          and mo.delivered_at is null
+          and mo.sent_at is null
+          and mo.failed_at is not null
+      )::int as failed_total,
+      count(*) filter (
+        where mo.read_at is null
+          and mo.delivered_at is null
+          and mo.sent_at is not null
+      )::int as sent_total,
+      count(*) filter (
+        where mo.read_at is null
+          and mo.delivered_at is not null
+      )::int as delivered_total,
+      count(*) filter (
+        where mo.read_at is not null
+      )::int as read_total,
+      count(*) filter (
+        where mo.read_at is not null
+           or (mo.read_at is null and mo.delivered_at is not null)
+           or (mo.read_at is null and mo.delivered_at is null and mo.sent_at is not null)
+      )::int as blocking_total,
+      count(*) filter (
+        where mo.read_at is null
+          and mo.delivered_at is null
+          and mo.sent_at is null
+      )::int as cancelable_total
+    from public.mail_outbox as mo
+    where mo.mailshot_run_id = p_mailshot_run_id
+  ),
+  comms_counts as (
+    select
+      count(*)::int as total_rows,
+      count(*) filter (
+        where co.read_at is null
+          and co.delivered_at is null
+          and co.sent_at is null
+          and co.failed_at is null
+      )::int as pending_total,
+      count(*) filter (
+        where co.read_at is null
+          and co.delivered_at is null
+          and co.sent_at is null
+          and co.failed_at is not null
+      )::int as failed_total,
+      count(*) filter (
+        where co.read_at is null
+          and co.delivered_at is null
+          and co.sent_at is not null
+      )::int as sent_total,
+      count(*) filter (
+        where co.read_at is null
+          and co.delivered_at is not null
+      )::int as delivered_total,
+      count(*) filter (
+        where co.read_at is not null
+      )::int as read_total,
+      count(*) filter (
+        where co.read_at is not null
+           or (co.read_at is null and co.delivered_at is not null)
+           or (co.read_at is null and co.delivered_at is null and co.sent_at is not null)
+      )::int as blocking_total,
+      count(*) filter (
+        where co.read_at is null
+          and co.delivered_at is null
+          and co.sent_at is null
+      )::int as cancelable_total
+    from public.comms_outbox as co
+    where co.mailshot_run_id = p_mailshot_run_id
+  ),
+  mail_preview as (
+    select
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', mp.id::text,
+            'status', mp.status,
+            'to_address', mp.to_address,
+            'sent_at', mp.sent_at,
+            'delivered_at', mp.delivered_at,
+            'read_at', mp.read_at,
+            'failed_at', mp.failed_at
+          )
+          order by mp.created_at_utc desc, mp.id desc
+        ),
+        '[]'::jsonb
+      ) as items
+    from (
+      select
+        mo.id,
+        mo.status,
+        mo."to" as to_address,
+        mo.sent_at,
+        mo.delivered_at,
+        mo.read_at,
+        mo.failed_at,
+        mo.created_at_utc
+      from public.mail_outbox as mo
+      where mo.mailshot_run_id = p_mailshot_run_id
+      order by mo.created_at_utc desc, mo.id desc
+      limit 25
+    ) as mp
+  ),
+  comms_preview as (
+    select
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', cp.id::text,
+            'channel', cp.channel,
+            'status', cp.status,
+            'to_address', cp.to_address,
+            'sent_at', cp.sent_at,
+            'delivered_at', cp.delivered_at,
+            'read_at', cp.read_at,
+            'failed_at', cp.failed_at
+          )
+          order by cp.created_at_utc desc, cp.id desc
+        ),
+        '[]'::jsonb
+      ) as items
+    from (
+      select
+        co.id,
+        co.channel,
+        co.status,
+        co.to_address,
+        co.sent_at,
+        co.delivered_at,
+        co.read_at,
+        co.failed_at,
+        co.created_at_utc
+      from public.comms_outbox as co
+      where co.mailshot_run_id = p_mailshot_run_id
+      order by co.created_at_utc desc, co.id desc
+      limit 25
+    ) as cp
+  )
+  select
+    jsonb_build_object(
+      'ok', true,
+      'item',
+      jsonb_build_object(
+        'id', rr.id::text,
+        'mailshot_run_id', rr.id::text,
+        'context_kind', rr.context_kind,
+        'output_type', rr.output_type,
+        'document_template_id', case when rr.document_template_id is null then null else rr.document_template_id::text end,
+        'template_filename', rr.template_filename,
+        'created_by', case when rr.created_by is null then null else rr.created_by::text end,
+        'created_at_utc', rr.created_at_utc,
+        'delivery_timing_json', rr.delivery_timing_json,
+        'selection_json', rr.selection_json,
+        'result_json', rr.result_json,
+        'counts',
+        jsonb_build_object(
+          'queued', mc.pending_total + cc.pending_total,
+          'skipped', ic.initial_skipped,
+          'failed', ic.initial_failed + mc.failed_total + cc.failed_total,
+          'success', mc.sent_total + mc.delivered_total + mc.read_total + cc.sent_total + cc.delivered_total + cc.read_total,
+          'blocking', mc.blocking_total + cc.blocking_total,
+          'total_rows', mc.total_rows + cc.total_rows,
+          'cancelable', mc.cancelable_total + cc.cancelable_total,
+          'sent', mc.sent_total + cc.sent_total,
+          'delivered', mc.delivered_total + cc.delivered_total,
+          'read', mc.read_total + cc.read_total
+        ),
+        'initial_counts',
+        jsonb_build_object(
+          'queued', ic.initial_queued,
+          'skipped', ic.initial_skipped,
+          'failed', ic.initial_failed
+        ),
+        'live_counts',
+        jsonb_build_object(
+          'total_rows', mc.total_rows + cc.total_rows,
+          'mail_rows', mc.total_rows,
+          'comms_rows', cc.total_rows,
+          'pending_total', mc.pending_total + cc.pending_total,
+          'failed_total', mc.failed_total + cc.failed_total,
+          'sent_total', mc.sent_total + cc.sent_total,
+          'delivered_total', mc.delivered_total + cc.delivered_total,
+          'read_total', mc.read_total + cc.read_total,
+          'success_total', mc.sent_total + mc.delivered_total + mc.read_total + cc.sent_total + cc.delivered_total + cc.read_total,
+          'blocking_total', mc.blocking_total + cc.blocking_total,
+          'cancelable_total', mc.cancelable_total + cc.cancelable_total,
+          'blocking_mail_sent', mc.sent_total,
+          'blocking_mail_delivered', mc.delivered_total,
+          'blocking_mail_read', mc.read_total,
+          'blocking_comms_sent', cc.sent_total,
+          'blocking_comms_delivered', cc.delivered_total,
+          'blocking_comms_read', cc.read_total
+        ),
+        'can_cancel_pending', ((mc.cancelable_total + cc.cancelable_total) > 0) or ((mc.blocking_total + cc.blocking_total) = 0),
+        'can_delete_if_unsent', ((mc.blocking_total + cc.blocking_total) = 0),
+        'child_preview',
+        jsonb_build_object(
+          'mail_items', mp.items,
+          'comms_items', cp.items
+        )
+      )
+    )
+  into v_payload
+  from run_row as rr
+  left join initial_counts as ic
+    on ic.id = rr.id
+  cross join mail_counts as mc
+  cross join comms_counts as cc
+  cross join mail_preview as mp
+  cross join comms_preview as cp;
+
+  if v_payload is null then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'mailshot_run_not_found'
+    );
+  end if;
+
+  return v_payload;
+end;
+$$;
+
+create or replace function public.mailshot_runs_list(
+  p_page integer default 1,
+  p_page_size integer default 25,
+  p_order_by text default 'created_at_utc',
+  p_order_dir text default 'desc'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  v_page integer := greatest(coalesce(p_page, 1), 1);
+  v_page_size integer := greatest(1, least(coalesce(p_page_size, 25), 100));
+  v_offset integer := 0;
+  v_order_by text := 'created_at_utc';
+  v_order_dir text := 'desc';
+  v_total_count integer := 0;
+  v_items jsonb := '[]'::jsonb;
+  v_item_count integer := 0;
+begin
+  v_offset := (v_page - 1) * v_page_size;
+
+  v_order_by :=
+    case lower(coalesce(p_order_by, ''))
+      when 'created_at_utc' then 'created_at_utc'
+      when 'output_type' then 'output_type'
+      when 'context_kind' then 'context_kind'
+      else 'created_at_utc'
+    end;
+
+  v_order_dir :=
+    case lower(coalesce(p_order_dir, ''))
+      when 'asc' then 'asc'
+      else 'desc'
+    end;
+
+  select count(*)::integer
+    into v_total_count
+  from public.mailshot_runs as mr_count;
+
+  with ordered_runs as (
+    select
+      mr.id,
+      mr.context_kind,
+      mr.output_type,
+      mr.document_template_id,
+      mr.created_by,
+      mr.created_at_utc,
+      case
+        when jsonb_typeof(mr.result_json) = 'object' then mr.result_json
+        else '{}'::jsonb
+      end as result_json_obj,
+      case
+        when jsonb_typeof(mr.delivery_timing_json) = 'object' then mr.delivery_timing_json
+        else '{}'::jsonb
+      end as delivery_timing_json_obj,
+      dt.filename as template_filename,
+      coalesce(mail_counts.total_rows, 0) as mail_rows,
+      coalesce(mail_counts.pending_total, 0) as mail_pending_total,
+      coalesce(mail_counts.failed_total, 0) as mail_failed_total,
+      coalesce(mail_counts.sent_total, 0) as mail_sent_total,
+      coalesce(mail_counts.delivered_total, 0) as mail_delivered_total,
+      coalesce(mail_counts.read_total, 0) as mail_read_total,
+      coalesce(mail_counts.blocking_total, 0) as mail_blocking_total,
+      coalesce(mail_counts.cancelable_total, 0) as mail_cancelable_total,
+      coalesce(comms_counts.total_rows, 0) as comms_rows,
+      coalesce(comms_counts.pending_total, 0) as comms_pending_total,
+      coalesce(comms_counts.failed_total, 0) as comms_failed_total,
+      coalesce(comms_counts.sent_total, 0) as comms_sent_total,
+      coalesce(comms_counts.delivered_total, 0) as comms_delivered_total,
+      coalesce(comms_counts.read_total, 0) as comms_read_total,
+      coalesce(comms_counts.blocking_total, 0) as comms_blocking_total,
+      coalesce(comms_counts.cancelable_total, 0) as comms_cancelable_total,
+      row_number() over (
+        order by
+          case
+            when v_order_by = 'created_at_utc' and v_order_dir = 'asc' then mr.created_at_utc
+            else null
+          end asc nulls last,
+          case
+            when v_order_by = 'created_at_utc' and v_order_dir = 'desc' then mr.created_at_utc
+            else null
+          end desc nulls last,
+          case
+            when v_order_by = 'output_type' and v_order_dir = 'asc' then mr.output_type
+            else null
+          end asc nulls last,
+          case
+            when v_order_by = 'output_type' and v_order_dir = 'desc' then mr.output_type
+            else null
+          end desc nulls last,
+          case
+            when v_order_by = 'context_kind' and v_order_dir = 'asc' then mr.context_kind
+            else null
+          end asc nulls last,
+          case
+            when v_order_by = 'context_kind' and v_order_dir = 'desc' then mr.context_kind
+            else null
+          end desc nulls last,
+          mr.created_at_utc desc,
+          mr.id desc
+      ) as sort_idx
+    from public.mailshot_runs as mr
+    left join public.document_templates as dt
+      on dt.id = mr.document_template_id
+    left join lateral (
+      select
+        count(*)::integer as total_rows,
+        count(*) filter (
+          where mo.read_at is null
+            and mo.delivered_at is null
+            and mo.sent_at is null
+            and mo.failed_at is null
+        )::integer as pending_total,
+        count(*) filter (
+          where mo.failed_at is not null
+        )::integer as failed_total,
+        count(*) filter (
+          where mo.sent_at is not null
+            and mo.delivered_at is null
+            and mo.read_at is null
+        )::integer as sent_total,
+        count(*) filter (
+          where mo.delivered_at is not null
+            and mo.read_at is null
+        )::integer as delivered_total,
+        count(*) filter (
+          where mo.read_at is not null
+        )::integer as read_total,
+        count(*) filter (
+          where mo.read_at is not null
+             or mo.delivered_at is not null
+             or mo.sent_at is not null
+        )::integer as blocking_total,
+        count(*) filter (
+          where mo.read_at is null
+            and mo.delivered_at is null
+            and mo.sent_at is null
+        )::integer as cancelable_total
+      from public.mail_outbox as mo
+      where mo.mailshot_run_id = mr.id
+    ) as mail_counts
+      on true
+    left join lateral (
+      select
+        count(*)::integer as total_rows,
+        count(*) filter (
+          where co.read_at is null
+            and co.delivered_at is null
+            and co.sent_at is null
+            and co.failed_at is null
+        )::integer as pending_total,
+        count(*) filter (
+          where co.failed_at is not null
+        )::integer as failed_total,
+        count(*) filter (
+          where co.sent_at is not null
+            and co.delivered_at is null
+            and co.read_at is null
+        )::integer as sent_total,
+        count(*) filter (
+          where co.delivered_at is not null
+            and co.read_at is null
+        )::integer as delivered_total,
+        count(*) filter (
+          where co.read_at is not null
+        )::integer as read_total,
+        count(*) filter (
+          where co.read_at is not null
+             or co.delivered_at is not null
+             or co.sent_at is not null
+        )::integer as blocking_total,
+        count(*) filter (
+          where co.read_at is null
+            and co.delivered_at is null
+            and co.sent_at is null
+        )::integer as cancelable_total
+      from public.comms_outbox as co
+      where co.mailshot_run_id = mr.id
+    ) as comms_counts
+      on true
+  ),
+  paged_runs as (
+    select
+      orun.id,
+      orun.context_kind,
+      orun.output_type,
+      orun.document_template_id,
+      orun.created_by,
+      orun.created_at_utc,
+      orun.result_json_obj,
+      orun.delivery_timing_json_obj,
+      orun.template_filename,
+      orun.mail_rows,
+      orun.mail_pending_total,
+      orun.mail_failed_total,
+      orun.mail_sent_total,
+      orun.mail_delivered_total,
+      orun.mail_read_total,
+      orun.mail_blocking_total,
+      orun.mail_cancelable_total,
+      orun.comms_rows,
+      orun.comms_pending_total,
+      orun.comms_failed_total,
+      orun.comms_sent_total,
+      orun.comms_delivered_total,
+      orun.comms_read_total,
+      orun.comms_blocking_total,
+      orun.comms_cancelable_total,
+      case
+        when coalesce(orun.result_json_obj ->> 'queued', '') ~ '^[0-9]+$'
+          then greatest((orun.result_json_obj ->> 'queued')::integer, 0)
+        else 0
+      end as initial_queued,
+      case
+        when coalesce(orun.result_json_obj ->> 'skipped', '') ~ '^[0-9]+$'
+          then greatest((orun.result_json_obj ->> 'skipped')::integer, 0)
+        else 0
+      end as initial_skipped,
+      case
+        when coalesce(orun.result_json_obj ->> 'failed', '') ~ '^[0-9]+$'
+          then greatest((orun.result_json_obj ->> 'failed')::integer, 0)
+        else 0
+      end as initial_failed,
+      (orun.mail_rows + orun.comms_rows) as total_rows,
+      (orun.mail_pending_total + orun.comms_pending_total) as pending_total,
+      (orun.mail_failed_total + orun.comms_failed_total) as live_failed_total,
+      (orun.mail_sent_total + orun.comms_sent_total) as sent_total,
+      (orun.mail_delivered_total + orun.comms_delivered_total) as delivered_total,
+      (orun.mail_read_total + orun.comms_read_total) as read_total,
+      (
+        orun.mail_sent_total
+        + orun.mail_delivered_total
+        + orun.mail_read_total
+        + orun.comms_sent_total
+        + orun.comms_delivered_total
+        + orun.comms_read_total
+      ) as success_total,
+      (orun.mail_blocking_total + orun.comms_blocking_total) as blocking_total,
+      (orun.mail_cancelable_total + orun.comms_cancelable_total) as cancelable_total,
+      orun.sort_idx
+    from ordered_runs as orun
+    where orun.sort_idx > v_offset
+      and orun.sort_idx <= (v_offset + v_page_size)
+    order by orun.sort_idx
+  )
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', pr.id::text,
+          'mailshot_run_id', pr.id::text,
+          'context_kind', pr.context_kind,
+          'output_type', pr.output_type,
+          'document_template_id', case when pr.document_template_id is null then null else pr.document_template_id::text end,
+          'template_filename', pr.template_filename,
+          'created_by', case when pr.created_by is null then null else pr.created_by::text end,
+          'created_at_utc', pr.created_at_utc,
+          'delivery_timing_json', pr.delivery_timing_json_obj,
+          'counts', jsonb_build_object(
+            'queued', pr.pending_total,
+            'skipped', pr.initial_skipped,
+            'failed', (pr.initial_failed + pr.live_failed_total),
+            'success', pr.success_total,
+            'blocking', pr.blocking_total,
+            'total_rows', pr.total_rows,
+            'cancelable', pr.cancelable_total,
+            'sent', pr.sent_total,
+            'delivered', pr.delivered_total,
+            'read', pr.read_total
+          ),
+          'initial_counts', jsonb_build_object(
+            'queued', pr.initial_queued,
+            'skipped', pr.initial_skipped,
+            'failed', pr.initial_failed
+          ),
+          'live_counts', jsonb_build_object(
+            'total_rows', pr.total_rows,
+            'mail_rows', pr.mail_rows,
+            'comms_rows', pr.comms_rows,
+            'pending_total', pr.pending_total,
+            'failed_total', pr.live_failed_total,
+            'sent_total', pr.sent_total,
+            'delivered_total', pr.delivered_total,
+            'read_total', pr.read_total,
+            'success_total', pr.success_total,
+            'blocking_total', pr.blocking_total,
+            'cancelable_total', pr.cancelable_total
+          ),
+          'can_cancel_pending', ((pr.cancelable_total > 0) or (pr.blocking_total = 0)),
+          'can_delete_if_unsent', (pr.blocking_total = 0),
+          'result_json', pr.result_json_obj
+        )
+        order by pr.sort_idx
+      ),
+      '[]'::jsonb
+    ),
+    count(*)::integer
+    into v_items, v_item_count
+  from paged_runs as pr;
+
+  return jsonb_build_object(
+    'ok', true,
+    'items', v_items,
+    'page', v_page,
+    'page_size', v_page_size,
+    'total_count', v_total_count,
+    'has_more', ((v_offset + v_item_count) < v_total_count),
+    'order_by', v_order_by,
+    'order_dir', v_order_dir
+  );
+end;
+$function$;
+
+create or replace function public.email_outbox_claim_ready_batch(
+  p_limit integer,
+  p_attempt_lease_token text,
+  p_lease_minutes integer default 5
+)
+returns setof public.mail_outbox
+language plpgsql
+as $function$
+declare
+  v_now timestamptz := now();
+  v_effective_limit integer := greatest(coalesce(p_limit, 0), 0);
+  v_effective_lease_minutes integer := greatest(coalesce(p_lease_minutes, 5), 1);
+begin
+  if coalesce(btrim(p_attempt_lease_token), '') = '' then
+    raise exception 'attempt_lease_token is required';
+  end if;
+
+  if v_effective_limit = 0 then
+    return;
+  end if;
+
+  return query
+  with picked as (
+    select mo.id
+    from public.mail_outbox as mo
+    where mo.status = 'QUEUED'::public.mail_status_enum
+      and mo.sent_at is null
+      and mo.delivered_at is null
+      and mo.read_at is null
+      and coalesce(
+            mo.next_attempt_at_utc,
+            mo.scheduled_for_utc,
+            mo.created_at_utc
+          ) <= v_now
+      and (
+            mo.attempt_lease_token is null
+         or mo.attempt_lease_expires_at_utc is null
+         or mo.attempt_lease_expires_at_utc <= v_now
+      )
+    order by
+      coalesce(
+        mo.next_attempt_at_utc,
+        mo.scheduled_for_utc,
+        mo.created_at_utc
+      ) asc,
+      mo.created_at_utc asc,
+      mo.id asc
+    for update skip locked
+    limit v_effective_limit
+  ),
+  updated as (
+    update public.mail_outbox as mo
+    set attempt_lease_token = p_attempt_lease_token,
+        attempt_leased_at_utc = v_now,
+        attempt_lease_expires_at_utc = v_now + make_interval(mins => v_effective_lease_minutes)
+    from picked
+    where mo.id = picked.id
+    returning mo.*
+  )
+  select u.*
+  from updated as u
+  order by
+    coalesce(
+      u.next_attempt_at_utc,
+      u.scheduled_for_utc,
+      u.created_at_utc
+    ) asc,
+    u.created_at_utc asc,
+    u.id asc;
+
+  return;
+end;
+$function$;
+
+create or replace function public.comms_outbox_claim_ready_batch(
+  p_channel text,
+  p_limit integer,
+  p_attempt_lease_token text,
+  p_lease_minutes integer default 5
+)
+returns setof public.comms_outbox
+language plpgsql
+as $function$
+declare
+  v_now timestamptz := now();
+  v_channel text := nullif(upper(btrim(coalesce(p_channel, ''))), '');
+  v_effective_limit integer := greatest(coalesce(p_limit, 0), 0);
+  v_effective_lease_minutes integer := greatest(coalesce(p_lease_minutes, 5), 1);
+begin
+  if v_channel is null then
+    raise exception 'channel is required';
+  end if;
+
+  if v_channel not in ('WHATSAPP', 'SMS', 'VOICE') then
+    raise exception 'unsupported channel %', v_channel;
+  end if;
+
+  if coalesce(btrim(p_attempt_lease_token), '') = '' then
+    raise exception 'attempt_lease_token is required';
+  end if;
+
+  if v_effective_limit = 0 then
+    return;
+  end if;
+
+  return query
+  with picked as (
+    select co.id
+    from public.comms_outbox as co
+    where upper(coalesce(co.channel, '')) = v_channel
+      and upper(coalesce(co.status, '')) = 'QUEUED'
+      and co.sent_at is null
+      and co.delivered_at is null
+      and co.read_at is null
+      and coalesce(
+            co.next_attempt_at_utc,
+            co.scheduled_for_utc,
+            co.created_at_utc
+          ) <= v_now
+      and (
+            co.attempt_lease_token is null
+         or co.attempt_lease_expires_at_utc is null
+         or co.attempt_lease_expires_at_utc <= v_now
+      )
+    order by
+      coalesce(
+        co.next_attempt_at_utc,
+        co.scheduled_for_utc,
+        co.created_at_utc
+      ) asc,
+      co.created_at_utc asc,
+      co.id asc
+    for update skip locked
+    limit v_effective_limit
+  ),
+  updated as (
+    update public.comms_outbox as co
+    set attempt_lease_token = p_attempt_lease_token,
+        attempt_leased_at_utc = v_now,
+        attempt_lease_expires_at_utc = v_now + make_interval(mins => v_effective_lease_minutes)
+    from picked
+    where co.id = picked.id
+    returning co.*
+  )
+  select u.*
+  from updated as u
+  order by
+    coalesce(
+      u.next_attempt_at_utc,
+      u.scheduled_for_utc,
+      u.created_at_utc
+    ) asc,
+    u.created_at_utc asc,
+    u.id asc;
+
+  return;
+end;
+$function$;
