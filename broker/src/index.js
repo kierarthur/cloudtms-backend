@@ -58110,14 +58110,15 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows, opts = {}) {
     return '';
   };
 
-  const toWatiWhatsAppNumber = (raw) => {
-    let s = String(raw || '').trim();
-    if (!s) return '';
-    if (s.startsWith('+')) s = s.slice(1);
-    s = s.replace(/[^\d]/g, '');
-    if (s.length === 11 && s.startsWith('07')) s = '44' + s.slice(1);
-    return s;
-  };
+const toWatiWhatsAppNumber = (raw) => {
+  let s = String(raw || '').trim();
+  if (!s) return '';
+  s = s.replace(/[^\d]/g, '');
+  if (!s) return '';
+  if (s.startsWith('0')) s = '44' + s.slice(1);
+  else if (!s.startsWith('44')) s = '44' + s;
+  return s;
+};
 
   const getRowWatiContract = (row) => {
     const providerPayload = isPlainObject(row && row.provider_payload_json) ? row.provider_payload_json : {};
