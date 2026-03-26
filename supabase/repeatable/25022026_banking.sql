@@ -1038,7 +1038,12 @@ SET search_path = public
 AS $$
 declare
   v_preview_decisions_json jsonb := coalesce(p_preview_decisions_json, '{}'::jsonb);
-  v_component_resolutions jsonb := '{}'::jsonb;
+  v_component_resolutions jsonb := null;
+  v_component_resolutions_present boolean := false;
+  v_component_resolutions_supplied boolean := false;
+  v_component_resolutions_input_type text := null;
+  v_component_resolutions_normalized_present boolean := false;
+  v_component_resolutions_normalized_type text := null;
   v_case_resolution_states jsonb := '[]'::jsonb;
   v_blocked_case_states jsonb := '[]'::jsonb;
   v_safe_case_states jsonb := '[]'::jsonb;
@@ -1094,12 +1099,30 @@ begin
     raise exception 'preview_decisions_json must be a jsonb object';
   end if;
 
-  if jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'object' then
-    v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '{}'::jsonb);
-  elsif jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'array' then
-    v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '[]'::jsonb);
+  v_component_resolutions_present := (v_preview_decisions_json ? 'component_resolutions');
+  v_component_resolutions_input_type := case
+    when v_component_resolutions_present then coalesce(jsonb_typeof(v_preview_decisions_json->'component_resolutions'), 'null')
+    else null
+  end;
+
+  if v_component_resolutions_present then
+    if v_preview_decisions_json->'component_resolutions' is null
+       or jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'null' then
+      v_component_resolutions := null;
+      v_component_resolutions_supplied := false;
+    elsif jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'object' then
+      v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '{}'::jsonb);
+      v_component_resolutions_supplied := true;
+    elsif jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'array' then
+      v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '[]'::jsonb);
+      v_component_resolutions_supplied := true;
+    else
+      v_component_resolutions := v_preview_decisions_json->'component_resolutions';
+      v_component_resolutions_supplied := true;
+    end if;
   else
-    v_component_resolutions := '{}'::jsonb;
+    v_component_resolutions := null;
+    v_component_resolutions_supplied := false;
   end if;
 
   if jsonb_typeof(coalesce(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb)) = 'array' then
@@ -1169,18 +1192,29 @@ begin
 
   v_preview_decisions_json := coalesce(v_preview_decisions_json, '{}'::jsonb)
     - 'mismatch_choices'
+    - 'component_resolutions'
     - 'selected_preview_row_ids'
     || jsonb_build_object(
-         'component_resolutions', v_component_resolutions,
          'case_resolution_states', v_case_resolution_states,
          'blocked_case_states', v_blocked_case_states,
          'safe_case_states', v_safe_case_states
        );
 
+  if v_component_resolutions_supplied then
+    v_preview_decisions_json := v_preview_decisions_json
+      || jsonb_build_object('component_resolutions', v_component_resolutions);
+  end if;
+
   if v_selected_preview_row_ids_supplied then
     v_preview_decisions_json := v_preview_decisions_json
       || jsonb_build_object('selected_preview_row_ids', v_selected_preview_row_ids);
   end if;
+
+  v_component_resolutions_normalized_present := (v_preview_decisions_json ? 'component_resolutions');
+  v_component_resolutions_normalized_type := case
+    when v_component_resolutions_normalized_present then coalesce(jsonb_typeof(v_preview_decisions_json->'component_resolutions'), 'null')
+    else null
+  end;
 
   begin
     perform public._imp_debug_audit(
@@ -1199,6 +1233,15 @@ begin
         'override_verified', coalesce(p_override_verified, false),
         'override_verified_by_user_id', coalesce(p_override_verified_by_user_id::text, null),
         'override_verified_at_utc', p_override_verified_at_utc,
+        'preview_decisions_json_input_keys_sample', (
+          select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
+          from (
+            select e.key
+            from jsonb_each(coalesce(p_preview_decisions_json, '{}'::jsonb)) e
+            order by e.key
+            limit 50
+          ) k
+        ),
         'preview_decisions_json_keys_sample', (
           select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
           from (
@@ -1208,10 +1251,16 @@ begin
             limit 50
           ) k
         ),
-        'component_resolution_shape', coalesce(jsonb_typeof(v_component_resolutions), 'null'),
+        'component_resolution_present', v_component_resolutions_present,
+        'component_resolution_supplied', v_component_resolutions_supplied,
+        'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
+        'component_resolution_normalized_present', v_component_resolutions_normalized_present,
+        'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
+        'component_resolution_omitted_as_absent', (v_component_resolutions_present and not v_component_resolutions_supplied),
+        'component_resolution_shape', coalesce(v_component_resolutions_normalized_type, 'null'),
         'component_resolution_keys_sample', (
           case
-            when jsonb_typeof(v_component_resolutions) = 'object' then (
+            when v_component_resolutions_normalized_type = 'object' then (
               select coalesce(jsonb_agg(k.key_text order by k.key_text), '[]'::jsonb)
               from (
                 select e.key as key_text
@@ -1220,7 +1269,7 @@ begin
                 limit 50
               ) k
             )
-            when jsonb_typeof(v_component_resolutions) = 'array' then (
+            when v_component_resolutions_normalized_type = 'array' then (
               select coalesce(jsonb_agg(k.key_text order by k.ord), '[]'::jsonb)
               from (
                 select
@@ -1241,11 +1290,11 @@ begin
         ),
         'component_resolution_count', (
           case
-            when jsonb_typeof(v_component_resolutions) = 'object' then (
+            when v_component_resolutions_normalized_type = 'object' then (
               select count(*)::int
               from jsonb_each(v_component_resolutions) e
             )
-            when jsonb_typeof(v_component_resolutions) = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
+            when v_component_resolutions_normalized_type = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
             else 0
           end
         ),
@@ -1328,6 +1377,40 @@ begin
         v_umbrella_overpayment_sync := '{}'::jsonb;
         v_umbrella_status := 'NOTHING_RELEVANT';
       else
+        begin
+          perform public._imp_debug_audit(
+            p_actor_user_id,
+            'PAY_CREATE_DRAFT_BATCHES_SPLIT:UMBRELLA_ERROR',
+            jsonb_build_object(
+              'pay_date', p_pay_date::text,
+              'week_ending_cutoff', p_week_ending_cutoff::text,
+              'scope', 'UMBRELLA',
+              'error', v_err,
+              'component_resolution_present', v_component_resolutions_present,
+              'component_resolution_supplied', v_component_resolutions_supplied,
+              'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
+              'component_resolution_normalized_present', v_component_resolutions_normalized_present,
+              'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
+              'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
+              'selected_preview_row_count', (
+                case
+                  when v_selected_preview_row_ids_supplied then coalesce(v_selected_preview_row_ids_sanitized_count, coalesce(jsonb_array_length(v_selected_preview_row_ids), 0))
+                  else null
+                end
+              )
+            ),
+            'pay_create_draft_batches_split',
+            'pay_date:'||p_pay_date::text,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          );
+        exception when others then
+          null;
+        end;
         raise;
       end if;
   end;
@@ -1463,6 +1546,42 @@ begin
           v_paye_overpayment_sync := '{}'::jsonb;
           v_paye_status := 'NOTHING_RELEVANT';
         else
+          begin
+            perform public._imp_debug_audit(
+              p_actor_user_id,
+              'PAY_CREATE_DRAFT_BATCHES_SPLIT:PAYE_ERROR',
+              jsonb_build_object(
+                'pay_date', p_pay_date::text,
+                'week_ending_cutoff', p_week_ending_cutoff::text,
+                'scope', 'PAYE',
+                'error', v_err,
+                'component_resolution_present', v_component_resolutions_present,
+                'component_resolution_supplied', v_component_resolutions_supplied,
+                'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
+                'component_resolution_normalized_present', v_component_resolutions_normalized_present,
+                'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
+                'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
+                'selected_preview_row_count', (
+                  case
+                    when v_selected_preview_row_ids_supplied then coalesce(v_selected_preview_row_ids_sanitized_count, coalesce(jsonb_array_length(v_selected_preview_row_ids), 0))
+                    else null
+                  end
+                ),
+                'paye_scope_blocked', v_paye_scope_blocked,
+                'paye_block_reason_code', v_paye_block_reason_code
+              ),
+              'pay_create_draft_batches_split',
+              'pay_date:'||p_pay_date::text,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            );
+          exception when others then
+            null;
+          end;
           raise;
         end if;
     end;
@@ -1485,14 +1604,20 @@ begin
         'paye_pay_batch_id', coalesce(v_paye_pay_batch_id::text, null),
         'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
         'paye_overpayment_sync', v_paye_overpayment_sync,
-        'component_resolution_shape', coalesce(jsonb_typeof(v_component_resolutions), 'null'),
-          'component_resolution_count', (
+        'component_resolution_present', v_component_resolutions_present,
+        'component_resolution_supplied', v_component_resolutions_supplied,
+        'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
+        'component_resolution_normalized_present', v_component_resolutions_normalized_present,
+        'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
+        'component_resolution_omitted_as_absent', (v_component_resolutions_present and not v_component_resolutions_supplied),
+        'component_resolution_shape', coalesce(v_component_resolutions_normalized_type, 'null'),
+        'component_resolution_count', (
           case
-            when jsonb_typeof(v_component_resolutions) = 'object' then (
+            when v_component_resolutions_normalized_type = 'object' then (
               select count(*)::int
               from jsonb_each(v_component_resolutions) e
             )
-            when jsonb_typeof(v_component_resolutions) = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
+            when v_component_resolutions_normalized_type = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
             else 0
           end
         ),
@@ -1609,6 +1734,7 @@ begin
   );
 end;
 $$;
+
 
 
 
