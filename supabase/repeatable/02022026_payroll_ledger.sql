@@ -10160,6 +10160,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -10299,6 +10301,10 @@ v_stage_15_current_batch_key_count int := 0;
 v_stage_15_reserved_keys_sample jsonb := '[]'::jsonb;
 v_stage_15_outstanding_keys_sample jsonb := '[]'::jsonb;
 v_stage_15_current_batch_keys_sample jsonb := '[]'::jsonb;
+v_stage_15_ts_ids_sample jsonb := '[]'::jsonb;
+v_stage_15_current_batch_items_sample jsonb := '[]'::jsonb;
+v_stage_15_current_batch_keyed_sample jsonb := '[]'::jsonb;
+v_stage_15_checks_sample jsonb := '[]'::jsonb;
 v_override_consume_rec record;
 v_component_resolution_candidate record;
   v_payout_instruction_freeze_rec record;
@@ -13196,7 +13202,7 @@ end;
       to_jsonb(oc) as j
     from public._pay_outstanding_components((select t.timesheet_ids from ts_ids_arr t)) oc
   ),
-  outstanding_rows as (
+  outstanding_rows_raw as (
     select
       nullif(btrim(coalesce(o.j->>'timesheet_id','')), '')::uuid as timesheet_id,
       upper(nullif(btrim(coalesce(o.j->>'key_type','')), '')) as key_type,
@@ -13216,6 +13222,18 @@ end;
     where nullif(btrim(coalesce(o.j->>'timesheet_id','')), '') is not null
       and nullif(btrim(coalesce(o.j->>'key_type','')), '') is not null
       and nullif(btrim(coalesce(o.j->>'key_value','')), '') is not null
+  ),
+  outstanding_rows as (
+    select
+      orw_raw.timesheet_id,
+      orw_raw.key_type,
+      orw_raw.key_value,
+      round(max(coalesce(orw_raw.outstanding_ex_vat, 0)), 2) as outstanding_ex_vat
+    from outstanding_rows_raw orw_raw
+    group by
+      orw_raw.timesheet_id,
+      orw_raw.key_type,
+      orw_raw.key_value
   ),
   current_batch_items as (
     select
@@ -13610,6 +13628,112 @@ end;
         order by cbr.timesheet_id::text, cbr.key_type, cbr.key_value
         limit 50
       ) cbr
+    ),
+    (
+      select coalesce(
+        jsonb_agg(x.timesheet_id_text order by x.timesheet_id_text),
+        '[]'::jsonb
+      )
+      from (
+        select distinct
+          tid::text as timesheet_id_text
+        from ts_ids_arr t
+        cross join lateral unnest(coalesce(t.timesheet_ids, array[]::uuid[])) as u(tid)
+        order by tid::text
+        limit 50
+      ) x
+    ),
+    (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'pay_batch_item_id', cbi.pay_batch_item_id::text,
+            'timesheet_id', cbi.timesheet_id::text,
+            'item_type', cbi.item_type,
+            'segment_key', cbi.segment_key,
+            'source_ref', cbi.source_ref,
+            'finance_component_id', case when cbi.finance_component_id is null then null else cbi.finance_component_id::text end,
+            'frozen_component_key_type', cbi.frozen_component_key_type,
+            'frozen_component_key_value', cbi.frozen_component_key_value,
+            'frozen_snapshot_key_type', nullif(
+              btrim(
+                coalesce(
+                  cbi.frozen_component_snapshot_json->>'component_key_type',
+                  cbi.frozen_component_snapshot_json->>'key_type',
+                  ''
+                )
+              ),
+              ''
+            ),
+            'frozen_snapshot_key_value', nullif(
+              btrim(
+                coalesce(
+                  cbi.frozen_component_snapshot_json->>'component_key_value',
+                  cbi.frozen_component_snapshot_json->>'key_value',
+                  ''
+                )
+              ),
+              ''
+            ),
+            'frozen_source_basis_work_date', nullif(btrim(coalesce(cbi.frozen_source_basis_json->>'work_date','')), ''),
+            'live_component_key_type', cbi.live_component_key_type,
+            'live_component_key_value', cbi.live_component_key_value,
+            'amount_ex_vat', cbi.amount_ex_vat
+          )
+          order by cbi.timesheet_id::text, cbi.item_type, coalesce(cbi.segment_key,''), coalesce(cbi.source_ref,''), cbi.pay_batch_item_id::text
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select *
+        from current_batch_items cbi
+        order by cbi.timesheet_id::text, cbi.item_type, coalesce(cbi.segment_key,''), coalesce(cbi.source_ref,''), cbi.pay_batch_item_id::text
+        limit 50
+      ) cbi
+    ),
+    (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'timesheet_id', cbk.timesheet_id::text,
+            'key_type', cbk.key_type,
+            'key_value', cbk.key_value,
+            'amount_ex_vat', cbk.amount_ex_vat
+          )
+          order by cbk.timesheet_id::text, cbk.key_type, cbk.key_value, cbk.amount_ex_vat
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select *
+        from current_batch_keyed cbk
+        order by cbk.timesheet_id::text, cbk.key_type, cbk.key_value, cbk.amount_ex_vat
+        limit 50
+      ) cbk
+    ),
+    (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'timesheet_id', chk.timesheet_id::text,
+            'key_type', chk.key_type,
+            'key_value', chk.key_value,
+            'reserved_total_ex_vat', chk.reserved_total_ex_vat,
+            'current_batch_reserved_ex_vat', chk.current_batch_reserved_ex_vat,
+            'reserved_before_ex_vat', chk.reserved_before_ex_vat,
+            'payable_possible_ex_vat', chk.payable_possible_ex_vat,
+            'tolerance_ex_vat', chk.tolerance_ex_vat
+          )
+          order by chk.timesheet_id::text, chk.key_type, chk.key_value
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select *
+        from checks chk
+        order by chk.timesheet_id::text, chk.key_type, chk.key_value
+        limit 50
+      ) chk
     )
   into
     v_reserved,
@@ -13618,7 +13742,11 @@ end;
     v_stage_15_current_batch_key_count,
     v_stage_15_reserved_keys_sample,
     v_stage_15_outstanding_keys_sample,
-    v_stage_15_current_batch_keys_sample
+    v_stage_15_current_batch_keys_sample,
+    v_stage_15_ts_ids_sample,
+    v_stage_15_current_batch_items_sample,
+    v_stage_15_current_batch_keyed_sample,
+    v_stage_15_checks_sample
   from overruns;
 
   begin
@@ -13635,7 +13763,11 @@ end;
         'current_batch_key_count', v_stage_15_current_batch_key_count,
         'reserved_keys_sample', v_stage_15_reserved_keys_sample,
         'outstanding_keys_sample', v_stage_15_outstanding_keys_sample,
-        'current_batch_keys_sample', v_stage_15_current_batch_keys_sample
+        'current_batch_keys_sample', v_stage_15_current_batch_keys_sample,
+        'timesheet_ids_sample', v_stage_15_ts_ids_sample,
+        'current_batch_items_sample', v_stage_15_current_batch_items_sample,
+        'current_batch_keyed_sample', v_stage_15_current_batch_keyed_sample,
+        'checks_sample', v_stage_15_checks_sample
       ),
       'pay_batches',
       v_batch_id::text,
@@ -13666,7 +13798,22 @@ end;
       );
     exception when others then null; end;
 
-    raise exception 'PAY_BATCH_RESERVATION_OVERRUN: %', v_reserved::text;
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_RESERVATION_OVERRUN',
+      'stage', v_stage,
+      'pay_batch_id', v_batch_id::text,
+      'overruns', v_reserved,
+      'reserved_key_count', v_stage_15_reserved_key_count,
+      'outstanding_key_count', v_stage_15_outstanding_key_count,
+      'current_batch_key_count', v_stage_15_current_batch_key_count,
+      'reserved_keys_sample', v_stage_15_reserved_keys_sample,
+      'outstanding_keys_sample', v_stage_15_outstanding_keys_sample,
+      'current_batch_keys_sample', v_stage_15_current_batch_keys_sample,
+      'timesheet_ids_sample', v_stage_15_ts_ids_sample,
+      'current_batch_items_sample', v_stage_15_current_batch_items_sample,
+      'current_batch_keyed_sample', v_stage_15_current_batch_keyed_sample,
+      'checks_sample', v_stage_15_checks_sample
+    )::text;
   end if;
 
   v_stage := 'STAGE_16A_SET_PAYE_AWAITING_NET_MARKER';
