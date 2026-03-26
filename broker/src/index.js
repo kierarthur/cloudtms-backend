@@ -13633,32 +13633,45 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
   }
 
-  const argsWithFilters = {
-    p_pay_date: payDate,
-    p_week_ending_cutoff: cutoffIso,
-    p_actor_user_id: user.id,
-    p_preview_decisions_json: previewDecisions,
-    p_override_reason: overrideReason,
-    p_override_mode: 'NONE',
-    p_override_continue: overrideContinue,
-    p_override_verified: overrideVerified,
-    p_override_verified_by_user_id: overrideVerifiedByUserId,
-    p_override_verified_at_utc: overrideVerifiedAtUtc
-  };
-  if (candidateId) argsWithFilters.p_candidate_id = candidateId;
-  if (clientId) argsWithFilters.p_client_id = clientId;
+  let effectiveCandidateId = candidateId;
+  let effectiveClientId = clientId;
+  let routeFilterSource = effectiveCandidateId
+    ? 'REQUEST_CANDIDATE_ID'
+    : (effectiveClientId ? 'REQUEST_CLIENT_ID' : 'UNFILTERED');
+  let routeFilterWasDerived = false;
 
-  const argsWithoutFilters = {
-    p_pay_date: payDate,
-    p_week_ending_cutoff: cutoffIso,
-    p_actor_user_id: user.id,
-    p_preview_decisions_json: previewDecisions,
-    p_override_reason: overrideReason,
-    p_override_mode: 'NONE',
-    p_override_continue: overrideContinue,
-    p_override_verified: overrideVerified,
-    p_override_verified_by_user_id: overrideVerifiedByUserId,
-    p_override_verified_at_utc: overrideVerifiedAtUtc
+  const logRouteDebug = (level, event, details) => {
+    try {
+      const fn = (typeof console !== 'undefined' && console && typeof console[level] === 'function')
+        ? console[level].bind(console)
+        : ((typeof console !== 'undefined' && console && typeof console.log === 'function')
+            ? console.log.bind(console)
+            : null);
+      if (!fn) return;
+      if (details === undefined) {
+        fn(`[handleBankingPayCreateDraft] ${event}`);
+        return;
+      }
+      fn(`[handleBankingPayCreateDraft] ${event}`, cloneJson(details) ?? details);
+    } catch {}
+  };
+
+  const buildSplitArgs = (includeFilters = true) => {
+    const args = {
+      p_pay_date: payDate,
+      p_week_ending_cutoff: cutoffIso,
+      p_actor_user_id: user.id,
+      p_preview_decisions_json: previewDecisions,
+      p_override_reason: overrideReason,
+      p_override_mode: 'NONE',
+      p_override_continue: overrideContinue,
+      p_override_verified: overrideVerified,
+      p_override_verified_by_user_id: overrideVerifiedByUserId,
+      p_override_verified_at_utc: overrideVerifiedAtUtc
+    };
+    if (includeFilters && effectiveCandidateId) args.p_candidate_id = effectiveCandidateId;
+    if (includeFilters && effectiveClientId) args.p_client_id = effectiveClientId;
+    return args;
   };
 
   const unwrapPayPreviewRpc = (rpcRes) => {
@@ -13674,25 +13687,42 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return (payload && typeof payload === 'object') ? payload : {};
   };
 
+  const buildPayPreviewArgs = (includeFilters = true) => ({
+    p_pay_date: payDate,
+    p_week_ending_cutoff: cutoffIso,
+    p_actor_user_id: user.id,
+    ...(includeFilters && effectiveCandidateId ? { p_candidate_id: effectiveCandidateId } : {}),
+    ...(includeFilters && effectiveClientId ? { p_client_id: effectiveClientId } : {})
+  });
+
   const callPayPreview = async () => {
     let rpcRes = null;
     try {
-      rpcRes = await sbRpc(env, 'pay_preview', {
-        p_pay_date: payDate,
-        p_week_ending_cutoff: cutoffIso,
-        p_actor_user_id: user.id,
-        ...(candidateId ? { p_candidate_id: candidateId } : {}),
-        ...(clientId ? { p_client_id: clientId } : {})
-      });
+      rpcRes = await sbRpc(env, 'pay_preview', buildPayPreviewArgs(true));
     } catch (e) {
       const msg = String(e?.message || e || '');
       const looksLikeUnexpectedParam =
         /unexpected/i.test(msg) || /unknown/i.test(msg) || /parameter/i.test(msg) || /PGRST/i.test(msg);
 
-      if (looksLikeUnexpectedParam && (candidateId || clientId)) {
-        throw new Error(`pay_preview rejected filter parameters (candidate_id/client_id). Original error: ${msg}`);
+      if (looksLikeUnexpectedParam && (effectiveCandidateId || effectiveClientId)) {
+        if (candidateId || clientId) {
+          throw new Error(`pay_preview rejected filter parameters (candidate_id/client_id). Original error: ${msg}`);
+        }
+
+        logRouteDebug('warn', 'PAY_PREVIEW_FILTER_REJECTED_FALLBACK_UNFILTERED', {
+          pay_date: payDate,
+          week_ending_cutoff: cutoffIso,
+          effective_candidate_id: effectiveCandidateId,
+          effective_client_id: effectiveClientId,
+          filter_source: routeFilterSource,
+          filter_was_derived: routeFilterWasDerived,
+          error: msg
+        });
+
+        rpcRes = await sbRpc(env, 'pay_preview', buildPayPreviewArgs(false));
+      } else {
+        throw e;
       }
-      throw e;
     }
     return unwrapPayPreviewRpc(rpcRes);
   };
@@ -13886,6 +13916,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     const safeEntries = hasSafeSnapshot ? extractCaseStateEntries(decisionsObj.safe_case_states) : [];
     const safeSnapshotSuppliedEmpty = hasSafeSnapshot && safeEntries.length === 0;
     const eligibleCandidateIds = new Set();
+    const clientIds = new Set();
     const timesheetIds = new Set();
     const timesheetToCandidateId = new Map();
 
@@ -13912,6 +13943,17 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
       eligibleCandidateIds.add(candId);
 
+      const clientIdLocal = String(
+        entry.client_id ||
+        entry.clientId ||
+        caseObj.client_id ||
+        ''
+      ).trim();
+
+      if (clientIdLocal && uuidRe.test(clientIdLocal)) {
+        clientIds.add(clientIdLocal);
+      }
+
       const tid = String(
         entry.linked_timesheet_id ||
         entry.linkedTimesheetId ||
@@ -13933,6 +13975,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       hasSafeSnapshot,
       safeSnapshotSuppliedEmpty,
       eligibleCandidateIds,
+      clientIds,
       timesheetIds: Array.from(timesheetIds),
       timesheetToCandidateId
     };
@@ -14066,7 +14109,112 @@ async function handleBankingPayCreateDraft(env, req, user) {
   };
 
   try {
-    const preview0 = await callPayPreview();
+    const includeCandidateIdsForScope = Array.isArray(includeSet) ? includeSet : null;
+    const preflightDecisionAwareScope = collectDecisionAwareScope(previewDecisions, includeCandidateIdsForScope);
+    const preflightDecisionCandidateIds = Array.from(preflightDecisionAwareScope.eligibleCandidateIds || []);
+    const preflightDecisionClientIds = Array.from(preflightDecisionAwareScope.clientIds || []);
+    const preflightCaseResolutionCandidateIds = Array.from(new Set(
+      extractCaseStateEntries(previewDecisions?.case_resolution_states)
+        .map((entry) => {
+          const caseObj = (entry?.case && typeof entry.case === 'object' && !Array.isArray(entry.case))
+            ? entry.case
+            : (
+                entry?.raw_case && typeof entry.raw_case === 'object' && !Array.isArray(entry.raw_case)
+                  ? entry.raw_case
+                  : entry
+              );
+          return String(
+            entry?.candidate_id ||
+            entry?.candidateId ||
+            caseObj?.candidate_id ||
+            ''
+          ).trim();
+        })
+        .filter((candId) => uuidRe.test(candId))
+    ));
+
+    const safeSnapshotSupportsSingleCandidateFilter = (
+      preflightDecisionAwareScope.hasSafeSnapshot &&
+      !preflightDecisionAwareScope.safeSnapshotSuppliedEmpty &&
+      preflightDecisionCandidateIds.length === 1 &&
+      preflightCaseResolutionCandidateIds.length === 1 &&
+      preflightCaseResolutionCandidateIds[0] === preflightDecisionCandidateIds[0]
+    );
+
+    if (!effectiveCandidateId && Array.isArray(includeCandidateIdsForScope) && includeCandidateIdsForScope.length === 1) {
+      effectiveCandidateId = includeCandidateIdsForScope[0];
+      routeFilterSource = 'INCLUDE_SET_SINGLE_CANDIDATE';
+      routeFilterWasDerived = true;
+    }
+
+    if (!effectiveCandidateId && safeSnapshotSupportsSingleCandidateFilter) {
+      effectiveCandidateId = preflightDecisionCandidateIds[0];
+      routeFilterSource = 'SAFE_CASE_STATES_SINGLE_CANDIDATE';
+      routeFilterWasDerived = true;
+    }
+
+    if (
+      !effectiveClientId &&
+      !effectiveCandidateId &&
+      preflightDecisionAwareScope.hasSafeSnapshot &&
+      !preflightDecisionAwareScope.safeSnapshotSuppliedEmpty &&
+      preflightDecisionClientIds.length === 1 &&
+      preflightCaseResolutionCandidateIds.length <= 1
+    ) {
+      effectiveClientId = preflightDecisionClientIds[0];
+      routeFilterSource = 'SAFE_CASE_STATES_SINGLE_CLIENT';
+      routeFilterWasDerived = true;
+    }
+
+    if (effectiveCandidateId && !previewDecisions.candidate_filter_id) {
+      previewDecisions.candidate_filter_id = effectiveCandidateId;
+    }
+    if (effectiveClientId && !previewDecisions.client_filter_id) {
+      previewDecisions.client_filter_id = effectiveClientId;
+    }
+
+    logRouteDebug('info', 'PAY_PREVIEW_PREFLIGHT_SCOPE', {
+      pay_date: payDate,
+      week_ending_cutoff: cutoffIso,
+      explicit_candidate_id: candidateId,
+      explicit_client_id: clientId,
+      effective_candidate_id: effectiveCandidateId,
+      effective_client_id: effectiveClientId,
+      filter_source: routeFilterSource,
+      filter_was_derived: routeFilterWasDerived,
+      include_set_count: Array.isArray(includeCandidateIdsForScope) ? includeCandidateIdsForScope.length : 0,
+      safe_snapshot_present: preflightDecisionAwareScope.hasSafeSnapshot,
+      safe_snapshot_supplied_empty: preflightDecisionAwareScope.safeSnapshotSuppliedEmpty,
+      safe_snapshot_candidate_count: preflightDecisionCandidateIds.length,
+      safe_snapshot_client_count: preflightDecisionClientIds.length,
+      safe_snapshot_timesheet_count: preflightDecisionAwareScope.timesheetIds.length,
+      case_resolution_candidate_count: preflightCaseResolutionCandidateIds.length,
+      explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true,
+      component_resolutions_present: Object.prototype.hasOwnProperty.call(previewDecisions, 'component_resolutions')
+    });
+
+    let preview0 = null;
+    try {
+      preview0 = await callPayPreview();
+    } catch (e) {
+      logRouteDebug('error', 'PAY_PREVIEW_PREFLIGHT_FAILED', {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        effective_candidate_id: effectiveCandidateId,
+        effective_client_id: effectiveClientId,
+        filter_source: routeFilterSource,
+        filter_was_derived: routeFilterWasDerived,
+        include_set_count: Array.isArray(includeCandidateIdsForScope) ? includeCandidateIdsForScope.length : 0,
+        safe_snapshot_present: preflightDecisionAwareScope.hasSafeSnapshot,
+        safe_snapshot_candidate_count: preflightDecisionCandidateIds.length,
+        safe_snapshot_timesheet_count: preflightDecisionAwareScope.timesheetIds.length,
+        case_resolution_candidate_count: preflightCaseResolutionCandidateIds.length,
+        explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true,
+        error: String(e?.message || e || '')
+      });
+      throw e;
+    }
+
     const previewRowUniverse = collectPreviewRowIdsFromPreview(preview0);
 
     if (!explicitSelectedPreviewRowIdsProvided) {
@@ -14076,9 +14224,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
       if (normalizedSelectedPreviewRowIds.length <= 0) {
         try {
-          console.warn('[handleBankingPayCreateDraft] Rejected explicit empty selected_preview_row_ids', {
-            candidate_id: candidateId,
-            client_id: clientId,
+          logRouteDebug('warn', 'REJECTED_EXPLICIT_EMPTY_SELECTED_PREVIEW_ROW_IDS', {
+            effective_candidate_id: effectiveCandidateId,
+            effective_client_id: effectiveClientId,
+            filter_source: routeFilterSource,
             preview_row_universe_count: previewRowUniverse.length
           });
         } catch {}
@@ -14091,9 +14240,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
         if (filteredSelectedPreviewRowIds.length <= 0) {
           try {
-            console.warn('[handleBankingPayCreateDraft] Rejected selected_preview_row_ids not present in current preview universe', {
-              candidate_id: candidateId,
-              client_id: clientId,
+            logRouteDebug('warn', 'REJECTED_SELECTED_PREVIEW_ROWS_OUTSIDE_CURRENT_PREVIEW', {
+              effective_candidate_id: effectiveCandidateId,
+              effective_client_id: effectiveClientId,
+              filter_source: routeFilterSource,
               selected_preview_row_ids: normalizedSelectedPreviewRowIds,
               preview_row_universe_count: previewRowUniverse.length
             });
@@ -14108,9 +14258,9 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
 
     const rawEligibleScope =
-      collectEligibleTimesheetsForDraft(preview0, (Array.isArray(includeSet) ? includeSet : null));
+      collectEligibleTimesheetsForDraft(preview0, includeCandidateIdsForScope);
 
-    let decisionAwareScope = collectDecisionAwareScope(previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+    let decisionAwareScope = preflightDecisionAwareScope;
 
     const decisionAwareSnapshotLooksMalformed =
       !!decisionAwareScope.hasSafeSnapshot &&
@@ -14129,9 +14279,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
       if (previewSafeCaseStates !== null) previewDecisions.safe_case_states = previewSafeCaseStates;
 
       try {
-        console.warn('[handleBankingPayCreateDraft] Rebuilt malformed decision snapshot from preview truth', {
-          candidate_id: candidateId,
-          client_id: clientId,
+        logRouteDebug('warn', 'REBUILT_MALFORMED_DECISION_SNAPSHOT_FROM_PREVIEW', {
+          effective_candidate_id: effectiveCandidateId,
+          effective_client_id: effectiveClientId,
+          filter_source: routeFilterSource,
           has_safe_snapshot_key: decisionAwareScope.hasSafeSnapshotKey,
           has_safe_snapshot: decisionAwareScope.hasSafeSnapshot,
           safe_snapshot_supplied_empty: decisionAwareScope.safeSnapshotSuppliedEmpty,
@@ -14143,7 +14294,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
         });
       } catch {}
 
-      decisionAwareScope = collectDecisionAwareScope(previewDecisions, (Array.isArray(includeSet) ? includeSet : null));
+      decisionAwareScope = collectDecisionAwareScope(previewDecisions, includeCandidateIdsForScope);
     }
 
     const effectiveScope = (decisionAwareScope.hasSafeSnapshot && !decisionAwareScope.safeSnapshotSuppliedEmpty)
@@ -14154,9 +14305,10 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
     if (effectiveEligibleCount <= 0) {
       try {
-        console.warn('[handleBankingPayCreateDraft] No eligible scope after sanitation', {
-          candidate_id: candidateId,
-          client_id: clientId,
+        logRouteDebug('warn', 'NO_ELIGIBLE_SCOPE_AFTER_SANITATION', {
+          effective_candidate_id: effectiveCandidateId,
+          effective_client_id: effectiveClientId,
+          filter_source: routeFilterSource,
           has_safe_snapshot_key: decisionAwareScope.hasSafeSnapshotKey,
           has_safe_snapshot: decisionAwareScope.hasSafeSnapshot,
           safe_snapshot_supplied_empty: decisionAwareScope.safeSnapshotSuppliedEmpty,
@@ -14214,19 +14366,42 @@ async function handleBankingPayCreateDraft(env, req, user) {
 
     let rpcRes = null;
 
+    logRouteDebug('info', 'PAY_CREATE_DRAFT_SPLIT_START', {
+      pay_date: payDate,
+      week_ending_cutoff: cutoffIso,
+      effective_candidate_id: effectiveCandidateId,
+      effective_client_id: effectiveClientId,
+      filter_source: routeFilterSource,
+      filter_was_derived: routeFilterWasDerived,
+      explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true,
+      in_scope_timesheet_count: uniqueInScopeIds.length,
+      excluded_timesheet_count: excludedTimesheetIdsFromDrain.length,
+      component_resolutions_present: Object.prototype.hasOwnProperty.call(previewDecisions, 'component_resolutions')
+    });
+
     try {
-      rpcRes = await sbRpc(env, 'pay_create_draft_batches_split', argsWithFilters);
+      rpcRes = await sbRpc(env, 'pay_create_draft_batches_split', buildSplitArgs(true));
     } catch (e) {
       const msg = String(e?.message || e || '');
       const looksLikeUnexpectedParam =
         /unexpected/i.test(msg) || /unknown/i.test(msg) || /parameter/i.test(msg) || /PGRST/i.test(msg);
 
-      if (looksLikeUnexpectedParam && (candidateId || clientId)) {
-        throw new Error(`pay_create_draft_batches_split rejected filter parameters (candidate_id/client_id). This indicates an RPC signature mismatch between environments or wrong param names. Original error: ${msg}`);
-      }
+      if (looksLikeUnexpectedParam && (effectiveCandidateId || effectiveClientId)) {
+        if (candidateId || clientId) {
+          throw new Error(`pay_create_draft_batches_split rejected filter parameters (candidate_id/client_id). This indicates an RPC signature mismatch between environments or wrong param names. Original error: ${msg}`);
+        }
 
-      if (looksLikeUnexpectedParam && !(candidateId || clientId)) {
-        rpcRes = await sbRpc(env, 'pay_create_draft_batches_split', argsWithoutFilters);
+        logRouteDebug('warn', 'PAY_CREATE_DRAFT_SPLIT_FILTER_REJECTED_FALLBACK_UNFILTERED', {
+          pay_date: payDate,
+          week_ending_cutoff: cutoffIso,
+          effective_candidate_id: effectiveCandidateId,
+          effective_client_id: effectiveClientId,
+          filter_source: routeFilterSource,
+          filter_was_derived: routeFilterWasDerived,
+          error: msg
+        });
+
+        rpcRes = await sbRpc(env, 'pay_create_draft_batches_split', buildSplitArgs(false));
       } else {
         throw e;
       }
@@ -14289,8 +14464,39 @@ async function handleBankingPayCreateDraft(env, req, user) {
       });
     }
 
+    logRouteDebug('info', 'PAY_CREATE_DRAFT_SPLIT_SUCCESS', {
+      pay_date: payDate,
+      week_ending_cutoff: cutoffIso,
+      effective_candidate_id: effectiveCandidateId,
+      effective_client_id: effectiveClientId,
+      filter_source: routeFilterSource,
+      filter_was_derived: routeFilterWasDerived,
+      umbrella_status: String(outPayload?.umbrella_status || '').trim() || null,
+      umbrella_pay_batch_id: String(outPayload?.umbrella_pay_batch_id || '').trim() || null,
+      paye_status: String(outPayload?.paye_status || '').trim() || null,
+      paye_pay_batch_id: String(outPayload?.paye_pay_batch_id || '').trim() || null,
+      blocked_case_count: Array.isArray(outPayload?.blocked_case_ids)
+        ? outPayload.blocked_case_ids.length
+        : Number(outPayload?.blocked_case_count || 0),
+      safe_case_count: Array.isArray(outPayload?.safe_case_ids)
+        ? outPayload.safe_case_ids.length
+        : Number(outPayload?.safe_case_count || 0),
+      excluded_timesheet_count: Array.isArray(outPayload?.excluded_timesheets)
+        ? outPayload.excluded_timesheets.length
+        : 0
+    });
+
     return withCORS(env, req, ok(outPayload));
   } catch (e) {
+    logRouteDebug('error', 'HANDLE_ROUTE_FAILED', {
+      pay_date: payDate,
+      week_ending_cutoff: cutoffIso,
+      effective_candidate_id: effectiveCandidateId,
+      effective_client_id: effectiveClientId,
+      filter_source: routeFilterSource,
+      filter_was_derived: routeFilterWasDerived,
+      error: String(e?.message || e || '')
+    });
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
