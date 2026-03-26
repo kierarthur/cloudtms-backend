@@ -10159,6 +10159,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -10292,6 +10293,12 @@ v_component_resolution_invalid_sample jsonb := '[]'::jsonb;
 v_negative_preview_timesheets_count int := 0;
 v_rows_upd_timesheet_overrides_consumed int := 0;
 v_consumed_timesheet_payment_overrides jsonb := '[]'::jsonb;
+v_stage_15_reserved_key_count int := 0;
+v_stage_15_outstanding_key_count int := 0;
+v_stage_15_current_batch_key_count int := 0;
+v_stage_15_reserved_keys_sample jsonb := '[]'::jsonb;
+v_stage_15_outstanding_keys_sample jsonb := '[]'::jsonb;
+v_stage_15_current_batch_keys_sample jsonb := '[]'::jsonb;
 v_override_consume_rec record;
 v_component_resolution_candidate record;
   v_payout_instruction_freeze_rec record;
@@ -13213,97 +13220,209 @@ end;
   current_batch_items as (
     select
       pbi.id as pay_batch_item_id,
+      pbc.pay_batch_id as pay_batch_id,
       pbi.timesheet_id as timesheet_id,
       pbi.item_type as item_type,
       pbi.segment_key as segment_key,
       pbi.source_ref as source_ref,
-      round(coalesce(pbi.amount_ex_vat,0),2) as amount_ex_vat
+      pbi.finance_component_id as finance_component_id,
+      pbi.frozen_component_key_type as frozen_component_key_type,
+      pbi.frozen_component_key_value as frozen_component_key_value,
+      pbi.frozen_component_snapshot_json as frozen_component_snapshot_json,
+      pbi.frozen_source_basis_json as frozen_source_basis_json,
+      pfc.component_key_type as live_component_key_type,
+      pfc.component_key_value as live_component_key_value,
+      round(
+        coalesce(
+          pbi.amount_ex_vat,
+          pbi.frozen_target_amount_ex_vat,
+          pbi.amount_inc_vat,
+          pbi.frozen_target_amount_inc_vat,
+          0
+        ),
+        2
+      ) as amount_ex_vat
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
+    left join public.pay_finance_case_components pfc
+      on pfc.id = pbi.finance_component_id
     where pbc.pay_batch_id = v_batch_id
       and pbi.timesheet_id is not null
       and coalesce(pbi.is_voided,false) = false
       and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
   ),
+  current_batch_snapshot_choice as (
+    select
+      cbi.pay_batch_id,
+      cbi.timesheet_id,
+      (
+        select pbs1.target_snapshot_json
+        from public.pay_batch_timesheet_snapshots pbs1
+        where pbs1.pay_batch_id = cbi.pay_batch_id
+          and pbs1.timesheet_id = cbi.timesheet_id
+        order by pbs1.created_at_utc desc, pbs1.id desc
+        limit 1
+      ) as target_snapshot_json
+    from (
+      select distinct
+        cbi.pay_batch_id,
+        cbi.timesheet_id
+      from current_batch_items cbi
+    ) cbi
+  ),
+  current_batch_seg_lookup as (
+    select
+      cbi.pay_batch_id,
+      cbi.timesheet_id,
+      coalesce(
+        nullif(btrim(coalesce(cbi.segment_key,'')), ''),
+        case
+          when cbi.source_ref is not null and btrim(cbi.source_ref) like 'seg:%'
+            then nullif(btrim(split_part(cbi.source_ref,':',2)), '')
+          else null
+        end
+      ) as seg_id
+    from current_batch_items cbi
+    where cbi.item_type = 'SEGMENT_DELTA'
+  ),
+  current_batch_seg_date_map as (
+    select
+      csl.pay_batch_id,
+      csl.timesheet_id,
+      csl.seg_id,
+      nullif(btrim(coalesce(seg.value->>'date','')), '') as seg_date_raw
+    from current_batch_seg_lookup csl
+    join current_batch_snapshot_choice csc
+      on csc.pay_batch_id = csl.pay_batch_id
+     and csc.timesheet_id = csl.timesheet_id
+    join lateral jsonb_array_elements(coalesce(csc.target_snapshot_json->'segments','[]'::jsonb)) as seg(value)
+      on true
+    where csl.seg_id is not null
+      and seg.value is not null
+      and jsonb_typeof(seg.value) = 'object'
+      and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = csl.seg_id
+  ),
+  current_batch_seg_date_final as (
+    select
+      csdm.pay_batch_id,
+      csdm.timesheet_id,
+      csdm.seg_id,
+      case
+        when csdm.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then csdm.seg_date_raw
+        else null
+      end as seg_date
+    from current_batch_seg_date_map csdm
+  ),
   current_batch_keyed as (
     select
       cbi.timesheet_id,
-      case
-        when cbi.item_type = 'SEGMENT_DELTA' then
-          case
-            when nullif(btrim(coalesce(cbi.segment_key,'')), '') = ('ts:' || cbi.timesheet_id::text) then 'TS_TOTAL'
-            when seg_map.seg_date is not null then 'TS_DAY'
-            else 'TS_TOTAL'
-          end
-        when cbi.item_type = 'MILEAGE_DELTA' then 'EXPENSE_CODE'
-        when cbi.item_type = 'ADJUSTMENT_DELTA' then
-          case
-            when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%' then 'TS_TOTAL'
-            when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%' or btrim(cbi.source_ref) = 'additional') then 'ADDITIONAL_CODE'
-            else 'EXPENSE_CODE'
-          end
-        when cbi.item_type = 'EXPENSE_DELTA' then
-          case
-            when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%' or btrim(cbi.source_ref) = 'additional') then 'ADDITIONAL_CODE'
-            else 'EXPENSE_CODE'
-          end
-        else 'EXPENSE_CODE'
-      end as key_type,
-      case
-        when cbi.item_type = 'SEGMENT_DELTA' then
-          case
-            when nullif(btrim(coalesce(cbi.segment_key,'')), '') = ('ts:' || cbi.timesheet_id::text) then 'TOTAL'
-            when seg_map.seg_date is not null then seg_map.seg_date
-            else 'TOTAL'
-          end
-        when cbi.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
-        when cbi.item_type = 'ADJUSTMENT_DELTA' then
-          case
-            when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%' then 'TOTAL'
-            when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%') then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
-            when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional' then 'TOTAL'
-            when cbi.source_ref is not null and btrim(cbi.source_ref) <> '' then upper(btrim(cbi.source_ref))
-            else 'UNKNOWN'
-          end
-        when cbi.item_type = 'EXPENSE_DELTA' then
-          case
-            when cbi.source_ref is not null and (btrim(cbi.source_ref) like 'additional:%' or btrim(cbi.source_ref) like 'add:%') then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
-            when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional' then 'TOTAL'
-            when cbi.source_ref is not null and btrim(cbi.source_ref) <> '' then upper(btrim(cbi.source_ref))
-            else 'UNKNOWN'
-          end
-        else 'UNKNOWN'
-      end as key_value,
+      coalesce(
+        nullif(btrim(coalesce(cbi.frozen_component_key_type,'')), ''),
+        nullif(
+          btrim(
+            coalesce(
+              cbi.frozen_component_snapshot_json->>'component_key_type',
+              cbi.frozen_component_snapshot_json->>'key_type',
+              ''
+            )
+          ),
+          ''
+        ),
+        nullif(btrim(coalesce(cbi.live_component_key_type,'')), ''),
+        case
+          when cbi.item_type = 'SEGMENT_DELTA'
+            then case when cbsdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
+          when cbi.item_type = 'MILEAGE_DELTA'
+            then 'EXPENSE_CODE'
+          when cbi.item_type = 'ADJUSTMENT_DELTA'
+            then case
+              when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%'
+                then 'TS_TOTAL'
+              when cbi.source_ref is not null and (
+                btrim(cbi.source_ref) like 'additional:%'
+                or btrim(cbi.source_ref) like 'add:%'
+                or btrim(cbi.source_ref) = 'additional'
+              )
+                then 'ADDITIONAL_CODE'
+              else 'EXPENSE_CODE'
+            end
+          when cbi.item_type = 'EXPENSE_DELTA'
+            then case
+              when cbi.source_ref is not null and (
+                btrim(cbi.source_ref) like 'additional:%'
+                or btrim(cbi.source_ref) like 'add:%'
+                or btrim(cbi.source_ref) = 'additional'
+              )
+                then 'ADDITIONAL_CODE'
+              else 'EXPENSE_CODE'
+            end
+          else 'EXPENSE_CODE'
+        end
+      ) as key_type,
+      coalesce(
+        nullif(btrim(coalesce(cbi.frozen_component_key_value,'')), ''),
+        nullif(
+          btrim(
+            coalesce(
+              cbi.frozen_component_snapshot_json->>'component_key_value',
+              cbi.frozen_component_snapshot_json->>'key_value',
+              ''
+            )
+          ),
+          ''
+        ),
+        nullif(btrim(coalesce(cbi.live_component_key_value,'')), ''),
+        case
+          when cbi.item_type = 'SEGMENT_DELTA'
+            then coalesce(cbsdf.seg_date, 'TOTAL')
+          when cbi.item_type = 'MILEAGE_DELTA'
+            then 'MILEAGE'
+          when cbi.item_type = 'ADJUSTMENT_DELTA'
+            then case
+              when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%'
+                then 'TOTAL'
+              when cbi.source_ref is not null and (
+                btrim(cbi.source_ref) like 'additional:%'
+                or btrim(cbi.source_ref) like 'add:%'
+              )
+                then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
+              when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional'
+                then 'TOTAL'
+              when cbi.source_ref is not null and btrim(cbi.source_ref) <> ''
+                then upper(btrim(cbi.source_ref))
+              else 'UNKNOWN'
+            end
+          when cbi.item_type = 'EXPENSE_DELTA'
+            then case
+              when cbi.source_ref is not null and (
+                btrim(cbi.source_ref) like 'additional:%'
+                or btrim(cbi.source_ref) like 'add:%'
+              )
+                then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
+              when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional'
+                then 'TOTAL'
+              when cbi.source_ref is not null and btrim(cbi.source_ref) <> ''
+                then upper(btrim(cbi.source_ref))
+              else 'UNKNOWN'
+            end
+          else 'UNKNOWN'
+        end
+      ) as key_value,
       cbi.amount_ex_vat
     from current_batch_items cbi
-    left join public.timesheets_financials tf_cur
-      on tf_cur.timesheet_id = cbi.timesheet_id
-     and tf_cur.is_current = true
-    left join lateral (
-      select
-        nullif(btrim(coalesce(seg->>'date','')), '') as seg_date
-      from jsonb_array_elements(
-        case
-          when tf_cur.invoice_breakdown_json is not null
-           and jsonb_typeof(tf_cur.invoice_breakdown_json) = 'object'
-           and jsonb_typeof(tf_cur.invoice_breakdown_json->'segments') = 'array'
-          then tf_cur.invoice_breakdown_json->'segments'
-          else '[]'::jsonb
-        end
-      ) seg
-      where seg is not null
-        and jsonb_typeof(seg) = 'object'
-        and nullif(btrim(coalesce(seg->>'segment_id','')), '') =
-            coalesce(
-              nullif(btrim(coalesce(cbi.segment_key,'')), ''),
-              case
-                when cbi.source_ref is not null and btrim(cbi.source_ref) like 'seg:%' then nullif(btrim(substring(cbi.source_ref from 5)), '')
-                else null
-              end
-            )
-      limit 1
-    ) seg_map on true
+    left join current_batch_seg_date_final cbsdf
+      on cbsdf.pay_batch_id = cbi.pay_batch_id
+     and cbsdf.timesheet_id = cbi.timesheet_id
+     and cbsdf.seg_id = coalesce(
+       nullif(btrim(coalesce(cbi.segment_key,'')), ''),
+       case
+         when cbi.source_ref is not null and btrim(cbi.source_ref) like 'seg:%'
+           then nullif(btrim(split_part(cbi.source_ref,':',2)), '')
+         else null
+       end
+     )
+    where cbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
   ),
   current_batch_reserved_sums as (
     select
@@ -13415,8 +13534,91 @@ end;
         order by overruns.timesheet_id::text, overruns.key_type, overruns.key_value
       ),
       '[]'::jsonb
+    ),
+    (select count(*)::int from reserved_sums),
+    (select count(*)::int from outstanding_rows orw where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')),
+    (select count(*)::int from current_batch_reserved_sums),
+    (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'timesheet_id', rs.timesheet_id::text,
+            'key_type', rs.key_type,
+            'key_value', rs.key_value,
+            'reserved_ex_vat', rs.reserved_ex_vat
+          )
+          order by rs.timesheet_id::text, rs.key_type, rs.key_value
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select
+          rs.timesheet_id,
+          rs.key_type,
+          rs.key_value,
+          rs.reserved_ex_vat
+        from reserved_sums rs
+        order by rs.timesheet_id::text, rs.key_type, rs.key_value
+        limit 50
+      ) rs
+    ),
+    (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'timesheet_id', orw.timesheet_id::text,
+            'key_type', orw.key_type,
+            'key_value', orw.key_value,
+            'outstanding_ex_vat', orw.outstanding_ex_vat
+          )
+          order by orw.timesheet_id::text, orw.key_type, orw.key_value
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select
+          orw.timesheet_id,
+          orw.key_type,
+          orw.key_value,
+          orw.outstanding_ex_vat
+        from outstanding_rows orw
+        where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')
+        order by orw.timesheet_id::text, orw.key_type, orw.key_value
+        limit 50
+      ) orw
+    ),
+    (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'timesheet_id', cbr.timesheet_id::text,
+            'key_type', cbr.key_type,
+            'key_value', cbr.key_value,
+            'current_batch_reserved_ex_vat', cbr.current_batch_reserved_ex_vat
+          )
+          order by cbr.timesheet_id::text, cbr.key_type, cbr.key_value
+        ),
+        '[]'::jsonb
+      )
+      from (
+        select
+          cbr.timesheet_id,
+          cbr.key_type,
+          cbr.key_value,
+          cbr.current_batch_reserved_ex_vat
+        from current_batch_reserved_sums cbr
+        order by cbr.timesheet_id::text, cbr.key_type, cbr.key_value
+        limit 50
+      ) cbr
     )
-  into v_reserved
+  into
+    v_reserved,
+    v_stage_15_reserved_key_count,
+    v_stage_15_outstanding_key_count,
+    v_stage_15_current_batch_key_count,
+    v_stage_15_reserved_keys_sample,
+    v_stage_15_outstanding_keys_sample,
+    v_stage_15_current_batch_keys_sample
   from overruns;
 
   begin
@@ -13427,7 +13629,13 @@ end;
         'stage', v_stage,
         'pay_batch_id', v_batch_id::text,
         'overruns', v_reserved,
-        'overrun_count', jsonb_array_length(v_reserved)
+        'overrun_count', jsonb_array_length(v_reserved),
+        'reserved_key_count', v_stage_15_reserved_key_count,
+        'outstanding_key_count', v_stage_15_outstanding_key_count,
+        'current_batch_key_count', v_stage_15_current_batch_key_count,
+        'reserved_keys_sample', v_stage_15_reserved_keys_sample,
+        'outstanding_keys_sample', v_stage_15_outstanding_keys_sample,
+        'current_batch_keys_sample', v_stage_15_current_batch_keys_sample
       ),
       'pay_batches',
       v_batch_id::text,
@@ -13444,6 +13652,12 @@ end;
           'stage', v_stage,
           'pay_batch_id', v_batch_id::text,
           'overruns', v_reserved,
+          'reserved_key_count', v_stage_15_reserved_key_count,
+          'outstanding_key_count', v_stage_15_outstanding_key_count,
+          'current_batch_key_count', v_stage_15_current_batch_key_count,
+          'reserved_keys_sample', v_stage_15_reserved_keys_sample,
+          'outstanding_keys_sample', v_stage_15_outstanding_keys_sample,
+          'current_batch_keys_sample', v_stage_15_current_batch_keys_sample,
           'error', 'PAY_BATCH_RESERVATION_OVERRUN'
         ),
         'pay_batches',
@@ -15863,6 +16077,9 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
 
 
 
