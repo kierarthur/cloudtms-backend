@@ -13653,6 +13653,10 @@ end;
 $function$;
 
 
+
+
+
+
 create or replace function public.pay_batch_export_csv_rows(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -13745,7 +13749,16 @@ begin
     v_batch_kind := 'LOANS';
   end if;
 
-  v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  if v_is_cancelled then
+    v_fresh := jsonb_build_object(
+      'is_stale', false,
+      'stale_reasons', '[]'::jsonb,
+      'diff', '[]'::jsonb
+    );
+  else
+    v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
+  end if;
+
   v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
   v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
 
@@ -14249,6 +14262,8 @@ begin
   );
 end;
 $$;
+
+
 
 
 
