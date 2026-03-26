@@ -12334,6 +12334,115 @@ end;
     );
   exception when others then null; end;
 
+  update public.pay_batch_items as pbi_set
+  set payout_instruction_snapshot_json = pbi_src.payout_instruction_snapshot_json
+  from (
+    select
+      pbi.id as pay_batch_item_id,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'taxability',
+            case
+              when pbi.frozen_component_classification = 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum
+                then 'NON_TAXABLE'
+              else 'TAXABLE'
+            end,
+          'routing_kind',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then 'NORMAL_PAY_ROUTE'
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then 'UMBRELLA_COMPANY'
+              else null
+            end,
+          'destination_label',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then 'normal PAYE route'
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then 'umbrella company'
+              else null
+            end,
+          'pay_channel', upper(coalesce(pbi.pay_channel::text, '')),
+          'payee_entity_kind',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then 'CANDIDATE'
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then 'UMBRELLA'
+              else null
+            end,
+          'payee_entity_id',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then pbc.candidate_id::text
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' and pbi.umbrella_id is not null then pbi.umbrella_id::text
+              else null
+            end,
+          'beneficiary_name',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then nullif(btrim(coalesce(c.account_holder, c.display_name, concat_ws(' ', c.first_name, c.last_name))), '')
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then nullif(btrim(coalesce(u.name, '')), '')
+              else null
+            end,
+          'masked_bank_account',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE'
+               and nullif(coalesce(c.account_number, ''), '') is not null
+                then lpad(right(c.account_number, 4), length(c.account_number), '*')
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA'
+               and nullif(coalesce(u.account_number, ''), '') is not null
+                then lpad(right(u.account_number, 4), length(u.account_number), '*')
+              else null
+            end,
+          'bank_details_hash',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then c.bank_details_hash
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then u.bank_details_hash
+              else null
+            end,
+          'rail_provider', upper(btrim(coalesce(v_settings.rail_provider_default, ''))),
+          'rail_env', upper(btrim(coalesce(v_settings.rail_env_default, ''))),
+          'payee_id', case when bpm.payee_id is null then null else bpm.payee_id::text end,
+          'payee_account_id', case when bpm.payee_account_id is null then null else bpm.payee_account_id::text end,
+          'appears_on_umbrella_remittance',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then true
+              else false
+            end,
+          'generates_candidate_payment_advice', false,
+          'is_candidate_directed_oneoff_payout', false
+        )
+      ) as payout_instruction_snapshot_json
+    from public.pay_batch_items as pbi
+    join public.pay_batch_candidates as pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.candidates as c
+      on c.id = pbc.candidate_id
+    left join public.umbrellas as u
+      on u.id = pbi.umbrella_id
+    left join public.bank_payee_map as bpm
+      on upper(coalesce(bpm.rail_provider, '')) = upper(btrim(coalesce(v_settings.rail_provider_default, '')))
+     and upper(coalesce(bpm.rail_env, '')) = upper(btrim(coalesce(v_settings.rail_env_default, '')))
+     and upper(coalesce(bpm.entity_kind, '')) =
+          case
+            when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then 'CANDIDATE'
+            when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then 'UMBRELLA'
+            else ''
+          end
+     and bpm.entity_id =
+          case
+            when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then pbc.candidate_id
+            when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then pbi.umbrella_id
+            else null::uuid
+          end
+     and bpm.bank_details_hash =
+          case
+            when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then c.bank_details_hash
+            when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then u.bank_details_hash
+            else null
+          end
+    where pbc.pay_batch_id = v_batch_id
+      and coalesce(pbi.is_voided, false) = false
+      and pbi.finance_case_id is null
+      and pbi.payout_instruction_snapshot_json is null
+      and pbi.item_type in ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+  ) as pbi_src
+  where pbi_set.id = pbi_src.pay_batch_item_id;
+
   v_stage := 'STAGE_12A_SKIP_UNAPPROVED_UNDERPAYMENT_ITEMS';
   v_rows_ins_underpayment_items := 0;
 
@@ -16224,7 +16333,6 @@ exception when others then
   raise;
 end;
 $$;
-
 
 
 
