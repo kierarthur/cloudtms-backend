@@ -667,7 +667,6 @@ where rc.key_type is not null
   and rc.key_value is not null
   and btrim(rc.key_value) <> '';
 $$;
-
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
   timesheet_id uuid,
@@ -806,35 +805,22 @@ reserved_components as (
     rc.amount_inc_vat
   from public._pay_reserved_components((select i.ts_ids from inp i)) rc
 ),
-component_truth as (
+component_truth_raw as (
   select
     pfc.linked_timesheet_id as timesheet_id,
-    pfc.component_key_type as key_type,
-    pfc.component_key_value as key_value,
+    upper(nullif(btrim(coalesce(pfc.component_key_type,'')), '')) as raw_key_type,
+    nullif(btrim(coalesce(pfc.component_key_value,'')), '') as raw_key_value,
+    coalesce(pfc.source_basis_json, '{}'::jsonb) as source_basis_json,
     round(
-      sum(
-        case
-          when pa.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-            then coalesce(pfc.remaining_source_amount,0) * -1
-          when pa.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-            then coalesce(pfc.remaining_source_amount,0)
-          else 0
-        end
-      ),
+      case
+        when pa.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+          then coalesce(pfc.remaining_source_amount,0) * -1
+        when pa.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
+          then coalesce(pfc.remaining_source_amount,0)
+        else 0
+      end,
       2
-    ) as truth_ex_vat,
-    round(
-      sum(
-        case
-          when pa.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-            then coalesce(pfc.remaining_source_amount,0) * -1
-          when pa.case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-            then coalesce(pfc.remaining_source_amount,0)
-          else 0
-        end
-      ),
-      2
-    ) as truth_inc_vat
+    ) as signed_amount
   from inp i
   join public.pay_finance_case_components pfc
     on pfc.linked_timesheet_id = any(i.ts_ids)
@@ -847,10 +833,88 @@ component_truth as (
       'OVERPAYMENT'::public.pay_finance_case_type_enum,
       'UNDERPAYMENT'::public.pay_finance_case_type_enum
     )
+),
+component_truth_canonical_fallback as (
+  select
+    ctr.timesheet_id,
+    ctr.source_basis_json,
+    ctr.signed_amount,
+    case
+      when ctr.raw_key_type = 'TS_DAY'
+       and coalesce(ctr.raw_key_value, '') ~ '^\d{4}-\d{2}-\d{2}$'
+        then 'TS_DAY'
+      when ctr.raw_key_type in ('TS_TOTAL', 'CASE_TOTAL')
+       and upper(coalesce(ctr.raw_key_value, 'TOTAL')) = 'TOTAL'
+        then 'TS_TOTAL'
+      when ctr.raw_key_type = 'ADJUSTMENT_CODE'
+       and ctr.raw_key_value is not null
+        then 'ADJUSTMENT_CODE'
+      when ctr.raw_key_type = 'ADDITIONAL_CODE'
+       and ctr.raw_key_value is not null
+        then 'ADDITIONAL_CODE'
+      when ctr.raw_key_type = 'EXPENSE_CODE'
+       and ctr.raw_key_value is not null
+        then 'EXPENSE_CODE'
+      else null
+    end as fallback_key_type,
+    case
+      when ctr.raw_key_type = 'TS_DAY'
+       and coalesce(ctr.raw_key_value, '') ~ '^\d{4}-\d{2}-\d{2}$'
+        then ctr.raw_key_value
+      when ctr.raw_key_type in ('TS_TOTAL', 'CASE_TOTAL')
+       and upper(coalesce(ctr.raw_key_value, 'TOTAL')) = 'TOTAL'
+        then 'TOTAL'
+      when ctr.raw_key_type = 'ADJUSTMENT_CODE'
+       and ctr.raw_key_value is not null
+        then ctr.raw_key_value
+      when ctr.raw_key_type = 'ADDITIONAL_CODE'
+       and ctr.raw_key_value is not null
+        then upper(ctr.raw_key_value)
+      when ctr.raw_key_type = 'EXPENSE_CODE'
+       and ctr.raw_key_value is not null
+        then upper(ctr.raw_key_value)
+      else null
+    end as fallback_key_value
+  from component_truth_raw ctr
+),
+component_truth_keyed as (
+  select
+    ctf.timesheet_id,
+    case
+      when nullif(btrim(coalesce(ctf.source_basis_json->>'work_date','')), '') ~ '^\d{4}-\d{2}-\d{2}$' then 'TS_DAY'
+      when nullif(btrim(coalesce(ctf.source_basis_json->>'adjustment_id','')), '') is not null then 'ADJUSTMENT_CODE'
+      when nullif(btrim(coalesce(ctf.source_basis_json->>'additional_code','')), '') is not null then 'ADDITIONAL_CODE'
+      when nullif(btrim(coalesce(ctf.source_basis_json->>'expense_code','')), '') is not null then 'EXPENSE_CODE'
+      else ctf.fallback_key_type
+    end as key_type,
+    case
+      when nullif(btrim(coalesce(ctf.source_basis_json->>'work_date','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
+        then nullif(btrim(coalesce(ctf.source_basis_json->>'work_date','')), '')
+      when nullif(btrim(coalesce(ctf.source_basis_json->>'adjustment_id','')), '') is not null
+        then nullif(btrim(coalesce(ctf.source_basis_json->>'adjustment_id','')), '')
+      when nullif(btrim(coalesce(ctf.source_basis_json->>'additional_code','')), '') is not null
+        then upper(nullif(btrim(coalesce(ctf.source_basis_json->>'additional_code','')), ''))
+      when nullif(btrim(coalesce(ctf.source_basis_json->>'expense_code','')), '') is not null
+        then upper(nullif(btrim(coalesce(ctf.source_basis_json->>'expense_code','')), ''))
+      else ctf.fallback_key_value
+    end as key_value,
+    ctf.signed_amount
+  from component_truth_canonical_fallback ctf
+),
+component_truth as (
+  select
+    ctk.timesheet_id,
+    ctk.key_type,
+    ctk.key_value,
+    round(sum(ctk.signed_amount), 2) as truth_ex_vat,
+    round(sum(ctk.signed_amount), 2) as truth_inc_vat
+  from component_truth_keyed ctk
+  where ctk.key_type is not null
+    and ctk.key_value is not null
   group by
-    pfc.linked_timesheet_id,
-    pfc.component_key_type,
-    pfc.component_key_value
+    ctk.timesheet_id,
+    ctk.key_type,
+    ctk.key_value
 ),
 component_keys as (
   select distinct
@@ -977,7 +1041,6 @@ where fr.timesheet_id is not null
   and fr.key_type is not null
   and fr.key_value is not null;
 $$;
-
 
 
 CREATE OR REPLACE FUNCTION public._pay_candidate_week_totals(p_candidate_ids uuid[], p_week_start date)
