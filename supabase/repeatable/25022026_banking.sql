@@ -300,7 +300,6 @@ select
 from adj_components ac;
 $$;
 
-
 CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
   timesheet_id uuid,
@@ -337,8 +336,7 @@ active_items as (
     pbi.frozen_component_key_type as frozen_component_key_type,
     pbi.frozen_component_key_value as frozen_component_key_value,
     pbi.frozen_component_snapshot_json as frozen_component_snapshot_json,
-    pfc.component_key_type as live_component_key_type,
-    pfc.component_key_value as live_component_key_value,
+    pbi.frozen_source_basis_json as frozen_source_basis_json,
     coalesce(
       pbi.amount_ex_vat,
       pbi.frozen_target_amount_ex_vat,
@@ -360,8 +358,6 @@ active_items as (
     on pbc_r.id = pbi.pay_batch_candidate_id
   join public.pay_batches pb_r
     on pb_r.id = pbc_r.pay_batch_id
-  left join public.pay_finance_case_components pfc
-    on pfc.id = pbi.finance_component_id
   where pbi.timesheet_id is not null
     and pbi.pay_channel in ('PAYE','UMBRELLA')
     and upper(coalesce(pb_r.status,'')) in (
@@ -403,48 +399,145 @@ snap_choice as (
     from active_items ai
   ) ai
 ),
-seg_lookup as (
+seg_resolution_basis as (
   select
     ai.pay_batch_id,
     ai.timesheet_id,
+    ai.segment_key,
+    ai.source_ref,
     coalesce(
+      nullif(btrim(coalesce(ai.frozen_source_basis_json->>'segment_id','')), ''),
       nullif(btrim(coalesce(ai.segment_key,'')), ''),
       case
         when ai.source_ref is not null and btrim(ai.source_ref) like 'seg:%'
           then nullif(btrim(split_part(ai.source_ref,':',2)), '')
         else null
       end
-    ) as seg_id
+    ) as seg_id,
+    coalesce(
+      nullif(btrim(coalesce(ai.frozen_source_basis_json->>'segment_key','')), ''),
+      nullif(
+        btrim(
+          coalesce(
+            ai.frozen_component_snapshot_json->'source_basis_json'->>'segment_key',
+            ''
+          )
+        ),
+        ''
+      )
+    ) as basis_segment_key_raw,
+    coalesce(
+      nullif(btrim(coalesce(ai.frozen_source_basis_json->>'ref_num','')), ''),
+      nullif(
+        btrim(
+          coalesce(
+            ai.frozen_component_snapshot_json->'source_basis_json'->>'ref_num',
+            ''
+          )
+        ),
+        ''
+      )
+    ) as basis_ref_num_raw,
+    coalesce(
+      nullif(btrim(coalesce(ai.frozen_source_basis_json->>'work_date','')), ''),
+      nullif(
+        btrim(
+          coalesce(
+            ai.frozen_component_snapshot_json->'source_basis_json'->>'work_date',
+            ''
+          )
+        ),
+        ''
+      )
+    ) as basis_work_date_raw
   from active_items ai
   where ai.item_type = 'SEGMENT_DELTA'
 ),
-seg_date_map as (
+seg_date_candidates as (
   select
-    sl.pay_batch_id,
-    sl.timesheet_id,
-    sl.seg_id,
-    nullif(btrim(coalesce(seg.value->>'date','')), '') as seg_date_raw
-  from seg_lookup sl
+    srb.pay_batch_id,
+    srb.timesheet_id,
+    srb.segment_key,
+    srb.source_ref,
+    nullif(btrim(coalesce(seg.value->>'date','')), '') as seg_date_raw,
+    row_number() over (
+      partition by
+        srb.pay_batch_id,
+        srb.timesheet_id,
+        coalesce(srb.segment_key,''),
+        coalesce(srb.source_ref,'')
+      order by
+        case
+          when srb.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+           and nullif(btrim(coalesce(seg.value->>'date','')), '') = srb.basis_work_date_raw
+            then 0
+          when srb.basis_ref_num_raw is not null
+           and nullif(btrim(coalesce(seg.value->>'ref_num','')), '') = srb.basis_ref_num_raw
+            then 1
+          when srb.seg_id is not null
+           and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = srb.seg_id
+            then 2
+          when srb.basis_segment_key_raw is not null
+           and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = srb.basis_segment_key_raw
+            then 3
+          else 9
+        end,
+        nullif(btrim(coalesce(seg.value->>'segment_id','')), '')
+    ) as rn
+  from seg_resolution_basis srb
   join snap_choice sc
-    on sc.pay_batch_id = sl.pay_batch_id
-   and sc.timesheet_id = sl.timesheet_id
+    on sc.pay_batch_id = srb.pay_batch_id
+   and sc.timesheet_id = srb.timesheet_id
   join lateral jsonb_array_elements(coalesce(sc.target_snapshot_json->'segments','[]'::jsonb)) as seg(value)
     on true
-  where sl.seg_id is not null
-    and seg.value is not null
+  where seg.value is not null
     and jsonb_typeof(seg.value) = 'object'
-    and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = sl.seg_id
+    and (
+      (
+        srb.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+        and nullif(btrim(coalesce(seg.value->>'date','')), '') = srb.basis_work_date_raw
+      )
+      or (
+        srb.basis_ref_num_raw is not null
+        and nullif(btrim(coalesce(seg.value->>'ref_num','')), '') = srb.basis_ref_num_raw
+      )
+      or (
+        srb.seg_id is not null
+        and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = srb.seg_id
+      )
+      or (
+        srb.basis_segment_key_raw is not null
+        and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = srb.basis_segment_key_raw
+      )
+    )
+),
+seg_date_pick as (
+  select
+    sdc.pay_batch_id,
+    sdc.timesheet_id,
+    sdc.segment_key,
+    sdc.source_ref,
+    sdc.seg_date_raw
+  from seg_date_candidates sdc
+  where sdc.rn = 1
 ),
 seg_date_final as (
   select
-    sdm.pay_batch_id,
-    sdm.timesheet_id,
-    sdm.seg_id,
+    srb.pay_batch_id,
+    srb.timesheet_id,
+    srb.segment_key,
+    srb.source_ref,
     case
-      when sdm.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sdm.seg_date_raw
+      when srb.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then srb.basis_work_date_raw
+      when sdp.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sdp.seg_date_raw
       else null
     end as seg_date
-  from seg_date_map sdm
+  from seg_resolution_basis srb
+  left join seg_date_pick sdp
+    on sdp.pay_batch_id = srb.pay_batch_id
+   and sdp.timesheet_id = srb.timesheet_id
+   and coalesce(sdp.segment_key,'') = coalesce(srb.segment_key,'')
+   and coalesce(sdp.source_ref,'') = coalesce(srb.source_ref,'')
 ),
 reserved_keyed as (
   select
@@ -461,7 +554,6 @@ reserved_keyed as (
         ),
         ''
       ),
-      nullif(btrim(coalesce(ai.live_component_key_type,'')), ''),
       case
         when ai.item_type = 'SEGMENT_DELTA'
           then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
@@ -504,7 +596,6 @@ reserved_keyed as (
         ),
         ''
       ),
-      nullif(btrim(coalesce(ai.live_component_key_value,'')), ''),
       case
         when ai.item_type = 'SEGMENT_DELTA'
           then coalesce(sdf.seg_date, 'TOTAL')
@@ -547,14 +638,8 @@ reserved_keyed as (
   left join seg_date_final sdf
     on sdf.pay_batch_id = ai.pay_batch_id
    and sdf.timesheet_id = ai.timesheet_id
-   and sdf.seg_id = coalesce(
-     nullif(btrim(coalesce(ai.segment_key,'')), ''),
-     case
-       when ai.source_ref is not null and btrim(ai.source_ref) like 'seg:%'
-         then nullif(btrim(split_part(ai.source_ref,':',2)), '')
-       else null
-     end
-   )
+   and coalesce(sdf.segment_key,'') = coalesce(ai.segment_key,'')
+   and coalesce(sdf.source_ref,'') = coalesce(ai.source_ref,'')
   where ai.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
 ),
 reserved_components as (
@@ -582,7 +667,6 @@ where rc.key_type is not null
   and rc.key_value is not null
   and btrim(rc.key_value) <> '';
 $$;
-
 
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
