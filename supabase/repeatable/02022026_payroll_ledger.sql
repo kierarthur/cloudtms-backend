@@ -10302,10 +10302,6 @@ $function$;
 
 
 
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -12054,14 +12050,10 @@ end;
         when sr.seg_work_date is not null then 'TS_DAY'::text
         else 'TS_TOTAL'::text
       end as component_key_type,
-      coalesce(
-        sr.seg_work_date,
-        sr.seg_segment_stable_key,
-        sr.seg_ref_num,
-        sr.seg_segment_key,
-        sr.seg_segment_id,
-        sr.timesheet_id::text
-      ) as component_key_value,
+      case
+        when sr.seg_work_date is not null then sr.seg_work_date
+        else 'TOTAL'
+      end as component_key_value,
       jsonb_strip_nulls(
         jsonb_build_object(
           'timesheet_id', sr.timesheet_id::text,
@@ -12095,7 +12087,7 @@ end;
       sr.delta_ex,
       'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum as classification,
       'TS_TOTAL'::text as component_key_type,
-      sr.timesheet_id::text as component_key_value,
+      'TOTAL'::text as component_key_value,
       jsonb_strip_nulls(
         jsonb_build_object(
           'timesheet_id', sr.timesheet_id::text
@@ -13600,7 +13592,6 @@ end;
           ),
           ''
         ),
-        nullif(btrim(coalesce(cbi.live_component_key_type,'')), ''),
         case
           when cbi.item_type = 'SEGMENT_DELTA'
             then case when cbsdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
@@ -13643,7 +13634,6 @@ end;
           ),
           ''
         ),
-        nullif(btrim(coalesce(cbi.live_component_key_value,'')), ''),
         case
           when cbi.item_type = 'SEGMENT_DELTA'
             then coalesce(cbsdf.seg_date, 'TOTAL')
@@ -16477,6 +16467,10 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+
 
 
 
