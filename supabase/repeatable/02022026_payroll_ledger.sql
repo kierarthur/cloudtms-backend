@@ -4306,9 +4306,6 @@ begin;
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -4599,13 +4596,15 @@ begin
     select
       rbi.timesheet_id,
       rbi.segment_id_norm as segment_id_norm,
-      coalesce(
-        nullif(btrim(coalesce(seg->>'segment_stable_key','')),''),
-        nullif(btrim(coalesce(seg->>'segment_id','')),''),
-        nullif(btrim(coalesce(seg->>'segment_key','')),''),
-        nullif(btrim(coalesce(seg->>'date','')),''),
-        nullif(btrim(coalesce(seg->>'ref_num','')),'')
-      ) as segment_stable_key
+      case
+        when nullif(btrim(coalesce(seg->>'date','')), '') is not null then 'TS_DAY'::text
+        else 'TS_TOTAL'::text
+      end as component_key_type,
+      case
+        when nullif(btrim(coalesce(seg->>'date','')), '') is not null
+          then nullif(btrim(coalesce(seg->>'date','')), '')
+        else 'TOTAL'
+      end as component_key_value
     from reserved_batch_items rbi
     join public.pay_batch_timesheet_snapshots pbts
       on pbts.pay_batch_id = rbi.pay_batch_id
@@ -4624,16 +4623,17 @@ begin
   reserved_segment_sums as (
     select
       rskm.timesheet_id,
-      rskm.segment_stable_key,
+      rskm.component_key_type,
+      rskm.component_key_value,
       round(sum(rbi.amount_ex_vat),2) as reserved_amount_ex_vat
     from reserved_segment_key_map rskm
     join reserved_batch_items rbi
       on rbi.timesheet_id = rskm.timesheet_id
      and rbi.item_type = 'SEGMENT_DELTA'
      and rbi.segment_id_norm = rskm.segment_id_norm
-    where rskm.segment_stable_key is not null
-      and btrim(coalesce(rskm.segment_stable_key,'')) <> ''
-    group by rskm.timesheet_id, rskm.segment_stable_key
+    where rskm.component_key_value is not null
+      and btrim(coalesce(rskm.component_key_value,'')) <> ''
+    group by rskm.timesheet_id, rskm.component_key_type, rskm.component_key_value
   ),
   reserved_preview_segment_ords as (
     select
@@ -5019,314 +5019,468 @@ umb_map as (
     from ts_current t
   ),
   segment_status as (
-    -- Stable-key segment reconciliation:
-    -- key = segment_stable_key first, then segment_id, then legacy segment_key/date/ref_num fallbacks.
-    -- Outstanding = current_truth - baseline_paid - reserved(active batches)
+    -- Economic-key segment reconciliation:
+    -- segment identity is retained only for UI continuity and snooze matching.
+    -- Outstanding and reservation subtraction stay in the economic entitlement keyspace
+    -- (TS_DAY => work_date, TS_TOTAL => TOTAL).
     with
     cur_segments as (
       select
         b.timesheet_id,
         b.candidate_id,
-        nullif(btrim(coalesce(seg->>'segment_id','')),'') as segment_id,
-        nullif(btrim(coalesce(seg->>'ref_num','')),'') as ref_num,
-        nullif(btrim(coalesce(seg->>'date','')),'') as work_date,
-        coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
-        round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2) as pay_amount_ex_vat,
-        round(coalesce(nullif(seg->>'charge_amount','')::numeric, nullif(seg->>'charge_ex_vat','')::numeric,0),2) as charge_amount_ex_vat,
-        coalesce(nullif(seg->>'units','')::numeric, nullif(seg->>'hours','')::numeric) as source_units,
-        coalesce(nullif(seg->>'rate','')::numeric, nullif(seg->>'pay_rate','')::numeric) as source_rate,
-        coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
+        cur_seg.seg_ord as source_seg_ord,
+        nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')),'') as segment_id,
+        nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')),'') as ref_num,
+        nullif(btrim(coalesce(cur_seg.seg->>'date','')),'') as work_date,
+        coalesce(nullif(cur_seg.seg->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
+        round(coalesce(nullif(cur_seg.seg->>'pay_amount','')::numeric,0),2) as pay_amount_ex_vat,
+        round(coalesce(nullif(cur_seg.seg->>'charge_amount','')::numeric, nullif(cur_seg.seg->>'charge_ex_vat','')::numeric,0),2) as charge_amount_ex_vat,
+        coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) as source_units,
+        coalesce(nullif(cur_seg.seg->>'rate','')::numeric, nullif(cur_seg.seg->>'pay_rate','')::numeric) as source_rate,
+        coalesce(nullif(cur_seg.seg->>'charge_rate','')::numeric, nullif(cur_seg.seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
         coalesce(
-          nullif(btrim(coalesce(seg->>'segment_stable_key','')),''),
-          nullif(btrim(coalesce(seg->>'segment_id','')),''),
-          nullif(btrim(coalesce(seg->>'segment_key','')),''),
-          nullif(btrim(coalesce(seg->>'date','')),''),
-          nullif(btrim(coalesce(seg->>'ref_num','')),'')
-        ) as segment_stable_key
+          nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')),''),
+          nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')),''),
+          nullif(btrim(coalesce(cur_seg.seg->>'segment_key','')),''),
+          nullif(btrim(coalesce(cur_seg.seg->>'date','')),''),
+          nullif(btrim(coalesce(cur_seg.seg->>'ref_num','')),'')
+        ) as segment_stable_key,
+        case
+          when nullif(btrim(coalesce(cur_seg.seg->>'date','')), '') is not null then 'TS_DAY'::text
+          else 'TS_TOTAL'::text
+        end as component_key_type,
+        case
+          when nullif(btrim(coalesce(cur_seg.seg->>'date','')), '') is not null
+            then nullif(btrim(coalesce(cur_seg.seg->>'date','')), '')
+          else 'TOTAL'
+        end as component_key_value
       from ts_baseline b
-      join lateral jsonb_array_elements(coalesce(b.current_segments_json,'[]'::jsonb)) seg on true
-      where seg is not null
-        and jsonb_typeof(seg) = 'object'
+      join lateral jsonb_array_elements(coalesce(b.current_segments_json,'[]'::jsonb)) with ordinality as cur_seg(seg, seg_ord) on true
+      where cur_seg.seg is not null
+        and jsonb_typeof(cur_seg.seg) = 'object'
     ),
     bas_segments as (
       select
         b.timesheet_id,
         b.candidate_id,
-        nullif(btrim(coalesce(seg->>'segment_id','')),'') as segment_id,
-        nullif(btrim(coalesce(seg->>'ref_num','')),'') as ref_num,
-        nullif(btrim(coalesce(seg->>'date','')),'') as work_date,
-        coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
-        round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2) as pay_amount_ex_vat,
-        round(coalesce(nullif(seg->>'charge_amount','')::numeric, nullif(seg->>'charge_ex_vat','')::numeric,0),2) as charge_amount_ex_vat,
-        coalesce(nullif(seg->>'units','')::numeric, nullif(seg->>'hours','')::numeric) as source_units,
-        coalesce(nullif(seg->>'rate','')::numeric, nullif(seg->>'pay_rate','')::numeric) as source_rate,
-        coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
+        bas_seg.seg_ord as source_seg_ord,
+        nullif(btrim(coalesce(bas_seg.seg->>'segment_id','')),'') as segment_id,
+        nullif(btrim(coalesce(bas_seg.seg->>'ref_num','')),'') as ref_num,
+        nullif(btrim(coalesce(bas_seg.seg->>'date','')),'') as work_date,
+        coalesce(nullif(bas_seg.seg->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
+        round(coalesce(nullif(bas_seg.seg->>'pay_amount','')::numeric,0),2) as pay_amount_ex_vat,
+        round(coalesce(nullif(bas_seg.seg->>'charge_amount','')::numeric, nullif(bas_seg.seg->>'charge_ex_vat','')::numeric,0),2) as charge_amount_ex_vat,
+        coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) as source_units,
+        coalesce(nullif(bas_seg.seg->>'rate','')::numeric, nullif(bas_seg.seg->>'pay_rate','')::numeric) as source_rate,
+        coalesce(nullif(bas_seg.seg->>'charge_rate','')::numeric, nullif(bas_seg.seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
         coalesce(
-          nullif(btrim(coalesce(seg->>'segment_stable_key','')),''),
-          nullif(btrim(coalesce(seg->>'segment_id','')),''),
-          nullif(btrim(coalesce(seg->>'segment_key','')),''),
-          nullif(btrim(coalesce(seg->>'date','')),''),
-          nullif(btrim(coalesce(seg->>'ref_num','')),'')
-        ) as segment_stable_key
+          nullif(btrim(coalesce(bas_seg.seg->>'segment_stable_key','')),''),
+          nullif(btrim(coalesce(bas_seg.seg->>'segment_id','')),''),
+          nullif(btrim(coalesce(bas_seg.seg->>'segment_key','')),''),
+          nullif(btrim(coalesce(bas_seg.seg->>'date','')),''),
+          nullif(btrim(coalesce(bas_seg.seg->>'ref_num','')),'')
+        ) as segment_stable_key,
+        case
+          when nullif(btrim(coalesce(bas_seg.seg->>'date','')), '') is not null then 'TS_DAY'::text
+          else 'TS_TOTAL'::text
+        end as component_key_type,
+        case
+          when nullif(btrim(coalesce(bas_seg.seg->>'date','')), '') is not null
+            then nullif(btrim(coalesce(bas_seg.seg->>'date','')), '')
+          else 'TOTAL'
+        end as component_key_value
       from ts_baseline b
-      join lateral jsonb_array_elements(coalesce(b.base_json->'segments','[]'::jsonb)) seg on true
-      where seg is not null
-        and jsonb_typeof(seg) = 'object'
+      join lateral jsonb_array_elements(coalesce(b.base_json->'segments','[]'::jsonb)) with ordinality as bas_seg(seg, seg_ord) on true
+      where bas_seg.seg is not null
+        and jsonb_typeof(bas_seg.seg) = 'object'
+    ),
+    cur_ranked as (
+      select
+        cs.timesheet_id,
+        cs.candidate_id,
+        cs.source_seg_ord,
+        cs.segment_id,
+        cs.ref_num,
+        cs.work_date,
+        cs.exclude_from_pay,
+        cs.pay_amount_ex_vat,
+        cs.charge_amount_ex_vat,
+        cs.source_units,
+        cs.source_rate,
+        cs.source_charge_rate,
+        cs.segment_stable_key,
+        cs.component_key_type,
+        cs.component_key_value,
+        row_number() over (
+          partition by cs.timesheet_id, cs.candidate_id, cs.component_key_type, cs.component_key_value
+          order by cs.source_seg_ord nulls last, cs.segment_id nulls last, cs.ref_num nulls last
+        ) as bucket_row_ord
+      from cur_segments cs
+    ),
+    bas_ranked as (
+      select
+        bs.timesheet_id,
+        bs.candidate_id,
+        bs.source_seg_ord,
+        bs.segment_id,
+        bs.ref_num,
+        bs.work_date,
+        bs.exclude_from_pay,
+        bs.pay_amount_ex_vat,
+        bs.charge_amount_ex_vat,
+        bs.source_units,
+        bs.source_rate,
+        bs.source_charge_rate,
+        bs.segment_stable_key,
+        bs.component_key_type,
+        bs.component_key_value,
+        row_number() over (
+          partition by bs.timesheet_id, bs.candidate_id, bs.component_key_type, bs.component_key_value
+          order by bs.source_seg_ord nulls last, bs.segment_id nulls last, bs.ref_num nulls last
+        ) as bucket_row_ord
+      from bas_segments bs
     ),
     ids as (
       select distinct
-        cs.timesheet_id,
-        cs.candidate_id,
-        cs.segment_stable_key
-      from cur_segments cs
-      where cs.segment_stable_key is not null and btrim(coalesce(cs.segment_stable_key,'')) <> ''
+        cr.timesheet_id,
+        cr.candidate_id,
+        cr.component_key_type,
+        cr.component_key_value,
+        cr.bucket_row_ord
+      from cur_ranked cr
       union
       select distinct
-        bs.timesheet_id,
-        bs.candidate_id,
-        bs.segment_stable_key
-      from bas_segments bs
-      where bs.segment_stable_key is not null and btrim(coalesce(bs.segment_stable_key,'')) <> ''
+        br.timesheet_id,
+        br.candidate_id,
+        br.component_key_type,
+        br.component_key_value,
+        br.bucket_row_ord
+      from bas_ranked br
     ),
     agg as (
       select
         i.timesheet_id,
         i.candidate_id,
-        i.segment_stable_key,
-
-        -- Representative IDs/labels for UI/debug
-        max(cs.segment_id) as cur_segment_id,
-        max(bs.segment_id) as bas_segment_id,
-        max(coalesce(cs.ref_num, bs.ref_num)) as ref_num,
-        max(coalesce(cs.work_date, bs.work_date)) as work_date,
-
-        bool_or(coalesce(cs.exclude_from_pay,false)) as cur_excluded,
-        max(cs.source_units) as cur_source_units,
-        max(cs.source_rate) as cur_source_rate,
-        max(cs.source_charge_rate) as cur_source_charge_rate,
-
-        round(sum(case when cs.segment_stable_key = i.segment_stable_key then (case when coalesce(cs.exclude_from_pay,false) then 0 else coalesce(cs.pay_amount_ex_vat,0) end) else 0 end), 2) as cur_payable_ex_vat,
-        round(sum(case when bs.segment_stable_key = i.segment_stable_key then (case when coalesce(bs.exclude_from_pay,false) then 0 else coalesce(bs.pay_amount_ex_vat,0) end) else 0 end), 2) as bas_payable_ex_vat,
-        round(sum(case when cs.segment_stable_key = i.segment_stable_key then (case when coalesce(cs.exclude_from_pay,false) then 0 else coalesce(cs.charge_amount_ex_vat,0) end) else 0 end), 2) as cur_charge_ex_vat,
-        round(sum(case when bs.segment_stable_key = i.segment_stable_key then (case when coalesce(bs.exclude_from_pay,false) then 0 else coalesce(bs.charge_amount_ex_vat,0) end) else 0 end), 2) as bas_charge_ex_vat
+        i.component_key_type,
+        i.component_key_value,
+        i.bucket_row_ord,
+        max(cr.segment_id) as cur_segment_id,
+        max(br.segment_id) as bas_segment_id,
+        max(coalesce(cr.ref_num, br.ref_num)) as ref_num,
+        max(coalesce(cr.work_date, br.work_date)) as work_date,
+        max(coalesce(cr.segment_stable_key, br.segment_stable_key)) as segment_stable_key,
+        max(cr.source_seg_ord) as cur_source_seg_ord,
+        max(br.source_seg_ord) as bas_source_seg_ord,
+        bool_or(coalesce(cr.exclude_from_pay,false)) as cur_excluded,
+        max(cr.source_units) as cur_source_units,
+        max(cr.source_rate) as cur_source_rate,
+        max(cr.source_charge_rate) as cur_source_charge_rate,
+        round(sum(case when cr.bucket_row_ord = i.bucket_row_ord then (case when coalesce(cr.exclude_from_pay,false) then 0 else coalesce(cr.pay_amount_ex_vat,0) end) else 0 end), 2) as cur_payable_ex_vat,
+        round(sum(case when br.bucket_row_ord = i.bucket_row_ord then (case when coalesce(br.exclude_from_pay,false) then 0 else coalesce(br.pay_amount_ex_vat,0) end) else 0 end), 2) as bas_payable_ex_vat,
+        round(sum(case when cr.bucket_row_ord = i.bucket_row_ord then (case when coalesce(cr.exclude_from_pay,false) then 0 else coalesce(cr.charge_amount_ex_vat,0) end) else 0 end), 2) as cur_charge_ex_vat,
+        round(sum(case when br.bucket_row_ord = i.bucket_row_ord then (case when coalesce(br.exclude_from_pay,false) then 0 else coalesce(br.charge_amount_ex_vat,0) end) else 0 end), 2) as bas_charge_ex_vat
       from ids i
-      left join cur_segments cs
-        on cs.timesheet_id = i.timesheet_id
-       and cs.segment_stable_key = i.segment_stable_key
-      left join bas_segments bs
-        on bs.timesheet_id = i.timesheet_id
-       and bs.segment_stable_key = i.segment_stable_key
-      group by i.timesheet_id, i.candidate_id, i.segment_stable_key
-    )
-    select
-      b.candidate_id,
-      b.timesheet_id,
-      b.ts_booking_id as booking_id,
-
-      -- Representative segment_id (prefer current)
-      coalesce(a.cur_segment_id, a.bas_segment_id) as segment_id,
-
-      -- legacy alias used by other parts of this function
-      coalesce(a.cur_segment_id, a.bas_segment_id) as segment_key,
-
-      a.segment_stable_key as segment_stable_key,
-      a.work_date as work_date,
-      a.ref_num as ref_num,
-      a.cur_source_units as source_units,
-      a.cur_source_rate as source_rate,
-      a.cur_source_charge_rate as source_charge_rate,
-
-      round(
-        coalesce(a.cur_payable_ex_vat,0)
-        - coalesce(a.bas_payable_ex_vat,0),
-        2
-      ) as raw_delta_before_reservation_ex,
-      round(
-        coalesce(a.cur_charge_ex_vat,0)
-        - coalesce(a.bas_charge_ex_vat,0),
-        2
-      ) as raw_delta_charge_ex_vat,
-
-      -- Preview-base delta before active-batch reservation subtraction.
-      -- This preserves the original row ordering/ordinality that draft rows were created from.
-      round(
-        case
-          when (
-            coalesce(b.has_active_overpayment_case,false) = true
-            and round(
+      left join cur_ranked cr
+        on cr.timesheet_id = i.timesheet_id
+       and cr.candidate_id = i.candidate_id
+       and cr.component_key_type = i.component_key_type
+       and cr.component_key_value = i.component_key_value
+       and cr.bucket_row_ord = i.bucket_row_ord
+      left join bas_ranked br
+        on br.timesheet_id = i.timesheet_id
+       and br.candidate_id = i.candidate_id
+       and br.component_key_type = i.component_key_type
+       and br.component_key_value = i.component_key_value
+       and br.bucket_row_ord = i.bucket_row_ord
+      group by i.timesheet_id, i.candidate_id, i.component_key_type, i.component_key_value, i.bucket_row_ord
+    ),
+    calc as (
+      select
+        b.candidate_id,
+        b.timesheet_id,
+        b.ts_booking_id as booking_id,
+        coalesce(a.cur_segment_id, a.bas_segment_id) as segment_id,
+        coalesce(a.cur_segment_id, a.bas_segment_id) as segment_key,
+        a.segment_stable_key,
+        a.component_key_type,
+        a.component_key_value,
+        a.bucket_row_ord,
+        coalesce(a.cur_source_seg_ord, a.bas_source_seg_ord) as segment_sort_ord,
+        a.work_date,
+        a.ref_num,
+        a.cur_source_units as source_units,
+        a.cur_source_rate as source_rate,
+        a.cur_source_charge_rate as source_charge_rate,
+        a.cur_excluded,
+        coalesce(b.has_active_overpayment_case,false) as has_active_overpayment_case,
+        b.require_reference_to_pay,
+        coalesce(b.is_forced_advance,false) as is_forced_advance,
+        round(
+          coalesce(a.cur_payable_ex_vat,0)
+          - coalesce(a.bas_payable_ex_vat,0),
+          2
+        ) as raw_delta_before_reservation_ex,
+        round(
+          coalesce(a.cur_charge_ex_vat,0)
+          - coalesce(a.bas_charge_ex_vat,0),
+          2
+        ) as raw_delta_charge_ex_vat,
+        round(
+          case
+            when (
+              coalesce(b.has_active_overpayment_case,false) = true
+              and round(
+                coalesce(a.cur_payable_ex_vat,0)
+                - coalesce(a.bas_payable_ex_vat,0),
+                2
+              ) < 0
+            )
+            then 0
+            when (
+              b.require_reference_to_pay = true
+              and coalesce(b.is_forced_advance,false) = false
+              and a.cur_excluded = false
+              and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
+              and round(
+                coalesce(a.cur_payable_ex_vat,0)
+                - coalesce(a.bas_payable_ex_vat,0),
+                2
+              ) > 0
+            )
+            then 0
+            else round(
               coalesce(a.cur_payable_ex_vat,0)
               - coalesce(a.bas_payable_ex_vat,0),
               2
-            ) < 0
-          )
-          then 0
-          when (
-            b.require_reference_to_pay = true
-            and coalesce(b.is_forced_advance,false) = false
-            and a.cur_excluded = false
-            and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
-            and round(
+            )
+          end,
+          2
+        ) as preview_base_eff_delta_ex,
+        round(
+          case
+            when (
+              coalesce(b.has_active_overpayment_case,false) = true
+              and round(
+                coalesce(a.cur_payable_ex_vat,0)
+                - coalesce(a.bas_payable_ex_vat,0),
+                2
+              ) < 0
+            )
+            then 0
+            when round(
               coalesce(a.cur_payable_ex_vat,0)
               - coalesce(a.bas_payable_ex_vat,0),
               2
             ) > 0
-          )
-          then 0
-          else round(
-            coalesce(a.cur_payable_ex_vat,0)
-            - coalesce(a.bas_payable_ex_vat,0),
-            2
-          )
-        end,
-        2
-      ) as preview_base_eff_delta_ex,
-
-      -- Raw outstanding delta (Truth - Baseline - Reserved)
+            then round(
+              coalesce(a.cur_payable_ex_vat,0)
+              - coalesce(a.bas_payable_ex_vat,0),
+              2
+            )
+            else 0
+          end,
+          2
+        ) as allocatable_delta_ex,
+        coalesce(rss.reserved_amount_ex_vat,0) as reserved_bucket_amount_ex_vat
+      from ts_baseline b
+      join agg a
+        on a.timesheet_id = b.timesheet_id
+       and a.candidate_id = b.candidate_id
+      left join reserved_segment_sums rss
+        on rss.timesheet_id = b.timesheet_id
+       and rss.component_key_type = a.component_key_type
+       and rss.component_key_value = a.component_key_value
+    ),
+    alloc as (
+      select
+        c.candidate_id,
+        c.timesheet_id,
+        c.booking_id,
+        c.segment_id,
+        c.segment_key,
+        c.segment_stable_key,
+        c.component_key_type,
+        c.component_key_value,
+        c.bucket_row_ord,
+        c.segment_sort_ord,
+        c.work_date,
+        c.ref_num,
+        c.source_units,
+        c.source_rate,
+        c.source_charge_rate,
+        c.cur_excluded,
+        c.has_active_overpayment_case,
+        c.require_reference_to_pay,
+        c.is_forced_advance,
+        c.raw_delta_before_reservation_ex,
+        c.raw_delta_charge_ex_vat,
+        c.preview_base_eff_delta_ex,
+        c.reserved_bucket_amount_ex_vat,
+        round(
+          case
+            when coalesce(c.allocatable_delta_ex,0) <= 0 then 0
+            else greatest(
+              least(
+                coalesce(c.reserved_bucket_amount_ex_vat,0)
+                - coalesce(
+                    sum(coalesce(c.allocatable_delta_ex,0)) over (
+                      partition by c.timesheet_id, c.component_key_type, c.component_key_value
+                      order by c.segment_sort_ord nulls last, c.bucket_row_ord, c.segment_id nulls last
+                      rows between unbounded preceding and 1 preceding
+                    ),
+                    0
+                  ),
+                c.allocatable_delta_ex
+              ),
+              0
+            )
+          end,
+          2
+        ) as allocated_reserved_amount_ex_vat
+      from calc c
+    )
+    select
+      a.candidate_id,
+      a.timesheet_id,
+      a.booking_id,
+      a.segment_id,
+      a.segment_key,
+      a.segment_stable_key,
+      a.component_key_type,
+      a.component_key_value,
+      a.bucket_row_ord,
+      a.segment_sort_ord,
+      a.work_date,
+      a.ref_num,
+      a.source_units,
+      a.source_rate,
+      a.source_charge_rate,
+      a.raw_delta_before_reservation_ex,
+      a.raw_delta_charge_ex_vat,
+      a.preview_base_eff_delta_ex,
       round(
         case
           when (
-            coalesce(b.has_active_overpayment_case,false) = true
+            a.has_active_overpayment_case = true
             and round(
-              coalesce(a.cur_payable_ex_vat,0)
-              - coalesce(a.bas_payable_ex_vat,0)
-              - coalesce(rss.reserved_amount_ex_vat,0),
+              a.raw_delta_before_reservation_ex
+              - a.allocated_reserved_amount_ex_vat,
               2
             ) < 0
           )
           then 0
           else round(
-            coalesce(a.cur_payable_ex_vat,0)
-            - coalesce(a.bas_payable_ex_vat,0)
-            - coalesce(rss.reserved_amount_ex_vat,0),
+            a.raw_delta_before_reservation_ex
+            - a.allocated_reserved_amount_ex_vat,
             2
           )
         end,
         2
       ) as delta_pay_ex_vat,
-
-      -- Effective payable delta: blocked-by-reference segments are not payable (unless forced advance)
       round(
         case
           when (
-            coalesce(b.has_active_overpayment_case,false) = true
+            a.has_active_overpayment_case = true
             and round(
-              coalesce(a.cur_payable_ex_vat,0)
-              - coalesce(a.bas_payable_ex_vat,0)
-              - coalesce(rss.reserved_amount_ex_vat,0),
+              a.raw_delta_before_reservation_ex
+              - a.allocated_reserved_amount_ex_vat,
               2
             ) < 0
           )
           then 0
           when (
-            b.require_reference_to_pay = true
-            and coalesce(b.is_forced_advance,false) = false
+            a.require_reference_to_pay = true
+            and a.is_forced_advance = false
             and a.cur_excluded = false
             and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
             and round(
-              coalesce(a.cur_payable_ex_vat,0)
-              - coalesce(a.bas_payable_ex_vat,0)
-              - coalesce(rss.reserved_amount_ex_vat,0),
+              a.raw_delta_before_reservation_ex
+              - a.allocated_reserved_amount_ex_vat,
               2
             ) > 0
           )
           then 0
           else round(
-            coalesce(a.cur_payable_ex_vat,0)
-            - coalesce(a.bas_payable_ex_vat,0)
-            - coalesce(rss.reserved_amount_ex_vat,0),
+            a.raw_delta_before_reservation_ex
+            - a.allocated_reserved_amount_ex_vat,
             2
           )
         end,
         2
       ) as eff_delta_ex,
-
       case
-        when round(
-          coalesce(a.cur_payable_ex_vat,0) - coalesce(a.bas_payable_ex_vat,0),
-          2
-        ) = 0 then round(coalesce(a.cur_charge_ex_vat,0) - coalesce(a.bas_charge_ex_vat,0), 2)
+        when round(a.raw_delta_before_reservation_ex, 2) = 0 then round(a.raw_delta_charge_ex_vat, 2)
         else round(
-          (coalesce(a.cur_charge_ex_vat,0) - coalesce(a.bas_charge_ex_vat,0))
+          a.raw_delta_charge_ex_vat
           * (
               (
                 case
                   when (
-                    coalesce(b.has_active_overpayment_case,false) = true
+                    a.has_active_overpayment_case = true
                     and round(
-                      coalesce(a.cur_payable_ex_vat,0)
-                      - coalesce(a.bas_payable_ex_vat,0)
-                      - coalesce(rss.reserved_amount_ex_vat,0),
+                      a.raw_delta_before_reservation_ex
+                      - a.allocated_reserved_amount_ex_vat,
                       2
                     ) < 0
                   )
                   then 0
                   when (
-                    b.require_reference_to_pay = true
-                    and coalesce(b.is_forced_advance,false) = false
+                    a.require_reference_to_pay = true
+                    and a.is_forced_advance = false
                     and a.cur_excluded = false
                     and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
                     and round(
-                      coalesce(a.cur_payable_ex_vat,0)
-                      - coalesce(a.bas_payable_ex_vat,0)
-                      - coalesce(rss.reserved_amount_ex_vat,0),
+                      a.raw_delta_before_reservation_ex
+                      - a.allocated_reserved_amount_ex_vat,
                       2
                     ) > 0
                   )
                   then 0
                   else round(
-                    coalesce(a.cur_payable_ex_vat,0)
-                    - coalesce(a.bas_payable_ex_vat,0)
-                    - coalesce(rss.reserved_amount_ex_vat,0),
+                    a.raw_delta_before_reservation_ex
+                    - a.allocated_reserved_amount_ex_vat,
                     2
                   )
                 end
-              ) / nullif(round(coalesce(a.cur_payable_ex_vat,0) - coalesce(a.bas_payable_ex_vat,0), 2),0)
+              ) / nullif(round(a.raw_delta_before_reservation_ex, 2),0)
             ),
           2
         )
       end as eff_delta_charge_ex_vat,
-
-      -- Flags (for UI/review)
       (
         coalesce(a.cur_excluded,false) = true
-        and coalesce(rss.reserved_amount_ex_vat,0) = 0
+        and round(
+          a.raw_delta_before_reservation_ex
+          - a.allocated_reserved_amount_ex_vat,
+          2
+        ) <> 0
       ) as is_do_not_pay,
-
       (
-        b.require_reference_to_pay = true
-        and coalesce(b.is_forced_advance,false) = false
+        a.require_reference_to_pay = true
+        and a.is_forced_advance = false
         and a.cur_excluded = false
         and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
-        and (
-          coalesce(a.cur_payable_ex_vat,0)
-          - coalesce(a.bas_payable_ex_vat,0)
-          - coalesce(rss.reserved_amount_ex_vat,0)
+        and round(
+          a.raw_delta_before_reservation_ex
+          - a.allocated_reserved_amount_ex_vat,
+          2
         ) > 0
       ) as is_ref_missing,
-
       (
-        b.require_reference_to_pay = true
-        and coalesce(b.is_forced_advance,false) = false
+        a.require_reference_to_pay = true
+        and a.is_forced_advance = false
         and a.cur_excluded = false
         and (a.ref_num is null or btrim(coalesce(a.ref_num,'')) = '')
-        and (
-          coalesce(a.cur_payable_ex_vat,0)
-          - coalesce(a.bas_payable_ex_vat,0)
-          - coalesce(rss.reserved_amount_ex_vat,0)
+        and round(
+          a.raw_delta_before_reservation_ex
+          - a.allocated_reserved_amount_ex_vat,
+          2
         ) > 0
       ) as is_blocked,
-
-      -- Snooze fields are joined in the downstream BLOCKED / DO_NOT_PAY CTEs
       null::uuid as snooze_id,
       null::date as snooze_until_date,
       null::text as note
-    from ts_baseline b
-    join agg a
-      on a.timesheet_id = b.timesheet_id
-     and a.candidate_id = b.candidate_id
-    left join reserved_segment_sums rss
-      on rss.timesheet_id = b.timesheet_id
-     and rss.segment_stable_key = a.segment_stable_key
+    from alloc a
   ),
   blocked_items_all as (
     select
@@ -5453,8 +5607,9 @@ blocked_items as (
       b.cand_bank_hash,
       b.umb_bank_hash,
 
-      -- SEGMENTS (stable-key outstanding): include stable key so UI can group even if segment_id drifted.
-      -- Ordinality must be based on the original preview rows (before active-batch reservation subtraction),
+      -- SEGMENTS: reservation math stays in the economic entitlement keyspace,
+      -- while stable identifiers are retained only for UI continuity.
+      -- Ordinality must be based on the original preview rows (before preview-row reservation subtraction),
       -- otherwise preview_seg:<timesheet_id>:<ord> draft rows will not line up with the rows they reserved.
       coalesce((
         with ss_rows as (
@@ -5462,13 +5617,21 @@ blocked_items as (
             ss.segment_id,
             ss.segment_key,
             ss.segment_stable_key,
+            ss.component_key_type,
+            ss.component_key_value,
             ss.work_date,
             ss.ref_num,
             ss.preview_base_eff_delta_ex,
             ss.eff_delta_ex,
+            ss.eff_delta_charge_ex_vat,
+            ss.source_units,
+            ss.source_rate,
+            ss.source_charge_rate,
+            ss.bucket_row_ord,
+            ss.segment_sort_ord,
             row_number() over (
               partition by ss.timesheet_id
-              order by ss.segment_stable_key nulls last, ss.segment_id nulls last
+              order by ss.segment_sort_ord nulls last, ss.bucket_row_ord, ss.component_key_type, ss.component_key_value, ss.segment_id nulls last
             ) as seg_ord
           from segment_status ss
           where ss.timesheet_id = b.timesheet_id
@@ -5479,8 +5642,16 @@ blocked_items as (
             ssr.segment_id,
             ssr.segment_key,
             ssr.segment_stable_key,
+            ssr.component_key_type,
+            ssr.component_key_value,
             ssr.work_date,
             ssr.ref_num,
+            ssr.eff_delta_charge_ex_vat,
+            ssr.source_units,
+            ssr.source_rate,
+            ssr.source_charge_rate,
+            ssr.bucket_row_ord,
+            ssr.segment_sort_ord,
             round(
               ssr.eff_delta_ex - coalesce(rpso.reserved_amount_ex_vat,0),
               2
@@ -5495,39 +5666,17 @@ blocked_items as (
             'segment_id', sse.segment_id,
             'segment_key', sse.segment_key,
             'segment_stable_key', sse.segment_stable_key,
+            'component_key_type', sse.component_key_type,
+            'component_key_value', sse.component_key_value,
             'work_date', sse.work_date,
             'ref_num', sse.ref_num,
             'delta_pay_ex_vat', sse.eff_delta_ex_after_reserved,
-            'delta_charge_ex_vat', (
-              select ss.eff_delta_charge_ex_vat
-              from segment_status ss
-              where ss.timesheet_id = b.timesheet_id
-                and ss.segment_stable_key = sse.segment_stable_key
-              limit 1
-            ),
-            'source_units', (
-              select ss.source_units
-              from segment_status ss
-              where ss.timesheet_id = b.timesheet_id
-                and ss.segment_stable_key = sse.segment_stable_key
-              limit 1
-            ),
-            'source_rate', (
-              select ss.source_rate
-              from segment_status ss
-              where ss.timesheet_id = b.timesheet_id
-                and ss.segment_stable_key = sse.segment_stable_key
-              limit 1
-            ),
-            'source_charge_rate', (
-              select ss.source_charge_rate
-              from segment_status ss
-              where ss.timesheet_id = b.timesheet_id
-                and ss.segment_stable_key = sse.segment_stable_key
-              limit 1
-            )
+            'delta_charge_ex_vat', sse.eff_delta_charge_ex_vat,
+            'source_units', sse.source_units,
+            'source_rate', sse.source_rate,
+            'source_charge_rate', sse.source_charge_rate
           )
-          order by sse.segment_stable_key nulls last, sse.segment_id nulls last
+          order by sse.segment_sort_ord nulls last, sse.bucket_row_ord, sse.component_key_type, sse.component_key_value, sse.segment_id nulls last
         )
         from ss_effective sse
         where sse.eff_delta_ex_after_reserved <> 0
@@ -10133,7 +10282,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
 
 
 
