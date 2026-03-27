@@ -4304,6 +4304,11 @@ begin;
 
 
 
+
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -6231,14 +6236,11 @@ ts_itemised as (
         when nullif(btrim(coalesce(seg->>'work_date','')), '') is not null then 'TS_DAY'::text
         else 'TS_TOTAL'::text
       end as component_key_type,
-      coalesce(
-        nullif(btrim(coalesce(seg->>'segment_stable_key','')), ''),
-        nullif(btrim(coalesce(seg->>'segment_id','')), ''),
-        nullif(btrim(coalesce(seg->>'segment_key','')), ''),
-        nullif(btrim(coalesce(seg->>'work_date','')), ''),
-        nullif(btrim(coalesce(seg->>'ref_num','')), ''),
-        d.timesheet_id::text
-      ) as component_key_value,
+      case
+        when nullif(btrim(coalesce(seg->>'work_date','')), '') is not null
+          then nullif(btrim(coalesce(seg->>'work_date','')), '')
+        else 'TOTAL'
+      end as component_key_value,
       'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum as classification,
       round(coalesce(nullif(seg->>'delta_pay_ex_vat','')::numeric, 0), 2) as component_amount_ex_vat,
       round(coalesce(nullif(seg->>'delta_charge_ex_vat','')::numeric, 0), 2) as source_charge_ex_vat,
@@ -6265,14 +6267,11 @@ ts_itemised as (
       public.pay_finance_component_fingerprint(
         ('timesheet:' || d.timesheet_id::text),
         case when nullif(btrim(coalesce(seg->>'work_date','')), '') is not null then 'TS_DAY' else 'TS_TOTAL' end,
-        coalesce(
-          nullif(btrim(coalesce(seg->>'segment_stable_key','')), ''),
-          nullif(btrim(coalesce(seg->>'segment_id','')), ''),
-          nullif(btrim(coalesce(seg->>'segment_key','')), ''),
-          nullif(btrim(coalesce(seg->>'work_date','')), ''),
-          nullif(btrim(coalesce(seg->>'ref_num','')), ''),
-          d.timesheet_id::text
-        ),
+        case
+          when nullif(btrim(coalesce(seg->>'work_date','')), '') is not null
+            then nullif(btrim(coalesce(seg->>'work_date','')), '')
+          else 'TOTAL'
+        end,
         'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum,
         upper(coalesce(d.ts_pay_method, '')),
         upper(coalesce(d.cand_pay_method, '')),
@@ -10134,9 +10133,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
-
-
 
 
 
