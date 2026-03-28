@@ -3540,6 +3540,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.pay_batch_prepare(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -3853,7 +3854,7 @@ begin
   t3 as (
     select
       t2.*,
-      coalesce(nullif(btrim(coalesce(t2.bank_details_hash_snapshot,'')),''), t2.cand_bank_hash, t2.umb_bank_hash) as payee_bank_hash
+      nullif(btrim(coalesce(t2.bank_details_hash_snapshot,'')), '') as payee_bank_hash
     from t2
   ),
   payees as (
@@ -4326,8 +4327,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 
@@ -10972,7 +10971,7 @@ begin
           pbt.payee_entity_id,
           case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
         ) as payee_id,
-        coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
+        nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')), '') as bank_hash
       from public.pay_bank_transfers pbt
       left join public.candidates c
         on c.id = coalesce(
@@ -11011,7 +11010,7 @@ begin
           pbt.payee_entity_id,
           case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
         ) as payee_id,
-        coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
+        nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')), '') as bank_hash
       from public.pay_bank_transfers pbt
       left join public.candidates c
         on c.id = coalesce(
@@ -11067,7 +11066,7 @@ begin
           pbt.payee_entity_id,
           case when upper(coalesce(pbt.pay_channel,'')) = 'UMBRELLA' then pbt.umbrella_id else pbt.candidate_id end
         ) as payee_id,
-        coalesce(nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')),''), c.bank_details_hash, u.bank_details_hash) as bank_hash
+        nullif(btrim(coalesce(pbt.bank_details_hash_snapshot,'')), '') as bank_hash
       from public.pay_bank_transfers pbt
       left join public.candidates c
         on c.id = coalesce(
@@ -11301,6 +11300,7 @@ begin
   end if;
 end;
 $$;
+
 
 
 
