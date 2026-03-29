@@ -10301,6 +10301,10 @@ $function$;
 
 
 
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -12511,6 +12515,34 @@ end;
             case
               when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then nullif(btrim(coalesce(c.account_holder, c.display_name, concat_ws(' ', c.first_name, c.last_name))), '')
               when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then nullif(btrim(coalesce(u.name, '')), '')
+              else null
+            end,
+          'sort_code',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE'
+               and length(regexp_replace(coalesce(c.sort_code, ''), '[^0-9]', '', 'g')) = 6
+                then substr(regexp_replace(coalesce(c.sort_code, ''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+                     substr(regexp_replace(coalesce(c.sort_code, ''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+                     substr(regexp_replace(coalesce(c.sort_code, ''), '[^0-9]', '', 'g'), 5, 2)
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA'
+               and length(regexp_replace(coalesce(u.sort_code, ''), '[^0-9]', '', 'g')) = 6
+                then substr(regexp_replace(coalesce(u.sort_code, ''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+                     substr(regexp_replace(coalesce(u.sort_code, ''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+                     substr(regexp_replace(coalesce(u.sort_code, ''), '[^0-9]', '', 'g'), 5, 2)
+              else null
+            end,
+          'account_number',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE'
+                then nullif(regexp_replace(coalesce(c.account_number, ''), '[^0-9]', '', 'g'), '')
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA'
+                then nullif(regexp_replace(coalesce(u.account_number, ''), '[^0-9]', '', 'g'), '')
+              else null
+            end,
+          'account_type',
+            case
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'PAYE' then 'Personal'
+              when upper(coalesce(pbi.pay_channel::text, '')) = 'UMBRELLA' then 'Business'
               else null
             end,
           'masked_bank_account',
@@ -16466,9 +16498,6 @@ exception when others then
   raise;
 end;
 $$;
-
-
-
 
 
 
