@@ -19315,8 +19315,6 @@ $$;
 
 
 
-
-
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -19809,7 +19807,10 @@ begin
           else (pbi_p.payout_instruction_snapshot_json->>'payee_entity_id')::uuid
         end as snapshot_payee_entity_id,
         nullif(pbi_p.payout_instruction_snapshot_json->>'bank_details_hash','') as snapshot_bank_details_hash,
-        nullif(pbi_p.payout_instruction_snapshot_json->>'beneficiary_name','') as snapshot_beneficiary_name
+        nullif(pbi_p.payout_instruction_snapshot_json->>'beneficiary_name','') as snapshot_beneficiary_name,
+        nullif(btrim(coalesce(pbi_p.payout_instruction_snapshot_json->>'sort_code','')), '') as snapshot_sort_code,
+        nullif(btrim(coalesce(pbi_p.payout_instruction_snapshot_json->>'account_number','')), '') as snapshot_account_number,
+        nullif(btrim(coalesce(pbi_p.payout_instruction_snapshot_json->>'account_type','')), '') as snapshot_account_type
       from public.pay_batch_candidates pbc_p
       join public.pay_batch_items pbi_p
         on pbi_p.pay_batch_candidate_id = pbc_p.id
@@ -19830,46 +19831,84 @@ begin
         pir.item_amount as amount,
         'GBP'::text as currency,
         case
-          when pir.is_finance_item = true and pir.payout_instruction_snapshot_json is null then 'BLOCKED'
-          when pir.is_finance_item = true and upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' then 'BLOCKED'
-          when pir.is_finance_item = true and pir.payee_entity_kind_txt <> 'CANDIDATE' then 'BLOCKED'
-          when pir.is_finance_item = true and pir.snapshot_payee_entity_id is distinct from pir.candidate_id then 'BLOCKED'
-          when pir.is_finance_item = true and (pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '') then 'BLOCKED'
-          when pir.is_finance_item = true and pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash then 'BLOCKED'
-          when nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null then 'BLOCKED'
-          when length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6 then 'BLOCKED'
-          when nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null then 'BLOCKED'
+          when pir.payout_instruction_snapshot_json is null then 'BLOCKED'
+          when upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' then 'BLOCKED'
+          when pir.payee_entity_kind_txt <> 'CANDIDATE' then 'BLOCKED'
+          when pir.snapshot_payee_entity_id is distinct from pir.candidate_id then 'BLOCKED'
+          when pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '' then 'BLOCKED'
+          when pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash then 'BLOCKED'
+          when pir.is_finance_item = false and nullif(btrim(coalesce(pir.snapshot_beneficiary_name,'')), '') is null then 'BLOCKED'
+          when pir.is_finance_item = false and pir.snapshot_sort_code is null then 'BLOCKED'
+          when pir.is_finance_item = false and pir.snapshot_account_number is null then 'BLOCKED'
+          when pir.is_finance_item = false and pir.snapshot_account_type is null then 'BLOCKED'
+          when pir.is_finance_item = true and nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null then 'BLOCKED'
+          when pir.is_finance_item = true and length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6 then 'BLOCKED'
+          when pir.is_finance_item = true and nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null then 'BLOCKED'
           else 'PENDING'
         end as status,
         case
-          when pir.is_finance_item = true and pir.payout_instruction_snapshot_json is null then 'BLOCKED_PAYOUT_INSTRUCTION_SNAPSHOT'
-          when pir.is_finance_item = true and (upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' or pir.payee_entity_kind_txt <> 'CANDIDATE' or pir.snapshot_payee_entity_id is distinct from pir.candidate_id) then 'BLOCKED_DESTINATION_INVALID'
-          when pir.is_finance_item = true and (pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '' or pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash) then 'BLOCKED_BANK_DETAILS'
-          when nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null or length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6 or nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null then 'BLOCKED_BANK_DETAILS'
+          when pir.payout_instruction_snapshot_json is null then 'BLOCKED_PAYOUT_INSTRUCTION_SNAPSHOT'
+          when upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' or pir.payee_entity_kind_txt <> 'CANDIDATE' or pir.snapshot_payee_entity_id is distinct from pir.candidate_id then 'BLOCKED_DESTINATION_INVALID'
+          when pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '' or pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash then 'BLOCKED_BANK_DETAILS'
+          when pir.is_finance_item = false and (
+               nullif(btrim(coalesce(pir.snapshot_beneficiary_name,'')), '') is null
+               or pir.snapshot_sort_code is null
+               or pir.snapshot_account_number is null
+               or pir.snapshot_account_type is null
+             ) then 'BLOCKED_BANK_DETAILS'
+          when pir.is_finance_item = true and (
+               nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null
+               or length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6
+               or nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null
+             ) then 'BLOCKED_BANK_DETAILS'
           else null
         end as rail_state,
         case
-          when pir.is_finance_item = true and pir.payout_instruction_snapshot_json is null then jsonb_build_object('reason_code', 'PAYOUT_INSTRUCTION_SNAPSHOT_MISSING')
-          when pir.is_finance_item = true and (upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' or pir.payee_entity_kind_txt <> 'CANDIDATE' or pir.snapshot_payee_entity_id is distinct from pir.candidate_id) then jsonb_build_object('reason_code', 'DESTINATION_INVALID')
-          when pir.is_finance_item = true and (pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '' or pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISMATCH')
-          when nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null or length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6 or nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null then jsonb_build_object('reason_code', 'BANK_DETAILS_MISSING')
+          when pir.payout_instruction_snapshot_json is null then jsonb_build_object('reason_code', 'PAYOUT_INSTRUCTION_SNAPSHOT_MISSING')
+          when upper(coalesce(pir.routing_kind_txt,'')) <> 'NORMAL_PAY_ROUTE' or pir.payee_entity_kind_txt <> 'CANDIDATE' or pir.snapshot_payee_entity_id is distinct from pir.candidate_id then jsonb_build_object('reason_code', 'DESTINATION_INVALID')
+          when pir.snapshot_bank_details_hash is null or pir.snapshot_bank_details_hash = '' or pir.bank_details_hash is distinct from pir.snapshot_bank_details_hash then jsonb_build_object('reason_code', 'BANK_DETAILS_MISMATCH')
+          when pir.is_finance_item = false and (
+               nullif(btrim(coalesce(pir.snapshot_beneficiary_name,'')), '') is null
+               or pir.snapshot_sort_code is null
+               or pir.snapshot_account_number is null
+               or pir.snapshot_account_type is null
+             ) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISSING')
+          when pir.is_finance_item = true and (
+               nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '') is null
+               or length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) <> 6
+               or nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') is null
+             ) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISSING')
           else null
         end as rail_meta_json,
         ('Pay - week ' || v_tax_week::text) as payment_reference,
-        coalesce(pir.snapshot_beneficiary_name, nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), '')) as payee_name,
         case
-          when length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) = 6 then
-            substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
-            substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
-            substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
-          else null
+          when pir.is_finance_item = true
+            then coalesce(pir.snapshot_beneficiary_name, nullif(btrim(coalesce(pir.account_holder, pir.display_name, concat_ws(' ', pir.first_name, pir.last_name))), ''))
+          else nullif(btrim(coalesce(pir.snapshot_beneficiary_name,'')), '')
+        end as payee_name,
+        case
+          when pir.is_finance_item = true then
+            case
+              when length(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g')) = 6 then
+                substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
+                substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 3, 2) || '-' ||
+                substr(regexp_replace(coalesce(pir.sort_code,''), '[^0-9]', '', 'g'), 5, 2)
+              else null
+            end
+          else pir.snapshot_sort_code
         end as sort_code,
-        nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '') as account_number,
-        'Personal'::text as account_type,
-        case when pir.is_finance_item = true then pir.snapshot_bank_details_hash else pir.bank_details_hash end as bank_details_hash_snapshot,
+        case
+          when pir.is_finance_item = true then nullif(regexp_replace(coalesce(pir.account_number,''), '[^0-9]', '', 'g'), '')
+          else pir.snapshot_account_number
+        end as account_number,
+        case
+          when pir.is_finance_item = true then 'Personal'::text
+          else pir.snapshot_account_type
+        end as account_type,
+        pir.snapshot_bank_details_hash as bank_details_hash_snapshot,
         'CANDIDATE'::text as payee_entity_kind,
         pir.candidate_id as payee_entity_id,
-        (pir.candidate_id::text || '|NORMAL_PAY_ROUTE|' || coalesce(case when pir.is_finance_item = true then pir.snapshot_bank_details_hash else pir.bank_details_hash end, '')) as transfer_group_key,
+        (pir.candidate_id::text || '|NORMAL_PAY_ROUTE|' || coalesce(pir.snapshot_bank_details_hash, '')) as transfer_group_key,
         'CANDIDATE_DESTINATION'::text as grouping_mode_used
       from paye_item_rows pir
     )
@@ -20021,7 +20060,10 @@ begin
           else (uir.payout_instruction_snapshot_json->>'payee_entity_id')::uuid
         end as snapshot_payee_entity_id,
         nullif(uir.payout_instruction_snapshot_json->>'bank_details_hash','') as snapshot_bank_details_hash,
-        nullif(uir.payout_instruction_snapshot_json->>'beneficiary_name','') as snapshot_beneficiary_name
+        nullif(uir.payout_instruction_snapshot_json->>'beneficiary_name','') as snapshot_beneficiary_name,
+        nullif(btrim(coalesce(uir.payout_instruction_snapshot_json->>'sort_code','')), '') as snapshot_sort_code,
+        nullif(btrim(coalesce(uir.payout_instruction_snapshot_json->>'account_number','')), '') as snapshot_account_number,
+        nullif(btrim(coalesce(uir.payout_instruction_snapshot_json->>'account_type','')), '') as snapshot_account_type
       from umbrella_item_rows uir
     ),
     umbrella_item_banks as (
@@ -20040,12 +20082,15 @@ begin
         ures.snapshot_payee_entity_id,
         ures.snapshot_bank_details_hash,
         ures.snapshot_beneficiary_name,
+        ures.snapshot_sort_code,
+        ures.snapshot_account_number,
+        ures.snapshot_account_type,
         ures.candidate_first_name,
         ures.candidate_last_name,
         case
-          when ures.is_finance_item = true and upper(coalesce(ures.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then null::uuid
-          when ures.is_finance_item = true and ures.payee_entity_kind_txt = 'UMBRELLA' then ures.snapshot_payee_entity_id
-          else coalesce(ures.item_umbrella_id, ures.candidate_umbrella_id)
+          when upper(coalesce(ures.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then null::uuid
+          when ures.payee_entity_kind_txt = 'UMBRELLA' then ures.snapshot_payee_entity_id
+          else null::uuid
         end as resolved_umbrella_id,
         oneoff.beneficiary_name as oneoff_beneficiary_name,
         oneoff.sort_code as oneoff_sort_code_raw,
@@ -20062,14 +20107,10 @@ begin
        and upper(coalesce(ures.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
       left join public.umbrellas umb
         on umb.id = case
-                       when ures.is_finance_item = true and upper(coalesce(ures.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then ures.snapshot_payee_entity_id
-                       else coalesce(ures.item_umbrella_id, ures.candidate_umbrella_id)
+                       when upper(coalesce(ures.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then ures.snapshot_payee_entity_id
+                       else null::uuid
                     end
-       and (
-         ures.is_finance_item = false
-         or upper(coalesce(ures.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
-         or umb.bank_details_hash = ures.snapshot_bank_details_hash
-       )
+       and umb.bank_details_hash = ures.snapshot_bank_details_hash
     ),
     umbrella_item_final as (
       select
@@ -20101,11 +20142,18 @@ begin
                     or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
                     or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
                     or nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null) then 'BLOCKED'
+          when uib.is_finance_item = false and uib.payout_instruction_snapshot_json is null then 'BLOCKED'
+          when uib.is_finance_item = false and upper(coalesce(uib.routing_kind_txt,'')) <> 'UMBRELLA_COMPANY' then 'BLOCKED'
+          when uib.is_finance_item = false and uib.payee_entity_kind_txt <> 'UMBRELLA' then 'BLOCKED'
+          when uib.is_finance_item = false and (uib.snapshot_payee_entity_id is null or uib.snapshot_bank_details_hash is null or uib.snapshot_bank_details_hash = '') then 'BLOCKED'
           when uib.is_finance_item = false and uib.resolved_umbrella_id is null then 'BLOCKED'
-          when uib.is_finance_item = false and (nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null
-                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
-                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
-                    or nullif(btrim(coalesce(uib.umbrella_bank_details_hash,'')), '') is null) then 'BLOCKED'
+          when uib.is_finance_item = false and (
+                 nullif(btrim(coalesce(uib.snapshot_beneficiary_name,'')), '') is null
+                 or uib.snapshot_sort_code is null
+                 or uib.snapshot_account_number is null
+                 or uib.snapshot_account_type is null
+               ) then 'BLOCKED'
+          when uib.is_finance_item = false and (uib.umbrella_bank_details_hash is null or uib.umbrella_bank_details_hash <> uib.snapshot_bank_details_hash) then 'BLOCKED'
           else 'PENDING'
         end as status,
         case
@@ -20125,11 +20173,16 @@ begin
                     or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
                     or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
                     or nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null) then 'BLOCKED_BANK_DETAILS'
-          when uib.is_finance_item = false and uib.resolved_umbrella_id is null then 'BLOCKED_UMBRELLA_MISSING'
-          when uib.is_finance_item = false and (nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null
-                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
-                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
-                    or nullif(btrim(coalesce(uib.umbrella_bank_details_hash,'')), '') is null) then 'BLOCKED_BANK_DETAILS'
+          when uib.is_finance_item = false and uib.payout_instruction_snapshot_json is null then 'BLOCKED_PAYOUT_INSTRUCTION_SNAPSHOT'
+          when uib.is_finance_item = false and (upper(coalesce(uib.routing_kind_txt,'')) <> 'UMBRELLA_COMPANY' or uib.payee_entity_kind_txt <> 'UMBRELLA' or uib.snapshot_payee_entity_id is null or uib.snapshot_bank_details_hash is null or uib.snapshot_bank_details_hash = '') then 'BLOCKED_DESTINATION_INVALID'
+          when uib.is_finance_item = false and (uib.resolved_umbrella_id is null) then 'BLOCKED_UMBRELLA_MISSING'
+          when uib.is_finance_item = false and (
+                 nullif(btrim(coalesce(uib.snapshot_beneficiary_name,'')), '') is null
+                 or uib.snapshot_sort_code is null
+                 or uib.snapshot_account_number is null
+                 or uib.snapshot_account_type is null
+               ) then 'BLOCKED_BANK_DETAILS'
+          when uib.is_finance_item = false and (uib.umbrella_bank_details_hash is null or uib.umbrella_bank_details_hash <> uib.snapshot_bank_details_hash) then 'BLOCKED_BANK_DETAILS'
           else null
         end as rail_state,
         case
@@ -20149,15 +20202,20 @@ begin
                     or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
                     or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
                     or nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISMATCH')
-          when uib.is_finance_item = false and uib.resolved_umbrella_id is null then jsonb_build_object('reason_code', 'UMBRELLA_MISSING')
-          when uib.is_finance_item = false and (nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '') is null
-                    or nullif(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), '') is null
-                    or nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '') is null
-                    or nullif(btrim(coalesce(uib.umbrella_bank_details_hash,'')), '') is null) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISSING')
+          when uib.is_finance_item = false and uib.payout_instruction_snapshot_json is null then jsonb_build_object('reason_code', 'PAYOUT_INSTRUCTION_SNAPSHOT_MISSING')
+          when uib.is_finance_item = false and (upper(coalesce(uib.routing_kind_txt,'')) <> 'UMBRELLA_COMPANY' or uib.payee_entity_kind_txt <> 'UMBRELLA' or uib.snapshot_payee_entity_id is null or uib.snapshot_bank_details_hash is null or uib.snapshot_bank_details_hash = '') then jsonb_build_object('reason_code', 'DESTINATION_INVALID')
+          when uib.is_finance_item = false and (uib.resolved_umbrella_id is null) then jsonb_build_object('reason_code', 'UMBRELLA_MISSING')
+          when uib.is_finance_item = false and (
+                 nullif(btrim(coalesce(uib.snapshot_beneficiary_name,'')), '') is null
+                 or uib.snapshot_sort_code is null
+                 or uib.snapshot_account_number is null
+                 or uib.snapshot_account_type is null
+               ) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISSING')
+          when uib.is_finance_item = false and (uib.umbrella_bank_details_hash is null or uib.umbrella_bank_details_hash <> uib.snapshot_bank_details_hash) then jsonb_build_object('reason_code', 'BANK_DETAILS_MISMATCH')
           else null
         end as rail_meta_json,
         left(
-          btrim(concat_ws(' ', nullif(btrim(uib.candidate_last_name),''), nullif(btrim(uib.candidate_first_name),''))),
+          btrim(concat_ws(' ', nullif(btrim(coalesce(uib.candidate_last_name,'')),''), nullif(btrim(coalesce(uib.candidate_first_name,'')),''))),
           18
         ) as payment_reference,
         case
@@ -20165,7 +20223,7 @@ begin
             then uib.snapshot_beneficiary_name
           when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) <> 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
             then coalesce(uib.snapshot_beneficiary_name, nullif(btrim(coalesce(uib.umbrella_payee_name,'')), ''))
-          else nullif(btrim(coalesce(uib.umbrella_payee_name,'')), '')
+          else nullif(btrim(coalesce(uib.snapshot_beneficiary_name,'')), '')
         end as payee_name,
         case
           when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then
@@ -20176,7 +20234,7 @@ begin
                 substr(regexp_replace(coalesce(uib.oneoff_sort_code_raw,''), '[^0-9]', '', 'g'), 5, 2)
               else null
             end
-          else
+          when uib.is_finance_item = true then
             case
               when length(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g')) = 6 then
                 substr(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), 1, 2) || '-' ||
@@ -20184,22 +20242,21 @@ begin
                 substr(regexp_replace(coalesce(uib.umbrella_sort_code_raw,''), '[^0-9]', '', 'g'), 5, 2)
               else null
             end
+          else uib.snapshot_sort_code
         end as sort_code,
         case
           when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
             then nullif(regexp_replace(coalesce(uib.oneoff_account_number_raw,''), '[^0-9]', '', 'g'), '')
-          else
+          when uib.is_finance_item = true then
             nullif(regexp_replace(coalesce(uib.umbrella_account_number_raw,''), '[^0-9]', '', 'g'), '')
+          else uib.snapshot_account_number
         end as account_number,
         case
-          when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'Personal'::text
-          else 'Business'::text
+          when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'Personal'::text
+          when uib.is_finance_item = true then 'Business'::text
+          else uib.snapshot_account_type
         end as account_type,
-        case
-          when uib.is_finance_item = true then uib.snapshot_bank_details_hash
-          when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then uib.snapshot_bank_details_hash
-          else coalesce(uib.umbrella_bank_details_hash, uib.snapshot_bank_details_hash)
-        end as bank_details_hash_snapshot,
+        uib.snapshot_bank_details_hash as bank_details_hash_snapshot,
         case
           when uib.is_finance_item = true then uib.payee_entity_kind_txt
           when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'CANDIDATE'::text
@@ -20218,7 +20275,7 @@ begin
           when upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then
             uib.candidate_id::text || '|ONEOFF|' || coalesce(uib.snapshot_bank_details_hash, '')
           else
-            uib.candidate_id::text || '|' || uib.default_week_ending_bucket::text || '|UMBRELLA|' || coalesce(uib.resolved_umbrella_id::text, '') || '|' || coalesce(uib.umbrella_bank_details_hash, '')
+            uib.candidate_id::text || '|' || uib.default_week_ending_bucket::text || '|UMBRELLA|' || coalesce(uib.resolved_umbrella_id::text, '') || '|' || coalesce(uib.snapshot_bank_details_hash, '')
         end as transfer_group_key,
         case
           when uib.is_finance_item = true and upper(coalesce(uib.routing_kind_txt,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'CANDIDATE_DESTINATION'::text
@@ -20606,8 +20663,6 @@ begin
   );
 end;
 $$;
-
-
 
 
 
