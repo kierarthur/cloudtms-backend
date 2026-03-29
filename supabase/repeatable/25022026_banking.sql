@@ -12008,181 +12008,11 @@ begin
   truncate table pg_temp.tmp_fresh_state_diffs;
 
   ---------------------------------------------------------------------------
-  -- TIMESHEET_CHANGED: compare stored pbts.signature vs recomputed md5(current target_snapshot_json)
+  -- TIMESHEET_CHANGED: Policy X keeps blocking freshness checks in the
+  -- economic entitlement keyspace. The legacy whole-snapshot signature
+  -- comparison is intentionally disabled as a blocking stale gate here.
   ---------------------------------------------------------------------------
-  insert into pg_temp.tmp_fresh_ts_diffs (
-    timesheet_id,
-    key_type,
-    key_value,
-    expected_text,
-    actual_text,
-    ord
-  )
-  with
-  pbts as (
-    select
-      pbs.timesheet_id,
-      pbs.signature as stored_signature
-    from public.pay_batch_timesheet_snapshots pbs
-    where pbs.pay_batch_id = p_pay_batch_id
-      and pbs.timesheet_id is not null
-  ),
-  tf0 as (
-    select
-      tf.timesheet_id,
-      tf.candidate_id,
-      tf.client_id,
-      ts.contract_id,
-      ts.reference_number,
-      tf.invoice_breakdown_json,
-      tf.hours_day,
-      tf.hours_night,
-      tf.hours_sat,
-      tf.hours_sun,
-      tf.hours_bh,
-      tf.pay_day,
-      tf.pay_night,
-      tf.pay_sat,
-      tf.pay_sun,
-      tf.pay_bh,
-      tf.additional_units_json,
-      tf.mileage_units,
-      tf.mileage_pay_rate,
-      round(coalesce(tf.total_pay_ex_vat,0),2) as total_pay_ex_vat,
-      round(coalesce(tf.expenses_pay_ex_vat,0),2) as expenses_pay_ex_vat,
-      round(coalesce(tf.travel_pay_ex_vat,0),2) as travel_pay_ex_vat,
-      round(coalesce(tf.accommodation_pay_ex_vat,0),2) as accommodation_pay_ex_vat,
-      round(coalesce(tf.other_pay_ex_vat,0),2) as other_pay_ex_vat,
-      round(coalesce(tf.mileage_pay_ex_vat,0),2) as mileage_pay_ex_vat
-    from public.timesheets_financials tf
-    join pbts p0
-      on p0.timesheet_id = tf.timesheet_id
-    join public.timesheets ts
-      on ts.timesheet_id = tf.timesheet_id
-     and ts.is_current = true
-    where tf.is_current = true
-  ),
-  cur0 as (
-    select
-      t.*,
-      case
-        when t.invoice_breakdown_json is not null
-         and jsonb_typeof(t.invoice_breakdown_json) = 'object'
-         and upper(coalesce(t.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-         and jsonb_typeof(t.invoice_breakdown_json->'segments') = 'array'
-        then (
-          select coalesce(
-            jsonb_agg(
-              jsonb_build_object(
-                'segment_id', nullif(btrim(coalesce(seg->>'segment_id','')),''),
-                'date', nullif(btrim(coalesce(seg->>'date','')),''),
-                'start_utc', nullif(btrim(coalesce(seg->>'start_utc','')),''),
-                'end_utc', nullif(btrim(coalesce(seg->>'end_utc','')),''),
-                'break_mins', coalesce(nullif(seg->>'break_mins','')::numeric,0),
-                'breaks', coalesce(seg->'breaks','[]'::jsonb),
-                'hours_day', coalesce(nullif(seg->>'hours_day','')::numeric,0),
-                'hours_night', coalesce(nullif(seg->>'hours_night','')::numeric,0),
-                'hours_sat', coalesce(nullif(seg->>'hours_sat','')::numeric,0),
-                'hours_sun', coalesce(nullif(seg->>'hours_sun','')::numeric,0),
-                'hours_bh', coalesce(nullif(seg->>'hours_bh','')::numeric,0),
-                'pay_amount', round(coalesce(nullif(seg->>'pay_amount','')::numeric,0),2),
-                'exclude_from_pay', coalesce(nullif(seg->>'exclude_from_pay','')::boolean,false),
-                'ref_num', nullif(btrim(coalesce(seg->>'ref_num','')),'')
-              )
-            ),
-            '[]'::jsonb
-          )
-          from jsonb_array_elements(t.invoice_breakdown_json->'segments') seg
-          where seg is not null and jsonb_typeof(seg) = 'object'
-        )
-        else jsonb_build_array(
-          jsonb_build_object(
-            'segment_id', ('ts:' || t.timesheet_id::text),
-            'pay_amount', round(coalesce(t.total_pay_ex_vat,0),2),
-            'exclude_from_pay', false,
-            'ref_num', nullif(btrim(coalesce(t.reference_number,'')), '')
-          )
-        )
-      end as cur_segments,
-      case
-        when t.invoice_breakdown_json is not null
-         and jsonb_typeof(t.invoice_breakdown_json) = 'object'
-         and upper(coalesce(t.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-        then round(coalesce(nullif(t.invoice_breakdown_json #>> '{additional,pay_ex_vat}','')::numeric,0),2)
-        else 0::numeric
-      end as cur_additional,
-      coalesce(
-        (
-          select coalesce(
-            jsonb_agg(
-              jsonb_build_object(
-                'id', a.id::text,
-                'delta_pay_ex_vat', round(coalesce(a.delta_pay_ex_vat,0),2)
-              )
-              order by a.id
-            ),
-            '[]'::jsonb
-          )
-          from public.ts_pay_adjustments a
-          where a.timesheet_id = t.timesheet_id
-            and a.as_advance = false
-        ),
-        '[]'::jsonb
-      ) as cur_adjs
-    from tf0 t
-  ),
-  cur_sig as (
-    select
-      c.timesheet_id,
-      md5(
-        jsonb_build_object(
-          'segments', coalesce(c.cur_segments, '[]'::jsonb),
-          'additional_pay_ex_vat', round(coalesce(c.cur_additional,0),2),
-          'additional_units_json', coalesce(c.additional_units_json, '{}'::jsonb),
-          'hours_day', round(coalesce(c.hours_day,0),2),
-          'hours_night', round(coalesce(c.hours_night,0),2),
-          'hours_sat', round(coalesce(c.hours_sat,0),2),
-          'hours_sun', round(coalesce(c.hours_sun,0),2),
-          'hours_bh', round(coalesce(c.hours_bh,0),2),
-          'pay_day', round(coalesce(c.pay_day,0),2),
-          'pay_night', round(coalesce(c.pay_night,0),2),
-          'pay_sat', round(coalesce(c.pay_sat,0),2),
-          'pay_sun', round(coalesce(c.pay_sun,0),2),
-          'pay_bh', round(coalesce(c.pay_bh,0),2),
-          'mileage_units', round(coalesce(c.mileage_units,0),2),
-          'mileage_pay_rate', c.mileage_pay_rate,
-          'expenses', jsonb_build_object(
-            'expenses_pay_ex_vat', round(coalesce(c.expenses_pay_ex_vat,0),2),
-            'travel_pay_ex_vat', round(coalesce(c.travel_pay_ex_vat,0),2),
-            'accommodation_pay_ex_vat', round(coalesce(c.accommodation_pay_ex_vat,0),2),
-            'other_pay_ex_vat', round(coalesce(c.other_pay_ex_vat,0),2),
-            'mileage_pay_ex_vat', round(coalesce(c.mileage_pay_ex_vat,0),2)
-          ),
-          'adjustments', coalesce(c.cur_adjs, '[]'::jsonb)
-        )::text
-      ) as current_signature
-    from cur0 c
-  )
-  select
-    p0.timesheet_id,
-    'TS_SIGNATURE' as key_type,
-    'SIGNATURE' as key_value,
-    p0.stored_signature as expected_text,
-    c0.current_signature as actual_text,
-    1 as ord
-  from pbts p0
-  join cur_sig c0
-    on c0.timesheet_id = p0.timesheet_id
-  where coalesce(p0.stored_signature,'') <> coalesce(c0.current_signature,'');
-
-  select count(*)::int
-  into v_ts_changed_ct
-  from pg_temp.tmp_fresh_ts_diffs;
-
-  if v_ts_changed_ct > 0 then
-    v_is_stale := true;
-    v_reasons := array_append(v_reasons, 'TIMESHEET_CHANGED');
-  end if;
+  v_ts_changed_ct := 0;
 
   ---------------------------------------------------------------------------
   -- RESERVATION_CHANGED: compare this-batch stable keys to helper outstanding
@@ -12393,13 +12223,7 @@ begin
             then case
               when tibn.source_ref is not null and btrim(tibn.source_ref) like 'preview_seg:%'
                 then 'TS_TOTAL'
-              when tibn.source_ref is not null and (
-                btrim(tibn.source_ref) like 'additional:%'
-                or btrim(tibn.source_ref) like 'add:%'
-                or btrim(tibn.source_ref) = 'additional'
-              )
-                then 'ADDITIONAL_CODE'
-              else 'EXPENSE_CODE'
+              else 'ADJUSTMENT_CODE'
             end
           when tibn.item_type = 'EXPENSE_DELTA'
             then case
@@ -12433,16 +12257,34 @@ begin
             then case
               when tibn.source_ref is not null and btrim(tibn.source_ref) like 'preview_seg:%'
                 then 'TOTAL'
-              when tibn.source_ref is not null and (
-                btrim(tibn.source_ref) like 'additional:%'
-                or btrim(tibn.source_ref) like 'add:%'
-              )
-                then upper(nullif(btrim(split_part(tibn.source_ref,':',2)), ''))
-              when tibn.source_ref is not null and btrim(tibn.source_ref) = 'additional'
-                then 'TOTAL'
-              when tibn.source_ref is not null and btrim(tibn.source_ref) <> ''
-                then upper(btrim(tibn.source_ref))
-              else 'UNKNOWN'
+              when nullif(btrim(coalesce(tibn.frozen_source_basis_json->>'adjustment_id','')), '') is not null
+                then nullif(btrim(coalesce(tibn.frozen_source_basis_json->>'adjustment_id','')), '')
+              when nullif(
+                btrim(
+                  coalesce(
+                    tibn.frozen_component_snapshot_json->'source_basis_json'->>'adjustment_id',
+                    ''
+                  )
+                ),
+                ''
+              ) is not null
+                then nullif(
+                  btrim(
+                    coalesce(
+                      tibn.frozen_component_snapshot_json->'source_basis_json'->>'adjustment_id',
+                      ''
+                    )
+                  ),
+                  ''
+                )
+              when tibn.source_ref is not null and btrim(tibn.source_ref) like 'adj:%'
+                then case
+                  when nullif(btrim(split_part(tibn.source_ref,':',2)), '') is null
+                    or btrim(split_part(tibn.source_ref,':',2)) like 'preview_adj_%'
+                    then 'TOTAL'
+                  else nullif(btrim(split_part(tibn.source_ref,':',2)), '')
+                end
+              else 'TOTAL'
             end
           when tibn.item_type = 'EXPENSE_DELTA'
             then case
@@ -13920,7 +13762,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
