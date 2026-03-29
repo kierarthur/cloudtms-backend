@@ -241,8 +241,8 @@ exp_components as (
 ),
 adj_components as (
   select
-    'EXPENSE_CODE'::text as key_type,
-    upper('ADJ:' || nullif(btrim(coalesce(adj->>'id','')), '')) as key_value,
+    'ADJUSTMENT_CODE'::text as key_type,
+    nullif(btrim(coalesce(adj->>'id','')), '') as key_value,
     round(
       case
         when coalesce(adj->>'delta_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$' then (adj->>'delta_pay_ex_vat')::numeric
@@ -299,7 +299,6 @@ select
   ac.amount_ex_vat
 from adj_components ac;
 $$;
-
 CREATE OR REPLACE FUNCTION public._pay_reserved_components(p_timesheet_ids uuid[])
 RETURNS TABLE (
   timesheet_id uuid,
@@ -561,15 +560,24 @@ reserved_keyed as (
           then 'EXPENSE_CODE'
         when ai.item_type = 'ADJUSTMENT_DELTA'
           then case
+            when coalesce(
+              nullif(btrim(coalesce(ai.frozen_source_basis_json->>'adjustment_id','')), ''),
+              nullif(
+                btrim(
+                  coalesce(
+                    ai.frozen_component_snapshot_json->'source_basis_json'->>'adjustment_id',
+                    ''
+                  )
+                ),
+                ''
+              )
+            ) is not null
+              then 'ADJUSTMENT_CODE'
+            when ai.source_ref is not null and btrim(ai.source_ref) like 'adj:%'
+              then 'ADJUSTMENT_CODE'
             when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
               then 'TS_TOTAL'
-            when ai.source_ref is not null and (
-              btrim(ai.source_ref) like 'additional:%'
-              or btrim(ai.source_ref) like 'add:%'
-              or btrim(ai.source_ref) = 'additional'
-            )
-              then 'ADDITIONAL_CODE'
-            else 'EXPENSE_CODE'
+            else null
           end
         when ai.item_type = 'EXPENSE_DELTA'
           then case
@@ -602,20 +610,29 @@ reserved_keyed as (
         when ai.item_type = 'MILEAGE_DELTA'
           then 'MILEAGE'
         when ai.item_type = 'ADJUSTMENT_DELTA'
-          then case
-            when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
-              then 'TOTAL'
-            when ai.source_ref is not null and (
-              btrim(ai.source_ref) like 'additional:%'
-              or btrim(ai.source_ref) like 'add:%'
-            )
-              then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
-            when ai.source_ref is not null and btrim(ai.source_ref) = 'additional'
-              then 'TOTAL'
-            when ai.source_ref is not null and btrim(ai.source_ref) <> ''
-              then upper(btrim(ai.source_ref))
-            else 'UNKNOWN'
-          end
+          then coalesce(
+            nullif(btrim(coalesce(ai.frozen_source_basis_json->>'adjustment_id','')), ''),
+            nullif(
+              btrim(
+                coalesce(
+                  ai.frozen_component_snapshot_json->'source_basis_json'->>'adjustment_id',
+                  ''
+                )
+              ),
+              ''
+            ),
+            case
+              when ai.source_ref is not null and btrim(ai.source_ref) like 'adj:%'
+                then case
+                  when nullif(btrim(split_part(ai.source_ref,':',2)), '') like 'preview_adj_%'
+                    then 'TOTAL'
+                  else nullif(btrim(split_part(ai.source_ref,':',2)), '')
+                end
+              when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
+                then 'TOTAL'
+              else null
+            end
+          )
         when ai.item_type = 'EXPENSE_DELTA'
           then case
             when ai.source_ref is not null and (
@@ -847,13 +864,13 @@ component_truth_canonical_fallback as (
        and upper(coalesce(ctr.raw_key_value, 'TOTAL')) = 'TOTAL'
         then 'TS_TOTAL'
       when ctr.raw_key_type = 'ADJUSTMENT_CODE'
-       and ctr.raw_key_value is not null
+       and nullif(btrim(coalesce(ctr.raw_key_value, '')), '') is not null
         then 'ADJUSTMENT_CODE'
       when ctr.raw_key_type = 'ADDITIONAL_CODE'
-       and ctr.raw_key_value is not null
+       and nullif(btrim(coalesce(ctr.raw_key_value, '')), '') is not null
         then 'ADDITIONAL_CODE'
       when ctr.raw_key_type = 'EXPENSE_CODE'
-       and ctr.raw_key_value is not null
+       and nullif(btrim(coalesce(ctr.raw_key_value, '')), '') is not null
         then 'EXPENSE_CODE'
       else null
     end as fallback_key_type,
@@ -865,14 +882,14 @@ component_truth_canonical_fallback as (
        and upper(coalesce(ctr.raw_key_value, 'TOTAL')) = 'TOTAL'
         then 'TOTAL'
       when ctr.raw_key_type = 'ADJUSTMENT_CODE'
-       and ctr.raw_key_value is not null
-        then ctr.raw_key_value
+       and nullif(btrim(coalesce(ctr.raw_key_value, '')), '') is not null
+        then nullif(btrim(coalesce(ctr.raw_key_value, '')), '')
       when ctr.raw_key_type = 'ADDITIONAL_CODE'
-       and ctr.raw_key_value is not null
-        then upper(ctr.raw_key_value)
+       and nullif(btrim(coalesce(ctr.raw_key_value, '')), '') is not null
+        then upper(nullif(btrim(coalesce(ctr.raw_key_value, '')), ''))
       when ctr.raw_key_type = 'EXPENSE_CODE'
-       and ctr.raw_key_value is not null
-        then upper(ctr.raw_key_value)
+       and nullif(btrim(coalesce(ctr.raw_key_value, '')), '') is not null
+        then upper(nullif(btrim(coalesce(ctr.raw_key_value, '')), ''))
       else null
     end as fallback_key_value
   from component_truth_raw ctr
@@ -910,7 +927,9 @@ component_truth as (
     round(sum(ctk.signed_amount), 2) as truth_inc_vat
   from component_truth_keyed ctk
   where ctk.key_type is not null
+    and btrim(ctk.key_type) <> ''
     and ctk.key_value is not null
+    and btrim(ctk.key_value) <> ''
   group by
     ctk.timesheet_id,
     ctk.key_type,
@@ -1041,6 +1060,11 @@ where fr.timesheet_id is not null
   and fr.key_type is not null
   and fr.key_value is not null;
 $$;
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public._pay_candidate_week_totals(p_candidate_ids uuid[], p_week_start date)
