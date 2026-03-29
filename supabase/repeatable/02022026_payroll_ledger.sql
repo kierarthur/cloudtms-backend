@@ -10289,16 +10289,6 @@ $function$;
 
 
 
-
-
-
-
-
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -13430,8 +13420,8 @@ end;
   -- stable key. Pre-existing stale reservations in other active batches must not block
   -- creation of a new draft; only new/worsened overrun caused by the current draft is an error.
   -- Stable keys come from _pay_outstanding_components / _pay_reserved_components:
-  --   key_type: TS_DAY, TS_TOTAL, ADDITIONAL_CODE, EXPENSE_CODE
-  --   key_value: work_date / TOTAL / code
+  --   key_type: TS_DAY, TS_TOTAL, ADDITIONAL_CODE, ADJUSTMENT_CODE, EXPENSE_CODE
+  --   key_value: work_date / TOTAL / adjustment_id / code
   --
   -- tolerance: 0.01 to avoid rounding noise false positives.
   with ts_ids_arr as (
@@ -13476,7 +13466,7 @@ end;
       rr.key_value,
       round(sum(coalesce(rr.reserved_ex_vat,0)),2) as reserved_ex_vat
     from reserved_rows rr
-    where rr.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')
+    where rr.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
     group by rr.timesheet_id, rr.key_type, rr.key_value
   ),
   outstanding_raw as (
@@ -13638,13 +13628,7 @@ end;
             then case
               when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%'
                 then 'TS_TOTAL'
-              when cbi.source_ref is not null and (
-                btrim(cbi.source_ref) like 'additional:%'
-                or btrim(cbi.source_ref) like 'add:%'
-                or btrim(cbi.source_ref) = 'additional'
-              )
-                then 'ADDITIONAL_CODE'
-              else 'EXPENSE_CODE'
+              else 'ADJUSTMENT_CODE'
             end
           when cbi.item_type = 'EXPENSE_DELTA'
             then case
@@ -13680,16 +13664,16 @@ end;
             then case
               when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%'
                 then 'TOTAL'
-              when cbi.source_ref is not null and (
-                btrim(cbi.source_ref) like 'additional:%'
-                or btrim(cbi.source_ref) like 'add:%'
-              )
-                then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
-              when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional'
-                then 'TOTAL'
-              when cbi.source_ref is not null and btrim(cbi.source_ref) <> ''
-                then upper(btrim(cbi.source_ref))
-              else 'UNKNOWN'
+              when nullif(btrim(coalesce(cbi.frozen_source_basis_json->>'adjustment_id','')), '') is not null
+                then nullif(btrim(coalesce(cbi.frozen_source_basis_json->>'adjustment_id','')), '')
+              when cbi.source_ref is not null and btrim(cbi.source_ref) like 'adj:%'
+                then case
+                  when nullif(btrim(split_part(cbi.source_ref,':',2)), '') is null
+                    or btrim(split_part(cbi.source_ref,':',2)) like 'preview_adj_%'
+                    then 'TOTAL'
+                  else nullif(btrim(split_part(cbi.source_ref,':',2)), '')
+                end
+              else 'TOTAL'
             end
           when cbi.item_type = 'EXPENSE_DELTA'
             then case
@@ -13731,7 +13715,7 @@ end;
     from current_batch_keyed c
     where c.key_value is not null
       and btrim(coalesce(c.key_value,'')) <> ''
-      and c.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')
+      and c.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
     group by c.timesheet_id, c.key_type, c.key_value
   ),
   key_union as (
@@ -13740,7 +13724,7 @@ end;
     union
     select orw.timesheet_id, orw.key_type, orw.key_value
     from outstanding_rows orw
-    where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')
+    where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
     union
     select cbr.timesheet_id, cbr.key_type, cbr.key_value
     from current_batch_reserved_sums cbr
@@ -13834,7 +13818,7 @@ end;
       '[]'::jsonb
     ),
     (select count(*)::int from reserved_sums),
-    (select count(*)::int from outstanding_rows orw where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')),
+    (select count(*)::int from outstanding_rows orw where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')),
     (select count(*)::int from current_batch_reserved_sums),
     (
       select coalesce(
@@ -13880,7 +13864,7 @@ end;
           orw.key_value,
           orw.outstanding_ex_vat
         from outstanding_rows orw
-        where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','EXPENSE_CODE')
+        where orw.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
         order by orw.timesheet_id::text, orw.key_type, orw.key_value
         limit 50
       ) orw
@@ -16640,6 +16624,17 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+
+
+
+
+
+
+
+
 
 
 
