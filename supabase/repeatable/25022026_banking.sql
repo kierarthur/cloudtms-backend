@@ -4487,7 +4487,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_export_bank_csv(
   p_pay_batch_id uuid,
   p_scope text default 'ALL'
@@ -4539,14 +4538,53 @@ declare
   v_val text;
   v_line text;
 
+  v_batch_created_by_user_id uuid := null;
+  v_fresh jsonb := null;
+  v_is_stale boolean := false;
+  v_stale_reasons jsonb := '[]'::jsonb;
+  v_diff_sample jsonb := '[]'::jsonb;
+
   r record;
 begin
   if v_scope not in ('ALL','PAYE','UMBRELLA') then
     raise exception 'pay_export_bank_csv: invalid scope "%". Expected ALL|PAYE|UMBRELLA.', v_scope;
   end if;
 
-  if not exists (select 1 from public.pay_batches pb where pb.id = p_pay_batch_id) then
+  select
+    pb.created_by_user_id
+  into v_batch_created_by_user_id
+  from public.pay_batches pb
+  where pb.id = p_pay_batch_id
+  limit 1;
+
+  if not found then
     raise exception 'pay_export_bank_csv: pay batch % not found.', p_pay_batch_id;
+  end if;
+
+  v_fresh := public.pay_batch_validate_freshness(
+    p_pay_batch_id,
+    coalesce(v_batch_created_by_user_id, '00000000-0000-0000-0000-000000000000'::uuid)
+  );
+  v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
+  v_stale_reasons := coalesce(v_fresh->'stale_reasons', '[]'::jsonb);
+
+  select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+  into v_diff_sample
+  from (
+    select elem
+    from jsonb_array_elements(coalesce(v_fresh->'diff','[]'::jsonb)) as elem
+    limit 50
+  ) x;
+
+  if v_is_stale = true then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_EXPORT_BANK_CSV',
+      'code', 'BATCH_STALE',
+      'message', 'pay_export_bank_csv: batch is stale; regenerate draft before exporting',
+      'pay_batch_id', p_pay_batch_id::text,
+      'stale_reasons', v_stale_reasons,
+      'diff', v_diff_sample
+    )::text;
   end if;
 
   -- Load configured CSV column order (fallback to default if NULL/invalid/empty)
@@ -4773,6 +4811,9 @@ begin
   return v_csv;
 end;
 $$;
+
+
+
 
 
 create or replace function public.pay_settle_manual_confirm(
