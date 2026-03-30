@@ -16568,6 +16568,9 @@ begin
 end;
 $$;
 
+
+
+
 create or replace function public.pay_loans_snoozes_list(
   p_candidate_id uuid default null::uuid,
   p_client_id uuid default null::uuid,
@@ -16743,7 +16746,16 @@ begin
       and (p_client_id is null or vfcr.client_id = p_client_id)
       and (
         v_hide_completed_non_current_items = false
-        or upper(coalesce(vfcr.lifecycle_status_display, '')) in ('NOT PROCESSED YET', 'DRAFTED AWAITING AUTHORISATION')
+        or (
+          vfcr.written_off_at_utc is null
+          and vfcr.cleared_at_utc is null
+          and upper(coalesce(vfcr.status::text, '')) not in ('PAID_OFF', 'PAID', 'CLEARED', 'WRITTEN_OFF', 'CANCELLED', 'SETTLED')
+          and (
+            upper(coalesce(vfcr.status::text, '')) in ('NOT_PROCESSED_YET', 'DRAFTED_AWAITING_AUTHORISATION', 'ACTIVE', 'PAUSED')
+            or round(coalesce(vfcr.outstanding_amount, 0), 2) > 0
+            or vfcr.active_snooze_id is not null
+          )
+        )
       )
   ),
   finance_payload_rows as (
