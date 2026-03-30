@@ -21177,8 +21177,20 @@ async function handleContractWeekReplaceManualPdf(env, req, weekId) {
   return withCORS(env, req, ok({ replaced: true, r2_key: newKey }));
 }
 
-
 async function handleContractWeekManualUpsert(env, req, weekId) {
+  const WLOG = true;
+  const wlog = (step, extra = {}) => {
+    if (!WLOG) return;
+    try {
+      console.log(JSON.stringify({
+        tag: 'CW_MANUAL_UPSERT',
+        step,
+        at_utc: new Date().toISOString(),
+        week_id: String(weekId || ''),
+        ...(extra && typeof extra === 'object' ? extra : {})
+      }));
+    } catch {}
+  };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -21189,6 +21201,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   } catch {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
+
+  wlog('start', {
+    actor_user_id: user?.id || null,
+    body_keys: (body && typeof body === 'object') ? Object.keys(body) : [],
+    expected_timesheet_id: body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '',
+    qr_action: String(body?.qr_action || body?.qrAction || '').trim().toUpperCase() || null
+  });
 
   // ✅ Guarded write (only enforced when a current timesheet already exists for this week)
   const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
@@ -21223,6 +21242,15 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
+  wlog('loaded_week_and_contract', {
+    contract_week_timesheet_id: cw?.timesheet_id || null,
+    contract_id: contract?.id || null,
+    contract_candidate_id: contract?.candidate_id || null,
+    contract_client_id: contract?.client_id || null,
+    contract_week_status: cw?.status || null,
+    week_ending_date: cw?.week_ending_date || null
+  });
+
   // ✅ Compute a timestamp ONCE (and do not shadow the nowIso() helper)
   const nowIso2 = nowIso();
 
@@ -21234,9 +21262,19 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const resTs = await resolveTimesheetToCurrent(env, currentTimesheetIdForWeek);
     if (!resTs) return withCORS(env, req, notFound('Timesheet not found'));
 
+    wlog('resolved_existing_week_timesheet', {
+      requested_timesheet_id: currentTimesheetIdForWeek,
+      resolved: resTs
+    });
+
     if (String(resTs.current_timesheet_id) !== String(currentTimesheetIdForWeek)) {
       wasStaleWeekTs = true;
       currentTimesheetIdForWeek = resTs.current_timesheet_id;
+
+      wlog('week_pointer_stale', {
+        old_timesheet_id: cw?.timesheet_id || null,
+        new_current_timesheet_id: currentTimesheetIdForWeek
+      });
 
       // keep contract_week pointer aligned (best-effort)
       try {
@@ -21253,10 +21291,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
     // Guard requires expected_timesheet_id when a timesheet exists
     if (!expectedTimesheetId) {
+      wlog('guard_fail_missing_expected_timesheet_id', {
+        current_timesheet_id_for_week: currentTimesheetIdForWeek
+      });
       return withCORS(env, req, badRequest('expected_timesheet_id is required'));
     }
 
     if (String(expectedTimesheetId) !== String(currentTimesheetIdForWeek)) {
+      wlog('guard_fail_timesheet_moved', {
+        expected_timesheet_id: expectedTimesheetId,
+        current_timesheet_id_for_week: currentTimesheetIdForWeek
+      });
       return withCORS(
         env,
         req,
@@ -21319,6 +21364,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   }
 
   if (!Array.isArray(actual_schedule_json)) {
+    wlog('bad_request_missing_schedule');
     return withCORS(env, req, badRequest('actual_schedule_json is required (schedule-driven weekly manual only)'));
   }
 
@@ -21414,15 +21460,23 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
   actual_schedule_json = normaliseSchedule(actual_schedule_json);
 
+  wlog('schedule_normalised', {
+    schedule_segments: actual_schedule_json.length
+  });
+
   // If we are creating a NEW timesheet (no ts exists), require at least 1 shift segment.
   // Draft/planned saves belong in the draft endpoint.
   if (!currentTimesheetIdForWeek && actual_schedule_json.length === 0) {
+    wlog('bad_request_empty_schedule_for_create');
     return withCORS(env, req, badRequest('Cannot create a timesheet with an empty schedule. Save as draft or add at least one shift.'));
   }
 
   try {
     validateScheduleStructure(actual_schedule_json);
   } catch (e) {
+    wlog('bad_request_invalid_schedule_structure', {
+      err: e?.message || String(e)
+    });
     return withCORS(env, req, badRequest(e.message || 'Invalid schedule (overlap/breaks).'));
   }
 
@@ -21440,8 +21494,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       };
     }
   } catch (e) {
+    wlog('bad_request_bucket_resolution_failed', {
+      err: e?.message || String(e)
+    });
     return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
   }
+
+  wlog('hours_resolved', { hours });
 
   // Base rates must exist for any positive bucket
   const { pay, charge, method } = payChargeFromContract(contract);
@@ -21453,6 +21512,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     (h.bh    > 0 && (!P.bh    && P.bh    !== 0 || !C.bh    && C.bh    !== 0));
 
   if (anyMissing(hours, pay, charge)) {
+    wlog('bad_request_missing_base_rates', {
+      method,
+      hours,
+      pay,
+      charge
+    });
     return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
   }
 
@@ -21553,6 +21618,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
   if (unitsWeek == null) unitsWeek = {};
   if (unitsPerDay == null) unitsPerDay = {};
+
+  wlog('units_normalised', {
+    units_week_codes: Object.keys(unitsWeek || {}),
+    units_per_day_codes: Object.keys(unitsPerDay || {})
+  });
 
   const addlConfig = Array.isArray(contract.additional_rates_json) ? contract.additional_rates_json : [];
 
@@ -21691,6 +21761,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   }
 
   if (badBuckets.length) {
+    wlog('bad_request_missing_additional_rates', {
+      bad_buckets: badBuckets
+    });
     return withCORS(env, req, badRequest(`Missing additional rate(s) in contract for bucket(s): ${badBuckets.join(', ')}`));
   }
 
@@ -21708,8 +21781,20 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       )
     : null;
 
+  wlog('loaded_current_timesheet_row', {
+    current_timesheet_id_for_week: currentTimesheetIdForWeek,
+    found_timesheet: !!ts,
+    found_timesheet_id: ts?.timesheet_id || null,
+    found_booking_id: ts?.booking_id || null,
+    found_version: ts?.version ?? null,
+    found_is_current: ts?.is_current ?? null
+  });
+
   // ✅ Hard rule: reject any attempt to alter schedule/hours while authorised
   if (ts && ts.authorised_at_server) {
+    wlog('conflict_authorised_edit_blocked', {
+      timesheet_id: ts.timesheet_id
+    });
     return withCORS(
       env,
       req,
@@ -21722,8 +21807,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       )
     );
   }
-
-
 
   const hasAnySegmentInvoiceLock = (tf) => {
     try {
@@ -21751,6 +21834,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         `&is_current=eq.true&select=*`
     );
     if (finLock && (finLock.locked_by_invoice_id || hasAnySegmentInvoiceLock(finLock) || finLock.paid_at_utc)) {
+      wlog('bad_request_locked_or_paid', {
+        timesheet_id: ts.timesheet_id,
+        locked_by_invoice_id: finLock?.locked_by_invoice_id || null,
+        paid_at_utc: finLock?.paid_at_utc || null
+      });
       return withCORS(env, req, badRequest('Timesheet already invoiced or paid; changes are blocked'));
     }
   }
@@ -21782,6 +21870,15 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     } catch {}
 
     const now2 = nowIso();
+
+    wlog('rotate_begin', {
+      booking_id: bookingId,
+      current_timesheet_id: currentTs.timesheet_id,
+      current_version: currentTs.version ?? null,
+      next_version: nextVersion,
+      revoke_reason: revokeReason || null,
+      qr_action_for_new: qrActionForNew || null
+    });
 
     // Demote any current row for this booking_id
     await fetch(
@@ -21860,6 +21957,16 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
     const created = (await ins.json().catch(() => []))[0] || null;
 
+    wlog('rotate_created_new_current', {
+      booking_id: bookingId,
+      new_timesheet_id: created?.timesheet_id || null,
+      new_version: created?.version ?? null,
+      new_is_current: created?.is_current ?? null,
+      new_status: created?.status || null,
+      new_qr_status: created?.qr_status || null,
+      new_is_manual_only: !!newIsManualOnly
+    });
+
     // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks caller)
     try {
       await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
@@ -21901,6 +22008,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
     const rotated = await rotateTimesheetVersion(ts, why, qrAction);
     if (!rotated || !rotated.timesheet_id) {
+      wlog('server_error_rotate_failed');
       return withCORS(env, req, serverError('Failed to rotate timesheet version'));
     }
     ts = rotated;
@@ -21914,6 +22022,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         body: JSON.stringify({ timesheet_id: ts.timesheet_id, updated_at: nowIso2 })
       }
     ).catch(() => {});
+
+    wlog('contract_week_pointer_after_rotate', {
+      contract_week_id: cw.id,
+      timesheet_id: ts.timesheet_id
+    });
   }
 
   // processing status:
@@ -21936,6 +22049,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
     const booking_id = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
     if (!booking_id || booking_id === '{}' || booking_id === 'null' || booking_id === 'undefined') {
+      wlog('bad_request_invalid_booking_id', {
+        booking_id
+      });
       return withCORS(env, req, badRequest(`Invalid booking_id produced: "${booking_id}"`));
     }
 
@@ -21988,6 +22104,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     ts = (await ins.json().catch(() => []))[0];
     createdNow = true;
 
+    wlog('created_new_timesheet', {
+      timesheet_id: ts?.timesheet_id || null,
+      booking_id: ts?.booking_id || null,
+      version: ts?.version ?? null,
+      is_current: ts?.is_current ?? null
+    });
+
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
       {
@@ -22037,6 +22160,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
       { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return-minimal' }, body: JSON.stringify(patchBody) }
     ).catch(() => {});
+
+    wlog('patched_existing_current_timesheet', {
+      timesheet_id: ts?.timesheet_id || null,
+      booking_id: ts?.booking_id || null,
+      version: ts?.version ?? null
+    });
   }
 
   // policy snapshot (for holiday, etc.)
@@ -22122,6 +22251,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     try {
       minsByBucketSeg = await resolveBucketsFromSchedule(env, contract, [seg]);
     } catch (e) {
+      wlog('bad_request_segment_bucket_resolution_failed', {
+        segment_index: i,
+        err: e?.message || String(e)
+      });
       return withCORS(env, req, badRequest(e.message || 'Invalid schedule segment'));
     }
 
@@ -22197,12 +22330,32 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   const coreChg = round2(baseCharge + additional_charge_ex_vat);
   const coreMargin = round2(coreChg - corePay);
   if (coreMargin < 0) {
+    wlog('bad_request_negative_margin', {
+      core_pay: corePay,
+      core_charge: coreChg,
+      core_margin: coreMargin
+    });
     return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay.'));
   }
 
   const total_pay = round2(corePay + expPay + milPay);
   const total_chg = round2(coreChg + expChg + milChg);
   const margin = round2(total_chg - total_pay);
+
+  wlog('totals_resolved', {
+    base_pay: basePay,
+    base_charge: baseCharge,
+    additional_pay_ex_vat,
+    additional_charge_ex_vat,
+    expenses_pay_ex_vat: expPay,
+    expenses_charge_ex_vat: expChg,
+    mileage_pay_ex_vat: milPay,
+    mileage_charge_ex_vat: milChg,
+    total_pay_ex_vat: total_pay,
+    total_charge_ex_vat: total_chg,
+    margin_ex_vat: margin,
+    segments_count: segments.length
+  });
 
   const snap = {
     timesheet_id: ts.timesheet_id,
@@ -22311,6 +22464,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const row = Array.isArray(leased) ? leased[0] : null;
     outboxId = row?.id || row?.outbox_id || null;
 
+    wlog('tsfin_outbox_leased', {
+      timesheet_id: ts.timesheet_id,
+      outbox_id: outboxId
+    });
+
     // 3) Write snapshot + complete outbox in one RPC
     if (outboxId) {
       const wr = await rpcTsfinWriteSnapshotsAndComplete(env, {
@@ -22322,6 +22480,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       });
 
       wroteViaSql = (Number(wr?.ok_count || 0) > 0);
+
+      wlog('tsfin_write_sql_result', {
+        timesheet_id: ts.timesheet_id,
+        outbox_id: outboxId,
+        ok_count: Number(wr?.ok_count || 0),
+        wrote_via_sql: wroteViaSql
+      });
     }
   } catch (e) {
     try {
@@ -22330,6 +22495,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         err: e?.message || String(e)
       });
     } catch {}
+    wlog('tsfin_write_sql_failed', {
+      timesheet_id: ts?.timesheet_id || null,
+      err: e?.message || String(e)
+    });
   }
 
   // Fallback: preserve legacy behaviour if SQL path fails (rare)
@@ -22340,6 +22509,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     if (outboxId) {
       try { await sbRpc(env, 'tsfin_work_success', { p_id: outboxId }); } catch {}
     }
+
+    wlog('tsfin_write_fallback_used', {
+      timesheet_id: ts.timesheet_id,
+      outbox_id: outboxId
+    });
   }
 
   // Persist week totals + schedule + weekly extras (draft-per-day refs removed)
@@ -22363,6 +22537,17 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return-minimal' }, body: JSON.stringify(weekPatch) }
   ).catch(() => {});
 
+  wlog('finish', {
+    final_timesheet_id: ts?.timesheet_id || null,
+    final_booking_id: ts?.booking_id || null,
+    final_version: ts?.version ?? null,
+    final_is_current: ts?.is_current ?? null,
+    current_timesheet_id_returned: ts?.timesheet_id || null,
+    was_stale: !!wasStaleWeekTs,
+    created_now: !!createdNow,
+    processing_status: processingStatus
+  });
+
   return withCORS(env, req, ok({
     timesheet_id: ts.timesheet_id,
     current_timesheet_id: ts.timesheet_id,
@@ -22373,7 +22558,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     created_now: !!createdNow
   }));
 }
-
 
 
  async function handleManualTimesheetQueueEnqueue(env, req) {
@@ -23051,6 +23235,19 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
 
 async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
+  const WLOG = true;
+  const wlog = (step, extra = {}) => {
+    if (!WLOG) return;
+    try {
+      console.log(JSON.stringify({
+        tag: 'HANDLE_TIMESHEET_DETAILS',
+        step,
+        at_utc: new Date().toISOString(),
+        requested_timesheet_id: String(timesheetId || ''),
+        ...(extra && typeof extra === 'object' ? extra : {})
+      }));
+    } catch {}
+  };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -23060,16 +23257,23 @@ async function handleTimesheetDetails(env, req, timesheetId) {
   }
 
   try {
+    wlog('start', {
+      actor_user_id: user?.id || null
+    });
+
     // ─────────────────────────────────────────────────────────────
     // Resolve stale/historical timesheet_id -> current by booking_id
     // ─────────────────────────────────────────────────────────────
     const resolved = await resolveTimesheetToCurrent(env, timesheetId);
     if (!resolved) {
+      wlog('not_found_after_resolve');
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
     const bookingId = resolved.booking_id || null;
     const currentTimesheetId = resolved.current_timesheet_id || timesheetId;
+
+    wlog('resolved', resolved);
 
     // Current timesheet record (ALWAYS load by current_timesheet_id)
     let ts = null;
@@ -23084,6 +23288,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       ts = tsRows?.[0] || null;
     }
     if (!ts) {
+      wlog('not_found_current_timesheet_row', {
+        current_timesheet_id: currentTimesheetId
+      });
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
@@ -23105,6 +23312,15 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       contractWeek = null;
     }
 
+    wlog('loaded_timesheet_and_contract_week', {
+      current_timesheet_id: currentTimesheetId,
+      booking_id: bookingId,
+      timesheet_version: ts?.version ?? null,
+      timesheet_is_current: ts?.is_current ?? null,
+      contract_week_id: contractWeekId,
+      contract_week_timesheet_id: contractWeek?.timesheet_id || null
+    });
+
     // ✅ adjustment detection used to hard-block convert actions
     const isAdjustment = !!(ts?.is_adjustment || contractWeek?.is_adjustment);
 
@@ -23121,6 +23337,16 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       );
       tsfinRaw = finRows?.[0] || null;
     }
+
+    wlog('loaded_tsfin', {
+      current_timesheet_id: currentTimesheetId,
+      tsfin_found: !!tsfinRaw,
+      tsfin_id: tsfinRaw?.id || null,
+      processing_status: tsfinRaw?.processing_status || null,
+      basis: tsfinRaw?.basis || null,
+      locked_by_invoice_id: tsfinRaw?.locked_by_invoice_id || null,
+      paid_at_utc: tsfinRaw?.paid_at_utc || null
+    });
 
     // ─────────────────────────────────────────────────────────────
     // ✅ Repair-on-open for corrupt SEGMENTS snapshots
@@ -23143,6 +23369,11 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         }
 
         if (invalidCount0 > 0) {
+          wlog('repair_on_open_triggered', {
+            current_timesheet_id: currentTimesheetId,
+            invalid_segment_count: invalidCount0
+          });
+
           // Enqueue TSFIN recompute with priority and run the worker once for this id
           try {
             await sbRpc(env, 'enqueue_ts_financials_priority', {
@@ -23167,6 +23398,11 @@ async function handleTimesheetDetails(env, req, timesheetId) {
             );
             tsfinRaw = finRows2?.[0] || tsfinRaw;
           } catch {}
+
+          wlog('repair_on_open_refetched_tsfin', {
+            current_timesheet_id: currentTimesheetId,
+            tsfin_id: tsfinRaw?.id || null
+          });
         }
       }
     } catch {}
@@ -23342,6 +23578,15 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       ready_to_pay: undefined,
       issue_codes: undefined
     };
+
+    wlog('loaded_effective_summary', {
+      current_timesheet_id: currentTimesheetId,
+      summary_found: !!summaryRow,
+      route_type: effective.route_type || null,
+      route_display: effective.route_display || null,
+      summary_stage: effective.summary_stage || null,
+      ready_to_pay: effective.ready_to_pay
+    });
 
     // Validation rows (most recent first)
     const { rows: valRows } = await sbFetch(
@@ -23652,6 +23897,22 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       can_clear_payment_snooze: canClearPaymentSnooze
     };
 
+    wlog('finish', {
+      booking_id: bookingId,
+      requested_timesheet_id: resolved.requested_timesheet_id,
+      current_timesheet_id: resolved.current_timesheet_id,
+      current_version: resolved.current_version,
+      was_stale: resolved.was_stale,
+      contract_week_id: contractWeekId,
+      tsfin_found: !!tsfinOut,
+      is_segments_mode: isSegmentsMode,
+      segments_count: Array.isArray(segments) ? segments.length : 0,
+      validations_count: Array.isArray(validations) ? validations.length : 0,
+      shifts_count: Array.isArray(shifts) ? shifts.length : 0,
+      route_type: effective.route_type || null,
+      route_display: effective.route_display || null
+    });
+
     return withCORS(env, req, ok({
       booking_id: bookingId,
       requested_timesheet_id: resolved.requested_timesheet_id,
@@ -23721,10 +23982,12 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       timesheet_id: timesheetId,
       err: e?.message || String(e)
     });
+    wlog('error', {
+      err: e?.message || String(e)
+    });
     return withCORS(env, req, serverError('Failed to load timesheet details'));
   }
 }
-
 async function handleTimesheetUnauthorise(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -68416,11 +68679,25 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
 // Resolve any timesheet_id (current or historical) to the current row for its booking_id.
 // Returns null if the requested timesheet_id does not exist.
 
-
 async function resolveTimesheetToCurrent(env, timesheet_id) {
   const enc = encodeURIComponent;
+  const WLOG = true;
+  const wlog = (step, extra = {}) => {
+    if (!WLOG) return;
+    try {
+      console.log(JSON.stringify({
+        tag: 'RESOLVE_TIMESHEET_TO_CURRENT',
+        step,
+        at_utc: new Date().toISOString(),
+        requested_timesheet_id: String(timesheet_id || ''),
+        ...(extra && typeof extra === 'object' ? extra : {})
+      }));
+    } catch {}
+  };
 
   if (!timesheet_id) return null;
+
+  wlog('start');
 
   // 1) Load the requested row by PK (current OR historical)
   const { rows: reqRows } = await sbFetch(
@@ -68432,20 +68709,29 @@ async function resolveTimesheetToCurrent(env, timesheet_id) {
   );
 
   const reqRow = (reqRows && reqRows[0]) ? reqRows[0] : null;
-  if (!reqRow) return null;
+  if (!reqRow) {
+    wlog('not_found_requested_row');
+    return null;
+  }
 
   const booking_id = reqRow.booking_id || null;
+
+  wlog('requested_row_loaded', {
+    requested_row: reqRow
+  });
 
   // If booking_id is missing, we cannot resolve the series.
   // Return a structured response so callers can turn this into a 400.
   if (!booking_id) {
-    return {
+    const out = {
       booking_id: null,
       requested_timesheet_id: reqRow.timesheet_id,
       current_timesheet_id: reqRow.timesheet_id,
       current_version: reqRow.version != null ? Number(reqRow.version) : null,
       was_stale: false
     };
+    wlog('finish_no_booking_id', out);
+    return out;
   }
 
   // 2) Load the current row for this booking_id
@@ -68465,6 +68751,11 @@ async function resolveTimesheetToCurrent(env, timesheet_id) {
     curRow = null;
   }
 
+  wlog('queried_current_row', {
+    booking_id,
+    current_row: curRow
+  });
+
   // Defensive fallback if data is inconsistent (no is_current row found):
   // pick the highest version row.
   if (!curRow) {
@@ -68481,6 +68772,11 @@ async function resolveTimesheetToCurrent(env, timesheet_id) {
     } catch {
       curRow = null;
     }
+
+    wlog('fallback_highest_version_row', {
+      booking_id,
+      fallback_row: curRow
+    });
   }
 
   // If still missing, treat the requested row as the best-known "current".
@@ -68489,16 +68785,18 @@ async function resolveTimesheetToCurrent(env, timesheet_id) {
   const current_timesheet_id = curRow.timesheet_id;
   const current_version = curRow.version != null ? Number(curRow.version) : null;
 
-  return {
+  const out = {
     booking_id,
     requested_timesheet_id: reqRow.timesheet_id,
     current_timesheet_id,
     current_version,
     was_stale: String(reqRow.timesheet_id) !== String(current_timesheet_id)
   };
+
+  wlog('finish', out);
+
+  return out;
 }
-
-
 
 
 
