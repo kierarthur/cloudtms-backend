@@ -25146,7 +25146,7 @@ BEGIN
         WHEN 'UNDERPAYMENT' THEN 'Underpayment'
         WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'Manual Debt Adjustment'
         WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
-        ELSE coalesce(vfcr.case_type, 'Finance Case')
+        ELSE coalesce(vfcr.case_type::text, 'Finance Case')
       END AS row_label,
       CASE vfcr.case_type
         WHEN 'PAYMENT_ADVANCE' THEN 'PAYMENT_ADVANCE'
@@ -25183,36 +25183,36 @@ BEGIN
         ELSE
           CASE
             WHEN vfcr.written_off_at_utc IS NOT NULL THEN 'WRITTEN_OFF'
-            WHEN round(coalesce(vfcr.outstanding_amount, 0), 2) > 0 THEN 'OUTSTANDING'
+            WHEN round(norm.outstanding_amount_norm, 2) > 0 THEN 'OUTSTANDING'
             ELSE 'FULLY_PAID'
           END
       END AS ledger_status,
-      round(coalesce(vfcr.original_amount, 0), 2) AS original_amount,
-      round(coalesce(vfcr.outstanding_amount, 0), 2) AS outstanding_amount,
-      round(coalesce(vfcr.weekly_due, 0), 2) AS weekly_due,
+      round(norm.original_amount_norm, 2) AS original_amount,
+      round(norm.outstanding_amount_norm, 2) AS outstanding_amount,
+      round(norm.weekly_due_norm, 2) AS weekly_due,
       vfcr.weeks_total,
       vfcr.start_week_start,
       vfcr.next_due_week_start,
-      vfcr.schedule_json,
+      norm.schedule_json_norm AS schedule_json,
       vfcr.adjustment_comment,
-      round(coalesce(vfcr.source_original_paid_amount, 0), 2) AS source_original_paid_amount,
-      round(coalesce(vfcr.source_corrected_paid_amount, 0), 2) AS source_corrected_paid_amount,
-      round(coalesce(vfcr.minimum_earnings_threshold, 0), 2) AS minimum_earnings_threshold,
-      round(coalesce(vfcr.take_home_floor_override, 0), 2) AS take_home_floor_override,
+      round(norm.source_original_paid_amount_norm, 2) AS source_original_paid_amount,
+      round(norm.source_corrected_paid_amount_norm, 2) AS source_corrected_paid_amount,
+      round(norm.minimum_earnings_threshold_norm, 2) AS minimum_earnings_threshold,
+      round(norm.take_home_floor_override_norm, 2) AS take_home_floor_override,
       vfcr.baseline_signature,
-      round(coalesce(vfcr.best_guess_hours, 0), 2) AS best_guess_hours,
+      round(norm.best_guess_hours_norm, 2) AS best_guess_hours,
       vfcr.notes,
       vfcr.written_off_at_utc,
       coalesce(nullif(btrim(coalesce(u_written_off.display_name, u_written_off.email, '')), ''), NULL) AS written_off_by_display,
       vfcr.write_off_reason,
       vfcr.cleared_at_utc,
       coalesce(nullif(btrim(coalesce(u_cleared.display_name, u_cleared.email, '')), ''), NULL) AS cleared_by_display,
-      round(coalesce(vfcr.active_reserved_amount, 0), 2) AS active_reserved_amount,
-      round(coalesce(vfcr.reserved_amount, 0), 2) AS reserved_amount,
-      round(coalesce(vfcr.committed_amount, 0), 2) AS committed_amount,
-      round(coalesce(vfcr.settled_amount, 0), 2) AS settled_amount,
-      round(coalesce(vfcr.released_amount, 0), 2) AS released_amount,
-      coalesce(vfcr.active_reservation_count, 0) AS active_reservation_count,
+      round(norm.active_reserved_amount_norm, 2) AS active_reserved_amount,
+      round(norm.reserved_amount_norm, 2) AS reserved_amount,
+      round(norm.committed_amount_norm, 2) AS committed_amount,
+      round(norm.settled_amount_norm, 2) AS settled_amount,
+      round(norm.released_amount_norm, 2) AS released_amount,
+      norm.active_reservation_count_norm AS active_reservation_count,
       vfcr.latest_reservation_created_at_utc,
       vfcr.latest_committed_at_utc,
       vfcr.latest_settled_at_utc,
@@ -25236,12 +25236,12 @@ BEGIN
         WHEN vfcr.active_snooze_until_date IS NULL THEN 'INDEFINITE_DEFERRED'
         ELSE 'ACTIVE'
       END AS active_snooze_visibility_status,
-      coalesce(vfcr.is_mixed_case, false) AS is_mixed_case,
-      coalesce(vfcr.open_taxable_count, 0) AS open_taxable_count,
-      coalesce(vfcr.open_reimbursement_count, 0) AS open_reimbursement_count,
-      coalesce(vfcr.unresolved_taxable_count, 0) AS unresolved_taxable_count,
-      coalesce(vfcr.stale_count, 0) AS stale_count,
-      coalesce(vfcr.component_resolution_summary_json, '{}'::jsonb) AS component_resolution_summary_json
+      norm.is_mixed_case_norm AS is_mixed_case,
+      norm.open_taxable_count_norm AS open_taxable_count,
+      norm.open_reimbursement_count_norm AS open_reimbursement_count,
+      norm.unresolved_taxable_count_norm AS unresolved_taxable_count,
+      norm.stale_count_norm AS stale_count,
+      norm.component_resolution_summary_json_norm AS component_resolution_summary_json
     FROM public.v_finance_cases_register AS vfcr
     LEFT JOIN public.candidates_summary AS cs
       ON cs.id = vfcr.candidate_id
@@ -25254,6 +25254,161 @@ BEGIN
       ON u_written_off.id = vfcr.written_off_by_user_id
     LEFT JOIN public.tms_users AS u_cleared
       ON u_cleared.id = vfcr.cleared_by_user_id
+    LEFT JOIN LATERAL (
+      WITH normalized AS (
+        SELECT
+          CASE
+            WHEN vfcr.case_type = 'PAYMENT_ADVANCE' THEN false
+            WHEN lower(nullif(btrim(vfcr.is_mixed_case::text, '"'), '')) IN ('true', 't', '1', 'yes', 'y') THEN true
+            ELSE false
+          END AS is_mixed_case_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.original_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.original_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS original_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.outstanding_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.outstanding_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS outstanding_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.weekly_due::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.weekly_due::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS weekly_due_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.source_original_paid_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.source_original_paid_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS source_original_paid_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.source_corrected_paid_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.source_corrected_paid_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS source_corrected_paid_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.minimum_earnings_threshold::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.minimum_earnings_threshold::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS minimum_earnings_threshold_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.take_home_floor_override::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.take_home_floor_override::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS take_home_floor_override_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.best_guess_hours::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.best_guess_hours::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS best_guess_hours_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.active_reserved_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.active_reserved_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS active_reserved_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.reserved_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.reserved_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS reserved_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.committed_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.committed_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS committed_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.settled_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.settled_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS settled_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.released_amount::text, '"'), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+              THEN nullif(btrim(vfcr.released_amount::text, '"'), '')::numeric
+            ELSE 0::numeric
+          END AS released_amount_norm,
+          CASE
+            WHEN nullif(btrim(vfcr.active_reservation_count::text, '"'), '') ~ '^-?[0-9]+$'
+              THEN nullif(btrim(vfcr.active_reservation_count::text, '"'), '')::integer
+            ELSE 0
+          END AS active_reservation_count_norm,
+          CASE
+            WHEN vfcr.case_type = 'PAYMENT_ADVANCE' THEN 0
+            WHEN nullif(btrim(vfcr.open_taxable_count::text, '"'), '') ~ '^-?[0-9]+$'
+              THEN nullif(btrim(vfcr.open_taxable_count::text, '"'), '')::integer
+            ELSE 0
+          END AS open_taxable_count_norm,
+          CASE
+            WHEN vfcr.case_type = 'PAYMENT_ADVANCE' THEN 0
+            WHEN nullif(btrim(vfcr.open_reimbursement_count::text, '"'), '') ~ '^-?[0-9]+$'
+              THEN nullif(btrim(vfcr.open_reimbursement_count::text, '"'), '')::integer
+            ELSE 0
+          END AS open_reimbursement_count_norm,
+          CASE
+            WHEN vfcr.case_type = 'PAYMENT_ADVANCE' THEN 0
+            WHEN nullif(btrim(vfcr.unresolved_taxable_count::text, '"'), '') ~ '^-?[0-9]+$'
+              THEN nullif(btrim(vfcr.unresolved_taxable_count::text, '"'), '')::integer
+            ELSE 0
+          END AS unresolved_taxable_count_norm,
+          CASE
+            WHEN vfcr.case_type = 'PAYMENT_ADVANCE' THEN 0
+            WHEN nullif(btrim(vfcr.stale_count::text, '"'), '') ~ '^-?[0-9]+$'
+              THEN nullif(btrim(vfcr.stale_count::text, '"'), '')::integer
+            ELSE 0
+          END AS stale_count_norm,
+          CASE
+            WHEN vfcr.schedule_json IS NULL THEN '[]'::jsonb
+            WHEN jsonb_typeof(to_jsonb(vfcr.schedule_json)) IN ('object', 'array') THEN to_jsonb(vfcr.schedule_json)
+            ELSE '[]'::jsonb
+          END AS schedule_json_norm
+      )
+      SELECT
+        normalized.is_mixed_case_norm,
+        normalized.original_amount_norm,
+        normalized.outstanding_amount_norm,
+        normalized.weekly_due_norm,
+        normalized.source_original_paid_amount_norm,
+        normalized.source_corrected_paid_amount_norm,
+        normalized.minimum_earnings_threshold_norm,
+        normalized.take_home_floor_override_norm,
+        normalized.best_guess_hours_norm,
+        normalized.active_reserved_amount_norm,
+        normalized.reserved_amount_norm,
+        normalized.committed_amount_norm,
+        normalized.settled_amount_norm,
+        normalized.released_amount_norm,
+        normalized.active_reservation_count_norm,
+        normalized.open_taxable_count_norm,
+        normalized.open_reimbursement_count_norm,
+        normalized.unresolved_taxable_count_norm,
+        normalized.stale_count_norm,
+        normalized.schedule_json_norm,
+        CASE
+          WHEN vfcr.case_type = 'PAYMENT_ADVANCE' THEN jsonb_build_object(
+            'open_taxable_count', 0,
+            'open_reimbursement_count', 0,
+            'unresolved_taxable_count', 0,
+            'stale_count', 0,
+            'is_mixed_case', false
+          )
+          WHEN vfcr.component_resolution_summary_json IS NULL THEN jsonb_build_object(
+            'open_taxable_count', normalized.open_taxable_count_norm,
+            'open_reimbursement_count', normalized.open_reimbursement_count_norm,
+            'unresolved_taxable_count', normalized.unresolved_taxable_count_norm,
+            'stale_count', normalized.stale_count_norm,
+            'is_mixed_case', normalized.is_mixed_case_norm
+          )
+          WHEN jsonb_typeof(to_jsonb(vfcr.component_resolution_summary_json)) IN ('object', 'array') THEN to_jsonb(vfcr.component_resolution_summary_json)
+          ELSE jsonb_build_object(
+            'open_taxable_count', normalized.open_taxable_count_norm,
+            'open_reimbursement_count', normalized.open_reimbursement_count_norm,
+            'unresolved_taxable_count', normalized.unresolved_taxable_count_norm,
+            'stale_count', normalized.stale_count_norm,
+            'is_mixed_case', normalized.is_mixed_case_norm
+          )
+        END AS component_resolution_summary_json_norm
+      FROM normalized
+    ) AS norm ON TRUE
     WHERE
       (p_created_from IS NULL OR vfcr.created_at::date >= p_created_from)
       AND (p_created_to IS NULL OR vfcr.created_at::date <= p_created_to)
@@ -25277,22 +25432,16 @@ BEGIN
     ORDER BY
       CASE WHEN v_sort_key = 'created_at' AND v_sort_dir = 'asc' THEN fr.created_at END ASC NULLS LAST,
       CASE WHEN v_sort_key = 'created_at' AND v_sort_dir = 'desc' THEN fr.created_at END DESC NULLS LAST,
-
       CASE WHEN v_sort_key = 'candidate' AND v_sort_dir = 'asc' THEN lower(coalesce(fr.candidate_display_name, '')) END ASC NULLS LAST,
       CASE WHEN v_sort_key = 'candidate' AND v_sort_dir = 'desc' THEN lower(coalesce(fr.candidate_display_name, '')) END DESC NULLS LAST,
-
       CASE WHEN v_sort_key = 'client' AND v_sort_dir = 'asc' THEN lower(coalesce(fr.client_name, '')) END ASC NULLS LAST,
       CASE WHEN v_sort_key = 'client' AND v_sort_dir = 'desc' THEN lower(coalesce(fr.client_name, '')) END DESC NULLS LAST,
-
       CASE WHEN v_sort_key = 'case_type' AND v_sort_dir = 'asc' THEN lower(coalesce(fr.case_type::text, '')) END ASC NULLS LAST,
       CASE WHEN v_sort_key = 'case_type' AND v_sort_dir = 'desc' THEN lower(coalesce(fr.case_type::text, '')) END DESC NULLS LAST,
-
       CASE WHEN v_sort_key = 'outstanding_amount' AND v_sort_dir = 'asc' THEN fr.outstanding_amount END ASC NULLS LAST,
       CASE WHEN v_sort_key = 'outstanding_amount' AND v_sort_dir = 'desc' THEN fr.outstanding_amount END DESC NULLS LAST,
-
       CASE WHEN v_sort_key = 'next_due_week_start' AND v_sort_dir = 'asc' THEN fr.next_due_week_start END ASC NULLS LAST,
       CASE WHEN v_sort_key = 'next_due_week_start' AND v_sort_dir = 'desc' THEN fr.next_due_week_start END DESC NULLS LAST,
-
       fr.created_at DESC,
       lower(coalesce(fr.candidate_display_name, '')) ASC
   )
@@ -25316,7 +25465,9 @@ BEGIN
           'linked_timesheet_reference_number', orw.linked_timesheet_reference_number,
           'linked_shift_date', CASE WHEN orw.linked_shift_date IS NULL THEN NULL ELSE orw.linked_shift_date::text END,
           'created_at', CASE WHEN orw.created_at IS NULL THEN NULL ELSE orw.created_at::text END,
-          'updated_at', CASE WHEN orw.updated_at IS NULL THEN NULL ELSE orw.updated_at::text END,
+          'updated_at', CASE WHEN orw.updated_at IS NULL THEN NULL ELSE orw.updated_at::text END
+        )
+        || jsonb_build_object(
           'created_by_display', orw.created_by_display,
           'finance_status', orw.finance_status,
           'payout_status', orw.payout_status,
@@ -25327,14 +25478,16 @@ BEGIN
           'weeks_total', orw.weeks_total,
           'start_week_start', CASE WHEN orw.start_week_start IS NULL THEN NULL ELSE orw.start_week_start::text END,
           'next_due_week_start', CASE WHEN orw.next_due_week_start IS NULL THEN NULL ELSE orw.next_due_week_start::text END,
-          'schedule_json', coalesce(orw.schedule_json, '[]'::jsonb),
+          'schedule_json', orw.schedule_json,
           'adjustment_comment', orw.adjustment_comment,
           'source_original_paid_amount', orw.source_original_paid_amount,
           'source_corrected_paid_amount', orw.source_corrected_paid_amount,
           'minimum_earnings_threshold', orw.minimum_earnings_threshold,
           'take_home_floor_override', orw.take_home_floor_override,
           'baseline_signature', orw.baseline_signature,
-          'best_guess_hours', orw.best_guess_hours,
+          'best_guess_hours', orw.best_guess_hours
+        )
+        || jsonb_build_object(
           'notes', orw.notes,
           'written_off_at_utc', CASE WHEN orw.written_off_at_utc IS NULL THEN NULL ELSE orw.written_off_at_utc::text END,
           'written_off_by_display', orw.written_off_by_display,
@@ -25350,7 +25503,9 @@ BEGIN
           'latest_reservation_created_at_utc', CASE WHEN orw.latest_reservation_created_at_utc IS NULL THEN NULL ELSE orw.latest_reservation_created_at_utc::text END,
           'latest_committed_at_utc', CASE WHEN orw.latest_committed_at_utc IS NULL THEN NULL ELSE orw.latest_committed_at_utc::text END,
           'latest_settled_at_utc', CASE WHEN orw.latest_settled_at_utc IS NULL THEN NULL ELSE orw.latest_settled_at_utc::text END,
-          'latest_released_at_utc', CASE WHEN orw.latest_released_at_utc IS NULL THEN NULL ELSE orw.latest_released_at_utc::text END,
+          'latest_released_at_utc', CASE WHEN orw.latest_released_at_utc IS NULL THEN NULL ELSE orw.latest_released_at_utc::text END
+        )
+        || jsonb_build_object(
           'latest_recovery_pay_date', CASE WHEN orw.latest_recovery_pay_date IS NULL THEN NULL ELSE orw.latest_recovery_pay_date::text END,
           'latest_remittance_sent_at_utc', CASE WHEN orw.latest_remittance_sent_at_utc IS NULL THEN NULL ELSE orw.latest_remittance_sent_at_utc::text END,
           'latest_remittance_trigger_status', orw.latest_remittance_trigger_status,
@@ -25367,7 +25522,7 @@ BEGIN
           'open_reimbursement_count', orw.open_reimbursement_count,
           'unresolved_taxable_count', orw.unresolved_taxable_count,
           'stale_count', orw.stale_count,
-          'component_resolution_summary_json', coalesce(orw.component_resolution_summary_json, '{}'::jsonb)
+          'component_resolution_summary_json', orw.component_resolution_summary_json
         )
       ),
       '[]'::jsonb
@@ -25419,7 +25574,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
@@ -25502,7 +25656,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_snoozes_export_rows(
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -25594,7 +25747,7 @@ BEGIN
             WHEN 'UNDERPAYMENT' THEN 'Underpayment'
             WHEN 'MANUAL_DEBT_ADJUSTMENT' THEN 'Manual Debt Adjustment'
             WHEN 'MANUAL_CREDIT_ADJUSTMENT' THEN 'Manual Credit Adjustment'
-            ELSE coalesce(vfcr.case_type, 'Finance Case')
+            ELSE coalesce(vfcr.case_type::text, 'Finance Case')
           END
         ELSE 'Timesheet Payment'
       END AS row_label,
@@ -25831,7 +25984,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_snoozes_pdf_payload(
   p_actor_user_id uuid DEFAULT NULL::uuid,
