@@ -2954,6 +2954,147 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
   const byDate = new Map();
   const hasText = (v) => v != null && String(v).trim() !== '';
 
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  const normalizeHhmm = (v) => {
+    const mins = parseHHMM(v);
+    if (mins == null) return null;
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    return `${pad2(hh)}:${pad2(mm)}`;
+  };
+
+  const addDaysYmd = (ymd, days) => {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  };
+
+  const localToUtcIso = (ymd, hhmm, addDays = 0, opts = null) => {
+    if (!ymd || !hhmm) return null;
+
+    const base = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(base.getTime())) return null;
+    if (addDays) {
+      base.setUTCDate(base.getUTCDate() + Number(addDays || 0));
+    }
+
+    const y2 = base.getUTCFullYear();
+    const m2 = base.getUTCMonth() + 1;
+    const d2 = base.getUTCDate();
+    const targetYmd = `${y2}-${pad2(m2)}-${pad2(d2)}`;
+
+    if (typeof ukLocalToUtcISO === 'function') {
+      const options = (opts && typeof opts === 'object') ? opts : null;
+      return ukLocalToUtcISO(targetYmd, hhmm, options);
+    }
+
+    const m = String(hhmm).trim().match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!m) return null;
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+
+    return new Date(Date.UTC(y2, m2 - 1, d2, hh, mm, 0, 0)).toISOString();
+  };
+
+  const uniqueLocalUtcCandidates = (ymd, hhmm) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    if (typeof ukLocalToUtcISO === 'function') {
+      pushIso(localToUtcIso(ymd, hhmm, 0, { prefer: 'earlier' }));
+      pushIso(localToUtcIso(ymd, hhmm, 0, { prefer: 'later' }));
+    } else {
+      pushIso(localToUtcIso(ymd, hhmm, 0));
+    }
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveActualShiftMinutes = (dateYmd, startRaw, endRaw) => {
+    const startHhmm = normalizeHhmm(startRaw);
+    const endHhmm = normalizeHhmm(endRaw);
+    if (!dateYmd || !startHhmm || !endHhmm) return null;
+
+    const startMin = parseHHMM(startHhmm);
+    const endMin = parseHHMM(endHhmm);
+    if (startMin == null || endMin == null) return null;
+    if (startMin === endMin) return null;
+
+    const overnight = endMin <= startMin;
+    const endYmd = overnight ? addDaysYmd(dateYmd, 1) : dateYmd;
+    if (!endYmd) {
+      throw new Error(`Invalid work date for ${dateYmd}`);
+    }
+
+    if (typeof ukLocalToUtcISO !== 'function') {
+      const startIso = localToUtcIso(dateYmd, startHhmm, 0);
+      const endIso = localToUtcIso(dateYmd, endHhmm, overnight ? 1 : 0);
+      const startMs = new Date(String(startIso || '')).getTime();
+      const endMs = new Date(String(endIso || '')).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        throw new Error(`Invalid local time range on ${dateYmd}`);
+      }
+      return Math.round((endMs - startMs) / 60000);
+    }
+
+    const startCandidates = uniqueLocalUtcCandidates(dateYmd, startHhmm);
+    if (!startCandidates.length) {
+      throw new Error(`Non-existent local start time on ${dateYmd}`);
+    }
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHhmm);
+    if (!endCandidates.length) {
+      throw new Error(`Non-existent local end time on ${endYmd}`);
+    }
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, { startMs, endMs });
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = localToUtcIso(endYmd, endHhmm, 0, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endIsoAfterStart);
+
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+    if (!pairs.length) {
+      throw new Error(`Invalid local time range on ${dateYmd}`);
+    }
+
+    if (pairs.length > 1) {
+      throw new Error(`Ambiguous local time range across DST change on ${dateYmd}`);
+    }
+
+    return Math.round((pairs[0].endMs - pairs[0].startMs) / 60000);
+  };
+
   const breakMinutesValue = (d) => {
     if (!d) return null;
     // accept break_minutes or break_mins
@@ -3020,6 +3161,7 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
     const shiftStartMin = s;
     const shiftEndMin   = (e > s) ? e : (e + 1440); // overnight ok
     const shiftMinutes  = shiftEndMin - shiftStartMin;
+    const actualShiftMinutes = resolveActualShiftMinutes(date, d.start, d.end);
 
     // Disallow mixing break minutes with break windows on the same segment
     if (hasBreakMins && hasWindowBreaks) {
@@ -3028,7 +3170,7 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
 
     // Sanity check floating break minutes
     if (hasBreakMins) {
-      if (bm >= shiftMinutes) {
+      if (bm >= actualShiftMinutes) {
         throw new Error(`break_minutes must be less than shift duration on ${date}`);
       }
     }
@@ -3044,7 +3186,7 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
     // - validateBreaksForShift already checks window breaks; we only call it if windows exist
     // - break_minutes is validated above
     if (hasWindowBreaks) {
-      validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d);
+      validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d, actualShiftMinutes);
     }
   }
 
@@ -3064,8 +3206,155 @@ function validateScheduleStructure(actualDays /* array of {date,start,end,breaks
   }
 }
 
-function validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d) {
+function validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, d, actualShiftMinutes) {
   const hasText = (v) => v != null && String(v).trim() !== '';
+
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  const normalizeHhmm = (v) => {
+    const mins = parseHHMM(v);
+    if (mins == null) return null;
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    return `${pad2(hh)}:${pad2(mm)}`;
+  };
+
+  const addDaysYmd = (ymd, days) => {
+    const dt = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(dt.getTime())) return null;
+    dt.setUTCDate(dt.getUTCDate() + Number(days || 0));
+    return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+  };
+
+  const localToUtcIso = (ymd, hhmm, addDays = 0, opts = null) => {
+    if (!ymd || !hhmm) return null;
+
+    const base = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(base.getTime())) return null;
+    if (addDays) {
+      base.setUTCDate(base.getUTCDate() + Number(addDays || 0));
+    }
+
+    const y2 = base.getUTCFullYear();
+    const m2 = base.getUTCMonth() + 1;
+    const d2 = base.getUTCDate();
+    const targetYmd = `${y2}-${pad2(m2)}-${pad2(d2)}`;
+
+    if (typeof ukLocalToUtcISO === 'function') {
+      const options = (opts && typeof opts === 'object') ? opts : null;
+      return ukLocalToUtcISO(targetYmd, hhmm, options);
+    }
+
+    const m = String(hhmm).trim().match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!m) return null;
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+
+    return new Date(Date.UTC(y2, m2 - 1, d2, hh, mm, 0, 0)).toISOString();
+  };
+
+  const uniqueLocalUtcCandidates = (ymd, hhmm) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    if (typeof ukLocalToUtcISO === 'function') {
+      pushIso(localToUtcIso(ymd, hhmm, 0, { prefer: 'earlier' }));
+      pushIso(localToUtcIso(ymd, hhmm, 0, { prefer: 'later' }));
+    } else {
+      pushIso(localToUtcIso(ymd, hhmm, 0));
+    }
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveActualShiftMinutes = () => {
+    if (!d || !d.date) return shiftMinutes;
+
+    const startHhmm = normalizeHhmm(d.start);
+    const endHhmm = normalizeHhmm(d.end);
+    if (!startHhmm || !endHhmm) return shiftMinutes;
+
+    const startMin = parseHHMM(startHhmm);
+    const endMin = parseHHMM(endHhmm);
+    if (startMin == null || endMin == null || startMin === endMin) return shiftMinutes;
+
+    const overnight = endMin <= startMin;
+    const endYmd = overnight ? addDaysYmd(d.date, 1) : d.date;
+    if (!endYmd) {
+      throw new Error(`Invalid work date for ${date}`);
+    }
+
+    if (typeof ukLocalToUtcISO !== 'function') {
+      const startIso = localToUtcIso(d.date, startHhmm, 0);
+      const endIso = localToUtcIso(d.date, endHhmm, overnight ? 1 : 0);
+      const startMs = new Date(String(startIso || '')).getTime();
+      const endMs = new Date(String(endIso || '')).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        throw new Error(`Invalid local time range on ${date}`);
+      }
+      return Math.round((endMs - startMs) / 60000);
+    }
+
+    const startCandidates = uniqueLocalUtcCandidates(d.date, startHhmm);
+    if (!startCandidates.length) {
+      throw new Error(`Non-existent local start time on ${date}`);
+    }
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHhmm);
+    if (!endCandidates.length) {
+      throw new Error(`Non-existent local end time on ${endYmd}`);
+    }
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, { startMs, endMs });
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = localToUtcIso(endYmd, endHhmm, 0, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endIsoAfterStart);
+
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+    if (!pairs.length) {
+      throw new Error(`Invalid local time range on ${date}`);
+    }
+
+    if (pairs.length > 1) {
+      throw new Error(`Ambiguous local time range across DST change on ${date}`);
+    }
+
+    return Math.round((pairs[0].endMs - pairs[0].startMs) / 60000);
+  };
+
+  const effectiveShiftMinutes =
+    (Number.isFinite(Number(actualShiftMinutes)) && Number(actualShiftMinutes) > 0)
+      ? Number(actualShiftMinutes)
+      : resolveActualShiftMinutes();
 
   // ✅ If break_minutes/break_mins is used, do not accept break windows too.
   // validateScheduleStructure already validates bm < shiftMinutes, but keep it defensive here too.
@@ -3081,7 +3370,7 @@ function validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, 
     if (hasWindow) {
       throw new Error(`Use either break_minutes OR break windows (not both) on ${date}`);
     }
-    if (bm >= shiftMinutes) {
+    if (bm >= effectiveShiftMinutes) {
       throw new Error(`break_minutes must be less than shift length on ${date}`);
     }
     return; // nothing else to validate
@@ -3146,12 +3435,10 @@ function validateBreaksForShift(date, shiftStartMin, shiftEndMin, shiftMinutes, 
 
   // Optional sanity: total break minutes < shift minutes (prevents break >= shift)
   const totalBreakMin = ranges.reduce((sum, r) => sum + (r.beAdj - r.bsAdj), 0);
-  if (totalBreakMin >= shiftMinutes) {
+  if (totalBreakMin >= effectiveShiftMinutes) {
     throw new Error(`Total break time must be less than shift length on ${date}`);
   }
 }
-
-
 
 async function r2GetJSON(env, key) {
   const u8 = await r2GetBytes(env, key);
@@ -3923,37 +4210,166 @@ const getSegTimes = (seg) => {
     return { brkStart: "", brkEnd: "" };
   };
 
-  const computePaidMinutes = (seg) => {
-    const { start, end } = getSegTimes(seg);
-    const s0 = parseHHMM(start);
-    const e0 = parseHHMM(end);
-    if (s0 == null || e0 == null) return 0;
+  const addDaysYmdLocal = (ymd, days) => {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return "";
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
 
-    let s = s0;
-    let e = e0;
-    if (e <= s) e += 1440; // overnight
+  const utcElapsedMinutes = (startIso, endIso) => {
+    if (!startIso || !endIso) return null;
+    const startMs = new Date(String(startIso)).getTime();
+    const endMs = new Date(String(endIso)).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+    return Math.round((endMs - startMs) / 60000);
+  };
 
-    let breakMins = 0;
-    const b = getBreakDisplay(seg);
+  const ukLocalToUtcIsoSafe = (ymd, hhmm, addDays = 0, opts = null) => {
+    if (!ymd || !hhmm || typeof ukLocalToUtcISO !== "function") return null;
+    const base = new Date(`${String(ymd)}T00:00:00Z`);
+    if (Number.isNaN(base.getTime())) return null;
+    if (addDays) base.setUTCDate(base.getUTCDate() + Number(addDays || 0));
+    const yyyy = base.getUTCFullYear();
+    const mm = String(base.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(base.getUTCDate()).padStart(2, "0");
+    const targetYmd = `${yyyy}-${mm}-${dd}`;
+    const options = (opts && typeof opts === "object") ? opts : null;
+    return ukLocalToUtcISO(targetYmd, hhmm, options);
+  };
 
-    if (b.brkStart && b.brkEnd) {
-      const bs0 = parseHHMM(b.brkStart);
-      const be0 = parseHHMM(b.brkEnd);
-      if (bs0 != null && be0 != null) {
-        let bs = bs0;
-        let be = be0;
-        if (bs < s0) bs += 1440;
-        if (be <= bs0) be += 1440;
-        if (bs >= s && be <= e && be > bs) breakMins = (be - bs);
-      }
-    } else {
-      const m = (seg.break_minutes != null) ? Number(seg.break_minutes) :
-                (seg.break_mins != null) ? Number(seg.break_mins) : 0;
-      if (Number.isFinite(m) && m > 0) breakMins = Math.round(m);
+  const uniqueLocalUtcCandidates = (ymd, hhmm) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    if (typeof ukLocalToUtcISO === "function") {
+      pushIso(ukLocalToUtcIsoSafe(ymd, hhmm, 0, { prefer: "earlier" }));
+      pushIso(ukLocalToUtcIsoSafe(ymd, hhmm, 0, { prefer: "later" }));
     }
 
-    const total = e - s;
-    return Math.max(0, total - breakMins);
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveLocalIntervalMinutes = (dateYmd, startHHMM, endHHMM) => {
+    const s = parseHHMM(startHHMM);
+    const e = parseHHMM(endHHMM);
+    if (!dateYmd || s == null || e == null || s === e) return null;
+
+    if (typeof ukLocalToUtcISO !== "function") {
+      let span = e - s;
+      if (span < 0) span += 1440;
+      return span;
+    }
+
+    const overnight = e <= s;
+    const endYmd = overnight ? addDaysYmdLocal(dateYmd, 1) : dateYmd;
+    if (!endYmd) return null;
+
+    const startCandidates = uniqueLocalUtcCandidates(dateYmd, startHHMM);
+    if (!startCandidates.length) return null;
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHHMM);
+    if (!endCandidates.length) return null;
+
+    const pairMap = new Map();
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, Math.round((endMs - startMs) / 60000));
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = ukLocalToUtcIsoSafe(endYmd, endHHMM, 0, { afterIso: startCand.iso, prefer: "later" });
+      pushPair(startCand.iso, endIsoAfterStart);
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const vals = Array.from(pairMap.values());
+    if (vals.length !== 1) return null;
+    return vals[0];
+  };
+
+  const breakMinutesFromSegTruth = (seg) => {
+    const direct =
+      (seg?.break_minutes != null) ? Number(seg.break_minutes) :
+      (seg?.break_mins != null) ? Number(seg.break_mins) :
+      null;
+
+    if (Number.isFinite(direct) && direct > 0) return Math.round(direct);
+
+    const dateYmd = safeStr(seg?.date).slice(0, 10) || isoToLocalYmd(seg?.start_utc) || "";
+    if (!dateYmd) return 0;
+
+    const breaksArr = Array.isArray(seg?.breaks) ? seg.breaks.filter(Boolean) : [];
+    if (breaksArr.length) {
+      let sum = 0;
+      for (const b of breaksArr) {
+        const bs = safeStr(b?.start || "").trim();
+        const be = safeStr(b?.end || "").trim();
+        if (!bs || !be) continue;
+        const dm = resolveLocalIntervalMinutes(dateYmd, bs, be);
+        if (Number.isFinite(dm) && dm > 0) sum += dm;
+      }
+      return sum > 0 ? sum : 0;
+    }
+
+    const bs = safeStr(seg?.break_start || "").trim();
+    const be = safeStr(seg?.break_end || "").trim();
+    if (bs && be) {
+      const dm = resolveLocalIntervalMinutes(dateYmd, bs, be);
+      if (Number.isFinite(dm) && dm > 0) return dm;
+    }
+
+    return 0;
+  };
+
+  const segmentBucketMinutes = (seg) => {
+    const vals = [
+      Number(seg?.hours_day || 0),
+      Number(seg?.hours_night || 0),
+      Number(seg?.hours_sat || 0),
+      Number(seg?.hours_sun || 0),
+      Number(seg?.hours_bh || 0)
+    ];
+    const any = vals.some(v => Number.isFinite(v) && v > 0);
+    if (!any) return null;
+    return Math.round(vals.reduce((sum, v) => sum + (Number.isFinite(v) ? v : 0), 0) * 60);
+  };
+
+  const computePaidMinutes = (seg) => {
+    const bucketMins = segmentBucketMinutes(seg);
+    if (Number.isFinite(bucketMins)) return bucketMins;
+
+    const breakMins = breakMinutesFromSegTruth(seg);
+    const elapsedUtc = utcElapsedMinutes(seg?.start_utc || null, seg?.end_utc || null);
+    if (Number.isFinite(elapsedUtc)) return Math.max(0, elapsedUtc - breakMins);
+
+    const { start, end } = getSegTimes(seg);
+    const dateYmd = safeStr(seg?.date).slice(0, 10) || "";
+    const elapsedLocal = resolveLocalIntervalMinutes(dateYmd, start, end);
+    if (Number.isFinite(elapsedLocal)) return Math.max(0, elapsedLocal - breakMins);
+
+    return 0;
   };
 
   const computePaidHours = (seg) => {
@@ -4493,21 +4909,27 @@ const isoToLocalHHMM = (iso) => {
             ref_num: safeStr(s?.ref_num || "").trim(),
 
             // stable segment identity when present
-            segment_id: sid || null
+            segment_id: sid || null,
+
+            // authoritative bucket truth for claimed hours display
+            hours_day: Number(s?.hours_day || 0) || 0,
+            hours_night: Number(s?.hours_night || 0) || 0,
+            hours_sat: Number(s?.hours_sat || 0) || 0,
+            hours_sun: Number(s?.hours_sun || 0) || 0,
+            hours_bh: Number(s?.hours_bh || 0) || 0
           };
 
-      // Optional break fields if present on TSFIN segments
-if (s?.break_start && s?.break_end) {
-  out.break_start = safeStr(s.break_start);
-  out.break_end = safeStr(s.break_end);
-  out.breaks = [{ start: safeStr(s.break_start), end: safeStr(s.break_end) }];
-} else if (s?.break_minutes != null) {
-  out.break_minutes = Number(s.break_minutes) || 0;
-} else if (s?.break_mins != null) {
-  // ✅ TSFIN segments use break_mins (minutes-only). Preserve it so getBreakDisplay/computePaidMinutes work.
-  out.break_mins = Number(s.break_mins) || 0;
-}
-
+          // Optional break fields if present on TSFIN segments
+          if (s?.break_start && s?.break_end) {
+            out.break_start = safeStr(s.break_start);
+            out.break_end = safeStr(s.break_end);
+            out.breaks = [{ start: safeStr(s.break_start), end: safeStr(s.break_end) }];
+          } else if (s?.break_minutes != null) {
+            out.break_minutes = Number(s.break_minutes) || 0;
+          } else if (s?.break_mins != null) {
+            // ✅ TSFIN segments use break_mins (minutes-only). Preserve it so getBreakDisplay/computePaidMinutes work.
+            out.break_mins = Number(s.break_mins) || 0;
+          }
 
           return out;
         });
@@ -5423,7 +5845,6 @@ if (s?.break_start && s?.break_end) {
     throw e;
   }
 }
-
 
 
 
@@ -39002,7 +39423,7 @@ function parseNhspHtmlTableToRows(html) {
 // Main NHSP parser: handles both HTML “fake xls” and real Excel
 // ─────────────────────────────────────────────────────────────
 async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Europe/London' }) {
-  console.log('[NHSP_PARSE_VERSION]', 'v2026-02-16-col-aliases-full-core');
+  console.log('[NHSP_PARSE_VERSION]', 'v2026-03-30-dst-utc-range-fix');
   console.log('[NHSP_PARSE] start', { import_id, file_key, tz });
 
   // ─────────────────────────────────────────────────────────────
@@ -39161,25 +39582,163 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     return `${HH}:${MM}`;
   }
 
-  function localToUtcIso(ymd, hhmm, tzName, addDays = 0) {
+  function localToUtcIso(ymd, hhmm, tzName, addDays = 0, opts = null) {
     if (!ymd || !hhmm) return null;
-    const [Y, M, D] = ymd.split('-').map((n) => Number(n));
-    const [h0, m0] = hhmm.split(':').map((n) => Number(n));
-    if (!Number.isFinite(Y) || !Number.isFinite(M) || !Number.isFinite(D) || !Number.isFinite(h0) || !Number.isFinite(m0)) return null;
-
-    let offsetHours = 0;
-    if (tzName === 'Europe/London') {
-      if (isBSTLocalDate(Y, M, D)) offsetHours = 1;
-    }
-    const base = new Date(Date.UTC(Y, M - 1, D));
-    if (addDays) base.setUTCDate(base.getUTCDate() + addDays);
+    const base = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(base.getTime())) return null;
+    if (addDays) base.setUTCDate(base.getUTCDate() + Number(addDays || 0));
 
     const y2 = base.getUTCFullYear();
-    const m2 = base.getUTCMonth();
+    const m2 = base.getUTCMonth() + 1;
     const d2 = base.getUTCDate();
+    const targetYmd = `${y2}-${pad2(m2)}-${pad2(d2)}`;
 
-    const utcMs = Date.UTC(y2, m2, d2, h0 - offsetHours, m0, 0);
+    if (tzName === 'Europe/London') {
+      if (typeof ukLocalToUtcISO !== 'function') return null;
+      const options = (opts && typeof opts === 'object') ? opts : null;
+      return ukLocalToUtcISO(targetYmd, hhmm, options);
+    }
+
+    const mTime = String(hhmm).trim().match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!mTime) return null;
+    const h0 = Number(mTime[1]);
+    const m0 = Number(mTime[2]);
+    if (!Number.isFinite(h0) || !Number.isFinite(m0)) return null;
+
+    const utcMs = Date.UTC(y2, m2 - 1, d2, h0, m0, 0, 0);
     return new Date(utcMs).toISOString();
+  }
+
+  function parseHhmmToMinutes(hhmm) {
+    const m = String(hhmm || '').trim().match(/^(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const mi = Number(m[2]);
+    if (!Number.isFinite(h) || !Number.isFinite(mi)) return null;
+    if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+    return h * 60 + mi;
+  }
+
+  function addDaysYmd(ymd, days) {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  }
+
+  function uniqueLocalUtcCandidates(ymd, hhmm, tzName) {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    if (tzName === 'Europe/London') {
+      pushIso(localToUtcIso(ymd, hhmm, tzName, 0, { prefer: 'earlier' }));
+      pushIso(localToUtcIso(ymd, hhmm, tzName, 0, { prefer: 'later' }));
+    } else {
+      pushIso(localToUtcIso(ymd, hhmm, tzName, 0));
+    }
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  }
+
+  function resolveShiftUtcRange(workDateYmd, startHhmm, endHhmm, tzName) {
+    if (!workDateYmd || !startHhmm || !endHhmm) {
+      return { startUtcIso: null, endUtcIso: null, error: 'Shift date/start/end are required' };
+    }
+
+    const startMins = parseHhmmToMinutes(startHhmm);
+    const endMins = parseHhmmToMinutes(endHhmm);
+    if (startMins == null || endMins == null) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid HH:MM for ${workDateYmd}` };
+    }
+    if (startMins === endMins) {
+      return { startUtcIso: null, endUtcIso: null, error: `Shift start and end cannot be the same on ${workDateYmd}` };
+    }
+
+    const overnight = endMins <= startMins;
+    const endYmd = overnight ? addDaysYmd(workDateYmd, 1) : workDateYmd;
+    if (!endYmd) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid work date for ${workDateYmd}` };
+    }
+
+    if (tzName !== 'Europe/London') {
+      const startUtcIso = localToUtcIso(workDateYmd, startHhmm, tzName, 0);
+      const endUtcIso = localToUtcIso(workDateYmd, endHhmm, tzName, overnight ? 1 : 0);
+
+      const startMs = new Date(String(startUtcIso || '')).getTime();
+      const endMs = new Date(String(endUtcIso || '')).getTime();
+      if (!startUtcIso || !endUtcIso || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${workDateYmd}` };
+      }
+
+      return {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        error: null
+      };
+    }
+
+    const startCandidates = uniqueLocalUtcCandidates(workDateYmd, startHhmm, tzName);
+    if (!startCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local start time on ${workDateYmd}` };
+    }
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHhmm, tzName);
+    if (!endCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local end time on ${endYmd}` };
+    }
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        startMs,
+        endMs
+      });
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = localToUtcIso(endYmd, endHhmm, tzName, 0, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endIsoAfterStart);
+
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+    if (!pairs.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${workDateYmd}` };
+    }
+
+    if (pairs.length > 1) {
+      return { startUtcIso: null, endUtcIso: null, error: `Ambiguous local time range across DST change on ${workDateYmd}` };
+    }
+
+    return {
+      startUtcIso: pairs[0].startUtcIso,
+      endUtcIso: pairs[0].endUtcIso,
+      error: null
+    };
   }
 
   function normalizeStr(s) {
@@ -39516,16 +40075,19 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       continue;
     }
 
-    const [sh, sm] = startHhmm.split(':').map(Number);
-    const [eh, em] = endHhmm.split(':').map(Number);
-    const startMins = sh * 60 + sm;
-    const endMins = eh * 60 + em;
-    const addDaysForEnd = endMins <= startMins ? 1 : 0;
-
-    const startUtcIso = localToUtcIso(workDateYmd, startHhmm, tz, 0);
-    const endUtcIso = localToUtcIso(workDateYmd, endHhmm, tz, addDaysForEnd);
+    const resolvedUtcRange = resolveShiftUtcRange(workDateYmd, startHhmm, endHhmm, tz);
+    const startUtcIso = resolvedUtcRange.startUtcIso;
+    const endUtcIso = resolvedUtcRange.endUtcIso;
 
     if (!startUtcIso || !endUtcIso) {
+      console.warn('[NHSP_PARSE] skipping row due to UTC resolution failure', {
+        import_id,
+        row_index: i,
+        workDateYmd,
+        startHhmm,
+        endHhmm,
+        error: resolvedUtcRange.error || 'Unable to resolve local shift range to UTC'
+      });
       rows_skipped++;
       continue;
     }
@@ -40152,25 +40714,166 @@ async function parseHealthRosterWorkbookIntoHrRows(
     return diff;
   }
 
-  function localToUtcIso(ymd, hhmm, tzName, addDays = 0) {
+  function localToUtcIso(ymd, hhmm, tzName, addDays = 0, opts = null) {
     if (!ymd || !hhmm) return null;
-    const [Y, M, D] = ymd.split('-').map(n => Number(n));
-    let [h, m]      = hhmm.split(':').map(n => Number(n));
-    if (!Number.isFinite(Y) || !Number.isFinite(M) || !Number.isFinite(D)) return null;
 
-    let offsetHours = 0;
-    if (tzName === 'Europe/London') {
-      if (isBSTLocalDate(Y, M, D)) offsetHours = 1;
-    }
-    const base = new Date(Date.UTC(Y, M - 1, D));
+    const base = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(base.getTime())) return null;
     if (addDays) {
-      base.setUTCDate(base.getUTCDate() + addDays);
+      base.setUTCDate(base.getUTCDate() + Number(addDays || 0));
     }
-    const y2  = base.getUTCFullYear();
-    const m2  = base.getUTCMonth();
-    const d2  = base.getUTCDate();
-    const utcMs = Date.UTC(y2, m2, d2, h - offsetHours, m, 0);
+
+    const y2 = base.getUTCFullYear();
+    const m2 = base.getUTCMonth() + 1;
+    const d2 = base.getUTCDate();
+    const targetYmd = `${y2}-${pad2(m2)}-${pad2(d2)}`;
+
+    if (tzName === 'Europe/London') {
+      if (typeof ukLocalToUtcISO !== 'function') return null;
+      const options = (opts && typeof opts === 'object') ? opts : null;
+      return ukLocalToUtcISO(targetYmd, hhmm, options);
+    }
+
+    const mTime = String(hhmm).trim().match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!mTime) return null;
+    const h = Number(mTime[1]);
+    const m = Number(mTime[2]);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+
+    const utcMs = Date.UTC(y2, m2 - 1, d2, h, m, 0, 0);
     return new Date(utcMs).toISOString();
+  }
+
+  function parseHhmmToMinutes(hhmm) {
+    const m = String(hhmm || '').trim().match(/^(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const mi = Number(m[2]);
+    if (!Number.isFinite(h) || !Number.isFinite(mi)) return null;
+    if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+    return h * 60 + mi;
+  }
+
+  function addDaysYmd(ymd, days) {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  }
+
+  function uniqueLocalUtcCandidates(ymd, hhmm, tzName) {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    if (tzName === 'Europe/London') {
+      pushIso(localToUtcIso(ymd, hhmm, tzName, 0, { prefer: 'earlier' }));
+      pushIso(localToUtcIso(ymd, hhmm, tzName, 0, { prefer: 'later' }));
+    } else {
+      pushIso(localToUtcIso(ymd, hhmm, tzName, 0));
+    }
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  }
+
+  function resolveShiftUtcRange(workDateYmd, startHhmm, endHhmm, tzName) {
+    if (!workDateYmd || !startHhmm || !endHhmm) {
+      return { startUtcIso: null, endUtcIso: null, error: 'Shift date/start/end are required' };
+    }
+
+    const startMins = parseHhmmToMinutes(startHhmm);
+    const endMins = parseHhmmToMinutes(endHhmm);
+    if (startMins == null || endMins == null) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid HH:MM for ${workDateYmd}` };
+    }
+    if (startMins === endMins) {
+      return { startUtcIso: null, endUtcIso: null, error: `Shift start and end cannot be the same on ${workDateYmd}` };
+    }
+
+    const overnight = endMins <= startMins;
+    const endYmd = overnight ? addDaysYmd(workDateYmd, 1) : workDateYmd;
+    if (!endYmd) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid work date for ${workDateYmd}` };
+    }
+
+    if (tzName !== 'Europe/London') {
+      const startUtcIso = localToUtcIso(workDateYmd, startHhmm, tzName, 0);
+      const endUtcIso = localToUtcIso(workDateYmd, endHhmm, tzName, overnight ? 1 : 0);
+
+      const startMs = new Date(String(startUtcIso || '')).getTime();
+      const endMs = new Date(String(endUtcIso || '')).getTime();
+      if (!startUtcIso || !endUtcIso || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${workDateYmd}` };
+      }
+
+      return {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        error: null
+      };
+    }
+
+    const startCandidates = uniqueLocalUtcCandidates(workDateYmd, startHhmm, tzName);
+    if (!startCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local start time on ${workDateYmd}` };
+    }
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHhmm, tzName);
+    if (!endCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local end time on ${endYmd}` };
+    }
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        startMs,
+        endMs
+      });
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = localToUtcIso(endYmd, endHhmm, tzName, 0, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endIsoAfterStart);
+
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+    if (!pairs.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${workDateYmd}` };
+    }
+
+    if (pairs.length > 1) {
+      return { startUtcIso: null, endUtcIso: null, error: `Ambiguous local time range across DST change on ${workDateYmd}` };
+    }
+
+    return {
+      startUtcIso: pairs[0].startUtcIso,
+      endUtcIso: pairs[0].endUtcIso,
+      error: null
+    };
   }
 
   function normalizeStr(s) {
@@ -40694,16 +41397,22 @@ async function parseHealthRosterWorkbookIntoHrRows(
         continue;
       }
 
-      const [sh, sm] = startHhmm.split(':').map(Number);
-      const [eh, em] = endHhmm.split(':').map(Number);
-      const startMins = sh * 60 + sm;
-      const endMins0  = eh * 60 + em;
-      const addDaysForEnd = endMins0 <= startMins ? 1 : 0;
-
-      const startUtcIso = localToUtcIso(workDateYmd, startHhmm, tz, 0);
-      const endUtcIso   = localToUtcIso(workDateYmd, endHhmm, tz, addDaysForEnd);
+      const resolvedUtcRange = resolveShiftUtcRange(workDateYmd, startHhmm, endHhmm, tz);
+      const startUtcIso = resolvedUtcRange.startUtcIso;
+      const endUtcIso   = resolvedUtcRange.endUtcIso;
 
       if (!startUtcIso || !endUtcIso) {
+        if (LOG) {
+          console.warn('[HR_PARSE]', JSON.stringify({
+            stage: 'weekly_row_skipped_utc_resolution',
+            import_id,
+            row_index: i,
+            work_date: workDateYmd,
+            start_local: startHhmm,
+            end_local: endHhmm,
+            error: resolvedUtcRange.error || 'Unable to resolve local shift range to UTC'
+          }));
+        }
         rows_skipped++;
         continue;
       }
@@ -40815,8 +41524,6 @@ async function parseHealthRosterWorkbookIntoHrRows(
     header_columns
   };
 }
-
-
 // BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; write against CURRENT id only
 async function handleManualPayAdjustmentCreate(env, req, timesheetId) {
   const enc = encodeURIComponent;
@@ -43569,7 +44276,7 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
   const weekStart = toYmd(weekStartDate);
   const weekEndY  = toYmd(weekEndDate);
 
-  // DST-correct UK local HH:MM from UTC ISO
+  // DST-correct UK local display helpers + UTC-authoritative minute resolution
   const hhmmLondonFromIso = (iso) => {
     if (!iso) return null;
     const d = new Date(iso);
@@ -43582,11 +44289,36 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
         hour12: false
       }).format(d);
     } catch {
-      // fallback: UTC
       const hh = String(d.getUTCHours()).padStart(2,'0');
       const mm = String(d.getUTCMinutes()).padStart(2,'0');
       return `${hh}:${mm}`;
     }
+  };
+
+  const ymdLondonFromIso = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    try {
+      if (typeof toLocalParts === 'function') {
+        const p = toLocalParts(iso, 'Europe/London');
+        if (p?.ymd && /^\d{4}-\d{2}-\d{2}$/.test(String(p.ymd))) return String(p.ymd);
+      }
+    } catch {}
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(d);
+      const yy = parts.find(x => x.type === 'year')?.value || '';
+      const mm = parts.find(x => x.type === 'month')?.value || '';
+      const dd = parts.find(x => x.type === 'day')?.value || '';
+      const out = `${yy}-${mm}-${dd}`;
+      return /^\d{4}-\d{2}-\d{2}$/.test(out) ? out : null;
+    } catch {}
+    return String(iso).slice(0, 10);
   };
 
   const minutesFromHHMM = (hhmm) => {
@@ -43599,24 +44331,202 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
     return (hh * 60) + mm;
   };
 
-  const diffMinsHHMM = (a, b) => {
-    const am = minutesFromHHMM(a);
-    const bm = minutesFromHHMM(b);
-    if (am == null || bm == null) return null;
-    let d = bm - am;
-    if (d < 0) d += 1440; // overnight
-    return d;
+  const addDaysYmd = (ymd, days) => {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   };
 
-  const computePaidMinutes = (startHHMM, endHHMM, breakMins) => {
-    const s = minutesFromHHMM(startHHMM);
-    const e = minutesFromHHMM(endHHMM);
-    if (s == null || e == null) return null;
-    let span = e - s;
-    if (span < 0) span += 24 * 60; // overnight
-    const br = Number(breakMins || 0) || 0;
-    const paid = Math.max(0, span - br);
-    return Number.isFinite(paid) ? Math.round(paid) : null;
+  const utcElapsedMinutes = (startIso, endIso) => {
+    if (!startIso || !endIso) return null;
+    const startMs = new Date(String(startIso)).getTime();
+    const endMs = new Date(String(endIso)).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+    return Math.round((endMs - startMs) / 60000);
+  };
+
+  const ukLocalToUtcIsoSafe = (ymd, hhmm, addDays = 0, opts = null) => {
+    if (!ymd || !hhmm || typeof ukLocalToUtcISO !== 'function') return null;
+    const base = new Date(`${String(ymd)}T00:00:00Z`);
+    if (Number.isNaN(base.getTime())) return null;
+    if (addDays) base.setUTCDate(base.getUTCDate() + Number(addDays || 0));
+    const yyyy = base.getUTCFullYear();
+    const mm = String(base.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(base.getUTCDate()).padStart(2, '0');
+    const targetYmd = `${yyyy}-${mm}-${dd}`;
+    const options = (opts && typeof opts === 'object') ? opts : null;
+    return ukLocalToUtcISO(targetYmd, hhmm, options);
+  };
+
+  const uniqueLocalUtcCandidates = (ymd, hhmm) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    if (typeof ukLocalToUtcISO === 'function') {
+      pushIso(ukLocalToUtcIsoSafe(ymd, hhmm, 0, { prefer: 'earlier' }));
+      pushIso(ukLocalToUtcIsoSafe(ymd, hhmm, 0, { prefer: 'later' }));
+    }
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveLocalIntervalMinutes = (dateYmd, startHHMM, endHHMM) => {
+    const startMin = minutesFromHHMM(startHHMM);
+    const endMin = minutesFromHHMM(endHHMM);
+    if (!dateYmd || startMin == null || endMin == null || startMin === endMin) return null;
+
+    if (typeof ukLocalToUtcISO !== 'function') {
+      let d = endMin - startMin;
+      if (d < 0) d += 1440;
+      return d;
+    }
+
+    const overnight = endMin <= startMin;
+    const endYmd = overnight ? addDaysYmd(dateYmd, 1) : dateYmd;
+    if (!endYmd) return null;
+
+    const startCandidates = uniqueLocalUtcCandidates(dateYmd, startHHMM);
+    if (!startCandidates.length) return null;
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHHMM);
+    if (!endCandidates.length) return null;
+
+    const pairMap = new Map();
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, Math.round((endMs - startMs) / 60000));
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = ukLocalToUtcIsoSafe(endYmd, endHHMM, 0, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endIsoAfterStart);
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const vals = Array.from(pairMap.values());
+    if (vals.length !== 1) return null;
+    return vals[0];
+  };
+
+  const breakMinutesFromEntry = (entry, dateYmd) => {
+    const direct =
+      (entry?.break_minutes != null) ? Number(entry.break_minutes) :
+      (entry?.break_mins != null) ? Number(entry.break_mins) :
+      null;
+
+    if (Number.isFinite(direct) && direct > 0) return Math.round(direct);
+
+    const breaksArr = Array.isArray(entry?.breaks) ? entry.breaks.filter(Boolean) : [];
+    if (breaksArr.length) {
+      let sum = 0;
+      for (const b of breaksArr) {
+        const bs = (b?.start != null) ? String(b.start).trim() : '';
+        const be = (b?.end != null) ? String(b.end).trim() : '';
+        if (!bs || !be) continue;
+        const dm = resolveLocalIntervalMinutes(dateYmd, bs, be);
+        if (Number.isFinite(dm) && dm > 0) sum += dm;
+      }
+      return sum > 0 ? sum : 0;
+    }
+
+    const bs = entry?.break_start != null ? String(entry.break_start).trim() : '';
+    const be = entry?.break_end != null ? String(entry.break_end).trim() : '';
+    if (bs && be) {
+      const dm = resolveLocalIntervalMinutes(dateYmd, bs, be);
+      if (Number.isFinite(dm) && dm > 0) return dm;
+    }
+
+    return 0;
+  };
+
+  const parseActualMinutesByDay = (raw) => {
+    const out = {};
+    if (raw == null) return out;
+
+    let val = raw;
+    if (typeof val === 'string') {
+      try { val = JSON.parse(val); } catch { return out; }
+    }
+
+    const pushVal = (d, v) => {
+      const ymd = String(d || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
+      let mins = null;
+      if (typeof v === 'number' && Number.isFinite(v)) mins = Math.round(v);
+      else if (v && typeof v === 'object') {
+        if (v.minutes != null && Number.isFinite(Number(v.minutes))) mins = Math.round(Number(v.minutes));
+        else if (v.actual_minutes != null && Number.isFinite(Number(v.actual_minutes))) mins = Math.round(Number(v.actual_minutes));
+        else if (v.paid_minutes != null && Number.isFinite(Number(v.paid_minutes))) mins = Math.round(Number(v.paid_minutes));
+        else if (v.total_minutes != null && Number.isFinite(Number(v.total_minutes))) mins = Math.round(Number(v.total_minutes));
+        else if (v.hours != null && Number.isFinite(Number(v.hours))) mins = Math.round(Number(v.hours) * 60);
+      }
+      if (mins != null) out[ymd] = mins;
+    };
+
+    if (Array.isArray(val)) {
+      for (const item of val) {
+        if (!item || typeof item !== 'object') continue;
+        pushVal(item.date || item.work_date || item.ymd, item);
+      }
+      return out;
+    }
+
+    if (val && typeof val === 'object') {
+      for (const [k, v] of Object.entries(val)) pushVal(k, v);
+    }
+
+    return out;
+  };
+
+  const segmentBucketMinutes = (seg) => {
+    const vals = [
+      Number(seg?.hours_day || 0),
+      Number(seg?.hours_night || 0),
+      Number(seg?.hours_sat || 0),
+      Number(seg?.hours_sun || 0),
+      Number(seg?.hours_bh || 0)
+    ];
+    const any = vals.some(v => Number.isFinite(v) && v > 0);
+    if (!any) return null;
+    return Math.round(vals.reduce((sum, v) => sum + (Number.isFinite(v) ? v : 0), 0) * 60);
+  };
+
+  const paidMinutesFromTruthEntry = (entry, dateHint) => {
+    const bucketMins = segmentBucketMinutes(entry);
+    if (Number.isFinite(bucketMins)) return bucketMins;
+
+    const breakMins = breakMinutesFromEntry(entry, dateHint || null);
+    const elapsedUtc = utcElapsedMinutes(entry?.start_utc || null, entry?.end_utc || null);
+    if (Number.isFinite(elapsedUtc)) return Math.max(0, elapsedUtc - breakMins);
+
+    const startHHMM = (entry?.start != null) ? String(entry.start).trim() : '';
+    const endHHMM = (entry?.end != null) ? String(entry.end).trim() : '';
+    const elapsedLocal = resolveLocalIntervalMinutes(dateHint || null, startHHMM, endHHMM);
+    if (Number.isFinite(elapsedLocal)) return Math.max(0, elapsedLocal - breakMins);
+
+    return null;
   };
 
   // ─────────────────────────────────────────────
@@ -43703,7 +44613,8 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
     const startHHMM = hhmmLondonFromIso(sh.start_utc);
     const endHHMM   = hhmmLondonFromIso(sh.end_utc);
     const br        = Number(sh.break_mins || 0) || 0;
-    const paid      = computePaidMinutes(startHHMM, endHHMM, br);
+    const elapsedUtc = utcElapsedMinutes(sh.start_utc, sh.end_utc);
+    const paid      = Number.isFinite(elapsedUtc) ? Math.max(0, elapsedUtc - br) : null;
 
     hrRowsSnapshot.push({
       date: d,
@@ -43727,78 +44638,61 @@ async function enrichTsfinWithHrCrosscheck(env, ts, tsfinRow, effFlagsIn = null,
 
   // ─────────────────────────────────────────────
   // ✅ Timesheet schedule source (effective schedule rules):
-  //  1) timesheets.actual_schedule_json if non-empty
-  //  2) else if TSFIN is SEGMENTS mode, derive from tsfinRow.invoice_breakdown_json.segments
+  //  1) actual_minutes_by_day_json when present on current TSFIN snapshot
+  //  2) else TSFIN SEGMENTS truth from invoice_breakdown_json.segments
+  //  3) else timesheets.actual_schedule_json fallback
   // ─────────────────────────────────────────────
-  let tsSchedule = [];
-  {
-    const raw = ts?.actual_schedule_json;
-    const parsed = Array.isArray(raw)
-      ? raw
-      : (raw ? (() => { try { return JSON.parse(raw); } catch { return []; } })() : []);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      tsSchedule = parsed;
-    } else {
-      // Fallback to TSFIN SEGMENTS
-      let ib = tsfinRow?.invoice_breakdown_json || null;
-      if (ib && typeof ib === 'string') {
-        try { ib = JSON.parse(ib); } catch { ib = null; }
-      }
-      const mode = ib && typeof ib === 'object' ? String(ib.mode || ib?.mode || ib?.['mode'] || '').toUpperCase() : '';
-      const segs = (ib && typeof ib === 'object' && Array.isArray(ib.segments)) ? ib.segments : [];
-      if (mode === 'SEGMENTS' && segs.length > 0) {
-        tsSchedule = segs.map(s => ({
-          date: s?.date || s?.work_date || null,
-          start_utc: s?.start_utc || null,
-          end_utc: s?.end_utc || null,
-          start: s?.start || null,
-          end: s?.end || null,
-          break_minutes: (s?.break_minutes != null ? s.break_minutes : null),
-          break_mins: (s?.break_mins != null ? s.break_mins : null),
-          breaks: Array.isArray(s?.breaks) ? s.breaks : null,
-          break_start: s?.break_start || null,
-          break_end: s?.break_end || null
-        }));
-      }
-    }
-  }
-
   const tsPaidByDate = {};
 
-  for (const entry of (tsSchedule || [])) {
-    const d = String(entry?.date || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+  const actualMinutesByDate = parseActualMinutesByDay(tsfinRow?.actual_minutes_by_day_json);
+  const actualMinuteDates = Object.keys(actualMinutesByDate || {});
 
-    let startHHMM = (entry?.start != null) ? String(entry.start).trim() : '';
-    let endHHMM   = (entry?.end   != null) ? String(entry.end).trim()   : '';
+  if (actualMinuteDates.length > 0) {
+    for (const d of actualMinuteDates) {
+      const mins = Number(actualMinutesByDate[d]);
+      if (!Number.isFinite(mins)) continue;
+      tsPaidByDate[d] = mins;
+    }
+  } else {
+    let usedAuthoritativeSegments = false;
 
-    if (!startHHMM && entry?.start_utc) startHHMM = hhmmLondonFromIso(entry.start_utc) || '';
-    if (!endHHMM   && entry?.end_utc)   endHHMM   = hhmmLondonFromIso(entry.end_utc)   || '';
+    let ib = tsfinRow?.invoice_breakdown_json || null;
+    if (ib && typeof ib === 'string') {
+      try { ib = JSON.parse(ib); } catch { ib = null; }
+    }
+    const mode = ib && typeof ib === 'object' ? String(ib.mode || ib?.mode || ib?.['mode'] || '').toUpperCase() : '';
+    const segs = (ib && typeof ib === 'object' && Array.isArray(ib.segments)) ? ib.segments : [];
 
-    startHHMM = startHHMM || null;
-    endHHMM   = endHHMM || null;
-
-    let br = 0;
-
-    if (entry?.break_minutes != null) br = Number(entry.break_minutes || 0) || 0;
-    else if (entry?.break_mins != null) br = Number(entry.break_mins || 0) || 0;
-    else if (Array.isArray(entry?.breaks) && entry.breaks.length) {
-      let sum = 0;
-      for (const b of entry.breaks) {
-        const bs = (b?.start != null) ? String(b.start).trim() : '';
-        const be = (b?.end   != null) ? String(b.end).trim()   : '';
-        const dm = diffMinsHHMM(bs, be);
-        if (Number.isFinite(dm) && dm > 0) sum += dm;
+    if (mode === 'SEGMENTS' && segs.length > 0) {
+      usedAuthoritativeSegments = true;
+      for (const seg of segs) {
+        const d = String(seg?.date || seg?.work_date || ymdLondonFromIso(seg?.start_utc) || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+        const paid = paidMinutesFromTruthEntry(seg, d);
+        if (paid != null) {
+          tsPaidByDate[d] = (Number(tsPaidByDate[d] || 0) + Number(paid || 0));
+        }
       }
-      br = sum;
-    } else if (entry?.break_start || entry?.break_end) {
-      const dm = diffMinsHHMM(String(entry.break_start || '').trim(), String(entry.break_end || '').trim());
-      if (Number.isFinite(dm) && dm > 0) br = dm;
     }
 
-    const paid = computePaidMinutes(startHHMM, endHHMM, br);
-    if (paid != null) {
-      tsPaidByDate[d] = (Number(tsPaidByDate[d] || 0) + Number(paid || 0));
+    if (!usedAuthoritativeSegments) {
+      let tsSchedule = [];
+      const raw = ts?.actual_schedule_json;
+      const parsed = Array.isArray(raw)
+        ? raw
+        : (raw ? (() => { try { return JSON.parse(raw); } catch { return []; } })() : []);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        tsSchedule = parsed;
+      }
+
+      for (const entry of (tsSchedule || [])) {
+        const d = String(entry?.date || ymdLondonFromIso(entry?.start_utc) || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+        const paid = paidMinutesFromTruthEntry(entry, d);
+        if (paid != null) {
+          tsPaidByDate[d] = (Number(tsPaidByDate[d] || 0) + Number(paid || 0));
+        }
+      }
     }
   }
 
@@ -68800,7 +69694,6 @@ async function resolveTimesheetToCurrent(env, timesheet_id) {
 
 
 
-
 async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRates }) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const L = (...a) => { if (LOG) console.log('[TSFIN][DAILY][validateDailyRotaRowAgainstTimesheet]', ...a); };
@@ -68898,6 +69791,162 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     return null;
   };
 
+  const addDaysYmd = (ymd, days) => {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+  };
+
+  const localToUtcIso = (ymd, hhmm, addDays = 0, opts = null) => {
+    if (!ymd || !hhmm) return null;
+
+    const base = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(base.getTime())) return null;
+    if (addDays) {
+      base.setUTCDate(base.getUTCDate() + Number(addDays || 0));
+    }
+
+    const y2 = base.getUTCFullYear();
+    const m2 = base.getUTCMonth() + 1;
+    const d2 = base.getUTCDate();
+    const targetYmd = `${y2}-${pad2(m2)}-${pad2(d2)}`;
+
+    if (typeof ukLocalToUtcISO === 'function') {
+      const options = (opts && typeof opts === 'object') ? opts : null;
+      return ukLocalToUtcISO(targetYmd, hhmm, options);
+    }
+
+    const m = String(hhmm).trim().match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!m) return null;
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+
+    return new Date(Date.UTC(y2, m2 - 1, d2, hh, mm, 0, 0)).toISOString();
+  };
+
+  const uniqueLocalUtcCandidates = (ymd, hhmm) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    if (typeof ukLocalToUtcISO === 'function') {
+      pushIso(localToUtcIso(ymd, hhmm, 0, { prefer: 'earlier' }));
+      pushIso(localToUtcIso(ymd, hhmm, 0, { prefer: 'later' }));
+    } else {
+      pushIso(localToUtcIso(ymd, hhmm, 0));
+    }
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveShiftUtcRange = (workDateYmd, startHhmm, endHhmm) => {
+    if (!workDateYmd || !startHhmm || !endHhmm) {
+      return { startUtcIso: null, endUtcIso: null, error: 'Shift date/start/end are required' };
+    }
+
+    const startMins = hhmmToMinutes(startHhmm);
+    const endMins = hhmmToMinutes(endHhmm);
+    if (startMins == null || endMins == null) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid HH:MM for ${workDateYmd}` };
+    }
+    if (startMins === endMins) {
+      return { startUtcIso: null, endUtcIso: null, error: `Shift start and end cannot be the same on ${workDateYmd}` };
+    }
+
+    const overnight = endMins <= startMins;
+    const endYmd = overnight ? addDaysYmd(workDateYmd, 1) : workDateYmd;
+    if (!endYmd) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid work date for ${workDateYmd}` };
+    }
+
+    if (typeof ukLocalToUtcISO !== 'function') {
+      const startUtcIso = localToUtcIso(workDateYmd, startHhmm, 0);
+      const endUtcIso = localToUtcIso(workDateYmd, endHhmm, overnight ? 1 : 0);
+      const startMs = new Date(String(startUtcIso || '')).getTime();
+      const endMs = new Date(String(endUtcIso || '')).getTime();
+      if (!startUtcIso || !endUtcIso || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${workDateYmd}` };
+      }
+      return {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        error: null
+      };
+    }
+
+    const startCandidates = uniqueLocalUtcCandidates(workDateYmd, startHhmm);
+    if (!startCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local start time on ${workDateYmd}` };
+    }
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHhmm);
+    if (!endCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local end time on ${endYmd}` };
+    }
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        startMs,
+        endMs
+      });
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = localToUtcIso(endYmd, endHhmm, 0, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endIsoAfterStart);
+
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+    if (!pairs.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${workDateYmd}` };
+    }
+
+    if (pairs.length > 1) {
+      return { startUtcIso: null, endUtcIso: null, error: `Ambiguous local time range across DST change on ${workDateYmd}` };
+    }
+
+    return {
+      startUtcIso: pairs[0].startUtcIso,
+      endUtcIso: pairs[0].endUtcIso,
+      error: null
+    };
+  };
+
+  const utcElapsedMinutes = (startIso, endIso) => {
+    if (!startIso || !endIso) return null;
+    const startMs = new Date(String(startIso)).getTime();
+    const endMs = new Date(String(endIso)).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+    return Math.round((endMs - startMs) / 60000);
+  };
+
   // ─────────────────────────────────────────────────────────────
   // HR / Rota parsing
   // ─────────────────────────────────────────────────────────────
@@ -68908,9 +69957,13 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
   const hrEndMin   = hhmmToMinutes(hrEndLocal);
 
   let shiftMinutes = null;
-  if (hrStartMin != null && hrEndMin != null) {
-    shiftMinutes = hrEndMin - hrStartMin;
-    if (shiftMinutes <= 0) shiftMinutes += 24 * 60;
+  const hrResolvedRange =
+    (dateLocal && hrStartLocal && hrEndLocal)
+      ? resolveShiftUtcRange(dateLocal, hrStartLocal, hrEndLocal)
+      : { startUtcIso: null, endUtcIso: null, error: null };
+
+  if (hrResolvedRange.startUtcIso && hrResolvedRange.endUtcIso) {
+    shiftMinutes = utcElapsedMinutes(hrResolvedRange.startUtcIso, hrResolvedRange.endUtcIso);
   }
 
   const actualHoursRota =
@@ -68918,7 +69971,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     parseActualHours(hrRow?.payload_json?.actual_hours);
 
   let paidMinutesRota = null;
-  if (shiftMinutes != null && actualHoursRota != null) {
+  if (actualHoursRota != null) {
     paidMinutesRota = Math.round(actualHoursRota * 60);
   }
 
@@ -68945,7 +69998,8 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
     hr_end_local: hrEndLocal,
     shift_minutes: shiftMinutes,
     actual_hours: actualHoursRota,
-    break_minutes: breakMinutesRotaForDisplay
+    break_minutes: breakMinutesRotaForDisplay,
+    hr_shift_resolution_error: hrResolvedRange.error || null
   });
 
   // ─────────────────────────────────────────────────────────────
@@ -68974,10 +70028,7 @@ async function validateDailyRotaRowAgainstTimesheet(env, ts, hrRow, { roleForRat
       tsStartMin = hhmmToMinutes(tsStartLocal);
       tsEndMin   = hhmmToMinutes(tsEndLocal);
 
-      if (tsStartMin != null && tsEndMin != null) {
-        tsShiftMin = tsEndMin - tsStartMin;
-        if (tsShiftMin <= 0) tsShiftMin += 24 * 60;
-      }
+      tsShiftMin = utcElapsedMinutes(tsStartIso, tsEndIso);
     } catch {}
   }
 
