@@ -13731,16 +13731,17 @@ end;
       and nullif(btrim(coalesce(o.j->>'key_value','')), '') is not null
   ),
   outstanding_rows as (
-    select
+    select distinct on (orw_raw.timesheet_id, orw_raw.key_type, orw_raw.key_value)
       orw_raw.timesheet_id,
       orw_raw.key_type,
       orw_raw.key_value,
-      round(max(coalesce(orw_raw.outstanding_ex_vat, 0)), 2) as outstanding_ex_vat
+      round(coalesce(orw_raw.outstanding_ex_vat, 0), 2) as outstanding_ex_vat
     from outstanding_rows_raw orw_raw
-    group by
+    order by
       orw_raw.timesheet_id,
       orw_raw.key_type,
-      orw_raw.key_value
+      orw_raw.key_value,
+      coalesce(orw_raw.outstanding_ex_vat, 0) desc
   ),
   current_batch_items as (
     select
@@ -14546,28 +14547,52 @@ end;
       ) > 0
   ),
   protected_case_due_inputs as (
+    with carrier as (
+      select
+        pcds.candidate_id,
+        pcds.pay_batch_candidate_id,
+        pcds.pay_channel,
+        pcds.umbrella_id,
+        pcds.run_earnings_headroom_ex,
+        pcds.run_take_home_before,
+        pcds.default_take_home_floor,
+        row_number() over (
+          partition by pcds.candidate_id
+          order by pcds.finance_case_created_at, pcds.finance_case_id
+        ) as rn
+      from protected_case_due_seed pcds
+    ),
+    grouped as (
+      select
+        pcds.candidate_id,
+        jsonb_agg(
+          jsonb_build_object(
+            'sort_order', pcds.sort_order,
+            'finance_case_id', pcds.finance_case_id::text,
+            'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+            'payout_status', null,
+            'nominal_due_amount', pcds.nominal_due_amount,
+            'minimum_earnings_threshold', pcds.minimum_earnings_threshold,
+            'take_home_floor_override', pcds.take_home_floor_override
+          )
+          order by pcds.finance_case_created_at, pcds.finance_case_id
+        ) as recovery_rows_json
+      from protected_case_due_seed pcds
+      group by pcds.candidate_id
+    )
     select
-      pcds.candidate_id,
-      max(pcds.pay_batch_candidate_id) as pay_batch_candidate_id,
-      max(pcds.pay_channel) as pay_channel,
-      max(pcds.umbrella_id) as umbrella_id,
-      jsonb_agg(
-        jsonb_build_object(
-          'sort_order', pcds.sort_order,
-          'finance_case_id', pcds.finance_case_id::text,
-          'case_type', 'MANUAL_DEBT_ADJUSTMENT',
-          'payout_status', null,
-          'nominal_due_amount', pcds.nominal_due_amount,
-          'minimum_earnings_threshold', pcds.minimum_earnings_threshold,
-          'take_home_floor_override', pcds.take_home_floor_override
-        )
-        order by pcds.finance_case_created_at, pcds.finance_case_id
-      ) as recovery_rows_json,
-      max(pcds.run_earnings_headroom_ex) as run_earnings_headroom_ex,
-      max(pcds.run_take_home_before) as run_take_home_before,
-      max(pcds.default_take_home_floor) as default_take_home_floor
-    from protected_case_due_seed pcds
-    group by pcds.candidate_id
+      carrier.candidate_id,
+      carrier.pay_batch_candidate_id,
+      carrier.pay_channel,
+      carrier.umbrella_id,
+      grouped.recovery_rows_json,
+      carrier.run_earnings_headroom_ex,
+      carrier.run_take_home_before,
+      carrier.default_take_home_floor
+    from carrier
+    join grouped
+      on grouped.candidate_id = carrier.candidate_id
+    where carrier.rn = 1
   ),
   protected_case_due_allocations as (
     select
@@ -15024,27 +15049,50 @@ end;
       ) > 0
   ),
   protected_case_due_inputs as (
+    with carrier as (
+      select
+        pcds.candidate_id,
+        pcds.pay_batch_candidate_id,
+        pcds.pay_channel,
+        pcds.umbrella_id,
+        pcds.run_earnings_headroom_ex,
+        pcds.run_take_home_before,
+        row_number() over (
+          partition by pcds.candidate_id
+          order by pcds.finance_case_created_at, pcds.finance_case_id
+        ) as rn
+      from protected_case_due_seed pcds
+    ),
+    grouped as (
+      select
+        pcds.candidate_id,
+        jsonb_agg(
+          jsonb_build_object(
+            'sort_order', pcds.sort_order,
+            'finance_case_id', pcds.finance_case_id::text,
+            'case_type', 'PAYMENT_ADVANCE',
+            'payout_status', 'PAID',
+            'nominal_due_amount', pcds.nominal_due_amount,
+            'minimum_earnings_threshold', pcds.minimum_earnings_threshold,
+            'take_home_floor_override', pcds.take_home_floor_override
+          )
+          order by pcds.finance_case_created_at, pcds.finance_case_id
+        ) as recovery_rows_json
+      from protected_case_due_seed pcds
+      group by pcds.candidate_id
+    )
     select
-      pcds.candidate_id,
-      max(pcds.pay_batch_candidate_id) as pay_batch_candidate_id,
-      max(pcds.pay_channel) as pay_channel,
-      max(pcds.umbrella_id) as umbrella_id,
-      jsonb_agg(
-        jsonb_build_object(
-          'sort_order', pcds.sort_order,
-          'finance_case_id', pcds.finance_case_id::text,
-          'case_type', 'PAYMENT_ADVANCE',
-          'payout_status', 'PAID',
-          'nominal_due_amount', pcds.nominal_due_amount,
-          'minimum_earnings_threshold', pcds.minimum_earnings_threshold,
-          'take_home_floor_override', pcds.take_home_floor_override
-        )
-        order by pcds.finance_case_created_at, pcds.finance_case_id
-      ) as recovery_rows_json,
-      max(pcds.run_earnings_headroom_ex) as run_earnings_headroom_ex,
-      max(pcds.run_take_home_before) as run_take_home_before
-    from protected_case_due_seed pcds
-    group by pcds.candidate_id
+      carrier.candidate_id,
+      carrier.pay_batch_candidate_id,
+      carrier.pay_channel,
+      carrier.umbrella_id,
+      grouped.recovery_rows_json,
+      carrier.run_earnings_headroom_ex,
+      carrier.run_take_home_before
+    from carrier
+    join grouped
+      on grouped.candidate_id = carrier.candidate_id
+    where carrier.rn = 1
   ),
   protected_case_due_allocations as (
     select
@@ -15706,16 +15754,18 @@ end;
       and pbi.timesheet_id is not null
   ),
   ts_channel as (
-    select
+    select distinct on (pbi.timesheet_id)
       pbi.timesheet_id,
-      max(pbi.pay_channel) as pay_channel_used
+      pbi.pay_channel as pay_channel_used
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
     where pbc.pay_batch_id = v_batch_id
       and pbi.timesheet_id is not null
       and pbi.pay_channel in ('PAYE','UMBRELLA')
-    group by pbi.timesheet_id
+    order by
+      pbi.timesheet_id,
+      pbi.pay_channel desc
   ),
   tf0 as (
     select
@@ -16997,8 +17047,6 @@ exception when others then
   raise;
 end;
 $$;
-
-
 
 
 
