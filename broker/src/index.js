@@ -8837,7 +8837,6 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
   }
 }
 
-
 async function handleBankingFinanceLedgerExportCsv(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -8884,6 +8883,21 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
     return null;
   };
 
+  const normalizeExportCaseType = (raw) => {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase();
+    if (!s || s === 'ALL' || s === 'FINANCE CASE' || s === 'FINANCE_CASE') return null;
+    if (
+      s === 'PAYMENT_ADVANCE' ||
+      s === 'OVERPAYMENT' ||
+      s === 'UNDERPAYMENT' ||
+      s === 'MANUAL_DEBT_ADJUSTMENT' ||
+      s === 'MANUAL_CREDIT_ADJUSTMENT'
+    ) {
+      return s;
+    }
+    return null;
+  };
+
   const csvEscape = (v) => {
     const s = (v === null || v === undefined) ? '' : String(v);
     if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
@@ -8915,7 +8929,7 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
   const statusRaw = parseNullableText(q('status'));
   const candidateIdRaw = parseNullableText(q('candidate_id'), q('candidateId'));
   const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
-  const caseType = parseNullableText(q('case_type'), q('caseType'));
+  const caseTypeRaw = parseNullableText(q('case_type'), q('caseType'));
   const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
   const sortDir = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
 
@@ -8924,6 +8938,7 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
   const candidateId = candidateIdRaw ? parseUuid(candidateIdRaw) : null;
   const clientId = clientIdRaw ? parseUuid(clientIdRaw) : null;
   const status = normalizeLedgerStatus(statusRaw);
+  const caseType = normalizeExportCaseType(caseTypeRaw);
 
   if (createdFromRaw && !createdFrom) return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
   if (createdToRaw && !createdTo) return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
@@ -9110,7 +9125,6 @@ async function handleBankingFinanceLedgerExportCsv(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'FINANCE_LEDGER_EXPORT_CSV_FAILED')));
   }
 }
-
 async function handleBankingFinanceLedgerExportPdf(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -9154,6 +9168,21 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
     if (!s || s === 'ALL') return 'ALL';
     if (['OUTSTANDING', 'ACTIVE', 'OPEN'].includes(s)) return 'OUTSTANDING';
     if (['FULLY_PAID', 'PAID', 'CLEARED', 'SETTLED', 'HISTORY'].includes(s)) return 'FULLY_PAID';
+    return null;
+  };
+
+  const normalizeExportCaseType = (raw) => {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase();
+    if (!s || s === 'ALL' || s === 'FINANCE CASE' || s === 'FINANCE_CASE') return null;
+    if (
+      s === 'PAYMENT_ADVANCE' ||
+      s === 'OVERPAYMENT' ||
+      s === 'UNDERPAYMENT' ||
+      s === 'MANUAL_DEBT_ADJUSTMENT' ||
+      s === 'MANUAL_CREDIT_ADJUSTMENT'
+    ) {
+      return s;
+    }
     return null;
   };
 
@@ -9286,7 +9315,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
   const statusRaw = parseNullableText(q('status'));
   const candidateIdRaw = parseNullableText(q('candidate_id'), q('candidateId'));
   const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
-  const caseType = parseNullableText(q('case_type'), q('caseType'));
+  const caseTypeRaw = parseNullableText(q('case_type'), q('caseType'));
   const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
   const sortDir = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
 
@@ -9295,6 +9324,7 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
   const candidateId = candidateIdRaw ? parseUuid(candidateIdRaw) : null;
   const clientId = clientIdRaw ? parseUuid(clientIdRaw) : null;
   const status = normalizeLedgerStatus(statusRaw);
+  const caseType = normalizeExportCaseType(caseTypeRaw);
 
   if (createdFromRaw && !createdFrom) return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
   if (createdToRaw && !createdTo) return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
@@ -9556,7 +9586,6 @@ async function handleBankingFinanceLedgerExportPdf(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'FINANCE_LEDGER_EXPORT_PDF_FAILED')));
   }
 }
-
 async function handleBankingSnoozesExportCsv(env, req, user) {
   const actorUser = (() => {
     if (user && typeof user === 'object' && user.id) return user;
@@ -9603,6 +9632,21 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
     return null;
   };
 
+  const normalizeExportCaseType = (raw) => {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase();
+    if (!s || s === 'ALL' || s === 'FINANCE CASE' || s === 'FINANCE_CASE') return null;
+    if (
+      s === 'PAYMENT_ADVANCE' ||
+      s === 'OVERPAYMENT' ||
+      s === 'UNDERPAYMENT' ||
+      s === 'MANUAL_DEBT_ADJUSTMENT' ||
+      s === 'MANUAL_CREDIT_ADJUSTMENT'
+    ) {
+      return s;
+    }
+    return null;
+  };
+
   const csvEscape = (v) => {
     const s = (v === null || v === undefined) ? '' : String(v);
     if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
@@ -9646,7 +9690,7 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
   const statusRaw = parseNullableText(q('status'));
   const candidateIdRaw = parseNullableText(q('candidate_id'), q('candidateId'));
   const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
-  const caseType = parseNullableText(q('case_type'), q('caseType'));
+  const caseTypeRaw = parseNullableText(q('case_type'), q('caseType'));
   const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
   const sortDir = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
 
@@ -9655,6 +9699,7 @@ async function handleBankingSnoozesExportCsv(env, req, user) {
   const candidateId = candidateIdRaw ? parseUuid(candidateIdRaw) : null;
   const clientId = clientIdRaw ? parseUuid(clientIdRaw) : null;
   const normalizedStatus = normalizeSnoozeStatus(statusRaw);
+  const caseType = normalizeExportCaseType(caseTypeRaw);
 
   if (createdFromRaw && !createdFrom) return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
   if (createdToRaw && !createdTo) return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
@@ -9837,6 +9882,21 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
     return null;
   };
 
+  const normalizeExportCaseType = (raw) => {
+    const s = String(raw == null ? '' : raw).trim().toUpperCase();
+    if (!s || s === 'ALL' || s === 'FINANCE CASE' || s === 'FINANCE_CASE') return null;
+    if (
+      s === 'PAYMENT_ADVANCE' ||
+      s === 'OVERPAYMENT' ||
+      s === 'UNDERPAYMENT' ||
+      s === 'MANUAL_DEBT_ADJUSTMENT' ||
+      s === 'MANUAL_CREDIT_ADJUSTMENT'
+    ) {
+      return s;
+    }
+    return null;
+  };
+
   const fmtDateOnly = (raw) => {
     const s = String(raw == null ? '' : raw).trim();
     if (!s) return '';
@@ -9945,7 +10005,7 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
   const statusRaw = parseNullableText(q('status'));
   const candidateIdRaw = parseNullableText(q('candidate_id'), q('candidateId'));
   const clientIdRaw = parseNullableText(q('client_id'), q('clientId'));
-  const caseType = parseNullableText(q('case_type'), q('caseType'));
+  const caseTypeRaw = parseNullableText(q('case_type'), q('caseType'));
   const sortKey = parseNullableText(q('sort_key'), q('sortKey')) || 'created_at';
   const sortDir = String(parseNullableText(q('sort_dir'), q('sortDir')) || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
 
@@ -9954,6 +10014,7 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
   const candidateId = candidateIdRaw ? parseUuid(candidateIdRaw) : null;
   const clientId = clientIdRaw ? parseUuid(clientIdRaw) : null;
   const normalizedStatus = normalizeSnoozeStatus(statusRaw);
+  const caseType = normalizeExportCaseType(caseTypeRaw);
 
   if (createdFromRaw && !createdFrom) return withCORS(env, req, badRequest('created_from must be YYYY-MM-DD or DD/MM/YYYY'));
   if (createdToRaw && !createdTo) return withCORS(env, req, badRequest('created_to must be YYYY-MM-DD or DD/MM/YYYY'));
@@ -10212,7 +10273,6 @@ async function handleBankingSnoozesExportPdf(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e || 'SNOOZES_EXPORT_PDF_FAILED')));
   }
 }
-
 
 
 async function handleBankingRailAccountsList(env, req, user) {
