@@ -791,6 +791,215 @@ begin
 end;
 $$;
 
+CREATE OR REPLACE FUNCTION public._pay_finance_protected_recovery_allocate(
+  p_recovery_rows jsonb,
+  p_run_earnings_headroom numeric,
+  p_run_take_home_headroom numeric DEFAULT NULL::numeric,
+  p_default_take_home_floor numeric DEFAULT NULL::numeric
+)
+RETURNS TABLE(
+  sort_order integer,
+  finance_case_id uuid,
+  case_type public.pay_finance_case_type_enum,
+  payout_status public.pay_advance_payout_status_enum,
+  nominal_due_amount numeric,
+  minimum_earnings_threshold numeric,
+  effective_take_home_floor numeric,
+  headroom_before numeric,
+  take_home_before numeric,
+  threshold_cap_amount numeric,
+  take_home_cap_amount numeric,
+  protected_recoverable_amount numeric,
+  headroom_after numeric,
+  take_home_after numeric
+)
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_row record;
+  v_remaining_headroom numeric(12,2) := round(greatest(coalesce(p_run_earnings_headroom, 0), 0), 2)::numeric(12,2);
+  v_remaining_take_home numeric(12,2) := CASE
+    WHEN p_run_take_home_headroom IS NULL THEN NULL
+    ELSE round(greatest(p_run_take_home_headroom, 0), 2)::numeric(12,2)
+  END;
+  v_default_take_home_floor numeric(12,2) := CASE
+    WHEN p_default_take_home_floor IS NULL THEN NULL
+    ELSE round(greatest(p_default_take_home_floor, 0), 2)::numeric(12,2)
+  END;
+  v_case_type_text text := NULL;
+  v_payout_status_text text := NULL;
+  v_nominal_due_amount numeric(12,2) := 0;
+  v_minimum_earnings_threshold numeric(12,2) := NULL;
+  v_effective_take_home_floor_local numeric(12,2) := NULL;
+  v_headroom_before_local numeric(12,2) := 0;
+  v_take_home_before_local numeric(12,2) := NULL;
+  v_threshold_cap_amount_local numeric(12,2) := 0;
+  v_take_home_cap_amount_local numeric(12,2) := NULL;
+  v_effective_cap_amount_local numeric(12,2) := 0;
+  v_protected_recoverable_amount_local numeric(12,2) := 0;
+BEGIN
+  IF p_recovery_rows IS NULL OR jsonb_typeof(p_recovery_rows) <> 'array' THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_PROTECTED_RECOVERY_ALLOCATE',
+      'code', 'RECOVERY_ROWS_ARRAY_REQUIRED',
+      'message', '_pay_finance_protected_recovery_allocate: p_recovery_rows must be a JSON array'
+    )::text;
+  END IF;
+
+  FOR v_row IN
+    WITH parsed_rows AS (
+      SELECT
+        CASE
+          WHEN nullif(btrim(elem.value->>'sort_order'), '') IS NULL THEN elem.ordinality::integer
+          ELSE (elem.value->>'sort_order')::integer
+        END AS sort_order,
+        elem.ordinality::integer AS input_ordinality,
+        CASE
+          WHEN nullif(btrim(elem.value->>'finance_case_id'), '') IS NULL THEN NULL::uuid
+          ELSE (elem.value->>'finance_case_id')::uuid
+        END AS finance_case_id,
+        nullif(btrim(elem.value->>'case_type'), '') AS case_type_text,
+        nullif(btrim(elem.value->>'payout_status'), '') AS payout_status_text,
+        round(
+          greatest(
+            coalesce(
+              CASE
+                WHEN nullif(btrim(elem.value->>'nominal_due_amount'), '') IS NULL THEN 0::numeric
+                ELSE (elem.value->>'nominal_due_amount')::numeric
+              END,
+              0::numeric
+            ),
+            0::numeric
+          ),
+          2
+        )::numeric(12,2) AS nominal_due_amount,
+        CASE
+          WHEN nullif(btrim(elem.value->>'minimum_earnings_threshold'), '') IS NULL THEN NULL::numeric(12,2)
+          ELSE round(greatest((elem.value->>'minimum_earnings_threshold')::numeric, 0::numeric), 2)::numeric(12,2)
+        END AS minimum_earnings_threshold,
+        CASE
+          WHEN nullif(btrim(elem.value->>'take_home_floor_override'), '') IS NULL THEN NULL::numeric(12,2)
+          ELSE round(greatest((elem.value->>'take_home_floor_override')::numeric, 0::numeric), 2)::numeric(12,2)
+        END AS take_home_floor_override
+      FROM jsonb_array_elements(p_recovery_rows) WITH ORDINALITY AS elem(value, ordinality)
+    )
+    SELECT
+      pr.sort_order,
+      pr.input_ordinality,
+      pr.finance_case_id,
+      pr.case_type_text,
+      pr.payout_status_text,
+      pr.nominal_due_amount,
+      pr.minimum_earnings_threshold,
+      pr.take_home_floor_override
+    FROM parsed_rows AS pr
+    ORDER BY pr.sort_order, pr.input_ordinality, pr.finance_case_id
+  LOOP
+    IF v_row.finance_case_id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_PROTECTED_RECOVERY_ALLOCATE',
+        'code', 'FINANCE_CASE_ID_REQUIRED',
+        'message', '_pay_finance_protected_recovery_allocate: each recovery row must include finance_case_id',
+        'sort_order', v_row.sort_order,
+        'input_ordinality', v_row.input_ordinality
+      )::text;
+    END IF;
+
+    v_case_type_text := upper(coalesce(v_row.case_type_text, ''));
+
+    IF v_case_type_text NOT IN ('PAYMENT_ADVANCE', 'MANUAL_DEBT_ADJUSTMENT') THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_PROTECTED_RECOVERY_ALLOCATE',
+        'code', 'UNSUPPORTED_CASE_TYPE',
+        'message', '_pay_finance_protected_recovery_allocate: only PAYMENT_ADVANCE repayments and MANUAL_DEBT_ADJUSTMENT recoveries are supported',
+        'finance_case_id', v_row.finance_case_id::text,
+        'case_type', v_row.case_type_text
+      )::text;
+    END IF;
+
+    v_payout_status_text := upper(coalesce(v_row.payout_status_text, ''));
+    IF v_case_type_text = 'PAYMENT_ADVANCE' AND v_payout_status_text <> 'PAID' THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_PROTECTED_RECOVERY_ALLOCATE',
+        'code', 'PAYMENT_ADVANCE_NOT_REPAYABLE',
+        'message', '_pay_finance_protected_recovery_allocate: PAYMENT_ADVANCE rows must represent paid advances when allocating recoveries',
+        'finance_case_id', v_row.finance_case_id::text,
+        'payout_status', v_row.payout_status_text
+      )::text;
+    END IF;
+
+    v_nominal_due_amount := round(greatest(coalesce(v_row.nominal_due_amount, 0), 0), 2)::numeric(12,2);
+    v_minimum_earnings_threshold := v_row.minimum_earnings_threshold;
+    v_effective_take_home_floor_local := coalesce(v_row.take_home_floor_override, v_default_take_home_floor);
+
+    v_headroom_before_local := v_remaining_headroom;
+    v_take_home_before_local := v_remaining_take_home;
+
+    v_threshold_cap_amount_local := round(
+      CASE
+        WHEN v_minimum_earnings_threshold IS NULL THEN v_headroom_before_local
+        ELSE greatest(v_headroom_before_local - v_minimum_earnings_threshold, 0)
+      END,
+      2
+    )::numeric(12,2);
+
+    v_take_home_cap_amount_local := CASE
+      WHEN v_take_home_before_local IS NULL OR v_effective_take_home_floor_local IS NULL THEN NULL
+      ELSE round(greatest(v_take_home_before_local - v_effective_take_home_floor_local, 0), 2)::numeric(12,2)
+    END;
+
+    v_effective_cap_amount_local := round(
+      least(
+        v_headroom_before_local,
+        v_threshold_cap_amount_local,
+        coalesce(v_take_home_cap_amount_local, v_headroom_before_local)
+      ),
+      2
+    )::numeric(12,2);
+
+    v_protected_recoverable_amount_local := round(
+      least(v_nominal_due_amount, greatest(v_effective_cap_amount_local, 0)),
+      2
+    )::numeric(12,2);
+
+    v_remaining_headroom := round(
+      greatest(v_remaining_headroom - v_protected_recoverable_amount_local, 0),
+      2
+    )::numeric(12,2);
+
+    IF v_remaining_take_home IS NOT NULL THEN
+      v_remaining_take_home := round(
+        greatest(v_remaining_take_home - v_protected_recoverable_amount_local, 0),
+        2
+      )::numeric(12,2);
+    END IF;
+
+    sort_order := v_row.sort_order;
+    finance_case_id := v_row.finance_case_id;
+    case_type := v_case_type_text::public.pay_finance_case_type_enum;
+    payout_status := CASE
+      WHEN v_case_type_text = 'PAYMENT_ADVANCE' THEN 'PAID'::public.pay_advance_payout_status_enum
+      ELSE NULL::public.pay_advance_payout_status_enum
+    END;
+    nominal_due_amount := v_nominal_due_amount;
+    minimum_earnings_threshold := v_minimum_earnings_threshold;
+    effective_take_home_floor := v_effective_take_home_floor_local;
+    headroom_before := v_headroom_before_local;
+    take_home_before := v_take_home_before_local;
+    threshold_cap_amount := v_threshold_cap_amount_local;
+    take_home_cap_amount := v_take_home_cap_amount_local;
+    protected_recoverable_amount := v_protected_recoverable_amount_local;
+    headroom_after := v_remaining_headroom;
+    take_home_after := v_remaining_take_home;
+
+    RETURN NEXT;
+  END LOOP;
+
+  RETURN;
+END;
+$function$;
 
 
 
