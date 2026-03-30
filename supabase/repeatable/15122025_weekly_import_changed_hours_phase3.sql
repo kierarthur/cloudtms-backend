@@ -225,6 +225,8 @@ $$;
 -- - precedence BH > Sun > Sat > Night > Day
 -- - "0/0" windows treated as FULL DAY
 -- ---------------------------------------------------------
+
+
 create or replace function public._wkimp_bucket_hours_from_policy(
   p_policy jsonb,
   p_start_utc timestamptz,
@@ -300,6 +302,10 @@ declare
   sun_eff int;
   sat_eff int;
   night_eff int;
+
+  minute_cursor timestamptz;
+  local_ts timestamp;
+  local_minute int;
 begin
   hours_day := 0; hours_night := 0; hours_sat := 0; hours_sun := 0; hours_bh := 0; total_hours := 0;
 
@@ -341,77 +347,56 @@ begin
       if next_midnight_utc is null then
         next_midnight_utc := date_trunc('day', slice_start) + interval '1 day';
       end if;
-
       slice_end := least(cur_end, next_midnight_utc);
       if slice_end <= slice_start then
         slice_start := next_midnight_utc;
         continue;
       end if;
 
-      a0 := floor(extract(epoch from ((slice_start at time zone tz) - (local_date::timestamp))) / 60)::int;
-      b0 := floor(extract(epoch from ((slice_end   at time zone tz) - (local_date::timestamp))) / 60)::int;
-
-      a0 := greatest(0, least(1440, a0));
-      b0 := greatest(0, least(1440, b0));
-
-      slice_len := greatest(0, floor(extract(epoch from (slice_end - slice_start)) / 60)::int);
-      if slice_len <= 0 or a0 >= b0 then
-        slice_start := slice_end;
-        continue;
-      end if;
-
       dow := extract(dow from local_date)::int; -- 0=Sun..6=Sat
       is_bh := (local_date::text = any(bh_list));
 
-      -- BH (highest priority)
-      bh_raw := case when is_bh then public._wkimp_overlap_window(a0,b0,bh_start,bh_end) else 0 end;
+      minute_cursor := slice_start;
 
-      -- Sun / Sat (excluding BH overlap)
-      if dow = 0 then
-        sun_raw := public._wkimp_overlap_window(a0,b0,sun_start,sun_end);
-        sun_eff := greatest(0, sun_raw - case when is_bh then public._wkimp_overlap_intersection2(a0,b0,sun_start,sun_end,bh_start,bh_end) else 0 end);
-      else
-        sun_eff := 0;
-      end if;
+      while (minute_cursor + interval '1 minute') <= slice_end loop
+        local_ts := (minute_cursor at time zone tz);
+        local_minute := floor(extract(epoch from (local_ts - (local_date::timestamp))) / 60)::int;
+        local_minute := greatest(0, least(1439, local_minute));
 
-      if dow = 6 then
-        sat_raw := public._wkimp_overlap_window(a0,b0,sat_start,sat_end);
-        sat_eff := greatest(0, sat_raw - case when is_bh then public._wkimp_overlap_intersection2(a0,b0,sat_start,sat_end,bh_start,bh_end) else 0 end);
-      else
-        sat_eff := 0;
-      end if;
+        if is_bh and (
+          (bh_start = bh_end) or
+          (bh_start < bh_end and local_minute >= bh_start and local_minute < bh_end) or
+          (bh_start > bh_end and (local_minute >= bh_start or local_minute < bh_end))
+        ) then
+          m_bh := m_bh + 1;
 
-      -- Day (exclude BH + weekend windows with inclusion-exclusion)
-      day_raw := public._wkimp_overlap_window(a0,b0,day_start,day_end);
-      day_eff := day_raw;
+        elsif dow = 0 and (
+          (sun_start = sun_end) or
+          (sun_start < sun_end and local_minute >= sun_start and local_minute < sun_end) or
+          (sun_start > sun_end and (local_minute >= sun_start or local_minute < sun_end))
+        ) then
+          m_sun := m_sun + 1;
 
-      if is_bh then
-        day_eff := day_eff - public._wkimp_overlap_intersection2(a0,b0,day_start,day_end,bh_start,bh_end);
-      end if;
+        elsif dow = 6 and (
+          (sat_start = sat_end) or
+          (sat_start < sat_end and local_minute >= sat_start and local_minute < sat_end) or
+          (sat_start > sat_end and (local_minute >= sat_start or local_minute < sat_end))
+        ) then
+          m_sat := m_sat + 1;
 
-      if dow = 0 then
-        day_eff := day_eff - public._wkimp_overlap_intersection2(a0,b0,day_start,day_end,sun_start,sun_end);
-        if is_bh then
-          day_eff := day_eff + public._wkimp_overlap_intersection3(a0,b0,day_start,day_end,bh_start,bh_end,sun_start,sun_end);
+        elsif
+          (day_start = day_end) or
+          (day_start < day_end and local_minute >= day_start and local_minute < day_end) or
+          (day_start > day_end and (local_minute >= day_start or local_minute < day_end))
+        then
+          m_day := m_day + 1;
+
+        else
+          m_night := m_night + 1;
         end if;
-      elsif dow = 6 then
-        day_eff := day_eff - public._wkimp_overlap_intersection2(a0,b0,day_start,day_end,sat_start,sat_end);
-        if is_bh then
-          day_eff := day_eff + public._wkimp_overlap_intersection3(a0,b0,day_start,day_end,bh_start,bh_end,sat_start,sat_end);
-        end if;
-      end if;
 
-      if day_eff < 0 then day_eff := 0; end if;
-
-      -- Night remainder
-      night_eff := slice_len - bh_raw - sun_eff - sat_eff - day_eff;
-      if night_eff < 0 then night_eff := 0; end if;
-
-      m_bh    := m_bh    + bh_raw;
-      m_sun   := m_sun   + sun_eff;
-      m_sat   := m_sat   + sat_eff;
-      m_day   := m_day   + day_eff;
-      m_night := m_night + night_eff;
+        minute_cursor := minute_cursor + interval '1 minute';
+      end loop;
 
       slice_start := slice_end;
     end loop;
@@ -427,6 +412,9 @@ begin
   return;
 end;
 $$;
+
+
+
 
 -- ---------------------------------------------------------
 -- PHASE 3 RPC: preview "changed hours" rows (read-only)
