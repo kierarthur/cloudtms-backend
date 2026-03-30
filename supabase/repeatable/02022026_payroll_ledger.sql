@@ -7702,6 +7702,235 @@ ts_itemised as (
       and upper(coalesce(pb.status::text,'')) <> 'CANCELLED'
     group by nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)),'')::uuid
   ),
+  finance_case_recovery_rows_base as (
+    select
+      vfcr.finance_case_id,
+      vfcr.candidate_id,
+      upper(coalesce(cr.cand_pay_method,'')) as candidate_pay_method,
+      round(greatest(coalesce(cr.non_mismatch_total_ex,0),0),2)::numeric(12,2) as run_earnings_headroom_ex,
+      round(
+        greatest(
+          coalesce(pwb.paid_wtd_before,0)
+          + greatest(coalesce(cr.non_mismatch_total_ex,0),0),
+          0
+        ),
+        2
+      )::numeric(12,2) as run_take_home_before,
+      round(greatest(coalesce(c.min_take_home_wtd,0),0),2)::numeric(12,2) as default_take_home_floor,
+      vfcr.case_type,
+      vfcr.payout_status,
+      vfcr.created_at,
+      case
+        when vfcr.minimum_earnings_threshold is null then null::numeric(12,2)
+        else round(greatest(vfcr.minimum_earnings_threshold,0),2)::numeric(12,2)
+      end as minimum_earnings_threshold,
+      case
+        when vfcr.take_home_floor_override is null then null::numeric(12,2)
+        else round(greatest(vfcr.take_home_floor_override,0),2)::numeric(12,2)
+      end as take_home_floor_override,
+      round(
+        greatest(
+          case
+            when vfcr.case_type = 'PAYMENT_ADVANCE'
+             and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID'
+            then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+                 - coalesce(fcrw.repaid_wtd_ex,0)
+                 - coalesce(vfcr.active_reserved_amount,0)
+            when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+            then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+                 - coalesce(fcrw.repaid_wtd_ex,0)
+                 - coalesce(vfcr.active_reserved_amount,0)
+            else 0::numeric
+          end,
+          0::numeric
+        ),
+        2
+      )::numeric(12,2) as nominal_due_amount
+    from public.v_finance_cases_register vfcr
+    join candidate_rollup cr
+      on cr.candidate_id = vfcr.candidate_id
+    join public.candidates c
+      on c.id = vfcr.candidate_id
+    left join paid_wtd_before pwb
+      on pwb.candidate_id = vfcr.candidate_id
+    left join finance_case_repaid_wtd fcrw
+      on fcrw.finance_case_id = vfcr.finance_case_id
+    where vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT')
+      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+      and coalesce(vfcr.outstanding_amount,0) > 0
+      and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
+      and (
+        (
+          vfcr.case_type = 'PAYMENT_ADVANCE'
+          and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID'
+          and (
+            vfcr.next_due_week_start is null
+            or vfcr.next_due_week_start <= v_week_start
+          )
+        )
+        or (
+          vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+          and (
+            vfcr.next_due_week_start is null
+            or vfcr.next_due_week_start <= v_week_start
+          )
+        )
+      )
+      and (p_candidate_id is null or vfcr.candidate_id = p_candidate_id)
+      and (p_client_id is null or vfcr.client_id = p_client_id)
+  ),
+  manual_debt_recovery_rows as (
+    select
+      fcrrb.candidate_id,
+      fcrrb.finance_case_id,
+      fcrrb.case_type,
+      fcrrb.payout_status,
+      fcrrb.nominal_due_amount,
+      fcrrb.minimum_earnings_threshold,
+      fcrrb.take_home_floor_override,
+      fcrrb.run_earnings_headroom_ex,
+      fcrrb.run_take_home_before,
+      fcrrb.default_take_home_floor,
+      row_number() over (
+        partition by fcrrb.candidate_id
+        order by fcrrb.created_at, fcrrb.finance_case_id
+      )::integer as sort_order
+    from finance_case_recovery_rows_base fcrrb
+    where fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+      and fcrrb.nominal_due_amount > 0
+  ),
+  manual_debt_recovery_allocations as (
+    select
+      mdra.candidate_id,
+      mdra_alloc.finance_case_id,
+      round(coalesce(mdra_alloc.protected_recoverable_amount,0),2)::numeric(12,2) as protected_recoverable_amount
+    from (
+      select
+        mdrr.candidate_id,
+        max(mdrr.run_earnings_headroom_ex) as run_earnings_headroom_ex,
+        max(mdrr.run_take_home_before) as run_take_home_before,
+        max(mdrr.default_take_home_floor) as default_take_home_floor,
+        jsonb_agg(
+          jsonb_build_object(
+            'sort_order', mdrr.sort_order,
+            'finance_case_id', mdrr.finance_case_id::text,
+            'case_type', mdrr.case_type::text,
+            'payout_status', case when mdrr.payout_status is null then null else mdrr.payout_status::text end,
+            'nominal_due_amount', mdrr.nominal_due_amount,
+            'minimum_earnings_threshold', mdrr.minimum_earnings_threshold,
+            'take_home_floor_override', mdrr.take_home_floor_override
+          )
+          order by mdrr.sort_order, mdrr.finance_case_id
+        ) as recovery_rows_json
+      from manual_debt_recovery_rows mdrr
+      group by mdrr.candidate_id
+    ) mdra
+    cross join lateral public._pay_finance_protected_recovery_allocate(
+      p_recovery_rows => mdra.recovery_rows_json,
+      p_run_earnings_headroom => mdra.run_earnings_headroom_ex,
+      p_run_take_home_headroom => mdra.run_take_home_before,
+      p_default_take_home_floor => mdra.default_take_home_floor
+    ) mdra_alloc
+  ),
+  manual_debt_recovery_totals as (
+    select
+      mdra.candidate_id,
+      round(sum(mdra.protected_recoverable_amount),2)::numeric(12,2) as protected_recoverable_total
+    from manual_debt_recovery_allocations mdra
+    group by mdra.candidate_id
+  ),
+  payment_advance_recovery_rows as (
+    select
+      fcrrb.candidate_id,
+      fcrrb.candidate_pay_method,
+      fcrrb.finance_case_id,
+      fcrrb.case_type,
+      fcrrb.payout_status,
+      fcrrb.nominal_due_amount,
+      fcrrb.minimum_earnings_threshold,
+      fcrrb.take_home_floor_override,
+      fcrrb.run_earnings_headroom_ex,
+      fcrrb.run_take_home_before,
+      row_number() over (
+        partition by fcrrb.candidate_id
+        order by fcrrb.created_at, fcrrb.finance_case_id
+      )::integer as sort_order
+    from finance_case_recovery_rows_base fcrrb
+    where fcrrb.case_type = 'PAYMENT_ADVANCE'
+      and upper(coalesce(fcrrb.payout_status::text,'')) = 'PAID'
+      and fcrrb.nominal_due_amount > 0
+  ),
+  payment_advance_recovery_allocations as (
+    select
+      para.candidate_id,
+      para_alloc.finance_case_id,
+      round(coalesce(para_alloc.protected_recoverable_amount,0),2)::numeric(12,2) as protected_recoverable_amount
+    from (
+      select
+        parr.candidate_id,
+        max(
+          case
+            when parr.candidate_pay_method = 'UMBRELLA'
+              then round(
+                greatest(
+                  parr.run_earnings_headroom_ex - coalesce(mdrt.protected_recoverable_total,0),
+                  0
+                ),
+                2
+              )::numeric(12,2)
+            else parr.run_earnings_headroom_ex
+          end
+        ) as run_earnings_headroom_ex,
+        max(
+          case
+            when parr.candidate_pay_method = 'UMBRELLA'
+              then round(
+                greatest(
+                  parr.run_take_home_before - coalesce(mdrt.protected_recoverable_total,0),
+                  0
+                ),
+                2
+              )::numeric(12,2)
+            else parr.run_take_home_before
+          end
+        ) as run_take_home_before,
+        jsonb_agg(
+          jsonb_build_object(
+            'sort_order', parr.sort_order,
+            'finance_case_id', parr.finance_case_id::text,
+            'case_type', parr.case_type::text,
+            'payout_status', case when parr.payout_status is null then null else parr.payout_status::text end,
+            'nominal_due_amount', parr.nominal_due_amount,
+            'minimum_earnings_threshold', parr.minimum_earnings_threshold,
+            'take_home_floor_override', parr.take_home_floor_override
+          )
+          order by parr.sort_order, parr.finance_case_id
+        ) as recovery_rows_json
+      from payment_advance_recovery_rows parr
+      left join manual_debt_recovery_totals mdrt
+        on mdrt.candidate_id = parr.candidate_id
+      group by parr.candidate_id
+    ) para
+    cross join lateral public._pay_finance_protected_recovery_allocate(
+      p_recovery_rows => para.recovery_rows_json,
+      p_run_earnings_headroom => para.run_earnings_headroom_ex,
+      p_run_take_home_headroom => para.run_take_home_before,
+      p_default_take_home_floor => null::numeric
+    ) para_alloc
+  ),
+  finance_case_protected_allocations as (
+    select
+      mdra.finance_case_id,
+      mdra.protected_recoverable_amount
+    from manual_debt_recovery_allocations mdra
+
+    union all
+
+    select
+      para.finance_case_id,
+      para.protected_recoverable_amount
+    from payment_advance_recovery_allocations para
+  ),
   finance_case_payee_readiness as (
     select
       f0.finance_case_id,
@@ -8080,18 +8309,24 @@ ts_itemised as (
           greatest(
             case
               when vfcr.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID'
-                then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
-                     - coalesce(fcrw.repaid_wtd_ex,0)
-                     - coalesce(vfcr.active_reserved_amount,0)
+                then coalesce(
+                  fcpa.protected_recoverable_amount,
+                  least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+                  - coalesce(fcrw.repaid_wtd_ex,0)
+                  - coalesce(vfcr.active_reserved_amount,0)
+                )
               when vfcr.case_type = 'PAYMENT_ADVANCE'
                 then case
                   when vfcr.lifecycle_status_display in ('Paid','Cancelled') then 0::numeric
                   else coalesce(vfcr.original_amount,0) - coalesce(vfcr.active_reserved_amount,0)
                 end
               when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
-                then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
-                     - coalesce(fcrw.repaid_wtd_ex,0)
-                     - coalesce(vfcr.active_reserved_amount,0)
+                then coalesce(
+                  fcpa.protected_recoverable_amount,
+                  least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+                  - coalesce(fcrw.repaid_wtd_ex,0)
+                  - coalesce(vfcr.active_reserved_amount,0)
+                )
               when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
                 then case
                   when vfcr.lifecycle_status_display in ('Paid','Cancelled') then 0::numeric
@@ -8191,6 +8426,8 @@ ts_itemised as (
         on cp.candidate_id = vfcr.candidate_id
       left join finance_case_repaid_wtd fcrw
         on fcrw.finance_case_id = vfcr.finance_case_id
+      left join finance_case_protected_allocations fcpa
+        on fcpa.finance_case_id = vfcr.finance_case_id
       left join finance_case_component_review_rows fccr
         on fccr.finance_case_id = vfcr.finance_case_id
       left join finance_case_payee_readiness fpr
@@ -8250,7 +8487,8 @@ ts_itemised as (
         vfcr.weekly_due,
         vfcr.active_reserved_amount,
         vfcr.payout_status,
-        fcrw.repaid_wtd_ex
+        fcrw.repaid_wtd_ex,
+        fcpa.protected_recoverable_amount
     )
     select
       g.finance_case_id,
@@ -10282,9 +10520,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
-
-
 
 
 
@@ -14165,12 +14400,27 @@ end;
     frozen_target_amount_vat,
     frozen_target_amount_inc_vat
   )
-  with safe_case_rows as (
+  with finance_case_repaid_wtd_local as (
     select
+      nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)), '')::uuid as finance_case_id,
+      round(sum(abs(coalesce(pbi.amount_ex_vat,0))),2)::numeric(12,2) as repaid_wtd_ex
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbi.is_voided = false
+      and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+      and pbi.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')
+      and pbi.repayment_week_start = v_week_start
+      and upper(coalesce(pb.status::text,'')) <> 'CANCELLED'
+    group by nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)), '')::uuid
+  ),
+  safe_case_rows as (
+    select distinct
       spr.candidate_id,
       spr.finance_case_id,
-      spr.client_id,
-      abs(round(coalesce(spr.preview_amount_ex_vat, 0), 2))::numeric(12,2) as due_amount_ex_vat
+      spr.client_id
     from pg_temp.tmp_pay_selected_preview_rows spr
     where spr.draftable = true
       and spr.line_type = 'MANUAL_DEBT_RECOVERY'
@@ -14209,7 +14459,6 @@ end;
               'MILEAGE_DELTA'
             )
         ), 0),
-
         0
       )::numeric(12,2) as earnings_available_target_ex
     from cand_scope cs
@@ -14232,57 +14481,130 @@ end;
       and pbi2.item_type <> 'DEBT_CREATED'
     group by pbc2.candidate_id
   ),
-  candidate_due as (
+  protected_case_due_seed as (
     select
       ce.pay_batch_candidate_id,
       ce.candidate_id,
       ce.pay_channel,
       ce.umbrella_id,
+      vfcr.finance_case_id,
+      vfcr.created_at as finance_case_created_at,
+      row_number() over (
+        partition by ce.candidate_id
+        order by vfcr.created_at, vfcr.finance_case_id
+      )::integer as sort_order,
       round(
         greatest(
-          least(
-            round(coalesce(sum(scr.due_amount_ex_vat), 0), 2)::numeric(12,2),
-            greatest(least(ce.earnings_available_target_ex, (coalesce(pw.paid_wtd_before_ex, 0) + ce.earnings_available_target_ex) - coalesce(c.min_take_home_wtd, 0)), 0)
-          ),
+          least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+          - coalesce(fcrw.repaid_wtd_ex,0)
+          - coalesce(vfcr.active_reserved_amount,0),
           0
         ),
         2
-      )::numeric(12,2) as recovery_total_target_ex
-    from cand_earnings ce
-    join safe_case_rows scr
-      on scr.candidate_id = ce.candidate_id
+      )::numeric(12,2) as nominal_due_amount,
+      case
+        when vfcr.minimum_earnings_threshold is null then null::numeric(12,2)
+        else round(greatest(vfcr.minimum_earnings_threshold,0),2)::numeric(12,2)
+      end as minimum_earnings_threshold,
+      case
+        when vfcr.take_home_floor_override is null then null::numeric(12,2)
+        else round(greatest(vfcr.take_home_floor_override,0),2)::numeric(12,2)
+      end as take_home_floor_override,
+      round(ce.earnings_available_target_ex,2)::numeric(12,2) as run_earnings_headroom_ex,
+      round(
+        greatest(
+          coalesce(pw.paid_wtd_before_ex, 0) + ce.earnings_available_target_ex,
+          0
+        ),
+        2
+      )::numeric(12,2) as run_take_home_before,
+      round(greatest(coalesce(c.min_take_home_wtd,0),0),2)::numeric(12,2) as default_take_home_floor
+    from safe_case_rows scr
+    join cand_earnings ce
+      on ce.candidate_id = scr.candidate_id
     join public.candidates c
       on c.id = ce.candidate_id
+    join public.v_finance_cases_register vfcr
+      on vfcr.finance_case_id = scr.finance_case_id
+     and vfcr.candidate_id = scr.candidate_id
     left join paid_wtd pw
       on pw.candidate_id = ce.candidate_id
-    
-    group by
-      ce.pay_batch_candidate_id,
-      ce.candidate_id,
-      ce.pay_channel,
-      ce.umbrella_id,
-      ce.earnings_available_target_ex,
-      coalesce(pw.paid_wtd_before_ex, 0),
-      coalesce(c.min_take_home_wtd, 0)
-    having round(
-      greatest(
-        least(
-          round(coalesce(sum(scr.due_amount_ex_vat), 0), 2)::numeric(12,2),
-          greatest(least(ce.earnings_available_target_ex, (coalesce(pw.paid_wtd_before_ex, 0) + ce.earnings_available_target_ex) - coalesce(c.min_take_home_wtd, 0)), 0)
+    left join finance_case_repaid_wtd_local fcrw
+      on fcrw.finance_case_id = vfcr.finance_case_id
+    where vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+      and coalesce(vfcr.outstanding_amount,0) > 0
+      and (vfcr.next_due_week_start is null or vfcr.next_due_week_start <= v_week_start)
+      and round(
+        greatest(
+          least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+          - coalesce(fcrw.repaid_wtd_ex,0)
+          - coalesce(vfcr.active_reserved_amount,0),
+          0
         ),
-        0
-      ),
-      2
-    ) > 0
+        2
+      ) > 0
+  ),
+  protected_case_due_inputs as (
+    select
+      pcds.candidate_id,
+      max(pcds.pay_batch_candidate_id) as pay_batch_candidate_id,
+      max(pcds.pay_channel) as pay_channel,
+      max(pcds.umbrella_id) as umbrella_id,
+      jsonb_agg(
+        jsonb_build_object(
+          'sort_order', pcds.sort_order,
+          'finance_case_id', pcds.finance_case_id::text,
+          'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+          'payout_status', null,
+          'nominal_due_amount', pcds.nominal_due_amount,
+          'minimum_earnings_threshold', pcds.minimum_earnings_threshold,
+          'take_home_floor_override', pcds.take_home_floor_override
+        )
+        order by pcds.finance_case_created_at, pcds.finance_case_id
+      ) as recovery_rows_json,
+      max(pcds.run_earnings_headroom_ex) as run_earnings_headroom_ex,
+      max(pcds.run_take_home_before) as run_take_home_before,
+      max(pcds.default_take_home_floor) as default_take_home_floor
+    from protected_case_due_seed pcds
+    group by pcds.candidate_id
+  ),
+  protected_case_due_allocations as (
+    select
+      pcdi.candidate_id,
+      pcda.finance_case_id,
+      round(coalesce(pcda.protected_recoverable_amount,0),2)::numeric(12,2) as protected_due_amount_ex_vat
+    from protected_case_due_inputs pcdi
+    cross join lateral public._pay_finance_protected_recovery_allocate(
+      pcdi.recovery_rows_json,
+      pcdi.run_earnings_headroom_ex,
+      pcdi.run_take_home_before,
+      pcdi.default_take_home_floor
+    ) pcda
+  ),
+  protected_case_due as (
+    select
+      pcds.pay_batch_candidate_id,
+      pcds.candidate_id,
+      pcds.pay_channel,
+      pcds.umbrella_id,
+      pcds.finance_case_id,
+      pcds.finance_case_created_at,
+      round(pcda.protected_due_amount_ex_vat,2)::numeric(12,2) as due_amount_ex_vat
+    from protected_case_due_seed pcds
+    join protected_case_due_allocations pcda
+      on pcda.candidate_id = pcds.candidate_id
+     and pcda.finance_case_id = pcds.finance_case_id
+    where round(pcda.protected_due_amount_ex_vat,2) > 0
   ),
   case_component_base as (
     select
-      cd.pay_batch_candidate_id,
-      cd.candidate_id,
-      cd.pay_channel,
-      cd.umbrella_id,
-      scr.finance_case_id,
-      pa.created_at as finance_case_created_at,
+      pcd.pay_batch_candidate_id,
+      pcd.candidate_id,
+      pcd.pay_channel,
+      pcd.umbrella_id,
+      pcd.finance_case_id,
+      pcd.finance_case_created_at,
       pfc.id as finance_component_id,
       pfc.component_key_type,
       pfc.component_key_value,
@@ -14298,12 +14620,11 @@ end;
       pfc.allocation_priority_group,
       pfc.allocation_priority_order,
       pfc.created_at_utc as finance_component_created_at,
-      scr.due_amount_ex_vat,
-      cd.recovery_total_target_ex,
+      pcd.due_amount_ex_vat,
       coalesce(u.vat_chargeable,false) as umbrella_vat_chargeable,
       case
         when pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(cd.pay_channel,''))
+         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(pcd.pay_channel,''))
          and coalesce(pfc.saved_resolution_result_json->>'target_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$'
          and round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2) > 0
           then round(
@@ -14312,14 +14633,14 @@ end;
             / round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2),
             2
           )::numeric(12,2)
-        when cd.pay_channel = 'UMBRELLA'
+        when pcd.pay_channel = 'UMBRELLA'
          and pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
           then round((public._pay_umbrella_vat_calc(round(greatest(coalesce(pfc.remaining_source_amount,0),0),2), v_vat_rate_pct, coalesce(u.vat_chargeable,false))->>'ex')::numeric, 2)::numeric(12,2)
         else round(greatest(coalesce(pfc.remaining_source_amount,0),0), 2)::numeric(12,2)
       end as remaining_target_amount_ex_vat,
       case
         when pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(cd.pay_channel,''))
+         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(pcd.pay_channel,''))
          and coalesce(pfc.saved_resolution_result_json->>'target_amount_vat','') ~ '^-?\d+(\.\d+)?$'
          and round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2) > 0
           then round(
@@ -14328,14 +14649,14 @@ end;
             / round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2),
             2
           )::numeric(12,2)
-        when cd.pay_channel = 'UMBRELLA'
+        when pcd.pay_channel = 'UMBRELLA'
          and pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
           then round((public._pay_umbrella_vat_calc(round(greatest(coalesce(pfc.remaining_source_amount,0),0),2), v_vat_rate_pct, coalesce(u.vat_chargeable,false))->>'vat')::numeric, 2)::numeric(12,2)
         else 0::numeric(12,2)
       end as remaining_target_amount_vat,
       case
         when pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(cd.pay_channel,''))
+         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(pcd.pay_channel,''))
          and coalesce(pfc.saved_resolution_result_json->>'target_amount_inc_vat','') ~ '^-?\d+(\.\d+)?$'
          and round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2) > 0
           then round(
@@ -14344,22 +14665,18 @@ end;
             / round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2),
             2
           )::numeric(12,2)
-        when cd.pay_channel = 'UMBRELLA'
+        when pcd.pay_channel = 'UMBRELLA'
          and pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
           then round((public._pay_umbrella_vat_calc(round(greatest(coalesce(pfc.remaining_source_amount,0),0),2), v_vat_rate_pct, coalesce(u.vat_chargeable,false))->>'inc')::numeric, 2)::numeric(12,2)
         else round(greatest(coalesce(pfc.remaining_source_amount,0),0), 2)::numeric(12,2)
       end as remaining_target_amount_inc_vat
-    from candidate_due cd
-    join safe_case_rows scr
-      on scr.candidate_id = cd.candidate_id
-    join public.pay_advances pa
-      on pa.id = scr.finance_case_id
+    from protected_case_due pcd
     join public.pay_finance_case_components pfc
-      on pfc.finance_case_id = scr.finance_case_id
+      on pfc.finance_case_id = pcd.finance_case_id
      and pfc.closed_at_utc is null
      and pfc.remaining_source_amount > 0
     left join public.umbrellas u
-      on u.id = cd.umbrella_id
+      on u.id = pcd.umbrella_id
   ),
   case_component_due as (
     select
@@ -14379,45 +14696,29 @@ end;
       )::numeric(12,2) as component_due_target_ex
     from case_component_base ccb
   ),
-  alloc_base as (
-    select
-      ccd.*,
-      sum(ccd.component_due_target_ex) over (
-        partition by ccd.candidate_id
-        order by ccd.finance_case_created_at, ccd.finance_case_id, ccd.allocation_priority_group, ccd.allocation_priority_order, ccd.finance_component_created_at, ccd.finance_component_id
-        rows between unbounded preceding and 1 preceding
-      )::numeric(12,2) as cum_before_candidate_target
-    from case_component_due ccd
-    where ccd.component_due_target_ex > 0
-  ),
   alloc as (
     select
-      ab.pay_batch_candidate_id,
-      ab.pay_channel,
-      ab.umbrella_id,
-      ab.finance_case_id,
-      ab.finance_component_id,
-      ab.component_key_type,
-      ab.component_key_value,
-      ab.classification,
-      ab.source_pay_method,
-      ab.source_basis_json,
-      ab.saved_target_pay_method,
-      ab.saved_resolution_mode,
-      ab.saved_resolution_payload_json,
-      ab.saved_resolution_result_json,
-      round(
-        least(
-          ab.component_due_target_ex,
-          greatest(ab.recovery_total_target_ex - coalesce(ab.cum_before_candidate_target, 0), 0)
-        ),
-        2
-      )::numeric(12,2) as take_target_ex,
-      round(ab.remaining_source_amount, 2)::numeric(12,2) as remaining_source_amount,
-      round(ab.remaining_target_amount_ex_vat, 2)::numeric(12,2) as remaining_target_amount_ex_vat,
-      round(ab.remaining_target_amount_vat, 2)::numeric(12,2) as remaining_target_amount_vat,
-      round(ab.remaining_target_amount_inc_vat, 2)::numeric(12,2) as remaining_target_amount_inc_vat
-    from alloc_base ab
+      ccd.pay_batch_candidate_id,
+      ccd.pay_channel,
+      ccd.umbrella_id,
+      ccd.finance_case_id,
+      ccd.finance_component_id,
+      ccd.component_key_type,
+      ccd.component_key_value,
+      ccd.classification,
+      ccd.source_pay_method,
+      ccd.source_basis_json,
+      ccd.saved_target_pay_method,
+      ccd.saved_resolution_mode,
+      ccd.saved_resolution_payload_json,
+      ccd.saved_resolution_result_json,
+      round(ccd.component_due_target_ex, 2)::numeric(12,2) as take_target_ex,
+      round(ccd.remaining_source_amount, 2)::numeric(12,2) as remaining_source_amount,
+      round(ccd.remaining_target_amount_ex_vat, 2)::numeric(12,2) as remaining_target_amount_ex_vat,
+      round(ccd.remaining_target_amount_vat, 2)::numeric(12,2) as remaining_target_amount_vat,
+      round(ccd.remaining_target_amount_inc_vat, 2)::numeric(12,2) as remaining_target_amount_inc_vat
+    from case_component_due ccd
+    where ccd.component_due_target_ex > 0
   ),
   final_alloc as (
     select
@@ -14555,12 +14856,27 @@ end;
     frozen_target_amount_vat,
     frozen_target_amount_inc_vat
   )
-  with safe_case_rows as (
+  with finance_case_repaid_wtd_local as (
     select
+      nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)), '')::uuid as finance_case_id,
+      round(sum(abs(coalesce(pbi.amount_ex_vat,0))),2)::numeric(12,2) as repaid_wtd_ex
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where pbi.is_voided = false
+      and pbi.source_ref ~ '^advance:[0-9a-fA-F-]{36}$'
+      and pbi.item_type in ('LOAN_REPAYMENT','OVERPAYMENT_RECOVERY','MANUAL_DEBT_RECOVERY')
+      and pbi.repayment_week_start = v_week_start
+      and upper(coalesce(pb.status::text,'')) <> 'CANCELLED'
+    group by nullif(btrim(split_part(coalesce(pbi.source_ref,''), ':', 2)), '')::uuid
+  ),
+  safe_case_rows as (
+    select distinct
       spr.candidate_id,
       spr.finance_case_id,
-      spr.client_id,
-      abs(round(coalesce(spr.preview_amount_ex_vat, 0), 2))::numeric(12,2) as due_amount_ex_vat
+      spr.client_id
     from pg_temp.tmp_pay_selected_preview_rows spr
     where spr.draftable = true
       and spr.line_type = 'PAYMENT_ADVANCE_REPAYMENT'
@@ -14640,54 +14956,132 @@ end;
       and pbi2.item_type <> 'DEBT_CREATED'
     group by pbc2.candidate_id
   ),
-  candidate_due as (
+  protected_case_due_seed as (
     select
       ce.pay_batch_candidate_id,
       ce.candidate_id,
       ce.pay_channel,
       ce.umbrella_id,
+      vfcr.finance_case_id,
+      vfcr.created_at as finance_case_created_at,
+      row_number() over (
+        partition by ce.candidate_id
+        order by vfcr.created_at, vfcr.finance_case_id
+      )::integer as sort_order,
       round(
         greatest(
-          least(
-            round(coalesce(sum(scr.due_amount_ex_vat), 0), 2)::numeric(12,2),
-            greatest(ce.earnings_available_target_ex, 0)
-          ),
+          least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+          - coalesce(fcrw.repaid_wtd_ex,0)
+          - coalesce(vfcr.active_reserved_amount,0),
           0
         ),
         2
-      )::numeric(12,2) as recovery_total_target_ex
-    from cand_earnings ce
-    join safe_case_rows scr
-      on scr.candidate_id = ce.candidate_id
-    
-    
-    where (ce.pay_channel <> 'PAYE' or ce.awaiting_net_amount = false)
-    group by
-      ce.pay_batch_candidate_id,
-      ce.candidate_id,
-      ce.pay_channel,
-      ce.umbrella_id,
-      ce.earnings_available_target_ex,
-      ce.awaiting_net_amount
-    having round(
-      greatest(
-        least(
-          round(coalesce(sum(scr.due_amount_ex_vat), 0), 2)::numeric(12,2),
-          greatest(ce.earnings_available_target_ex, 0)
+      )::numeric(12,2) as nominal_due_amount,
+      case
+        when vfcr.minimum_earnings_threshold is null then null::numeric(12,2)
+        else round(greatest(vfcr.minimum_earnings_threshold,0),2)::numeric(12,2)
+      end as minimum_earnings_threshold,
+      case
+        when vfcr.take_home_floor_override is null then null::numeric(12,2)
+        else round(greatest(vfcr.take_home_floor_override,0),2)::numeric(12,2)
+      end as take_home_floor_override,
+      round(ce.earnings_available_target_ex,2)::numeric(12,2) as run_earnings_headroom_ex,
+      case
+        when ce.pay_channel = 'UMBRELLA'
+          then round(
+            greatest(
+              coalesce(pw.paid_wtd_before_ex, 0) + ce.earnings_available_target_ex,
+              0
+            ),
+            2
+          )::numeric(12,2)
+        else null::numeric(12,2)
+      end as run_take_home_before
+    from safe_case_rows scr
+    join cand_earnings ce
+      on ce.candidate_id = scr.candidate_id
+    join public.v_finance_cases_register vfcr
+      on vfcr.finance_case_id = scr.finance_case_id
+     and vfcr.candidate_id = scr.candidate_id
+    left join paid_wtd pw
+      on pw.candidate_id = ce.candidate_id
+    left join finance_case_repaid_wtd_local fcrw
+      on fcrw.finance_case_id = vfcr.finance_case_id
+    where vfcr.case_type = 'PAYMENT_ADVANCE'
+      and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID'
+      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+      and coalesce(vfcr.outstanding_amount,0) > 0
+      and (vfcr.next_due_week_start is null or vfcr.next_due_week_start <= v_week_start)
+      and (ce.pay_channel <> 'PAYE' or ce.awaiting_net_amount = false)
+      and round(
+        greatest(
+          least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
+          - coalesce(fcrw.repaid_wtd_ex,0)
+          - coalesce(vfcr.active_reserved_amount,0),
+          0
         ),
-        0
-      ),
-      2
-    ) > 0
+        2
+      ) > 0
+  ),
+  protected_case_due_inputs as (
+    select
+      pcds.candidate_id,
+      max(pcds.pay_batch_candidate_id) as pay_batch_candidate_id,
+      max(pcds.pay_channel) as pay_channel,
+      max(pcds.umbrella_id) as umbrella_id,
+      jsonb_agg(
+        jsonb_build_object(
+          'sort_order', pcds.sort_order,
+          'finance_case_id', pcds.finance_case_id::text,
+          'case_type', 'PAYMENT_ADVANCE',
+          'payout_status', 'PAID',
+          'nominal_due_amount', pcds.nominal_due_amount,
+          'minimum_earnings_threshold', pcds.minimum_earnings_threshold,
+          'take_home_floor_override', pcds.take_home_floor_override
+        )
+        order by pcds.finance_case_created_at, pcds.finance_case_id
+      ) as recovery_rows_json,
+      max(pcds.run_earnings_headroom_ex) as run_earnings_headroom_ex,
+      max(pcds.run_take_home_before) as run_take_home_before
+    from protected_case_due_seed pcds
+    group by pcds.candidate_id
+  ),
+  protected_case_due_allocations as (
+    select
+      pcdi.candidate_id,
+      pcda.finance_case_id,
+      round(coalesce(pcda.protected_recoverable_amount,0),2)::numeric(12,2) as protected_due_amount_ex_vat
+    from protected_case_due_inputs pcdi
+    cross join lateral public._pay_finance_protected_recovery_allocate(
+      pcdi.recovery_rows_json,
+      pcdi.run_earnings_headroom_ex,
+      pcdi.run_take_home_before,
+      null::numeric
+    ) pcda
+  ),
+  protected_case_due as (
+    select
+      pcds.pay_batch_candidate_id,
+      pcds.candidate_id,
+      pcds.pay_channel,
+      pcds.umbrella_id,
+      pcds.finance_case_id,
+      pcds.finance_case_created_at,
+      round(pcda.protected_due_amount_ex_vat,2)::numeric(12,2) as due_amount_ex_vat
+    from protected_case_due_seed pcds
+    join protected_case_due_allocations pcda
+      on pcda.candidate_id = pcds.candidate_id
+     and pcda.finance_case_id = pcds.finance_case_id
+    where round(pcda.protected_due_amount_ex_vat,2) > 0
   ),
   case_component_base as (
     select
-      cd.pay_batch_candidate_id,
-      cd.candidate_id,
-      cd.pay_channel,
-      cd.umbrella_id,
-      scr.finance_case_id,
-      pa.created_at as finance_case_created_at,
+      pcd.pay_batch_candidate_id,
+      pcd.candidate_id,
+      pcd.pay_channel,
+      pcd.umbrella_id,
+      pcd.finance_case_id,
+      pcd.finance_case_created_at,
       pfc.id as finance_component_id,
       pfc.component_key_type,
       pfc.component_key_value,
@@ -14703,12 +15097,11 @@ end;
       pfc.allocation_priority_group,
       pfc.allocation_priority_order,
       pfc.created_at_utc as finance_component_created_at,
-      scr.due_amount_ex_vat,
-      cd.recovery_total_target_ex,
+      pcd.due_amount_ex_vat,
       coalesce(u.vat_chargeable,false) as umbrella_vat_chargeable,
       case
         when pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(cd.pay_channel,''))
+         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(pcd.pay_channel,''))
          and coalesce(pfc.saved_resolution_result_json->>'target_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$'
          and round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2) > 0
           then round(
@@ -14717,14 +15110,14 @@ end;
             / round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2),
             2
           )::numeric(12,2)
-        when cd.pay_channel = 'UMBRELLA'
+        when pcd.pay_channel = 'UMBRELLA'
          and pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
           then round((public._pay_umbrella_vat_calc(round(greatest(coalesce(pfc.remaining_source_amount,0),0),2), v_vat_rate_pct, coalesce(u.vat_chargeable,false))->>'ex')::numeric, 2)::numeric(12,2)
         else round(greatest(coalesce(pfc.remaining_source_amount,0),0), 2)::numeric(12,2)
       end as remaining_target_amount_ex_vat,
       case
         when pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(cd.pay_channel,''))
+         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(pcd.pay_channel,''))
          and coalesce(pfc.saved_resolution_result_json->>'target_amount_vat','') ~ '^-?\d+(\.\d+)?$'
          and round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2) > 0
           then round(
@@ -14733,14 +15126,14 @@ end;
             / round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2),
             2
           )::numeric(12,2)
-        when cd.pay_channel = 'UMBRELLA'
+        when pcd.pay_channel = 'UMBRELLA'
          and pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
           then round((public._pay_umbrella_vat_calc(round(greatest(coalesce(pfc.remaining_source_amount,0),0),2), v_vat_rate_pct, coalesce(u.vat_chargeable,false))->>'vat')::numeric, 2)::numeric(12,2)
         else 0::numeric(12,2)
       end as remaining_target_amount_vat,
       case
         when pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(cd.pay_channel,''))
+         and upper(coalesce(pfc.source_pay_method,'')) <> upper(coalesce(pcd.pay_channel,''))
          and coalesce(pfc.saved_resolution_result_json->>'target_amount_inc_vat','') ~ '^-?\d+(\.\d+)?$'
          and round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2) > 0
           then round(
@@ -14749,22 +15142,18 @@ end;
             / round(greatest(coalesce(pfc.source_amount, pfc.remaining_source_amount, 0),0),2),
             2
           )::numeric(12,2)
-        when cd.pay_channel = 'UMBRELLA'
+        when pcd.pay_channel = 'UMBRELLA'
          and pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
           then round((public._pay_umbrella_vat_calc(round(greatest(coalesce(pfc.remaining_source_amount,0),0),2), v_vat_rate_pct, coalesce(u.vat_chargeable,false))->>'inc')::numeric, 2)::numeric(12,2)
         else round(greatest(coalesce(pfc.remaining_source_amount,0),0), 2)::numeric(12,2)
       end as remaining_target_amount_inc_vat
-    from candidate_due cd
-    join safe_case_rows scr
-      on scr.candidate_id = cd.candidate_id
-    join public.pay_advances pa
-      on pa.id = scr.finance_case_id
+    from protected_case_due pcd
     join public.pay_finance_case_components pfc
-      on pfc.finance_case_id = scr.finance_case_id
+      on pfc.finance_case_id = pcd.finance_case_id
      and pfc.closed_at_utc is null
      and pfc.remaining_source_amount > 0
     left join public.umbrellas u
-      on u.id = cd.umbrella_id
+      on u.id = pcd.umbrella_id
   ),
   case_component_due as (
     select
@@ -14784,45 +15173,29 @@ end;
       )::numeric(12,2) as component_due_target_ex
     from case_component_base ccb
   ),
-  alloc_base as (
-    select
-      ccd.*,
-      sum(ccd.component_due_target_ex) over (
-        partition by ccd.candidate_id
-        order by ccd.finance_case_created_at, ccd.finance_case_id, ccd.allocation_priority_group, ccd.allocation_priority_order, ccd.finance_component_created_at, ccd.finance_component_id
-        rows between unbounded preceding and 1 preceding
-      )::numeric(12,2) as cum_before_candidate_target
-    from case_component_due ccd
-    where ccd.component_due_target_ex > 0
-  ),
   alloc as (
     select
-      ab.pay_batch_candidate_id,
-      ab.pay_channel,
-      ab.umbrella_id,
-      ab.finance_case_id,
-      ab.finance_component_id,
-      ab.component_key_type,
-      ab.component_key_value,
-      ab.classification,
-      ab.source_pay_method,
-      ab.source_basis_json,
-      ab.saved_target_pay_method,
-      ab.saved_resolution_mode,
-      ab.saved_resolution_payload_json,
-      ab.saved_resolution_result_json,
-      round(
-        least(
-          ab.component_due_target_ex,
-          greatest(ab.recovery_total_target_ex - coalesce(ab.cum_before_candidate_target, 0), 0)
-        ),
-        2
-      )::numeric(12,2) as take_target_ex,
-      round(ab.remaining_source_amount, 2)::numeric(12,2) as remaining_source_amount,
-      round(ab.remaining_target_amount_ex_vat, 2)::numeric(12,2) as remaining_target_amount_ex_vat,
-      round(ab.remaining_target_amount_vat, 2)::numeric(12,2) as remaining_target_amount_vat,
-      round(ab.remaining_target_amount_inc_vat, 2)::numeric(12,2) as remaining_target_amount_inc_vat
-    from alloc_base ab
+      ccd.pay_batch_candidate_id,
+      ccd.pay_channel,
+      ccd.umbrella_id,
+      ccd.finance_case_id,
+      ccd.finance_component_id,
+      ccd.component_key_type,
+      ccd.component_key_value,
+      ccd.classification,
+      ccd.source_pay_method,
+      ccd.source_basis_json,
+      ccd.saved_target_pay_method,
+      ccd.saved_resolution_mode,
+      ccd.saved_resolution_payload_json,
+      ccd.saved_resolution_result_json,
+      round(ccd.component_due_target_ex, 2)::numeric(12,2) as take_target_ex,
+      round(ccd.remaining_source_amount, 2)::numeric(12,2) as remaining_source_amount,
+      round(ccd.remaining_target_amount_ex_vat, 2)::numeric(12,2) as remaining_target_amount_ex_vat,
+      round(ccd.remaining_target_amount_vat, 2)::numeric(12,2) as remaining_target_amount_vat,
+      round(ccd.remaining_target_amount_inc_vat, 2)::numeric(12,2) as remaining_target_amount_inc_vat
+    from case_component_due ccd
+    where ccd.component_due_target_ex > 0
   ),
   final_alloc as (
     select
@@ -16624,10 +16997,6 @@ exception when others then
   raise;
 end;
 $$;
-
-
-
-
 
 
 
