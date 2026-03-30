@@ -2464,30 +2464,14 @@ async function resolveSummarySelection(section, filters, selectionMode, included
 
 // Resolve hours (minutes) by bucket from an actual_schedule_json array
 async function resolveBucketsFromSchedule(env, contract, actualDays /* array */, policyOverride = null) {
-  // ─────────────────────────────────────────────────────────────
-  // ✅ Normalise schedule so TSFIN can handle both schemas:
-  // - Manual/weekly: { date, start, end, break_minutes/breaks }
-  // - NHSP/Corrections: { date, start_utc, end_utc, break_mins }
-  //
-  // We ensure:
-  // - start/end (HH:MM) exist when start_utc/end_utc exist
-  // - break_minutes is populated from break_mins when needed
-  // ─────────────────────────────────────────────────────────────
   const toIso = (v) => {
     const s0 = String(v ?? '').trim();
     if (!s0) return '';
     if (s0.includes('T')) return s0;
 
-    // Common Postgres-ish: "YYYY-MM-DD HH:MM:SS+00" or "YYYY-MM-DD HH:MM:SS+00:00"
     let s = s0.replace(' ', 'T');
-
-    // "+00" => "+00:00"
     if (s.endsWith('+00')) s = s + ':00';
-
-    // "+HH" => "+HH:00"
     if (/[\+\-]\d{2}$/.test(s)) s = s + ':00';
-
-    // "+HHMM" => "+HH:MM"
     if (/[\+\-]\d{4}$/.test(s)) s = s.replace(/([\+\-]\d{2})(\d{2})$/, '$1:$2');
 
     return s;
@@ -2498,31 +2482,214 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
     if (!iso) return '';
     const dt = new Date(iso);
     if (!Number.isFinite(dt.getTime())) return '';
+    const parts = toLocalParts(dt.toISOString(), 'Europe/London');
+    return parts.hhmm || '';
+  };
 
-    try {
-      const parts = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      }).formatToParts(dt);
+  const parseIsoMs = (v) => {
+    const iso = toIso(v);
+    if (!iso) return NaN;
+    const ms = new Date(iso).getTime();
+    return Number.isFinite(ms) ? ms : NaN;
+  };
 
-      const hh = parts.find(p => p.type === 'hour')?.value || '';
-      const mm = parts.find(p => p.type === 'minute')?.value || '';
-      return (hh && mm) ? `${hh}:${mm}` : '';
-    } catch {
-      // Fallback: UTC HH:MM (should be rare in Workers)
-      const hh = String(dt.getUTCHours()).padStart(2, '0');
-      const mm = String(dt.getUTCMinutes()).padStart(2, '0');
-      return `${hh}:${mm}`;
+  const isIsoLike = (v) => {
+    const s = String(v || '').trim();
+    return !!s && s.includes('T') && (s.endsWith('Z') || /[\+\-]\d{2}:\d{2}$/.test(s));
+  };
+
+  const addDays = (ymd, days) => {
+    const d = new Date(`${String(ymd || '').slice(0, 10)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return String(ymd || '').slice(0, 10);
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  };
+
+  const normYmd = (v) => {
+    const s = String(v || '').trim();
+    if (!s) return '';
+    const out = s.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(out) ? out : '';
+  };
+
+  const localCandidateFormatter = resolveBucketsFromSchedule._localCandidateFormatter || (resolveBucketsFromSchedule._localCandidateFormatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    hourCycle: 'h23'
+  }));
+
+  const localToUtcCandidates = (ymd, hhmm) => {
+    const ymdStr = normYmd(ymd);
+    const hm = String(hhmm || '').trim();
+
+    const mDate = ymdStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const mTime = hm.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!mDate || !mTime) return [];
+
+    const Y  = Number(mDate[1]);
+    const Mo = Number(mDate[2]);
+    const D  = Number(mDate[3]);
+    const H  = Number(mTime[1]);
+    const Mi = Number(mTime[2]);
+    if (!Y || Mo < 1 || Mo > 12 || D < 1 || D > 31 || H < 0 || H > 23 || Mi < 0 || Mi > 59) {
+      return [];
     }
+
+    const targetYmd = ymdStr;
+    const targetHm  = `${String(H).padStart(2, '0')}:${String(Mi).padStart(2, '0')}`;
+
+    const out = [];
+    const seen = new Set();
+
+    for (const offsetHours of [0, 1]) {
+      const ms = Date.UTC(Y, Mo - 1, D, H - offsetHours, Mi, 0, 0);
+      const dt = new Date(ms);
+      if (!Number.isFinite(dt.getTime())) continue;
+
+      const parts = localCandidateFormatter.formatToParts(dt);
+      const year  = parts.find((p) => p.type === 'year')?.value || '';
+      const month = parts.find((p) => p.type === 'month')?.value || '';
+      const day   = parts.find((p) => p.type === 'day')?.value || '';
+      let hour    = parts.find((p) => p.type === 'hour')?.value || '';
+      const min   = parts.find((p) => p.type === 'minute')?.value || '';
+      if (hour === '24') hour = '00';
+
+      const gotYmd = (year && month && day) ? `${year}-${month}-${day}` : '';
+      const gotHm  = (hour && min) ? `${hour}:${min}` : '';
+      if (gotYmd !== targetYmd || gotHm !== targetHm) continue;
+
+      const iso = dt.toISOString();
+      if (seen.has(iso)) continue;
+      seen.add(iso);
+
+      out.push({ iso, ms });
+    }
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveLocalInterval = (date, startHH, endHH, label) => {
+    const sMin = parseHHMM(startHH);
+    const eMin = parseHHMM(endHH);
+    if (sMin == null || eMin == null) {
+      throw new Error(`Invalid HH:MM in actual_schedule_json for ${label}`);
+    }
+    if (sMin === eMin) {
+      throw new Error(`Shift start and end cannot be the same on ${label}`);
+    }
+
+    const overnight = (eMin <= sMin);
+    const endYmd = overnight ? addDays(date, 1) : date;
+
+    const startCandidates = localToUtcCandidates(date, startHH);
+    if (!startCandidates.length) {
+      throw new Error(`Non-existent local start time on ${label}`);
+    }
+
+    const endCandidates = localToUtcCandidates(endYmd, endHH);
+    if (!endCandidates.length) {
+      throw new Error(`Non-existent local end time on ${label}`);
+    }
+
+    const pairs = [];
+    const seenPairs = new Set();
+    for (const a of startCandidates) {
+      for (const b of endCandidates) {
+        if (b.ms <= a.ms) continue;
+        const key = `${a.iso}|${b.iso}`;
+        if (seenPairs.has(key)) continue;
+        seenPairs.add(key);
+        pairs.push({
+          startIso: a.iso,
+          endIso: b.iso,
+          startMs: a.ms,
+          endMs: b.ms
+        });
+      }
+    }
+
+    if (!pairs.length) {
+      throw new Error(`Invalid local time range on ${label}`);
+    }
+
+    const uniquePairs = Array.from(new Map(
+      pairs.map((p) => [`${p.startMs}|${p.endMs}`, p])
+    ).values());
+
+    if (uniquePairs.length > 1) {
+      throw new Error(`Ambiguous local time range across DST change on ${label}`);
+    }
+
+    return uniquePairs[0];
+  };
+
+  const nextLondonTransitionMs = (afterMs) => {
+    const d = new Date(afterMs);
+    if (!Number.isFinite(d.getTime())) return Infinity;
+
+    let best = Infinity;
+    for (const year of [d.getUTCFullYear() - 1, d.getUTCFullYear(), d.getUTCFullYear() + 1, d.getUTCFullYear() + 2]) {
+      for (const cand of [bstStartUtc(year), bstEndUtc(year)]) {
+        if (cand > afterMs && cand < best) best = cand;
+      }
+    }
+    return best;
+  };
+
+  const actualBucketsFromSegments = (segments, policy) => {
+    const tmpAcc = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+
+    for (const seg of segments) {
+      let curMs = seg.startMs;
+      const endMs = seg.endMs;
+
+      while (curMs < endMs) {
+        const curIso = new Date(curMs).toISOString();
+        const parts = toLocalParts(curIso, 'Europe/London');
+        if (!parts || !parts.ymd) break;
+
+        const nextMidnightIso = ukLocalToUtcISO(addDays(parts.ymd, 1), '00:00', { prefer: 'earlier' });
+        const nextMidnightMs = nextMidnightIso ? new Date(nextMidnightIso).getTime() : Infinity;
+        const nextTzMs = nextLondonTransitionMs(curMs);
+
+        let sliceEndMs = endMs;
+        if (Number.isFinite(nextMidnightMs) && nextMidnightMs > curMs && nextMidnightMs < sliceEndMs) {
+          sliceEndMs = nextMidnightMs;
+        }
+        if (Number.isFinite(nextTzMs) && nextTzMs > curMs && nextTzMs < sliceEndMs) {
+          sliceEndMs = nextTzMs;
+        }
+        if (!(sliceEndMs > curMs)) break;
+
+        const mins = Math.round((sliceEndMs - curMs) / 60000);
+        if (mins > 0) {
+          const fromMin = (parts.hh * 60) + parts.mm;
+          const toMin = fromMin + mins;
+          segmentChunkIntoBuckets(parts.ymd, fromMin, toMin, policy, tmpAcc);
+        }
+
+        curMs = sliceEndMs;
+      }
+    }
+
+    return tmpAcc;
   };
 
   const normDays = (Array.isArray(actualDays) ? actualDays : []).map((d) => {
     if (!d || typeof d !== 'object') return d;
     const out = { ...d };
 
-    // Promote start_utc/end_utc -> start/end (HH:MM) if missing
+    const derivedDate = (!out.date && out.start_utc)
+      ? (toLocalParts(toIso(out.start_utc), 'Europe/London').ymd || '')
+      : '';
+    if (derivedDate && !out.date) out.date = derivedDate;
+
     if ((!out.start || !String(out.start).trim()) && out.start_utc) {
       out.start = hhmmLondonFromUtc(out.start_utc);
     }
@@ -2530,7 +2697,6 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
       out.end = hhmmLondonFromUtc(out.end_utc);
     }
 
-    // Promote break_mins -> break_minutes if missing (bucketer subtracts break_minutes)
     const bm =
       (out.break_minutes != null && String(out.break_minutes).trim() !== '')
         ? Number(out.break_minutes)
@@ -2539,17 +2705,12 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
           : null;
 
     if (Number.isFinite(bm) && bm > 0) {
-      // store canonical float-break key the resolver expects
       out.break_minutes = Math.floor(bm);
     }
 
     return out;
   });
 
-  // ✅ Ensure schedule has no internal overlaps / bad breaks before bucketing
-  validateScheduleStructure(normDays);
-
-  // If caller provides SQL policy (string times + bh_list), derive numeric policy
   const toNumericPolicyFromSql = (p) => {
     const hhmmssToMin = (val, fallback = '00:00:00') => {
       const s = String(val ?? fallback).trim();
@@ -2560,12 +2721,21 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
       return (h * 60) + m;
     };
 
-    const bhArr = Array.isArray(p?.bh_list) ? p.bh_list.map(String) : [];
+    let bhArr = [];
+    if (Array.isArray(p?.bh_list)) {
+      bhArr = p.bh_list.map(String);
+    } else if (typeof p?.bh_list === 'string') {
+      try {
+        const parsed = JSON.parse(p.bh_list);
+        if (Array.isArray(parsed)) bhArr = parsed.map(String);
+      } catch {}
+    }
+
     return {
       dayStart:   hhmmssToMin(p?.day_start,   '06:00:00'),
       dayEnd:     hhmmssToMin(p?.day_end,     '20:00:00'),
-      nightStart: hhmmssToMin(p?.night_start, '20:00:00'), // not used by segmentChunkIntoBuckets but kept for completeness
-      nightEnd:   hhmmssToMin(p?.night_end,   '06:00:00'), // not used by segmentChunkIntoBuckets but kept for completeness
+      nightStart: hhmmssToMin(p?.night_start, '20:00:00'),
+      nightEnd:   hhmmssToMin(p?.night_end,   '06:00:00'),
       satStart:   hhmmssToMin(p?.sat_start,   '00:00:00'),
       satEnd:     hhmmssToMin(p?.sat_end,     '00:00:00'),
       sunStart:   hhmmssToMin(p?.sun_start,   '00:00:00'),
@@ -2576,29 +2746,11 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
     };
   };
 
-  // ✅ Choose policy: override if provided; else legacy REST path
-  // If policyOverride already looks like a numeric policy (dayStart is a number), use it directly.
   const policy = policyOverride
     ? (typeof policyOverride?.dayStart === 'number' ? policyOverride : toNumericPolicyFromSql(policyOverride))
     : await loadClientTimePolicy(env, contract.client_id);
 
   const acc = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
-
-  // ✅ Self-contained date add helper (avoid relying on a global addDays())
-  const addDays = (ymd, days) => {
-    try {
-      const baseYmd = String(ymd || '').slice(0, 10);
-      const d = new Date(`${baseYmd}T00:00:00Z`);
-      if (!Number.isFinite(d.getTime())) return baseYmd || String(ymd || '');
-      d.setUTCDate(d.getUTCDate() + Number(days || 0));
-      const yyyy = d.getUTCFullYear();
-      const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd   = String(d.getUTCDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    } catch {
-      return String(ymd || '').slice(0, 10);
-    }
-  };
 
   if (typeof segmentChunkIntoBuckets !== 'function') {
     throw new Error('segmentChunkIntoBuckets is missing (required for BH/Sun/Sat/Night/Day precedence bucketing)');
@@ -2613,115 +2765,152 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
     } catch {}
   };
 
-  const normYmd = (v) => {
-    const s = String(v || '').trim();
-    if (!s) return '';
-    const ymd = s.slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return '';
-    return ymd;
-  };
+  const hasText = (v) => v != null && String(v).trim() !== '';
+  const byDate = new Map();
 
   logBuckets('policy', { client_id: contract.client_id, contract_id: contract.id, policy });
 
   for (const d of (normDays || [])) {
-    if (!d || !d.date || !d.start || !d.end) continue;
+    if (!d || typeof d !== 'object') continue;
 
-    const ymd = normYmd(d.date);
-    if (!ymd) continue;
+    const date = normYmd(d.date);
+    if (!date) continue;
+    const label = date;
 
-    const s = parseHHMM(d.start);
-    const e = parseHHMM(d.end);
+    const startIsoRaw = d.start_utc || d.start_iso || null;
+    const endIsoRaw   = d.end_utc   || d.end_iso   || null;
+    const hasShiftIso = !!(startIsoRaw && endIsoRaw && isIsoLike(startIsoRaw) && isIsoLike(endIsoRaw));
+    const hasShiftLocal = hasText(d.start) && hasText(d.end);
 
-    if (s == null || e == null) {
-      throw new Error(`Invalid HH:MM in actual_schedule_json for ${ymd}`);
+    const rawBreaksArr = Array.isArray(d.breaks)
+      ? d.breaks.filter((b) => b && (hasText(b.start) || hasText(b.end)))
+      : [];
+    const hasBreakWindowScalar = hasText(d.break_start) || hasText(d.break_end);
+
+    const rawBm =
+      (d.break_minutes != null && String(d.break_minutes).trim() !== '')
+        ? Number(d.break_minutes)
+        : (d.break_mins != null && String(d.break_mins).trim() !== '')
+          ? Number(d.break_mins)
+          : null;
+    const hasBreakMins = Number.isFinite(rawBm) && rawBm > 0;
+
+    if (!hasShiftIso && !hasShiftLocal) {
+      if (rawBreaksArr.length || hasBreakWindowScalar || hasBreakMins) {
+        throw new Error(`Breaks require a valid shift start/end on ${label}`);
+      }
+      continue;
     }
 
-    const overnight = (e <= s);
+    let shift = null;
+    if (hasShiftIso) {
+      const startIso = toIso(startIsoRaw);
+      const endIso   = toIso(endIsoRaw);
+      const startMs = parseIsoMs(startIso);
+      const endMs   = parseIsoMs(endIso);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        throw new Error(`Invalid UTC shift range on ${label}`);
+      }
+      shift = { startIso, endIso, startMs, endMs };
+    } else {
+      shift = resolveLocalInterval(date, String(d.start).trim(), String(d.end).trim(), label);
+    }
+
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date).push({ startMs: shift.startMs, endMs: shift.endMs });
+
+    const windowBreaks = [];
+    if (rawBreaksArr.length) {
+      for (const br of rawBreaksArr) {
+        const hasStart = hasText(br.start);
+        const hasEnd   = hasText(br.end);
+        if (hasStart !== hasEnd) {
+          throw new Error(`Break start/end must both be set (or both blank) on ${label}`);
+        }
+        if (!hasStart && !hasEnd) continue;
+        windowBreaks.push({ start: String(br.start).trim(), end: String(br.end).trim() });
+      }
+    } else if (hasBreakWindowScalar) {
+      if (!(hasText(d.break_start) && hasText(d.break_end))) {
+        throw new Error(`Break start/end must both be set (or both blank) on ${label}`);
+      }
+      windowBreaks.push({ start: String(d.break_start).trim(), end: String(d.break_end).trim() });
+    }
+
+    if (hasBreakMins && windowBreaks.length) {
+      throw new Error(`Use either break_minutes OR break start/end windows (not both) on ${label}`);
+    }
+
+    const beforeWork = { ...acc };
+    const workedBuckets = actualBucketsFromSegments([shift], policy);
+    for (const k of Object.keys(acc)) {
+      acc[k] += (workedBuckets[k] || 0);
+    }
+
+    const workedDelta = {};
+    for (const k of Object.keys(acc)) {
+      const delta = (acc[k] || 0) - (beforeWork[k] || 0);
+      if (delta !== 0) workedDelta[k] = delta;
+    }
 
     logBuckets('day-entry', {
-      date: ymd,
-      start: d.start,
-      end: d.end,
-      parsed_start_min: s,
-      parsed_end_min: e,
-      overnight,
-      breaks: d.breaks || null,
-      break_minutes: d.break_minutes || null
+      date,
+      start: d.start || null,
+      end: d.end || null,
+      start_utc: shift.startIso,
+      end_utc: shift.endIso,
+      breaks: rawBreaksArr.length ? rawBreaksArr : null,
+      break_minutes: hasBreakMins ? Math.floor(rawBm) : null
     });
 
-    const chunk1 = { date: ymd, from: s, to: overnight ? 1440 : e };
-    const chunks = [chunk1];
-    if (overnight) {
-      const next = addDays(ymd, 1);
-      chunks.push({ date: next, from: 0, to: e });
-    }
+    logBuckets('work-chunk', {
+      chunk_date: date,
+      added_minutes: workedDelta,
+      acc_after: acc
+    });
 
-    for (const c of chunks) {
-      const before = { ...acc };
-      segmentChunkIntoBuckets(c.date, c.from, c.to, policy, acc);
-
-      const diff = {};
-      for (const k of Object.keys(acc)) {
-        const delta = (acc[k] || 0) - (before[k] || 0);
-        if (delta !== 0) diff[k] = delta;
+    if (windowBreaks.length) {
+      const breakSegs = [];
+      for (const br of windowBreaks) {
+        const brSeg = resolveLocalInterval(date, br.start, br.end, `${label} (break window)`);
+        if (brSeg.startMs < shift.startMs || brSeg.endMs > shift.endMs) {
+          throw new Error(`Break window must sit within shift range on ${label}`);
+        }
+        breakSegs.push(brSeg);
       }
 
-      logBuckets('work-chunk', {
-        chunk_date: c.date,
-        from_min: c.from,
-        to_min: c.to,
-        added_minutes: diff,
-        acc_after: acc
+      breakSegs.sort((a, b) => a.startMs - b.startMs);
+      for (let i = 1; i < breakSegs.length; i++) {
+        if (breakSegs[i].startMs < breakSegs[i - 1].endMs) {
+          throw new Error(`Overlapping break windows detected on ${label}`);
+        }
+      }
+
+      const tmp = actualBucketsFromSegments(breakSegs, policy);
+      logBuckets('break-window', {
+        date,
+        break_minutes_per_bucket: tmp
       });
-    }
 
-    // ── Breaks by explicit windows ──
-    if (Array.isArray(d.breaks) && d.breaks.length) {
-      for (const br of d.breaks) {
-        const bs = parseHHMM(br.start);
-        const be = parseHHMM(br.end);
-        if (bs == null || be == null) {
-          logBuckets('break-skip-invalid', { date: ymd, break: br });
-          continue;
-        }
-
-        const bOver = (be <= bs);
-        const bChunk1 = { date: ymd, from: bs, to: bOver ? 1440 : be };
-        const bChunks = [bChunk1];
-        if (bOver) bChunks.push({ date: addDays(ymd, 1), from: 0, to: be });
-
-        const tmp = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
-        for (const c of bChunks) {
-          segmentChunkIntoBuckets(c.date, c.from, c.to, policy, tmp);
-        }
-
-        logBuckets('break-window', {
-          date: ymd,
-          break_start: br.start,
-          break_end: br.end,
-          parsed_start_min: bs,
-          parsed_end_min: be,
-          overnight: bOver,
-          break_minutes_per_bucket: tmp
-        });
-
-        const beforeAcc = { ...acc };
-        for (const k of Object.keys(acc)) {
-          acc[k] = Math.max(0, acc[k] - (tmp[k] || 0));
-        }
-
-        const diffAfter = {};
-        for (const k of Object.keys(acc)) {
-          const delta = (acc[k] || 0) - (beforeAcc[k] || 0);
-          if (delta !== 0) diffAfter[k] = delta;
-        }
-
-        logBuckets('break-applied', { date: ymd, delta_minutes: diffAfter, acc_after: acc });
+      const beforeAcc = { ...acc };
+      for (const k of Object.keys(acc)) {
+        acc[k] = Math.max(0, acc[k] - (tmp[k] || 0));
       }
-    }
-    // ── Floating break minutes (no explicit windows) ──
-    else if (Number(d.break_minutes) > 0) {
-      const mins = Number(d.break_minutes) || 0;
+
+      const diffAfter = {};
+      for (const k of Object.keys(acc)) {
+        const delta = (acc[k] || 0) - (beforeAcc[k] || 0);
+        if (delta !== 0) diffAfter[k] = delta;
+      }
+
+      logBuckets('break-applied', { date, delta_minutes: diffAfter, acc_after: acc });
+    } else if (hasBreakMins) {
+      const actualShiftMinutes = Math.round((shift.endMs - shift.startMs) / 60000);
+      if (rawBm >= actualShiftMinutes) {
+        throw new Error(`break_minutes must be less than shift duration on ${label}`);
+      }
+
+      const mins = Math.floor(rawBm);
       const beforeAcc = { ...acc };
       applyDurationBreak(acc, mins);
 
@@ -2731,16 +2920,26 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
         if (delta !== 0) diffAfter[k] = delta;
       }
 
-      logBuckets('floating-break-applied', { date: ymd, break_minutes: mins, delta_minutes: diffAfter, acc_after: acc });
+      logBuckets('floating-break-applied', { date, break_minutes: mins, delta_minutes: diffAfter, acc_after: acc });
     }
 
-    logBuckets('day-summary', { date: ymd, acc_after_day: { ...acc } });
+    logBuckets('day-summary', { date, acc_after_day: { ...acc } });
+  }
+
+  for (const [date, segments] of byDate.entries()) {
+    if (!Array.isArray(segments) || segments.length < 2) continue;
+
+    segments.sort((a, b) => a.startMs - b.startMs);
+    for (let i = 1; i < segments.length; i++) {
+      if (segments[i].startMs < segments[i - 1].endMs) {
+        throw new Error(`Overlapping shifts detected on ${date}`);
+      }
+    }
   }
 
   logBuckets('final-accumulator', acc);
   return acc;
 }
-
 
 
 
@@ -20441,12 +20640,23 @@ async function handleAuditEventsList(env, req) {
 //     contract_weeks.updated_at
 // - Returns the updated contract_week row (representation)
 // ============================================================================
-async function handleContractWeekManualDraftUpsert(env, req, weekId) {
-  const enc = encodeURIComponent;
+async function handleContractWeekManualUpsert(env, req, weekId) {
+  const WLOG = true;
+  const wlog = (step, extra = {}) => {
+    if (!WLOG) return;
+    try {
+      console.log(JSON.stringify({
+        tag: 'CW_MANUAL_UPSERT',
+        step,
+        at_utc: new Date().toISOString(),
+        week_id: String(weekId || ''),
+        ...(extra && typeof extra === 'object' ? extra : {})
+      }));
+    } catch {}
+  };
 
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!weekId) return withCORS(env, req, badRequest('weekId is required'));
 
   let body;
   try {
@@ -20455,72 +20665,173 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
 
-  // Load contract_week (must be a planned/manual draft)
+  wlog('start', {
+    actor_user_id: user?.id || null,
+    body_keys: (body && typeof body === 'object') ? Object.keys(body) : [],
+    expected_timesheet_id: body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '',
+    qr_action: String(body?.qr_action || body?.qrAction || '').trim().toUpperCase() || null
+  });
+
+  // ✅ Guarded write (only enforced when a current timesheet already exists for this week)
+  const expectedTimesheetId = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
+
+  // Additional units keys (weekly/per-day) are still supported
+  const hasUnitsWeekKey   = !!(body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week'));
+  const hasUnitsPerDayKey = !!(body && Object.prototype.hasOwnProperty.call(body, 'additional_units_per_day'));
+
+  // QR revoke/reissue hints (legacy)
+  const rawRevokeQr  = !!body?.revoke_qr;
+  const rawReissueQr = !!body?.reissue_qr;
+
+  // preferred enum
+  const qrActionEnumRaw = String(body?.qr_action || body?.qrAction || '').trim().toUpperCase();
+  const enumOk = (x) => (
+    x === 'INVALIDATE' ||
+    x === 'REISSUE' ||
+    x === 'REVOKE_TO_MANUAL' ||
+    x === 'ISSUE' ||
+    x === 'SAVE_WITHOUT_ISSUE'
+  );
+
   const cw = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}` +
-      `&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json`
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=*`
   );
   if (!cw) return withCORS(env, req, notFound('Week not found'));
 
-  if (cw.timesheet_id) {
-    return withCORS(env, req, badRequest('This week already has a timesheet; draft save is not allowed.'));
-  }
-
-  const mode = String(cw.submission_mode_snapshot || '').toUpperCase();
-  if (mode !== 'MANUAL') {
-    return withCORS(env, req, badRequest('Draft save is only allowed for MANUAL weeks.'));
-  }
-
-  // Load contract (needed for bucket resolution via client time policy + BH list)
   const contract = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,client_id`
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=*`
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
-  // ─────────────────────────────────────────────────────────────
-  // ✅ Draft schedule is PLANNED (weekly manual draft)
-  // Require planned_schedule_json (array) – can be EMPTY to clear the plan.
-  // Accept actual_schedule_json / schedule_json as aliases (backwards compatibility).
-  // ─────────────────────────────────────────────────────────────
-  let planned_schedule_json = null;
+  wlog('loaded_week_and_contract', {
+    contract_week_timesheet_id: cw?.timesheet_id || null,
+    contract_id: contract?.id || null,
+    contract_candidate_id: contract?.candidate_id || null,
+    contract_client_id: contract?.client_id || null,
+    contract_week_status: cw?.status || null,
+    week_ending_date: cw?.week_ending_date || null
+  });
 
-  if (Array.isArray(body?.planned_schedule_json)) {
-    planned_schedule_json = body.planned_schedule_json;
-  } else if (typeof body?.planned_schedule_json === 'string') {
-    try {
-      const parsed = JSON.parse(body.planned_schedule_json);
-      if (Array.isArray(parsed)) planned_schedule_json = parsed;
-    } catch {}
-  } else if (Array.isArray(body?.actual_schedule_json)) {
-    planned_schedule_json = body.actual_schedule_json; // alias
+  // ✅ Compute a timestamp ONCE (and do not shadow the nowIso() helper)
+  const nowIso2 = nowIso();
+
+  // ✅ Resolve cw.timesheet_id to the current timesheet id (if one exists)
+  let currentTimesheetIdForWeek = cw.timesheet_id || null;
+  let wasStaleWeekTs = false;
+
+  if (currentTimesheetIdForWeek) {
+    const resTs = await resolveTimesheetToCurrent(env, currentTimesheetIdForWeek);
+    if (!resTs) return withCORS(env, req, notFound('Timesheet not found'));
+
+    wlog('resolved_existing_week_timesheet', {
+      requested_timesheet_id: currentTimesheetIdForWeek,
+      resolved: resTs
+    });
+
+    if (String(resTs.current_timesheet_id) !== String(currentTimesheetIdForWeek)) {
+      wasStaleWeekTs = true;
+      currentTimesheetIdForWeek = resTs.current_timesheet_id;
+
+      wlog('week_pointer_stale', {
+        old_timesheet_id: cw?.timesheet_id || null,
+        new_current_timesheet_id: currentTimesheetIdForWeek
+      });
+
+      // keep contract_week pointer aligned (best-effort)
+      try {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({ timesheet_id: currentTimesheetIdForWeek, updated_at: nowIso2 })
+          }
+        ).catch(() => {});
+      } catch {}
+    }
+
+    // Guard requires expected_timesheet_id when a timesheet exists
+    if (!expectedTimesheetId) {
+      wlog('guard_fail_missing_expected_timesheet_id', {
+        current_timesheet_id_for_week: currentTimesheetIdForWeek
+      });
+      return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+    }
+
+    if (String(expectedTimesheetId) !== String(currentTimesheetIdForWeek)) {
+      wlog('guard_fail_timesheet_moved', {
+        expected_timesheet_id: expectedTimesheetId,
+        current_timesheet_id_for_week: currentTimesheetIdForWeek
+      });
+      return withCORS(
+        env,
+        req,
+        new Response(
+          JSON.stringify({ error: 'TIMESHEET_MOVED', current_timesheet_id: currentTimesheetIdForWeek }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    }
+  }
+
+  // Load candidate/client once for use in TS creation + QR reissue
+  const candidate = contract.candidate_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=eq.${enc(contract.candidate_id)}&select=id,display_name,email`
+      )
+    : null;
+
+  const client = contract.client_id
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+          `?id=eq.${enc(contract.client_id)}&select=id,name`
+      )
+    : null;
+
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
+
+  // rotation degrees normalisation
+  const normaliseRotation = (raw) => {
+    if (raw == null) return 0;
+    let n = Number(raw);
+    if (!Number.isFinite(n)) return 0;
+    n = ((n % 360) + 360) % 360;
+    if (n >= 315 || n < 45) return 0;
+    if (n >= 45 && n < 135) return 90;
+    if (n >= 135 && n < 225) return 180;
+    return 270;
+  };
+  const manualPdfRotationDeg = normaliseRotation(
+    body?.manual_pdf_rotation_degrees ?? body?.rotation_degrees
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ SCHEDULE-DRIVEN ONLY (weekly manual)
+  // Require actual_schedule_json (array; may be empty for "clear schedule")
+  // ─────────────────────────────────────────────────────────────
+  let actual_schedule_json = null;
+
+  if (Array.isArray(body?.actual_schedule_json)) {
+    actual_schedule_json = body.actual_schedule_json;
   } else if (typeof body?.actual_schedule_json === 'string') {
     try {
       const parsed = JSON.parse(body.actual_schedule_json);
-      if (Array.isArray(parsed)) planned_schedule_json = parsed;
-    } catch {}
-  } else if (Array.isArray(body?.schedule_json)) {
-    planned_schedule_json = body.schedule_json; // alias
-  } else if (typeof body?.schedule_json === 'string') {
-    try {
-      const parsed = JSON.parse(body.schedule_json);
-      if (Array.isArray(parsed)) planned_schedule_json = parsed;
+      if (Array.isArray(parsed)) actual_schedule_json = parsed;
     } catch {}
   }
 
-  if (!Array.isArray(planned_schedule_json)) {
-    return withCORS(env, req, badRequest('planned_schedule_json is required (weekly manual draft)'));
+  if (!Array.isArray(actual_schedule_json)) {
+    wlog('bad_request_missing_schedule');
+    return withCORS(env, req, badRequest('actual_schedule_json is required (schedule-driven weekly manual only)'));
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Normalise schedule (stable storage)
-  // Policy:
-  // - If break windows exist (breaks[] or break_start/break_end), we store ONLY breaks[]
-  //   and we REMOVE break_mins/break_minutes (prevents “mixing”).
-  // - If no break windows, we may store break_minutes (integer) if provided (>0).
-  // - Never let string mins leak into storage.
-  // ─────────────────────────────────────────────────────────────
+  // Normalise: ensure breaks[] exists, and break_mins reflects sum of breaks windows
   const parseHHMM = (s) => {
     const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);
     if (!m) return null;
@@ -20539,17 +20850,6 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     return d;
   };
 
-  const toIntMins = (v) => {
-    if (v == null) return 0;
-    if (typeof v === 'number') return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
-    const s = String(v).trim();
-    if (!s) return 0;
-    const m = s.match(/^(\d{1,4})(?:\s*m)?$/i);
-    if (!m) return 0;
-    const n = Number(m[1]);
-    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-  };
-
   const normaliseSchedule = (arr) => {
     const out = [];
     for (const raw of (arr || [])) {
@@ -20559,7 +20859,7 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
       // normalise ref key
       if (seg.ref_num == null && seg.reference != null) seg.ref_num = seg.reference;
 
-      // build breaks[] (from seg.breaks plus legacy break_start/break_end)
+      // build breaks[]
       let breaks = [];
       if (Array.isArray(seg.breaks)) {
         breaks = seg.breaks
@@ -20570,279 +20870,1238 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
           .filter(b => b.start || b.end);
       }
 
+      // legacy primary break fields -> include as first break if present and not already
       const bs0 = String(seg.break_start || '').trim();
       const be0 = String(seg.break_end   || '').trim();
       if ((bs0 || be0) && !breaks.some(b => (b.start === bs0 && b.end === be0))) {
         breaks.unshift({ start: bs0, end: be0 });
       }
 
-      // Determine whether we have *any* break window
-      const hasWindow = breaks.some(b => String(b.start || '').trim() || String(b.end || '').trim());
+      // compute break minutes from breaks if possible
+      let br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+      if ((!Number.isFinite(br) || br <= 0) && breaks.length) {
+        let sum = 0;
+        for (const b of breaks) {
+          const d = diffMins(b.start, b.end);
+          if (Number.isFinite(d) && d > 0) sum += d;
+        }
+        br = sum;
+      }
+      if (!Number.isFinite(br) || br < 0) br = 0;
 
-      // If no window breaks, allow mins-only breaks
-      const brMins = toIntMins(seg.break_mins ?? seg.break_minutes);
+      seg.breaks = breaks;
 
-      // Keep legacy convenience fields aligned to first break (if present)
-      const p = hasWindow ? (breaks[0] || null) : null;
-      seg.break_start = p ? p.start : '';
-      seg.break_end   = p ? p.end   : '';
-
-      if (hasWindow) {
-        // ✅ Window breaks: store ONLY breaks[]
-        seg.breaks = breaks;
-
-        // Remove mins to prevent mixing (and avoid validator rejection)
+      // ✅ Canonical: never store both
+      if (breaks.length) {
+        // windows mode
         delete seg.break_mins;
         delete seg.break_minutes;
+        delete seg.break_minutes; // (keep once if duplicated)
       } else {
-        // ✅ No window: store mins if present (>0), else clear both
-        seg.breaks = []; // normalised empty
+        // minutes mode (only if >0)
+        const bm = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+        const n = (Number.isFinite(bm) && bm > 0) ? Math.floor(bm) : 0;
 
-        if (brMins > 0) {
-          seg.break_minutes = brMins;
-          // don’t store break_mins separately (avoid redundant fields)
-          delete seg.break_mins;
-        } else {
-          delete seg.break_mins;
-          delete seg.break_minutes;
-        }
+        if (n > 0) seg.break_minutes = n;
+        else delete seg.break_minutes;
+
+        delete seg.break_mins;
+        delete seg.break_start;
+        delete seg.break_end;
+        delete seg.breaks;
       }
 
-      // Remove any stray legacy keys that can confuse downstream code
-      // (they’re represented by seg.breaks or seg.break_minutes now)
-      delete seg.break_start;
-      delete seg.break_end;
-
-      // Re-add aligned legacy fields ONLY if you still want them present in storage.
-      // If you do, uncomment below:
-      // if (hasWindow && p) { seg.break_start = p.start; seg.break_end = p.end; }
+      // keep legacy convenience fields aligned to first break
+      const p = breaks[0] || null;
+      seg.break_start = p ? p.start : (seg.break_start || '');
+      seg.break_end   = p ? p.end   : (seg.break_end   || '');
 
       out.push(seg);
     }
     return out;
   };
 
-  planned_schedule_json = normaliseSchedule(planned_schedule_json);
+  actual_schedule_json = normaliseSchedule(actual_schedule_json);
 
-  // Validate schedule only if there is at least one shift segment
-  if (planned_schedule_json.length) {
-    try {
-      validateScheduleStructure(planned_schedule_json);
-    } catch (e) {
-      return withCORS(env, req, badRequest(e?.message || 'Invalid schedule (overlap/break windows).'));
-    }
+  wlog('schedule_normalised', {
+    schedule_segments: actual_schedule_json.length
+  });
+
+  // If we are creating a NEW timesheet (no ts exists), require at least 1 shift segment.
+  // Draft/planned saves belong in the draft endpoint.
+  if (!currentTimesheetIdForWeek && actual_schedule_json.length === 0) {
+    wlog('bad_request_empty_schedule_for_create');
+    return withCORS(env, req, badRequest('Cannot create a timesheet with an empty schedule. Save as draft or add at least one shift.'));
   }
 
-  // Compute minutes by bucket -> hours (canonical)
+  // Resolve bucket minutes from schedule (single source of truth + authoritative schedule validation)
   let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   try {
-    if (planned_schedule_json.length) {
-      const mins = await resolveBucketsFromSchedule(env, contract, planned_schedule_json);
+    if (actual_schedule_json.length) {
+      const minsByBucket = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
       hours = {
-        day:   +(Number(mins?.day   || 0) / 60).toFixed(2),
-        night: +(Number(mins?.night || 0) / 60).toFixed(2),
-        sat:   +(Number(mins?.sat   || 0) / 60).toFixed(2),
-        sun:   +(Number(mins?.sun   || 0) / 60).toFixed(2),
-        bh:    +(Number(mins?.bh    || 0) / 60).toFixed(2)
+        day:   +(minsByBucket.day   / 60).toFixed(2),
+        night: +(minsByBucket.night / 60).toFixed(2),
+        sat:   +(minsByBucket.sat   / 60).toFixed(2),
+        sun:   +(minsByBucket.sun   / 60).toFixed(2),
+        bh:    +(minsByBucket.bh    / 60).toFixed(2)
       };
     }
   } catch (e) {
-    return withCORS(env, req, badRequest(e?.message || 'Failed to bucket schedule'));
+    wlog('bad_request_bucket_resolution_failed', {
+      err: e?.message || String(e)
+    });
+    return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Additional units (optional)
-  // Persist inside totals_json.additional_units_week + totals_json.additional_units_per_day
-  // (no dedicated columns).
-  // ─────────────────────────────────────────────────────────────
+  wlog('hours_resolved', { hours });
+
+  // Base rates must exist for any positive bucket
+  const { pay, charge, method } = payChargeFromContract(contract);
+  const anyMissing = (h, P, C) =>
+    (h.day   > 0 && (!P.day   && P.day   !== 0 || !C.day   && C.day   !== 0)) ||
+    (h.night > 0 && (!P.night && P.night !== 0 || !C.night && C.night !== 0)) ||
+    (h.sat   > 0 && (!P.sat   && P.sat   !== 0 || !C.sat   && C.sat   !== 0)) ||
+    (h.sun   > 0 && (!P.sun   && P.sun   !== 0 || !C.sun   && C.sun   !== 0)) ||
+    (h.bh    > 0 && (!P.bh    && P.bh    !== 0 || !C.bh    && C.bh    !== 0));
+
+  if (anyMissing(hours, pay, charge)) {
+    wlog('bad_request_missing_base_rates', {
+      method,
+      hours,
+      pay,
+      charge
+    });
+    return withCORS(env, req, badRequest('Missing rate(s) in contract for one or more entered hour buckets'));
+  }
+
+  // Additional unit buckets – weekly totals (still supported)
   const normaliseUnitsWeek = (obj) => {
-    if (!obj || typeof obj !== 'object') return {};
     const out = {};
-    for (const [kRaw, vRaw] of Object.entries(obj)) {
+    const src = (obj && typeof obj === 'object') ? obj : {};
+    for (const [kRaw, vRaw] of Object.entries(src)) {
       const code = String(kRaw || '').toUpperCase().trim();
       if (!code) continue;
-      const n = Number(vRaw || 0);
-      if (!Number.isFinite(n) || !n) continue; // strip zeros + invalid
+
+      const n = Number(vRaw);
+      // ✅ Only allow positive numbers (reject negatives + NaN + 0)
+      if (!Number.isFinite(n) || n <= 0) continue;
+
       out[code] = n;
     }
     return out;
   };
 
-  // Build a Set of valid YYYY-MM-DD dates for this contract_week (for per-day validation)
-  const weekDateSet = (() => {
-    const we = String(cw.week_ending_date || '').slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(we)) return null;
+  const normaliseUnitsPerDay = (obj) => {
+    const out = {};
+    const src = (obj && typeof obj === 'object') ? obj : {};
+    for (const [kRaw, per] of Object.entries(src)) {
+      const code = String(kRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      if (!per || typeof per !== 'object') continue;
 
-    const addDaysYmd = (ymd, days) => {
+      const days = {};
+      for (const [dRaw, vRaw] of Object.entries(per)) {
+        const ymd = String(dRaw || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
+
+        const n = Number(vRaw);
+        // ✅ Only allow positive numbers (reject negatives + NaN + 0)
+        if (!Number.isFinite(n) || n <= 0) continue;
+
+        days[ymd] = n;
+      }
+
+      if (Object.keys(days).length) out[code] = days;
+    }
+    return out;
+  };
+
+  const parseMaybeJsonObj = (v) => {
+    if (v == null) return null;
+    if (typeof v === 'object') return v;
+    if (typeof v === 'string') {
       try {
-        const base = new Date(`${String(ymd)}T00:00:00Z`);
-        if (Number.isNaN(base.getTime())) return null;
-        base.setUTCDate(base.getUTCDate() + Number(days || 0));
-        const yyyy = base.getUTCFullYear();
-        const mm = String(base.getUTCMonth() + 1).padStart(2, '0');
-        const dd = String(base.getUTCDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
+        const p = JSON.parse(v);
+        return (p && typeof p === 'object') ? p : null;
       } catch {
         return null;
       }
+    }
+    return null;
+  };
+
+  // ✅ Accept object or JSON string; allow null to mean "clear"
+  let unitsWeek = null;
+  if (hasUnitsWeekKey) {
+    if (body.additional_units_week === null) unitsWeek = {};
+    else {
+      const src = parseMaybeJsonObj(body.additional_units_week);
+      unitsWeek = src ? normaliseUnitsWeek(src) : {};
+    }
+  }
+
+  let unitsPerDay = null;
+  if (hasUnitsPerDayKey) {
+    if (body.additional_units_per_day === null) unitsPerDay = {};
+    else {
+      const src = parseMaybeJsonObj(body.additional_units_per_day);
+      unitsPerDay = src ? normaliseUnitsPerDay(src) : {};
+    }
+  }
+
+  // If missing, reuse from the current timesheet (if any)
+  if ((!hasUnitsWeekKey || !hasUnitsPerDayKey) && currentTimesheetIdForWeek) {
+    const tsExistingUnits = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=eq.${enc(currentTimesheetIdForWeek)}` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,additional_units_week,additional_units_per_day`
+    );
+
+    if (!hasUnitsWeekKey) {
+      const u = tsExistingUnits?.additional_units_week;
+      unitsWeek = (u && typeof u === 'object') ? normaliseUnitsWeek(u) : {};
+    }
+    if (!hasUnitsPerDayKey) {
+      const u = tsExistingUnits?.additional_units_per_day;
+      unitsPerDay = (u && typeof u === 'object') ? normaliseUnitsPerDay(u) : {};
+    }
+  }
+
+  if (unitsWeek == null) unitsWeek = {};
+  if (unitsPerDay == null) unitsPerDay = {};
+
+  wlog('units_normalised', {
+    units_week_codes: Object.keys(unitsWeek || {}),
+    units_per_day_codes: Object.keys(unitsPerDay || {})
+  });
+
+  const addlConfig = Array.isArray(contract.additional_rates_json) ? contract.additional_rates_json : [];
+
+  // Derive week dates (for per-day units)
+  const weekDates = [];
+  try {
+    const base = new Date(String(cw.week_ending_date) + 'T00:00:00Z');
+    for (let offset = 6; offset >= 0; offset--) {
+      const d = new Date(base);
+      d.setUTCDate(base.getUTCDate() - offset);
+      const yyyy = d.getUTCFullYear();
+      const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd   = String(d.getUTCDate()).toString().padStart(2, '0');
+      const ymd  = `${yyyy}-${mm}-${dd}`;
+      const dow  = d.getUTCDay();
+      weekDates.push({ ymd, dow });
+    }
+  } catch {}
+
+  let bhSet = new Set();
+  try {
+    const pol = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+    const bhList = Array.isArray(pol?.bh_list) ? pol.bh_list : [];
+    bhSet = new Set(bhList.map(String));
+  } catch {
+    bhSet = new Set();
+  }
+
+  const isBH = (ymd) => bhSet.has(ymd);
+
+  const normaliseFreq = (raw) => {
+    const s = String(raw || '').toUpperCase();
+    if (s === 'ONE_PER_WEEK')          return 'ONE_PER_WEEK';
+    if (s === 'ONE_PER_DAY')           return 'ONE_PER_DAY';
+    if (s === 'WEEKENDS_AND_BH_ONLY')  return 'WEEKENDS_AND_BH_ONLY';
+    if (s === 'WEEKDAYS_EXCL_BH_ONLY') return 'WEEKDAYS_EXCL_BH_ONLY';
+    return 'ONE_PER_WEEK';
+  };
+
+  const shouldIncludeDay = (freq, meta) => {
+    const { ymd, dow } = meta;
+    const bh = isBH(ymd);
+    if (freq === 'ONE_PER_DAY')           return true;
+    if (freq === 'WEEKENDS_AND_BH_ONLY')  return bh || dow === 0 || dow === 6;
+    if (freq === 'WEEKDAYS_EXCL_BH_ONLY') return !bh && dow >= 1 && dow <= 5;
+    return false;
+  };
+
+  // ✅ If per-day units were provided, restrict them to the 7 days of this week
+  //    and derive coherent weekly totals when weekly wasn't provided.
+  try {
+    const weekDateSet = new Set((weekDates || []).map(x => String(x.ymd || '').slice(0, 10)));
+
+    if (unitsPerDay && typeof unitsPerDay === 'object') {
+      const cleaned = {};
+      for (const [codeRaw, per] of Object.entries(unitsPerDay)) {
+        const code = String(codeRaw || '').toUpperCase().trim();
+        if (!code) continue;
+        if (!per || typeof per !== 'object') continue;
+
+        const days = {};
+        for (const [dRaw, vRaw] of Object.entries(per)) {
+          const ymd = String(dRaw || '').slice(0, 10);
+          if (!weekDateSet.has(ymd)) continue;
+
+          const n = Number(vRaw);
+          if (!Number.isFinite(n) || n <= 0) continue;
+
+          days[ymd] = n;
+        }
+
+        if (Object.keys(days).length) cleaned[code] = days;
+      }
+
+      unitsPerDay = cleaned;
+    }
+
+    // ✅ Do NOT derive weekly totals from per-day here.
+    // Backend stores exactly what it receives; frontend is responsible for coherence.
+  } catch {}
+
+  let additional_units_json = {};
+  let additional_pay_ex_vat = 0;
+  let additional_charge_ex_vat = 0;
+  const badBuckets = [];
+
+  for (const cfgRaw of addlConfig) {
+    if (!cfgRaw || typeof cfgRaw !== 'object') continue;
+    const code = String(cfgRaw.code || '').toUpperCase() || 'EX1';
+    const freq = normaliseFreq(cfgRaw.frequency);
+    let unitCount = 0;
+    const daysUsed = {};
+
+    if (freq === 'ONE_PER_WEEK') {
+      const u = Number(unitsWeek[code] || 0);
+      if (u && Number.isFinite(u)) unitCount = u;
+    } else {
+      const perRaw = (unitsPerDay[code] && typeof unitsPerDay[code] === 'object') ? unitsPerDay[code] : {};
+      for (const meta of weekDates) {
+        const raw = perRaw[meta.ymd];
+        if (raw == null || raw === '') continue;
+        const v = Number(raw);
+        if (!Number.isFinite(v) || !v) continue;
+        if (!shouldIncludeDay(freq, meta)) continue;
+        unitCount += v;
+        daysUsed[meta.ymd] = v;
+      }
+    }
+
+    if (!unitCount || !Number.isFinite(unitCount)) continue;
+
+    const payRate    = (cfgRaw.pay_rate    != null) ? Number(cfgRaw.pay_rate)    : NaN;
+    const chargeRate = (cfgRaw.charge_rate != null) ? Number(cfgRaw.charge_rate) : NaN;
+    if (!Number.isFinite(payRate) || !Number.isFinite(chargeRate)) {
+      badBuckets.push(cfgRaw.bucket_name || code);
+      continue;
+    }
+
+    const payEx = +Number(unitCount * payRate).toFixed(2);
+    const chgEx = +Number(unitCount * chargeRate).toFixed(2);
+
+    additional_units_json[code] = {
+      bucket_name: cfgRaw.bucket_name || null,
+      unit_name:   cfgRaw.unit_name   || null,
+      frequency:   freq,
+      unit_count:  unitCount,
+      pay_rate:    payRate,
+      charge_rate: chargeRate,
+      pay_ex_vat:  payEx,
+      charge_ex_vat: chgEx,
+      days: Object.keys(daysUsed).length ? daysUsed : undefined
     };
 
-    const s = new Set();
-    for (let i = 6; i >= 0; i--) {
-      const d = addDaysYmd(we, -i);
-      if (d) s.add(d);
+    additional_pay_ex_vat += payEx;
+    additional_charge_ex_vat += chgEx;
+  }
+
+  if (badBuckets.length) {
+    wlog('bad_request_missing_additional_rates', {
+      bad_buckets: badBuckets
+    });
+    return withCORS(env, req, badRequest(`Missing additional rate(s) in contract for bucket(s): ${badBuckets.join(', ')}`));
+  }
+
+  additional_pay_ex_vat = +Number(additional_pay_ex_vat).toFixed(2);
+  additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
+  const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
+  // Load current timesheet row (if exists)
+  let ts = currentTimesheetIdForWeek
+    ? await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(currentTimesheetIdForWeek)}` +
+          `&is_current=eq.true` +
+          `&select=*`
+      )
+    : null;
+
+  wlog('loaded_current_timesheet_row', {
+    current_timesheet_id_for_week: currentTimesheetIdForWeek,
+    found_timesheet: !!ts,
+    found_timesheet_id: ts?.timesheet_id || null,
+    found_booking_id: ts?.booking_id || null,
+    found_version: ts?.version ?? null,
+    found_is_current: ts?.is_current ?? null
+  });
+
+  // ✅ Hard rule: reject any attempt to alter schedule/hours while authorised
+  if (ts && ts.authorised_at_server) {
+    wlog('conflict_authorised_edit_blocked', {
+      timesheet_id: ts.timesheet_id
+    });
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before changing hours.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
+
+  const hasAnySegmentInvoiceLock = (tf) => {
+    try {
+      const ib = tf?.invoice_breakdown_json;
+      if (!ib || typeof ib !== 'object') return false;
+      const mode = String(ib?.mode || '').toUpperCase();
+      if (mode !== 'SEGMENTS') return false;
+      const segs = Array.isArray(ib?.segments) ? ib.segments : [];
+      return segs.some(s => {
+        const v = s?.invoice_locked_invoice_id;
+        return v != null && String(v).trim() !== '';
+      });
+    } catch {
+      return false;
     }
-    return s;
-  })();
-
-  const normaliseUnitsPerDay = (obj) => {
-    if (!obj || typeof obj !== 'object') return {};
-    const out = {};
-
-    for (const [kRaw, dayMap] of Object.entries(obj)) {
-      const code = String(kRaw || '').toUpperCase().trim();
-      if (!code) continue;
-
-      if (!dayMap || typeof dayMap !== 'object') continue;
-
-      const outDays = {};
-      for (const [dRaw, vRaw] of Object.entries(dayMap)) {
-        const ymd = String(dRaw || '').slice(0, 10);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
-          throw new Error(`Invalid date '${ymd}' in additional_units_per_day.${code}`);
-        }
-        if (weekDateSet && !weekDateSet.has(ymd)) {
-          throw new Error(`Date '${ymd}' outside week in additional_units_per_day.${code}`);
-        }
-
-        const n = Number(vRaw == null ? 0 : vRaw);
-        if (!Number.isFinite(n) || n < 0) {
-          throw new Error(`Invalid units '${vRaw}' in additional_units_per_day.${code}.${ymd}`);
-        }
-        if (!n) continue; // strip zeros
-
-        outDays[ymd] = n;
-      }
-
-      if (Object.keys(outDays).length) out[code] = outDays;
-    }
-
-    return out;
   };
 
-  const deriveWeekFromPerDay = (perDayObj) => {
-    const out = {};
-    if (!perDayObj || typeof perDayObj !== 'object') return out;
-
-    for (const [codeRaw, dayMap] of Object.entries(perDayObj)) {
-      const code = String(codeRaw || '').toUpperCase().trim();
-      if (!code) continue;
-      if (!dayMap || typeof dayMap !== 'object') continue;
-
-      let sum = 0;
-      for (const v of Object.values(dayMap)) {
-        const n = Number(v);
-        if (Number.isFinite(n) && n > 0) sum += n;
-      }
-      if (sum > 0) out[code] = sum;
-    }
-
-    return out;
-  };
-
-  let additionalUnitsWeek = undefined;   // undefined = "no change"
-  let additionalUnitsPerDay = undefined; // undefined = "no change"
-
-  // weekly
-  if (body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week')) {
-    if (body.additional_units_week && typeof body.additional_units_week === 'object') {
-      additionalUnitsWeek = normaliseUnitsWeek(body.additional_units_week);
-    } else if (body.additional_units_week === null) {
-      additionalUnitsWeek = {}; // explicit clear
-    } else if (typeof body.additional_units_week === 'string') {
-      try {
-        const parsed = JSON.parse(body.additional_units_week);
-        if (parsed && typeof parsed === 'object') additionalUnitsWeek = normaliseUnitsWeek(parsed);
-      } catch {
-        additionalUnitsWeek = undefined;
-      }
-    } else {
-      additionalUnitsWeek = undefined;
+  // Lock enforcement: block changes if invoiced or paid
+  let finLock = null;
+  if (ts && ts.timesheet_id) {
+    finLock = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=eq.${enc(ts.timesheet_id)}` +
+        `&is_current=eq.true&select=*`
+    );
+    if (finLock && (finLock.locked_by_invoice_id || hasAnySegmentInvoiceLock(finLock) || finLock.paid_at_utc)) {
+      wlog('bad_request_locked_or_paid', {
+        timesheet_id: ts.timesheet_id,
+        locked_by_invoice_id: finLock?.locked_by_invoice_id || null,
+        paid_at_utc: finLock?.paid_at_utc || null
+      });
+      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; changes are blocked'));
     }
   }
 
-  // per-day
-  if (body && Object.prototype.hasOwnProperty.call(body, 'additional_units_per_day')) {
-    if (body.additional_units_per_day && typeof body.additional_units_per_day === 'object') {
-      try {
-        additionalUnitsPerDay = normaliseUnitsPerDay(body.additional_units_per_day);
-      } catch (e) {
-        return withCORS(env, req, badRequest(e?.message || 'Invalid additional_units_per_day'));
+  // ✅ Preserve financial adjustments across recompute (even when schedule changes)
+  // Use the current TSFIN snapshot (if present) as the source of truth.
+  const preservedFin = finLock || null;
+
+  // Helper: rotate the current timesheet version (preserve old QR/signed evidence by revoking old current)
+  const rotateTimesheetVersion = async (currentTs, revokeReason, qrActionForNew) => {
+    if (!currentTs || !currentTs.timesheet_id) return currentTs;
+
+    const bookingId = currentTs.booking_id || null;
+    if (!bookingId) throw new Error('Cannot rotate: booking_id missing on current timesheet');
+
+    // Determine next version by booking_id
+    let nextVersion = Number(currentTs.version || 1) + 1;
+    try {
+      const { rows: vRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?booking_id=eq.${enc(bookingId)}` +
+          `&select=version` +
+          `&order=version.desc` +
+          `&limit=1`
+      );
+      const maxV = vRows?.[0]?.version != null ? Number(vRows[0].version) : Number(currentTs.version || 1);
+      nextVersion = Number.isFinite(maxV) ? maxV + 1 : (Number(currentTs.version || 1) + 1);
+    } catch {}
+
+    const now2 = nowIso();
+
+    wlog('rotate_begin', {
+      booking_id: bookingId,
+      current_timesheet_id: currentTs.timesheet_id,
+      current_version: currentTs.version ?? null,
+      next_version: nextVersion,
+      revoke_reason: revokeReason || null,
+      qr_action_for_new: qrActionForNew || null
+    });
+
+    // Demote any current row for this booking_id
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?booking_id=eq.${enc(bookingId)}` +
+        `&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          is_current: false,
+          status: 'REVOKED',
+          revoked_reason: revokeReason || null,
+          revoked_by: user?.id || null,
+          updated_at: now2
+        })
       }
-    } else if (body.additional_units_per_day === null) {
-      additionalUnitsPerDay = {}; // explicit clear
-    } else if (typeof body.additional_units_per_day === 'string') {
-      try {
-        const parsed = JSON.parse(body.additional_units_per_day);
-        if (parsed && typeof parsed === 'object') {
-          try {
-            additionalUnitsPerDay = normaliseUnitsPerDay(parsed);
-          } catch (e) {
-            return withCORS(env, req, badRequest(e?.message || 'Invalid additional_units_per_day'));
-          }
-        }
-      } catch {
-        additionalUnitsPerDay = undefined;
-      }
-    } else {
-      additionalUnitsPerDay = undefined;
-    }
-  }
+    ).catch(() => {});
 
-  // Build patch
-  const now = nowIso();
+    const newRow = { ...currentTs };
+    delete newRow.id;
+    delete newRow.timesheet_id;
 
-  const existingTotals =
-    (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
+    const act = String(qrActionForNew || '').toUpperCase();
 
-  const totals_json = {
-    ...existingTotals,
-    hours
-  };
+    const newIsQrPending =
+      (act === 'INVALIDATE' || act === 'REISSUE' || act === 'ISSUE');
 
-  // Store exactly what is provided (frontend is source of truth); never derive/overwrite.
-  if (additionalUnitsWeek !== undefined) {
-    totals_json.additional_units_week = additionalUnitsWeek;
-  }
-  if (additionalUnitsPerDay !== undefined) {
-    totals_json.additional_units_per_day = additionalUnitsPerDay;
-  }
+    const newIsManualOnly =
+      (act === 'REVOKE_TO_MANUAL');
 
-  const patch = {
-    totals_json,
-    planned_schedule_json: planned_schedule_json, // ALWAYS set (including empty array) so "clear" persists
-    updated_at: now
-  };
+    Object.assign(newRow, {
+      booking_id: bookingId,
+      version: nextVersion,
+      is_current: true,
+      status: 'RECEIVED',
+      revoked_reason: null,
+      revoked_by: null,
 
-  const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
-    {
-      method: 'PATCH',
+      // ✅ New truth model:
+      // INVALIDATE/REISSUE/ISSUE => QR enabled but not issued (token/gen cleared, qr_status=PENDING)
+      // REVOKE_TO_MANUAL        => manual-only (qr fields cleared so QR UI won't show)
+      qr_token: null,
+      qr_status: newIsQrPending ? 'PENDING' : null,
+      qr_payload_json: {},
+      qr_generated_at: null,
+      qr_scanned_at: null,
+      qr_scan_info_json: null,
+      qr_r2_key: null,
+
+      // ✅ Hash-truth fields (must exist in DB)
+      qr_last_sent_hash: null,
+      qr_last_sent_at_utc: null,
+      qr_signed_hash: null,
+      qr_signed_at_utc: null,
+
+      // ✅ Critical: a rotated "new current" must NOT keep any signed/manual evidence or authorisation.
+      // The old signed copy remains on the revoked version for audit/history.
+      manual_pdf_r2_key: null,
+      authorised_at_server: null,
+
+      updated_at: now2,
+      created_at: now2
+    });
+
+    const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+      method: 'POST',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify(patch)
-    }
-  );
+      body: JSON.stringify([newRow])
+    });
 
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    return withCORS(env, req, serverError(txt || 'Failed to patch contract_week'));
+    if (!ins.ok) {
+      const t = await ins.text().catch(() => '');
+      throw new Error(`Failed to rotate timesheet version: ${t}`);
+    }
+
+    const created = (await ins.json().catch(() => []))[0] || null;
+
+    wlog('rotate_created_new_current', {
+      booking_id: bookingId,
+      new_timesheet_id: created?.timesheet_id || null,
+      new_version: created?.version ?? null,
+      new_is_current: created?.is_current ?? null,
+      new_status: created?.status || null,
+      new_qr_status: created?.qr_status || null,
+      new_is_manual_only: !!newIsManualOnly
+    });
+
+    // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks caller)
+    try {
+      await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
+    } catch (e) {
+      try {
+        console.warn('[ROTATE_TIMESHEET_VERSION] purge failed (non-fatal)', {
+          booking_id: bookingId,
+          err: e?.message || String(e)
+        });
+      } catch {}
+    }
+
+    return created || null;
+  };
+
+  // Determine QR action (enum preferred, legacy booleans fallback)
+  let qrAction = null; // 'INVALIDATE' | 'REISSUE' | 'REVOKE_TO_MANUAL' | 'ISSUE' | null
+  if (enumOk(qrActionEnumRaw)) {
+    qrAction = qrActionEnumRaw;
+  } else {
+    if (rawReissueQr) qrAction = 'REISSUE';
+    else if (rawRevokeQr) qrAction = 'REVOKE_TO_MANUAL';
   }
 
-  const json = await res.json().catch(() => []);
-  const row = Array.isArray(json) ? (json[0] || null) : json;
+  // If QR action on existing QR timesheet, rotate FIRST so:
+  // - the old signed/issued QR evidence stays on the revoked version for audit
+  // - the new current version is clean / truthy for hashes + UI rules
+  const hadQrBefore = !!(ts && (ts.qr_status || ts.qr_token || ts.qr_generated_at || ts.qr_scanned_at));
 
-  return withCORS(env, req, ok(row || { updated: true, week_id: weekId, hours }));
+  if (
+    ts && ts.timesheet_id &&
+    hadQrBefore &&
+    (qrAction === 'INVALIDATE' || qrAction === 'REISSUE' || qrAction === 'REVOKE_TO_MANUAL')
+  ) {
+    const why =
+      (qrAction === 'INVALIDATE' || qrAction === 'REISSUE')
+        ? 'QR_INVALIDATED_AFTER_CONTENT_CHANGE'
+        : 'QR_REVOKED_TO_MANUAL';
+
+    const rotated = await rotateTimesheetVersion(ts, why, qrAction);
+    if (!rotated || !rotated.timesheet_id) {
+      wlog('server_error_rotate_failed');
+      return withCORS(env, req, serverError('Failed to rotate timesheet version'));
+    }
+    ts = rotated;
+
+    // Move contract_week pointer to the new current timesheet id
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({ timesheet_id: ts.timesheet_id, updated_at: nowIso2 })
+      }
+    ).catch(() => {});
+
+    wlog('contract_week_pointer_after_rotate', {
+      contract_week_id: cw.id,
+      timesheet_id: ts.timesheet_id
+    });
+  }
+
+  // processing status:
+  // - INVALIDATE/REISSUE/ISSUE => QR-enabled but not issued (awaiting signature evidence once sent)
+  // - REVOKE_TO_MANUAL         => manual-only (admin will upload signature evidence manually)
+  // In both cases we are still awaiting signature evidence, so keep AWAITING_MANUAL_SIGNATURE.
+  const processingStatus =
+    (qrAction === 'INVALIDATE' || qrAction === 'REISSUE' || qrAction === 'ISSUE' || qrAction === 'REVOKE_TO_MANUAL')
+      ? 'AWAITING_MANUAL_SIGNATURE'
+      : 'PENDING_AUTH';
+
+  let createdNow = false;
+
+  if (!ts) {
+    // create new timesheet for this contract_week
+    const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
+    const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
+    const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
+    const job_title_norm= (contract.role || 'weekly').toLowerCase();
+
+    const booking_id = await makeWeeklyBookingId(contract?.candidate_id || null, contract, cw);
+    if (!booking_id || booking_id === '{}' || booking_id === 'null' || booking_id === 'undefined') {
+      wlog('bad_request_invalid_booking_id', {
+        booking_id
+      });
+      return withCORS(env, req, badRequest(`Invalid booking_id produced: "${booking_id}"`));
+    }
+
+    const payload = [{
+      booking_id,
+      version: 1,
+      is_current: true,
+      status: 'RECEIVED',
+      occupant_key_norm: occupant_norm,
+      hospital_norm, ward_norm, job_title_norm,
+      shift_label_norm: 'weekly',
+      week_ending_date: cw.week_ending_date,
+      r2_nurse_key: null, r2_auth_key: null,
+      contract_id: contract.id,
+      sheet_scope: 'WEEKLY',
+      submission_mode: 'MANUAL',
+
+      manual_pdf_r2_key: cw.uploaded_pdf_r2_key || null,
+      manual_pdf_rotation_degrees: manualPdfRotationDeg,
+      line_type: 'HOURS',
+
+      // ✅ schedule-driven truth
+      actual_schedule_json,
+
+      additional_units_week: unitsWeek || {},
+      additional_units_per_day: unitsPerDay || {},
+
+      // per-day refs are obsolete in this flow (per-shift ref_num lives inside schedule)
+      day_references_json: null,
+
+      authorised_at_server: null,
+      created_at: nowIso2, updated_at: nowIso2,
+
+      qr_payload_json: {},
+      qr_status: null,
+      qr_token: null,
+      qr_generated_at: null,
+      qr_scanned_at: null,
+      qr_scan_info_json: null,
+      qr_r2_key: null
+    }];
+
+    const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(payload)
+    });
+    if (!ins.ok) return withCORS(env, req, serverError(await ins.text()));
+
+    ts = (await ins.json().catch(() => []))[0];
+    createdNow = true;
+
+    wlog('created_new_timesheet', {
+      timesheet_id: ts?.timesheet_id || null,
+      booking_id: ts?.booking_id || null,
+      version: ts?.version ?? null,
+      is_current: ts?.is_current ?? null
+    });
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+        body: JSON.stringify({
+          timesheet_id: ts.timesheet_id,
+          status: 'SUBMITTED',
+          updated_at: nowIso2
+        })
+      }
+    ).catch(() => {});
+
+    try {
+      await writeAudit(
+        env,
+        user,
+        'TIMESHEET_CREATED',
+        {
+          timesheet_id: ts.timesheet_id,
+          contract_week_id: cw.id,
+          contract_id: contract.id,
+          sheet_scope: 'WEEKLY',
+          submission_mode: 'MANUAL',
+          source: 'contract_week_manual_upsert',
+          week_ending_date: cw.week_ending_date
+        },
+        { entity: 'timesheets', subject_id: ts.timesheet_id, req }
+      );
+    } catch {}
+  } else {
+    // Patch existing current timesheet for this week (always schedule-driven)
+    const patchBody = { updated_at: nowIso2 };
+
+    patchBody.actual_schedule_json = actual_schedule_json;
+
+    if (body?.manual_pdf_rotation_degrees != null || body?.rotation_degrees != null) {
+      patchBody.manual_pdf_rotation_degrees = manualPdfRotationDeg;
+    }
+
+    if (hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
+    if (hasUnitsPerDayKey) patchBody.additional_units_per_day = unitsPerDay || {};
+
+    // do NOT set day_references_json here (obsolete)
+
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
+      { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return-minimal' }, body: JSON.stringify(patchBody) }
+    ).catch(() => {});
+
+    wlog('patched_existing_current_timesheet', {
+      timesheet_id: ts?.timesheet_id || null,
+      booking_id: ts?.booking_id || null,
+      version: ts?.version ?? null
+    });
+  }
+
+  // policy snapshot (for holiday, etc.)
+  let policySnapshot = {};
+  try {
+    policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+    if (!policySnapshot || typeof policySnapshot !== 'object') policySnapshot = {};
+  } catch {
+    policySnapshot = {};
+  }
+
+  const pay_wtr_rate_pct_snapshot =
+    (String(method || '').toUpperCase() === 'PAYE' && policySnapshot && policySnapshot.holiday_pay_pct != null)
+      ? Number(policySnapshot.holiday_pay_pct)
+      : null;
+
+  // ─────────────────────────────────────────────────────────────
+  // TSFIN snapshot: ALWAYS SEGMENTS for schedule-driven weekly manual
+  // (supports multiple shifts per day + per-shift ref_num)
+  // ─────────────────────────────────────────────────────────────
+  const segments = [];
+
+  if (typeof ukLocalToUtcISO !== 'function') {
+    throw new Error('ukLocalToUtcISO helper is missing (required for weekly conversion).');
+  }
+
+  const _addDaysYmd = (ymd, days) => {
+    const d = new Date(`${String(ymd)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return String(ymd || '');
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const _isIsoLike = (s) => {
+    const x = String(s || '');
+    return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
+  };
+
+  const _uniqueLocalUtcCandidates = (ymd, hhmm) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(iso).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    pushIso(ukLocalToUtcISO(ymd, hhmm, { prefer: 'earlier' }));
+    pushIso(ukLocalToUtcISO(ymd, hhmm, { prefer: 'later' }));
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const scheduleEntryToUtcRange = (seg) => {
+    const date = String(seg?.date || '').trim();
+    if (!date) return { startUtcIso: null, endUtcIso: null, error: 'Schedule segment date is required' };
+
+    const startIsoRaw = seg?.start_utc || seg?.start_iso || null;
+    const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || null;
+    if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
+      const startMs = new Date(String(startIsoRaw)).getTime();
+      const endMs   = new Date(String(endIsoRaw)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return { startUtcIso: null, endUtcIso: null, error: `Invalid UTC shift range on ${date}` };
+      }
+      return {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso:   new Date(endMs).toISOString(),
+        error: null
+      };
+    }
+
+    const startHH = String(seg?.start || '').trim();
+    const endHH   = String(seg?.end   || '').trim();
+    if (!startHH || !endHH) {
+      return { startUtcIso: null, endUtcIso: null, error: `Shift start/end must both be set for ${date}` };
+    }
+
+    const sMin = parseHHMM(startHH);
+    const eMin = parseHHMM(endHH);
+    if (sMin == null || eMin == null) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid HH:MM in actual_schedule_json for ${date}` };
+    }
+    if (sMin === eMin) {
+      return { startUtcIso: null, endUtcIso: null, error: `Shift start and end cannot be the same on ${date}` };
+    }
+
+    const overnight = (eMin <= sMin);
+    const endYmd = overnight ? _addDaysYmd(date, 1) : date;
+
+    const startCandidates = _uniqueLocalUtcCandidates(date, startHH);
+    if (!startCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local start time on ${date}` };
+    }
+
+    const endCandidates = _uniqueLocalUtcCandidates(endYmd, endHH);
+    if (!endCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local end time on ${date}` };
+    }
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(startIso).getTime();
+      const endMs   = new Date(endIso).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso:   new Date(endMs).toISOString(),
+        startMs,
+        endMs
+      });
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = ukLocalToUtcISO(endYmd, endHH, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endIsoAfterStart);
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+    if (!pairs.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${date}` };
+    }
+
+    if (pairs.length > 1) {
+      return { startUtcIso: null, endUtcIso: null, error: `Ambiguous local time range across DST change on ${date}` };
+    }
+
+    return {
+      startUtcIso: pairs[0].startUtcIso,
+      endUtcIso: pairs[0].endUtcIso,
+      error: null
+    };
+  };
+
+  // Per-segment bucket calc (consistent w/ resolveBucketsFromSchedule)
+  let segPayTotal = 0;
+  let segChgTotal = 0;
+
+  for (let i = 0; i < actual_schedule_json.length; i++) {
+    const seg = actual_schedule_json[i] || {};
+    const date = String(seg.date || '').trim();
+    if (!date) continue;
+
+    const { startUtcIso, endUtcIso, error: utcRangeError } = scheduleEntryToUtcRange(seg);
+    if (!startUtcIso || !endUtcIso) {
+      wlog('bad_request_segment_utc_resolution_failed', {
+        segment_index: i,
+        err: utcRangeError || 'Unable to resolve schedule segment to UTC'
+      });
+      return withCORS(env, req, badRequest(utcRangeError || 'Invalid schedule segment'));
+    }
+
+    // bucket mins for THIS segment using the same resolver
+    let minsByBucketSeg = null;
+    try {
+      minsByBucketSeg = await resolveBucketsFromSchedule(env, contract, [seg]);
+    } catch (e) {
+      wlog('bad_request_segment_bucket_resolution_failed', {
+        segment_index: i,
+        err: e?.message || String(e)
+      });
+      return withCORS(env, req, badRequest(e.message || 'Invalid schedule segment'));
+    }
+
+    const h = {
+      hours_day:   +(minsByBucketSeg.day   / 60).toFixed(2),
+      hours_night: +(minsByBucketSeg.night / 60).toFixed(2),
+      hours_sat:   +(minsByBucketSeg.sat   / 60).toFixed(2),
+      hours_sun:   +(minsByBucketSeg.sun   / 60).toFixed(2),
+      hours_bh:    +(minsByBucketSeg.bh    / 60).toFixed(2)
+    };
+
+    const p = pay || {};
+    const c = charge || {};
+
+    const segPay = round2(
+      (h.hours_day   || 0) * asNumberLocal(p.day)   +
+      (h.hours_night || 0) * asNumberLocal(p.night) +
+      (h.hours_sat   || 0) * asNumberLocal(p.sat)   +
+      (h.hours_sun   || 0) * asNumberLocal(p.sun)   +
+      (h.hours_bh    || 0) * asNumberLocal(p.bh)
+    );
+
+    const segChg = round2(
+      (h.hours_day   || 0) * asNumberLocal(c.day)   +
+      (h.hours_night || 0) * asNumberLocal(c.night) +
+      (h.hours_sat   || 0) * asNumberLocal(c.sat)   +
+      (h.hours_sun   || 0) * asNumberLocal(c.sun)   +
+      (h.hours_bh    || 0) * asNumberLocal(c.bh)
+    );
+
+    segPayTotal += segPay;
+    segChgTotal += segChg;
+
+    const br = Number(seg.break_mins ?? seg.break_minutes ?? 0);
+
+    segments.push({
+      segment_id: `ts:${ts.timesheet_id}:${i}`,
+      date,
+      start_utc: startUtcIso,
+      end_utc: endUtcIso,
+      break_mins: Number.isFinite(br) ? br : 0,
+
+      // ✅ per-shift reference number (supports multiple refs per day)
+      ref_num: (seg.ref_num != null && String(seg.ref_num).trim()) ? String(seg.ref_num).trim() : null,
+
+      // optional: keep breaks array for audit/debug
+      breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
+
+      hours_day:   h.hours_day   || 0,
+      hours_night: h.hours_night || 0,
+      hours_sat:   h.hours_sat   || 0,
+      hours_sun:   h.hours_sun   || 0,
+      hours_bh:    h.hours_bh    || 0,
+
+      pay_amount: segPay,
+      charge_amount: segChg,
+      exclude_from_pay: false
+    });
+  }
+
+  const basePay = round2(segPayTotal);
+  const baseCharge = round2(segChgTotal);
+
+  // ✅ Preserve expenses + mileage values (and include in totals)
+  const expPay   = round2(asNumberLocal(preservedFin?.expenses_pay_ex_vat ?? 0));
+  const expChg   = round2(asNumberLocal(preservedFin?.expenses_charge_ex_vat ?? 0));
+  const milPay   = round2(asNumberLocal(preservedFin?.mileage_pay_ex_vat ?? 0));
+  const milChg   = round2(asNumberLocal(preservedFin?.mileage_charge_ex_vat ?? 0));
+  const milUnits = round2(asNumberLocal(preservedFin?.mileage_units ?? 0));
+
+  // ✅ Negative margin check applies ONLY to base+additional (expenses/mileage may be negative margin)
+  const corePay = round2(basePay + additional_pay_ex_vat);
+  const coreChg = round2(baseCharge + additional_charge_ex_vat);
+  const coreMargin = round2(coreChg - corePay);
+  if (coreMargin < 0) {
+    wlog('bad_request_negative_margin', {
+      core_pay: corePay,
+      core_charge: coreChg,
+      core_margin: coreMargin
+    });
+    return withCORS(env, req, badRequest('Negative margin: total charge is less than total pay.'));
+  }
+
+  const total_pay = round2(corePay + expPay + milPay);
+  const total_chg = round2(coreChg + expChg + milChg);
+  const margin = round2(total_chg - total_pay);
+
+  wlog('totals_resolved', {
+    base_pay: basePay,
+    base_charge: baseCharge,
+    additional_pay_ex_vat,
+    additional_charge_ex_vat,
+    expenses_pay_ex_vat: expPay,
+    expenses_charge_ex_vat: expChg,
+    mileage_pay_ex_vat: milPay,
+    mileage_charge_ex_vat: milChg,
+    total_pay_ex_vat: total_pay,
+    total_charge_ex_vat: total_chg,
+    margin_ex_vat: margin,
+    segments_count: segments.length
+  });
+
+  const snap = {
+    timesheet_id: ts.timesheet_id,
+    timesheet_version: ts.version || 1,
+    basis: 'CONTRACT_WEEKLY',
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    role: contract.role || null,
+    band: contract.band || null,
+    candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
+    processing_status: processingStatus,
+    pay_method: method,
+
+    // hours buckets derived from schedule (authoritative)
+    hours_day: Number(hours.day || 0),
+    hours_night: Number(hours.night || 0),
+    hours_sat: Number(hours.sat || 0),
+    hours_sun: Number(hours.sun || 0),
+    hours_bh: Number(hours.bh || 0),
+    total_hours: round2(
+      Number(hours.day || 0) +
+      Number(hours.night || 0) +
+      Number(hours.sat || 0) +
+      Number(hours.sun || 0) +
+      Number(hours.bh || 0)
+    ),
+
+    pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
+    charge_day: charge.day, charge_night: charge.night, charge_sat: charge.sat, charge_sun: charge.sun, charge_bh: charge.bh,
+
+    total_pay_ex_vat: total_pay,
+    total_charge_ex_vat: total_chg,
+    margin_ex_vat: margin,
+
+    additional_units_json,
+    additional_pay_ex_vat,
+    additional_charge_ex_vat,
+    additional_margin_ex_vat,
+
+    // ✅ PRESERVE expenses fields
+    expenses_pay_ex_vat: expPay,
+    expenses_charge_ex_vat: expChg,
+    expenses_description: preservedFin?.expenses_description ?? null,
+    expenses_evidence_r2_key: preservedFin?.expenses_evidence_r2_key ?? null,
+    expenses_evidence_manifest: preservedFin?.expenses_evidence_manifest ?? null,
+
+    // ✅ PRESERVE mileage fields (+ units)
+    mileage_units: milUnits,
+    mileage_pay_ex_vat: milPay,
+    mileage_charge_ex_vat: milChg,
+    mileage_evidence_r2_key: preservedFin?.mileage_evidence_r2_key ?? null,
+    mileage_evidence_manifest: preservedFin?.mileage_evidence_manifest ?? null,
+    mileage_pay_rate: preservedFin?.mileage_pay_rate ?? null,
+    mileage_charge_rate: preservedFin?.mileage_charge_rate ?? null,
+
+    pay_on_hold: false,
+    pay_on_hold_reason: null,
+    pay_on_hold_since_utc: null,
+
+    paid_at_utc: null,
+    paid_by_user_id: null,
+    payment_reference: null,
+
+    policy_snapshot_json: policySnapshot,
+    rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
+    pay_wtr_rate_pct_snapshot,
+
+    created_at: nowIso2,
+    invoice_breakdown_json: {
+      mode: 'SEGMENTS',
+      segments,
+      additional: {
+        units: additional_units_json,
+        pay_ex_vat: additional_pay_ex_vat,
+        charge_ex_vat: additional_charge_ex_vat,
+        margin_ex_vat: additional_margin_ex_vat
+      },
+      totals: {
+        total_pay_ex_vat: total_pay,
+        total_charge_ex_vat: total_chg,
+        margin_ex_vat: margin
+      }
+    }
+  };
+
+  // ✅ Write TSFIN using SQL-backed outbox + batch writer.
+  // Uses your new RPCs:
+  // - enqueue_ts_financials_priority
+  // - tsfin_dequeue_specific
+  // - tsfin_write_snapshots_and_complete
+  let outboxId = null;
+  let wroteViaSql = false;
+
+  try {
+    // 1) Ensure a single outbox row exists for this timesheet (unique constraint dedupes)
+    await sbRpc(env, 'enqueue_ts_financials_priority', {
+      _timesheet_ids: [ts.timesheet_id],
+      _reason: 'CONTEXT_CHANGED'
+    });
+
+    // ✅ FIX (C): RPC-only deterministic lease (no REST lookup of ts_financials_outbox)
+    const leased = await sbRpc(env, 'tsfin_dequeue_specific', {
+      p_timesheet_ids: [ts.timesheet_id],
+      p_limit: 1
+    });
+    const row = Array.isArray(leased) ? leased[0] : null;
+    outboxId = row?.id || row?.outbox_id || null;
+
+    wlog('tsfin_outbox_leased', {
+      timesheet_id: ts.timesheet_id,
+      outbox_id: outboxId
+    });
+
+    // 3) Write snapshot + complete outbox in one RPC
+    if (outboxId) {
+      const wr = await rpcTsfinWriteSnapshotsAndComplete(env, {
+        rows: [{
+          outbox_id: outboxId,
+          timesheet_id: ts.timesheet_id,
+          snapshot: snap
+        }]
+      });
+
+      wroteViaSql = (Number(wr?.ok_count || 0) > 0);
+
+      wlog('tsfin_write_sql_result', {
+        timesheet_id: ts.timesheet_id,
+        outbox_id: outboxId,
+        ok_count: Number(wr?.ok_count || 0),
+        wrote_via_sql: wroteViaSql
+      });
+    }
+  } catch (e) {
+    try {
+      console.warn('[CONTRACT_WEEK_MANUAL_UPSERT] SQL TSFIN write failed (fallback)', {
+        timesheet_id: ts?.timesheet_id,
+        err: e?.message || String(e)
+      });
+    } catch {}
+    wlog('tsfin_write_sql_failed', {
+      timesheet_id: ts?.timesheet_id || null,
+      err: e?.message || String(e)
+    });
+  }
+
+  // Fallback: preserve legacy behaviour if SQL path fails (rare)
+  if (!wroteViaSql) {
+    await writeSnapshot(env, snap);
+
+    // ✅ best-effort: clear the outbox row we created so it doesn't churn later
+    if (outboxId) {
+      try { await sbRpc(env, 'tsfin_work_success', { p_id: outboxId }); } catch {}
+    }
+
+    wlog('tsfin_write_fallback_used', {
+      timesheet_id: ts.timesheet_id,
+      outbox_id: outboxId
+    });
+  }
+
+  // Persist week totals + schedule + weekly extras (draft-per-day refs removed)
+  const existingWeekTotals = (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
+  const mergedWeekTotals = { ...existingWeekTotals, hours };
+
+  // ✅ Persist weekly totals only when provided (frontend is source of truth)
+  if (hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
+
+  // ✅ Persist per-day units when provided
+  if (hasUnitsPerDayKey) mergedWeekTotals.additional_units_per_day = unitsPerDay || {};
+
+  const weekPatch = {
+    totals_json: mergedWeekTotals,
+    planned_schedule_json: actual_schedule_json, // keep week schedule aligned for future view/processing
+    updated_at: nowIso2
+  };
+
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
+    { method: 'PATCH', headers: { ...sbHeaders(env), Prefer: 'return-minimal' }, body: JSON.stringify(weekPatch) }
+  ).catch(() => {});
+
+  wlog('finish', {
+    final_timesheet_id: ts?.timesheet_id || null,
+    final_booking_id: ts?.booking_id || null,
+    final_version: ts?.version ?? null,
+    final_is_current: ts?.is_current ?? null,
+    current_timesheet_id_returned: ts?.timesheet_id || null,
+    was_stale: !!wasStaleWeekTs,
+    created_now: !!createdNow,
+    processing_status: processingStatus
+  });
+
+  return withCORS(env, req, ok({
+    timesheet_id: ts.timesheet_id,
+    current_timesheet_id: ts.timesheet_id,
+    was_stale: !!wasStaleWeekTs,
+    processing_status: processingStatus,
+    hours,
+    used_schedule: true,
+    created_now: !!createdNow
+  }));
 }
+
 
 async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -24266,24 +25525,66 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     return h * 60 + mi;
   };
 
-  const getLondonOffsetHours = (ymdStr) => {
-    try {
-      if (typeof isBSTLocal === 'function') return isBSTLocal(ymdStr) ? 1 : 0;
-    } catch {}
-    return 0;
+  const uniqueLocalUtcCandidates = (ymdStr, hhmmStr) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+      const norm = new Date(ms).toISOString();
+      if (seen.has(norm)) return;
+      seen.add(norm);
+      out.push({ iso: norm, ms });
+    };
+
+    pushIso(ukLocalToUtcISO(ymdStr, hhmmStr, { prefer: 'earlier' }));
+    pushIso(ukLocalToUtcISO(ymdStr, hhmmStr, { prefer: 'later' }));
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
   };
 
-  const localYmdHhmmToIsoUtc = (ymdStr, hhmmStr) => {
-    const p = parseYmd(ymdStr);
-    if (!p) return null;
-    const normT = normaliseHHMM(hhmmStr);
-    const mins = hhmmToMinutes(normT);
-    if (mins == null) return null;
-    const hh = Math.floor(mins / 60);
-    const mm = mins % 60;
-    const off = getLondonOffsetHours(ymdStr);
-    const ms = Date.UTC(p.y, p.mo - 1, p.d, hh - off, mm, 0, 0);
-    return new Date(ms).toISOString();
+  const resolveLocalWindowToIso = (startYmd, startHHMM, endYmd, endHHMM, label) => {
+    const startCandidates = uniqueLocalUtcCandidates(startYmd, startHHMM);
+    if (!startCandidates.length) return { error: `Non-existent local start time on ${label}` };
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHHMM);
+    if (!endCandidates.length) return { error: `Non-existent local end time on ${label}` };
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs   = new Date(String(endIso)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, {
+        start_iso: new Date(startMs).toISOString(),
+        end_iso:   new Date(endMs).toISOString(),
+        start_ms: startMs,
+        end_ms: endMs
+      });
+    };
+
+    for (const startCand of startCandidates) {
+      const endAfter = ukLocalToUtcISO(endYmd, endHHMM, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endAfter);
+
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.start_ms - b.start_ms || a.end_ms - b.end_ms);
+
+    if (!pairs.length) return { error: `Invalid local time range on ${label}` };
+    if (pairs.length > 1) return { error: `Ambiguous local time range across DST change on ${label}` };
+
+    return pairs[0];
   };
 
   // Map schedule_json -> ISO fields (Europe/London local HH:MM + YMD -> UTC ISO)
@@ -24318,6 +25619,8 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
     let worked_start_iso = null;
     let worked_end_iso   = null;
+    let workedStartMs    = null;
+    let workedEndMs      = null;
 
     let shiftStartMin0 = null;
     let shiftEndMin0   = null;
@@ -24337,13 +25640,17 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       const endYmd = addDaysYmd(ymdStr, endDayAdd);
       if (!endYmd) return { error: 'Failed to compute overnight end date.' };
 
-      worked_start_iso = localYmdHhmmToIsoUtc(ymdStr, startHHMM);
-      worked_end_iso   = localYmdHhmmToIsoUtc(
-        endYmd,
-        normaliseHHMM(`${Math.floor((shiftEndAdj % 1440) / 60)}:${String((shiftEndAdj % 1440) % 60).padStart(2,'0')}`)
-      );
+      const workedResolved = resolveLocalWindowToIso(ymdStr, startHHMM, endYmd, normaliseHHMM(`${Math.floor((shiftEndAdj % 1440) / 60)}:${String((shiftEndAdj % 1440) % 60).padStart(2,'0')}`), ymdStr);
+      if (workedResolved?.error) return { error: workedResolved.error };
 
-      if (!worked_start_iso || !worked_end_iso) return { error: 'Failed to convert schedule_json.start/end to ISO.' };
+      worked_start_iso = workedResolved.start_iso;
+      worked_end_iso   = workedResolved.end_iso;
+      workedStartMs    = workedResolved.start_ms;
+      workedEndMs      = workedResolved.end_ms;
+
+      if (!worked_start_iso || !worked_end_iso || !(workedEndMs > workedStartMs)) {
+        return { error: 'Failed to convert schedule_json.start/end to ISO.' };
+      }
     }
 
     // Break source: prefer explicit fields; else breaks[0]
@@ -24407,12 +25714,25 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       const beHH = String(Math.floor(beM / 60)).padStart(2, '0');
       const beMM = String(beM % 60).padStart(2, '0');
 
-      break_start_iso = localYmdHhmmToIsoUtc(bsYmd, `${bsHH}:${bsMM}`);
-      break_end_iso   = localYmdHhmmToIsoUtc(beYmd, `${beHH}:${beMM}`);
+      const breakResolved = resolveLocalWindowToIso(bsYmd, `${bsHH}:${bsMM}`, beYmd, `${beHH}:${beMM}`, `${ymdStr} (break window)`);
+      if (breakResolved?.error) return { error: breakResolved.error };
 
-      if (!break_start_iso || !break_end_iso) return { error: 'Failed to convert break window to ISO.' };
+      break_start_iso = breakResolved.start_iso;
+      break_end_iso   = breakResolved.end_iso;
 
-      break_minutes = Math.round((beAdj - bsAdj));
+      if (!break_start_iso || !break_end_iso || !(breakResolved.end_ms > breakResolved.start_ms)) {
+        return { error: 'Failed to convert break window to ISO.' };
+      }
+
+      if (workedStartMs == null || workedEndMs == null) {
+        return { error: 'Cannot set a break window without a worked start/end.' };
+      }
+
+      if (breakResolved.start_ms < workedStartMs || breakResolved.end_ms > workedEndMs) {
+        return { error: 'Break window must be fully within the worked shift span.' };
+      }
+
+      break_minutes = Math.round((breakResolved.end_ms - breakResolved.start_ms) / 60000);
       if (!(break_minutes > 0)) return { error: 'Break duration must be > 0 minutes.' };
     } else {
       // No break window: accept numeric break minutes if present
@@ -24427,8 +25747,11 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         if (!(hasStart && hasEnd)) return { error: 'Cannot set break_minutes without a worked start/end.' };
         bm = Math.round(bm);
         if (bm < 0) return { error: 'break_minutes must be a non-negative number.' };
-        const shiftLen = shiftEndAdj - shiftStartAdj;
-        if (bm > shiftLen) return { error: 'break_minutes cannot exceed the worked shift duration.' };
+
+        const actualShiftMinutes = Math.round((workedEndMs - workedStartMs) / 60000);
+        if (!(actualShiftMinutes > 0)) return { error: 'Worked shift duration must be > 0 minutes.' };
+        if (bm > actualShiftMinutes) return { error: 'break_minutes cannot exceed the worked shift duration.' };
+
         break_minutes = bm;
       }
     }
@@ -24470,7 +25793,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
     const act = String(qrActionForNew || '').toUpperCase();
     const newIsQrPending = (act === 'INVALIDATE' || act === 'REISSUE' || act === 'ISSUE');
-    const newIsManualOnly = (act === 'REVOKE_TO_MANUAL' || act === 'DISABLE');
 
     const newRow = {
       ...currentTs,
@@ -25069,7 +26391,6 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
-
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -74604,16 +75925,112 @@ function roleFromRequestGrade(grade){
 }
 
 /** Utility: UK DST (BST) check; last Sunday of Mar to last Sunday of Oct */
-function ukLocalToUtcISO(ymd, hhmm = "00:00") {
-  // ymd: "YYYY-MM-DD" (UK local date), hhmm: "HH:MM" (UK local clock time)
-  const [Y, Mo, D] = String(ymd || "").split("-").map(Number);
-  const [H, Mi]    = String(hhmm || "00:00").split(":").map(Number);
-  if (!Y || !Mo || !D || Number.isNaN(H) || Number.isNaN(Mi)) return null;
 
-  const offsetHours = isBSTLocalDate(Y, Mo, D) ? 1 : 0; // UK summer = UTC+1
-  const dt = new Date(Date.UTC(Y, Mo - 1, D, H - offsetHours, Mi, 0));
-  return dt.toISOString();
+function ukLocalToUtcISO(ymd, hhmm = "00:00", opts = null) {
+  const ymdStr = String(ymd || '').trim();
+  const hhmmStr = String(hhmm || '00:00').trim();
+
+  const mDate = ymdStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const mTime = hhmmStr.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  if (!mDate || !mTime) return null;
+
+  const Y  = Number(mDate[1]);
+  const Mo = Number(mDate[2]);
+  const D  = Number(mDate[3]);
+  const H  = Number(mTime[1]);
+  const Mi = Number(mTime[2]);
+
+  if (!Y || Mo < 1 || Mo > 12 || D < 1 || D > 31 || H < 0 || H > 23 || Mi < 0 || Mi > 59) {
+    return null;
+  }
+
+  const options = (opts && typeof opts === 'object') ? opts : {};
+
+  const formatter = ukLocalToUtcISO._formatterLondon || (ukLocalToUtcISO._formatterLondon = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    hourCycle: 'h23'
+  }));
+
+  const targetYmd = `${String(Y).padStart(4, '0')}-${String(Mo).padStart(2, '0')}-${String(D).padStart(2, '0')}`;
+  const targetHm  = `${String(H).padStart(2, '0')}:${String(Mi).padStart(2, '0')}`;
+
+  const formatLocal = (dt) => {
+    const parts = formatter.formatToParts(dt);
+    const year  = parts.find((p) => p.type === 'year')?.value || '';
+    const month = parts.find((p) => p.type === 'month')?.value || '';
+    const day   = parts.find((p) => p.type === 'day')?.value || '';
+    let hour    = parts.find((p) => p.type === 'hour')?.value || '';
+    const min   = parts.find((p) => p.type === 'minute')?.value || '';
+
+    if (hour === '24') hour = '00';
+
+    return {
+      ymd:  (year && month && day) ? `${year}-${month}-${day}` : '',
+      hhmm: (hour && min) ? `${hour}:${min}` : ''
+    };
+  };
+
+  const candidates = [];
+  const seen = new Set();
+
+  for (const offsetHours of [0, 1]) {
+    const ms = Date.UTC(Y, Mo - 1, D, H - offsetHours, Mi, 0, 0);
+    const dt = new Date(ms);
+    if (!Number.isFinite(dt.getTime())) continue;
+
+    const local = formatLocal(dt);
+    if (local.ymd !== targetYmd || local.hhmm !== targetHm) continue;
+
+    const iso = dt.toISOString();
+    if (seen.has(iso)) continue;
+    seen.add(iso);
+
+    candidates.push({ iso, ms });
+  }
+
+  candidates.sort((a, b) => a.ms - b.ms);
+
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0].iso;
+
+  const relationRefMs = (() => {
+    const ref = options.referenceIso || options.afterIso || options.beforeIso || null;
+    const ms = ref ? new Date(ref).getTime() : NaN;
+    return Number.isFinite(ms) ? ms : null;
+  })();
+
+  if (relationRefMs != null) {
+    if (options.afterIso || options.relation === 'after' || options.direction === 'after') {
+      const hit = candidates.find((c) => c.ms > relationRefMs);
+      if (hit) return hit.iso;
+    }
+    if (options.beforeIso || options.relation === 'before' || options.direction === 'before') {
+      const hit = [...candidates].reverse().find((c) => c.ms < relationRefMs);
+      if (hit) return hit.iso;
+    }
+  }
+
+  const prefer = String(options.prefer || '').trim().toLowerCase();
+  if (prefer === 'later' || prefer === 'latest' || prefer === 'second') {
+    return candidates[candidates.length - 1].iso;
+  }
+  if (prefer === 'earlier' || prefer === 'earliest' || prefer === 'first') {
+    return candidates[0].iso;
+  }
+
+  if (options.rejectAmbiguous === true || options.strict === true) {
+    return null;
+  }
+
+  return candidates[0].iso;
 }
+
 
 function isBSTLocalDate(Y, Mo, D) {
   // Decide DST for that calendar date using a noon sentinel to avoid boundary weirdness.
@@ -85203,34 +86620,84 @@ function isBSTLocal(ymdStr) {
 }
 
 function toLocalParts(iso, tz) {
-  // For Europe/London only; treat other tz as UTC fallback.
-  const tzEff = (tz == null || String(tz).trim() === '') ? 'Europe/London' : String(tz).trim();
-  const inYmd = ymd(iso);
-  const offset = (tzEff === 'Europe/London' && isBSTLocal(inYmd)) ? 1 : 0; // hours ahead of UTC
-  const d = new Date(iso);
-  let hh = d.getUTCHours() + offset;
-  let mm = d.getUTCMinutes();
-  let y = d.getUTCFullYear();
-  let m = d.getUTCMonth() + 1;
-  let da = d.getUTCDate();
-  if (hh >= 24) {
-    hh -= 24;
-    const dt = new Date(Date.UTC(y, m - 1, da));
-    dt.setUTCDate(dt.getUTCDate() + 1);
-    y = dt.getUTCFullYear(); m = dt.getUTCMonth() + 1; da = dt.getUTCDate();
-  }
-  const ymdStr = `${y}-${String(m).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
+  const tzRaw = (tz == null || String(tz).trim() === '') ? 'Europe/London' : String(tz).trim();
+  const tzEff = (tzRaw === 'Europe/London') ? 'Europe/London' : 'UTC';
 
-  const hhStr = String(hh).padStart(2, '0');
-  const mmStr = String(mm).padStart(2, '0');
-  const hhmm = `${hhStr}:${mmStr}`;
+  const dt = new Date(iso);
+  if (!Number.isFinite(dt.getTime())) {
+    return {
+      ymd: '',
+      year: null,
+      month: null,
+      day: null,
+      hh: 0,
+      mm: 0,
+      hm: '00:00',
+      hhmm: '00:00',
+      hhmm_local: '00:00',
+      hm_local: '00:00',
+      tz: tzEff
+    };
+  }
+
+  if (tzEff !== 'Europe/London') {
+    const year = dt.getUTCFullYear();
+    const month = dt.getUTCMonth() + 1;
+    const day = dt.getUTCDate();
+    const hh = dt.getUTCHours();
+    const mm = dt.getUTCMinutes();
+    const hhStr = String(hh).padStart(2, '0');
+    const mmStr = String(mm).padStart(2, '0');
+    const hhmm = `${hhStr}:${mmStr}`;
+
+    return {
+      ymd: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      year,
+      month,
+      day,
+      hh,
+      mm,
+      hm: hhmm,
+      hhmm,
+      hhmm_local: hhmm,
+      hm_local: hhmm,
+      tz: tzEff
+    };
+  }
+
+  const formatter = toLocalParts._formatterLondon || (toLocalParts._formatterLondon = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    hourCycle: 'h23'
+  }));
+
+  const parts = formatter.formatToParts(dt);
+  const year  = Number(parts.find((p) => p.type === 'year')?.value || NaN);
+  const month = Number(parts.find((p) => p.type === 'month')?.value || NaN);
+  const day   = Number(parts.find((p) => p.type === 'day')?.value || NaN);
+  let hhStr   = parts.find((p) => p.type === 'hour')?.value || '00';
+  const mmStr = parts.find((p) => p.type === 'minute')?.value || '00';
+
+  if (hhStr === '24') hhStr = '00';
+
+  const hh = Number(hhStr);
+  const mm = Number(mmStr);
+  const hhmm = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 
   return {
-    ymd: ymdStr,
+    ymd: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    year,
+    month,
+    day,
     hh,
     mm,
     hm: hhmm,
-    hhmm: hhmm,
+    hhmm,
     hhmm_local: hhmm,
     hm_local: hhmm,
     tz: tzEff
@@ -86125,21 +87592,26 @@ function subtractBreak(segments, breakStartIso, breakEndIso, breakMin) {
 
 function classifyMinutes(env, policy, segments) {
   const out = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
-  const tz = policy.timezone_id || 'Europe/London';
+  const tz = (policy && policy.timezone_id) ? (String(policy.timezone_id).trim() || 'Europe/London') : 'Europe/London';
 
-  // Normalise string times into minutes and BH set
   const dayStartMin = hhmmToMin(policy.day_start);
   const dayEndMin   = hhmmToMin(policy.day_end);
   const satStartMin = hhmmToMin(policy.sat_start || '00:00');
   const satEndMin   = hhmmToMin(policy.sat_end   || '00:00');
   const sunStartMin = hhmmToMin(policy.sun_start || '00:00');
   const sunEndMin   = hhmmToMin(policy.sun_end   || '00:00');
+  const bhStartMin  = hhmmToMin(policy.bh_start  || '00:00');
+  const bhEndMin    = hhmmToMin(policy.bh_end    || '00:00');
 
-  // NEW: BH hours (00:00–00:00 means full BH day)
-  const bhStartMin  = hhmmToMin(policy.bh_start || '00:00');
-  const bhEndMin    = hhmmToMin(policy.bh_end   || '00:00');
-
-  const bhSet       = new Set(policy.bh_list || []);
+  let bhArr = [];
+  if (Array.isArray(policy?.bh_list)) {
+    bhArr = policy.bh_list.map(String);
+  } else if (typeof policy?.bh_list === 'string') {
+    try {
+      const parsed = JSON.parse(policy.bh_list);
+      if (Array.isArray(parsed)) bhArr = parsed.map(String);
+    } catch {}
+  }
 
   const normPolicy = {
     dayStart: dayStartMin,
@@ -86150,36 +87622,93 @@ function classifyMinutes(env, policy, segments) {
     sunEnd:   sunEndMin,
     bhStart:  bhStartMin,
     bhEnd:    bhEndMin,
-    bhList:   bhSet
+    bhList:   new Set(bhArr)
   };
 
-  for (const [isoA, isoB] of segments) {
-    let cur = new Date(isoA);
-    const end = new Date(isoB);
+  const addDaysYmd = (ymdStr, days) => {
+    const d = new Date(`${String(ymdStr)}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return String(ymdStr || '').slice(0, 10);
+    d.setUTCDate(d.getUTCDate() + Number(days || 0));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  };
 
-    while (cur < end) {
-      const { ymd: curYmd, hh, mm } = toLocalParts(cur.toISOString(), tz);
-      const dayEnd = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth(), cur.getUTCDate() + 1));
-      const sliceEnd = end < dayEnd ? end : dayEnd;
-      const mins = minutesBetween(cur.toISOString(), sliceEnd.toISOString());
+  const nextLondonTransitionMs = (afterMs) => {
+    const d = new Date(afterMs);
+    if (!Number.isFinite(d.getTime())) return Infinity;
 
-      const fromMin = hh * 60 + mm;
-      const toMin   = fromMin + mins;
+    let best = Infinity;
+    for (const year of [d.getUTCFullYear() - 1, d.getUTCFullYear(), d.getUTCFullYear() + 1, d.getUTCFullYear() + 2]) {
+      for (const cand of [bstStartUtc(year), bstEndUtc(year)]) {
+        if (cand > afterMs && cand < best) best = cand;
+      }
+    }
+    return best;
+  };
 
-      segmentChunkIntoBuckets(curYmd, fromMin, toMin, normPolicy, out);
+  const nextSliceBoundaryMs = (curMs, endMs, tzEff) => {
+    let best = endMs;
+    const curIso = new Date(curMs).toISOString();
+    const parts = toLocalParts(curIso, tzEff);
+    if (!parts || !parts.ymd) return best;
 
-      cur = sliceEnd;
+    if (tzEff === 'Europe/London') {
+      const nextMidnightIso = ukLocalToUtcISO(addDaysYmd(parts.ymd, 1), '00:00', { prefer: 'earlier' });
+      const nextMidnightMs = nextMidnightIso ? new Date(nextMidnightIso).getTime() : NaN;
+      if (Number.isFinite(nextMidnightMs) && nextMidnightMs > curMs && nextMidnightMs < best) {
+        best = nextMidnightMs;
+      }
+
+      const nextTzMs = nextLondonTransitionMs(curMs);
+      if (Number.isFinite(nextTzMs) && nextTzMs > curMs && nextTzMs < best) {
+        best = nextTzMs;
+      }
+    } else {
+      const nextMidnightMs = Date.UTC(parts.year, (parts.month || 1) - 1, (parts.day || 1) + 1, 0, 0, 0, 0);
+      if (Number.isFinite(nextMidnightMs) && nextMidnightMs > curMs && nextMidnightMs < best) {
+        best = nextMidnightMs;
+      }
+    }
+
+    return best;
+  };
+
+  for (const seg of (Array.isArray(segments) ? segments : [])) {
+    if (!Array.isArray(seg) || seg.length < 2) continue;
+
+    const startMs = new Date(seg[0]).getTime();
+    const endMs   = new Date(seg[1]).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
+
+    let curMs = startMs;
+    while (curMs < endMs) {
+      const curIso = new Date(curMs).toISOString();
+      const parts = toLocalParts(curIso, tz);
+      if (!parts || !parts.ymd) break;
+
+      const sliceEndMs = nextSliceBoundaryMs(curMs, endMs, parts.tz || tz);
+      if (!Number.isFinite(sliceEndMs) || sliceEndMs <= curMs) break;
+
+      const mins = Math.round((sliceEndMs - curMs) / 60000);
+      if (mins > 0) {
+        const fromMin = (parts.hh * 60) + parts.mm;
+        const toMin = fromMin + mins;
+        segmentChunkIntoBuckets(parts.ymd, fromMin, toMin, normPolicy, out);
+      }
+
+      curMs = sliceEndMs;
     }
   }
 
   return {
-    hours_day:  round2(out.day   / 60),
-    hours_night:round2(out.night / 60),
-    hours_sat:  round2(out.sat   / 60),
-    hours_sun:  round2(out.sun   / 60),
-    hours_bh:   round2(out.bh    / 60),
+    hours_day:   round2(out.day   / 60),
+    hours_night: round2(out.night / 60),
+    hours_sat:   round2(out.sat   / 60),
+    hours_sun:   round2(out.sun   / 60),
+    hours_bh:    round2(out.bh    / 60),
   };
 }
+
+
 // 3) Resolve combined PAY/CHARGE view
 
 
