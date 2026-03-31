@@ -12989,20 +12989,15 @@ begin
     paid_wtd as (
       select
         pbc_pw.candidate_id,
-        round(coalesce(sum(pbi_pw.amount_ex_vat), 0), 2)::numeric(12,2) as paid_wtd_before_ex
+        public._pay_candidate_arranged_pay_wtd_before(
+          p_candidate_id => pbc_pw.candidate_id,
+          p_week_start => v_week_start,
+          p_pay_date => v_pay_date,
+          p_before_created_at_utc => v_batch_created_at_utc,
+          p_before_pay_batch_id => p_pay_batch_id
+        )::numeric(12,2) as paid_wtd_before_ex
       from public.pay_batch_candidates pbc_pw
-      join public.pay_batches pb_pw
-        on pb_pw.id = pbc_pw.pay_batch_id
-      join public.pay_batch_items pbi_pw
-        on pbi_pw.pay_batch_candidate_id = pbc_pw.id
-      where pb_pw.cancelled_at_utc is null
-        and pb_pw.id <> p_pay_batch_id
-        and coalesce(pb_pw.batch_kind_fixed, '') <> 'LOANS'
-        and pb_pw.pay_date >= v_week_start
-        and pb_pw.pay_date < (v_week_start + 7)
-        and pbi_pw.is_voided = false
-        and pbi_pw.item_type <> 'DEBT_CREATED'
-      group by pbc_pw.candidate_id
+      where pbc_pw.pay_batch_id = p_pay_batch_id
     ),
     finance_case_repaid_wtd as (
       select
@@ -13315,20 +13310,15 @@ begin
     paid_wtd as (
       select
         pbc_pw.candidate_id,
-        round(coalesce(sum(pbi_pw.amount_ex_vat), 0), 2)::numeric(12,2) as paid_wtd_before_ex
+        public._pay_candidate_arranged_pay_wtd_before(
+          p_candidate_id => pbc_pw.candidate_id,
+          p_week_start => v_week_start,
+          p_pay_date => v_pay_date,
+          p_before_created_at_utc => v_batch_created_at_utc,
+          p_before_pay_batch_id => p_pay_batch_id
+        )::numeric(12,2) as paid_wtd_before_ex
       from public.pay_batch_candidates pbc_pw
-      join public.pay_batches pb_pw
-        on pb_pw.id = pbc_pw.pay_batch_id
-      join public.pay_batch_items pbi_pw
-        on pbi_pw.pay_batch_candidate_id = pbc_pw.id
-      where pb_pw.cancelled_at_utc is null
-        and pb_pw.id <> p_pay_batch_id
-        and coalesce(pb_pw.batch_kind_fixed, '') <> 'LOANS'
-        and pb_pw.pay_date >= v_week_start
-        and pb_pw.pay_date < (v_week_start + 7)
-        and pbi_pw.is_voided = false
-        and pbi_pw.item_type <> 'DEBT_CREATED'
-      group by pbc_pw.candidate_id
+      where pbc_pw.pay_batch_id = p_pay_batch_id
     ),
     finance_case_repaid_wtd as (
       select
@@ -13872,6 +13862,7 @@ begin
   );
 end;
 $function$;
+
 
 
 
