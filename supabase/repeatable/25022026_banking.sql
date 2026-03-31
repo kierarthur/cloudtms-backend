@@ -29377,3 +29377,77 @@ BEGIN
   );
 END;
 $function$;
+
+CREATE OR REPLACE FUNCTION public._pay_candidate_arranged_pay_wtd_before(
+  p_candidate_id uuid,
+  p_week_start date,
+  p_pay_date date,
+  p_before_created_at_utc timestamptz DEFAULT NULL,
+  p_before_pay_batch_id uuid DEFAULT NULL
+)
+RETURNS numeric
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_result numeric(12,2);
+BEGIN
+  IF p_candidate_id IS NULL THEN
+    RAISE EXCEPTION 'public._pay_candidate_arranged_pay_wtd_before: p_candidate_id is required';
+  END IF;
+
+  IF p_week_start IS NULL THEN
+    RAISE EXCEPTION 'public._pay_candidate_arranged_pay_wtd_before: p_week_start is required';
+  END IF;
+
+  IF p_pay_date IS NULL THEN
+    RAISE EXCEPTION 'public._pay_candidate_arranged_pay_wtd_before: p_pay_date is required';
+  END IF;
+
+  SELECT
+    round(
+      coalesce(
+        sum(
+          CASE
+            WHEN public.pay_batch_candidates.net_bank_amount IS NOT NULL THEN public.pay_batch_candidates.net_bank_amount
+            WHEN public.pay_batch_candidates.gross_preview IS NOT NULL THEN public.pay_batch_candidates.gross_preview
+            ELSE 0::numeric
+          END
+        ),
+        0::numeric
+      ),
+      2
+    )::numeric(12,2)
+  INTO v_result
+  FROM public.pay_batch_candidates
+  JOIN public.pay_batches
+    ON public.pay_batches.id = public.pay_batch_candidates.pay_batch_id
+  WHERE public.pay_batch_candidates.candidate_id = p_candidate_id
+    AND public.pay_batches.pay_date >= p_week_start
+    AND public.pay_batches.pay_date < (p_week_start + 7)
+    AND public.pay_batches.cancelled_at_utc IS NULL
+    AND upper(coalesce(public.pay_batches.status::text, '')) <> 'CANCELLED'
+    AND upper(coalesce(public.pay_batches.batch_kind_fixed::text, 'PAYROLL')) <> 'LOANS'
+    AND (p_before_pay_batch_id IS NULL OR public.pay_batches.id <> p_before_pay_batch_id)
+    AND (
+      public.pay_batches.pay_date < p_pay_date
+      OR (
+        public.pay_batches.pay_date = p_pay_date
+        AND (
+          p_before_created_at_utc IS NULL
+          OR public.pay_batches.created_at_utc < p_before_created_at_utc
+          OR (
+            public.pay_batches.created_at_utc = p_before_created_at_utc
+            AND p_before_pay_batch_id IS NOT NULL
+            AND public.pay_batches.id::text < p_before_pay_batch_id::text
+          )
+        )
+      )
+    );
+
+  RETURN coalesce(v_result, 0::numeric(12,2));
+END;
+$function$;
+
