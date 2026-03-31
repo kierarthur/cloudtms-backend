@@ -4305,6 +4305,8 @@ begin;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -7727,11 +7729,11 @@ ts_itemised as (
              and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID'
             then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
                  - coalesce(fcrw.repaid_wtd_ex,0)
-                 - coalesce(vfcr.active_reserved_amount,0)
+                 - greatest(coalesce(vfcr.active_reserved_amount,0) - coalesce(fcrw.repaid_wtd_ex,0), 0)
             when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
             then least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
                  - coalesce(fcrw.repaid_wtd_ex,0)
-                 - coalesce(vfcr.active_reserved_amount,0)
+                 - greatest(coalesce(vfcr.active_reserved_amount,0) - coalesce(fcrw.repaid_wtd_ex,0), 0)
             else 0::numeric
           end,
           0::numeric
@@ -8305,7 +8307,7 @@ ts_itemised as (
                   fcpa.protected_recoverable_amount,
                   least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
                   - coalesce(fcrw.repaid_wtd_ex,0)
-                  - coalesce(vfcr.active_reserved_amount,0)
+                  - greatest(coalesce(vfcr.active_reserved_amount,0) - coalesce(fcrw.repaid_wtd_ex,0), 0)
                 )
               when vfcr.case_type = 'PAYMENT_ADVANCE'
                 then case
@@ -8317,7 +8319,7 @@ ts_itemised as (
                   fcpa.protected_recoverable_amount,
                   least(coalesce(vfcr.weekly_due,0), coalesce(vfcr.outstanding_amount,0))
                   - coalesce(fcrw.repaid_wtd_ex,0)
-                  - coalesce(vfcr.active_reserved_amount,0)
+                  - greatest(coalesce(vfcr.active_reserved_amount,0) - coalesce(fcrw.repaid_wtd_ex,0), 0)
                 )
               when vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
                 then case
@@ -10512,9 +10514,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
-
-
 
 
 
