@@ -13003,7 +13003,6 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       : {};
 
     const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
-    const batchHasVat = rows.some((row) => hasVatValue(row));
 
     const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
     const PAGE_W_MM = 210;
@@ -13139,6 +13138,18 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       drawText(state.page, f, formatMoney(amount), PAGE_W_MM - M - 24, y, tiny);
     };
 
+    const drawDestinationInfoLine = (beneficiary, sortCode, accountNumber, route) => {
+      const parts = [];
+      if (beneficiary) parts.push(`Paid to: ${beneficiary}`);
+      if (sortCode) parts.push(`Sort code: ${sortCode}`);
+      if (accountNumber) parts.push(`Account number: ${accountNumber}`);
+      if (route) parts.push(`Route: ${route}`);
+      const line = parts.join('    ');
+      if (!line) return;
+      drawText(state.page, font, fitText(font, line, tiny, PAGE_W_MM - (M * 2) - 2), M + 2, state.yTop, tiny);
+      state.yTop += 4.2;
+    };
+
     const candidateMap = new Map();
     for (const row of rows) {
       const candidateKey = safeStr(row?.candidate_id || candidateDisplayName(row) || '__candidate__');
@@ -13166,8 +13177,10 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
         destinationMap.get(destinationKey).push(row);
       }
       const destinationGroups = [...destinationMap.values()];
+      const showDestinationTotals = destinationGroups.length > 1;
 
-      for (const destinationRows of destinationGroups) {
+      for (let destinationIdx = 0; destinationIdx < destinationGroups.length; destinationIdx += 1) {
+        const destinationRows = destinationGroups[destinationIdx];
         const destinationFirst = destinationRows[0] || {};
         const destinationTotals = computeGroupTotals(destinationRows);
         const destinationHasVat = destinationTotals.hasVat;
@@ -13177,17 +13190,23 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
         const route = routeDisplay(destinationFirst);
 
         ensureSpace(18);
-        drawText(state.page, fontBold, beneficiary, M + 2, state.yTop, small);
-        state.yTop += 4.5;
-        if (sortCode || accountNumber) {
-          drawText(state.page, font, `Sort code: ${sortCode || '-'}    Account number: ${accountNumber || '-'}`, M + 4, state.yTop, tiny);
-          state.yTop += 3.8;
+        if (showDestinationTotals) {
+          drawText(state.page, fontBold, beneficiary, M + 2, state.yTop, small);
+          state.yTop += 4.5;
+          if (sortCode || accountNumber) {
+            drawText(state.page, font, `Sort code: ${sortCode || '-'}    Account number: ${accountNumber || '-'}`, M + 4, state.yTop, tiny);
+            state.yTop += 3.8;
+          }
+          if (route) {
+            drawText(state.page, font, `Route: ${route}`, M + 4, state.yTop, tiny);
+            state.yTop += 3.8;
+          }
+          state.yTop += 1.0;
+        } else if (destinationIdx === 0) {
+          drawDestinationInfoLine(beneficiary, sortCode, accountNumber, route);
+          state.yTop += 0.8;
         }
-        if (route) {
-          drawText(state.page, font, `Route: ${route}`, M + 4, state.yTop, tiny);
-          state.yTop += 3.8;
-        }
-        state.yTop += 1.0;
+
         drawTableHeader(destinationHasVat);
 
         const cols = makeCols(destinationHasVat);
@@ -13212,19 +13231,23 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
           }
         }
 
-        ensureSpace(destinationHasVat ? 18 : 14);
-        drawLine(state.page, M + 2, state.yTop, PAGE_W_MM - M);
-        state.yTop += 2.4;
-        drawTotalLine('Destination gross pay ex VAT', destinationTotals.grossEx, state.yTop, true);
-        state.yTop += 3.8;
-        if (destinationHasVat) {
-          drawTotalLine('Destination gross pay inc VAT', destinationTotals.grossInc, state.yTop, true);
+        if (showDestinationTotals) {
+          ensureSpace(destinationHasVat ? 18 : 14);
+          drawLine(state.page, M + 2, state.yTop, PAGE_W_MM - M);
+          state.yTop += 2.4;
+          drawTotalLine('Destination gross pay ex VAT', destinationTotals.grossEx, state.yTop, true);
           state.yTop += 3.8;
+          if (destinationHasVat) {
+            drawTotalLine('Destination gross pay inc VAT', destinationTotals.grossInc, state.yTop, true);
+            state.yTop += 3.8;
+          }
+          drawTotalLine('Destination deductions total', destinationHasVat ? destinationTotals.deductionsInc : destinationTotals.deductionsEx, state.yTop, false);
+          state.yTop += 3.8;
+          drawTotalLine('Destination net total', destinationHasVat ? destinationTotals.netInc : destinationTotals.netEx, state.yTop, true);
+          state.yTop += 5.0;
+        } else {
+          state.yTop += 3.5;
         }
-        drawTotalLine('Destination deductions total', destinationHasVat ? destinationTotals.deductionsInc : destinationTotals.deductionsEx, state.yTop, false);
-        state.yTop += 3.8;
-        drawTotalLine('Destination net total', destinationHasVat ? destinationTotals.netInc : destinationTotals.netEx, state.yTop, true);
-        state.yTop += 5.0;
       }
 
       ensureSpace(candidateHasVat ? 20 : 16);
@@ -20425,9 +20448,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
   };
   const unitsDisplay = (row) => {
     const units = asNum(row?.units);
-    const kind = safeStr(row?.line_kind).trim().toUpperCase();
     if (units == null) return '';
-    if (kind === 'TS_BUCKET' || kind === 'ADDITIONAL_UNIT') return units.toFixed(2);
     return units.toFixed(2);
   };
   const unitTypeDisplay = (row) => {
@@ -20538,6 +20559,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
         destinationMap.get(destinationKey).push(row);
       }
       const destinationGroups = [...destinationMap.values()];
+      const showDestinationTotals = destinationGroups.length > 1;
 
       for (const destinationRows of destinationGroups) {
         const destinationTotals = computeTotals(destinationRows);
@@ -20554,7 +20576,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
             sort_code: normalizeText(safeStr(row?.sort_code || '').trim()),
             account_number: normalizeText(safeStr(row?.account_number || '').trim()),
             route: normalizeText(routeDisplay(row)),
-            destination_group_key: normalizeText(safeStr(row?.destination_group_key || '').trim()),
+            destination: normalizeText(safeStr(row?.beneficiary_name || '').trim()),
             client_name: normalizeText(row?.client_name),
             work_date: normalizeText(safeStr(row?.work_date || row?.seg_work_date || row?.week_ending_date || row?.repayment_week_start || '').trim()),
             description: normalizeText(lineLabel(row)),
@@ -20566,10 +20588,10 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
             vat_amount: batchHasVat ? normalizeText(formatNum(lineVat(row))) : undefined,
             gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(lineInc(row))) : undefined,
             note: normalizeText(meaningfulNote(row)),
-            destination_gross_pay_ex_vat: normalizeText(formatNum(destinationTotals.grossEx)),
-            destination_gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(destinationTotals.grossInc)) : undefined,
-            destination_deductions_total: normalizeText(formatNum(batchHasVat ? destinationTotals.deductionsInc : destinationTotals.deductionsEx)),
-            destination_net_total: normalizeText(formatNum(batchHasVat ? destinationTotals.netInc : destinationTotals.netEx)),
+            destination_gross_pay_ex_vat: showDestinationTotals ? normalizeText(formatNum(destinationTotals.grossEx)) : undefined,
+            destination_gross_pay_inc_vat: (batchHasVat && showDestinationTotals) ? normalizeText(formatNum(destinationTotals.grossInc)) : undefined,
+            destination_deductions_total: showDestinationTotals ? normalizeText(formatNum(batchHasVat ? destinationTotals.deductionsInc : destinationTotals.deductionsEx)) : undefined,
+            destination_net_total: showDestinationTotals ? normalizeText(formatNum(batchHasVat ? destinationTotals.netInc : destinationTotals.netEx)) : undefined,
             candidate_gross_pay_ex_vat: normalizeText(formatNum(candidateTotals.grossEx)),
             candidate_gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(candidateTotals.grossInc)) : undefined,
             candidate_deductions_total: normalizeText(formatNum(batchHasVat ? candidateTotals.deductionsInc : candidateTotals.deductionsEx)),
@@ -20591,7 +20613,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
       'sort_code',
       'account_number',
       'route',
-      'destination_group_key',
+      'destination',
       'client_name',
       'work_date',
       'description',
@@ -20641,7 +20663,6 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
   }
 }
-
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
