@@ -10518,12 +10518,6 @@ $function$;
 
 
 
-
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -14492,7 +14486,11 @@ end;
             coalesce(public.v_finance_cases_register.outstanding_amount, 0)
           )
           - coalesce(fcrw.repaid_wtd_ex, 0)
-          - coalesce(public.v_finance_cases_register.active_reserved_amount, 0),
+          - greatest(
+              coalesce(public.v_finance_cases_register.active_reserved_amount, 0)
+              - coalesce(fcrw.repaid_wtd_ex, 0),
+              0
+            ),
           0
         ),
         2
@@ -14960,7 +14958,11 @@ end;
             coalesce(public.v_finance_cases_register.outstanding_amount, 0)
           )
           - coalesce(fcrw.repaid_wtd_ex, 0)
-          - coalesce(public.v_finance_cases_register.active_reserved_amount, 0),
+          - greatest(
+              coalesce(public.v_finance_cases_register.active_reserved_amount, 0)
+              - coalesce(fcrw.repaid_wtd_ex, 0),
+              0
+            ),
           0
         ),
         2
@@ -16985,6 +16987,8 @@ exception when others then
   raise;
 end;
 $$;
+
+
 
 
 
