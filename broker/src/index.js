@@ -12785,7 +12785,6 @@ async function buildPayBatchDetailPdfFromRows(exportObj) {
   const pdfBytes = await pdfDoc.save();
   return pdfBytes;
 }
-
 async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -12861,15 +12860,134 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   };
-  const asMoney = (v) => {
+  const round2 = (v) => {
+    const n = asNum(v);
+    return n == null ? 0 : Math.round(n * 100) / 100;
+  };
+  const formatMoney = (v) => {
     const n = asNum(v);
     if (n == null) return '';
-    return n.toFixed(2);
+    const abs = Math.abs(n).toFixed(2);
+    return n < 0 ? `-£${abs}` : `£${abs}`;
   };
-  const boolLabel = (v) => {
-    if (v === true) return 'Yes';
-    if (v === false) return 'No';
-    return '';
+  const hasVatValue = (row) => {
+    const vat = round2(row?.amount_vat);
+    return Math.abs(vat) > 0.00001;
+  };
+  const lineEx = (row) => {
+    const n = asNum(row?.signed_amount_ex_vat);
+    if (n != null) return n;
+    const m = asNum(row?.amount_ex_vat);
+    return m != null ? m : 0;
+  };
+  const lineInc = (row) => {
+    const n = asNum(row?.signed_amount_inc_vat);
+    if (n != null) return n;
+    const m = asNum(row?.amount_inc_vat);
+    if (m != null) return m;
+    return lineEx(row);
+  };
+  const lineVat = (row) => {
+    const n = asNum(row?.amount_vat);
+    return n != null ? n : 0;
+  };
+  const lineDirection = (row) => {
+    const d = safeStr(row?.payment_or_deduction).trim().toUpperCase();
+    if (d === 'PAYMENT' || d === 'DEDUCTION') return d;
+    return lineEx(row) < 0 ? 'DEDUCTION' : (lineEx(row) > 0 ? 'PAYMENT' : 'ZERO');
+  };
+  const lineLabel = (row) => {
+    const friendly = safeStr(row?.friendly_line_label).trim();
+    const kind = safeStr(row?.line_kind).trim().toUpperCase();
+    if (kind === 'ADDITIONAL_UNIT') {
+      if (!friendly || friendly.toLowerCase() === 'additional unit') return 'Additional hours';
+      return `Additional hours - ${friendly}`;
+    }
+    if (kind === 'EXPENSE') {
+      if (!friendly || friendly.toLowerCase() === 'expense') return 'Expense';
+      if (friendly.toLowerCase().startsWith('expense')) return friendly;
+      return `Expense - ${friendly}`;
+    }
+    return friendly || safeStr(row?.item_type_label || row?.line_label || row?.item_type || row?.line_kind).trim();
+  };
+  const unitsDisplay = (row) => {
+    const units = asNum(row?.units);
+    const kind = safeStr(row?.line_kind).trim().toUpperCase();
+    if (units == null) return '';
+    if (kind === 'TS_BUCKET' || kind === 'ADDITIONAL_UNIT') return `${units.toFixed(2)} hrs`;
+    if (kind === 'MILEAGE') return `${units.toFixed(2)} miles`;
+    if (safeStr(row?.unit_name).trim()) return `${units.toFixed(2)} ${safeStr(row.unit_name).trim()}`;
+    return units.toFixed(2);
+  };
+  const rateDisplay = (row) => {
+    const rate = asNum(row?.rate);
+    return rate == null ? '' : `£${rate.toFixed(2)}`;
+  };
+  const routeDisplay = (row) => {
+    return safeStr(row?.payout_destination || row?.routing_kind || row?.finance_routing_kind || '').trim();
+  };
+  const meaningfulNote = (row) => {
+    const raw = safeStr(row?.comment_or_note || row?.note || row?.adjustment_comment || '').trim();
+    const desc = safeStr(row?.description || '').trim();
+    const lowerRaw = raw.toLowerCase();
+    const lowerDesc = desc.toLowerCase();
+    if (!raw) return '';
+    if (lowerRaw === 'segment delta') return '';
+    if (lowerRaw === lowerDesc && lowerRaw === 'segment delta') return '';
+    return raw;
+  };
+  const candidateDisplayName = (row) => {
+    const display = safeStr(row?.candidate_display_name || '').trim();
+    const first = safeStr(row?.candidate_first_name || '').trim();
+    const last = safeStr(row?.candidate_last_name || '').trim();
+    const ref = safeStr(row?.candidate_tms_ref || row?.candidate_tms_ref_snap || '').trim();
+    const name = display || [first, last].filter(Boolean).join(' ').trim() || safeStr(row?.candidate_id || '').trim();
+    return ref ? `${name} (${ref})` : name;
+  };
+  const computeGroupTotals = (groupRows) => {
+    let grossEx = 0;
+    let grossInc = 0;
+    let deductionsEx = 0;
+    let deductionsInc = 0;
+    let netEx = 0;
+    let netInc = 0;
+    let vatTotal = 0;
+    let hasVat = false;
+    for (const row of groupRows) {
+      const ex = lineEx(row);
+      const inc = lineInc(row);
+      const vat = lineVat(row);
+      netEx += ex;
+      netInc += inc;
+      vatTotal += vat;
+      if (Math.abs(vat) > 0.00001) hasVat = true;
+      if (ex > 0) {
+        grossEx += ex;
+        grossInc += inc;
+      }
+      if (ex < 0) {
+        deductionsEx += ex;
+        deductionsInc += inc;
+      }
+    }
+    return {
+      grossEx: round2(grossEx),
+      grossInc: round2(grossInc),
+      deductionsEx: round2(deductionsEx),
+      deductionsInc: round2(deductionsInc),
+      netEx: round2(netEx),
+      netInc: round2(netInc),
+      vatTotal: round2(vatTotal),
+      hasVat
+    };
+  };
+  const candidateNetTotal = (candidateRows, candidateTotals) => {
+    const channels = [...new Set(candidateRows.map((row) => safeStr(row?.pay_channel).trim().toUpperCase()).filter(Boolean))];
+    if (channels.length === 1 && channels[0] === 'PAYE') {
+      const payeNet = asNum(candidateRows.find((row) => asNum(row?.paye_net_amount) != null)?.paye_net_amount);
+      if (payeNet != null) return round2(payeNet);
+    }
+    return candidateTotals.hasVat ? candidateTotals.netInc : candidateTotals.netEx;
   };
 
   try {
@@ -12885,6 +13003,7 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       : {};
 
     const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+    const batchHasVat = rows.some((row) => hasVatValue(row));
 
     const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
     const PAGE_W_MM = 210;
@@ -12896,7 +13015,6 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
     const M = 10;
-    const lineH = 4.2;
     const small = 8;
     const tiny = 7;
     const title = 12;
@@ -12936,9 +13054,7 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       if (textWidthMm(f, s, size) <= maxWmm) return s;
       const ell = '…';
       let out = s;
-      while (out.length > 1 && textWidthMm(f, out + ell, size) > maxWmm) {
-        out = out.slice(0, -1);
-      }
+      while (out.length > 1 && textWidthMm(f, out + ell, size) > maxWmm) out = out.slice(0, -1);
       return out.length ? `${out}${ell}` : ell;
     };
 
@@ -12977,140 +13093,153 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       drawHeader();
     };
 
-    const grouped = new Map();
-    for (const row of rows) {
-      const candidateId = safeStr(row?.candidate_id || '');
-      const key = candidateId || `__no_candidate__:${grouped.size}`;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(row);
-    }
-
-    const sortGroupKey = (arr) => {
-      const first = Array.isArray(arr) && arr.length ? arr[0] : {};
-      const ln = safeStr(first?.candidate_last_name).toLowerCase();
-      const fn = safeStr(first?.candidate_first_name).toLowerCase();
-      const dn = safeStr(first?.candidate_display_name).toLowerCase();
-      const ref = safeStr(first?.candidate_tms_ref || first?.candidate_tms_ref_snap).toLowerCase();
-      return `${ln}|${fn}|${dn}|${ref}`;
+    const makeCols = (showVat) => {
+      if (showVat) {
+        return {
+          date: { x: M, w: 18 },
+          client: { x: M + 20, w: 32 },
+          desc: { x: M + 54, w: 48 },
+          units: { x: M + 104, w: 20 },
+          rate: { x: M + 126, w: 16 },
+          ex: { x: M + 144, w: 16 },
+          vat: { x: M + 162, w: 12 },
+          inc: { x: M + 176, w: 20 }
+        };
+      }
+      return {
+        date: { x: M, w: 20 },
+        client: { x: M + 22, w: 36 },
+        desc: { x: M + 60, w: 58 },
+        units: { x: M + 120, w: 24 },
+        rate: { x: M + 146, w: 18 },
+        ex: { x: M + 166, w: 24 }
+      };
     };
 
-    const candidateGroups = [...grouped.values()].sort((a, b) => sortGroupKey(a).localeCompare(sortGroupKey(b)));
-
-    newPage();
-
-    const topCols = {
-      date: { x: M, w: 18 },
-      client: { x: M + 20, w: 32 },
-      type: { x: M + 54, w: 24 },
-      dir: { x: M + 80, w: 16 },
-      tax: { x: M + 98, w: 18 },
-      method: { x: M + 118, w: 18 },
-      destination: { x: M + 138, w: 34 },
-      amount: { x: M + 174, w: 20 }
-    };
-
-    const drawMainHeader = () => {
-      drawText(state.page, fontBold, 'Date', topCols.date.x, state.yTop, tiny);
-      drawText(state.page, fontBold, 'Client', topCols.client.x, state.yTop, tiny);
-      drawText(state.page, fontBold, 'Type', topCols.type.x, state.yTop, tiny);
-      drawText(state.page, fontBold, 'Dir', topCols.dir.x, state.yTop, tiny);
-      drawText(state.page, fontBold, 'Tax', topCols.tax.x, state.yTop, tiny);
-      drawText(state.page, fontBold, 'Method', topCols.method.x, state.yTop, tiny);
-      drawText(state.page, fontBold, 'Destination', topCols.destination.x, state.yTop, tiny);
-      drawText(state.page, fontBold, 'Amount', topCols.amount.x, state.yTop, tiny);
+    const drawTableHeader = (showVat) => {
+      const cols = makeCols(showVat);
+      drawText(state.page, fontBold, 'Date', cols.date.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Client', cols.client.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Description', cols.desc.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Hours / Units', cols.units.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Rate', cols.rate.x, state.yTop, tiny);
+      drawText(state.page, fontBold, 'Gross ex VAT', cols.ex.x, state.yTop, tiny);
+      if (showVat) {
+        drawText(state.page, fontBold, 'VAT', cols.vat.x, state.yTop, tiny);
+        drawText(state.page, fontBold, 'Gross inc VAT', cols.inc.x, state.yTop, tiny);
+      }
       state.yTop += 4.5;
       drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
       state.yTop += 2.0;
     };
 
-    drawMainHeader();
+    const drawTotalLine = (label, amount, y, bold = false) => {
+      const f = bold ? fontBold : font;
+      drawText(state.page, f, label, M + 6, y, tiny);
+      drawText(state.page, f, formatMoney(amount), PAGE_W_MM - M - 24, y, tiny);
+    };
 
-    for (const groupRows of candidateGroups) {
-      const first = groupRows[0] || {};
-      const candidateName = safeStr(first?.candidate_display_name || [safeStr(first?.candidate_first_name), safeStr(first?.candidate_last_name)].filter(Boolean).join(' ').trim() || first?.candidate_id || '');
-      const candidateRef = safeStr(first?.candidate_tms_ref || first?.candidate_tms_ref_snap || '');
-      const candidateDisplay = candidateRef ? `${candidateName} (${candidateRef})` : candidateName;
+    const candidateMap = new Map();
+    for (const row of rows) {
+      const candidateKey = safeStr(row?.candidate_id || candidateDisplayName(row) || '__candidate__');
+      if (!candidateMap.has(candidateKey)) candidateMap.set(candidateKey, []);
+      candidateMap.get(candidateKey).push(row);
+    }
+    const candidateGroups = [...candidateMap.values()];
 
-      ensureSpace(12);
-      drawText(state.page, fontBold, candidateDisplay || '(unknown candidate)', M, state.yTop, small);
+    newPage();
+
+    for (const candidateRows of candidateGroups) {
+      const candidateTitle = candidateDisplayName(candidateRows[0] || {});
+      const candidateTotals = computeGroupTotals(candidateRows);
+      const candidateNet = candidateNetTotal(candidateRows, candidateTotals);
+      const candidateHasVat = candidateTotals.hasVat;
+
+      ensureSpace(14);
+      drawText(state.page, fontBold, candidateTitle || '(unknown candidate)', M, state.yTop, small);
       state.yTop += 5.0;
 
-      for (const row of groupRows) {
-        const amountText = (() => {
-          const deductionAmount = asNum(row?.deduction_amount ?? row?.deduction_amount_ex_vat);
-          const amountEx = asNum(row?.amount_ex_vat);
-          const paymentOrDeduction = safeStr(row?.payment_or_deduction).trim().toUpperCase();
-          if (paymentOrDeduction === 'DEDUCTION' && deductionAmount != null) return `£${asMoney(deductionAmount)}`;
-          if (amountEx != null) return `£${asMoney(amountEx)}`;
-          return '';
-        })();
+      const destinationMap = new Map();
+      for (const row of candidateRows) {
+        const destinationKey = safeStr(row?.destination_group_key || `${safeStr(row?.beneficiary_name)}|${safeStr(row?.sort_code)}|${safeStr(row?.account_number)}|${routeDisplay(row)}` || '__destination__');
+        if (!destinationMap.has(destinationKey)) destinationMap.set(destinationKey, []);
+        destinationMap.get(destinationKey).push(row);
+      }
+      const destinationGroups = [...destinationMap.values()];
 
-        const dateText = safeStr(row?.work_date || row?.seg_work_date || row?.sort_work_date || row?.week_ending_date || '');
-        const clientText = safeStr(row?.client_name || '');
-        const typeText = safeStr(row?.item_type_label || row?.item_type || row?.line_kind || '');
-        const directionText = safeStr(row?.payment_or_deduction || '');
-        const taxText = safeStr(row?.taxability || row?.finance_taxability || '');
-        const methodText = safeStr(row?.pay_method || row?.pay_channel || '');
-        const destinationText = safeStr(row?.payout_destination || row?.routing_kind || row?.finance_routing_kind || '');
+      for (const destinationRows of destinationGroups) {
+        const destinationFirst = destinationRows[0] || {};
+        const destinationTotals = computeGroupTotals(destinationRows);
+        const destinationHasVat = destinationTotals.hasVat;
+        const beneficiary = safeStr(destinationFirst?.beneficiary_name || '').trim() || candidateTitle;
+        const sortCode = safeStr(destinationFirst?.sort_code || '').trim();
+        const accountNumber = safeStr(destinationFirst?.account_number || '').trim();
+        const route = routeDisplay(destinationFirst);
 
-        ensureSpace(16);
-
-        drawText(state.page, font, fitText(font, dateText, tiny, topCols.date.w), topCols.date.x, state.yTop, tiny);
-        drawText(state.page, font, fitText(font, clientText, tiny, topCols.client.w), topCols.client.x, state.yTop, tiny);
-        drawText(state.page, font, fitText(font, typeText, tiny, topCols.type.w), topCols.type.x, state.yTop, tiny);
-        drawText(state.page, font, fitText(font, directionText, tiny, topCols.dir.w), topCols.dir.x, state.yTop, tiny);
-        drawText(state.page, font, fitText(font, taxText, tiny, topCols.tax.w), topCols.tax.x, state.yTop, tiny);
-        drawText(state.page, font, fitText(font, methodText, tiny, topCols.method.w), topCols.method.x, state.yTop, tiny);
-        drawText(state.page, font, fitText(font, destinationText, tiny, topCols.destination.w), topCols.destination.x, state.yTop, tiny);
-        drawText(state.page, fontBold, amountText, topCols.amount.x, state.yTop, tiny);
+        ensureSpace(18);
+        drawText(state.page, fontBold, beneficiary, M + 2, state.yTop, small);
         state.yTop += 4.5;
-
-        const detailLine1 = [
-          safeStr(row?.finance_case_reference) ? `Ref: ${safeStr(row.finance_case_reference)}` : '',
-          safeStr(row?.comment_or_note) ? `Note: ${safeStr(row.comment_or_note)}` : '',
-          safeStr(row?.description) ? `Desc: ${safeStr(row.description)}` : ''
-        ].filter(Boolean).join('   ');
-
-        const detailLine2 = [
-          safeStr(row?.masked_bank_account_paid_to || row?.masked_bank_account) ? `Masked account: ${safeStr(row.masked_bank_account_paid_to || row.masked_bank_account)}` : '',
-          safeStr(row?.beneficiary_name) ? `Beneficiary: ${safeStr(row.beneficiary_name)}` : '',
-          safeStr(row?.bank_details_created_by_display_name || row?.bank_details_created_by) ? `Entered by: ${safeStr(row.bank_details_created_by_display_name || row.bank_details_created_by)}` : '',
-          safeStr(row?.bank_details_updated_by_display_name || row?.bank_details_updated_by) ? `Last changed by: ${safeStr(row.bank_details_updated_by_display_name || row.bank_details_updated_by)}` : ''
-        ].filter(Boolean).join('   ');
-
-        const detailLine3 = [
-          safeStr(row?.lifecycle_status_display || row?.finance_lifecycle_status_display || row?.lifecycle_status) ? `Lifecycle: ${safeStr(row.lifecycle_status_display || row.finance_lifecycle_status_display || row.lifecycle_status)}` : '',
-          safeStr(row?.finance_status) ? `Finance status: ${safeStr(row.finance_status)}` : '',
-          safeStr(row?.finance_payout_status) ? `Payout status: ${safeStr(row.finance_payout_status)}` : '',
-          row?.is_candidate_directed_oneoff_payout !== undefined ? `Candidate-directed one-off: ${boolLabel(row.is_candidate_directed_oneoff_payout)}` : '',
-          row?.appears_on_umbrella_remittance !== undefined ? `On umbrella remittance: ${boolLabel(row.appears_on_umbrella_remittance)}` : '',
-          row?.generates_candidate_payment_advice !== undefined ? `Generates payout advice: ${boolLabel(row.generates_candidate_payment_advice)}` : ''
-        ].filter(Boolean).join('   ');
-
-        if (detailLine1) {
-          ensureSpace(4.0);
-          drawText(state.page, font, fitText(font, detailLine1, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
+        if (sortCode || accountNumber) {
+          drawText(state.page, font, `Sort code: ${sortCode || '-'}    Account number: ${accountNumber || '-'}`, M + 4, state.yTop, tiny);
           state.yTop += 3.8;
         }
-
-        if (detailLine2) {
-          ensureSpace(4.0);
-          drawText(state.page, font, fitText(font, detailLine2, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
+        if (route) {
+          drawText(state.page, font, `Route: ${route}`, M + 4, state.yTop, tiny);
           state.yTop += 3.8;
         }
+        state.yTop += 1.0;
+        drawTableHeader(destinationHasVat);
 
-        if (detailLine3) {
-          ensureSpace(4.0);
-          drawText(state.page, font, fitText(font, detailLine3, tiny, PAGE_W_MM - (M * 2)), M + 4, state.yTop, tiny);
-          state.yTop += 3.8;
+        const cols = makeCols(destinationHasVat);
+        for (const row of destinationRows) {
+          const label = lineLabel(row);
+          const note = meaningfulNote(row);
+          ensureSpace(note ? 10 : 6);
+          drawText(state.page, font, fitText(font, safeStr(row?.work_date || row?.seg_work_date || row?.week_ending_date || row?.repayment_week_start || ''), tiny, cols.date.w), cols.date.x, state.yTop, tiny);
+          drawText(state.page, font, fitText(font, safeStr(row?.client_name || ''), tiny, cols.client.w), cols.client.x, state.yTop, tiny);
+          drawText(state.page, font, fitText(font, label, tiny, cols.desc.w), cols.desc.x, state.yTop, tiny);
+          drawText(state.page, font, fitText(font, unitsDisplay(row), tiny, cols.units.w), cols.units.x, state.yTop, tiny);
+          drawText(state.page, font, fitText(font, rateDisplay(row), tiny, cols.rate.w), cols.rate.x, state.yTop, tiny);
+          drawText(state.page, fontBold, fitText(fontBold, formatMoney(lineEx(row)), tiny, cols.ex.w), cols.ex.x, state.yTop, tiny);
+          if (destinationHasVat) {
+            drawText(state.page, font, fitText(font, formatMoney(lineVat(row)), tiny, cols.vat.w), cols.vat.x, state.yTop, tiny);
+            drawText(state.page, fontBold, fitText(fontBold, formatMoney(lineInc(row)), tiny, cols.inc.w), cols.inc.x, state.yTop, tiny);
+          }
+          state.yTop += 4.0;
+          if (note) {
+            drawText(state.page, font, fitText(font, `Note: ${note}`, tiny, PAGE_W_MM - (M * 2) - 6), M + 6, state.yTop, tiny);
+            state.yTop += 3.4;
+          }
         }
 
-        state.yTop += 1.5;
+        ensureSpace(destinationHasVat ? 18 : 14);
+        drawLine(state.page, M + 2, state.yTop, PAGE_W_MM - M);
+        state.yTop += 2.4;
+        drawTotalLine('Destination gross pay ex VAT', destinationTotals.grossEx, state.yTop, true);
+        state.yTop += 3.8;
+        if (destinationHasVat) {
+          drawTotalLine('Destination gross pay inc VAT', destinationTotals.grossInc, state.yTop, true);
+          state.yTop += 3.8;
+        }
+        drawTotalLine('Destination deductions total', destinationHasVat ? destinationTotals.deductionsInc : destinationTotals.deductionsEx, state.yTop, false);
+        state.yTop += 3.8;
+        drawTotalLine('Destination net total', destinationHasVat ? destinationTotals.netInc : destinationTotals.netEx, state.yTop, true);
+        state.yTop += 5.0;
       }
 
-      state.yTop += 2.5;
+      ensureSpace(candidateHasVat ? 20 : 16);
       drawLine(state.page, M, state.yTop, PAGE_W_MM - M);
-      state.yTop += 4.0;
+      state.yTop += 2.8;
+      drawTotalLine('Candidate gross pay ex VAT', candidateTotals.grossEx, state.yTop, true);
+      state.yTop += 3.8;
+      if (candidateHasVat) {
+        drawTotalLine('Candidate gross pay inc VAT', candidateTotals.grossInc, state.yTop, true);
+        state.yTop += 3.8;
+      }
+      drawTotalLine('Candidate deductions total', candidateHasVat ? candidateTotals.deductionsInc : candidateTotals.deductionsEx, state.yTop, false);
+      state.yTop += 3.8;
+      drawTotalLine('Candidate net pay total', candidateNet, state.yTop, true);
+      state.yTop += 6.0;
     }
 
     const pdfBytes = await pdfDoc.save();
@@ -20167,8 +20296,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   }
 }
 
-
-
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -20247,19 +20374,128 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     return s;
   };
 
-  const asBoolText = (v) => {
-    return v === true ? 'true' : (v === false ? 'false' : '');
+  const normalizeText = (v) => (v === null || v === undefined ? '' : String(v));
+  const safeStr = (v) => (v == null ? '' : String(v));
+  const asNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   };
-
-  const normalizeText = (v) => {
-    return (v === null || v === undefined) ? '' : String(v);
+  const round2 = (v) => {
+    const n = asNum(v);
+    return n == null ? 0 : Math.round(n * 100) / 100;
   };
-
-  const coalesce = (...vals) => {
-    for (const v of vals) {
-      if (v !== null && v !== undefined && String(v) !== '') return v;
+  const formatNum = (v) => {
+    const n = asNum(v);
+    return n == null ? '' : n.toFixed(2);
+  };
+  const hasVatValue = (row) => {
+    const vat = round2(row?.amount_vat);
+    return Math.abs(vat) > 0.00001;
+  };
+  const lineEx = (row) => {
+    const n = asNum(row?.signed_amount_ex_vat);
+    if (n != null) return n;
+    const m = asNum(row?.amount_ex_vat);
+    return m != null ? m : 0;
+  };
+  const lineInc = (row) => {
+    const n = asNum(row?.signed_amount_inc_vat);
+    if (n != null) return n;
+    const m = asNum(row?.amount_inc_vat);
+    if (m != null) return m;
+    return lineEx(row);
+  };
+  const lineVat = (row) => {
+    const n = asNum(row?.amount_vat);
+    return n != null ? n : 0;
+  };
+  const lineLabel = (row) => {
+    const friendly = safeStr(row?.friendly_line_label).trim();
+    const kind = safeStr(row?.line_kind).trim().toUpperCase();
+    if (kind === 'ADDITIONAL_UNIT') {
+      if (!friendly || friendly.toLowerCase() === 'additional unit') return 'Additional hours';
+      return `Additional hours - ${friendly}`;
     }
-    return '';
+    if (kind === 'EXPENSE') {
+      if (!friendly || friendly.toLowerCase() === 'expense') return 'Expense';
+      if (friendly.toLowerCase().startsWith('expense')) return friendly;
+      return `Expense - ${friendly}`;
+    }
+    return friendly || safeStr(row?.item_type_label || row?.line_label || row?.item_type || row?.line_kind).trim();
+  };
+  const unitsDisplay = (row) => {
+    const units = asNum(row?.units);
+    const kind = safeStr(row?.line_kind).trim().toUpperCase();
+    if (units == null) return '';
+    if (kind === 'TS_BUCKET' || kind === 'ADDITIONAL_UNIT') return units.toFixed(2);
+    return units.toFixed(2);
+  };
+  const unitTypeDisplay = (row) => {
+    const kind = safeStr(row?.line_kind).trim().toUpperCase();
+    if (kind === 'TS_BUCKET' || kind === 'ADDITIONAL_UNIT') return 'Hours';
+    if (kind === 'MILEAGE') return 'Miles';
+    const unitName = safeStr(row?.unit_name).trim();
+    return unitName || '';
+  };
+  const directionDisplay = (row) => {
+    const d = safeStr(row?.payment_or_deduction).trim().toUpperCase();
+    if (d === 'PAYMENT' || d === 'DEDUCTION') return d;
+    return lineEx(row) < 0 ? 'DEDUCTION' : (lineEx(row) > 0 ? 'PAYMENT' : 'ZERO');
+  };
+  const candidateName = (row) => {
+    const display = safeStr(row?.candidate_display_name || '').trim();
+    const first = safeStr(row?.candidate_first_name || '').trim();
+    const last = safeStr(row?.candidate_last_name || '').trim();
+    return display || [first, last].filter(Boolean).join(' ').trim() || safeStr(row?.candidate_id || '').trim();
+  };
+  const routeDisplay = (row) => safeStr(row?.payout_destination || row?.routing_kind || row?.finance_routing_kind || '').trim();
+  const meaningfulNote = (row) => {
+    const raw = safeStr(row?.comment_or_note || row?.note || row?.adjustment_comment || '').trim();
+    if (!raw) return '';
+    if (raw.toLowerCase() === 'segment delta') return '';
+    return raw;
+  };
+  const computeTotals = (groupRows) => {
+    let grossEx = 0;
+    let grossInc = 0;
+    let deductionsEx = 0;
+    let deductionsInc = 0;
+    let netEx = 0;
+    let netInc = 0;
+    let hasVat = false;
+    for (const row of groupRows) {
+      const ex = lineEx(row);
+      const inc = lineInc(row);
+      const vat = lineVat(row);
+      netEx += ex;
+      netInc += inc;
+      if (Math.abs(vat) > 0.00001) hasVat = true;
+      if (ex > 0) {
+        grossEx += ex;
+        grossInc += inc;
+      }
+      if (ex < 0) {
+        deductionsEx += ex;
+        deductionsInc += inc;
+      }
+    }
+    return {
+      grossEx: round2(grossEx),
+      grossInc: round2(grossInc),
+      deductionsEx: round2(deductionsEx),
+      deductionsInc: round2(deductionsInc),
+      netEx: round2(netEx),
+      netInc: round2(netInc),
+      hasVat
+    };
+  };
+  const candidateNetTotal = (candidateRows, candidateTotals) => {
+    const channels = [...new Set(candidateRows.map((row) => safeStr(row?.pay_channel).trim().toUpperCase()).filter(Boolean))];
+    if (channels.length === 1 && channels[0] === 'PAYE') {
+      const payeNet = asNum(candidateRows.find((row) => asNum(row?.paye_net_amount) != null)?.paye_net_amount);
+      if (payeNet != null) return round2(payeNet);
+    }
+    return candidateTotals.hasVat ? candidateTotals.netInc : candidateTotals.netEx;
   };
 
   try {
@@ -20275,6 +20511,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
       : {};
 
     const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+    const batchHasVat = rows.some((row) => hasVatValue(row));
 
     const batchId = (batch && batch.id != null) ? String(batch.id) : id;
     const batchStatus = (batch && batch.status != null) ? String(batch.status) : '';
@@ -20282,169 +20519,108 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     const batchKind = (batch && batch.batch_kind != null) ? String(batch.batch_kind) : '';
     const batchKindFixed = (batch && batch.batch_kind_fixed != null) ? String(batch.batch_kind_fixed) : '';
 
+    const candidateMap = new Map();
+    for (const row of rows) {
+      const candidateKey = safeStr(row?.candidate_id || candidateName(row) || '__candidate__');
+      if (!candidateMap.has(candidateKey)) candidateMap.set(candidateKey, []);
+      candidateMap.get(candidateKey).push(row);
+    }
+    const candidateGroups = [...candidateMap.values()];
+
+    const outputRows = [];
+    for (const candidateRows of candidateGroups) {
+      const candidateTotals = computeTotals(candidateRows);
+      const candidateNet = candidateNetTotal(candidateRows, candidateTotals);
+      const destinationMap = new Map();
+      for (const row of candidateRows) {
+        const destinationKey = safeStr(row?.destination_group_key || `${safeStr(row?.beneficiary_name)}|${safeStr(row?.sort_code)}|${safeStr(row?.account_number)}|${routeDisplay(row)}` || '__destination__');
+        if (!destinationMap.has(destinationKey)) destinationMap.set(destinationKey, []);
+        destinationMap.get(destinationKey).push(row);
+      }
+      const destinationGroups = [...destinationMap.values()];
+
+      for (const destinationRows of destinationGroups) {
+        const destinationTotals = computeTotals(destinationRows);
+        for (const row of destinationRows) {
+          outputRows.push({
+            batch_id: batchId,
+            batch_status: batchStatus,
+            pay_date: payDate,
+            batch_kind: batchKind,
+            batch_kind_fixed: batchKindFixed,
+            candidate_ref: normalizeText(safeStr(row?.candidate_tms_ref || row?.candidate_tms_ref_snap || '').trim()),
+            candidate_name: normalizeText(candidateName(row)),
+            beneficiary_name: normalizeText(safeStr(row?.beneficiary_name || '').trim()),
+            sort_code: normalizeText(safeStr(row?.sort_code || '').trim()),
+            account_number: normalizeText(safeStr(row?.account_number || '').trim()),
+            route: normalizeText(routeDisplay(row)),
+            destination_group_key: normalizeText(safeStr(row?.destination_group_key || '').trim()),
+            client_name: normalizeText(row?.client_name),
+            work_date: normalizeText(safeStr(row?.work_date || row?.seg_work_date || row?.week_ending_date || row?.repayment_week_start || '').trim()),
+            description: normalizeText(lineLabel(row)),
+            direction: normalizeText(directionDisplay(row)),
+            hours_or_units: normalizeText(unitsDisplay(row)),
+            unit_type: normalizeText(unitTypeDisplay(row)),
+            rate: normalizeText(formatNum(row?.rate)),
+            gross_pay_ex_vat: normalizeText(formatNum(lineEx(row))),
+            vat_amount: batchHasVat ? normalizeText(formatNum(lineVat(row))) : undefined,
+            gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(lineInc(row))) : undefined,
+            note: normalizeText(meaningfulNote(row)),
+            destination_gross_pay_ex_vat: normalizeText(formatNum(destinationTotals.grossEx)),
+            destination_gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(destinationTotals.grossInc)) : undefined,
+            destination_deductions_total: normalizeText(formatNum(batchHasVat ? destinationTotals.deductionsInc : destinationTotals.deductionsEx)),
+            destination_net_total: normalizeText(formatNum(batchHasVat ? destinationTotals.netInc : destinationTotals.netEx)),
+            candidate_gross_pay_ex_vat: normalizeText(formatNum(candidateTotals.grossEx)),
+            candidate_gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(candidateTotals.grossInc)) : undefined,
+            candidate_deductions_total: normalizeText(formatNum(batchHasVat ? candidateTotals.deductionsInc : candidateTotals.deductionsEx)),
+            candidate_net_pay_total: normalizeText(formatNum(candidateNet))
+          });
+        }
+      }
+    }
+
     const cols = [
       'batch_id',
       'batch_status',
       'pay_date',
       'batch_kind',
       'batch_kind_fixed',
-
-      'candidate_last_name',
-      'candidate_first_name',
       'candidate_ref',
-      'candidate_display_name',
-      'client_name',
-      'client_id',
-      'timesheet_id',
-      'work_date',
-      'week_ending_date',
-      'reference_number',
-
-      'line_kind',
-      'bucket_code',
-      'unit_name',
-      'units',
-      'rate',
-      'amount_ex_vat',
-      'amount_vat',
-      'amount_inc_vat',
-      'signed_amount_ex_vat',
-
-      'item_type',
-      'item_type_label',
-      'payment_or_deduction',
-      'is_deduction',
-      'deduction_kind',
-      'deduction_amount',
-
-      'taxability',
-      'pay_channel',
-      'pay_method',
-
-      'finance_case_reference',
-      'source_ref',
-      'comment_or_note',
-      'description',
-      'item_description',
-
-      'payout_destination',
-      'routing_kind',
-      'finance_routing_kind',
-      'appears_on_umbrella_remittance',
-      'generates_candidate_payment_advice',
-      'is_candidate_directed_oneoff_payout',
-
-      'masked_bank_account',
-      'masked_bank_account_paid_to',
+      'candidate_name',
       'beneficiary_name',
-
-      'bank_details_created_by',
-      'bank_details_created_by_display_name',
-      'bank_details_created_by_email',
-      'bank_details_created_by_user_id',
-      'bank_details_updated_by',
-      'bank_details_updated_by_display_name',
-      'bank_details_updated_by_email',
-      'bank_details_updated_by_user_id',
-
-      'lifecycle_status',
-      'lifecycle_status_display',
-      'finance_lifecycle_status_display',
-      'finance_status',
-      'finance_payout_status',
-
-      'paye_net_amount',
-      'repayment_week_start'
+      'sort_code',
+      'account_number',
+      'route',
+      'destination_group_key',
+      'client_name',
+      'work_date',
+      'description',
+      'direction',
+      'hours_or_units',
+      'unit_type',
+      'rate',
+      'gross_pay_ex_vat'
     ];
+
+    if (batchHasVat) {
+      cols.push('vat_amount');
+      cols.push('gross_pay_inc_vat');
+    }
+
+    cols.push('note');
+    cols.push('destination_gross_pay_ex_vat');
+    if (batchHasVat) cols.push('destination_gross_pay_inc_vat');
+    cols.push('destination_deductions_total');
+    cols.push('destination_net_total');
+    cols.push('candidate_gross_pay_ex_vat');
+    if (batchHasVat) cols.push('candidate_gross_pay_inc_vat');
+    cols.push('candidate_deductions_total');
+    cols.push('candidate_net_pay_total');
 
     const lines = [];
     lines.push(cols.map(csvEscape).join(','));
-
-    for (const row of rows) {
-      const itemType = normalizeText(coalesce(row?.item_type, ''));
-      const paymentOrDeduction = normalizeText(coalesce(row?.payment_or_deduction, ''));
-      const deductionKind = normalizeText(coalesce(row?.deduction_kind, itemType));
-      const deductionAmount = coalesce(row?.deduction_amount, row?.deduction_amount_ex_vat, '');
-      const isDeduction = (String(paymentOrDeduction).trim().toUpperCase() === 'DEDUCTION')
-        ? 'true'
-        : (String(paymentOrDeduction).trim().toUpperCase() === 'PAYMENT' ? 'false' : asBoolText(row?.is_deduction));
-
-      const vals = [
-        batchId,
-        batchStatus,
-        payDate,
-        batchKind,
-        batchKindFixed,
-
-        normalizeText(row?.candidate_last_name),
-        normalizeText(row?.candidate_first_name),
-        normalizeText(coalesce(row?.candidate_tms_ref, row?.candidate_tms_ref_snap, '')),
-        normalizeText(coalesce(row?.candidate_display_name, row?.candidate_display_name_snap, '')),
-        normalizeText(row?.client_name),
-        normalizeText(row?.client_id),
-        normalizeText(row?.timesheet_id),
-        normalizeText(coalesce(row?.work_date, row?.seg_work_date, row?.sort_work_date, '')),
-        normalizeText(row?.week_ending_date),
-        normalizeText(row?.reference_number),
-
-        normalizeText(row?.line_kind),
-        normalizeText(coalesce(row?.bucket_code, row?.sort_bucket_code, '')),
-        normalizeText(coalesce(row?.unit_name, row?.sort_unit_name, '')),
-        normalizeText(row?.units),
-        normalizeText(row?.rate),
-        normalizeText(row?.amount_ex_vat),
-        normalizeText(row?.amount_vat),
-        normalizeText(row?.amount_inc_vat),
-        normalizeText(row?.signed_amount_ex_vat),
-
-        itemType,
-        normalizeText(row?.item_type_label),
-        paymentOrDeduction,
-        isDeduction,
-        deductionKind,
-        normalizeText(deductionAmount),
-
-        normalizeText(coalesce(row?.taxability, row?.finance_taxability, '')),
-        normalizeText(row?.pay_channel),
-        normalizeText(row?.pay_method),
-
-        normalizeText(row?.finance_case_reference),
-        normalizeText(row?.source_ref),
-        normalizeText(row?.comment_or_note),
-        normalizeText(row?.description),
-        normalizeText(row?.item_description),
-
-        normalizeText(row?.payout_destination),
-        normalizeText(coalesce(row?.routing_kind, row?.finance_routing_kind, '')),
-        normalizeText(row?.finance_routing_kind),
-        asBoolText(row?.appears_on_umbrella_remittance),
-        asBoolText(row?.generates_candidate_payment_advice),
-        asBoolText(row?.is_candidate_directed_oneoff_payout),
-
-        normalizeText(row?.masked_bank_account),
-        normalizeText(row?.masked_bank_account_paid_to),
-        normalizeText(row?.beneficiary_name),
-
-        normalizeText(row?.bank_details_created_by),
-        normalizeText(row?.bank_details_created_by_display_name),
-        normalizeText(row?.bank_details_created_by_email),
-        normalizeText(row?.bank_details_created_by_user_id),
-        normalizeText(row?.bank_details_updated_by),
-        normalizeText(row?.bank_details_updated_by_display_name),
-        normalizeText(row?.bank_details_updated_by_email),
-        normalizeText(row?.bank_details_updated_by_user_id),
-
-        normalizeText(row?.lifecycle_status),
-        normalizeText(row?.lifecycle_status_display),
-        normalizeText(row?.finance_lifecycle_status_display),
-        normalizeText(row?.finance_status),
-        normalizeText(row?.finance_payout_status),
-
-        normalizeText(row?.paye_net_amount),
-        normalizeText(row?.repayment_week_start)
-      ];
-
-      lines.push(vals.map(csvEscape).join(','));
+    for (const row of outputRows) {
+      lines.push(cols.map((col) => csvEscape(row[col])).join(','));
     }
 
     const csvText = lines.join('\r\n');
@@ -20465,6 +20641,7 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
   }
 }
+
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -90474,8 +90651,9 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   };
 
   // ─────────────────────────────────────────────────────────────
-  // ✅ Local-time → UTC ISO helpers (Europe/London DST-safe, 2-pass)
-  // We need these so SEGMENTS rows have start_utc/end_utc populated.
+  // ✅ Local-time → UTC ISO helpers
+  // Europe/London uses the canonical strict interval-resolution model.
+  // Non-London timezones preserve the existing local→UTC fallback behaviour.
   // ─────────────────────────────────────────────────────────────
   const _addDaysYmd = (ymd, addDays) => {
     const s = String(ymd || '').slice(0, 10);
@@ -90548,6 +90726,144 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     } catch {
       return 'Europe/London';
     }
+  };
+
+  const tzId = _pickTzId();
+
+  const _isIsoLike = (s) => {
+    const x = String(s || '');
+    return x.includes('T') && (x.endsWith('Z') || /[+\-]\d{2}:\d{2}$/.test(x));
+  };
+
+  const _uniqueLocalUtcCandidates = (ymd, hhmm) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(iso).getTime();
+      if (!Number.isFinite(ms)) return;
+      const normIso = new Date(ms).toISOString();
+      if (seen.has(normIso)) return;
+      seen.add(normIso);
+      out.push({ iso: normIso, ms });
+    };
+
+    pushIso(ukLocalToUtcISO(ymd, hhmm, { prefer: 'earlier' }));
+    pushIso(ukLocalToUtcISO(ymd, hhmm, { prefer: 'later' }));
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const _scheduleEntryToUtcRange = (seg) => {
+    const date = String(seg?.date || '').trim();
+    if (!date) return { startUtcIso: null, endUtcIso: null, error: 'Schedule segment date is required' };
+
+    const startIsoRaw = seg?.start_utc || seg?.start_iso || seg?.startUtc || null;
+    const endIsoRaw   = seg?.end_utc   || seg?.end_iso   || seg?.endUtc   || null;
+    if (startIsoRaw && endIsoRaw && _isIsoLike(startIsoRaw) && _isIsoLike(endIsoRaw)) {
+      const startMs = new Date(String(startIsoRaw)).getTime();
+      const endMs   = new Date(String(endIsoRaw)).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return { startUtcIso: null, endUtcIso: null, error: `Invalid UTC shift range on ${date}` };
+      }
+      return {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        error: null
+      };
+    }
+
+    const startHH = String(seg?.start || '').trim();
+    const endHH = String(seg?.end || '').trim();
+    if (!startHH || !endHH) {
+      return { startUtcIso: null, endUtcIso: null, error: `Shift start/end must both be set for ${date}` };
+    }
+
+    const sMin = parseHHMM(startHH);
+    const eMin = parseHHMM(endHH);
+    if (sMin == null || eMin == null) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid HH:MM in actual_schedule_json for ${date}` };
+    }
+    if (sMin === eMin) {
+      return { startUtcIso: null, endUtcIso: null, error: `Shift start and end cannot be the same on ${date}` };
+    }
+
+    const overnight = (eMin <= sMin);
+    const endYmd = overnight ? (_addDaysYmd(date, 1) || date) : date;
+
+    if (tzId !== 'Europe/London') {
+      const startUtcIso = _localYmdHmToUtcIso(date, startHH, tzId);
+      const endUtcIso = _localYmdHmToUtcIso(endYmd, endHH, tzId);
+      if (!startUtcIso) {
+        return { startUtcIso: null, endUtcIso: null, error: `Invalid local start time on ${date}` };
+      }
+      if (!endUtcIso) {
+        return { startUtcIso: null, endUtcIso: null, error: `Invalid local end time on ${date}` };
+      }
+      const startMs = new Date(startUtcIso).getTime();
+      const endMs = new Date(endUtcIso).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${date}` };
+      }
+      return {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        error: null
+      };
+    }
+
+    const startCandidates = _uniqueLocalUtcCandidates(date, startHH);
+    if (!startCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local start time on ${date}` };
+    }
+
+    const endCandidates = _uniqueLocalUtcCandidates(endYmd, endHH);
+    if (!endCandidates.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Non-existent local end time on ${endYmd}` };
+    }
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+      const startMs = new Date(startIso).getTime();
+      const endMs = new Date(endIso).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+      pairMap.set(key, {
+        startUtcIso: new Date(startMs).toISOString(),
+        endUtcIso: new Date(endMs).toISOString(),
+        startMs,
+        endMs
+      });
+    };
+
+    for (const startCand of startCandidates) {
+      const endIsoAfterStart = ukLocalToUtcISO(endYmd, endHH, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endIsoAfterStart);
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+    if (!pairs.length) {
+      return { startUtcIso: null, endUtcIso: null, error: `Invalid local time range on ${date}` };
+    }
+
+    if (pairs.length > 1) {
+      return { startUtcIso: null, endUtcIso: null, error: `Ambiguous local time range across DST change on ${date}` };
+    }
+
+    return {
+      startUtcIso: pairs[0].startUtcIso,
+      endUtcIso: pairs[0].endUtcIso,
+      error: null
+    };
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -90870,13 +91186,16 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
   const seenLockedKeys = new Set();
 
-  const tzId = _pickTzId();
-
   for (let i = 0; i < actual.length; i++) {
     const seg = actual[i] || {};
 
     const key = _stableSegKey(seg);
     const sid = _stableSegId(ts.timesheet_id, key);
+
+    const { startUtcIso, endUtcIso, error: utcRangeError } = _scheduleEntryToUtcRange(seg);
+    if (utcRangeError) {
+      throw new Error(utcRangeError);
+    }
 
     // If this corresponds to an invoice-locked segment, preserve evidence as-is (immutability), non-correction only.
     if (!isCorrection) {
@@ -90890,8 +91209,8 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       // Fallback match by date+start+end (ignores break differences)
       if (!lockedSegObj) {
         const d = (seg?.date != null) ? String(seg.date).slice(0, 10) : '';
-        const sMs = parseUtcMs(seg?.start_utc || seg?.start_iso || seg?.startUtc || null);
-        const eMs = parseUtcMs(seg?.end_utc || seg?.end_iso || seg?.endUtc || null);
+        const sMs = parseUtcMs(startUtcIso);
+        const eMs = parseUtcMs(endUtcIso);
         if (d && sMs != null && eMs != null) {
           const k2 = `${d}|${sMs}|${eMs}`;
           lockedSegObj = preservedLockedByTime.get(k2) || null;
@@ -90991,8 +91310,8 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
     if (useImportRefs) {
       const dateYmd = (seg?.date != null) ? String(seg.date).slice(0, 10) : '';
-      const sMs = parseUtcMs(seg?.start_utc || seg?.start_iso || seg?.startUtc || null);
-      const eMs = parseUtcMs(seg?.end_utc || seg?.end_iso || seg?.endUtc || null);
+      const sMs = parseUtcMs(startUtcIso);
+      const eMs = parseUtcMs(endUtcIso);
 
       let hrRef = null;
 
@@ -91015,25 +91334,14 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     }
 
     // ✅ Populate BOTH local start/end and UTC ISO start_utc/end_utc (fixes blank QR PDFs + stable preservation)
-    const dateYmd0 = (seg?.date != null) ? String(seg.date).slice(0, 10) : '';
     const startLocal = (seg?.start != null) ? String(seg.start).trim() : '';
     const endLocal = (seg?.end != null) ? String(seg.end).trim() : '';
-    const overnight = !!seg?.overnight;
-
-    const startUtcIso =
-      (dateYmd0 && startLocal)
-        ? _localYmdHmToUtcIso(dateYmd0, startLocal, tzId)
-        : null;
-
-    const endDateYmd =
-      (dateYmd0 && overnight)
-        ? (_addDaysYmd(dateYmd0, 1) || dateYmd0)
-        : dateYmd0;
-
-    const endUtcIso =
-      (endDateYmd && endLocal)
-        ? _localYmdHmToUtcIso(endDateYmd, endLocal, tzId)
-        : null;
+    const startLocalMins = parseHHMM(startLocal);
+    const endLocalMins = parseHHMM(endLocal);
+    const overnight =
+      (startLocalMins != null && endLocalMins != null)
+        ? (endLocalMins <= startLocalMins)
+        : !!seg?.overnight;
 
     segments.push({
       segment_id: sid,
@@ -91243,7 +91551,6 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
   return { ok: true, snapshot };
 }
-
 
 async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin, options = {}) {
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
