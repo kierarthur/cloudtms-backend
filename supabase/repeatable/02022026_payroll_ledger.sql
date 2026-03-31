@@ -10521,15 +10521,30 @@ $function$;
 
 
 
+CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
+  p_pay_date date,
+  p_week_ending_cutoff date,
+  p_pay_channel_scope text,
+  p_actor_user_id uuid,
+  p_preview_decisions_json jsonb,
+  p_candidate_id uuid default null,
+  p_client_id uuid default null,
+  p_force_include_timesheet_ids uuid[] default null,
+  p_override_reason text default null,
+  p_override_mode public.pay_override_mode_enum default 'NONE'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_scope text := upper(btrim(coalesce(p_pay_channel_scope,'')));
 
+  v_week_start date := public._pay_week_start_monday(p_pay_date);
 
-
-
-
-
-
-
-
+  -- ✅ UK “today” anchor for eligibility window (Option A)
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
 
   -- ✅ UTC now anchor (timestamptz)
   v_now_utc timestamptz := now();
@@ -16645,6 +16660,13 @@ exception when others then
   raise;
 end;
 $$;
+
+
+
+
+
+
+
 
 
 
