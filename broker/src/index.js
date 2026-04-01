@@ -13284,6 +13284,8 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
   }
 }
 
+
+
 /**
  * Minimal HTML escape for safe <pre> usage.
  * (mail_outbox ultimately renders HTML; keep it safe.)
@@ -13296,6 +13298,239 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+
+async function handleBankingPayTaxableManualDebtResolution(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
+  if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const normalizeResolutionPath = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'SUGGESTED') return 'SUGGESTED';
+    if (s === 'MANUAL') return 'MANUAL';
+    return null;
+  };
+
+  const normalizeScheduleMode = (raw) => {
+    const s = String(raw ?? '').trim().toUpperCase();
+    if (!s) return null;
+    if (s === 'BY_WEEKS' || s === 'WEEKS' || s === 'BY_NUMBER_OF_WEEKS' || s === 'NUMBER_OF_WEEKS') return 'BY_WEEKS';
+    if (s === 'BY_WEEKLY_DUE' || s === 'BY_WEEKLY_AMOUNT' || s === 'WEEKLY_AMOUNT' || s === 'WEEKLY_DUE') return 'BY_WEEKLY_DUE';
+    return null;
+  };
+
+  const hasOwnValue = (obj, keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return true;
+      }
+    }
+    return false;
+  };
+
+  const resolutionPath = normalizeResolutionPath(body.resolution_path ?? body.resolutionPath);
+  if (!resolutionPath) {
+    return withCORS(env, req, badRequest('resolution_path must be SUGGESTED or MANUAL'));
+  }
+
+  const scheduleInputMode = normalizeScheduleMode(
+    body.schedule_input_mode ??
+    body.scheduleInputMode ??
+    body.repayment_input_mode ??
+    body.repaymentInputMode ??
+    body.repayment_mode ??
+    body.repaymentMode
+  );
+  if (!scheduleInputMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE'));
+  }
+
+  const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+  const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+  const totalRemainingAmountProvided = hasOwnValue(body, ['total_remaining_amount', 'totalRemainingAmount', 'manual_total_remaining', 'manualTotalRemaining']);
+
+  const weeksTotalRaw = weeksTotalProvided ? Number(body.weeks_total ?? body.weeksTotal) : null;
+  if (scheduleInputMode === 'BY_WEEKS') {
+    if (!weeksTotalProvided) {
+      return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+    }
+    if (!Number.isFinite(weeksTotalRaw) || Math.trunc(weeksTotalRaw) < 1) {
+      return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 when schedule_input_mode is BY_WEEKS'));
+    }
+  }
+
+  const weeklyDueRaw = weeklyDueProvided ? Number(body.weekly_due ?? body.weeklyDue) : null;
+  if (scheduleInputMode === 'BY_WEEKLY_DUE') {
+    if (!weeklyDueProvided) {
+      return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+    }
+    if (!Number.isFinite(weeklyDueRaw) || weeklyDueRaw <= 0) {
+      return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 when schedule_input_mode is BY_WEEKLY_DUE'));
+    }
+  }
+
+  const manualTotalRemainingRaw = totalRemainingAmountProvided
+    ? Number(body.total_remaining_amount ?? body.totalRemainingAmount ?? body.manual_total_remaining ?? body.manualTotalRemaining)
+    : null;
+
+  if (resolutionPath === 'MANUAL') {
+    if (!totalRemainingAmountProvided) {
+      return withCORS(env, req, badRequest('total_remaining_amount is required when resolution_path is MANUAL'));
+    }
+    if (!Number.isFinite(manualTotalRemainingRaw) || manualTotalRemainingRaw <= 0) {
+      return withCORS(env, req, badRequest('total_remaining_amount must be a number greater than 0 when resolution_path is MANUAL'));
+    }
+  }
+
+  const note =
+    (body.note === null || body.note === undefined)
+      ? null
+      : String(body.note).trim() || null;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _raisedPayloadResponse = (payload, fallbackStatus) => {
+    if (!payload || typeof payload !== 'object') return null;
+
+    const code = String(payload.code || '').trim().toUpperCase();
+    let status = Number.isFinite(Number(fallbackStatus)) ? Number(fallbackStatus) : 400;
+
+    if (
+      code === 'FINANCE_CASE_NOT_FOUND'
+      || code === 'CANDIDATE_NOT_FOUND'
+    ) {
+      status = 404;
+    } else if (
+      code === 'RESTRUCTURE_NOT_REQUIRED'
+      || code === 'CASE_ALREADY_IN_OPEN_BATCH'
+    ) {
+      status = 409;
+    } else if (
+      code === 'FINANCE_CASE_ID_REQUIRED'
+      || code === 'ACTOR_USER_ID_REQUIRED'
+      || code === 'RESOLUTION_PATH_INVALID'
+      || code === 'SCHEDULE_INPUT_MODE_REQUIRED'
+      || code === 'SCHEDULE_INPUT_MODE_INVALID'
+      || code === 'CASE_TYPE_INVALID'
+      || code === 'CASE_NOT_ACTIVE'
+      || code === 'NO_OUTSTANDING_BALANCE'
+      || code === 'PAY_METHOD_INVALID'
+      || code === 'COMPONENT_SHAPE_INVALID'
+      || code === 'CASE_TOTAL_COMPONENT_REQUIRED'
+      || code === 'CASE_NOT_TAXABLE'
+      || code === 'COMPONENT_NOT_TAXABLE_CHANNEL_SENSITIVE'
+      || code === 'SOURCE_PAY_METHOD_INVALID'
+      || code === 'COMPONENT_NO_REMAINING_BALANCE'
+      || code === 'CASE_COMPONENT_BALANCE_MISMATCH'
+      || code === 'START_WEEK_START_REQUIRED'
+      || code === 'START_WEEK_START_NOT_MONDAY'
+      || code === 'FINANCE_SETTINGS_MISSING'
+      || code === 'WEEKS_TOTAL_INVALID'
+      || code === 'WEEKS_TOTAL_REQUIRED'
+      || code === 'WEEKLY_DUE_REQUIRED'
+      || code === 'BASIS_AMOUNT_INVALID'
+      || code === 'UNSUPPORTED_SUGGESTED_CONVERSION'
+      || code === 'MANUAL_TOTAL_REMAINING_REQUIRED'
+      || code === 'MANUAL_TOTAL_REMAINING_INVALID'
+      || code === 'CONFIRMED_NEW_REMAINING_INVALID'
+      || code === 'UPDATED_CASE_NOT_FOUND'
+      || code === 'UPDATED_COMPONENT_NOT_FOUND'
+    ) {
+      status = 400;
+    }
+
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS })
+    );
+  };
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_manual_debt_adjustment_resolve_taxable_channel_change', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: user.id,
+      p_resolution_path: resolutionPath,
+      p_schedule_input_mode: scheduleInputMode,
+      p_weeks_total: scheduleInputMode === 'BY_WEEKS' ? Math.trunc(weeksTotalRaw) : null,
+      p_weekly_due: scheduleInputMode === 'BY_WEEKLY_DUE' ? weeklyDueRaw : null,
+      p_manual_total_remaining: resolutionPath === 'MANUAL' ? manualTotalRemainingRaw : null,
+      p_note: note
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_resolve_taxable_channel_change');
+    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+  } catch (e) {
+    const raised = _extractDbRaisedJson(e);
+    const raisedRes = _raisedPayloadResponse(raised, e?.status === 404 ? 404 : (e?.status === 409 ? 409 : 400));
+    if (raisedRes) return raisedRes;
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve taxable manual debt channel change')));
+  }
+}
+
+
 
 
 async function handleBankingPayReconcileExternal(env, req) {
@@ -105638,7 +105873,12 @@ if (req.method === 'GET' && p === '/api/comms/by-recipient') {
       // =============================================================================
       if (req.method === 'GET' && p === '/api/funnel/timesheets') return handleFunnelTimesheets(env, req);
       if (req.method === 'GET' && p === '/api/invoices/precheck') return handleInvoicesPrecheck(env, req);
-
+{
+  const m = matchPath(p, '/api/banking/pay/manual-debt-adjustments/:id/resolve-channel-change');
+  if (m && req.method === 'POST') {
+    return handleBankingPayTaxableManualDebtResolution(env, req, user, m.id);
+  }
+}
 // ─────────────────────────────────────────────────────────────
 // Users (admin) + self-service password change
 // ─────────────────────────────────────────────────────────────
