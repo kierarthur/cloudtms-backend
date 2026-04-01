@@ -29647,3 +29647,812 @@ BEGIN
 END;
 $function$;
 
+
+CREATE OR REPLACE FUNCTION public.pay_manual_debt_adjustment_resolve_taxable_channel_change(
+  p_finance_case_id uuid,
+  p_actor_user_id uuid,
+  p_resolution_path text,
+  p_schedule_input_mode text DEFAULT NULL::text,
+  p_weeks_total integer DEFAULT NULL::integer,
+  p_weekly_due numeric DEFAULT NULL::numeric,
+  p_manual_total_remaining numeric DEFAULT NULL::numeric,
+  p_note text DEFAULT NULL::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_now_utc timestamptz := now();
+  v_today_uk date := (now() at time zone 'Europe/London')::date;
+
+  v_case public.pay_advances%rowtype;
+  v_candidate record;
+  v_component public.pay_finance_case_components%rowtype;
+  v_updated_case public.pay_advances%rowtype;
+  v_updated_component public.pay_finance_case_components%rowtype;
+  v_finance_settings record;
+
+  v_open_component_count integer := 0;
+  v_resolution_path_norm text := upper(nullif(btrim(coalesce(p_resolution_path, '')), ''));
+  v_schedule_input_mode_norm text := upper(nullif(btrim(coalesce(p_schedule_input_mode, '')), ''));
+  v_candidate_pay_method text := null;
+  v_case_is_taxable boolean := false;
+  v_requires_restructure boolean := false;
+  v_has_open_batch_item boolean := false;
+
+  v_old_source_pay_method text := null;
+  v_old_source_amount numeric(12,2) := 0;
+  v_old_remaining_source_amount numeric(12,2) := 0;
+
+  v_relevant_erni_pct numeric := null;
+  v_vat_rate_pct numeric := null;
+  v_umbrella_vat_chargeable boolean := false;
+
+  v_default_remaining_weeks integer := null;
+  v_selected_weeks_total integer := null;
+  v_selected_weekly_due numeric(12,2) := null;
+  v_restructure_start_week_start date := null;
+
+  v_basis_remaining_source_amount numeric(12,2) := 0;
+  v_confirmed_new_remaining_ex numeric(12,2) := 0;
+  v_confirmed_new_remaining_vat numeric(12,2) := 0;
+  v_confirmed_new_remaining_inc numeric(12,2) := 0;
+  v_target_amounts_json jsonb := '{}'::jsonb;
+
+  v_recovered_so_far_ex numeric(12,2) := 0;
+  v_new_case_total_ex numeric(12,2) := 0;
+
+  v_update_result jsonb := '{}'::jsonb;
+  v_before_json jsonb := '{}'::jsonb;
+  v_after_json jsonb := '{}'::jsonb;
+  v_event_note text := null;
+begin
+  if p_finance_case_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'FINANCE_CASE_ID_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: finance_case_id is required'
+    )::text;
+  end if;
+
+  if p_actor_user_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'ACTOR_USER_ID_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: actor_user_id is required'
+    )::text;
+  end if;
+
+  if v_resolution_path_norm not in ('SUGGESTED', 'MANUAL') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'RESOLUTION_PATH_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: resolution_path must be SUGGESTED or MANUAL',
+      'resolution_path', p_resolution_path
+    )::text;
+  end if;
+
+  if v_schedule_input_mode_norm is null then
+    if v_resolution_path_norm = 'SUGGESTED' then
+      v_schedule_input_mode_norm := 'BY_WEEKS';
+    else
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+        'code', 'SCHEDULE_INPUT_MODE_REQUIRED',
+        'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: schedule_input_mode is required for MANUAL resolution',
+        'resolution_path', v_resolution_path_norm
+      )::text;
+    end if;
+  end if;
+
+  if v_schedule_input_mode_norm not in ('BY_WEEKS', 'BY_WEEKLY_DUE') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'SCHEDULE_INPUT_MODE_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE',
+      'schedule_input_mode', p_schedule_input_mode
+    )::text;
+  end if;
+
+  select pa.*
+  into v_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id
+  for update;
+
+  if v_case.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'FINANCE_CASE_NOT_FOUND',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: finance case not found',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if v_case.case_type <> 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'CASE_TYPE_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: finance case must be MANUAL_DEBT_ADJUSTMENT',
+      'finance_case_id', p_finance_case_id::text,
+      'case_type', v_case.case_type::text
+    )::text;
+  end if;
+
+  if v_case.status <> 'ACTIVE'::public.pay_advance_status_enum then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'CASE_NOT_ACTIVE',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: finance case must be ACTIVE',
+      'finance_case_id', p_finance_case_id::text,
+      'status', v_case.status::text
+    )::text;
+  end if;
+
+  if round(coalesce(v_case.outstanding_amount, 0), 2) <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'NO_OUTSTANDING_BALANCE',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: finance case has no outstanding balance to restructure',
+      'finance_case_id', p_finance_case_id::text,
+      'outstanding_amount', round(coalesce(v_case.outstanding_amount, 0), 2)
+    )::text;
+  end if;
+
+  select
+    c.id,
+    upper(coalesce(c.pay_method, '')) as pay_method
+  into v_candidate
+  from public.candidates c
+  where c.id = v_case.candidate_id
+  limit 1;
+
+  if v_candidate.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'CANDIDATE_NOT_FOUND',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: candidate not found for finance case',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text
+    )::text;
+  end if;
+
+  v_candidate_pay_method := upper(coalesce(v_candidate.pay_method, ''));
+  if v_candidate_pay_method not in ('PAYE', 'UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'PAY_METHOD_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: candidate pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'pay_method', v_candidate_pay_method
+    )::text;
+  end if;
+
+  select count(*)
+  into v_open_component_count
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.closed_at_utc is null;
+
+  if v_open_component_count <> 1 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'COMPONENT_SHAPE_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: expected exactly one open finance component for the case',
+      'finance_case_id', p_finance_case_id::text,
+      'open_component_count', v_open_component_count
+    )::text;
+  end if;
+
+  select pfc.*
+  into v_component
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.closed_at_utc is null
+    and pfc.component_key_type = 'CASE_TOTAL'
+    and pfc.component_key_value = 'TOTAL'
+  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
+  limit 1
+  for update;
+
+  if v_component.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'CASE_TOTAL_COMPONENT_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: expected one open CASE_TOTAL/TOTAL component for the case',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  v_case_is_taxable := case
+    when v_case.taxability is null then (v_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum)
+    else (v_case.taxability = 'TAXABLE'::public.pay_finance_taxability_enum)
+  end;
+
+  if v_case_is_taxable is distinct from true then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'CASE_NOT_TAXABLE',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: finance case must be taxable',
+      'finance_case_id', p_finance_case_id::text,
+      'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+      'classification', v_component.classification::text
+    )::text;
+  end if;
+
+  if v_component.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'COMPONENT_NOT_TAXABLE_CHANNEL_SENSITIVE',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: component must be TAXABLE_CHANNEL_SENSITIVE',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_component.id::text,
+      'classification', v_component.classification::text
+    )::text;
+  end if;
+
+  v_old_source_pay_method := upper(coalesce(v_component.source_pay_method, ''));
+  if v_old_source_pay_method not in ('PAYE', 'UMBRELLA') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'SOURCE_PAY_METHOD_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: component source_pay_method must be PAYE or UMBRELLA',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_component.id::text,
+      'source_pay_method', v_component.source_pay_method
+    )::text;
+  end if;
+
+  v_old_source_amount := round(coalesce(v_component.source_amount, 0), 2);
+  v_old_remaining_source_amount := round(coalesce(v_component.remaining_source_amount, 0), 2);
+
+  if v_old_remaining_source_amount <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'COMPONENT_NO_REMAINING_BALANCE',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: component has no remaining source amount to restructure',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_component.id::text,
+      'remaining_source_amount', v_old_remaining_source_amount
+    )::text;
+  end if;
+
+  if round(coalesce(v_case.outstanding_amount, 0), 2) <> v_old_remaining_source_amount then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'CASE_COMPONENT_BALANCE_MISMATCH',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: finance case outstanding_amount must match the open component remaining_source_amount',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_component.id::text,
+      'case_outstanding_amount', round(coalesce(v_case.outstanding_amount, 0), 2),
+      'component_remaining_source_amount', v_old_remaining_source_amount
+    )::text;
+  end if;
+
+  v_requires_restructure := (
+    v_candidate_pay_method is distinct from v_old_source_pay_method
+    or coalesce(v_component.is_resolution_stale, false) = true
+    or nullif(btrim(coalesce(v_component.stale_reason, '')), '') is not null
+  );
+
+  if v_requires_restructure is distinct from true then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'RESTRUCTURE_NOT_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: restructure is not required because the case is already aligned to the current pay channel and is not stale',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_component.id::text,
+      'source_pay_method', v_old_source_pay_method,
+      'candidate_pay_method', v_candidate_pay_method,
+      'is_resolution_stale', coalesce(v_component.is_resolution_stale, false),
+      'stale_reason', v_component.stale_reason
+    )::text;
+  end if;
+
+  select exists (
+    select 1
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join public.pay_batches pb
+      on pb.id = pbc.pay_batch_id
+    where (
+        pbi.finance_case_id = p_finance_case_id
+        or pbi.source_ref = ('advance:' || p_finance_case_id::text)
+      )
+      and pbi.item_type = 'MANUAL_DEBT_RECOVERY'
+      and coalesce(pbi.is_voided, false) = false
+      and pb.cancelled_at_utc is null
+      and upper(coalesce(pb.status, '')) not in ('CANCELLED', 'COMPLETED', 'SETTLED')
+  )
+  into v_has_open_batch_item;
+
+  if v_has_open_batch_item then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'CASE_ALREADY_IN_OPEN_BATCH',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: cannot restructure while the case is already included in an open pay batch',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  v_restructure_start_week_start := coalesce(v_case.next_due_week_start, v_case.start_week_start);
+  if v_restructure_start_week_start is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'START_WEEK_START_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: current next_due_week_start or start_week_start is required',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if public._pay_week_start_monday(v_restructure_start_week_start) <> v_restructure_start_week_start then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'START_WEEK_START_NOT_MONDAY',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: restructure start week must be a Monday',
+      'finance_case_id', p_finance_case_id::text,
+      'start_week_start', v_restructure_start_week_start::text
+    )::text;
+  end if;
+
+  select
+    sfp.vat_rate_pct,
+    sfp.erni_pct
+  into v_finance_settings
+  from public.settings_finance_pick(v_today_uk) sfp
+  limit 1;
+
+  if v_finance_settings.vat_rate_pct is null or v_finance_settings.erni_pct is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'FINANCE_SETTINGS_MISSING',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: finance settings missing vat_rate_pct and/or erni_pct'
+    )::text;
+  end if;
+
+  v_relevant_erni_pct := case
+    when coalesce(v_component.saved_resolution_payload_json->>'relevant_erni_pct', '') ~ '^-?\d+(\.\d+)?$'
+      then round((v_component.saved_resolution_payload_json->>'relevant_erni_pct')::numeric, 6)
+    when coalesce(v_component.saved_resolution_result_json->>'relevant_erni_pct', '') ~ '^-?\d+(\.\d+)?$'
+      then round((v_component.saved_resolution_result_json->>'relevant_erni_pct')::numeric, 6)
+    else round(v_finance_settings.erni_pct, 6)
+  end;
+
+  v_vat_rate_pct := case
+    when coalesce(v_component.saved_resolution_payload_json->>'vat_rate_pct', '') ~ '^-?\d+(\.\d+)?$'
+      then round((v_component.saved_resolution_payload_json->>'vat_rate_pct')::numeric, 6)
+    when coalesce(v_component.saved_resolution_result_json->>'vat_rate_pct', '') ~ '^-?\d+(\.\d+)?$'
+      then round((v_component.saved_resolution_result_json->>'vat_rate_pct')::numeric, 6)
+    else round(v_finance_settings.vat_rate_pct, 6)
+  end;
+
+  v_umbrella_vat_chargeable := coalesce(
+    case
+      when lower(coalesce(v_component.saved_resolution_payload_json->>'umbrella_vat_chargeable', '')) in ('true', 'false')
+        then (v_component.saved_resolution_payload_json->>'umbrella_vat_chargeable')::boolean
+      else null::boolean
+    end,
+    case
+      when lower(coalesce(v_component.saved_resolution_result_json->>'umbrella_vat_chargeable', '')) in ('true', 'false')
+        then (v_component.saved_resolution_result_json->>'umbrella_vat_chargeable')::boolean
+      else null::boolean
+    end,
+    case
+      when lower(coalesce(v_component.source_basis_json->>'umbrella_vat_chargeable', '')) in ('true', 'false')
+        then (v_component.source_basis_json->>'umbrella_vat_chargeable')::boolean
+      else null::boolean
+    end,
+    false
+  );
+
+  select count(*)::integer
+  into v_default_remaining_weeks
+  from jsonb_array_elements(coalesce(v_case.schedule_json, '[]'::jsonb)) as sched(schedule_row)
+  where coalesce(sched.schedule_row->>'week_start', '') ~ '^\d{4}-\d{2}-\d{2}$'
+    and (sched.schedule_row->>'week_start')::date >= v_restructure_start_week_start
+    and coalesce(
+      case
+        when coalesce(sched.schedule_row->>'amount', '') ~ '^-?\d+(\.\d+)?$'
+          then round((sched.schedule_row->>'amount')::numeric, 2)
+        else null::numeric
+      end,
+      0::numeric
+    ) < 0;
+
+  if v_default_remaining_weeks is null or v_default_remaining_weeks < 1 then
+    if round(coalesce(v_case.weekly_due, 0), 2) > 0 and round(coalesce(v_case.outstanding_amount, 0), 2) > 0 then
+      v_default_remaining_weeks := greatest(ceil(round(coalesce(v_case.outstanding_amount, 0), 2) / round(coalesce(v_case.weekly_due, 0), 2))::integer, 1);
+    elsif coalesce(v_case.weeks_total, 0) > 0 then
+      v_default_remaining_weeks := v_case.weeks_total;
+    else
+      v_default_remaining_weeks := 1;
+    end if;
+  end if;
+
+  if v_schedule_input_mode_norm = 'BY_WEEKS' then
+    if p_weeks_total is not null and p_weeks_total < 1 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+        'code', 'WEEKS_TOTAL_INVALID',
+        'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: weeks_total must be >= 1 when schedule_input_mode is BY_WEEKS',
+        'weeks_total', p_weeks_total
+      )::text;
+    end if;
+
+    if v_resolution_path_norm = 'MANUAL' and p_weeks_total is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+        'code', 'WEEKS_TOTAL_REQUIRED',
+        'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: weeks_total is required for MANUAL resolution when schedule_input_mode is BY_WEEKS',
+        'schedule_input_mode', v_schedule_input_mode_norm,
+        'resolution_path', v_resolution_path_norm
+      )::text;
+    end if;
+
+    v_selected_weeks_total := coalesce(p_weeks_total, v_default_remaining_weeks);
+
+    if v_selected_weeks_total is null or v_selected_weeks_total < 1 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+        'code', 'WEEKS_TOTAL_REQUIRED',
+        'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: weeks_total is required when schedule_input_mode is BY_WEEKS',
+        'schedule_input_mode', v_schedule_input_mode_norm
+      )::text;
+    end if;
+  else
+    v_selected_weekly_due := case
+      when p_weekly_due is null then null::numeric(12,2)
+      else round(p_weekly_due, 2)
+    end;
+
+    if v_selected_weekly_due is null or v_selected_weekly_due <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+        'code', 'WEEKLY_DUE_REQUIRED',
+        'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: weekly_due must be > 0 when schedule_input_mode is BY_WEEKLY_DUE',
+        'weekly_due', p_weekly_due
+      )::text;
+    end if;
+  end if;
+
+  v_basis_remaining_source_amount := v_old_remaining_source_amount;
+  if v_basis_remaining_source_amount <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'BASIS_AMOUNT_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: basis remaining source amount must be > 0',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_component.id::text,
+      'basis_remaining_source_amount', v_basis_remaining_source_amount
+    )::text;
+  end if;
+
+  if v_resolution_path_norm = 'SUGGESTED' then
+    if v_old_source_pay_method = 'PAYE' and v_candidate_pay_method = 'UMBRELLA' then
+      v_target_amounts_json := public._pay_convert_paye_to_umbrella(
+        v_basis_remaining_source_amount,
+        v_relevant_erni_pct,
+        v_vat_rate_pct,
+        v_umbrella_vat_chargeable
+      );
+      v_confirmed_new_remaining_ex := round(coalesce((v_target_amounts_json->>'ex')::numeric, 0), 2);
+      v_confirmed_new_remaining_vat := round(coalesce((v_target_amounts_json->>'vat')::numeric, 0), 2);
+      v_confirmed_new_remaining_inc := round(coalesce((v_target_amounts_json->>'inc')::numeric, 0), 2);
+    elsif v_old_source_pay_method = 'UMBRELLA' and v_candidate_pay_method = 'PAYE' then
+      v_confirmed_new_remaining_ex := public._pay_convert_umbrella_to_paye_ex(v_basis_remaining_source_amount, v_relevant_erni_pct);
+      v_confirmed_new_remaining_vat := 0;
+      v_confirmed_new_remaining_inc := v_confirmed_new_remaining_ex;
+    elsif v_old_source_pay_method = v_candidate_pay_method and v_candidate_pay_method = 'PAYE' then
+      v_confirmed_new_remaining_ex := v_basis_remaining_source_amount;
+      v_confirmed_new_remaining_vat := 0;
+      v_confirmed_new_remaining_inc := v_confirmed_new_remaining_ex;
+    elsif v_old_source_pay_method = v_candidate_pay_method and v_candidate_pay_method = 'UMBRELLA' then
+      v_target_amounts_json := public._pay_umbrella_vat_calc(
+        v_basis_remaining_source_amount,
+        v_vat_rate_pct,
+        v_umbrella_vat_chargeable
+      );
+      v_confirmed_new_remaining_ex := round(coalesce((v_target_amounts_json->>'ex')::numeric, 0), 2);
+      v_confirmed_new_remaining_vat := round(coalesce((v_target_amounts_json->>'vat')::numeric, 0), 2);
+      v_confirmed_new_remaining_inc := round(coalesce((v_target_amounts_json->>'inc')::numeric, 0), 2);
+    else
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+        'code', 'UNSUPPORTED_SUGGESTED_CONVERSION',
+        'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: unsupported taxable channel conversion pair for suggested resolution',
+        'finance_case_id', p_finance_case_id::text,
+        'finance_component_id', v_component.id::text,
+        'source_pay_method', v_old_source_pay_method,
+        'target_pay_method', v_candidate_pay_method
+      )::text;
+    end if;
+  else
+    if p_manual_total_remaining is null or round(p_manual_total_remaining, 2) <= 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+        'code', 'MANUAL_TOTAL_REMAINING_REQUIRED',
+        'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: manual_total_remaining must be > 0 for MANUAL resolution',
+        'manual_total_remaining', p_manual_total_remaining
+      )::text;
+    end if;
+
+    v_confirmed_new_remaining_ex := round(p_manual_total_remaining, 2);
+
+    if v_candidate_pay_method = 'PAYE' then
+      v_confirmed_new_remaining_vat := 0;
+      v_confirmed_new_remaining_inc := v_confirmed_new_remaining_ex;
+    else
+      v_target_amounts_json := public._pay_umbrella_vat_calc(
+        v_confirmed_new_remaining_ex,
+        v_vat_rate_pct,
+        v_umbrella_vat_chargeable
+      );
+      v_confirmed_new_remaining_ex := round(coalesce((v_target_amounts_json->>'ex')::numeric, 0), 2);
+      v_confirmed_new_remaining_vat := round(coalesce((v_target_amounts_json->>'vat')::numeric, 0), 2);
+      v_confirmed_new_remaining_inc := round(coalesce((v_target_amounts_json->>'inc')::numeric, 0), 2);
+    end if;
+  end if;
+
+  if v_confirmed_new_remaining_ex <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'CONFIRMED_REMAINING_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: confirmed remaining amount must be > 0',
+      'confirmed_remaining_amount_ex_vat', v_confirmed_new_remaining_ex
+    )::text;
+  end if;
+
+  v_recovered_so_far_ex := round(greatest(coalesce(v_case.original_amount, 0) - coalesce(v_case.outstanding_amount, 0), 0), 2);
+  v_new_case_total_ex := round(v_recovered_so_far_ex + v_confirmed_new_remaining_ex, 2);
+
+  if v_new_case_total_ex <= 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'NEW_CASE_TOTAL_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: recomputed case total must be > 0',
+      'recovered_so_far_ex', v_recovered_so_far_ex,
+      'confirmed_new_remaining_ex', v_confirmed_new_remaining_ex,
+      'new_case_total_ex', v_new_case_total_ex
+    )::text;
+  end if;
+
+  v_before_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'finance_component_id', v_component.id::text,
+      'case_type', v_case.case_type::text,
+      'status', v_case.status::text,
+      'taxability', case when v_case.taxability is null then null else v_case.taxability::text end,
+      'routing_kind', case when v_case.routing_kind is null then null else v_case.routing_kind::text end,
+      'source_pay_method_before', v_old_source_pay_method,
+      'candidate_pay_method_before', v_candidate_pay_method,
+      'source_amount_before', v_old_source_amount,
+      'remaining_source_amount_before', v_old_remaining_source_amount,
+      'original_amount_before', round(coalesce(v_case.original_amount, 0), 2),
+      'outstanding_amount_before', round(coalesce(v_case.outstanding_amount, 0), 2),
+      'weekly_due_before', round(coalesce(v_case.weekly_due, 0), 2),
+      'weeks_total_before', v_case.weeks_total,
+      'start_week_start_before', case when v_case.start_week_start is null then null else v_case.start_week_start::text end,
+      'next_due_week_start_before', case when v_case.next_due_week_start is null then null else v_case.next_due_week_start::text end,
+      'schedule_json_before', coalesce(v_case.schedule_json, '[]'::jsonb),
+      'is_resolution_stale_before', coalesce(v_component.is_resolution_stale, false),
+      'stale_reason_before', v_component.stale_reason,
+      'saved_target_pay_method_before', v_component.saved_target_pay_method,
+      'saved_resolution_mode_before', case when v_component.saved_resolution_mode is null then null else v_component.saved_resolution_mode::text end,
+      'saved_resolution_payload_json_before', v_component.saved_resolution_payload_json,
+      'saved_resolution_result_json_before', v_component.saved_resolution_result_json,
+      'resolution_fingerprint_before', v_component.resolution_fingerprint
+    )
+  );
+
+  v_update_result := public.pay_manual_debt_adjustment_update(
+    p_finance_case_id => p_finance_case_id,
+    p_actor_user_id => p_actor_user_id,
+    p_amount => v_new_case_total_ex,
+    p_weekly_due => case when v_schedule_input_mode_norm = 'BY_WEEKLY_DUE' then v_selected_weekly_due else null::numeric end,
+    p_weeks_total => case when v_schedule_input_mode_norm = 'BY_WEEKS' then v_selected_weeks_total else null::integer end,
+    p_start_week_start => v_restructure_start_week_start,
+    p_adjustment_comment => null::text,
+    p_note => null::text,
+    p_minimum_earnings_threshold => null::numeric,
+    p_take_home_floor_override => null::numeric,
+    p_taxability => 'TAXABLE'
+  );
+
+  select pa.*
+  into v_updated_case
+  from public.pay_advances pa
+  where pa.id = p_finance_case_id;
+
+  if v_updated_case.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'UPDATED_CASE_NOT_FOUND',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: updated finance case could not be reloaded',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  select pfc.*
+  into v_updated_component
+  from public.pay_finance_case_components pfc
+  where pfc.finance_case_id = p_finance_case_id
+    and pfc.closed_at_utc is null
+    and pfc.component_key_type = 'CASE_TOTAL'
+    and pfc.component_key_value = 'TOTAL'
+  order by pfc.updated_at_utc desc, pfc.created_at_utc desc, pfc.id desc
+  limit 1;
+
+  if v_updated_component.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'UPDATED_COMPONENT_NOT_FOUND',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: updated component could not be reloaded',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if v_updated_component.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'UPDATED_COMPONENT_CLASSIFICATION_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: updated component classification drifted from TAXABLE_CHANNEL_SENSITIVE',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_updated_component.id::text,
+      'classification', v_updated_component.classification::text
+    )::text;
+  end if;
+
+  if upper(coalesce(v_updated_component.source_pay_method, '')) <> v_candidate_pay_method then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'UPDATED_SOURCE_PAY_METHOD_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: updated component source_pay_method must match the candidate current pay method',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_updated_component.id::text,
+      'updated_source_pay_method', v_updated_component.source_pay_method,
+      'candidate_pay_method', v_candidate_pay_method
+    )::text;
+  end if;
+
+  if round(coalesce(v_updated_case.outstanding_amount, 0), 2) <> round(coalesce(v_updated_component.remaining_source_amount, 0), 2) then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'UPDATED_BALANCE_MISMATCH',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: updated finance case outstanding_amount must match updated component remaining_source_amount',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_updated_component.id::text,
+      'updated_case_outstanding_amount', round(coalesce(v_updated_case.outstanding_amount, 0), 2),
+      'updated_component_remaining_source_amount', round(coalesce(v_updated_component.remaining_source_amount, 0), 2)
+    )::text;
+  end if;
+
+  if round(coalesce(v_updated_case.outstanding_amount, 0), 2) <> v_confirmed_new_remaining_ex then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'UPDATED_REMAINING_AMOUNT_MISMATCH',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: updated outstanding_amount must match the confirmed new remaining amount',
+      'finance_case_id', p_finance_case_id::text,
+      'confirmed_new_remaining_ex', v_confirmed_new_remaining_ex,
+      'updated_outstanding_amount', round(coalesce(v_updated_case.outstanding_amount, 0), 2)
+    )::text;
+  end if;
+
+  if v_updated_component.saved_target_pay_method is distinct from v_candidate_pay_method then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'UPDATED_TARGET_PAY_METHOD_INVALID',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: updated component saved_target_pay_method must match the candidate current pay method',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_updated_component.id::text,
+      'saved_target_pay_method', v_updated_component.saved_target_pay_method,
+      'candidate_pay_method', v_candidate_pay_method
+    )::text;
+  end if;
+
+  if coalesce(v_updated_component.is_resolution_stale, false) = true then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'UPDATED_COMPONENT_STILL_STALE',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: updated component must not remain stale after restructure',
+      'finance_case_id', p_finance_case_id::text,
+      'finance_component_id', v_updated_component.id::text,
+      'stale_reason', v_updated_component.stale_reason
+    )::text;
+  end if;
+
+  v_after_json := jsonb_strip_nulls(
+    jsonb_build_object(
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_updated_case.candidate_id::text,
+      'finance_component_id', v_updated_component.id::text,
+      'resolution_path', v_resolution_path_norm,
+      'schedule_input_mode', v_schedule_input_mode_norm,
+      'source_pay_method_before', v_old_source_pay_method,
+      'target_pay_method_after', v_candidate_pay_method,
+      'remaining_source_amount_before', v_old_remaining_source_amount,
+      'confirmed_new_remaining_amount_ex_vat', v_confirmed_new_remaining_ex,
+      'confirmed_new_remaining_amount_vat', v_confirmed_new_remaining_vat,
+      'confirmed_new_remaining_amount_inc_vat', v_confirmed_new_remaining_inc,
+      'recovered_so_far_ex', v_recovered_so_far_ex,
+      'new_case_total_ex', v_new_case_total_ex,
+      'weekly_due_after', round(coalesce(v_updated_case.weekly_due, 0), 2),
+      'weeks_total_after', v_updated_case.weeks_total,
+      'start_week_start_after', case when v_updated_case.start_week_start is null then null else v_updated_case.start_week_start::text end,
+      'next_due_week_start_after', case when v_updated_case.next_due_week_start is null then null else v_updated_case.next_due_week_start::text end,
+      'schedule_json_after', coalesce(v_updated_case.schedule_json, '[]'::jsonb),
+      'source_amount_after', round(coalesce(v_updated_component.source_amount, 0), 2),
+      'remaining_source_amount_after', round(coalesce(v_updated_component.remaining_source_amount, 0), 2),
+      'source_pay_method_after', v_updated_component.source_pay_method,
+      'saved_target_pay_method_after', v_updated_component.saved_target_pay_method,
+      'saved_resolution_mode_after', case when v_updated_component.saved_resolution_mode is null then null else v_updated_component.saved_resolution_mode::text end,
+      'saved_resolution_payload_json_after', v_updated_component.saved_resolution_payload_json,
+      'saved_resolution_result_json_after', v_updated_component.saved_resolution_result_json,
+      'resolution_fingerprint_after', v_updated_component.resolution_fingerprint,
+      'is_resolution_stale_after', coalesce(v_updated_component.is_resolution_stale, false),
+      'stale_reason_after', v_updated_component.stale_reason,
+      'taxability_after', case when v_updated_case.taxability is null then null else v_updated_case.taxability::text end,
+      'routing_kind_after', case when v_updated_case.routing_kind is null then null else v_updated_case.routing_kind::text end,
+      'minimum_earnings_threshold_after', v_updated_case.minimum_earnings_threshold,
+      'take_home_floor_override_after', v_updated_case.take_home_floor_override
+    )
+  );
+
+  v_event_note := coalesce(nullif(btrim(coalesce(p_note, '')), ''), 'Resolved taxable manual debt adjustment channel change in Banking Pay');
+
+  insert into public.pay_finance_case_events(
+    finance_case_id,
+    finance_component_id,
+    event_type,
+    event_at_utc,
+    actor_user_id,
+    pay_batch_id,
+    before_json,
+    after_json,
+    reason,
+    note
+  )
+  values (
+    p_finance_case_id,
+    v_updated_component.id,
+    'TAXABLE_CHANNEL_RESTRUCTURE_APPLIED',
+    v_now_utc,
+    p_actor_user_id,
+    null::uuid,
+    v_before_json,
+    v_after_json,
+    v_resolution_path_norm,
+    v_event_note
+  );
+
+  return jsonb_build_object(
+    'ok', true,
+    'finance_case_id', p_finance_case_id::text,
+    'candidate_id', v_updated_case.candidate_id::text,
+    'finance_component_id', v_updated_component.id::text,
+    'source_pay_method_before', v_old_source_pay_method,
+    'target_pay_method_after', v_candidate_pay_method,
+    'confirmed_remaining_amount_ex_vat', v_confirmed_new_remaining_ex,
+    'confirmed_remaining_amount_vat', v_confirmed_new_remaining_vat,
+    'confirmed_remaining_amount_inc_vat', v_confirmed_new_remaining_inc,
+    'weekly_due', round(coalesce(v_updated_case.weekly_due, 0), 2),
+    'weeks_total', v_updated_case.weeks_total,
+    'start_week_start', case when v_updated_case.start_week_start is null then null else v_updated_case.start_week_start::text end,
+    'next_due_week_start', case when v_updated_case.next_due_week_start is null then null else v_updated_case.next_due_week_start::text end,
+    'resolution_path', v_resolution_path_norm,
+    'schedule_input_mode', v_schedule_input_mode_norm,
+    'schedule_json', coalesce(v_updated_case.schedule_json, '[]'::jsonb),
+    'recovered_so_far_ex', v_recovered_so_far_ex,
+    'new_case_total_ex', v_new_case_total_ex,
+    'minimum_earnings_threshold', v_updated_case.minimum_earnings_threshold,
+    'take_home_floor_override', v_updated_case.take_home_floor_override,
+    'update_result', v_update_result
+  );
+end;
+$function$;
+
