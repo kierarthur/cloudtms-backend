@@ -1189,7 +1189,6 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1400,68 +1399,7 @@ begin
   v_paye_preview_decisions_json := v_preview_decisions_json;
 
   if v_selected_preview_row_ids_supplied then
-    with preview as (
-      select public.pay_preview(
-        p_pay_date,
-        p_week_ending_cutoff,
-        p_actor_user_id,
-        p_candidate_id,
-        p_client_id
-      ) as j
-    ),
-    preview_rows as (
-      select distinct on (
-        coalesce(
-          nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
-          nullif(btrim(coalesce(line_json->>'line_id','')), '')
-        ),
-        upper(btrim(coalesce(line_json->>'pay_channel',''))),
-        nullif(btrim(coalesce(line_json->>'timesheet_id','')), ''),
-        nullif(btrim(coalesce(line_json->>'finance_case_id','')), ''),
-        nullif(btrim(coalesce(line_json->>'line_type','')), '')
-      )
-        coalesce(
-          nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
-          nullif(btrim(coalesce(line_json->>'line_id','')), '')
-        ) as preview_row_id,
-        nullif(btrim(coalesce(line_json->>'timesheet_id','')), '') as timesheet_row_id,
-        case
-          when nullif(btrim(coalesce(line_json->>'finance_case_id','')), '') is not null
-           and nullif(btrim(coalesce(line_json->>'line_type','')), '') is not null
-            then 'finance:'
-                 || nullif(btrim(coalesce(line_json->>'finance_case_id','')), '')
-                 || ':'
-                 || lower(nullif(btrim(coalesce(line_json->>'line_type','')), ''))
-          else null
-        end as finance_row_id,
-        upper(btrim(coalesce(line_json->>'pay_channel',''))) as pay_channel
-      from preview
-      cross join lateral jsonb_array_elements(coalesce(preview.j->'canonical_preview_lines', '[]'::jsonb)) as line_json
-      where coalesce(
-        nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
-        nullif(btrim(coalesce(line_json->>'line_id','')), ''),
-        nullif(btrim(coalesce(line_json->>'timesheet_id','')), ''),
-        case
-          when nullif(btrim(coalesce(line_json->>'finance_case_id','')), '') is not null
-           and nullif(btrim(coalesce(line_json->>'line_type','')), '') is not null
-            then 'finance:'
-                 || nullif(btrim(coalesce(line_json->>'finance_case_id','')), '')
-                 || ':'
-                 || lower(nullif(btrim(coalesce(line_json->>'line_type','')), ''))
-          else null
-        end
-      ) is not null
-      order by
-        coalesce(
-          nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
-          nullif(btrim(coalesce(line_json->>'line_id','')), '')
-        ),
-        upper(btrim(coalesce(line_json->>'pay_channel',''))),
-        nullif(btrim(coalesce(line_json->>'timesheet_id','')), ''),
-        nullif(btrim(coalesce(line_json->>'finance_case_id','')), ''),
-        nullif(btrim(coalesce(line_json->>'line_type','')), '')
-    ),
-    selected_rows as (
+    with selected_rows as (
       select distinct on (x.preview_row_id)
         x.preview_row_id,
         x.ord
@@ -1474,18 +1412,54 @@ begin
       ) x
       order by x.preview_row_id, x.ord
     ),
-    scoped_rows as (
-      select distinct on (sr.preview_row_id, pr.pay_channel)
+    selected_keys as (
+      select
         sr.preview_row_id,
         sr.ord,
-        pr.pay_channel
+        case
+          when sr.preview_row_id ~ '^finance:[0-9a-fA-F-]{36}:' then nullif(btrim(split_part(sr.preview_row_id, ':', 2)), '')::uuid
+          else null::uuid
+        end as finance_case_id,
+        case
+          when sr.preview_row_id ~ '^[0-9a-fA-F-]{36}($|:)' then substring(sr.preview_row_id from '^[0-9a-fA-F-]{36}')::uuid
+          else null::uuid
+        end as timesheet_id
       from selected_rows sr
-      join preview_rows pr
-        on pr.preview_row_id = sr.preview_row_id
-        or pr.timesheet_row_id = sr.preview_row_id
-        or pr.finance_row_id = sr.preview_row_id
-      where pr.pay_channel in ('UMBRELLA', 'PAYE')
-      order by sr.preview_row_id, pr.pay_channel, sr.ord
+    ),
+    scoped_rows as (
+      select distinct on (src.preview_row_id, src.pay_channel)
+        src.preview_row_id,
+        src.ord,
+        src.pay_channel
+      from (
+        select
+          sk.preview_row_id,
+          sk.ord,
+          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel
+        from selected_keys sk
+        join public.v_finance_cases_register vfcr
+          on vfcr.finance_case_id = sk.finance_case_id
+        join public.candidates c
+          on c.id = vfcr.candidate_id
+        where sk.finance_case_id is not null
+
+        union all
+
+        select
+          sk.preview_row_id,
+          sk.ord,
+          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel
+        from selected_keys sk
+        join public.timesheets_financials tf
+          on tf.timesheet_id = sk.timesheet_id
+         and tf.is_current = true
+        join public.candidates c
+          on c.id = tf.candidate_id
+        where sk.finance_case_id is null
+          and sk.timesheet_id is not null
+      ) src
+      where src.pay_channel in ('UMBRELLA', 'PAYE')
+      order by src.preview_row_id, src.pay_channel, src.ord
     )
     select
       coalesce(
@@ -2113,6 +2087,7 @@ begin
   );
 end;
 $$;
+
 
 
 
