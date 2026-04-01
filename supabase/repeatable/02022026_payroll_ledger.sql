@@ -4306,6 +4306,7 @@ begin;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -8320,6 +8321,183 @@ ts_itemised as (
         end as target_amounts_json
     ) fcsr on true
   ),
+  finance_case_taxable_manual_debt_resolution as (
+    with manual_debt_shape as (
+      select
+        vfcr.finance_case_id,
+        vfcr.candidate_id,
+        vfcr.next_due_week_start,
+        vfcr.weekly_due,
+        vfcr.weeks_total,
+        vfcr.outstanding_amount,
+        vfcr.schedule_json,
+        count(fccr.finance_component_id) filter (
+          where fccr.finance_component_id is not null
+        )::int as open_component_count,
+        count(fccr.finance_component_id) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        )::int as qualifying_component_count,
+        max(fccr.finance_component_id) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        ) as finance_component_id,
+        max(fccr.source_pay_method) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        ) as source_pay_method,
+        max(fccr.current_target_pay_method) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        ) as target_pay_method,
+        bool_or(coalesce(fccr.umb_vat_chargeable,false)) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        ) as umb_vat_chargeable,
+        max(fccr.source_amount) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        ) as source_amount,
+        max(fccr.remaining_source_amount) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        ) as remaining_source_amount,
+        bool_or(coalesce(fccr.is_reusable_saved_resolution,false)) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        ) as is_reusable_saved_resolution,
+        bool_or(coalesce(fccr.is_stale_saved_resolution,false)) filter (
+          where fccr.finance_component_id is not null
+            and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            and fccr.component_key_type = 'CASE_TOTAL'
+            and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+        ) as is_stale_saved_resolution,
+        bool_or(
+          fccr.finance_component_id is not null
+          and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          and fccr.component_key_type = 'CASE_TOTAL'
+          and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+          and (
+            upper(coalesce(fccr.source_pay_method,'')) is distinct from upper(coalesce(fccr.current_target_pay_method,''))
+            or fccr.is_resolution_stale = true
+            or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(fccr.current_target_pay_method,''))
+            or (
+              fccr.resolution_fingerprint is not null
+              and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint
+            )
+          )
+        ) as requires_resolution
+      from public.v_finance_cases_register vfcr
+      left join finance_case_component_review_rows fccr
+        on fccr.finance_case_id = vfcr.finance_case_id
+      where vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+        and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+        and coalesce(vfcr.outstanding_amount,0) > 0
+      group by
+        vfcr.finance_case_id,
+        vfcr.candidate_id,
+        vfcr.next_due_week_start,
+        vfcr.weekly_due,
+        vfcr.weeks_total,
+        vfcr.outstanding_amount,
+        vfcr.schedule_json
+    )
+    select
+      mds.finance_case_id,
+      (
+        mds.open_component_count = 1
+        and mds.qualifying_component_count = 1
+        and mds.finance_component_id is not null
+        and mds.source_pay_method in ('PAYE','UMBRELLA')
+        and mds.target_pay_method in ('PAYE','UMBRELLA')
+        and mds.target_pay_method <> ''
+      ) as has_dedicated_resolution_payload,
+      (
+        mds.open_component_count = 1
+        and mds.qualifying_component_count = 1
+        and mds.finance_component_id is not null
+        and mds.source_pay_method in ('PAYE','UMBRELLA')
+        and mds.target_pay_method in ('PAYE','UMBRELLA')
+        and mds.target_pay_method <> ''
+        and coalesce(mds.requires_resolution,false) = true
+      ) as use_dedicated_blocker,
+      case
+        when (
+          mds.open_component_count = 1
+          and mds.qualifying_component_count = 1
+          and mds.finance_component_id is not null
+          and mds.source_pay_method in ('PAYE','UMBRELLA')
+          and mds.target_pay_method in ('PAYE','UMBRELLA')
+          and mds.target_pay_method <> ''
+        )
+        then jsonb_strip_nulls(
+          jsonb_build_object(
+            'resolution_kind', 'TAXABLE_MANUAL_DEBT_CHANNEL_CHANGE',
+            'finance_component_id', mds.finance_component_id::text,
+            'source_pay_method', mds.source_pay_method,
+            'target_pay_method', mds.target_pay_method,
+            'remaining_source_amount', round(coalesce(mds.remaining_source_amount,0),2),
+            'suggested_target_amount_ex_vat', round(coalesce(nullif(mdca.target_amounts_json->>'ex','')::numeric,0),2),
+            'suggested_target_amount_vat', round(coalesce(nullif(mdca.target_amounts_json->>'vat','')::numeric,0),2),
+            'suggested_target_amount_inc_vat', round(coalesce(nullif(mdca.target_amounts_json->>'inc','')::numeric,0),2),
+            'remaining_weeks', mdwr.remaining_weeks,
+            'current_weekly_due', case when mds.weekly_due is null then null else round(mds.weekly_due,2) end,
+            'suggested_weekly_due_by_remaining_weeks', case when coalesce(mdwr.remaining_weeks,0) > 0 then round(coalesce(nullif(mdca.target_amounts_json->>'ex','')::numeric,0) / mdwr.remaining_weeks, 2) else null end,
+            'next_due_week_start', case when mds.next_due_week_start is null then null else mds.next_due_week_start::text end,
+            'is_reusable_saved_resolution', coalesce(mds.is_reusable_saved_resolution,false),
+            'is_stale_saved_resolution', coalesce(mds.is_stale_saved_resolution,false),
+            'suggestion_explanation_text', case
+              when coalesce(mds.is_reusable_saved_resolution,false) = true and coalesce(mds.requires_resolution,false) = false then 'This taxable manual debt adjustment already has a reusable whole-remaining-balance restructure for the current pay method.'
+              when coalesce(mds.is_stale_saved_resolution,false) = true then 'A saved whole-remaining-balance taxable debt restructure exists but is stale for the current pay method. The suggested plan recalculates the remaining outstanding balance onto the current pay method.'
+              else 'This taxable manual debt adjustment must be restructured as a whole remaining balance onto the current pay method before it can move to Ready to Pay.'
+            end
+          )
+        )
+        else null::jsonb
+      end as taxable_manual_debt_resolution_json
+    from manual_debt_shape mds
+    left join lateral (
+      select
+        case
+          when count(*) > 0 then count(*)::integer
+          when coalesce(mds.weekly_due,0) > 0 and coalesce(mds.outstanding_amount,0) > 0 then ceil(mds.outstanding_amount / mds.weekly_due)::integer
+          when coalesce(mds.weeks_total,0) > 0 then mds.weeks_total
+          else null::integer
+        end as remaining_weeks
+      from jsonb_array_elements(coalesce(mds.schedule_json,'[]'::jsonb)) mdse(schedule_entry)
+      where jsonb_typeof(mdse.schedule_entry) = 'object'
+        and nullif(btrim(coalesce(mdse.schedule_entry->>'week_start','')), '') is not null
+        and (mds.next_due_week_start is null or (mdse.schedule_entry->>'week_start')::date >= mds.next_due_week_start)
+        and coalesce(nullif(mdse.schedule_entry->>'amount','')::numeric,0) < 0
+    ) mdwr on true
+    left join lateral (
+      select
+        case
+          when mds.source_pay_method = 'PAYE' and mds.target_pay_method = 'UMBRELLA' then public._pay_convert_paye_to_umbrella(round(coalesce(mds.remaining_source_amount,0),2), v_erni_pct, v_vat_rate_pct, coalesce(mds.umb_vat_chargeable,false))
+          when mds.source_pay_method = 'UMBRELLA' and mds.target_pay_method = 'PAYE' then jsonb_build_object('ex', public._pay_convert_umbrella_to_paye_ex(round(coalesce(mds.remaining_source_amount,0),2), v_erni_pct), 'vat', 0, 'inc', public._pay_convert_umbrella_to_paye_ex(round(coalesce(mds.remaining_source_amount,0),2), v_erni_pct))
+          when mds.target_pay_method = 'PAYE' then jsonb_build_object('ex', round(coalesce(mds.remaining_source_amount,0),2), 'vat', 0, 'inc', round(coalesce(mds.remaining_source_amount,0),2))
+          when mds.target_pay_method = 'UMBRELLA' then public._pay_umbrella_vat_calc(round(coalesce(mds.remaining_source_amount,0),2), v_vat_rate_pct, coalesce(mds.umb_vat_chargeable,false))
+          else null::jsonb
+        end as target_amounts_json
+    ) mdca on true
+  ),
+
   finance_case_resolution_rollup as (
     with grouped as (
       select
@@ -8404,14 +8582,30 @@ ts_itemised as (
         coalesce(count(fccr.finance_component_id) filter (
           where fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
             and (
-              fccr.saved_target_pay_method is null
-              or fccr.saved_resolution_mode is null
-              or fccr.is_resolution_stale = true
-              or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,''))
-              or (
-                fccr.resolution_fingerprint is not null
-                and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint
-              )
+              case
+                when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+                 and fccr.component_key_type = 'CASE_TOTAL'
+                 and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
+                then (
+                  upper(coalesce(fccr.source_pay_method,'')) is distinct from upper(coalesce(fccr.current_target_pay_method,''))
+                  or fccr.is_resolution_stale = true
+                  or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(fccr.current_target_pay_method,''))
+                  or (
+                    fccr.resolution_fingerprint is not null
+                    and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint
+                  )
+                )
+                else (
+                  fccr.saved_target_pay_method is null
+                  or fccr.saved_resolution_mode is null
+                  or fccr.is_resolution_stale = true
+                  or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,''))
+                  or (
+                    fccr.resolution_fingerprint is not null
+                    and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint
+                  )
+                )
+              end
             )
         ), 0)::int as unresolved_taxable_count,
         coalesce(count(fccr.finance_component_id) filter (
@@ -8596,37 +8790,47 @@ ts_itemised as (
         coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)
         ||
         (case
+          when coalesce(fcmtdr.use_dedicated_blocker, false) = true then jsonb_build_array('BLOCKED_TAXABLE_MANUAL_DEBT_CHANNEL_RESOLUTION')
           when g.unresolved_taxable_count > 0 then jsonb_build_array('BLOCKED_TAXABLE_RESOLUTION')
           else '[]'::jsonb
         end)
       ) as blocked_reason_codes,
-      jsonb_build_object(
-        'case_key', ('finance:' || g.finance_case_id::text),
-        'case_type', g.case_type::text,
-        'taxability', case when g.taxability is null then null else g.taxability::text end,
-        'routing_kind', case when g.routing_kind is null then null else g.routing_kind::text end,
-        'destination_label', g.destination_label,
-        'is_mixed_case', g.is_mixed_case,
-        'open_taxable_count', g.open_taxable_count,
-        'open_reimbursement_count', g.open_reimbursement_count,
-        'unresolved_taxable_count', g.unresolved_taxable_count,
-        'stale_count', g.stale_count,
-        'is_blocked', (
-          g.unresolved_taxable_count > 0
-          or jsonb_array_length(coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)) > 0
-        ),
-        'due_amount_ex_vat', g.due_amount_ex_vat,
-        'blocked_reason_codes', (
-          coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)
-          ||
-          (case
-            when g.unresolved_taxable_count > 0 then jsonb_build_array('BLOCKED_TAXABLE_RESOLUTION')
-            else '[]'::jsonb
-          end)
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'case_key', ('finance:' || g.finance_case_id::text),
+          'case_type', g.case_type::text,
+          'taxability', case when g.taxability is null then null else g.taxability::text end,
+          'routing_kind', case when g.routing_kind is null then null else g.routing_kind::text end,
+          'destination_label', g.destination_label,
+          'is_mixed_case', g.is_mixed_case,
+          'open_taxable_count', g.open_taxable_count,
+          'open_reimbursement_count', g.open_reimbursement_count,
+          'unresolved_taxable_count', g.unresolved_taxable_count,
+          'stale_count', g.stale_count,
+          'is_blocked', (
+            g.unresolved_taxable_count > 0
+            or jsonb_array_length(coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)) > 0
+          ),
+          'due_amount_ex_vat', g.due_amount_ex_vat,
+          'blocked_reason_codes', (
+            coalesce(g.payee_blocked_reason_codes, '[]'::jsonb)
+            ||
+            (case
+              when coalesce(fcmtdr.use_dedicated_blocker, false) = true then jsonb_build_array('BLOCKED_TAXABLE_MANUAL_DEBT_CHANNEL_RESOLUTION')
+              when g.unresolved_taxable_count > 0 then jsonb_build_array('BLOCKED_TAXABLE_RESOLUTION')
+              else '[]'::jsonb
+            end)
+          )
+        )
+        || jsonb_build_object(
+          'taxable_manual_debt_resolution', fcmtdr.taxable_manual_debt_resolution_json
         )
       ) as case_resolution_summary_json,
+      fcmtdr.taxable_manual_debt_resolution_json,
       g.case_components_json
     from grouped g
+    left join finance_case_taxable_manual_debt_resolution fcmtdr
+      on fcmtdr.finance_case_id = g.finance_case_id
   ),
   canonical_timesheet_lines as (
     select
@@ -9911,10 +10115,15 @@ ts_itemised as (
         'unresolved_taxable_count', fcrr.unresolved_taxable_count,
         'stale_count', fcrr.stale_count,
         'due_amount_ex_vat', fcrr.due_amount_ex_vat,
+        'case_resolution_summary', fcrr.case_resolution_summary_json,
         'components', fcrr.case_components_json
       ) as case_json
     from finance_case_resolution_rollup fcrr
     where fcrr.due_amount_ex_vat > 0
+      and (
+        coalesce(fcrr.unresolved_taxable_count, 0) > 0
+        or coalesce(fcrr.stale_count, 0) > 0
+      )
   ),
   candidate_case_states as (
     select
@@ -10577,7 +10786,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
 
 
 
