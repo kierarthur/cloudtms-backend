@@ -1187,6 +1187,9 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1223,6 +1226,12 @@ declare
   v_selected_preview_row_ids_supplied boolean := false;
   v_selected_preview_row_ids_input_count integer := 0;
   v_selected_preview_row_ids_sanitized_count integer := 0;
+  v_umbrella_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_paye_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_umbrella_selected_preview_row_count integer := 0;
+  v_paye_selected_preview_row_count integer := 0;
+  v_umbrella_preview_decisions_json jsonb := '{}'::jsonb;
+  v_paye_preview_decisions_json jsonb := '{}'::jsonb;
 
   v_umbrella_res jsonb := '{}'::jsonb;
   v_paye_res jsonb := '{}'::jsonb;
@@ -1387,6 +1396,135 @@ begin
     else null
   end;
 
+  v_umbrella_preview_decisions_json := v_preview_decisions_json;
+  v_paye_preview_decisions_json := v_preview_decisions_json;
+
+  if v_selected_preview_row_ids_supplied then
+    with preview as (
+      select public.pay_preview(
+        p_pay_date,
+        p_week_ending_cutoff,
+        p_actor_user_id,
+        p_candidate_id,
+        p_client_id
+      ) as j
+    ),
+    preview_rows as (
+      select distinct on (
+        coalesce(
+          nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
+          nullif(btrim(coalesce(line_json->>'line_id','')), '')
+        ),
+        upper(btrim(coalesce(line_json->>'pay_channel',''))),
+        nullif(btrim(coalesce(line_json->>'timesheet_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'finance_case_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'line_type','')), '')
+      )
+        coalesce(
+          nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
+          nullif(btrim(coalesce(line_json->>'line_id','')), '')
+        ) as preview_row_id,
+        nullif(btrim(coalesce(line_json->>'timesheet_id','')), '') as timesheet_row_id,
+        case
+          when nullif(btrim(coalesce(line_json->>'finance_case_id','')), '') is not null
+           and nullif(btrim(coalesce(line_json->>'line_type','')), '') is not null
+            then 'finance:'
+                 || nullif(btrim(coalesce(line_json->>'finance_case_id','')), '')
+                 || ':'
+                 || lower(nullif(btrim(coalesce(line_json->>'line_type','')), ''))
+          else null
+        end as finance_row_id,
+        upper(btrim(coalesce(line_json->>'pay_channel',''))) as pay_channel
+      from preview
+      cross join lateral jsonb_array_elements(coalesce(preview.j->'canonical_preview_lines', '[]'::jsonb)) as line_json
+      where coalesce(
+        nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'line_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'timesheet_id','')), ''),
+        case
+          when nullif(btrim(coalesce(line_json->>'finance_case_id','')), '') is not null
+           and nullif(btrim(coalesce(line_json->>'line_type','')), '') is not null
+            then 'finance:'
+                 || nullif(btrim(coalesce(line_json->>'finance_case_id','')), '')
+                 || ':'
+                 || lower(nullif(btrim(coalesce(line_json->>'line_type','')), ''))
+          else null
+        end
+      ) is not null
+      order by
+        coalesce(
+          nullif(btrim(coalesce(line_json->>'preview_row_id','')), ''),
+          nullif(btrim(coalesce(line_json->>'line_id','')), '')
+        ),
+        upper(btrim(coalesce(line_json->>'pay_channel',''))),
+        nullif(btrim(coalesce(line_json->>'timesheet_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'finance_case_id','')), ''),
+        nullif(btrim(coalesce(line_json->>'line_type','')), '')
+    ),
+    selected_rows as (
+      select distinct on (x.preview_row_id)
+        x.preview_row_id,
+        x.ord
+      from (
+        select
+          btrim(e.value) as preview_row_id,
+          e.ord
+        from jsonb_array_elements_text(v_selected_preview_row_ids) with ordinality as e(value, ord)
+        where btrim(e.value) <> ''
+      ) x
+      order by x.preview_row_id, x.ord
+    ),
+    scoped_rows as (
+      select distinct on (sr.preview_row_id, pr.pay_channel)
+        sr.preview_row_id,
+        sr.ord,
+        pr.pay_channel
+      from selected_rows sr
+      join preview_rows pr
+        on pr.preview_row_id = sr.preview_row_id
+        or pr.timesheet_row_id = sr.preview_row_id
+        or pr.finance_row_id = sr.preview_row_id
+      where pr.pay_channel in ('UMBRELLA', 'PAYE')
+      order by sr.preview_row_id, pr.pay_channel, sr.ord
+    )
+    select
+      coalesce(
+        jsonb_agg(to_jsonb(sr.preview_row_id) order by sr.ord) filter (where sr.pay_channel = 'UMBRELLA'),
+        '[]'::jsonb
+      ),
+      coalesce(count(*) filter (where sr.pay_channel = 'UMBRELLA'), 0)::int,
+      coalesce(
+        jsonb_agg(to_jsonb(sr.preview_row_id) order by sr.ord) filter (where sr.pay_channel = 'PAYE'),
+        '[]'::jsonb
+      ),
+      coalesce(count(*) filter (where sr.pay_channel = 'PAYE'), 0)::int
+    into
+      v_umbrella_selected_preview_row_ids,
+      v_umbrella_selected_preview_row_count,
+      v_paye_selected_preview_row_ids,
+      v_paye_selected_preview_row_count
+    from scoped_rows sr;
+
+    if coalesce(v_umbrella_selected_preview_row_count, 0) = 0
+       and coalesce(v_paye_selected_preview_row_count, 0) = 0 then
+      raise exception 'Selected preview rows are not valid for the current preview';
+    end if;
+
+    if coalesce(v_umbrella_selected_preview_row_count, 0) > 0 then
+      v_umbrella_preview_decisions_json := (v_umbrella_preview_decisions_json - 'selected_preview_row_ids')
+        || jsonb_build_object('selected_preview_row_ids', v_umbrella_selected_preview_row_ids);
+    else
+      v_umbrella_preview_decisions_json := v_umbrella_preview_decisions_json - 'selected_preview_row_ids';
+    end if;
+
+    if coalesce(v_paye_selected_preview_row_count, 0) > 0 then
+      v_paye_preview_decisions_json := (v_paye_preview_decisions_json - 'selected_preview_row_ids')
+        || jsonb_build_object('selected_preview_row_ids', v_paye_selected_preview_row_ids);
+    else
+      v_paye_preview_decisions_json := v_paye_preview_decisions_json - 'selected_preview_row_ids';
+    end if;
+  end if;
+
   begin
     perform public._imp_debug_audit(
       p_actor_user_id,
@@ -1498,6 +1636,34 @@ begin
             )
             else null
           end
+        ),
+        'umbrella_selected_preview_row_count', coalesce(v_umbrella_selected_preview_row_count, 0),
+        'paye_selected_preview_row_count', coalesce(v_paye_selected_preview_row_count, 0),
+        'umbrella_selected_preview_row_ids_sample', (
+          case
+            when v_selected_preview_row_ids_supplied and coalesce(v_umbrella_selected_preview_row_count, 0) > 0 then (
+              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+              from (
+                select elem
+                from jsonb_array_elements(v_umbrella_selected_preview_row_ids) as elem
+                limit 50
+              ) x
+            )
+            else null
+          end
+        ),
+        'paye_selected_preview_row_ids_sample', (
+          case
+            when v_selected_preview_row_ids_supplied and coalesce(v_paye_selected_preview_row_count, 0) > 0 then (
+              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+              from (
+                select elem
+                from jsonb_array_elements(v_paye_selected_preview_row_ids) as elem
+                limit 50
+              ) x
+            )
+            else null
+          end
         )
       ),
       'pay_create_draft_batches_split',
@@ -1513,33 +1679,39 @@ begin
     null;
   end;
 
-  v_umbrella_status := 'RUNNING';
-  begin
-    v_umbrella_res := public.pay_create_draft_batch(
-      p_pay_date => p_pay_date,
-      p_week_ending_cutoff => p_week_ending_cutoff,
-      p_pay_channel_scope => 'UMBRELLA',
-      p_actor_user_id => p_actor_user_id,
-      p_preview_decisions_json => v_preview_decisions_json,
-      p_candidate_id => p_candidate_id,
-      p_client_id => p_client_id,
-      p_force_include_timesheet_ids => p_force_include_timesheet_ids,
-      p_override_reason => p_override_reason,
-      p_override_mode => p_override_mode
-    );
+  if v_selected_preview_row_ids_supplied and coalesce(v_umbrella_selected_preview_row_count, 0) = 0 then
+    v_umbrella_pay_batch_id := null;
+    v_umbrella_overpayment_sync_only := false;
+    v_umbrella_overpayment_sync := '{}'::jsonb;
+    v_umbrella_status := 'NOTHING_RELEVANT';
+  else
+    v_umbrella_status := 'RUNNING';
+    begin
+      v_umbrella_res := public.pay_create_draft_batch(
+        p_pay_date => p_pay_date,
+        p_week_ending_cutoff => p_week_ending_cutoff,
+        p_pay_channel_scope => 'UMBRELLA',
+        p_actor_user_id => p_actor_user_id,
+        p_preview_decisions_json => v_umbrella_preview_decisions_json,
+        p_candidate_id => p_candidate_id,
+        p_client_id => p_client_id,
+        p_force_include_timesheet_ids => p_force_include_timesheet_ids,
+        p_override_reason => p_override_reason,
+        p_override_mode => p_override_mode
+      );
 
-    v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
-    v_umbrella_overpayment_sync_only := coalesce(nullif(v_umbrella_res->>'overpayment_sync_only','')::boolean, false);
-    v_umbrella_overpayment_sync := coalesce(v_umbrella_res->'overpayment_sync', '{}'::jsonb);
+      v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
+      v_umbrella_overpayment_sync_only := coalesce(nullif(v_umbrella_res->>'overpayment_sync_only','')::boolean, false);
+      v_umbrella_overpayment_sync := coalesce(v_umbrella_res->'overpayment_sync', '{}'::jsonb);
 
-    if v_umbrella_pay_batch_id is not null then
-      v_umbrella_status := 'BATCH_CREATED';
-    elsif v_umbrella_overpayment_sync_only then
-      v_umbrella_status := 'DEBT_SYNCED_NO_BATCH';
-    else
-      v_umbrella_status := 'NOTHING_RELEVANT';
-    end if;
-  exception
+      if v_umbrella_pay_batch_id is not null then
+        v_umbrella_status := 'BATCH_CREATED';
+      elsif v_umbrella_overpayment_sync_only then
+        v_umbrella_status := 'DEBT_SYNCED_NO_BATCH';
+      else
+        v_umbrella_status := 'NOTHING_RELEVANT';
+      end if;
+    exception
     when others then
       v_err := coalesce(SQLERRM, '');
       if position('Nothing to pay' in v_err) = 1 then
@@ -1584,7 +1756,8 @@ begin
         end;
         raise;
       end if;
-  end;
+    end;
+  end if;
 
   perform pg_advisory_xact_lock(94201, 1);
 
@@ -1682,33 +1855,39 @@ begin
   end if;
 
   if not v_paye_scope_blocked then
-    v_paye_status := 'RUNNING';
-    begin
-      v_paye_res := public.pay_create_draft_batch(
-        p_pay_date => p_pay_date,
-        p_week_ending_cutoff => p_week_ending_cutoff,
-        p_pay_channel_scope => 'PAYE',
-        p_actor_user_id => p_actor_user_id,
-        p_preview_decisions_json => v_preview_decisions_json,
-        p_candidate_id => p_candidate_id,
-        p_client_id => p_client_id,
-        p_force_include_timesheet_ids => p_force_include_timesheet_ids,
-        p_override_reason => p_override_reason,
-        p_override_mode => p_override_mode
-      );
+    if v_selected_preview_row_ids_supplied and coalesce(v_paye_selected_preview_row_count, 0) = 0 then
+      v_paye_pay_batch_id := null;
+      v_paye_overpayment_sync_only := false;
+      v_paye_overpayment_sync := '{}'::jsonb;
+      v_paye_status := 'NOTHING_RELEVANT';
+    else
+      v_paye_status := 'RUNNING';
+      begin
+        v_paye_res := public.pay_create_draft_batch(
+          p_pay_date => p_pay_date,
+          p_week_ending_cutoff => p_week_ending_cutoff,
+          p_pay_channel_scope => 'PAYE',
+          p_actor_user_id => p_actor_user_id,
+          p_preview_decisions_json => v_paye_preview_decisions_json,
+          p_candidate_id => p_candidate_id,
+          p_client_id => p_client_id,
+          p_force_include_timesheet_ids => p_force_include_timesheet_ids,
+          p_override_reason => p_override_reason,
+          p_override_mode => p_override_mode
+        );
 
-      v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
-      v_paye_overpayment_sync_only := coalesce(nullif(v_paye_res->>'overpayment_sync_only','')::boolean, false);
-      v_paye_overpayment_sync := coalesce(v_paye_res->'overpayment_sync', '{}'::jsonb);
+        v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
+        v_paye_overpayment_sync_only := coalesce(nullif(v_paye_res->>'overpayment_sync_only','')::boolean, false);
+        v_paye_overpayment_sync := coalesce(v_paye_res->'overpayment_sync', '{}'::jsonb);
 
-      if v_paye_pay_batch_id is not null then
-        v_paye_status := 'BATCH_CREATED';
-      elsif v_paye_overpayment_sync_only then
-        v_paye_status := 'DEBT_SYNCED_NO_BATCH';
-      else
-        v_paye_status := 'NOTHING_RELEVANT';
-      end if;
-    exception
+        if v_paye_pay_batch_id is not null then
+          v_paye_status := 'BATCH_CREATED';
+        elsif v_paye_overpayment_sync_only then
+          v_paye_status := 'DEBT_SYNCED_NO_BATCH';
+        else
+          v_paye_status := 'NOTHING_RELEVANT';
+        end if;
+      exception
       when others then
         v_err := coalesce(SQLERRM, '');
         if position('Nothing to pay' in v_err) = 1 then
@@ -1755,7 +1934,8 @@ begin
           end;
           raise;
         end if;
-    end;
+      end;
+    end if;
   end if;
 
   begin
@@ -1816,6 +1996,34 @@ begin
               from (
                 select elem
                 from jsonb_array_elements(v_selected_preview_row_ids) as elem
+                limit 50
+              ) x
+            )
+            else null
+          end
+        ),
+        'umbrella_selected_preview_row_count', coalesce(v_umbrella_selected_preview_row_count, 0),
+        'paye_selected_preview_row_count', coalesce(v_paye_selected_preview_row_count, 0),
+        'umbrella_selected_preview_row_ids_sample', (
+          case
+            when v_selected_preview_row_ids_supplied and coalesce(v_umbrella_selected_preview_row_count, 0) > 0 then (
+              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+              from (
+                select elem
+                from jsonb_array_elements(v_umbrella_selected_preview_row_ids) as elem
+                limit 50
+              ) x
+            )
+            else null
+          end
+        ),
+        'paye_selected_preview_row_ids_sample', (
+          case
+            when v_selected_preview_row_ids_supplied and coalesce(v_paye_selected_preview_row_count, 0) > 0 then (
+              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
+              from (
+                select elem
+                from jsonb_array_elements(v_paye_selected_preview_row_ids) as elem
                 limit 50
               ) x
             )
@@ -1905,9 +2113,6 @@ begin
   );
 end;
 $$;
-
-
-
 
 
 
