@@ -4306,6 +4306,7 @@ begin;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -5035,9 +5036,238 @@ umb_map as (
         coalesce(nullif(cur_seg.seg->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
         round(coalesce(nullif(cur_seg.seg->>'pay_amount','')::numeric,0),2) as pay_amount_ex_vat,
         round(coalesce(nullif(cur_seg.seg->>'charge_amount','')::numeric, nullif(cur_seg.seg->>'charge_ex_vat','')::numeric,0),2) as charge_amount_ex_vat,
-        coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) as source_units,
-        coalesce(nullif(cur_seg.seg->>'rate','')::numeric, nullif(cur_seg.seg->>'pay_rate','')::numeric) as source_rate,
-        coalesce(nullif(cur_seg.seg->>'charge_rate','')::numeric, nullif(cur_seg.seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
+        case
+          when nullif(cur_seg.seg->>'units','') is not null then nullif(cur_seg.seg->>'units','')::numeric
+          when nullif(cur_seg.seg->>'hours','') is not null then nullif(cur_seg.seg->>'hours','')::numeric
+          when nullif(btrim(coalesce(cur_seg.seg->>'start_utc','')), '') is not null
+           and nullif(btrim(coalesce(cur_seg.seg->>'end_utc','')), '') is not null
+          then round(
+            greatest(
+              (
+                extract(
+                  epoch from (
+                    (cur_seg.seg->>'end_utc')::timestamptz
+                    - (cur_seg.seg->>'start_utc')::timestamptz
+                  )
+                ) / 3600.0
+              )
+              - (
+                  coalesce(
+                    nullif(cur_seg.seg->>'break_mins','')::numeric,
+                    nullif(cur_seg.seg->>'break_minutes','')::numeric,
+                    0
+                  ) / 60.0
+                ),
+              0
+            ),
+            6
+          )
+          when nullif(btrim(coalesce(cur_seg.seg->>'start','')), '') is not null
+           and nullif(btrim(coalesce(cur_seg.seg->>'end','')), '') is not null
+          then round(
+            greatest(
+              (
+                extract(
+                  epoch from (
+                    (
+                      timestamp '2000-01-01'
+                      + nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time
+                      + case
+                          when nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
+                          then interval '1 day'
+                          else interval '0 day'
+                        end
+                    )
+                    - (
+                        timestamp '2000-01-01'
+                        + nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
+                      )
+                  )
+                ) / 3600.0
+              )
+              - (
+                  coalesce(
+                    nullif(cur_seg.seg->>'break_mins','')::numeric,
+                    nullif(cur_seg.seg->>'break_minutes','')::numeric,
+                    0
+                  ) / 60.0
+                ),
+              0
+            ),
+            6
+          )
+          else null::numeric
+        end as source_units,
+        coalesce(
+          nullif(cur_seg.seg->>'rate','')::numeric,
+          nullif(cur_seg.seg->>'pay_rate','')::numeric,
+          case
+            when coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) is not null
+             and coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) <> 0
+            then round(
+              round(coalesce(nullif(cur_seg.seg->>'pay_amount','')::numeric,0),2)
+              / coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric),
+              6
+            )
+            when nullif(btrim(coalesce(cur_seg.seg->>'start_utc','')), '') is not null
+             and nullif(btrim(coalesce(cur_seg.seg->>'end_utc','')), '') is not null
+            then round(
+              round(coalesce(nullif(cur_seg.seg->>'pay_amount','')::numeric,0),2)
+              / nullif(
+                  round(
+                    greatest(
+                      (
+                        extract(
+                          epoch from (
+                            (cur_seg.seg->>'end_utc')::timestamptz
+                            - (cur_seg.seg->>'start_utc')::timestamptz
+                          )
+                        ) / 3600.0
+                      )
+                      - (
+                          coalesce(
+                            nullif(cur_seg.seg->>'break_mins','')::numeric,
+                            nullif(cur_seg.seg->>'break_minutes','')::numeric,
+                            0
+                          ) / 60.0
+                        ),
+                      0
+                    ),
+                    6
+                  ),
+                  0
+                ),
+              6
+            )
+            when nullif(btrim(coalesce(cur_seg.seg->>'start','')), '') is not null
+             and nullif(btrim(coalesce(cur_seg.seg->>'end','')), '') is not null
+            then round(
+              round(coalesce(nullif(cur_seg.seg->>'pay_amount','')::numeric,0),2)
+              / nullif(
+                  round(
+                    greatest(
+                      (
+                        extract(
+                          epoch from (
+                            (
+                              timestamp '2000-01-01'
+                              + nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time
+                              + case
+                                  when nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
+                                  then interval '1 day'
+                                  else interval '0 day'
+                                end
+                            )
+                            - (
+                                timestamp '2000-01-01'
+                                + nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
+                              )
+                          )
+                        ) / 3600.0
+                      )
+                      - (
+                          coalesce(
+                            nullif(cur_seg.seg->>'break_mins','')::numeric,
+                            nullif(cur_seg.seg->>'break_minutes','')::numeric,
+                            0
+                          ) / 60.0
+                        ),
+                      0
+                    ),
+                    6
+                  ),
+                  0
+                ),
+              6
+            )
+            else null::numeric
+          end
+        ) as source_rate,
+        coalesce(
+          nullif(cur_seg.seg->>'charge_rate','')::numeric,
+          nullif(cur_seg.seg->>'charge_unit_rate','')::numeric,
+          case
+            when coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) is not null
+             and coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) <> 0
+            then round(
+              round(coalesce(nullif(cur_seg.seg->>'charge_amount','')::numeric, nullif(cur_seg.seg->>'charge_ex_vat','')::numeric,0),2)
+              / coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric),
+              6
+            )
+            when nullif(btrim(coalesce(cur_seg.seg->>'start_utc','')), '') is not null
+             and nullif(btrim(coalesce(cur_seg.seg->>'end_utc','')), '') is not null
+            then round(
+              round(coalesce(nullif(cur_seg.seg->>'charge_amount','')::numeric, nullif(cur_seg.seg->>'charge_ex_vat','')::numeric,0),2)
+              / nullif(
+                  round(
+                    greatest(
+                      (
+                        extract(
+                          epoch from (
+                            (cur_seg.seg->>'end_utc')::timestamptz
+                            - (cur_seg.seg->>'start_utc')::timestamptz
+                          )
+                        ) / 3600.0
+                      )
+                      - (
+                          coalesce(
+                            nullif(cur_seg.seg->>'break_mins','')::numeric,
+                            nullif(cur_seg.seg->>'break_minutes','')::numeric,
+                            0
+                          ) / 60.0
+                        ),
+                      0
+                    ),
+                    6
+                  ),
+                  0
+                ),
+              6
+            )
+            when nullif(btrim(coalesce(cur_seg.seg->>'start','')), '') is not null
+             and nullif(btrim(coalesce(cur_seg.seg->>'end','')), '') is not null
+            then round(
+              round(coalesce(nullif(cur_seg.seg->>'charge_amount','')::numeric, nullif(cur_seg.seg->>'charge_ex_vat','')::numeric,0),2)
+              / nullif(
+                  round(
+                    greatest(
+                      (
+                        extract(
+                          epoch from (
+                            (
+                              timestamp '2000-01-01'
+                              + nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time
+                              + case
+                                  when nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
+                                  then interval '1 day'
+                                  else interval '0 day'
+                                end
+                            )
+                            - (
+                                timestamp '2000-01-01'
+                                + nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
+                              )
+                          )
+                        ) / 3600.0
+                      )
+                      - (
+                          coalesce(
+                            nullif(cur_seg.seg->>'break_mins','')::numeric,
+                            nullif(cur_seg.seg->>'break_minutes','')::numeric,
+                            0
+                          ) / 60.0
+                        ),
+                      0
+                    ),
+                    6
+                  ),
+                  0
+                ),
+              6
+            )
+            else null::numeric
+          end
+        ) as source_charge_rate,
         coalesce(
           nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')),''),
           nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')),''),
@@ -5070,9 +5300,238 @@ umb_map as (
         coalesce(nullif(bas_seg.seg->>'exclude_from_pay','')::boolean,false) as exclude_from_pay,
         round(coalesce(nullif(bas_seg.seg->>'pay_amount','')::numeric,0),2) as pay_amount_ex_vat,
         round(coalesce(nullif(bas_seg.seg->>'charge_amount','')::numeric, nullif(bas_seg.seg->>'charge_ex_vat','')::numeric,0),2) as charge_amount_ex_vat,
-        coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) as source_units,
-        coalesce(nullif(bas_seg.seg->>'rate','')::numeric, nullif(bas_seg.seg->>'pay_rate','')::numeric) as source_rate,
-        coalesce(nullif(bas_seg.seg->>'charge_rate','')::numeric, nullif(bas_seg.seg->>'charge_unit_rate','')::numeric) as source_charge_rate,
+        case
+          when nullif(bas_seg.seg->>'units','') is not null then nullif(bas_seg.seg->>'units','')::numeric
+          when nullif(bas_seg.seg->>'hours','') is not null then nullif(bas_seg.seg->>'hours','')::numeric
+          when nullif(btrim(coalesce(bas_seg.seg->>'start_utc','')), '') is not null
+           and nullif(btrim(coalesce(bas_seg.seg->>'end_utc','')), '') is not null
+          then round(
+            greatest(
+              (
+                extract(
+                  epoch from (
+                    (bas_seg.seg->>'end_utc')::timestamptz
+                    - (bas_seg.seg->>'start_utc')::timestamptz
+                  )
+                ) / 3600.0
+              )
+              - (
+                  coalesce(
+                    nullif(bas_seg.seg->>'break_mins','')::numeric,
+                    nullif(bas_seg.seg->>'break_minutes','')::numeric,
+                    0
+                  ) / 60.0
+                ),
+              0
+            ),
+            6
+          )
+          when nullif(btrim(coalesce(bas_seg.seg->>'start','')), '') is not null
+           and nullif(btrim(coalesce(bas_seg.seg->>'end','')), '') is not null
+          then round(
+            greatest(
+              (
+                extract(
+                  epoch from (
+                    (
+                      timestamp '2000-01-01'
+                      + nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time
+                      + case
+                          when nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
+                          then interval '1 day'
+                          else interval '0 day'
+                        end
+                    )
+                    - (
+                        timestamp '2000-01-01'
+                        + nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
+                      )
+                  )
+                ) / 3600.0
+              )
+              - (
+                  coalesce(
+                    nullif(bas_seg.seg->>'break_mins','')::numeric,
+                    nullif(bas_seg.seg->>'break_minutes','')::numeric,
+                    0
+                  ) / 60.0
+                ),
+              0
+            ),
+            6
+          )
+          else null::numeric
+        end as source_units,
+        coalesce(
+          nullif(bas_seg.seg->>'rate','')::numeric,
+          nullif(bas_seg.seg->>'pay_rate','')::numeric,
+          case
+            when coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) is not null
+             and coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) <> 0
+            then round(
+              round(coalesce(nullif(bas_seg.seg->>'pay_amount','')::numeric,0),2)
+              / coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric),
+              6
+            )
+            when nullif(btrim(coalesce(bas_seg.seg->>'start_utc','')), '') is not null
+             and nullif(btrim(coalesce(bas_seg.seg->>'end_utc','')), '') is not null
+            then round(
+              round(coalesce(nullif(bas_seg.seg->>'pay_amount','')::numeric,0),2)
+              / nullif(
+                  round(
+                    greatest(
+                      (
+                        extract(
+                          epoch from (
+                            (bas_seg.seg->>'end_utc')::timestamptz
+                            - (bas_seg.seg->>'start_utc')::timestamptz
+                          )
+                        ) / 3600.0
+                      )
+                      - (
+                          coalesce(
+                            nullif(bas_seg.seg->>'break_mins','')::numeric,
+                            nullif(bas_seg.seg->>'break_minutes','')::numeric,
+                            0
+                          ) / 60.0
+                        ),
+                      0
+                    ),
+                    6
+                  ),
+                  0
+                ),
+              6
+            )
+            when nullif(btrim(coalesce(bas_seg.seg->>'start','')), '') is not null
+             and nullif(btrim(coalesce(bas_seg.seg->>'end','')), '') is not null
+            then round(
+              round(coalesce(nullif(bas_seg.seg->>'pay_amount','')::numeric,0),2)
+              / nullif(
+                  round(
+                    greatest(
+                      (
+                        extract(
+                          epoch from (
+                            (
+                              timestamp '2000-01-01'
+                              + nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time
+                              + case
+                                  when nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
+                                  then interval '1 day'
+                                  else interval '0 day'
+                                end
+                            )
+                            - (
+                                timestamp '2000-01-01'
+                                + nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
+                              )
+                          )
+                        ) / 3600.0
+                      )
+                      - (
+                          coalesce(
+                            nullif(bas_seg.seg->>'break_mins','')::numeric,
+                            nullif(bas_seg.seg->>'break_minutes','')::numeric,
+                            0
+                          ) / 60.0
+                        ),
+                      0
+                    ),
+                    6
+                  ),
+                  0
+                ),
+              6
+            )
+            else null::numeric
+          end
+        ) as source_rate,
+        coalesce(
+          nullif(bas_seg.seg->>'charge_rate','')::numeric,
+          nullif(bas_seg.seg->>'charge_unit_rate','')::numeric,
+          case
+            when coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) is not null
+             and coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) <> 0
+            then round(
+              round(coalesce(nullif(bas_seg.seg->>'charge_amount','')::numeric, nullif(bas_seg.seg->>'charge_ex_vat','')::numeric,0),2)
+              / coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric),
+              6
+            )
+            when nullif(btrim(coalesce(bas_seg.seg->>'start_utc','')), '') is not null
+             and nullif(btrim(coalesce(bas_seg.seg->>'end_utc','')), '') is not null
+            then round(
+              round(coalesce(nullif(bas_seg.seg->>'charge_amount','')::numeric, nullif(bas_seg.seg->>'charge_ex_vat','')::numeric,0),2)
+              / nullif(
+                  round(
+                    greatest(
+                      (
+                        extract(
+                          epoch from (
+                            (bas_seg.seg->>'end_utc')::timestamptz
+                            - (bas_seg.seg->>'start_utc')::timestamptz
+                          )
+                        ) / 3600.0
+                      )
+                      - (
+                          coalesce(
+                            nullif(bas_seg.seg->>'break_mins','')::numeric,
+                            nullif(bas_seg.seg->>'break_minutes','')::numeric,
+                            0
+                          ) / 60.0
+                        ),
+                      0
+                    ),
+                    6
+                  ),
+                  0
+                ),
+              6
+            )
+            when nullif(btrim(coalesce(bas_seg.seg->>'start','')), '') is not null
+             and nullif(btrim(coalesce(bas_seg.seg->>'end','')), '') is not null
+            then round(
+              round(coalesce(nullif(bas_seg.seg->>'charge_amount','')::numeric, nullif(bas_seg.seg->>'charge_ex_vat','')::numeric,0),2)
+              / nullif(
+                  round(
+                    greatest(
+                      (
+                        extract(
+                          epoch from (
+                            (
+                              timestamp '2000-01-01'
+                              + nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time
+                              + case
+                                  when nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
+                                  then interval '1 day'
+                                  else interval '0 day'
+                                end
+                            )
+                            - (
+                                timestamp '2000-01-01'
+                                + nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
+                              )
+                          )
+                        ) / 3600.0
+                      )
+                      - (
+                          coalesce(
+                            nullif(bas_seg.seg->>'break_mins','')::numeric,
+                            nullif(bas_seg.seg->>'break_minutes','')::numeric,
+                            0
+                          ) / 60.0
+                        ),
+                      0
+                    ),
+                    6
+                  ),
+                  0
+                ),
+              6
+            )
+            else null::numeric
+          end
+        ) as source_charge_rate,
         coalesce(
           nullif(btrim(coalesce(bas_seg.seg->>'segment_stable_key','')),''),
           nullif(btrim(coalesce(bas_seg.seg->>'segment_id','')),''),
@@ -6808,7 +7267,7 @@ ts_itemised as (
             'vat_rate_pct', round(v_vat_rate_pct,6),
             'umbrella_vat_chargeable', coalesce(ttr.umb_vat_chargeable,false),
             'target_units', case when ttr.source_units is not null then round(ttr.source_units,6) else null end,
-            'suggested_target_rate', case when ttr.source_units is not null and ttr.source_units <> 0 then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0) / ttr.source_units, 6) else null end,
+            'suggested_target_rate', case when ttr.source_units is not null and ttr.source_units <> 0 then round(round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) / ttr.source_units, 2) else null end,
             'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT'
           )
         )
@@ -6832,10 +7291,10 @@ ts_itemised as (
             'vat_rate_pct', round(v_vat_rate_pct,6),
             'umbrella_vat_chargeable', coalesce(ttr.umb_vat_chargeable,false),
             'target_units', case when ttr.source_units is not null then round(ttr.source_units,6) else null end,
-            'replacement_rate', case when ttr.source_units is not null and ttr.source_units <> 0 then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0) / ttr.source_units, 6) else null end,
-            'target_amount_ex_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0) / ttr.component_amount_ex_vat, 10) else null end,
-            'target_amount_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(coalesce((ttrs.target_amounts_json->>'vat')::numeric,0) / ttr.component_amount_ex_vat, 10) else null end,
-            'target_amount_inc_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(coalesce((ttrs.target_amounts_json->>'inc')::numeric,0) / ttr.component_amount_ex_vat, 10) else null end,
+            'replacement_rate', case when ttr.source_units is not null and ttr.source_units <> 0 then round(round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) / ttr.source_units, 2) else null end,
+            'target_amount_ex_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) / ttr.component_amount_ex_vat, 10) else null end,
+            'target_amount_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(round(coalesce((ttrs.target_amounts_json->>'vat')::numeric,0),2) / ttr.component_amount_ex_vat, 10) else null end,
+            'target_amount_inc_vat_per_source_ex_vat', case when coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(round(coalesce((ttrs.target_amounts_json->>'inc')::numeric,0),2) / ttr.component_amount_ex_vat, 10) else null end,
             'target_units_per_source_ex_vat', case when ttr.source_units is not null and coalesce(ttr.component_amount_ex_vat,0) <> 0 then round(ttr.source_units / ttr.component_amount_ex_vat, 10) else null end,
             'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT',
             'source_pay_ex_vat', round(coalesce(ttr.component_amount_ex_vat,0),2),
@@ -6843,8 +7302,8 @@ ts_itemised as (
             'source_margin_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end,
             'target_pay_ex_vat', round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2),
             'target_charge_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat,2) end,
-            'target_margin_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) end,
-            'margin_delta_ex_vat', case when ttr.source_charge_ex_vat is null then null else round((ttr.source_charge_ex_vat - coalesce((ttrs.target_amounts_json->>'ex')::numeric,0)) - (ttr.source_charge_ex_vat - ttr.component_amount_ex_vat),2) end
+            'target_margin_ex_vat', case when ttr.source_charge_ex_vat is null or ttrs.target_amounts_json is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end,
+            'margin_delta_ex_vat', case when ttr.source_charge_ex_vat is null or ttrs.target_amounts_json is null then null else 0::numeric end
           )
         )
         else null::jsonb
@@ -6854,8 +7313,8 @@ ts_itemised as (
       case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end as source_margin_ex_vat,
       case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttrs.target_amounts_json is not null then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) else null end as target_pay_ex_vat,
       case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null then round(ttr.source_charge_ex_vat,2) else null end as target_charge_ex_vat,
-      case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then round(ttr.source_charge_ex_vat - coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) else null end as target_margin_ex_vat,
-      case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then round((ttr.source_charge_ex_vat - coalesce((ttrs.target_amounts_json->>'ex')::numeric,0)) - (ttr.source_charge_ex_vat - ttr.component_amount_ex_vat),2) else null end as margin_delta_ex_vat,
+      case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) else null end as target_margin_ex_vat,
+      case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then 0::numeric else null end as margin_delta_ex_vat,
       case
         when ttr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'Fixed reimbursements are not channel-converted and do not participate in suggested-rates review.'
         when upper(coalesce(ttr.source_pay_method,'')) is not distinct from upper(coalesce(ttr.current_target_pay_method,'')) then 'No suggested rates are required because this taxable component already aligns with the current target pay method.'
@@ -6996,7 +7455,7 @@ ts_itemised as (
             'source_pay_method', tcr.source_pay_method,
             'current_target_pay_method', tcr.current_target_pay_method,
             'component_amount_ex_vat', tcr.component_amount_ex_vat,
-            'source_basis_json', tcr.source_basis_json,
+            'source_basis_json', jsonb_strip_nulls(tcr.source_basis_json || jsonb_build_object('source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end, 'source_charge_rate', case when tcr.source_charge_rate is null then null else round(tcr.source_charge_rate,2) end)),
             'saved_target_pay_method', null,
             'saved_resolution_mode', null,
             'saved_resolution_payload_json', null,
@@ -7010,8 +7469,8 @@ ts_itemised as (
             'suggested_resolution_result_json', tcr.suggested_resolution_result_json,
             'source_units', tcr.source_units,
             'target_units', tcr.source_units,
-            'source_rate', tcr.source_rate,
-            'target_rate', case when tcr.source_units is not null and tcr.source_units <> 0 and tcr.target_pay_ex_vat is not null then round(tcr.target_pay_ex_vat / tcr.source_units, 6) else null end,
+            'source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end,
+            'target_rate', case when tcr.source_units is not null and tcr.source_units <> 0 and tcr.target_pay_ex_vat is not null then round(tcr.target_pay_ex_vat / tcr.source_units, 2) else null end,
             'source_pay_ex_vat', tcr.source_pay_ex_vat,
             'source_charge_ex_vat', tcr.source_charge_component_ex_vat,
             'source_margin_ex_vat', tcr.source_margin_ex_vat,
@@ -8266,7 +8725,7 @@ ts_itemised as (
           'vat_rate_pct', round(v_vat_rate_pct,6),
           'umbrella_vat_chargeable', coalesce(fccr.umb_vat_chargeable,false),
           'target_units', case when nullif(fccr.source_basis_json->>'source_units','') is not null then round(nullif(fccr.source_basis_json->>'source_units','')::numeric,6) else null end,
-          'suggested_target_rate', case when nullif(fccr.source_basis_json->>'source_units','') is not null and nullif(fccr.source_basis_json->>'source_units','')::numeric <> 0 then round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0) / (nullif(fccr.source_basis_json->>'source_units','')::numeric), 6) else null end,
+          'suggested_target_rate', case when nullif(fccr.source_basis_json->>'source_units','') is not null and nullif(fccr.source_basis_json->>'source_units','')::numeric <> 0 then round(round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0),2) / (nullif(fccr.source_basis_json->>'source_units','')::numeric), 2) else null end,
           'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT'
         ))
       end as suggested_resolution_payload_json,
@@ -8285,10 +8744,10 @@ ts_itemised as (
           'vat_rate_pct', round(v_vat_rate_pct,6),
           'umbrella_vat_chargeable', coalesce(fccr.umb_vat_chargeable,false),
           'target_units', case when nullif(fccr.source_basis_json->>'source_units','') is not null then round(nullif(fccr.source_basis_json->>'source_units','')::numeric,6) else null end,
-          'replacement_rate', case when nullif(fccr.source_basis_json->>'source_units','') is not null and nullif(fccr.source_basis_json->>'source_units','')::numeric <> 0 then round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0) / (nullif(fccr.source_basis_json->>'source_units','')::numeric), 6) else null end,
-          'target_amount_ex_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0) / fccr.source_amount, 10) else null end,
-          'target_amount_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(coalesce((fcsr.target_amounts_json->>'vat')::numeric,0) / fccr.source_amount, 10) else null end,
-          'target_amount_inc_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(coalesce((fcsr.target_amounts_json->>'inc')::numeric,0) / fccr.source_amount, 10) else null end,
+          'replacement_rate', case when nullif(fccr.source_basis_json->>'source_units','') is not null and nullif(fccr.source_basis_json->>'source_units','')::numeric <> 0 then round(round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0),2) / (nullif(fccr.source_basis_json->>'source_units','')::numeric), 2) else null end,
+          'target_amount_ex_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0),2) / fccr.source_amount, 10) else null end,
+          'target_amount_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(round(coalesce((fcsr.target_amounts_json->>'vat')::numeric,0),2) / fccr.source_amount, 10) else null end,
+          'target_amount_inc_vat_per_source_ex_vat', case when coalesce(fccr.source_amount,0) <> 0 then round(round(coalesce((fcsr.target_amounts_json->>'inc')::numeric,0),2) / fccr.source_amount, 10) else null end,
           'target_units_per_source_ex_vat', case when nullif(fccr.source_basis_json->>'source_units','') is not null and coalesce(fccr.source_amount,0) <> 0 then round((nullif(fccr.source_basis_json->>'source_units','')::numeric) / fccr.source_amount, 10) else null end,
           'reuse_mode', 'PROPORTIONAL_TO_REMAINING_SOURCE_AMOUNT',
           'source_pay_ex_vat', round(coalesce(fccr.source_amount,0),2),
@@ -8296,8 +8755,8 @@ ts_itemised as (
           'source_margin_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round(coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - fccr.source_amount,2) end,
           'target_pay_ex_vat', round(coalesce((fcsr.target_amounts_json->>'ex')::numeric,0),2),
           'target_charge_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round(coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric),2) end,
-          'target_margin_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round(coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - coalesce((fcsr.target_amounts_json->>'ex')::numeric,0),2) end,
-          'margin_delta_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null then null else round((coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - coalesce((fcsr.target_amounts_json->>'ex')::numeric,0)) - (coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - fccr.source_amount),2) end
+          'target_margin_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null or fcsr.target_amounts_json is null then null else round(coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) - fccr.source_amount,2) end,
+          'margin_delta_ex_vat', case when coalesce(nullif(fccr.source_basis_json->>'source_charge_ex_vat','')::numeric, nullif(fccr.saved_resolution_result_json->>'source_charge_ex_vat','')::numeric) is null or fcsr.target_amounts_json is null then null else 0::numeric end
         ))
       end as suggested_resolution_result_json,
       case
@@ -8457,7 +8916,7 @@ ts_itemised as (
             'suggested_target_amount_inc_vat', round(coalesce(nullif(mdca.target_amounts_json->>'inc','')::numeric,0),2),
             'remaining_weeks', mdwr.remaining_weeks,
             'current_weekly_due', case when mds.weekly_due is null then null else round(mds.weekly_due,2) end,
-            'suggested_weekly_due_by_remaining_weeks', case when coalesce(mdwr.remaining_weeks,0) > 0 then round(coalesce(nullif(mdca.target_amounts_json->>'ex','')::numeric,0) / mdwr.remaining_weeks, 2) else null end,
+            'suggested_weekly_due_by_remaining_weeks', case when coalesce(mdwr.remaining_weeks,0) > 0 then round(round(coalesce(nullif(mdca.target_amounts_json->>'ex','')::numeric,0),2) / mdwr.remaining_weeks, 2) else null end,
             'next_due_week_start', case when mds.next_due_week_start is null then null else mds.next_due_week_start::text end,
             'is_reusable_saved_resolution', coalesce(mds.is_reusable_saved_resolution,false),
             'is_stale_saved_resolution', coalesce(mds.is_stale_saved_resolution,false),
@@ -8510,7 +8969,16 @@ ts_itemised as (
         cp.cand_pay_method as candidate_pay_method,
         fpr.payee_entity_kind,
         fpr.payee_entity_id,
-        (jsonb_array_length(coalesce(fpr.blocked_reason_codes, '[]'::jsonb)) = 0) as candidate_ready_for_draft,
+        (
+          jsonb_array_length(
+            case
+              when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+               and upper(coalesce(cp.cand_pay_method,'')) = 'PAYE'
+              then '[]'::jsonb
+              else coalesce(fpr.blocked_reason_codes, '[]'::jsonb)
+            end
+          ) = 0
+        ) as candidate_ready_for_draft,
         vfcr.client_id,
         vfcr.client_name,
         vfcr.linked_timesheet_id,
@@ -8533,7 +9001,12 @@ ts_itemised as (
         fpr.bank_details_hash as payee_bank_hash,
         fpr.beneficiary_name,
         fpr.masked_bank_account,
-        coalesce(fpr.blocked_reason_codes, '[]'::jsonb) as payee_blocked_reason_codes,
+        case
+          when vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+           and upper(coalesce(cp.cand_pay_method,'')) = 'PAYE'
+          then '[]'::jsonb
+          else coalesce(fpr.blocked_reason_codes, '[]'::jsonb)
+        end as payee_blocked_reason_codes,
         case
           when vfcr.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum then 'one-off specified bank account'
           when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then 'umbrella company'
@@ -8637,7 +9110,7 @@ ts_itemised as (
               'current_target_pay_method', fccr.current_target_pay_method,
               'source_amount', fccr.source_amount,
               'remaining_source_amount', fccr.remaining_source_amount,
-              'source_basis_json', fccr.source_basis_json,
+              'source_basis_json', jsonb_strip_nulls(fccr.source_basis_json || jsonb_build_object('source_rate', case when fccr.source_rate is null then null else round(fccr.source_rate,2) end, 'source_charge_rate', case when fccr.source_charge_rate is null then null else round(fccr.source_charge_rate,2) end)),
               'saved_target_pay_method', fccr.saved_target_pay_method,
               'saved_resolution_mode', case when fccr.saved_resolution_mode is null then null else fccr.saved_resolution_mode::text end,
               'saved_resolution_payload_json', fccr.saved_resolution_payload_json,
@@ -8651,15 +9124,15 @@ ts_itemised as (
               'suggested_resolution_result_json', fccr.suggested_resolution_result_json,
               'source_units', fccr.source_units,
               'target_units', case when nullif(fccr.suggested_resolution_result_json->>'target_units','') is not null then (fccr.suggested_resolution_result_json->>'target_units')::numeric else fccr.source_units end,
-              'source_rate', fccr.source_rate,
+              'source_rate', case when fccr.source_rate is null then null else round(fccr.source_rate,2) end,
               'target_rate', coalesce(nullif(fccr.suggested_resolution_result_json->>'replacement_rate','')::numeric, nullif(fccr.suggested_resolution_payload_json->>'suggested_target_rate','')::numeric),
               'source_pay_ex_vat', round(coalesce(fccr.source_amount,0),2),
               'source_charge_ex_vat', fccr.source_charge_ex_vat,
               'source_margin_ex_vat', case when fccr.source_charge_ex_vat is null then null else round(fccr.source_charge_ex_vat - fccr.source_amount,2) end,
               'target_pay_ex_vat', nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','')::numeric,
               'target_charge_ex_vat', fccr.source_charge_ex_vat,
-              'target_margin_ex_vat', case when fccr.source_charge_ex_vat is null or nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','') is null then null else round(fccr.source_charge_ex_vat - (fccr.suggested_resolution_result_json->>'target_amount_ex_vat')::numeric,2) end,
-              'margin_delta_ex_vat', nullif(fccr.suggested_resolution_result_json->>'margin_delta_ex_vat','')::numeric,
+              'target_margin_ex_vat', case when fccr.source_charge_ex_vat is null or nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','') is null then null else round(fccr.source_charge_ex_vat - fccr.source_amount,2) end,
+              'margin_delta_ex_vat', case when fccr.source_charge_ex_vat is null or nullif(fccr.suggested_resolution_result_json->>'target_amount_ex_vat','') is null then null else 0::numeric end,
               'suggestion_explanation_text', fccr.suggestion_explanation_text,
               'component_fingerprint', fccr.current_component_fingerprint,
               'is_resolution_stale', (fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and (fccr.is_resolution_stale = true or upper(coalesce(fccr.saved_target_pay_method,'')) is distinct from upper(coalesce(cp.cand_pay_method,'')) or (fccr.resolution_fingerprint is not null and fccr.resolution_fingerprint is distinct from fccr.current_component_fingerprint))),
@@ -10122,6 +10595,13 @@ ts_itemised as (
       and (
         coalesce(fcrr.unresolved_taxable_count, 0) > 0
         or coalesce(fcrr.stale_count, 0) > 0
+        or (
+          coalesce(fcrr.is_blocked, false) = true
+          and (
+            coalesce(fcrr.blocked_reason_codes, '[]'::jsonb) ? 'BLOCKED_TAXABLE_MANUAL_DEBT_CHANNEL_RESOLUTION'
+            or coalesce(fcrr.blocked_reason_codes, '[]'::jsonb) ? 'BLOCKED_TAXABLE_RESOLUTION'
+          )
+        )
       )
   ),
   candidate_case_states as (
@@ -10785,7 +11265,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
 
 
 
