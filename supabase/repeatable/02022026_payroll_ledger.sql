@@ -4306,7 +4306,6 @@ begin;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -8340,12 +8339,12 @@ ts_itemised as (
             and fccr.component_key_type = 'CASE_TOTAL'
             and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
         )::int as qualifying_component_count,
-        max(fccr.finance_component_id) filter (
+        (max(fccr.finance_component_id::text) filter (
           where fccr.finance_component_id is not null
             and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
             and fccr.component_key_type = 'CASE_TOTAL'
             and upper(coalesce(fccr.component_key_value,'')) = 'TOTAL'
-        ) as finance_component_id,
+        ))::uuid as finance_component_id,
         max(fccr.source_pay_method) filter (
           where fccr.finance_component_id is not null
             and fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
@@ -10786,6 +10785,7 @@ ts_itemised as (
   );
 end;
 $function$;
+
 
 
 
