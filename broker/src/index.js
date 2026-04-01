@@ -14051,6 +14051,7 @@ async function handleBankingCapabilities(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleBankingPayPreview(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -14109,8 +14110,11 @@ async function handleBankingPayPreview(env, req, user) {
     if (
       lower.includes('rejected filter parameters') ||
       lower.includes('could not choose the best candidate function between') ||
+      lower.includes('no function matches the given name and argument types') ||
+      lower.includes('42883') ||
       (lower.includes('pay_preview') && lower.includes('signature')) ||
-      (lower.includes('pay_preview') && lower.includes('function') && lower.includes('candidate'))
+      (lower.includes('pay_preview') && lower.includes('function') && lower.includes('candidate')) ||
+      (lower.includes('pay_preview') && lower.includes('failed 404'))
     ) {
       return {
         status: 500,
@@ -14172,10 +14176,10 @@ async function handleBankingPayPreview(env, req, user) {
   const argsWithFilters = {
     p_pay_date: payDate,
     p_week_ending_cutoff: cutoffIso,
-    p_actor_user_id: user.id
+    p_actor_user_id: user.id,
+    p_candidate_id: candidateId,
+    p_client_id: clientId
   };
-  if (candidateId) argsWithFilters.p_candidate_id = candidateId;
-  if (clientId) argsWithFilters.p_client_id = clientId;
 
   const unwrapPayPreviewRpc = (rpcRes) => {
     let payload = rpcRes;
@@ -14344,7 +14348,6 @@ async function handleBankingPayPreview(env, req, user) {
     }));
   }
 }
-
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
