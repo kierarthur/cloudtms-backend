@@ -4306,7 +4306,6 @@ begin;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -7349,6 +7348,21 @@ ts_itemised as (
       nullif(btrim(coalesce(ce.umbrella_bank_hash,'')), '') as bank_details_hash
     from cand_enriched ce
     where ce.cand_umbrella_id is not null
+    union all
+    select
+      'CANDIDATE'::text as payee_entity_kind,
+      vfcr.candidate_id as payee_entity_id,
+      nullif(btrim(coalesce(obd.bank_details_hash,'')), '') as bank_details_hash
+    from public.v_finance_cases_register vfcr
+    join public.pay_finance_case_oneoff_payout_bank_details obd
+      on obd.finance_case_id = vfcr.finance_case_id
+    where vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
+      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+      and coalesce(vfcr.outstanding_amount,0) > 0
+      and vfcr.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum
+      and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
+      and (p_candidate_id is null or vfcr.candidate_id = p_candidate_id)
+      and (p_client_id is null or vfcr.client_id = p_client_id)
   ),
   payees as (
     select
@@ -7406,34 +7420,83 @@ ts_itemised as (
     left join public.umbrellas u_pay
       on p.payee_entity_kind = 'UMBRELLA'
      and u_pay.id = p.payee_entity_id
+    left join lateral (
+      select
+        vfcr_oneoff.finance_case_id,
+        obd.beneficiary_name,
+        obd.sort_code,
+        obd.account_number,
+        obd.bank_details_hash
+      from public.v_finance_cases_register vfcr_oneoff
+      join public.pay_finance_case_oneoff_payout_bank_details obd
+        on obd.finance_case_id = vfcr_oneoff.finance_case_id
+      where p.payee_entity_kind = 'CANDIDATE'
+        and vfcr_oneoff.candidate_id = p.payee_entity_id
+        and vfcr_oneoff.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
+        and upper(coalesce(vfcr_oneoff.status::text,'')) = 'ACTIVE'
+        and coalesce(vfcr_oneoff.outstanding_amount,0) > 0
+        and vfcr_oneoff.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum
+        and not (vfcr_oneoff.active_snooze_id is not null and vfcr_oneoff.active_snooze_until_date is null)
+        and (p_candidate_id is null or vfcr_oneoff.candidate_id = p_candidate_id)
+        and (p_client_id is null or vfcr_oneoff.client_id = p_client_id)
+        and obd.bank_details_hash is not distinct from p.bank_details_hash
+      order by vfcr_oneoff.finance_case_id
+      limit 1
+    ) obd_pay on true
 
-    -- ✅ FIX: CROSS JOIN LATERAL cannot have ON; use LEFT JOIN LATERAL ... ON true
     left join lateral (
       select
         case
+          when p.payee_entity_kind = 'CANDIDATE' and obd_pay.finance_case_id is not null then obd_pay.beneficiary_name
           when p.payee_entity_kind = 'CANDIDATE' then c_pay.display_name
           else u_pay.name
         end as payee_name,
         case
+          when p.payee_entity_kind = 'CANDIDATE' and obd_pay.finance_case_id is not null then obd_pay.beneficiary_name
           when p.payee_entity_kind = 'CANDIDATE' then c_pay.account_holder
           else u_pay.name
         end as account_holder,
-        coalesce(c_pay.bank_name, u_pay.bank_name) as bank_name,
-        coalesce(c_pay.sort_code, u_pay.sort_code) as sort_code,
-        coalesce(c_pay.account_number, u_pay.account_number) as account_number,
-        case when p.payee_entity_kind = 'CANDIDATE' then 'personal' else 'business' end as account_type,
+        case
+          when p.payee_entity_kind = 'CANDIDATE' and obd_pay.finance_case_id is not null then null::text
+          else coalesce(c_pay.bank_name, u_pay.bank_name)
+        end as bank_name,
+        case
+          when p.payee_entity_kind = 'CANDIDATE' and obd_pay.finance_case_id is not null then obd_pay.sort_code
+          else coalesce(c_pay.sort_code, u_pay.sort_code)
+        end as sort_code,
+        case
+          when p.payee_entity_kind = 'CANDIDATE' and obd_pay.finance_case_id is not null then obd_pay.account_number
+          else coalesce(c_pay.account_number, u_pay.account_number)
+        end as account_number,
+        case
+          when p.payee_entity_kind = 'CANDIDATE' then 'personal'
+          else 'business'
+        end as account_type,
         (
           p.bank_details_hash is null
           or btrim(p.bank_details_hash) = ''
           or nullif(btrim(coalesce(
                 case
+                  when p.payee_entity_kind = 'CANDIDATE' and obd_pay.finance_case_id is not null then obd_pay.beneficiary_name
                   when p.payee_entity_kind = 'CANDIDATE' then c_pay.account_holder
                   else u_pay.name
                 end,
                 ''
               )), '') is null
-          or nullif(btrim(coalesce(coalesce(c_pay.sort_code, u_pay.sort_code), '')), '') is null
-          or nullif(btrim(coalesce(coalesce(c_pay.account_number, u_pay.account_number), '')), '') is null
+          or nullif(btrim(coalesce(
+                case
+                  when p.payee_entity_kind = 'CANDIDATE' and obd_pay.finance_case_id is not null then obd_pay.sort_code
+                  else coalesce(c_pay.sort_code, u_pay.sort_code)
+                end,
+                ''
+              )), '') is null
+          or nullif(btrim(coalesce(
+                case
+                  when p.payee_entity_kind = 'CANDIDATE' and obd_pay.finance_case_id is not null then obd_pay.account_number
+                  else coalesce(c_pay.account_number, u_pay.account_number)
+                end,
+                ''
+              )), '') is null
         ) as is_missing_bank_details
     ) b on true
 
@@ -10514,6 +10577,8 @@ ts_itemised as (
   );
 end;
 $function$;
+
+
 
 
 
