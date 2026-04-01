@@ -10790,7 +10790,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
   p_week_ending_cutoff date,
