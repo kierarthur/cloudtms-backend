@@ -4303,7 +4303,7 @@ begin;
 begin;
 
 
-
+drop function if exists public.pay_preview(date, date, uuid, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
