@@ -1186,9 +1186,6 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1211,6 +1208,16 @@ SET search_path = public
 AS $$
 declare
   v_preview_decisions_json jsonb := coalesce(p_preview_decisions_json, '{}'::jsonb);
+  v_case_resolutions jsonb := '{}'::jsonb;
+  v_case_resolutions_present boolean := false;
+  v_case_resolutions_supplied boolean := false;
+  v_case_resolutions_input_type text := null;
+  v_case_resolutions_normalized_present boolean := false;
+  v_case_resolutions_normalized_type text := null;
+  v_umbrella_case_resolutions jsonb := '{}'::jsonb;
+  v_paye_case_resolutions jsonb := '{}'::jsonb;
+  v_umbrella_case_resolution_count integer := 0;
+  v_paye_case_resolution_count integer := 0;
   v_component_resolutions jsonb := null;
   v_component_resolutions_present boolean := false;
   v_component_resolutions_supplied boolean := false;
@@ -1304,6 +1311,42 @@ begin
     v_component_resolutions_supplied := false;
   end if;
 
+  v_case_resolutions_present := (v_preview_decisions_json ? 'case_resolutions');
+  v_case_resolutions_input_type := case
+    when v_case_resolutions_present then coalesce(jsonb_typeof(v_preview_decisions_json->'case_resolutions'), 'null')
+    else null
+  end;
+
+  if v_case_resolutions_present then
+    if v_preview_decisions_json->'case_resolutions' is null
+       or jsonb_typeof(v_preview_decisions_json->'case_resolutions') = 'null' then
+      v_case_resolutions := '{}'::jsonb;
+      v_case_resolutions_supplied := false;
+    elsif jsonb_typeof(v_preview_decisions_json->'case_resolutions') = 'object' then
+      select
+        coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+      into v_case_resolutions
+      from jsonb_each(coalesce(v_preview_decisions_json->'case_resolutions', '{}'::jsonb)) e
+      where nullif(btrim(e.key), '') is not null
+        and jsonb_typeof(e.value) = 'object'
+        and (
+          e.key ~ '^timesheet:[0-9a-fA-F-]{36}$'
+          or e.key ~ '^finance:[0-9a-fA-F-]{36}$'
+        );
+
+      v_case_resolutions_supplied := exists (
+        select 1
+        from jsonb_each(v_case_resolutions) e
+        limit 1
+      );
+    else
+      raise exception 'preview_decisions_json.case_resolutions must be an object when supplied';
+    end if;
+  else
+    v_case_resolutions := '{}'::jsonb;
+    v_case_resolutions_supplied := false;
+  end if;
+
   if jsonb_typeof(coalesce(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb)) = 'array' then
     v_case_resolution_states := coalesce(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb);
   else
@@ -1372,6 +1415,7 @@ begin
   v_preview_decisions_json := coalesce(v_preview_decisions_json, '{}'::jsonb)
     - 'mismatch_choices'
     - 'component_resolutions'
+    - 'case_resolutions'
     - 'selected_preview_row_ids'
     || jsonb_build_object(
          'case_resolution_states', v_case_resolution_states,
@@ -1379,9 +1423,9 @@ begin
          'safe_case_states', v_safe_case_states
        );
 
-  if v_component_resolutions_supplied then
+  if v_case_resolutions_supplied then
     v_preview_decisions_json := v_preview_decisions_json
-      || jsonb_build_object('component_resolutions', v_component_resolutions);
+      || jsonb_build_object('case_resolutions', v_case_resolutions);
   end if;
 
   if v_selected_preview_row_ids_supplied then
@@ -1389,9 +1433,11 @@ begin
       || jsonb_build_object('selected_preview_row_ids', v_selected_preview_row_ids);
   end if;
 
-  v_component_resolutions_normalized_present := (v_preview_decisions_json ? 'component_resolutions');
-  v_component_resolutions_normalized_type := case
-    when v_component_resolutions_normalized_present then coalesce(jsonb_typeof(v_preview_decisions_json->'component_resolutions'), 'null')
+  v_component_resolutions_normalized_present := false;
+  v_component_resolutions_normalized_type := null;
+  v_case_resolutions_normalized_present := (v_preview_decisions_json ? 'case_resolutions');
+  v_case_resolutions_normalized_type := case
+    when v_case_resolutions_normalized_present then coalesce(jsonb_typeof(v_preview_decisions_json->'case_resolutions'), 'null')
     else null
   end;
 
@@ -1499,6 +1545,210 @@ begin
     end if;
   end if;
 
+
+  if v_case_resolutions_supplied then
+    with case_entries as (
+      select
+        e.key as case_key,
+        e.value as resolution_json,
+        case
+          when e.key ~ '^finance:[0-9a-fA-F-]{36}$' then substring(e.key from 9)::uuid
+          else null::uuid
+        end as finance_case_id,
+        case
+          when e.key ~ '^timesheet:[0-9a-fA-F-]{36}$' then substring(e.key from 11)::uuid
+          else null::uuid
+        end as timesheet_id
+      from jsonb_each(v_case_resolutions) e
+      where nullif(btrim(e.key), '') is not null
+        and jsonb_typeof(e.value) = 'object'
+    ),
+    selected_rows as (
+      select distinct on (x.preview_row_id)
+        x.preview_row_id,
+        x.ord
+      from (
+        select
+          btrim(e.value) as preview_row_id,
+          e.ord
+        from jsonb_array_elements_text(coalesce(v_selected_preview_row_ids, '[]'::jsonb)) with ordinality as e(value, ord)
+        where btrim(e.value) <> ''
+      ) x
+      order by x.preview_row_id, x.ord
+    ),
+    selected_keys as (
+      select
+        sr.preview_row_id,
+        sr.ord,
+        case
+          when sr.preview_row_id ~ '^finance:[0-9a-fA-F-]{36}:' then nullif(btrim(split_part(sr.preview_row_id, ':', 2)), '')::uuid
+          else null::uuid
+        end as finance_case_id,
+        case
+          when sr.preview_row_id ~ '^[0-9a-fA-F-]{36}($|:)' then substring(sr.preview_row_id from '^[0-9a-fA-F-]{36}')::uuid
+          else null::uuid
+        end as timesheet_id
+      from selected_rows sr
+    ),
+    snapshot_case_rows as (
+      select case_json
+      from jsonb_array_elements(coalesce(v_case_resolution_states, '[]'::jsonb)) as case_json
+      union all
+      select case_json
+      from jsonb_array_elements(coalesce(v_blocked_case_states, '[]'::jsonb)) as case_json
+      union all
+      select case_json
+      from jsonb_array_elements(coalesce(v_safe_case_states, '[]'::jsonb)) as case_json
+    ),
+    snapshot_timesheet_case_links as (
+      select distinct
+        nullif(btrim(coalesce(scr.case_json->>'case_key','')), '') as case_key,
+        case
+          when nullif(btrim(coalesce(scr.case_json->>'case_key','')), '') ~ '^timesheet:[0-9a-fA-F-]{36}$'
+            then substring(scr.case_json->>'case_key' from 11)::uuid
+          else null::uuid
+        end as seed_timesheet_id,
+        linked_timesheet_id.value::uuid as linked_timesheet_id
+      from snapshot_case_rows scr
+      cross join lateral jsonb_array_elements_text(
+        coalesce(scr.case_json->'linked_resolution_scope_json'->'linked_timesheet_ids', '[]'::jsonb)
+      ) as linked_timesheet_id(value)
+      where jsonb_typeof(scr.case_json) = 'object'
+        and nullif(btrim(coalesce(scr.case_json->>'case_key','')), '') ~ '^timesheet:[0-9a-fA-F-]{36}$'
+        and linked_timesheet_id.value ~ '^[0-9a-fA-F-]{36}$'
+    ),
+    selected_case_keys as (
+      select
+        direct_rows.case_key,
+        min(direct_rows.ord)::int as ord
+      from (
+        select
+          ('finance:' || sk.finance_case_id::text) as case_key,
+          sk.ord
+        from selected_keys sk
+        where sk.finance_case_id is not null
+
+        union all
+
+        select
+          ('timesheet:' || sk.timesheet_id::text) as case_key,
+          sk.ord
+        from selected_keys sk
+        where sk.finance_case_id is null
+          and sk.timesheet_id is not null
+
+        union all
+
+        select
+          stcl.case_key,
+          sk.ord
+        from selected_keys sk
+        join snapshot_timesheet_case_links stcl
+          on stcl.linked_timesheet_id = sk.timesheet_id
+        where sk.finance_case_id is null
+          and sk.timesheet_id is not null
+          and stcl.case_key is not null
+      ) direct_rows
+      group by direct_rows.case_key
+    ),
+    selected_scope_rows as (
+      select distinct on (src.case_key, src.pay_channel)
+        src.case_key,
+        src.pay_channel,
+        src.ord
+      from (
+        select
+          sck.case_key,
+          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel,
+          sck.ord
+        from selected_case_keys sck
+        join case_entries ce
+          on ce.case_key = sck.case_key
+        left join public.v_finance_cases_register vfcr
+          on vfcr.finance_case_id = ce.finance_case_id
+        left join public.timesheets_financials tf
+          on tf.timesheet_id = ce.timesheet_id
+         and tf.is_current = true
+        join public.candidates c
+          on c.id = coalesce(vfcr.candidate_id, tf.candidate_id)
+      ) src
+      where v_selected_preview_row_ids_supplied = true
+        and src.pay_channel in ('UMBRELLA', 'PAYE')
+      order by src.case_key, src.pay_channel, src.ord
+    ),
+    live_scope_rows as (
+      select distinct on (src.case_key, src.pay_channel)
+        src.case_key,
+        src.pay_channel,
+        1 as ord
+      from (
+        select
+          ce.case_key,
+          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel
+        from case_entries ce
+        join public.v_finance_cases_register vfcr
+          on vfcr.finance_case_id = ce.finance_case_id
+        join public.candidates c
+          on c.id = vfcr.candidate_id
+        where ce.finance_case_id is not null
+
+        union all
+
+        select
+          ce.case_key,
+          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel
+        from case_entries ce
+        join public.timesheets_financials tf
+          on tf.timesheet_id = ce.timesheet_id
+         and tf.is_current = true
+        join public.candidates c
+          on c.id = tf.candidate_id
+        where ce.finance_case_id is null
+          and ce.timesheet_id is not null
+      ) src
+      where v_selected_preview_row_ids_supplied = false
+        and src.pay_channel in ('UMBRELLA', 'PAYE')
+      order by src.case_key, src.pay_channel, ord
+    ),
+    scope_rows as (
+      select ssr.case_key, ssr.pay_channel, ssr.ord
+      from selected_scope_rows ssr
+      union all
+      select lsr.case_key, lsr.pay_channel, lsr.ord
+      from live_scope_rows lsr
+    )
+    select
+      coalesce(jsonb_object_agg(ce.case_key, ce.resolution_json) filter (where sr.pay_channel = 'UMBRELLA'), '{}'::jsonb),
+      coalesce(count(*) filter (where sr.pay_channel = 'UMBRELLA'), 0)::int,
+      coalesce(jsonb_object_agg(ce.case_key, ce.resolution_json) filter (where sr.pay_channel = 'PAYE'), '{}'::jsonb),
+      coalesce(count(*) filter (where sr.pay_channel = 'PAYE'), 0)::int
+    into
+      v_umbrella_case_resolutions,
+      v_umbrella_case_resolution_count,
+      v_paye_case_resolutions,
+      v_paye_case_resolution_count
+    from case_entries ce
+    join scope_rows sr
+      on sr.case_key = ce.case_key;
+
+    if coalesce(v_umbrella_case_resolution_count, 0) > 0 then
+      v_umbrella_preview_decisions_json := (v_umbrella_preview_decisions_json - 'case_resolutions')
+        || jsonb_build_object('case_resolutions', v_umbrella_case_resolutions);
+    else
+      v_umbrella_preview_decisions_json := v_umbrella_preview_decisions_json - 'case_resolutions';
+    end if;
+
+    if coalesce(v_paye_case_resolution_count, 0) > 0 then
+      v_paye_preview_decisions_json := (v_paye_preview_decisions_json - 'case_resolutions')
+        || jsonb_build_object('case_resolutions', v_paye_case_resolutions);
+    else
+      v_paye_preview_decisions_json := v_paye_preview_decisions_json - 'case_resolutions';
+    end if;
+  else
+    v_umbrella_preview_decisions_json := v_umbrella_preview_decisions_json - 'case_resolutions';
+    v_paye_preview_decisions_json := v_paye_preview_decisions_json - 'case_resolutions';
+  end if;
+
   begin
     perform public._imp_debug_audit(
       p_actor_user_id,
@@ -1541,46 +1791,23 @@ begin
         'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
         'component_resolution_omitted_as_absent', (v_component_resolutions_present and not v_component_resolutions_supplied),
         'component_resolution_shape', coalesce(v_component_resolutions_normalized_type, 'null'),
-        'component_resolution_keys_sample', (
+        'component_resolution_count', 0,
+        'case_resolution_present', v_case_resolutions_present,
+        'case_resolution_supplied', v_case_resolutions_supplied,
+        'case_resolution_input_type', coalesce(v_case_resolutions_input_type, null),
+        'case_resolution_normalized_present', v_case_resolutions_normalized_present,
+        'case_resolution_normalized_type', coalesce(v_case_resolutions_normalized_type, null),
+        'case_resolution_count', (
           case
-            when v_component_resolutions_normalized_type = 'object' then (
-              select coalesce(jsonb_agg(k.key_text order by k.key_text), '[]'::jsonb)
-              from (
-                select e.key as key_text
-                from jsonb_each(v_component_resolutions) e
-                order by e.key
-                limit 50
-              ) k
-            )
-            when v_component_resolutions_normalized_type = 'array' then (
-              select coalesce(jsonb_agg(k.key_text order by k.ord), '[]'::jsonb)
-              from (
-                select
-                  coalesce(
-                    nullif(btrim(coalesce(a.value->>'candidate_id','')), ''),
-                    nullif(btrim(coalesce(a.value->>'finance_component_id','')), ''),
-                    '#' || a.ord::text
-                  ) as key_text,
-                  a.ord
-                from jsonb_array_elements(v_component_resolutions) with ordinality as a(value, ord)
-                where jsonb_typeof(a.value) = 'object'
-                order by a.ord
-                limit 50
-              ) k
-            )
-            else '[]'::jsonb
-          end
-        ),
-        'component_resolution_count', (
-          case
-            when v_component_resolutions_normalized_type = 'object' then (
+            when v_case_resolutions_normalized_type = 'object' then (
               select count(*)::int
-              from jsonb_each(v_component_resolutions) e
+              from jsonb_each(v_case_resolutions) e
             )
-            when v_component_resolutions_normalized_type = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
             else 0
           end
         ),
+        'umbrella_case_resolution_count', coalesce(v_umbrella_case_resolution_count, 0),
+        'paye_case_resolution_count', coalesce(v_paye_case_resolution_count, 0),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
         'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
@@ -1884,6 +2111,11 @@ begin
                 'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
                 'component_resolution_normalized_present', v_component_resolutions_normalized_present,
                 'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
+                'case_resolution_present', v_case_resolutions_present,
+                'case_resolution_supplied', v_case_resolutions_supplied,
+                'case_resolution_input_type', coalesce(v_case_resolutions_input_type, null),
+                'case_resolution_normalized_present', v_case_resolutions_normalized_present,
+                'case_resolution_normalized_type', coalesce(v_case_resolutions_normalized_type, null),
                 'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
                 'selected_preview_row_count', (
                   case
@@ -1936,16 +2168,23 @@ begin
         'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
         'component_resolution_omitted_as_absent', (v_component_resolutions_present and not v_component_resolutions_supplied),
         'component_resolution_shape', coalesce(v_component_resolutions_normalized_type, 'null'),
-        'component_resolution_count', (
+        'component_resolution_count', 0,
+        'case_resolution_present', v_case_resolutions_present,
+        'case_resolution_supplied', v_case_resolutions_supplied,
+        'case_resolution_input_type', coalesce(v_case_resolutions_input_type, null),
+        'case_resolution_normalized_present', v_case_resolutions_normalized_present,
+        'case_resolution_normalized_type', coalesce(v_case_resolutions_normalized_type, null),
+        'case_resolution_count', (
           case
-            when v_component_resolutions_normalized_type = 'object' then (
+            when v_case_resolutions_normalized_type = 'object' then (
               select count(*)::int
-              from jsonb_each(v_component_resolutions) e
+              from jsonb_each(v_case_resolutions) e
             )
-            when v_component_resolutions_normalized_type = 'array' then coalesce(jsonb_array_length(v_component_resolutions), 0)
             else 0
           end
         ),
+        'umbrella_case_resolution_count', coalesce(v_umbrella_case_resolution_count, 0),
+        'paye_case_resolution_count', coalesce(v_paye_case_resolution_count, 0),
         'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
         'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
         'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
@@ -2087,7 +2326,6 @@ begin
   );
 end;
 $$;
-
 
 
 
