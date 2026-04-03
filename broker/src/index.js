@@ -14077,6 +14077,154 @@ async function handleBankingPayPreview(env, req, user) {
     return null;
   };
 
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const parseNonNegativeTwoDpNumber = (raw, label) => {
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return { error: `${label} is required` };
+    }
+
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+      return { error: `${label} must be a non-negative number` };
+    }
+
+    if (Math.abs((n * 100) - Math.round(n * 100)) > 1e-9) {
+      return { error: `${label} must have at most 2 decimal places` };
+    }
+
+    return { value: Number(n.toFixed(2)) };
+  };
+
+  const sanitizeCaseResolutions = (raw) => {
+    if (raw == null) return { value: {} };
+    if (!isPlainObject(raw)) {
+      return { error: 'preview_decisions_json.case_resolutions must be an object when provided' };
+    }
+
+    const out = {};
+    const caseKeyRe = /^(timesheet|finance):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const financeComponentUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const allowedBucketComponentKeyTypes = new Set(['TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE']);
+    const allowedBucketModes = new Set(['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_REPLACEMENT_RATE']);
+    const allowedNonBucketModes = new Set(['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_AMOUNT']);
+
+    for (const [rawCaseKey, rawResolution] of Object.entries(raw)) {
+      const caseKey = String(rawCaseKey || '').trim();
+      if (!caseKey) continue;
+
+      if (!caseKeyRe.test(caseKey)) {
+        return { error: `preview_decisions_json.case_resolutions contains invalid case_key: ${caseKey}` };
+      }
+      if (!isPlainObject(rawResolution)) {
+        return { error: `preview_decisions_json.case_resolutions.${caseKey} must be an object` };
+      }
+
+      const embeddedCaseKey = String(rawResolution.case_key ?? caseKey).trim();
+      if (!embeddedCaseKey || embeddedCaseKey !== caseKey) {
+        return { error: `preview_decisions_json.case_resolutions.${caseKey}.case_key must exactly match the object key` };
+      }
+
+      const resolutionFamily = String(rawResolution.resolution_family || '').trim().toUpperCase();
+      if (resolutionFamily === 'BUCKETED') {
+        const bucketResolutionsIn = rawResolution.bucket_resolutions;
+        if (!Array.isArray(bucketResolutionsIn) || bucketResolutionsIn.length === 0) {
+          return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions must be a non-empty array` };
+        }
+
+        const bucketResolutionsOut = [];
+
+        for (let i = 0; i < bucketResolutionsIn.length; i++) {
+          const bucket = bucketResolutionsIn[i];
+          if (!isPlainObject(bucket)) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}] must be an object` };
+          }
+
+          const sourceFamilyKey = String(bucket.source_family_key || '').trim();
+          if (!sourceFamilyKey) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].source_family_key is required` };
+          }
+
+          const componentKeyType = String(bucket.component_key_type || '').trim().toUpperCase();
+          if (!allowedBucketComponentKeyTypes.has(componentKeyType)) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].component_key_type is invalid` };
+          }
+
+          const componentKeyValue = String(bucket.component_key_value || '').trim();
+          if (!componentKeyValue) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].component_key_value is required` };
+          }
+
+          const resolutionMode = String(bucket.resolution_mode || '').trim().toUpperCase();
+          if (!allowedBucketModes.has(resolutionMode)) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].resolution_mode is invalid` };
+          }
+
+          const parsedTargetRate = parseNonNegativeTwoDpNumber(
+            bucket.target_rate,
+            `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].target_rate`
+          );
+          if (parsedTargetRate.error) return parsedTargetRate;
+
+          const financeComponentIdRaw = String(bucket.finance_component_id || '').trim();
+          if (financeComponentIdRaw && !financeComponentUuidRe.test(financeComponentIdRaw)) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].finance_component_id must be a UUID when provided` };
+          }
+
+          bucketResolutionsOut.push({
+            finance_component_id: financeComponentIdRaw || null,
+            source_family_key: sourceFamilyKey,
+            component_key_type: componentKeyType,
+            component_key_value: componentKeyValue,
+            resolution_mode: resolutionMode,
+            target_rate: parsedTargetRate.value
+          });
+        }
+
+        out[caseKey] = {
+          case_key: caseKey,
+          resolution_family: 'BUCKETED',
+          resolve_all_linked_timesheets: rawResolution.resolve_all_linked_timesheets === true,
+          bucket_resolutions: bucketResolutionsOut
+        };
+        continue;
+      }
+
+      if (resolutionFamily === 'NON_BUCKET') {
+        const resolutionMode = String(rawResolution.resolution_mode || '').trim().toUpperCase();
+        if (!allowedNonBucketModes.has(resolutionMode)) {
+          return { error: `preview_decisions_json.case_resolutions.${caseKey}.resolution_mode is invalid` };
+        }
+
+        const parsedTargetAmount = parseNonNegativeTwoDpNumber(
+          rawResolution.target_amount_ex_vat,
+          `preview_decisions_json.case_resolutions.${caseKey}.target_amount_ex_vat`
+        );
+        if (parsedTargetAmount.error) return parsedTargetAmount;
+
+        out[caseKey] = {
+          case_key: caseKey,
+          resolution_family: 'NON_BUCKET',
+          resolution_mode: resolutionMode,
+          target_amount_ex_vat: parsedTargetAmount.value
+        };
+        continue;
+      }
+
+      return { error: `preview_decisions_json.case_resolutions.${caseKey}.resolution_family must be BUCKETED or NON_BUCKET` };
+    }
+
+    return { value: out };
+  };
+
   const buildPreviewErrorResponse = (status, code, message, details, canRetry) => {
     const payload = {
       ok: false,
@@ -14173,12 +14321,33 @@ async function handleBankingPayPreview(env, req, user) {
     return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
   }
 
+  const previewDecisionsIn =
+    (body.preview_decisions_json && typeof body.preview_decisions_json === 'object' && !Array.isArray(body.preview_decisions_json))
+      ? body.preview_decisions_json
+      : {};
+
+  const previewCaseResolutionSource =
+    (Object.prototype.hasOwnProperty.call(body, 'case_resolutions'))
+      ? body.case_resolutions
+      : previewDecisionsIn.case_resolutions;
+
+  const sanitizedCaseResolutionsResult = sanitizeCaseResolutions(previewCaseResolutionSource);
+  if (sanitizedCaseResolutionsResult.error) {
+    return withCORS(env, req, badRequest(sanitizedCaseResolutionsResult.error));
+  }
+
+  const previewDecisionsForRpc =
+    Object.keys(sanitizedCaseResolutionsResult.value || {}).length > 0
+      ? { case_resolutions: cloneJson(sanitizedCaseResolutionsResult.value) || {} }
+      : {};
+
   const argsWithFilters = {
     p_pay_date: payDate,
     p_week_ending_cutoff: cutoffIso,
     p_actor_user_id: user.id,
     p_candidate_id: candidateId,
-    p_client_id: clientId
+    p_client_id: clientId,
+    p_preview_decisions_json: previewDecisionsForRpc
   };
 
   const unwrapPayPreviewRpc = (rpcRes) => {
@@ -14216,7 +14385,8 @@ async function handleBankingPayPreview(env, req, user) {
     week_ending_cutoff: cutoffIso,
     has_candidate_id: !!candidateId,
     has_client_id: !!clientId,
-    perform_readiness_checks: performReadinessChecks
+    perform_readiness_checks: performReadinessChecks,
+    case_resolution_count: Object.keys(sanitizedCaseResolutionsResult.value || {}).length
   };
 
   let preview0 = null;
@@ -14455,18 +14625,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
   };
 
-   const normalizeComponentResolutionsShape = (value) => {
-    if (Array.isArray(value)) {
-      const cloned = cloneJson(value);
-      return Array.isArray(cloned) ? cloned : null;
-    }
-    if (isPlainObject(value)) {
-      const cloned = cloneJson(value);
-      return (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) ? cloned : null;
-    }
-    return null;
-  };
-
   const normalizeStringArray = (raw) => {
     if (!Array.isArray(raw)) return [];
     const out = [];
@@ -14490,6 +14648,145 @@ async function handleBankingPayCreateDraft(env, req, user) {
       return (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) ? cloned : null;
     }
     return null;
+  };
+
+  const parseNonNegativeTwoDpNumber = (raw, label) => {
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return { error: `${label} is required` };
+    }
+
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+      return { error: `${label} must be a non-negative number` };
+    }
+
+    if (Math.abs((n * 100) - Math.round(n * 100)) > 1e-9) {
+      return { error: `${label} must have at most 2 decimal places` };
+    }
+
+    return { value: Number(n.toFixed(2)) };
+  };
+
+  const sanitizeCaseResolutions = (raw) => {
+    if (raw == null) return { value: {} };
+    if (!isPlainObject(raw)) {
+      return { error: 'preview_decisions_json.case_resolutions must be an object when provided' };
+    }
+
+    const out = {};
+    const caseKeyRe = /^(timesheet|finance):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const allowedBucketComponentKeyTypes = new Set(['TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE']);
+    const allowedBucketModes = new Set(['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_REPLACEMENT_RATE']);
+    const allowedNonBucketModes = new Set(['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_AMOUNT']);
+
+    for (const [rawCaseKey, rawResolution] of Object.entries(raw)) {
+      const caseKey = String(rawCaseKey || '').trim();
+      if (!caseKey) continue;
+
+      if (!caseKeyRe.test(caseKey)) {
+        return { error: `preview_decisions_json.case_resolutions contains invalid case_key: ${caseKey}` };
+      }
+
+      if (!isPlainObject(rawResolution)) {
+        return { error: `preview_decisions_json.case_resolutions.${caseKey} must be an object` };
+      }
+
+      const embeddedCaseKey = String(rawResolution.case_key ?? caseKey).trim();
+      if (!embeddedCaseKey || embeddedCaseKey !== caseKey) {
+        return { error: `preview_decisions_json.case_resolutions.${caseKey}.case_key must exactly match the object key` };
+      }
+
+      const resolutionFamily = String(rawResolution.resolution_family || '').trim().toUpperCase();
+
+      if (resolutionFamily === 'BUCKETED') {
+        const bucketResolutionsIn = rawResolution.bucket_resolutions;
+        if (!Array.isArray(bucketResolutionsIn) || bucketResolutionsIn.length === 0) {
+          return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions must be a non-empty array` };
+        }
+
+        const bucketResolutionsOut = [];
+
+        for (let i = 0; i < bucketResolutionsIn.length; i++) {
+          const bucket = bucketResolutionsIn[i];
+          if (!isPlainObject(bucket)) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}] must be an object` };
+          }
+
+          const sourceFamilyKey = String(bucket.source_family_key || '').trim();
+          if (!sourceFamilyKey) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].source_family_key is required` };
+          }
+
+          const componentKeyType = String(bucket.component_key_type || '').trim().toUpperCase();
+          if (!allowedBucketComponentKeyTypes.has(componentKeyType)) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].component_key_type is invalid` };
+          }
+
+          const componentKeyValue = String(bucket.component_key_value || '').trim();
+          if (!componentKeyValue) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].component_key_value is required` };
+          }
+
+          const resolutionMode = String(bucket.resolution_mode || '').trim().toUpperCase();
+          if (!allowedBucketModes.has(resolutionMode)) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].resolution_mode is invalid` };
+          }
+
+          const parsedTargetRate = parseNonNegativeTwoDpNumber(
+            bucket.target_rate,
+            `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].target_rate`
+          );
+          if (parsedTargetRate.error) return parsedTargetRate;
+
+          const financeComponentIdRaw = String(bucket.finance_component_id || '').trim();
+          if (financeComponentIdRaw && !uuidRe.test(financeComponentIdRaw)) {
+            return { error: `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}].finance_component_id must be a UUID when provided` };
+          }
+
+          bucketResolutionsOut.push({
+            finance_component_id: financeComponentIdRaw || null,
+            source_family_key: sourceFamilyKey,
+            component_key_type: componentKeyType,
+            component_key_value: componentKeyValue,
+            resolution_mode: resolutionMode,
+            target_rate: parsedTargetRate.value
+          });
+        }
+
+        out[caseKey] = {
+          case_key: caseKey,
+          resolution_family: 'BUCKETED',
+          resolve_all_linked_timesheets: rawResolution.resolve_all_linked_timesheets === true,
+          bucket_resolutions: bucketResolutionsOut
+        };
+        continue;
+      }
+
+      if (resolutionFamily === 'NON_BUCKET') {
+        const resolutionMode = String(rawResolution.resolution_mode || '').trim().toUpperCase();
+        if (!allowedNonBucketModes.has(resolutionMode)) {
+          return { error: `preview_decisions_json.case_resolutions.${caseKey}.resolution_mode is invalid` };
+        }
+
+        const parsedTargetAmount = parseNonNegativeTwoDpNumber(
+          rawResolution.target_amount_ex_vat,
+          `preview_decisions_json.case_resolutions.${caseKey}.target_amount_ex_vat`
+        );
+        if (parsedTargetAmount.error) return parsedTargetAmount;
+
+        out[caseKey] = {
+          case_key: caseKey,
+          resolution_family: 'NON_BUCKET',
+          resolution_mode: resolutionMode,
+          target_amount_ex_vat: parsedTargetAmount.value
+        };
+        continue;
+      }
+
+      return { error: `preview_decisions_json.case_resolutions.${caseKey}.resolution_family must be BUCKETED or NON_BUCKET` };
+    }
+
+    return { value: out };
   };
 
   const collectPreviewRowIdsFromPreview = (preview) => {
@@ -14579,45 +14876,28 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, badRequest(excludeTimesheetIds.error));
   }
 
-  const previewDecisions =
-    (previewDecisionsIn && typeof previewDecisionsIn === 'object' && !Array.isArray(previewDecisionsIn))
-      ? { ...previewDecisionsIn }
-      : {};
+  const previewDecisions = (previewDecisionsIn && typeof previewDecisionsIn === 'object' && !Array.isArray(previewDecisionsIn))
+    ? { ...previewDecisionsIn }
+    : {};
 
-  if (
-    body.component_resolutions != null &&
-    !Array.isArray(body.component_resolutions) &&
-    (typeof body.component_resolutions !== 'object' || body.component_resolutions === null)
-  ) {
-    return withCORS(env, req, badRequest('component_resolutions must be an array or object when provided'));
+  try { delete previewDecisions.component_resolutions; } catch {}
+
+  const previewCaseResolutionsRaw =
+    Object.prototype.hasOwnProperty.call(body, 'case_resolutions')
+      ? body.case_resolutions
+      : previewDecisionsIn.case_resolutions;
+
+  const sanitizedCaseResolutionsResult = sanitizeCaseResolutions(previewCaseResolutionsRaw);
+  if (sanitizedCaseResolutionsResult.error) {
+    return withCORS(env, req, badRequest(sanitizedCaseResolutionsResult.error));
   }
 
-  if (
-    previewDecisions.component_resolutions != null &&
-    !Array.isArray(previewDecisions.component_resolutions) &&
-    (typeof previewDecisions.component_resolutions !== 'object' || previewDecisions.component_resolutions === null)
-  ) {
-    return withCORS(env, req, badRequest('preview_decisions_json.component_resolutions must be an array or object when provided'));
-  }
+  const sanitizedCaseResolutions = sanitizedCaseResolutionsResult.value || {};
 
-  const componentResolutionsIn =
-    previewDecisions.component_resolutions != null
-      ? normalizeComponentResolutionsShape(previewDecisions.component_resolutions)
-      : (
-          body.component_resolutions != null
-            ? normalizeComponentResolutionsShape(body.component_resolutions)
-            : null
-        );
-
-  if (
-    (previewDecisions.component_resolutions != null && componentResolutionsIn == null) ||
-    (body.component_resolutions != null && componentResolutionsIn == null)
-  ) {
-    return withCORS(env, req, badRequest('component_resolutions must be a valid JSON array or object when provided'));
-  }
-
-  if (componentResolutionsIn != null) {
-    previewDecisions.component_resolutions = componentResolutionsIn;
+  if (Object.keys(sanitizedCaseResolutions).length > 0) {
+    previewDecisions.case_resolutions = cloneJson(sanitizedCaseResolutions) || {};
+  } else {
+    try { delete previewDecisions.case_resolutions; } catch {}
   }
 
   if (candidateId && !previewDecisions.candidate_filter_id) previewDecisions.candidate_filter_id = candidateId;
@@ -14641,7 +14921,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     previewDecisions.exclude_timesheet_ids = Array.from(mergedExclude);
   }
 
-   if (overrideReason && !previewDecisions.same_week_paye_override_reason) {
+  if (overrideReason && !previewDecisions.same_week_paye_override_reason) {
     previewDecisions.same_week_paye_override_reason = overrideReason;
   }
   if (overrideContinue === true && previewDecisions.same_week_paye_override_continue !== true) {
@@ -14757,12 +15037,18 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return (payload && typeof payload === 'object') ? payload : {};
   };
 
+  const previewOverlayForPreview =
+    Object.keys(sanitizedCaseResolutions).length > 0
+      ? { case_resolutions: cloneJson(sanitizedCaseResolutions) || {} }
+      : {};
+
   const buildPayPreviewArgs = (includeFilters = true) => ({
     p_pay_date: payDate,
     p_week_ending_cutoff: cutoffIso,
     p_actor_user_id: user.id,
     ...(includeFilters && effectiveCandidateId ? { p_candidate_id: effectiveCandidateId } : {}),
-    ...(includeFilters && effectiveClientId ? { p_client_id: effectiveClientId } : {})
+    ...(includeFilters && effectiveClientId ? { p_client_id: effectiveClientId } : {}),
+    p_preview_decisions_json: previewOverlayForPreview
   });
 
   const callPayPreview = async () => {
@@ -14968,6 +15254,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     pushValue(raw);
     return out;
   };
+
   const collectDecisionAwareScope = (decisionsObj, includeCandidateIds) => {
     const includeSetNorm = (() => {
       if (!Array.isArray(includeCandidateIds) || includeCandidateIds.length === 0) return null;
@@ -15050,6 +15337,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       timesheetToCandidateId
     };
   };
+
   const chunk = (arr, n) => {
     const out = [];
     for (let i = 0; i < (arr?.length || 0); i += n) out.push(arr.slice(i, i + n));
@@ -15260,7 +15548,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       safe_snapshot_timesheet_count: preflightDecisionAwareScope.timesheetIds.length,
       case_resolution_candidate_count: preflightCaseResolutionCandidateIds.length,
       explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true,
-      component_resolutions_present: Object.prototype.hasOwnProperty.call(previewDecisions, 'component_resolutions')
+      case_resolution_count: Object.keys(sanitizedCaseResolutions).length
     });
 
     let preview0 = null;
@@ -15327,45 +15615,18 @@ async function handleBankingPayCreateDraft(env, req, user) {
       }
     }
 
+    const refreshedCaseResolutionStates = cloneCaseStateSnapshot(preview0?.case_resolution_states);
+    const refreshedBlockedCaseStates = cloneCaseStateSnapshot(preview0?.blocked_case_states);
+    const refreshedSafeCaseStates = cloneCaseStateSnapshot(preview0?.safe_case_states);
+
+    previewDecisions.case_resolution_states = refreshedCaseResolutionStates !== null ? refreshedCaseResolutionStates : [];
+    previewDecisions.blocked_case_states = refreshedBlockedCaseStates !== null ? refreshedBlockedCaseStates : [];
+    previewDecisions.safe_case_states = refreshedSafeCaseStates !== null ? refreshedSafeCaseStates : [];
+
     const rawEligibleScope =
       collectEligibleTimesheetsForDraft(preview0, includeCandidateIdsForScope);
 
-    let decisionAwareScope = preflightDecisionAwareScope;
-
-    const decisionAwareSnapshotLooksMalformed =
-      !!decisionAwareScope.hasSafeSnapshot &&
-      (
-        (decisionAwareScope.eligibleCandidateIds.size === 0 && rawEligibleScope.eligibleCandidateIds.size > 0) ||
-        (decisionAwareScope.timesheetIds.length === 0 && rawEligibleScope.timesheetIds.length > 0)
-      );
-
-    if (decisionAwareSnapshotLooksMalformed) {
-      const previewCaseResolutionStates = cloneCaseStateSnapshot(preview0?.case_resolution_states);
-      const previewBlockedCaseStates = cloneCaseStateSnapshot(preview0?.blocked_case_states);
-      const previewSafeCaseStates = cloneCaseStateSnapshot(preview0?.safe_case_states);
-
-      if (previewCaseResolutionStates !== null) previewDecisions.case_resolution_states = previewCaseResolutionStates;
-      if (previewBlockedCaseStates !== null) previewDecisions.blocked_case_states = previewBlockedCaseStates;
-      if (previewSafeCaseStates !== null) previewDecisions.safe_case_states = previewSafeCaseStates;
-
-      try {
-        logRouteDebug('warn', 'REBUILT_MALFORMED_DECISION_SNAPSHOT_FROM_PREVIEW', {
-          effective_candidate_id: effectiveCandidateId,
-          effective_client_id: effectiveClientId,
-          filter_source: routeFilterSource,
-          has_safe_snapshot_key: decisionAwareScope.hasSafeSnapshotKey,
-          has_safe_snapshot: decisionAwareScope.hasSafeSnapshot,
-          safe_snapshot_supplied_empty: decisionAwareScope.safeSnapshotSuppliedEmpty,
-          decision_safe_candidate_count: decisionAwareScope.eligibleCandidateIds.size,
-          decision_safe_timesheet_count: decisionAwareScope.timesheetIds.length,
-          preview_safe_candidate_count: rawEligibleScope.eligibleCandidateIds.size,
-          preview_safe_timesheet_count: rawEligibleScope.timesheetIds.length,
-          explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true
-        });
-      } catch {}
-
-      decisionAwareScope = collectDecisionAwareScope(previewDecisions, includeCandidateIdsForScope);
-    }
+    const decisionAwareScope = collectDecisionAwareScope(previewDecisions, includeCandidateIdsForScope);
 
     const effectiveScope = (decisionAwareScope.hasSafeSnapshot && !decisionAwareScope.safeSnapshotSuppliedEmpty)
       ? decisionAwareScope
@@ -15382,7 +15643,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
           has_safe_snapshot_key: decisionAwareScope.hasSafeSnapshotKey,
           has_safe_snapshot: decisionAwareScope.hasSafeSnapshot,
           safe_snapshot_supplied_empty: decisionAwareScope.safeSnapshotSuppliedEmpty,
-          decision_snapshot_malformed: decisionAwareSnapshotLooksMalformed,
           explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true,
           preview_row_universe_count: previewRowUniverse.length,
           preview_decision_keys: Object.keys(previewDecisions || {})
@@ -15446,7 +15706,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       explicit_selected_preview_rows: explicitSelectedPreviewRowIdsProvided === true,
       in_scope_timesheet_count: uniqueInScopeIds.length,
       excluded_timesheet_count: excludedTimesheetIdsFromDrain.length,
-      component_resolutions_present: Object.prototype.hasOwnProperty.call(previewDecisions, 'component_resolutions')
+      case_resolution_count: Object.keys(sanitizedCaseResolutions).length
     });
 
     try {
@@ -15570,7 +15830,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
