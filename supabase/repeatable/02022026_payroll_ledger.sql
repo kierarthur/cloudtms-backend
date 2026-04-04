@@ -7877,7 +7877,7 @@ ts_itemised as (
           'linked_timesheet_ids', coalesce(min(tslc.linked_timesheet_ids_json::text)::jsonb, jsonb_build_array(tcr.timesheet_id::text)),
           'contract_id', case when max(tls.contract_id::text) is null then null else max(tls.contract_id::text) end,
           'client_id', case when max(tls.client_id::text) is null then null else max(tls.client_id::text) end,
-          'seed_timesheet_id', max(tcr.timesheet_id)::text,
+          'seed_timesheet_id', tcr.timesheet_id::text,
           'confirmation_text', (
             'This will resolve ' || coalesce(max(tslc.linked_timesheet_count), 1)::text || ' timesheets for this candidate. Are you sure you wish to continue?'
           )
@@ -7981,10 +7981,10 @@ ts_itemised as (
             'resolve_all_linked_timesheets_default', true,
             'linked_scope_type', coalesce(max(tls.linked_scope_type), 'SELF_ONLY'),
             'linked_timesheet_count', coalesce(max(tslc.linked_timesheet_count), 1),
-            'linked_timesheet_ids', coalesce(min(tslc.linked_timesheet_ids_json::text)::jsonb, jsonb_build_array(max(tcr.timesheet_id)::text)),
+            'linked_timesheet_ids', coalesce(min(tslc.linked_timesheet_ids_json::text)::jsonb, jsonb_build_array(tcr.timesheet_id::text)),
             'contract_id', case when max(tls.contract_id::text) is null then null else max(tls.contract_id::text) end,
             'client_id', case when max(tls.client_id::text) is null then null else max(tls.client_id::text) end,
-            'seed_timesheet_id', max(tcr.timesheet_id)::text,
+            'seed_timesheet_id', tcr.timesheet_id::text,
             'confirmation_text', ('This will resolve ' || coalesce(max(tslc.linked_timesheet_count), 1)::text || ' timesheets for this candidate. Are you sure you wish to continue?')
           )
         ),
@@ -8827,7 +8827,6 @@ ts_itemised as (
         2
       )::numeric(12,2) as run_take_home_before,
       round(greatest(coalesce(c.min_take_home_wtd,0),0),2)::numeric(12,2) as default_take_home_floor,
-      vfcr.case_type,
       vfcr.payout_status,
       vfcr.created_at,
       case
@@ -9573,14 +9572,14 @@ ts_itemised as (
       case
         when (pfbre.target_rate is not null or pfbre.resolution_mode is not null)
           and pfbre.resolution_mode in ('SUGGESTED_EQUIVALENT_BASIS','MANUAL_REPLACEMENT_RATE')
-        then pfbre.resolution_mode::public.pay_finance_resolution_mode_enum
+        then pfbre.resolution_mode::public.pay_finance_component_resolution_mode_enum
         when fccr.case_type in ('MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
           and (pfnbre.target_amount_ex_vat is not null or pfnbre.resolution_mode is not null)
           and upper(coalesce(pfnbre.resolution_mode,'')) = 'SUGGESTED_EQUIVALENT_BASIS'
-        then 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_resolution_mode_enum
+        then 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum
         when fccr.case_type in ('MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
           and (pfnbre.target_amount_ex_vat is not null or pfnbre.resolution_mode is not null)
-        then null::public.pay_finance_resolution_mode_enum
+        then null::public.pay_finance_component_resolution_mode_enum
         else fccr.saved_resolution_mode
       end as saved_resolution_mode,
       case
@@ -11815,11 +11814,12 @@ ts_itemised as (
       tcr.cand_tms_ref as sort_candidate_tms_ref,
       1 as sort_case_order,
       ('timesheet:' || tcr.timesheet_id::text) as case_key,
-      false as is_blocked,
+      true as is_blocked,
       jsonb_build_object(
         'case_key', ('timesheet:' || tcr.timesheet_id::text),
         'case_scope', 'TIMESHEET_PAYMENT',
         'finance_case_id', null,
+        'case_type', 'TIMESHEET_PAYMENT',
         'timesheet_id', tcr.timesheet_id::text,
         'candidate_id', tcr.candidate_id::text,
         'client_id', case when tcr.client_id is null then null else tcr.client_id::text end,
@@ -11832,7 +11832,7 @@ ts_itemised as (
         'case_resolution_satisfied_now', tcr.case_resolution_satisfied_now,
         'resolution_action_label', tcr.resolution_action_label,
         'linked_resolution_scope_json', tcr.linked_resolution_scope_json,
-        'is_blocked', false,
+        'is_blocked', true,
         'is_mixed_case', tcr.is_mixed_case,
         'open_taxable_count', tcr.open_taxable_count,
         'open_reimbursement_count', tcr.open_reimbursement_count,
@@ -11855,7 +11855,7 @@ ts_itemised as (
       fcrr.cand_tms_ref as sort_candidate_tms_ref,
       2 as sort_case_order,
       ('finance:' || fcrr.finance_case_id::text) as case_key,
-      false as is_blocked,
+      true as is_blocked,
       jsonb_build_object(
         'case_key', ('finance:' || fcrr.finance_case_id::text),
         'case_scope', 'FINANCE_CASE',
@@ -11878,7 +11878,7 @@ ts_itemised as (
         'linked_resolution_scope_json', fcrr.linked_resolution_scope_json,
         'blocked_reason_codes', fcrr.blocked_reason_codes,
         'snooze_allowed', fcrr.snooze_allowed,
-        'is_blocked', false,
+        'is_blocked', true,
         'is_mixed_case', fcrr.is_mixed_case,
         'open_taxable_count', fcrr.open_taxable_count,
         'open_reimbursement_count', fcrr.open_reimbursement_count,
@@ -12593,6 +12593,35 @@ ts_itemised as (
   );
 end;
 $function$;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
   p_pay_date date,
