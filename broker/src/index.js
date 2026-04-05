@@ -36367,6 +36367,408 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
 
 
 
+async function handleContractWeekManualDraftUpsert(env, req, weekId) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  if (!weekId) return withCORS(env, req, badRequest('weekId is required'));
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  // Load contract_week (must be a planned/manual draft)
+  const cw = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}` +
+      `&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json`
+  );
+  if (!cw) return withCORS(env, req, notFound('Week not found'));
+
+  if (cw.timesheet_id) {
+    return withCORS(env, req, badRequest('This week already has a timesheet; draft save is not allowed.'));
+  }
+
+  const mode = String(cw.submission_mode_snapshot || '').toUpperCase();
+  if (mode !== 'MANUAL') {
+    return withCORS(env, req, badRequest('Draft save is only allowed for MANUAL weeks.'));
+  }
+
+  // Load contract (needed for bucket resolution via client time policy + BH list)
+  const contract = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(cw.contract_id)}&select=id,client_id`
+  );
+  if (!contract) return withCORS(env, req, notFound('Contract not found'));
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Draft schedule is PLANNED (weekly manual draft)
+  // Require planned_schedule_json (array) – can be EMPTY to clear the plan.
+  // Accept actual_schedule_json / schedule_json as aliases (backwards compatibility).
+  // ─────────────────────────────────────────────────────────────
+  let planned_schedule_json = null;
+
+  if (Array.isArray(body?.planned_schedule_json)) {
+    planned_schedule_json = body.planned_schedule_json;
+  } else if (typeof body?.planned_schedule_json === 'string') {
+    try {
+      const parsed = JSON.parse(body.planned_schedule_json);
+      if (Array.isArray(parsed)) planned_schedule_json = parsed;
+    } catch {}
+  } else if (Array.isArray(body?.actual_schedule_json)) {
+    planned_schedule_json = body.actual_schedule_json; // alias
+  } else if (typeof body?.actual_schedule_json === 'string') {
+    try {
+      const parsed = JSON.parse(body.actual_schedule_json);
+      if (Array.isArray(parsed)) planned_schedule_json = parsed;
+    } catch {}
+  } else if (Array.isArray(body?.schedule_json)) {
+    planned_schedule_json = body.schedule_json; // alias
+  } else if (typeof body?.schedule_json === 'string') {
+    try {
+      const parsed = JSON.parse(body.schedule_json);
+      if (Array.isArray(parsed)) planned_schedule_json = parsed;
+    } catch {}
+  }
+
+  if (!Array.isArray(planned_schedule_json)) {
+    return withCORS(env, req, badRequest('planned_schedule_json is required (weekly manual draft)'));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Normalise schedule (stable storage)
+  // Policy:
+  // - If break windows exist (breaks[] or break_start/break_end), we store ONLY breaks[]
+  //   and we REMOVE break_mins/break_minutes (prevents “mixing”).
+  // - If no break windows, we may store break_minutes (integer) if provided (>0).
+  // - Never let string mins leak into storage.
+  // ─────────────────────────────────────────────────────────────
+  const parseHHMM = (s) => {
+    const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Number(m[1]), mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const diffMins = (a, b) => {
+    const am = parseHHMM(a);
+    const bm = parseHHMM(b);
+    if (am == null || bm == null) return null;
+    let d = bm - am;
+    if (d < 0) d += 1440;
+    return d;
+  };
+
+  const toIntMins = (v) => {
+    if (v == null) return 0;
+    if (typeof v === 'number') return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+    const s = String(v).trim();
+    if (!s) return 0;
+    const m = s.match(/^(\d{1,4})(?:\s*m)?$/i);
+    if (!m) return 0;
+    const n = Number(m[1]);
+    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+  };
+
+  const normaliseSchedule = (arr) => {
+    const out = [];
+    for (const raw of (arr || [])) {
+      const seg = (raw && typeof raw === 'object') ? { ...raw } : null;
+      if (!seg) continue;
+
+      // normalise ref key
+      if (seg.ref_num == null && seg.reference != null) seg.ref_num = seg.reference;
+
+      // build breaks[] (from seg.breaks plus legacy break_start/break_end)
+      let breaks = [];
+      if (Array.isArray(seg.breaks)) {
+        breaks = seg.breaks
+          .map(b => ({
+            start: String(b?.start || '').trim(),
+            end:   String(b?.end   || '').trim()
+          }))
+          .filter(b => b.start || b.end);
+      }
+
+      const bs0 = String(seg.break_start || '').trim();
+      const be0 = String(seg.break_end   || '').trim();
+      if ((bs0 || be0) && !breaks.some(b => (b.start === bs0 && b.end === be0))) {
+        breaks.unshift({ start: bs0, end: be0 });
+      }
+
+      // Determine whether we have *any* break window
+      const hasWindow = breaks.some(b => String(b.start || '').trim() || String(b.end || '').trim());
+
+      // If no window breaks, allow mins-only breaks
+      const brMins = toIntMins(seg.break_mins ?? seg.break_minutes);
+
+      // Keep legacy convenience fields aligned to first break (if present)
+      const p = hasWindow ? (breaks[0] || null) : null;
+      seg.break_start = p ? p.start : '';
+      seg.break_end   = p ? p.end   : '';
+
+      if (hasWindow) {
+        // ✅ Window breaks: store ONLY breaks[]
+        seg.breaks = breaks;
+
+        // Remove mins to prevent mixing (and avoid validator rejection)
+        delete seg.break_mins;
+        delete seg.break_minutes;
+      } else {
+        // ✅ No window: store mins if present (>0), else clear both
+        seg.breaks = []; // normalised empty
+
+        if (brMins > 0) {
+          seg.break_minutes = brMins;
+          // don’t store break_mins separately (avoid redundant fields)
+          delete seg.break_mins;
+        } else {
+          delete seg.break_mins;
+          delete seg.break_minutes;
+        }
+      }
+
+      // Remove any stray legacy keys that can confuse downstream code
+      // (they’re represented by seg.breaks or seg.break_minutes now)
+      delete seg.break_start;
+      delete seg.break_end;
+
+      // Re-add aligned legacy fields ONLY if you still want them present in storage.
+      // If you do, uncomment below:
+      // if (hasWindow && p) { seg.break_start = p.start; seg.break_end = p.end; }
+
+      out.push(seg);
+    }
+    return out;
+  };
+
+  planned_schedule_json = normaliseSchedule(planned_schedule_json);
+
+  // Validate schedule only if there is at least one shift segment
+  if (planned_schedule_json.length) {
+    try {
+      validateScheduleStructure(planned_schedule_json);
+    } catch (e) {
+      return withCORS(env, req, badRequest(e?.message || 'Invalid schedule (overlap/break windows).'));
+    }
+  }
+
+  // Compute minutes by bucket -> hours (canonical)
+  let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+  try {
+    if (planned_schedule_json.length) {
+      const mins = await resolveBucketsFromSchedule(env, contract, planned_schedule_json);
+      hours = {
+        day:   +(Number(mins?.day   || 0) / 60).toFixed(2),
+        night: +(Number(mins?.night || 0) / 60).toFixed(2),
+        sat:   +(Number(mins?.sat   || 0) / 60).toFixed(2),
+        sun:   +(Number(mins?.sun   || 0) / 60).toFixed(2),
+        bh:    +(Number(mins?.bh    || 0) / 60).toFixed(2)
+      };
+    }
+  } catch (e) {
+    return withCORS(env, req, badRequest(e?.message || 'Failed to bucket schedule'));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Additional units (optional)
+  // Persist inside totals_json.additional_units_week + totals_json.additional_units_per_day
+  // (no dedicated columns).
+  // ─────────────────────────────────────────────────────────────
+  const normaliseUnitsWeek = (obj) => {
+    if (!obj || typeof obj !== 'object') return {};
+    const out = {};
+    for (const [kRaw, vRaw] of Object.entries(obj)) {
+      const code = String(kRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      const n = Number(vRaw || 0);
+      if (!Number.isFinite(n) || !n) continue; // strip zeros + invalid
+      out[code] = n;
+    }
+    return out;
+  };
+
+  // Build a Set of valid YYYY-MM-DD dates for this contract_week (for per-day validation)
+  const weekDateSet = (() => {
+    const we = String(cw.week_ending_date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(we)) return null;
+
+    const addDaysYmd = (ymd, days) => {
+      try {
+        const base = new Date(`${String(ymd)}T00:00:00Z`);
+        if (Number.isNaN(base.getTime())) return null;
+        base.setUTCDate(base.getUTCDate() + Number(days || 0));
+        const yyyy = base.getUTCFullYear();
+        const mm = String(base.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(base.getUTCDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      } catch {
+        return null;
+      }
+    };
+
+    const s = new Set();
+    for (let i = 6; i >= 0; i--) {
+      const d = addDaysYmd(we, -i);
+      if (d) s.add(d);
+    }
+    return s;
+  })();
+
+  const normaliseUnitsPerDay = (obj) => {
+    if (!obj || typeof obj !== 'object') return {};
+    const out = {};
+
+    for (const [kRaw, dayMap] of Object.entries(obj)) {
+      const code = String(kRaw || '').toUpperCase().trim();
+      if (!code) continue;
+
+      if (!dayMap || typeof dayMap !== 'object') continue;
+
+      const outDays = {};
+      for (const [dRaw, vRaw] of Object.entries(dayMap)) {
+        const ymd = String(dRaw || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+          throw new Error(`Invalid date '${ymd}' in additional_units_per_day.${code}`);
+        }
+        if (weekDateSet && !weekDateSet.has(ymd)) {
+          throw new Error(`Date '${ymd}' outside week in additional_units_per_day.${code}`);
+        }
+
+        const n = Number(vRaw == null ? 0 : vRaw);
+        if (!Number.isFinite(n) || n < 0) {
+          throw new Error(`Invalid units '${vRaw}' in additional_units_per_day.${code}.${ymd}`);
+        }
+        if (!n) continue; // strip zeros
+
+        outDays[ymd] = n;
+      }
+
+      if (Object.keys(outDays).length) out[code] = outDays;
+    }
+
+    return out;
+  };
+
+  const deriveWeekFromPerDay = (perDayObj) => {
+    const out = {};
+    if (!perDayObj || typeof perDayObj !== 'object') return out;
+
+    for (const [codeRaw, dayMap] of Object.entries(perDayObj)) {
+      const code = String(codeRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      if (!dayMap || typeof dayMap !== 'object') continue;
+
+      let sum = 0;
+      for (const v of Object.values(dayMap)) {
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) sum += n;
+      }
+      if (sum > 0) out[code] = sum;
+    }
+
+    return out;
+  };
+
+  let additionalUnitsWeek = undefined;   // undefined = "no change"
+  let additionalUnitsPerDay = undefined; // undefined = "no change"
+
+  // weekly
+  if (body && Object.prototype.hasOwnProperty.call(body, 'additional_units_week')) {
+    if (body.additional_units_week && typeof body.additional_units_week === 'object') {
+      additionalUnitsWeek = normaliseUnitsWeek(body.additional_units_week);
+    } else if (body.additional_units_week === null) {
+      additionalUnitsWeek = {}; // explicit clear
+    } else if (typeof body.additional_units_week === 'string') {
+      try {
+        const parsed = JSON.parse(body.additional_units_week);
+        if (parsed && typeof parsed === 'object') additionalUnitsWeek = normaliseUnitsWeek(parsed);
+      } catch {
+        additionalUnitsWeek = undefined;
+      }
+    } else {
+      additionalUnitsWeek = undefined;
+    }
+  }
+
+  // per-day
+  if (body && Object.prototype.hasOwnProperty.call(body, 'additional_units_per_day')) {
+    if (body.additional_units_per_day && typeof body.additional_units_per_day === 'object') {
+      try {
+        additionalUnitsPerDay = normaliseUnitsPerDay(body.additional_units_per_day);
+      } catch (e) {
+        return withCORS(env, req, badRequest(e?.message || 'Invalid additional_units_per_day'));
+      }
+    } else if (body.additional_units_per_day === null) {
+      additionalUnitsPerDay = {}; // explicit clear
+    } else if (typeof body.additional_units_per_day === 'string') {
+      try {
+        const parsed = JSON.parse(body.additional_units_per_day);
+        if (parsed && typeof parsed === 'object') {
+          try {
+            additionalUnitsPerDay = normaliseUnitsPerDay(parsed);
+          } catch (e) {
+            return withCORS(env, req, badRequest(e?.message || 'Invalid additional_units_per_day'));
+          }
+        }
+      } catch {
+        additionalUnitsPerDay = undefined;
+      }
+    } else {
+      additionalUnitsPerDay = undefined;
+    }
+  }
+
+  // Build patch
+  const now = nowIso();
+
+  const existingTotals =
+    (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
+
+  const totals_json = {
+    ...existingTotals,
+    hours
+  };
+
+  // Store exactly what is provided (frontend is source of truth); never derive/overwrite.
+  if (additionalUnitsWeek !== undefined) {
+    totals_json.additional_units_week = additionalUnitsWeek;
+  }
+  if (additionalUnitsPerDay !== undefined) {
+    totals_json.additional_units_per_day = additionalUnitsPerDay;
+  }
+
+  const patch = {
+    totals_json,
+    planned_schedule_json: planned_schedule_json, // ALWAYS set (including empty array) so "clear" persists
+    updated_at: now
+  };
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify(patch)
+    }
+  );
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    return withCORS(env, req, serverError(txt || 'Failed to patch contract_week'));
+  }
+
+  const json = await res.json().catch(() => []);
+  const row = Array.isArray(json) ? (json[0] || null) : json;
+
+  return withCORS(env, req, ok(row || { updated: true, week_id: weekId, hours }));
+}
 
 
 
