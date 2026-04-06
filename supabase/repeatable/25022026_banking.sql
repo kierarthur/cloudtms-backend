@@ -27876,6 +27876,15 @@ DECLARE
   v_target_units numeric := null;
   v_manual_replacement_rate numeric := null;
   v_manual_amount_ex_vat numeric := null;
+  v_requested_target_units numeric := null;
+
+  v_source_units numeric := null;
+  v_source_rate numeric := null;
+  v_source_charge_rate numeric := null;
+  v_bucket_code text := null;
+  v_component_semantics text := null;
+  v_is_rate_bearing_row boolean := false;
+  v_is_amount_led_row boolean := false;
 
   v_basis_amount_ex_vat numeric(12,2) := 0;
   v_target_amount_ex_vat numeric(12,2) := 0;
@@ -28153,6 +28162,34 @@ BEGIN
       )::text;
     END IF;
 
+    v_source_units := CASE
+      WHEN coalesce(v_component.source_basis_json->>'source_units', '') ~ '^-?\d+(\.\d+)?$'
+        THEN round((v_component.source_basis_json->>'source_units')::numeric, 6)
+      ELSE NULL
+    END;
+    v_source_rate := CASE
+      WHEN coalesce(v_component.source_basis_json->>'source_rate', '') ~ '^-?\d+(\.\d+)?$'
+        THEN round((v_component.source_basis_json->>'source_rate')::numeric, 6)
+      ELSE NULL
+    END;
+    v_source_charge_rate := CASE
+      WHEN coalesce(v_component.source_basis_json->>'source_charge_rate', '') ~ '^-?\d+(\.\d+)?$'
+        THEN round((v_component.source_basis_json->>'source_charge_rate')::numeric, 6)
+      ELSE NULL
+    END;
+    v_bucket_code := nullif(upper(btrim(coalesce(v_component.source_basis_json->>'bucket_code', ''))), '');
+    v_is_rate_bearing_row := (
+      v_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      and v_component.component_key_type in ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE')
+      and v_component.component_key_type <> 'ADJUSTMENT_CODE'
+      and v_source_units is not null
+      and v_source_units > 0
+      and v_source_rate is not null
+      and v_source_charge_rate is not null
+    );
+    v_is_amount_led_row := not v_is_rate_bearing_row;
+    v_component_semantics := case when v_is_rate_bearing_row then 'RATE_BEARING' else 'AMOUNT_LED' end;
+
     v_basis_amount_ex_vat := round(coalesce(v_component.remaining_source_amount, 0), 2)::numeric(12,2);
 
     v_relevant_erni_pct := CASE
@@ -28205,6 +28242,7 @@ BEGIN
         THEN round((v_resolution_json->>'target_units')::numeric, 6)
       ELSE NULL
     END;
+    v_requested_target_units := v_target_units;
 
     v_manual_replacement_rate := CASE
       WHEN coalesce(v_resolution_json->>'replacement_rate', '') ~ '^-?\d+(\.\d+)?$'
@@ -28223,6 +28261,48 @@ BEGIN
         THEN round((v_resolution_json->>'manual_amount_ex_vat')::numeric, 2)
       ELSE NULL
     END;
+
+    IF v_is_rate_bearing_row AND v_resolution_mode = 'MANUAL_AMOUNT'::public.pay_finance_component_resolution_mode_enum THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_COMPONENT_RESOLUTIONS_APPLY',
+        'code', 'MANUAL_AMOUNT_NOT_ALLOWED_FOR_RATE_BEARING_COMPONENT',
+        'message', 'pay_finance_component_resolutions_apply: MANUAL_AMOUNT is not allowed for genuine rate-bearing taxable rows',
+        'row_index', v_row_seq,
+        'finance_component_id', v_component.id::text,
+        'component_semantics', v_component_semantics
+      )::text;
+    END IF;
+
+    IF v_is_amount_led_row AND v_resolution_mode = 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_COMPONENT_RESOLUTIONS_APPLY',
+        'code', 'MANUAL_REPLACEMENT_RATE_NOT_ALLOWED_FOR_AMOUNT_LED_COMPONENT',
+        'message', 'pay_finance_component_resolutions_apply: MANUAL_REPLACEMENT_RATE is only allowed for genuine rate-bearing taxable rows',
+        'row_index', v_row_seq,
+        'finance_component_id', v_component.id::text,
+        'component_semantics', v_component_semantics
+      )::text;
+    END IF;
+
+    IF v_is_rate_bearing_row THEN
+      IF v_target_units IS NULL THEN
+        v_target_units := round(v_source_units, 6);
+      END IF;
+
+      IF round(coalesce(v_target_units, 0), 6) <> round(coalesce(v_source_units, 0), 6) THEN
+        RAISE EXCEPTION '%', jsonb_build_object(
+          'error', 'PAY_FINANCE_COMPONENT_RESOLUTIONS_APPLY',
+          'code', 'RATE_BEARING_TARGET_UNITS_MISMATCH',
+          'message', 'pay_finance_component_resolutions_apply: rate-bearing rows must preserve exact source units',
+          'row_index', v_row_seq,
+          'finance_component_id', v_component.id::text,
+          'source_units', v_source_units,
+          'target_units', v_target_units
+        )::text;
+      END IF;
+    ELSE
+      v_target_units := NULL;
+    END IF;
 
     v_target_amount_ex_vat := null;
     v_target_amount_vat := null;
@@ -28249,6 +28329,13 @@ BEGIN
       'saved_resolution_mode', CASE WHEN v_component.saved_resolution_mode IS NULL THEN NULL ELSE v_component.saved_resolution_mode::text END,
       'saved_resolution_payload_json', v_component.saved_resolution_payload_json,
       'saved_resolution_result_json', v_component.saved_resolution_result_json,
+      'source_units', v_source_units,
+      'source_rate', v_source_rate,
+      'source_charge_rate', v_source_charge_rate,
+      'bucket_code', v_bucket_code,
+      'component_semantics', v_component_semantics,
+      'is_rate_bearing_row', v_is_rate_bearing_row,
+      'is_amount_led_row', v_is_amount_led_row,
       'resolution_fingerprint', v_component.resolution_fingerprint,
       'is_resolution_stale', v_component.is_resolution_stale,
       'stale_reason', v_component.stale_reason,
@@ -28407,6 +28494,13 @@ BEGIN
         'relevant_erni_pct', round(v_relevant_erni_pct, 6),
         'vat_rate_pct', round(v_vat_rate_pct, 6),
         'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'bucket_code', v_bucket_code,
+        'source_units', v_source_units,
+        'source_rate', v_source_rate,
+        'source_charge_rate', v_source_charge_rate,
+        'component_semantics', v_component_semantics,
+        'is_rate_bearing_row', v_is_rate_bearing_row,
+        'is_amount_led_row', v_is_amount_led_row,
         'replacement_rate', CASE WHEN v_resolution_mode = 'MANUAL_REPLACEMENT_RATE'::public.pay_finance_component_resolution_mode_enum THEN round(v_manual_replacement_rate, 6) ELSE NULL END,
         'target_amount_ex_vat_per_source_ex_vat', v_target_amount_ex_vat_per_source,
         'target_amount_vat_per_source_ex_vat', v_target_amount_vat_per_source,
@@ -28424,6 +28518,14 @@ BEGIN
         'relevant_erni_pct', round(v_relevant_erni_pct, 6),
         'vat_rate_pct', round(v_vat_rate_pct, 6),
         'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'bucket_code', v_bucket_code,
+        'source_units', v_source_units,
+        'source_rate', v_source_rate,
+        'source_charge_rate', v_source_charge_rate,
+        'component_semantics', v_component_semantics,
+        'is_rate_bearing_row', v_is_rate_bearing_row,
+        'is_amount_led_row', v_is_amount_led_row,
+        'requested_target_units', CASE WHEN v_requested_target_units IS NULL THEN NULL ELSE round(v_requested_target_units, 6) END,
         'target_units', CASE WHEN v_target_units IS NULL THEN NULL ELSE round(v_target_units, 6) END,
         'replacement_rate', CASE WHEN v_manual_replacement_rate IS NULL THEN NULL ELSE round(v_manual_replacement_rate, 6) END,
         'manual_amount_ex_vat', CASE WHEN v_manual_amount_ex_vat IS NULL THEN NULL ELSE round(v_manual_amount_ex_vat, 2) END,
@@ -28443,6 +28545,14 @@ BEGIN
         'relevant_erni_pct', round(v_relevant_erni_pct, 6),
         'vat_rate_pct', round(v_vat_rate_pct, 6),
         'umbrella_vat_chargeable', v_umbrella_vat_chargeable,
+        'bucket_code', v_bucket_code,
+        'source_units', v_source_units,
+        'source_rate', v_source_rate,
+        'source_charge_rate', v_source_charge_rate,
+        'component_semantics', v_component_semantics,
+        'is_rate_bearing_row', v_is_rate_bearing_row,
+        'is_amount_led_row', v_is_amount_led_row,
+        'requested_target_units', CASE WHEN v_requested_target_units IS NULL THEN NULL ELSE round(v_requested_target_units, 6) END,
         'target_units', CASE WHEN v_target_units IS NULL THEN NULL ELSE round(v_target_units, 6) END,
         'replacement_rate', CASE WHEN v_manual_replacement_rate IS NULL THEN NULL ELSE round(v_manual_replacement_rate, 6) END,
         'target_amount_ex_vat_per_source_ex_vat', v_target_amount_ex_vat_per_source,
@@ -28491,6 +28601,13 @@ BEGIN
       'saved_resolution_mode', CASE WHEN pfc.saved_resolution_mode IS NULL THEN NULL ELSE pfc.saved_resolution_mode::text END,
       'saved_resolution_payload_json', pfc.saved_resolution_payload_json,
       'saved_resolution_result_json', pfc.saved_resolution_result_json,
+      'source_units', v_source_units,
+      'source_rate', v_source_rate,
+      'source_charge_rate', v_source_charge_rate,
+      'bucket_code', v_bucket_code,
+      'component_semantics', v_component_semantics,
+      'is_rate_bearing_row', v_is_rate_bearing_row,
+      'is_amount_led_row', v_is_amount_led_row,
       'resolution_fingerprint', pfc.resolution_fingerprint,
       'is_resolution_stale', pfc.is_resolution_stale,
       'stale_reason', pfc.stale_reason,
@@ -28537,6 +28654,13 @@ BEGIN
         'saved_resolution_mode', v_resolution_mode::text,
         'saved_resolution_payload_json', v_resolution_payload_json,
         'saved_resolution_result_json', v_resolution_result_json,
+        'source_units', v_source_units,
+        'source_rate', v_source_rate,
+        'source_charge_rate', v_source_charge_rate,
+        'bucket_code', v_bucket_code,
+        'component_semantics', v_component_semantics,
+        'is_rate_bearing_row', v_is_rate_bearing_row,
+        'is_amount_led_row', v_is_amount_led_row,
         'resolution_fingerprint', v_resolution_fingerprint,
         'resolved_at_utc', v_now_utc
       )
@@ -28552,6 +28676,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public._pay_finance_case_oneoff_bank_remove(uuid,uuid,text);
