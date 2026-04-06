@@ -5605,6 +5605,7 @@ $$;
 
 
 
+
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -5665,6 +5666,9 @@ declare
   v_comm_error text := null;
   v_worker_communications jsonb := '{}'::jsonb;
   v_catchup_needed boolean := false;
+  v_changed_channel_audit record;
+  v_changed_channel_audit_after_json jsonb := null;
+  v_changed_channel_settled_ct int := 0;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_settle_rail: pay_batch_id is required';
@@ -6882,6 +6886,249 @@ begin
   where pbt.pay_batch_id = p_pay_batch_id
     and upper(coalesce(pbt.status,'')) = 'BLOCKED';
 
+
+  for v_changed_channel_audit in
+    with batch_item_portions as (
+      select
+        pbi.id as pay_batch_item_id,
+        pbc.id as pay_batch_candidate_id,
+        pbc.candidate_id as candidate_id,
+        pbi.timesheet_id as timesheet_id,
+        ts.booking_id as booking_id,
+        pbi.pay_bank_transfer_id as pay_bank_transfer_id,
+        pbi.item_type as item_type,
+        pbi.segment_key as segment_key,
+        pbi.source_ref as source_ref,
+        pbi.description as description,
+        upper(coalesce(nullif(btrim(coalesce(pbi.frozen_source_pay_method,'')), ''), '')) as source_pay_channel,
+        upper(coalesce(nullif(btrim(coalesce(pbi.pay_channel,'')), ''), nullif(btrim(coalesce(pbi.frozen_target_pay_method,'')), ''), '')) as settled_pay_channel,
+        case when pbi.frozen_component_key_type is null then null else pbi.frozen_component_key_type end as component_key_type,
+        pbi.frozen_component_key_value as component_key_value,
+        case when pbi.frozen_component_classification is null then null else pbi.frozen_component_classification::text end as component_classification,
+        case when pbi.frozen_resolution_mode is null then null else pbi.frozen_resolution_mode::text end as resolution_mode,
+        pbi.frozen_resolution_payload_json as resolution_payload_json,
+        pbi.frozen_resolution_result_json as resolution_result_json,
+        pbi.frozen_source_basis_json as frozen_source_basis_json,
+        round(coalesce(pbi.frozen_source_amount, pbi.amount_ex_vat, 0), 2) as item_source_amount_ex_vat,
+        round(coalesce(pbi.frozen_target_amount_ex_vat, pbi.amount_ex_vat, 0), 2) as item_settled_amount_ex_vat,
+        pbi.amount_ex_vat as item_amount_ex_vat
+      from public.pay_batch_items pbi
+      join public.pay_batch_candidates pbc
+        on pbc.id = pbi.pay_batch_candidate_id
+      left join public.timesheets ts
+        on ts.timesheet_id = pbi.timesheet_id
+      where pbc.pay_batch_id = p_pay_batch_id
+        and pbc.candidate_id in (select t.candidate_id from _tmp_newly_settled_candidates t)
+        and pbi.timesheet_id is not null
+        and pbi.item_type <> 'DEBT_CREATED'
+        and coalesce(pbi.is_voided, false) = false
+    ),
+    portion_rows as (
+      select
+        bip.pay_batch_item_id,
+        bip.pay_batch_candidate_id,
+        bip.candidate_id,
+        bip.timesheet_id,
+        bip.booking_id,
+        bip.pay_bank_transfer_id,
+        bip.source_pay_channel,
+        bip.settled_pay_channel,
+        bip.component_key_type,
+        bip.component_key_value,
+        bip.component_classification,
+        bip.resolution_mode,
+        bip.resolution_payload_json,
+        bip.resolution_result_json,
+        bip.segment_key,
+        bip.source_ref,
+        bip.description,
+        pbib.id as pay_batch_item_breakdown_id,
+        coalesce(
+          nullif(btrim(coalesce(pbib.line_kind,'')), ''),
+          case
+            when bip.item_type = 'SEGMENT_DELTA' then 'SEGMENT_BUCKET'
+            when bip.item_type = 'EXPENSE_DELTA' then 'EXPENSE'
+            when bip.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
+            when bip.item_type = 'ADJUSTMENT_DELTA' then 'ADJUSTMENT'
+            when bip.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+            when bip.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+            when bip.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
+            when bip.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+            when bip.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
+            else bip.item_type
+          end
+        ) as line_kind,
+        nullif(btrim(coalesce(pbib.bucket_code, bip.frozen_source_basis_json ->> 'bucket_code', '')), '') as bucket_code,
+        coalesce(
+          nullif(btrim(coalesce(pbib.unit_name, '')), ''),
+          nullif(btrim(coalesce(bip.description, '')), ''),
+          case
+            when bip.item_type = 'SEGMENT_DELTA' then 'Timesheet portion'
+            when bip.item_type = 'EXPENSE_DELTA' then 'Expense'
+            when bip.item_type = 'MILEAGE_DELTA' then 'Mileage'
+            when bip.item_type = 'ADJUSTMENT_DELTA' then 'Adjustment'
+            when bip.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
+            when bip.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
+            when bip.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual debt recovery'
+            when bip.item_type = 'LOAN_PAYOUT' then 'Loan payout'
+            when bip.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual credit payout'
+            else 'Batch item'
+          end
+        ) as unit_name,
+        case
+          when pbib.units is not null then round(pbib.units, 4)
+          when bip.frozen_source_basis_json ? 'source_units'
+           and nullif(btrim(coalesce(bip.frozen_source_basis_json ->> 'source_units', '')), '') is not null
+            then round((bip.frozen_source_basis_json ->> 'source_units')::numeric, 4)
+          else null::numeric
+        end as units,
+        case
+          when bip.frozen_source_basis_json ? 'source_rate'
+           and nullif(btrim(coalesce(bip.frozen_source_basis_json ->> 'source_rate', '')), '') is not null
+            then round((bip.frozen_source_basis_json ->> 'source_rate')::numeric, 6)
+          else null::numeric
+        end as source_rate,
+        case
+          when pbib.rate is not null then round(pbib.rate, 6)
+          else null::numeric
+        end as settled_rate,
+        case
+          when pbib.units is not null
+           and bip.frozen_source_basis_json ? 'source_rate'
+           and nullif(btrim(coalesce(bip.frozen_source_basis_json ->> 'source_rate', '')), '') is not null
+            then round(pbib.units * round((bip.frozen_source_basis_json ->> 'source_rate')::numeric, 6), 2)
+          else bip.item_source_amount_ex_vat
+        end as source_amount_ex_vat,
+        round(coalesce(pbib.amount_ex_vat, bip.item_settled_amount_ex_vat), 2) as settled_amount_ex_vat,
+        md5(concat_ws('|',
+          bip.pay_batch_item_id::text,
+          coalesce(
+            nullif(btrim(coalesce(pbib.line_kind,'')), ''),
+            case
+              when bip.item_type = 'SEGMENT_DELTA' then 'SEGMENT_BUCKET'
+              when bip.item_type = 'EXPENSE_DELTA' then 'EXPENSE'
+              when bip.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
+              when bip.item_type = 'ADJUSTMENT_DELTA' then 'ADJUSTMENT'
+              when bip.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
+              when bip.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
+              when bip.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
+              when bip.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
+              when bip.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
+              else bip.item_type
+            end
+          ),
+          coalesce(nullif(btrim(coalesce(pbib.bucket_code, bip.frozen_source_basis_json ->> 'bucket_code', '')), ''), ''),
+          coalesce(
+            case
+              when pbib.units is not null then round(pbib.units, 4)::text
+              when bip.frozen_source_basis_json ? 'source_units'
+               and nullif(btrim(coalesce(bip.frozen_source_basis_json ->> 'source_units', '')), '') is not null
+                then round((bip.frozen_source_basis_json ->> 'source_units')::numeric, 4)::text
+              else null::text
+            end,
+            ''
+          ),
+          coalesce(case when pbib.rate is not null then round(pbib.rate, 6)::text else null::text end, ''),
+          round(coalesce(pbib.amount_ex_vat, bip.item_settled_amount_ex_vat), 2)::text
+        )) as portion_identity_key
+      from batch_item_portions bip
+      left join public.pay_batch_item_breakdowns pbib
+        on pbib.pay_batch_item_id = bip.pay_batch_item_id
+    )
+    select
+      pr.pay_batch_item_id,
+      pr.pay_batch_item_breakdown_id,
+      pr.pay_batch_candidate_id,
+      pr.candidate_id,
+      pr.timesheet_id,
+      pr.booking_id,
+      pr.pay_bank_transfer_id,
+      pr.source_pay_channel,
+      pr.settled_pay_channel,
+      pr.component_key_type,
+      pr.component_key_value,
+      pr.component_classification,
+      pr.resolution_mode,
+      pr.resolution_payload_json,
+      pr.resolution_result_json,
+      pr.segment_key,
+      pr.source_ref,
+      pr.description,
+      pr.line_kind,
+      pr.bucket_code,
+      pr.unit_name,
+      pr.units,
+      pr.source_rate,
+      pr.settled_rate,
+      pr.source_amount_ex_vat,
+      pr.settled_amount_ex_vat,
+      pr.portion_identity_key
+    from portion_rows pr
+    where pr.source_pay_channel <> ''
+      and pr.settled_pay_channel <> ''
+      and pr.source_pay_channel <> pr.settled_pay_channel
+    order by
+      pr.timesheet_id,
+      pr.pay_batch_item_id,
+      pr.line_kind,
+      pr.bucket_code nulls first,
+      pr.unit_name,
+      pr.settled_amount_ex_vat desc
+  loop
+    v_changed_channel_audit_after_json := jsonb_build_object(
+      'event_kind', 'TIMESHEET_CHANNEL_CHANGE_PORTION',
+      'audit_effective_state', 'SETTLED_ACTIVE',
+      'channel_changed', true,
+      'timesheet_id', v_changed_channel_audit.timesheet_id::text,
+      'booking_id', case when v_changed_channel_audit.booking_id is null then null else v_changed_channel_audit.booking_id::text end,
+      'candidate_id', case when v_changed_channel_audit.candidate_id is null then null else v_changed_channel_audit.candidate_id::text end,
+      'pay_batch_id', p_pay_batch_id::text,
+      'pay_batch_candidate_id', case when v_changed_channel_audit.pay_batch_candidate_id is null then null else v_changed_channel_audit.pay_batch_candidate_id::text end,
+      'pay_batch_item_id', case when v_changed_channel_audit.pay_batch_item_id is null then null else v_changed_channel_audit.pay_batch_item_id::text end,
+      'pay_batch_item_breakdown_id', case when v_changed_channel_audit.pay_batch_item_breakdown_id is null then null else v_changed_channel_audit.pay_batch_item_breakdown_id::text end,
+      'portion_identity_key', v_changed_channel_audit.portion_identity_key,
+      'source_pay_channel', v_changed_channel_audit.source_pay_channel,
+      'settled_pay_channel', v_changed_channel_audit.settled_pay_channel,
+      'component_key_type', v_changed_channel_audit.component_key_type,
+      'component_key_value', v_changed_channel_audit.component_key_value,
+      'component_classification', v_changed_channel_audit.component_classification,
+      'line_kind', v_changed_channel_audit.line_kind,
+      'bucket_code', v_changed_channel_audit.bucket_code,
+      'unit_name', v_changed_channel_audit.unit_name,
+      'units', case when v_changed_channel_audit.units is null then null else round(v_changed_channel_audit.units, 4) end,
+      'source_rate', case when v_changed_channel_audit.source_rate is null then null else round(v_changed_channel_audit.source_rate, 6) end,
+      'settled_rate', case when v_changed_channel_audit.settled_rate is null then null else round(v_changed_channel_audit.settled_rate, 6) end,
+      'source_amount_ex_vat', round(coalesce(v_changed_channel_audit.source_amount_ex_vat, 0), 2),
+      'settled_amount_ex_vat', round(coalesce(v_changed_channel_audit.settled_amount_ex_vat, 0), 2),
+      'resolution_mode', v_changed_channel_audit.resolution_mode,
+      'resolution_selection_kind', case
+        when v_changed_channel_audit.resolution_mode = 'SUGGESTED_EQUIVALENT_BASIS' then 'SUGGESTED'
+        when v_changed_channel_audit.resolution_mode in ('MANUAL_REPLACEMENT_RATE','MANUAL_AMOUNT') then 'MANUAL'
+        else null
+      end,
+      'pay_bank_transfer_id', case when v_changed_channel_audit.pay_bank_transfer_id is null then null else v_changed_channel_audit.pay_bank_transfer_id::text end,
+      'segment_key', v_changed_channel_audit.segment_key,
+      'source_ref', v_changed_channel_audit.source_ref,
+      'description', v_changed_channel_audit.description,
+      'settled_at_utc', v_now
+    );
+
+    begin
+      perform public._audit_insert(
+        'timesheets',
+        v_changed_channel_audit.timesheet_id::text,
+        'TIMESHEET_CHANNEL_CHANGE_PORTION_SETTLED',
+        null,
+        v_changed_channel_audit_after_json,
+        'rail_settlement',
+        p_actor_user_id
+      );
+      v_changed_channel_settled_ct := v_changed_channel_settled_ct + 1;
+    exception when others then
+      null;
+    end;
+  end loop;
+
   begin
     perform public._imp_debug_audit(
       p_actor_user_id,
@@ -6932,10 +7179,24 @@ begin
       'component_settlements_applied', v_component_settled_count,
       'component_settlement_amount', v_component_settled_amount
     ),
+    'timesheet_channel_change_audit', jsonb_build_object(
+      'settled_event_count', v_changed_channel_settled_ct
+    ),
     'worker_communications', v_worker_communications
   );
 end;
 $$;
+
+
+
+
+
+
+
+
+
+
+
 
 create or replace function public.pay_remittance_mark_sent(
   p_pay_batch_id uuid,
