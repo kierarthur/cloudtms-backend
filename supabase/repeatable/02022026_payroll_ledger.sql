@@ -8438,10 +8438,24 @@ ts_itemised as (
         when nullif(btrim(coalesce(bucket_entry.value->>'source_basis_fingerprint','')), '') is null then null::text
         else nullif(btrim(coalesce(bucket_entry.value->>'source_basis_fingerprint','')), '')
       end as source_basis_fingerprint,
+      case
+        when jsonb_typeof(bucket_entry.value->'source_basis_json') = 'object'
+          then coalesce(bucket_entry.value->'source_basis_json', '{}'::jsonb)
+        else '{}'::jsonb
+      end as source_basis_json,
       coalesce(
         nullif(btrim(coalesce(bucket_entry.value->>'bucket_code','')), ''),
         nullif(btrim(coalesce(bucket_entry.value #>> '{source_basis_json,bucket_code}','')), '')
-      ) as bucket_code
+      ) as bucket_code,
+      coalesce(
+        nullif(btrim(coalesce(bucket_entry.value->>'source_basis_fingerprint','')), ''),
+        case
+          when jsonb_typeof(bucket_entry.value->'source_basis_json') = 'object'
+           and coalesce(bucket_entry.value->'source_basis_json', '{}'::jsonb) <> '{}'::jsonb
+            then md5((bucket_entry.value->'source_basis_json')::text)
+          else null::text
+        end
+      ) as effective_source_basis_fingerprint
     from preview_timesheet_case_resolution_seeds pts
     cross join lateral jsonb_array_elements(coalesce(pts.resolution_json->'bucket_resolutions', '[]'::jsonb)) as bucket_entry(value)
     where pts.seed_timesheet_id is not null
@@ -8457,7 +8471,10 @@ ts_itemised as (
       ptre.component_key_value,
       ptre.resolution_mode,
       ptre.target_rate,
-      coalesce(ptre.source_basis_fingerprint, md5(coalesce(seed_row.source_basis_json::text, '{}'::text))) as basis_source_basis_fingerprint,
+      coalesce(
+        ptre.effective_source_basis_fingerprint,
+        md5(coalesce(seed_row.source_basis_json::text, '{}'::text))
+      ) as basis_source_basis_fingerprint,
       coalesce(ptre.bucket_code, nullif(btrim(coalesce(seed_row.source_basis_json->>'bucket_code','')), '')) as basis_bucket_code,
       case
         when ptre.source_rate is not null then ptre.source_rate
@@ -8474,11 +8491,11 @@ ts_itemised as (
      and seed_row.component_key_type = ptre.component_key_type
      and (
        (
-         ptre.source_basis_fingerprint is not null
-         and md5(coalesce(seed_row.source_basis_json::text, '{}'::text)) = ptre.source_basis_fingerprint
+         ptre.effective_source_basis_fingerprint is not null
+         and md5(coalesce(seed_row.source_basis_json::text, '{}'::text)) = ptre.effective_source_basis_fingerprint
        )
        or (
-         ptre.source_basis_fingerprint is null
+         ptre.effective_source_basis_fingerprint is null
          and ptre.component_key_type in ('TS_DAY','TS_TOTAL')
          and coalesce(seed_row.component_key_value,'') = coalesce(ptre.component_key_value,'')
          and coalesce(nullif(btrim(coalesce(seed_row.source_basis_json->>'bucket_code','')), ''), '') = coalesce(ptre.bucket_code, '')
@@ -8486,7 +8503,7 @@ ts_itemised as (
          and (ptre.source_charge_rate is null or round(coalesce(seed_row.source_charge_rate,0),6) = ptre.source_charge_rate)
        )
        or (
-         ptre.source_basis_fingerprint is null
+         ptre.effective_source_basis_fingerprint is null
          and ptre.component_key_type not in ('TS_DAY','TS_TOTAL')
          and coalesce(seed_row.component_key_value,'') = coalesce(ptre.component_key_value,'')
          and (ptre.source_rate is null or round(coalesce(seed_row.source_rate,0),6) = ptre.source_rate)
