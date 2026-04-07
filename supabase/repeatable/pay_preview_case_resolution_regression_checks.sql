@@ -314,7 +314,7 @@ from params;
 
 -- 7) Browser-shaped second incremental accept replay (same case, no linked scope fan-out).
 --    This mirrors UI payload shape by including case_key, resolve_all_linked_timesheets=false,
---    source_basis_json, source_rate, and source_charge_rate.
+--    source_basis_fingerprint/source_family_key plus basis/rate keys used by overlay matching.
 set local statement_timeout = '15s';
 with params as (
   select
@@ -357,7 +357,7 @@ seed_components as (
         comp.comp_json->>'source_rate'
     ) as rn
   from seed_case sc
-  cross join lateral jsonb_array_elements(coalesce(sc.case_json->'components', '[]'::jsonb)) comp(comp_json)
+  cross join lateral jsonb_array_elements(coalesce(sc.case_json->'case_components', '[]'::jsonb)) comp(comp_json)
   where coalesce((comp.comp_json->>'is_rate_bearing')::boolean, false) = true
 ),
 payloads as (
@@ -376,9 +376,18 @@ payloads as (
             jsonb_strip_nulls(
               jsonb_build_object(
                 'case_key', c.case_key,
+                'source_family_key', c.comp_json->>'source_family_key',
                 'component_key_type', c.comp_json->>'component_key_type',
                 'component_key_value', c.comp_json->>'component_key_value',
+                'source_basis_fingerprint', c.comp_json->>'source_basis_fingerprint',
                 'source_basis_json', coalesce(c.comp_json->'source_basis_json', '{}'::jsonb),
+                'bucket_code', coalesce(c.comp_json->>'bucket_code', c.comp_json #>> '{source_basis_json,bucket_code}'),
+                'source_units',
+                  case
+                    when coalesce(c.comp_json->>'source_units', c.comp_json #>> '{source_basis_json,source_units}', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                      then round((coalesce(c.comp_json->>'source_units', c.comp_json #>> '{source_basis_json,source_units}'))::numeric, 6)
+                    else null::numeric
+                  end,
                 'source_rate', (c.comp_json->>'source_rate')::numeric,
                 'source_charge_rate', (c.comp_json->>'source_charge_rate')::numeric,
                 'target_rate', round(((c.comp_json->>'source_rate')::numeric + 0.01), 2),
@@ -402,9 +411,18 @@ payloads as (
             jsonb_strip_nulls(
               jsonb_build_object(
                 'case_key', c.case_key,
+                'source_family_key', c.comp_json->>'source_family_key',
                 'component_key_type', c.comp_json->>'component_key_type',
                 'component_key_value', c.comp_json->>'component_key_value',
+                'source_basis_fingerprint', c.comp_json->>'source_basis_fingerprint',
                 'source_basis_json', coalesce(c.comp_json->'source_basis_json', '{}'::jsonb),
+                'bucket_code', coalesce(c.comp_json->>'bucket_code', c.comp_json #>> '{source_basis_json,bucket_code}'),
+                'source_units',
+                  case
+                    when coalesce(c.comp_json->>'source_units', c.comp_json #>> '{source_basis_json,source_units}', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                      then round((coalesce(c.comp_json->>'source_units', c.comp_json #>> '{source_basis_json,source_units}'))::numeric, 6)
+                    else null::numeric
+                  end,
                 'source_rate', (c.comp_json->>'source_rate')::numeric,
                 'source_charge_rate', (c.comp_json->>'source_charge_rate')::numeric,
                 'target_rate', round(((c.comp_json->>'source_rate')::numeric + 0.01), 2),
@@ -469,12 +487,12 @@ select
   true as second_incremental_call_completed,
   (
     select count(*)
-    from jsonb_array_elements(coalesce(cf.case_json->'components','[]'::jsonb)) c(comp_json)
+    from jsonb_array_elements(coalesce(cf.case_json->'case_components','[]'::jsonb)) c(comp_json)
     where c.comp_json->>'resolution_state' = 'RESOLVED'
   ) as resolved_components_after_first_accept,
   (
     select count(*)
-    from jsonb_array_elements(coalesce(cs.case_json->'components','[]'::jsonb)) c(comp_json)
+    from jsonb_array_elements(coalesce(cs.case_json->'case_components','[]'::jsonb)) c(comp_json)
     where c.comp_json->>'resolution_state' = 'RESOLVED'
   ) as resolved_components_after_second_accept,
   coalesce((select count(*) from dupe_lines_second), 0) as duplicate_line_id_count_after_second_accept,
