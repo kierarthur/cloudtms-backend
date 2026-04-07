@@ -8500,44 +8500,53 @@ ts_itemised as (
       and seed_row.component_key_type <> 'ADJUSTMENT_CODE'
   ),
   timesheet_overlay_component_decisions as (
-    select distinct
-      ptes.target_timesheet_id as timesheet_id,
-      target_row.source_family_key,
-      target_row.component_key_type,
-      target_row.component_key_value,
-      md5(coalesce(target_row.source_basis_json::text, '{}'::text)) as source_basis_fingerprint,
-      coalesce(nullif(btrim(coalesce(target_row.source_basis_json->>'bucket_code','')), ''), '') as bucket_code,
-      round(coalesce(target_row.source_rate,0),6) as source_rate,
-      round(coalesce(target_row.source_charge_rate,0),6) as source_charge_rate,
-      ptrb.resolution_mode,
-      ptrb.target_rate
-    from preview_timesheet_case_expanded_scope ptes
-    join preview_timesheet_bucket_resolution_basis ptrb
-      on ptrb.seed_timesheet_id = ptes.seed_timesheet_id
-    join transient_timesheet_component_review_rows target_row
-      on target_row.timesheet_id = ptes.target_timesheet_id
-     and target_row.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-     and target_row.source_units is not null
-     and coalesce(target_row.source_units,0) <> 0
-     and target_row.source_rate is not null
-     and target_row.source_charge_rate is not null
-     and target_row.component_key_type <> 'ADJUSTMENT_CODE'
-     and target_row.component_key_type = ptrb.component_key_type
-     and (
-       (
-         ptrb.component_key_type in ('TS_DAY','TS_TOTAL')
-         and coalesce(target_row.component_key_value,'') = coalesce(ptrb.component_key_value,'')
-         and coalesce(nullif(btrim(coalesce(target_row.source_basis_json->>'bucket_code','')), ''), '') = coalesce(ptrb.basis_bucket_code, '')
-         and round(coalesce(target_row.source_rate,0),6) = ptrb.basis_source_rate
-         and round(coalesce(target_row.source_charge_rate,0),6) = ptrb.basis_source_charge_rate
+    select
+      ranked.target_timesheet_id,
+      ranked.target_component_fingerprint,
+      ranked.resolution_mode,
+      ranked.target_rate
+    from (
+      select
+        target_row.timesheet_id as target_timesheet_id,
+        target_row.component_fingerprint as target_component_fingerprint,
+        ptrb.resolution_mode,
+        ptrb.target_rate,
+        row_number() over (
+          partition by target_row.timesheet_id, target_row.component_fingerprint
+          order by
+            case when ptes.seed_timesheet_id = ptes.target_timesheet_id then 0 else 1 end,
+            ptes.seed_timesheet_id,
+            ptrb.seed_case_key
+        ) as overlay_rank
+      from preview_timesheet_case_expanded_scope ptes
+      join preview_timesheet_bucket_resolution_basis ptrb
+        on ptrb.seed_timesheet_id = ptes.seed_timesheet_id
+      join transient_timesheet_component_review_rows target_row
+        on target_row.timesheet_id = ptes.target_timesheet_id
+       and target_row.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+       and target_row.source_units is not null
+       and coalesce(target_row.source_units,0) <> 0
+       and target_row.source_rate is not null
+       and target_row.source_charge_rate is not null
+       and target_row.component_key_type <> 'ADJUSTMENT_CODE'
+       and target_row.component_key_type = ptrb.component_key_type
+       and (
+         (
+           ptrb.component_key_type in ('TS_DAY','TS_TOTAL')
+           and coalesce(target_row.component_key_value,'') = coalesce(ptrb.component_key_value,'')
+           and coalesce(nullif(btrim(coalesce(target_row.source_basis_json->>'bucket_code','')), ''), '') = coalesce(ptrb.basis_bucket_code, '')
+           and round(coalesce(target_row.source_rate,0),6) = ptrb.basis_source_rate
+           and round(coalesce(target_row.source_charge_rate,0),6) = ptrb.basis_source_charge_rate
+         )
+         or (
+           ptrb.component_key_type not in ('TS_DAY','TS_TOTAL')
+           and coalesce(target_row.component_key_value,'') = coalesce(ptrb.component_key_value,'')
+           and round(coalesce(target_row.source_rate,0),6) = ptrb.basis_source_rate
+           and round(coalesce(target_row.source_charge_rate,0),6) = ptrb.basis_source_charge_rate
+         )
        )
-       or (
-         ptrb.component_key_type not in ('TS_DAY','TS_TOTAL')
-         and coalesce(target_row.component_key_value,'') = coalesce(ptrb.component_key_value,'')
-         and round(coalesce(target_row.source_rate,0),6) = ptrb.basis_source_rate
-         and round(coalesce(target_row.source_charge_rate,0),6) = ptrb.basis_source_charge_rate
-       )
-     )
+    ) ranked
+    where ranked.overlay_rank = 1
   ),
   transient_timesheet_component_review_rows_effective as (
     select
@@ -8723,29 +8732,8 @@ ts_itemised as (
       end as target_rate
     from transient_timesheet_component_review_rows ttr
     left join timesheet_overlay_component_decisions toc
-      on toc.timesheet_id = ttr.timesheet_id
-     and toc.source_family_key = ttr.source_family_key
-     and toc.component_key_type = ttr.component_key_type
-     and coalesce(toc.component_key_value,'') = coalesce(ttr.component_key_value,'')
-     and (
-       (
-         toc.source_basis_fingerprint is not null
-         and md5(coalesce(ttr.source_basis_json::text, '{}'::text)) = toc.source_basis_fingerprint
-       )
-       or (
-         toc.source_basis_fingerprint is null
-         and ttr.component_key_type in ('TS_DAY','TS_TOTAL')
-         and coalesce(nullif(btrim(coalesce(ttr.source_basis_json->>'bucket_code','')), ''), '') = coalesce(toc.bucket_code, '')
-         and round(coalesce(toc.source_rate,0),6) = round(coalesce(ttr.source_rate,0),6)
-         and round(coalesce(toc.source_charge_rate,0),6) = round(coalesce(ttr.source_charge_rate,0),6)
-       )
-       or (
-         toc.source_basis_fingerprint is null
-         and ttr.component_key_type not in ('TS_DAY','TS_TOTAL')
-         and round(coalesce(toc.source_rate,0),6) = round(coalesce(ttr.source_rate,0),6)
-         and round(coalesce(toc.source_charge_rate,0),6) = round(coalesce(ttr.source_charge_rate,0),6)
-       )
-     )
+      on toc.target_timesheet_id = ttr.timesheet_id
+     and toc.target_component_fingerprint = ttr.component_fingerprint
     left join lateral (
       select
         (
