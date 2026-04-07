@@ -4302,7 +4302,6 @@ begin;
 
 begin;
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -5075,78 +5074,78 @@ umb_map as (
       t.charge_sun as cur_charge_sun,
       t.charge_bh as cur_charge_bh,
       case
-        when coalesce(t.base_json->>'hours_day', t.base_json #>> '{invoice_breakdown_json,base_hours,day}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'hours_day')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,day}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'hours_day', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,day}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'hours_day')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,day}')::numeric), 6)
         else 0::numeric
       end as bas_hours_day,
       case
-        when coalesce(t.base_json->>'hours_night', t.base_json #>> '{invoice_breakdown_json,base_hours,night}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'hours_night')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,night}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'hours_night', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,night}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'hours_night')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,night}')::numeric), 6)
         else 0::numeric
       end as bas_hours_night,
       case
-        when coalesce(t.base_json->>'hours_sat', t.base_json #>> '{invoice_breakdown_json,base_hours,sat}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'hours_sat')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,sat}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'hours_sat', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,sat}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'hours_sat')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,sat}')::numeric), 6)
         else 0::numeric
       end as bas_hours_sat,
       case
-        when coalesce(t.base_json->>'hours_sun', t.base_json #>> '{invoice_breakdown_json,base_hours,sun}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'hours_sun')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,sun}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'hours_sun', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,sun}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'hours_sun')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,sun}')::numeric), 6)
         else 0::numeric
       end as bas_hours_sun,
       case
-        when coalesce(t.base_json->>'hours_bh', t.base_json #>> '{invoice_breakdown_json,base_hours,bh}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'hours_bh')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,bh}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'hours_bh', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,bh}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'hours_bh')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,bh}')::numeric), 6)
         else 0::numeric
       end as bas_hours_bh,
       case
-        when coalesce(t.base_json->>'pay_day', t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,day}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'pay_day')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,day}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'pay_day', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,day}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'pay_day')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,day}')::numeric), 6)
         else null::numeric
       end as bas_pay_day,
       case
-        when coalesce(t.base_json->>'pay_night', t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,night}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'pay_night')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,night}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'pay_night', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,night}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'pay_night')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,night}')::numeric), 6)
         else null::numeric
       end as bas_pay_night,
       case
-        when coalesce(t.base_json->>'pay_sat', t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sat}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'pay_sat')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sat}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'pay_sat', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sat}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'pay_sat')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sat}')::numeric), 6)
         else null::numeric
       end as bas_pay_sat,
       case
-        when coalesce(t.base_json->>'pay_sun', t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sun}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'pay_sun')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sun}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'pay_sun', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sun}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'pay_sun')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,sun}')::numeric), 6)
         else null::numeric
       end as bas_pay_sun,
       case
-        when coalesce(t.base_json->>'pay_bh', t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,bh}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'pay_bh')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,pay_rates,bh}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'pay_bh', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,bh}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'pay_bh')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,pay_rates,bh}')::numeric), 6)
         else null::numeric
       end as bas_pay_bh,
       case
-        when coalesce(t.base_json->>'charge_day', t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,day}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'charge_day')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,day}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'charge_day', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,day}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'charge_day')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,day}')::numeric), 6)
         else null::numeric
       end as bas_charge_day,
       case
-        when coalesce(t.base_json->>'charge_night', t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,night}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'charge_night')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,night}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'charge_night', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,night}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'charge_night')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,night}')::numeric), 6)
         else null::numeric
       end as bas_charge_night,
       case
-        when coalesce(t.base_json->>'charge_sat', t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sat}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'charge_sat')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sat}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'charge_sat', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sat}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'charge_sat')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sat}')::numeric), 6)
         else null::numeric
       end as bas_charge_sat,
       case
-        when coalesce(t.base_json->>'charge_sun', t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sun}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'charge_sun')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sun}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'charge_sun', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sun}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'charge_sun')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,sun}')::numeric), 6)
         else null::numeric
       end as bas_charge_sun,
       case
-        when coalesce(t.base_json->>'charge_bh', t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,bh}', '') ~ '^-?\d+(\.\d+)?$'
-          then round(coalesce((t.base_json->>'charge_bh')::numeric, (t.base_json #>> '{invoice_breakdown_json,base_hours,charge_rates,bh}')::numeric), 6)
+        when coalesce(t.last_settled_snapshot_json->>'charge_bh', t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,bh}', '') ~ '^-?\d+(\.\d+)?$'
+          then round(coalesce((t.last_settled_snapshot_json->>'charge_bh')::numeric, (t.last_settled_snapshot_json #>> '{invoice_breakdown_json,base_hours,charge_rates,bh}')::numeric), 6)
         else null::numeric
       end as bas_charge_bh,
       t.current_additional_pay_ex_vat,
@@ -7076,9 +7075,9 @@ ts_itemised as (
       wba.ref_num,
       case
         when wba.source_rate is null or wba.source_rate = 0 then null::numeric
-        when round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0), 6) <= 0 then null::numeric
+        when round(greatest(coalesce(wba.raw_delta_source_units,0), 0), 6) <= 0 then null::numeric
         when round(
-          round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0) * wba.source_rate, 2),
+          round(greatest(coalesce(wba.raw_delta_source_units,0), 0) * wba.source_rate, 2),
           2
         ) <> round(
           case
@@ -7099,9 +7098,9 @@ ts_itemised as (
       case
         when wba.source_charge_rate is null then null::numeric
         when wba.source_rate is null or wba.source_rate = 0 then null::numeric
-        when round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0), 6) <= 0 then null::numeric
+        when round(greatest(coalesce(wba.raw_delta_source_units,0), 0), 6) <= 0 then null::numeric
         when round(
-          round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0) * wba.source_rate, 2),
+          round(greatest(coalesce(wba.raw_delta_source_units,0), 0) * wba.source_rate, 2),
           2
         ) <> round(
           case
@@ -7138,9 +7137,9 @@ ts_itemised as (
           when wba.source_charge_rate is not null
            and wba.source_rate is not null
            and wba.source_rate <> 0
-           and round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0), 6) > 0
+           and round(greatest(coalesce(wba.raw_delta_source_units,0), 0), 6) > 0
            and round(
-             round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0) * wba.source_rate, 2),
+             round(greatest(coalesce(wba.raw_delta_source_units,0), 0) * wba.source_rate, 2),
              2
            ) = round(
              case
@@ -7156,7 +7155,7 @@ ts_itemised as (
              end,
              2
            )
-            then round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0) * wba.source_charge_rate, 2)
+            then round(greatest(coalesce(wba.raw_delta_source_units,0), 0) * wba.source_charge_rate, 2)
           when round(coalesce(wba.raw_delta_before_reservation_ex,0), 2) = 0 then round(coalesce(wba.raw_delta_charge_ex_vat,0), 2)
           else round(
             coalesce(wba.raw_delta_charge_ex_vat,0)
@@ -7182,9 +7181,9 @@ ts_itemised as (
       ) as source_charge_ex_vat,
       case
         when wba.source_rate is null or wba.source_rate = 0 then null::numeric
-        when round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0), 6) <= 0 then null::numeric
+        when round(greatest(coalesce(wba.raw_delta_source_units,0), 0), 6) <= 0 then null::numeric
         when round(
-          round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0) * wba.source_rate, 2),
+          round(greatest(coalesce(wba.raw_delta_source_units,0), 0) * wba.source_rate, 2),
           2
         ) <> round(
           case
@@ -7200,7 +7199,7 @@ ts_itemised as (
           end,
           2
         ) then null::numeric
-        else round(greatest(coalesce(wba.cur_source_units,0) - coalesce(wba.bas_source_units,0), 0), 6)
+        else round(greatest(coalesce(wba.raw_delta_source_units,0), 0), 6)
       end as source_units
     from worked_time_bucket_alloc wba
   ),
@@ -7297,11 +7296,35 @@ ts_itemised as (
           then nullif(btrim(coalesce(seg->>'work_date','')), '')
         else 'TOTAL'
       end as component_key_value,
-      round(coalesce(nullif(seg->>'delta_pay_ex_vat','')::numeric, 0), 2) as total_pay_ex_vat,
-      round(coalesce(nullif(seg->>'delta_charge_ex_vat','')::numeric, 0), 2) as total_charge_ex_vat
+      round(sum(coalesce(nullif(seg->>'delta_pay_ex_vat','')::numeric, 0)), 2) as total_pay_ex_vat,
+      round(sum(coalesce(nullif(seg->>'delta_charge_ex_vat','')::numeric, 0)), 2) as total_charge_ex_vat
     from ts_itemised d
     cross join lateral jsonb_array_elements(coalesce(d.segment_deltas_json, '[]'::jsonb)) seg
-    where round(coalesce(nullif(seg->>'delta_pay_ex_vat','')::numeric, 0), 2) <> 0
+    group by
+      d.candidate_id,
+      d.timesheet_id,
+      d.client_id,
+      d.ts_week_ending_date,
+      d.ts_client_name,
+      d.ts_pay_method,
+      d.cand_pay_method,
+      d.cand_tms_ref,
+      d.cand_display_name,
+      d.cand_umbrella_id,
+      d.umb_enabled,
+      d.umb_vat_chargeable,
+      d.cand_bank_hash,
+      d.umb_bank_hash,
+      case
+        when nullif(btrim(coalesce(seg->>'work_date','')), '') is not null then 'TS_DAY'::text
+        else 'TS_TOTAL'::text
+      end,
+      case
+        when nullif(btrim(coalesce(seg->>'work_date','')), '') is not null
+          then nullif(btrim(coalesce(seg->>'work_date','')), '')
+        else 'TOTAL'
+      end
+    having round(sum(coalesce(nullif(seg->>'delta_pay_ex_vat','')::numeric, 0)), 2) <> 0
   ),
   worked_time_bucket_component_sums as (
     select
@@ -9283,6 +9306,10 @@ ts_itemised as (
             when (coalesce(tcr.is_blocked, false) or not coalesce(cp.is_ready_for_draft, false))
             then coalesce(tcr.case_total_amount_ex, 0)
             else 0::numeric
+          end,
+          'blocked_reason_codes', case
+            when coalesce(tcr.is_blocked, false) = true then jsonb_build_array('BLOCKED_TAXABLE_RESOLUTION')
+            else '[]'::jsonb
           end
         )
       ) as case_resolution_summary_json,
@@ -11077,18 +11104,24 @@ ts_itemised as (
           'non_bucket_resolution', g.non_bucket_resolution_json,
           'taxable_manual_debt_resolution', case
             when g.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
-            then g.non_bucket_resolution_json
+             and g.taxability = 'TAXABLE'::public.pay_finance_taxability_enum
+             and coalesce(fctmdr.has_dedicated_resolution_payload, false) = true
+            then fctmdr.taxable_manual_debt_resolution_json
             else null::jsonb
           end
         )
       ) as case_resolution_summary_json,
       case
         when g.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
-        then g.non_bucket_resolution_json
+         and g.taxability = 'TAXABLE'::public.pay_finance_taxability_enum
+         and coalesce(fctmdr.has_dedicated_resolution_payload, false) = true
+        then fctmdr.taxable_manual_debt_resolution_json
         else null::jsonb
       end as taxable_manual_debt_resolution_json,
       g.case_components_json
     from grouped g
+    left join finance_case_taxable_manual_debt_resolution fctmdr
+      on fctmdr.finance_case_id = g.finance_case_id
   ),
   canonical_timesheet_lines as (
     select
@@ -11884,6 +11917,17 @@ ts_itemised as (
           'is_advanced', (ctpp.override_id is not null),
           'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
           'advanced_reason', ctpp.override_reason,
+          'blocked_reason_codes', (
+            (case
+              when ctpp.has_active_timesheet_snooze = true then jsonb_build_array('BLOCKED_DATED_SNOOZE')
+              else '[]'::jsonb
+            end)
+            ||
+            (case
+              when ctpp.case_is_blocked = true then jsonb_build_array('BLOCKED_TAXABLE_RESOLUTION')
+              else '[]'::jsonb
+            end)
+          ),
           'is_excluded_from_allocation', (ctpp.has_active_timesheet_snooze = true),
           'is_ready_for_draft', case
             when ctpp.has_active_timesheet_snooze = true then ctpp.is_ready_for_draft
@@ -12162,7 +12206,6 @@ ts_itemised as (
         )
         || jsonb_build_object(
           'case_resolution_summary', fcl.case_resolution_summary_json,
-          'taxable_manual_debt_resolution', fcl.taxable_manual_debt_resolution_json,
           'case_components', fcl.case_components_json,
           'timesheet_id', case when fcl.linked_timesheet_id is null then null else fcl.linked_timesheet_id::text end,
           'client_id', case when fcl.client_id is null then null else fcl.client_id::text end,
@@ -12175,6 +12218,11 @@ ts_itemised as (
           'routing_kind', case when fcl.routing_kind is null then null else fcl.routing_kind::text end,
           'destination_label', fcl.destination_label,
           'taxability', case when fcl.taxability is null then null else fcl.taxability::text end
+        )
+        || jsonb_strip_nulls(
+          jsonb_build_object(
+            'taxable_manual_debt_resolution', fcl.taxable_manual_debt_resolution_json
+          )
         )
         || jsonb_build_object(
           'beneficiary_name', fcl.beneficiary_name,
@@ -12426,8 +12474,11 @@ ts_itemised as (
         'stale_count', fcrr.stale_count,
         'due_amount_ex_vat', fcrr.due_amount_ex_vat,
         'case_resolution_summary', fcrr.case_resolution_summary_json,
-        'taxable_manual_debt_resolution', fcrr.taxable_manual_debt_resolution_json,
         'components', fcrr.case_components_json
+      ) || jsonb_strip_nulls(
+        jsonb_build_object(
+          'taxable_manual_debt_resolution', fcrr.taxable_manual_debt_resolution_json
+        )
       ) as case_json
     from finance_case_resolution_rollup fcrr
     where fcrr.due_amount_ex_vat > 0
@@ -12485,8 +12536,11 @@ ts_itemised as (
             'paye_treatment', fcl.paye_treatment,
             'presentation_section', fcl.readiness_state,
             'case_resolution_summary', fcl.case_resolution_summary_json,
-            'taxable_manual_debt_resolution', fcl.taxable_manual_debt_resolution_json,
             'components', fcl.case_components_json
+          ) || jsonb_strip_nulls(
+            jsonb_build_object(
+              'taxable_manual_debt_resolution', fcl.taxable_manual_debt_resolution_json
+            )
           )
           order by fcl.case_type::text, fcl.finance_case_id
         ),
@@ -12494,6 +12548,54 @@ ts_itemised as (
       ) as finance_itemisation
     from finance_case_lines fcl
     group by fcl.candidate_id
+  ),
+  candidate_overall_status as (
+    select
+      cos0.candidate_id,
+      cos0.has_any_delta,
+      cos0.has_ready_preview_line,
+      cos0.has_review_required_blocker,
+      (
+        cos0.has_any_delta = true
+        and cos0.has_ready_preview_line = true
+        and cos0.has_review_required_blocker = false
+      ) as is_ready_for_draft,
+      (
+        cos0.has_any_delta = true
+        and cos0.has_review_required_blocker = true
+      ) as is_review_required
+    from (
+      select
+        ce.candidate_id,
+        (
+          coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
+          or coalesce(ce.mismatch_source_paye_ex,0) <> 0
+          or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
+          or coalesce(fct.finance_due_total_ex_vat,0) <> 0
+          or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
+          or coalesce(ce.blocked_count,0) > 0
+          or coalesce(ce.do_not_pay_count,0) > 0
+          or coalesce(ccs.blocked_case_count,0) > 0
+        ) as has_any_delta,
+        coalesce(cplr.has_ready_preview_line, false) as has_ready_preview_line,
+        (
+          jsonb_array_length(coalesce(ce.blockers, '[]'::jsonb)) > 0
+          or coalesce(ce.blocked_count,0) > 0
+          or coalesce(ce.do_not_pay_count,0) > 0
+          or coalesce(ccs.blocked_case_count,0) > 0
+          or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
+          or coalesce(cplr.blocked_preview_line_count,0) > 0
+        ) as has_review_required_blocker
+      from cand_payee ce
+      left join candidate_case_states ccs
+        on ccs.candidate_id = ce.candidate_id
+      left join finance_candidate_totals fct
+        on fct.candidate_id = ce.candidate_id
+      left join candidate_preview_timesheet_rollup cptr
+        on cptr.candidate_id = ce.candidate_id
+      left join candidate_preview_line_rollup cplr
+        on cplr.candidate_id = ce.candidate_id
+    ) cos0
   ),
   summary_json_final as (
     select
@@ -12521,60 +12623,9 @@ ts_itemised as (
     cross join (
       select
         count(*)::int as total_candidates,
-        sum(
-          case when
-            (
-              (
-                coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
-                or coalesce(ce.mismatch_source_paye_ex,0) <> 0
-                or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
-                or coalesce(fct.finance_due_total_ex_vat,0) <> 0
-                or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
-                or coalesce(ce.blocked_count,0) > 0
-                or coalesce(ce.do_not_pay_count,0) > 0
-                or coalesce(ccs.blocked_case_count,0) > 0
-              )
-              and coalesce(cplr.has_ready_preview_line, false) = true
-              and coalesce(ce.blocked_count,0) = 0
-              and coalesce(ce.do_not_pay_count,0) = 0
-              and coalesce(ccs.blocked_case_count,0) = 0
-              and coalesce(cptr.blocked_timesheet_preview_count,0) = 0
-            )
-          then 1 else 0 end
-        )::int as ready_count,
-        sum(
-          case when
-            (
-              (
-                coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
-                or coalesce(ce.mismatch_source_paye_ex,0) <> 0
-                or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
-                or coalesce(fct.finance_due_total_ex_vat,0) <> 0
-                or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
-                or coalesce(ce.blocked_count,0) > 0
-                or coalesce(ce.do_not_pay_count,0) > 0
-                or coalesce(ccs.blocked_case_count,0) > 0
-              )
-              and (
-                coalesce(ccs.blocked_case_count,0) > 0
-                or jsonb_array_length(ce.blockers) > 0
-                or coalesce(ce.blocked_count,0) > 0
-                or coalesce(ce.do_not_pay_count,0) > 0
-                or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
-                or coalesce(cplr.blocked_preview_line_count,0) > 0
-              )
-            )
-          then 1 else 0 end
-        )::int as review_required_count
-      from cand_payee ce
-      left join candidate_case_states ccs
-        on ccs.candidate_id = ce.candidate_id
-      left join finance_candidate_totals fct
-        on fct.candidate_id = ce.candidate_id
-      left join candidate_preview_timesheet_rollup cptr
-        on cptr.candidate_id = ce.candidate_id
-      left join candidate_preview_line_rollup cplr
-        on cplr.candidate_id = ce.candidate_id
+        sum(case when coalesce(cos.is_ready_for_draft, false) = true then 1 else 0 end)::int as ready_count,
+        sum(case when coalesce(cos.is_review_required, false) = true then 1 else 0 end)::int as review_required_count
+      from candidate_overall_status cos
     ) cr
   ),
   paye_summary_breakdown_json as (
@@ -12611,7 +12662,7 @@ ts_itemised as (
             'name_check_status', ce.payee_name_check_status,
             'name_check_has_override', ce.payee_name_check_has_override,
             'blockers', ce.blockers,
-            'is_ready_for_draft', coalesce(cplr.has_ready_preview_line, false),
+            'is_ready_for_draft', coalesce(cos.is_ready_for_draft, false),
 
             'blocked_count', ce.blocked_count,
             'do_not_pay_count', ce.do_not_pay_count,
@@ -12620,15 +12671,7 @@ ts_itemised as (
             'preview_blocked_timesheet_count', coalesce(cptr.blocked_timesheet_preview_count, 0),
             'preview_ready_timesheet_count', coalesce(cptr.ready_timesheet_preview_count, 0),
             'case_resolution_states', coalesce(ccs.case_resolution_states, '[]'::jsonb),
-            'has_any_delta',
-              (coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
-               or coalesce(ce.mismatch_source_paye_ex,0) <> 0
-               or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
-               or coalesce(fct.finance_due_total_ex_vat,0) <> 0
-               or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
-               or coalesce(ce.blocked_count,0) > 0
-               or coalesce(ce.do_not_pay_count,0) > 0
-               or coalesce(ccs.blocked_case_count,0) > 0),
+            'has_any_delta', coalesce(cos.has_any_delta, false),
             'gross_preview_ex_vat_non_mismatch', coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),
             'finance_due_total_ex_vat', coalesce(fct.finance_due_total_ex_vat,0),
             'finance_safe_due_total_ex_vat', coalesce(fct.finance_safe_due_total_ex_vat,0),
@@ -12735,6 +12778,8 @@ ts_itemised as (
           on cfi.candidate_id = ce.candidate_id
         left join candidate_preview_line_rollup cplr
           on cplr.candidate_id = ce.candidate_id
+        left join candidate_overall_status cos
+          on cos.candidate_id = ce.candidate_id
         where ce.cand_pay_method = 'PAYE'
       ),
       '[]'::jsonb
@@ -12763,7 +12808,7 @@ ts_itemised as (
             'name_check_status', ce.payee_name_check_status,
             'name_check_has_override', ce.payee_name_check_has_override,
             'blockers', ce.blockers,
-            'is_ready_for_draft', coalesce(cplr.has_ready_preview_line, false),
+            'is_ready_for_draft', coalesce(cos.is_ready_for_draft, false),
 
             'blocked_count', ce.blocked_count,
             'do_not_pay_count', ce.do_not_pay_count,
@@ -12772,15 +12817,7 @@ ts_itemised as (
             'preview_blocked_timesheet_count', coalesce(cptr.blocked_timesheet_preview_count, 0),
             'preview_ready_timesheet_count', coalesce(cptr.ready_timesheet_preview_count, 0),
             'case_resolution_states', coalesce(ccs.case_resolution_states, '[]'::jsonb),
-            'has_any_delta',
-              (coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0) <> 0
-               or coalesce(ce.mismatch_source_paye_ex,0) <> 0
-               or coalesce(ce.mismatch_source_umbrella_ex,0) <> 0
-               or coalesce(fct.finance_due_total_ex_vat,0) <> 0
-               or coalesce(cptr.blocked_timesheet_preview_count,0) > 0
-               or coalesce(ce.blocked_count,0) > 0
-               or coalesce(ce.do_not_pay_count,0) > 0
-               or coalesce(ccs.blocked_case_count,0) > 0),
+            'has_any_delta', coalesce(cos.has_any_delta, false),
             'gross_preview_ex_vat_non_mismatch', coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0),
             'finance_due_total_ex_vat', coalesce(fct.finance_due_total_ex_vat,0),
             'finance_safe_due_total_ex_vat', coalesce(fct.finance_safe_due_total_ex_vat,0),
@@ -12888,6 +12925,8 @@ ts_itemised as (
           on cfi.candidate_id = ce.candidate_id
         left join candidate_preview_line_rollup cplr
           on cplr.candidate_id = ce.candidate_id
+        left join candidate_overall_status cos
+          on cos.candidate_id = ce.candidate_id
         where ce.cand_pay_method <> 'PAYE'
       ),
       '[]'::jsonb
@@ -13133,6 +13172,7 @@ ts_itemised as (
   );
 end;
 $function$;
+
 
 
 
