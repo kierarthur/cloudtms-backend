@@ -1,16 +1,26 @@
 -- Manual regression checks for pay_preview case_resolutions scoping/performance.
--- Usage (example):
---   \set pay_date '''2026-03-27'''
---   \set week_ending '''2026-03-29'''
---   \set actor '''00000000-0000-0000-0000-000000000000'''
---   \set candidate 'NULL'
---   \set client 'NULL'
+-- Usage:
+--   Edit the `params` CTE at the start of each check block below.
+--   `linked_case_resolutions` should be a JSON object keyed by case_key.
+--   `known_bad_payload` should be the full jsonb payload for timeout repro.
 
 -- 1) Empty case_resolutions path unchanged.
-with baseline as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, null::jsonb) as j
+with params as (
+  select
+    date '2026-03-27' as pay_date,
+    date '2026-03-29' as week_ending,
+    '00000000-0000-0000-0000-000000000000'::uuid as actor,
+    null::uuid as candidate,
+    null::uuid as client,
+    '{}'::jsonb as linked_case_resolutions,
+    null::jsonb as known_bad_payload
+),
+baseline as (
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, null::jsonb) as j
+  from params
 ), explicit_empty as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, '{"case_resolutions":{}}'::jsonb) as j
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, '{"case_resolutions":{}}'::jsonb) as j
+  from params
 )
 select
   ((baseline.j->'canonical_preview_lines') = (explicit_empty.j->'canonical_preview_lines')) as canonical_preview_lines_equal,
@@ -19,8 +29,17 @@ select
 from baseline, explicit_empty;
 
 -- 2) Resolve one/two/all buckets from a real unresolved BUCKETED timesheet case.
-with preview0 as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, null::jsonb) as j
+with params as (
+  select
+    date '2026-03-27' as pay_date,
+    date '2026-03-29' as week_ending,
+    '00000000-0000-0000-0000-000000000000'::uuid as actor,
+    null::uuid as candidate,
+    null::uuid as client
+),
+preview0 as (
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, null::jsonb) as j
+  from params
 ),
 unresolved_case as (
   select cs.case_json
@@ -118,16 +137,19 @@ mk_payload as (
   group by c.case_key
 ),
 one_case as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, mp.one_bucket_payload) as j
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, mp.one_bucket_payload) as j
   from mk_payload mp
+  cross join params
 ),
 two_case as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, mp.two_bucket_payload) as j
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, mp.two_bucket_payload) as j
   from mk_payload mp
+  cross join params
 ),
 all_case as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, mp.all_bucket_payload) as j
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, mp.all_bucket_payload) as j
   from mk_payload mp
+  cross join params
 ),
 counts as (
   select
@@ -159,8 +181,17 @@ resolved_counts as (
 select * from counts, resolved_counts;
 
 -- 3) resolve_all_linked_timesheets=false remains local.
-with preview0 as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, null::jsonb) as j
+with params as (
+  select
+    date '2026-03-27' as pay_date,
+    date '2026-03-29' as week_ending,
+    '00000000-0000-0000-0000-000000000000'::uuid as actor,
+    null::uuid as candidate,
+    null::uuid as client
+),
+preview0 as (
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, null::jsonb) as j
+  from params
 ),
 seed as (
   select cs.case_json
@@ -198,8 +229,9 @@ local_payload as (
   from seed
 ),
 preview_local as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, lp.payload) as j
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, lp.payload) as j
   from local_payload lp
+  cross join params
 )
 select
   cs.case_json->>'case_key' as case_key,
@@ -211,10 +243,20 @@ cross join lateral jsonb_array_elements(coalesce(cs.case_json->'case_components'
 group by 1,2;
 
 -- 4) Linked-scope true applies to linked timesheets and does not duplicate effective rows.
-with preview_linked as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid,
-    jsonb_build_object('case_resolutions', :linked_case_resolutions::jsonb)
+with params as (
+  select
+    date '2026-03-27' as pay_date,
+    date '2026-03-29' as week_ending,
+    '00000000-0000-0000-0000-000000000000'::uuid as actor,
+    null::uuid as candidate,
+    null::uuid as client,
+    '{}'::jsonb as linked_case_resolutions
+),
+preview_linked as (
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client,
+    jsonb_build_object('case_resolutions', params.linked_case_resolutions)
   ) as j
+  from params
 ),
 line_dupes as (
   select
@@ -228,10 +270,20 @@ line_dupes as (
 select coalesce(count(*),0) as duplicate_line_id_count from line_dupes;
 
 -- 5) Amount drift guard (summary totals should equal sum of canonical lines).
-with p as (
-  select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid,
-    jsonb_build_object('case_resolutions', :linked_case_resolutions::jsonb)
+with params as (
+  select
+    date '2026-03-27' as pay_date,
+    date '2026-03-29' as week_ending,
+    '00000000-0000-0000-0000-000000000000'::uuid as actor,
+    null::uuid as candidate,
+    null::uuid as client,
+    '{}'::jsonb as linked_case_resolutions
+),
+p as (
+  select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client,
+    jsonb_build_object('case_resolutions', params.linked_case_resolutions)
   ) as j
+  from params
 ),
 line_totals as (
   select
@@ -246,6 +298,16 @@ select
 from p, line_totals;
 
 -- 6) Timeout regression check for known problematic payload.
--- Replace :known_bad_payload with the exact JSON payload previously timing out.
+-- Replace known_bad_payload in params CTE with the exact JSON payload previously timing out.
 set local statement_timeout = '15s';
-select public.pay_preview(:pay_date::date, :week_ending::date, :actor::uuid, :candidate::uuid, :client::uuid, :known_bad_payload::jsonb);
+with params as (
+  select
+    date '2026-03-27' as pay_date,
+    date '2026-03-29' as week_ending,
+    '00000000-0000-0000-0000-000000000000'::uuid as actor,
+    null::uuid as candidate,
+    null::uuid as client,
+    null::jsonb as known_bad_payload
+)
+select public.pay_preview(params.pay_date, params.week_ending, params.actor, params.candidate, params.client, params.known_bad_payload)
+from params;
