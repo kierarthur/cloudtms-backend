@@ -8578,7 +8578,7 @@ ts_itemised as (
                 tcr.source_units is not null
                 and coalesce(tcr.source_units,0) <> 0
                 and tcr.source_rate is not null
-                and tcr.source_charge_rate is not null
+                and tcer.effective_source_charge_rate is not null
                 and tcr.component_key_type <> 'ADJUSTMENT_CODE'
               ),
             'classification', tcr.classification::text,
@@ -8588,7 +8588,17 @@ ts_itemised as (
             'preview_component_amount_ex_vat', round(coalesce(tcr.preview_component_amount_ex_vat, tcr.component_amount_ex_vat, 0),2),
             'ready_preview_amount_ex_vat', round(coalesce(tcr.ready_preview_amount_ex_vat, 0),2),
             'blocked_preview_amount_ex_vat', round(coalesce(tcr.blocked_preview_amount_ex_vat, 0),2),
-            'source_basis_json', jsonb_strip_nulls(tcr.source_basis_json || jsonb_build_object('source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end, 'source_charge_rate', case when tcr.source_charge_rate is null then null else round(tcr.source_charge_rate,2) end)),
+            'source_basis_json', jsonb_strip_nulls(
+              tcr.source_basis_json
+              || jsonb_build_object(
+                'source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end,
+                'source_charge_rate',
+                  case
+                    when tcer.effective_source_charge_rate is null then null
+                    else round(tcer.effective_source_charge_rate, 2)
+                  end
+              )
+            ),
             'saved_target_pay_method', null,
             'saved_resolution_mode', case when tcr.approved_resolution_mode is null then null else tcr.approved_resolution_mode end,
             'saved_resolution_payload_json', null,
@@ -8603,6 +8613,11 @@ ts_itemised as (
             'source_units', tcr.source_units,
             'target_units', case when ttrg.target_units is null then tcr.source_units else ttrg.target_units end,
             'source_rate', case when tcr.source_rate is null then null else round(tcr.source_rate,2) end,
+            'source_charge_rate',
+              case
+                when tcer.effective_source_charge_rate is null then null
+                else round(tcer.effective_source_charge_rate, 2)
+              end,
             'target_rate', case when tcr.target_rate is null then null else round(tcr.target_rate,2) end,
             'source_pay_ex_vat', tcr.source_pay_ex_vat,
             'source_charge_ex_vat', tcr.source_charge_component_ex_vat,
@@ -8641,6 +8656,17 @@ ts_itemised as (
       on tls.timesheet_id = tcr.timesheet_id
     left join timesheet_linked_scope_counts tslc
       on tslc.seed_timesheet_id = tcr.timesheet_id
+    left join lateral (
+      select
+        case
+          when tcr.source_charge_rate is not null then tcr.source_charge_rate
+          when coalesce(tcr.source_basis_json->>'source_charge_rate','') ~ '^-?\d+(\.\d+)?$'
+            then (tcr.source_basis_json->>'source_charge_rate')::numeric
+          when coalesce(tcr.source_units,0) <> 0 and tcr.source_charge_component_ex_vat is not null
+            then (tcr.source_charge_component_ex_vat / tcr.source_units)
+          else null::numeric
+        end as effective_source_charge_rate
+    ) tcer on true
     left join lateral (
       select
         case
