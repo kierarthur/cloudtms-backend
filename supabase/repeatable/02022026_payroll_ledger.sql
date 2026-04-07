@@ -4302,6 +4302,7 @@ begin;
 
 begin;
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -4867,8 +4868,6 @@ umb_map as (
               'charge_amount', round(coalesce(nullif(seg->>'charge_amount','')::numeric, nullif(seg->>'charge_ex_vat','')::numeric,0),2),
               'units', coalesce(nullif(seg->>'units','')::numeric, nullif(seg->>'hours','')::numeric),
               'hours', coalesce(nullif(seg->>'hours','')::numeric, nullif(seg->>'units','')::numeric),
-              'rate', coalesce(nullif(seg->>'rate','')::numeric, nullif(seg->>'pay_rate','')::numeric),
-              'charge_rate', coalesce(nullif(seg->>'charge_rate','')::numeric, nullif(seg->>'charge_unit_rate','')::numeric),
               'hours_day', coalesce(nullif(seg->>'hours_day','')::numeric, 0),
               'hours_night', coalesce(nullif(seg->>'hours_night','')::numeric, 0),
               'hours_sat', coalesce(nullif(seg->>'hours_sat','')::numeric, 0),
@@ -4916,8 +4915,6 @@ umb_map as (
             'charge_amount', round(coalesce(e.total_charge_ex_vat,0),2),
             'units', e.total_hours,
             'hours', e.total_hours,
-            'rate', case when coalesce(e.total_hours,0) > 0 then round(coalesce(e.total_pay_ex_vat,0) / e.total_hours, 6) else null end,
-            'charge_rate', case when coalesce(e.total_hours,0) > 0 then round(coalesce(e.total_charge_ex_vat,0) / e.total_hours, 6) else null end,
             'hours_day', coalesce(e.hours_day, 0),
             'hours_night', coalesce(e.hours_night, 0),
             'hours_sat', coalesce(e.hours_sat, 0),
@@ -5246,176 +5243,8 @@ umb_map as (
           )
           else null::numeric
         end as source_units,
-        coalesce(
-          nullif(cur_seg.seg->>'rate','')::numeric,
-          nullif(cur_seg.seg->>'pay_rate','')::numeric,
-          case
-            when coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) is not null
-             and coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) <> 0
-            then round(
-              round(coalesce(nullif(cur_seg.seg->>'pay_amount','')::numeric,0),2)
-              / coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric),
-              6
-            )
-            when nullif(btrim(coalesce(cur_seg.seg->>'start_utc','')), '') is not null
-             and nullif(btrim(coalesce(cur_seg.seg->>'end_utc','')), '') is not null
-            then round(
-              round(coalesce(nullif(cur_seg.seg->>'pay_amount','')::numeric,0),2)
-              / nullif(
-                  round(
-                    greatest(
-                      (
-                        extract(
-                          epoch from (
-                            (cur_seg.seg->>'end_utc')::timestamptz
-                            - (cur_seg.seg->>'start_utc')::timestamptz
-                          )
-                        ) / 3600.0
-                      )
-                      - (
-                          coalesce(
-                            nullif(cur_seg.seg->>'break_mins','')::numeric,
-                            nullif(cur_seg.seg->>'break_minutes','')::numeric,
-                            0
-                          ) / 60.0
-                        ),
-                      0
-                    ),
-                    6
-                  ),
-                  0
-                ),
-              6
-            )
-            when nullif(btrim(coalesce(cur_seg.seg->>'start','')), '') is not null
-             and nullif(btrim(coalesce(cur_seg.seg->>'end','')), '') is not null
-            then round(
-              round(coalesce(nullif(cur_seg.seg->>'pay_amount','')::numeric,0),2)
-              / nullif(
-                  round(
-                    greatest(
-                      (
-                        extract(
-                          epoch from (
-                            (
-                              timestamp '2000-01-01'
-                              + nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time
-                              + case
-                                  when nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
-                                  then interval '1 day'
-                                  else interval '0 day'
-                                end
-                            )
-                            - (
-                                timestamp '2000-01-01'
-                                + nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
-                              )
-                          )
-                        ) / 3600.0
-                      )
-                      - (
-                          coalesce(
-                            nullif(cur_seg.seg->>'break_mins','')::numeric,
-                            nullif(cur_seg.seg->>'break_minutes','')::numeric,
-                            0
-                          ) / 60.0
-                        ),
-                      0
-                    ),
-                    6
-                  ),
-                  0
-                ),
-              6
-            )
-            else null::numeric
-          end
-        ) as source_rate,
-        coalesce(
-          nullif(cur_seg.seg->>'charge_rate','')::numeric,
-          nullif(cur_seg.seg->>'charge_unit_rate','')::numeric,
-          case
-            when coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) is not null
-             and coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric) <> 0
-            then round(
-              round(coalesce(nullif(cur_seg.seg->>'charge_amount','')::numeric, nullif(cur_seg.seg->>'charge_ex_vat','')::numeric,0),2)
-              / coalesce(nullif(cur_seg.seg->>'units','')::numeric, nullif(cur_seg.seg->>'hours','')::numeric),
-              6
-            )
-            when nullif(btrim(coalesce(cur_seg.seg->>'start_utc','')), '') is not null
-             and nullif(btrim(coalesce(cur_seg.seg->>'end_utc','')), '') is not null
-            then round(
-              round(coalesce(nullif(cur_seg.seg->>'charge_amount','')::numeric, nullif(cur_seg.seg->>'charge_ex_vat','')::numeric,0),2)
-              / nullif(
-                  round(
-                    greatest(
-                      (
-                        extract(
-                          epoch from (
-                            (cur_seg.seg->>'end_utc')::timestamptz
-                            - (cur_seg.seg->>'start_utc')::timestamptz
-                          )
-                        ) / 3600.0
-                      )
-                      - (
-                          coalesce(
-                            nullif(cur_seg.seg->>'break_mins','')::numeric,
-                            nullif(cur_seg.seg->>'break_minutes','')::numeric,
-                            0
-                          ) / 60.0
-                        ),
-                      0
-                    ),
-                    6
-                  ),
-                  0
-                ),
-              6
-            )
-            when nullif(btrim(coalesce(cur_seg.seg->>'start','')), '') is not null
-             and nullif(btrim(coalesce(cur_seg.seg->>'end','')), '') is not null
-            then round(
-              round(coalesce(nullif(cur_seg.seg->>'charge_amount','')::numeric, nullif(cur_seg.seg->>'charge_ex_vat','')::numeric,0),2)
-              / nullif(
-                  round(
-                    greatest(
-                      (
-                        extract(
-                          epoch from (
-                            (
-                              timestamp '2000-01-01'
-                              + nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time
-                              + case
-                                  when nullif(btrim(coalesce(cur_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
-                                  then interval '1 day'
-                                  else interval '0 day'
-                                end
-                            )
-                            - (
-                                timestamp '2000-01-01'
-                                + nullif(btrim(coalesce(cur_seg.seg->>'start','')), '')::time
-                              )
-                          )
-                        ) / 3600.0
-                      )
-                      - (
-                          coalesce(
-                            nullif(cur_seg.seg->>'break_mins','')::numeric,
-                            nullif(cur_seg.seg->>'break_minutes','')::numeric,
-                            0
-                          ) / 60.0
-                        ),
-                      0
-                    ),
-                    6
-                  ),
-                  0
-                ),
-              6
-            )
-            else null::numeric
-          end
-        ) as source_charge_rate,
+        null::numeric as source_rate,
+        null::numeric as source_charge_rate,
         coalesce(
           nullif(btrim(coalesce(cur_seg.seg->>'segment_stable_key','')),''),
           nullif(btrim(coalesce(cur_seg.seg->>'segment_id','')),''),
@@ -5510,176 +5339,8 @@ umb_map as (
           )
           else null::numeric
         end as source_units,
-        coalesce(
-          nullif(bas_seg.seg->>'rate','')::numeric,
-          nullif(bas_seg.seg->>'pay_rate','')::numeric,
-          case
-            when coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) is not null
-             and coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) <> 0
-            then round(
-              round(coalesce(nullif(bas_seg.seg->>'pay_amount','')::numeric,0),2)
-              / coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric),
-              6
-            )
-            when nullif(btrim(coalesce(bas_seg.seg->>'start_utc','')), '') is not null
-             and nullif(btrim(coalesce(bas_seg.seg->>'end_utc','')), '') is not null
-            then round(
-              round(coalesce(nullif(bas_seg.seg->>'pay_amount','')::numeric,0),2)
-              / nullif(
-                  round(
-                    greatest(
-                      (
-                        extract(
-                          epoch from (
-                            (bas_seg.seg->>'end_utc')::timestamptz
-                            - (bas_seg.seg->>'start_utc')::timestamptz
-                          )
-                        ) / 3600.0
-                      )
-                      - (
-                          coalesce(
-                            nullif(bas_seg.seg->>'break_mins','')::numeric,
-                            nullif(bas_seg.seg->>'break_minutes','')::numeric,
-                            0
-                          ) / 60.0
-                        ),
-                      0
-                    ),
-                    6
-                  ),
-                  0
-                ),
-              6
-            )
-            when nullif(btrim(coalesce(bas_seg.seg->>'start','')), '') is not null
-             and nullif(btrim(coalesce(bas_seg.seg->>'end','')), '') is not null
-            then round(
-              round(coalesce(nullif(bas_seg.seg->>'pay_amount','')::numeric,0),2)
-              / nullif(
-                  round(
-                    greatest(
-                      (
-                        extract(
-                          epoch from (
-                            (
-                              timestamp '2000-01-01'
-                              + nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time
-                              + case
-                                  when nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
-                                  then interval '1 day'
-                                  else interval '0 day'
-                                end
-                            )
-                            - (
-                                timestamp '2000-01-01'
-                                + nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
-                              )
-                          )
-                        ) / 3600.0
-                      )
-                      - (
-                          coalesce(
-                            nullif(bas_seg.seg->>'break_mins','')::numeric,
-                            nullif(bas_seg.seg->>'break_minutes','')::numeric,
-                            0
-                          ) / 60.0
-                        ),
-                      0
-                    ),
-                    6
-                  ),
-                  0
-                ),
-              6
-            )
-            else null::numeric
-          end
-        ) as source_rate,
-        coalesce(
-          nullif(bas_seg.seg->>'charge_rate','')::numeric,
-          nullif(bas_seg.seg->>'charge_unit_rate','')::numeric,
-          case
-            when coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) is not null
-             and coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric) <> 0
-            then round(
-              round(coalesce(nullif(bas_seg.seg->>'charge_amount','')::numeric, nullif(bas_seg.seg->>'charge_ex_vat','')::numeric,0),2)
-              / coalesce(nullif(bas_seg.seg->>'units','')::numeric, nullif(bas_seg.seg->>'hours','')::numeric),
-              6
-            )
-            when nullif(btrim(coalesce(bas_seg.seg->>'start_utc','')), '') is not null
-             and nullif(btrim(coalesce(bas_seg.seg->>'end_utc','')), '') is not null
-            then round(
-              round(coalesce(nullif(bas_seg.seg->>'charge_amount','')::numeric, nullif(bas_seg.seg->>'charge_ex_vat','')::numeric,0),2)
-              / nullif(
-                  round(
-                    greatest(
-                      (
-                        extract(
-                          epoch from (
-                            (bas_seg.seg->>'end_utc')::timestamptz
-                            - (bas_seg.seg->>'start_utc')::timestamptz
-                          )
-                        ) / 3600.0
-                      )
-                      - (
-                          coalesce(
-                            nullif(bas_seg.seg->>'break_mins','')::numeric,
-                            nullif(bas_seg.seg->>'break_minutes','')::numeric,
-                            0
-                          ) / 60.0
-                        ),
-                      0
-                    ),
-                    6
-                  ),
-                  0
-                ),
-              6
-            )
-            when nullif(btrim(coalesce(bas_seg.seg->>'start','')), '') is not null
-             and nullif(btrim(coalesce(bas_seg.seg->>'end','')), '') is not null
-            then round(
-              round(coalesce(nullif(bas_seg.seg->>'charge_amount','')::numeric, nullif(bas_seg.seg->>'charge_ex_vat','')::numeric,0),2)
-              / nullif(
-                  round(
-                    greatest(
-                      (
-                        extract(
-                          epoch from (
-                            (
-                              timestamp '2000-01-01'
-                              + nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time
-                              + case
-                                  when nullif(btrim(coalesce(bas_seg.seg->>'end','')), '')::time < nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
-                                  then interval '1 day'
-                                  else interval '0 day'
-                                end
-                            )
-                            - (
-                                timestamp '2000-01-01'
-                                + nullif(btrim(coalesce(bas_seg.seg->>'start','')), '')::time
-                              )
-                          )
-                        ) / 3600.0
-                      )
-                      - (
-                          coalesce(
-                            nullif(bas_seg.seg->>'break_mins','')::numeric,
-                            nullif(bas_seg.seg->>'break_minutes','')::numeric,
-                            0
-                          ) / 60.0
-                        ),
-                      0
-                    ),
-                    6
-                  ),
-                  0
-                ),
-              6
-            )
-            else null::numeric
-          end
-        ) as source_charge_rate,
+        null::numeric as source_rate,
+        null::numeric as source_charge_rate,
         coalesce(
           nullif(btrim(coalesce(bas_seg.seg->>'segment_stable_key','')),''),
           nullif(btrim(coalesce(bas_seg.seg->>'segment_id','')),''),
@@ -6279,9 +5940,7 @@ blocked_items as (
             'ref_num', sse.ref_num,
             'delta_pay_ex_vat', sse.eff_delta_ex_after_reserved,
             'delta_charge_ex_vat', sse.eff_delta_charge_ex_vat,
-            'source_units', sse.source_units,
-            'source_rate', sse.source_rate,
-            'source_charge_rate', sse.source_charge_rate
+            'source_units', sse.source_units
           )
           order by sse.segment_sort_ord nulls last, sse.bucket_row_ord, sse.component_key_type, sse.component_key_value, sse.segment_id nulls last
         )
@@ -13474,8 +13133,6 @@ ts_itemised as (
   );
 end;
 $function$;
-
-
 
 
 
