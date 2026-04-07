@@ -8526,6 +8526,7 @@ ts_itemised as (
      and (
        (
          ptrb.component_key_type in ('TS_DAY','TS_TOTAL')
+         and coalesce(target_row.component_key_value,'') = coalesce(ptrb.component_key_value,'')
          and coalesce(nullif(btrim(coalesce(target_row.source_basis_json->>'bucket_code','')), ''), '') = coalesce(ptrb.basis_bucket_code, '')
          and round(coalesce(target_row.source_rate,0),6) = ptrb.basis_source_rate
          and round(coalesce(target_row.source_charge_rate,0),6) = ptrb.basis_source_charge_rate
