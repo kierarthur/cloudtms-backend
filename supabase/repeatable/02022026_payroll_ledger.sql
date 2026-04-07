@@ -8480,6 +8480,7 @@ ts_itemised as (
        or (
          ptre.source_basis_fingerprint is null
          and ptre.component_key_type in ('TS_DAY','TS_TOTAL')
+         and coalesce(seed_row.component_key_value,'') = coalesce(ptre.component_key_value,'')
          and coalesce(nullif(btrim(coalesce(seed_row.source_basis_json->>'bucket_code','')), ''), '') = coalesce(ptre.bucket_code, '')
          and (ptre.source_rate is null or round(coalesce(seed_row.source_rate,0),6) = ptre.source_rate)
          and (ptre.source_charge_rate is null or round(coalesce(seed_row.source_charge_rate,0),6) = ptre.source_charge_rate)
