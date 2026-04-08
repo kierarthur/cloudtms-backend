@@ -595,14 +595,16 @@ as $$
   cur as (
     select t.timesheet_id as current_timesheet_id
     from public.timesheets t
-    join base b on b.booking_id = t.booking_id
+    join base b
+      on b.booking_id = t.booking_id
     where t.is_current = true
     limit 1
   ),
   ts_ids as (
     select t.timesheet_id::text as ts_id_text
     from public.timesheets t
-    join base b on b.booking_id = t.booking_id
+    join base b
+      on b.booking_id = t.booking_id
 
     union all
 
@@ -610,42 +612,123 @@ as $$
     where not exists (select 1 from base)
   ),
   cw as (
-    select id::text as cw_id_text
-    from public.contract_weeks
-    where timesheet_id = (select current_timesheet_id from cur)
-    order by updated_at desc nulls last, week_ending_date desc
+    select cw1.id::text as cw_id_text
+    from public.contract_weeks cw1
+    where cw1.timesheet_id = (select c.current_timesheet_id from cur c)
+    order by cw1.updated_at desc nulls last, cw1.week_ending_date desc
     limit 1
+  ),
+  ae_scope as (
+    select
+      ae.id,
+      ae.ts_utc,
+      ae.actor_user_id,
+      ae.actor_display,
+      ae.actor_role_at_time,
+      ae.object_type,
+      ae.object_id_text,
+      ae.action,
+      ae.before_json,
+      ae.after_json,
+      ae.reason,
+      ae.ip,
+      ae.user_agent,
+      ae.correlation_id,
+      coalesce(ae.after_json, ae.before_json, '{}'::jsonb) as payload_json
+    from public.audit_events ae
   )
   select
-    ae.id,
-    ae.ts_utc,
-    ae.actor_user_id,
-    coalesce(ae.actor_display, tu.display_name, tu.email, 'CloudTMS server') as actor_display,
-    coalesce(ae.actor_role_at_time, tu.role, 'system') as actor_role_at_time,
-    ae.object_type,
-    ae.object_id_text,
-    ae.action,
-    ae.before_json,
-    ae.after_json,
-    ae.reason,
-    ae.ip,
-    ae.user_agent,
-    ae.correlation_id
-  from public.audit_events ae
+    aes.id,
+    aes.ts_utc,
+    aes.actor_user_id,
+    coalesce(aes.actor_display, tu.display_name, tu.email, 'CloudTMS server') as actor_display,
+    coalesce(aes.actor_role_at_time, tu.role, 'system') as actor_role_at_time,
+    aes.object_type,
+    aes.object_id_text,
+    aes.action,
+    aes.before_json,
+    aes.after_json,
+    aes.reason,
+    aes.ip,
+    aes.user_agent,
+    aes.correlation_id
+  from ae_scope aes
   left join public.tms_users tu
-    on tu.id = ae.actor_user_id
+    on tu.id = aes.actor_user_id
   where
     (
-      ae.object_type in ('timesheet','timesheets')
-      and ae.object_id_text in (select ts_id_text from ts_ids)
+      aes.object_type in ('timesheet', 'timesheets')
+      and aes.object_id_text in (
+        select ti.ts_id_text
+        from ts_ids ti
+      )
     )
     or
     (
-      (select cw_id_text from cw) is not null
-      and ae.object_type in ('contract_week','contract_weeks')
-      and ae.object_id_text = (select cw_id_text from cw)
+      exists (
+        select 1
+        from cw
+      )
+      and aes.object_type in ('contract_week', 'contract_weeks')
+      and aes.object_id_text = (
+        select c2.cw_id_text
+        from cw c2
+      )
     )
-  order by ae.ts_utc desc, ae.id desc
+    or
+    (
+      aes.object_type in ('manual_timesheet_queue', 'manual_timesheet_queues')
+      and aes.action in (
+        'MANUAL_TIMESHEET_QUEUE_ATTACHED',
+        'MANUAL_TIMESHEET_QUEUE_STAGED',
+        'MANUAL_TIMESHEET_QUEUE_STAGED_KIND_UPDATED',
+        'MANUAL_TIMESHEET_QUEUE_STAGED_RETURNED_TO_QUEUE',
+        'MANUAL_TIMESHEET_QUEUE_STAGED_DELETED'
+      )
+      and (
+        trim(coalesce(aes.payload_json ->> 'current_timesheet_id', '')) in (
+          select ti.ts_id_text
+          from ts_ids ti
+        )
+        or trim(coalesce(aes.payload_json ->> 'requested_timesheet_id', '')) in (
+          select ti.ts_id_text
+          from ts_ids ti
+        )
+        or trim(coalesce(aes.payload_json ->> 'timesheet_id', '')) in (
+          select ti.ts_id_text
+          from ts_ids ti
+        )
+        or trim(coalesce(aes.payload_json ->> 'materialised_to_timesheet_id', '')) in (
+          select ti.ts_id_text
+          from ts_ids ti
+        )
+        or trim(coalesce(aes.payload_json ->> 'dematerialised_from_timesheet_id', '')) in (
+          select ti.ts_id_text
+          from ts_ids ti
+        )
+        or (
+          exists (
+            select 1
+            from base b2
+          )
+          and trim(coalesce(aes.payload_json ->> 'dematerialised_from_booking_id', '')) = (
+            select b3.booking_id
+            from base b3
+          )
+        )
+        or (
+          exists (
+            select 1
+            from cw
+          )
+          and trim(coalesce(aes.payload_json ->> 'contract_week_id', '')) = (
+            select c3.cw_id_text
+            from cw c3
+          )
+        )
+      )
+    )
+  order by aes.ts_utc desc, aes.id desc
   limit 500;
 $$;
 
