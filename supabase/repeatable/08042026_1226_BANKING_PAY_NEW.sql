@@ -1375,6 +1375,7 @@ DECLARE
   v_lines_input jsonb := '[]'::jsonb;
   v_payees_input jsonb := '[]'::jsonb;
   v_itemisation_input jsonb := '[]'::jsonb;
+  v_baseline_component_rows jsonb := '[]'::jsonb;
   v_explicit_blocked_input jsonb := '[]'::jsonb;
   v_explicit_do_not_pay_input jsonb := '[]'::jsonb;
   v_explicit_snoozed_input jsonb := '[]'::jsonb;
@@ -1517,6 +1518,12 @@ BEGIN
       THEN COALESCE(v_candidate_effective_root->'snoozed_items', '[]'::jsonb)
     WHEN jsonb_typeof(v_candidate_row_source->'snoozed_items') = 'array'
       THEN COALESCE(v_candidate_row_source->'snoozed_items', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_baseline_component_rows := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'baseline_component_rows') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'baseline_component_rows', '[]'::jsonb)
     ELSE '[]'::jsonb
   END;
 
@@ -2025,9 +2032,11 @@ BEGIN
     'case_resolution_states', v_normalized_case_states,
     'canonical_preview_lines', v_normalized_lines,
     'payees', v_normalized_payees,
+    'itemisation', v_normalized_itemisation,
     'blocked_items', v_blocked_items,
     'do_not_pay_items', v_do_not_pay_items,
     'snoozed_items', v_snoozed_items,
+    'baseline_component_rows', v_baseline_component_rows,
     'paye_candidate', CASE WHEN v_current_pay_method = 'PAYE' THEN v_candidate_row ELSE NULL END,
     'non_paye_payee', CASE WHEN v_current_pay_method = 'PAYE' THEN NULL ELSE v_candidate_row END
   );
@@ -2052,17 +2061,21 @@ DECLARE
   v_case_resolution_states_raw jsonb := '[]'::jsonb;
   v_canonical_preview_lines_raw jsonb := '[]'::jsonb;
   v_payees_raw jsonb := '[]'::jsonb;
+  v_itemisation_raw jsonb := '[]'::jsonb;
   v_blocked_items_raw jsonb := '[]'::jsonb;
   v_do_not_pay_items_raw jsonb := '[]'::jsonb;
   v_snoozed_items_raw jsonb := '[]'::jsonb;
+  v_baseline_component_rows_raw jsonb := '[]'::jsonb;
   v_paye_candidates jsonb := '[]'::jsonb;
   v_non_paye_payees jsonb := '[]'::jsonb;
   v_case_resolution_states jsonb := '[]'::jsonb;
   v_canonical_preview_lines jsonb := '[]'::jsonb;
   v_payees jsonb := '[]'::jsonb;
+  v_itemisation jsonb := '[]'::jsonb;
   v_blocked_items jsonb := '[]'::jsonb;
   v_do_not_pay_items jsonb := '[]'::jsonb;
   v_snoozed_items jsonb := '[]'::jsonb;
+  v_baseline_component_rows jsonb := '[]'::jsonb;
   v_paye_summary_breakdown jsonb := '{}'::jsonb;
   v_summary jsonb := '{}'::jsonb;
   v_candidate_count integer := 0;
@@ -2125,6 +2138,10 @@ BEGIN
       v_payees_raw := v_payees_raw || COALESCE(v_rollup->'payees', '[]'::jsonb);
     END IF;
 
+    IF jsonb_typeof(v_rollup->'itemisation') = 'array' THEN
+      v_itemisation_raw := v_itemisation_raw || COALESCE(v_rollup->'itemisation', '[]'::jsonb);
+    END IF;
+
     IF jsonb_typeof(v_rollup->'blocked_items') = 'array' THEN
       v_blocked_items_raw := v_blocked_items_raw || COALESCE(v_rollup->'blocked_items', '[]'::jsonb);
     END IF;
@@ -2135,6 +2152,10 @@ BEGIN
 
     IF jsonb_typeof(v_rollup->'snoozed_items') = 'array' THEN
       v_snoozed_items_raw := v_snoozed_items_raw || COALESCE(v_rollup->'snoozed_items', '[]'::jsonb);
+    END IF;
+
+    IF jsonb_typeof(v_rollup->'baseline_component_rows') = 'array' THEN
+      v_baseline_component_rows_raw := v_baseline_component_rows_raw || COALESCE(v_rollup->'baseline_component_rows', '[]'::jsonb);
     END IF;
   END LOOP;
 
@@ -2172,6 +2193,24 @@ BEGIN
     )
   INTO v_canonical_preview_lines
   FROM jsonb_array_elements(v_canonical_preview_lines_raw) AS elem(value)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        elem.value
+        ORDER BY
+          BTRIM(COALESCE(elem.value->>'candidate_id', '')),
+          BTRIM(COALESCE(elem.value->>'timesheet_id', '')),
+          BTRIM(COALESCE(elem.value->>'finance_case_id', '')),
+          BTRIM(COALESCE(elem.value->>'segment_id', elem.value->>'segment_stable_key', '')),
+          BTRIM(COALESCE(elem.value->>'line_id', elem.value->>'preview_row_id', elem.value->>'row_id', elem.value->>'id', '')),
+          BTRIM(COALESCE(elem.value->>'line_type', elem.value->>'item_type', elem.value->>'category', elem.value->>'component_kind', elem.value->>'component_type', ''))
+      ),
+      '[]'::jsonb
+    )
+  INTO v_itemisation
+  FROM jsonb_array_elements(v_itemisation_raw) AS elem(value)
   WHERE jsonb_typeof(elem.value) = 'object';
 
   SELECT
@@ -2220,6 +2259,29 @@ BEGIN
     )
   INTO v_snoozed_items
   FROM jsonb_array_elements(v_snoozed_items_raw) AS elem(value)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        elem.value
+        ORDER BY
+          BTRIM(COALESCE(elem.value->>'candidate_id', '')),
+          BTRIM(COALESCE(elem.value->>'case_key', '')),
+          BTRIM(COALESCE(elem.value->>'timesheet_id', '')),
+          BTRIM(COALESCE(elem.value->>'finance_case_id', '')),
+          BTRIM(COALESCE(elem.value->>'finance_component_id', '')),
+          BTRIM(COALESCE(elem.value->>'component_scope', '')),
+          BTRIM(COALESCE(elem.value->>'source_family_key', '')),
+          BTRIM(COALESCE(elem.value->>'component_key_type', '')),
+          BTRIM(COALESCE(elem.value->>'component_key_value', '')),
+          BTRIM(COALESCE(elem.value->>'component_fingerprint', '')),
+          BTRIM(COALESCE(elem.value->>'source_basis_fingerprint', ''))
+      ),
+      '[]'::jsonb
+    )
+  INTO v_baseline_component_rows
+  FROM jsonb_array_elements(v_baseline_component_rows_raw) AS elem(value)
   WHERE jsonb_typeof(elem.value) = 'object';
 
   WITH payee_elements AS (
@@ -2320,32 +2382,9 @@ BEGIN
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
     );
 
-  SELECT COUNT(*)::integer
-  INTO v_blocked_preview_line_count
-  FROM jsonb_array_elements(v_canonical_preview_lines) AS elem(value)
-  WHERE jsonb_typeof(elem.value) = 'object'
-    AND (
-      COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_blocked', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
-      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY')
-    );
-
-  SELECT COUNT(*)::integer
-  INTO v_do_not_pay_line_count
-  FROM jsonb_array_elements(v_canonical_preview_lines) AS elem(value)
-  WHERE jsonb_typeof(elem.value) = 'object'
-    AND (
-      COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_do_not_pay', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
-      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
-    );
-
-  SELECT COUNT(*)::integer
-  INTO v_snoozed_line_count
-  FROM jsonb_array_elements(v_canonical_preview_lines) AS elem(value)
-  WHERE jsonb_typeof(elem.value) = 'object'
-    AND (
-      COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_snoozed', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
-      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
-    );
+  v_blocked_preview_line_count := jsonb_array_length(v_blocked_items);
+  v_do_not_pay_line_count := jsonb_array_length(v_do_not_pay_items);
+  v_snoozed_line_count := jsonb_array_length(v_snoozed_items);
 
   SELECT COUNT(*)::integer
   INTO v_payees_count
@@ -2538,11 +2577,13 @@ BEGIN
     'payees', v_payees,
     'canonical_preview_lines', v_canonical_preview_lines,
     'case_resolution_states', v_case_resolution_states,
+    'itemisation', v_itemisation,
     'paye_candidates', v_paye_candidates,
     'non_paye_payees', v_non_paye_payees,
     'blocked_items', v_blocked_items,
     'do_not_pay_items', v_do_not_pay_items,
-    'snoozed_items', v_snoozed_items
+    'snoozed_items', v_snoozed_items,
+    'baseline_component_rows', v_baseline_component_rows
   );
 END;
 $function$;
