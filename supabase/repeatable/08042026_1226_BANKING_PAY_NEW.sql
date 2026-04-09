@@ -1699,6 +1699,26 @@ BEGIN
     ''
   )));
 
+  IF v_display_name = '' THEN
+    v_display_name := BTRIM(COALESCE(
+      CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'display_name' END,
+      CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'candidate_name' END,
+      CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'display_name' END,
+      CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'candidate_name' END,
+      ''
+    ));
+  END IF;
+
+  IF v_tms_ref = '' THEN
+    v_tms_ref := BTRIM(COALESCE(
+      CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'tms_ref' END,
+      CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'candidate_tms_ref' END,
+      CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'tms_ref' END,
+      CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'candidate_tms_ref' END,
+      ''
+    ));
+  END IF;
+
   v_primary_payee_entity_kind := UPPER(BTRIM(COALESCE(
     v_candidate_row_source->>'payee_entity_kind',
     CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_entity_kind' END,
@@ -1928,7 +1948,7 @@ BEGIN
     'paye_candidates_count', CASE WHEN v_current_pay_method = 'PAYE' THEN 1 ELSE 0 END,
     'non_paye_payees_count', CASE WHEN v_current_pay_method = 'PAYE' THEN 0 ELSE 1 END,
     'ready_candidates_count', CASE WHEN v_is_ready_for_draft THEN 1 ELSE 0 END,
-    'blocked_candidates_count', CASE WHEN v_is_ready_for_draft THEN 0 ELSE 1 END,
+    'blocked_candidates_count', CASE WHEN v_is_review_required THEN 1 ELSE 0 END,
     'case_resolution_state_count', v_case_resolution_state_count,
     'blocked_case_state_count', v_blocked_case_state_count,
     'canonical_preview_line_count', v_canonical_preview_line_count,
@@ -2187,7 +2207,18 @@ BEGIN
   ) AS candidate_rows(value)
   WHERE COALESCE(LOWER(BTRIM(COALESCE(candidate_rows.value->>'is_ready_for_draft', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
 
-  v_blocked_candidates_count := GREATEST(v_candidate_count - v_ready_candidates_count, 0);
+  SELECT COUNT(*)::integer
+  INTO v_blocked_candidates_count
+  FROM (
+    SELECT elem.value
+    FROM jsonb_array_elements(v_paye_candidates) AS elem(value)
+    WHERE jsonb_typeof(elem.value) = 'object'
+    UNION ALL
+    SELECT elem.value
+    FROM jsonb_array_elements(v_non_paye_payees) AS elem(value)
+    WHERE jsonb_typeof(elem.value) = 'object'
+  ) AS candidate_rows(value)
+  WHERE COALESCE(LOWER(BTRIM(COALESCE(candidate_rows.value->>'is_review_required', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
 
   SELECT COUNT(*)::integer
   INTO v_case_resolution_state_count
@@ -11245,32 +11276,6 @@ ts_itemised as (
     when jsonb_typeof(v_candidate_row->'itemisation') = 'array' then coalesce(v_candidate_row->'itemisation', '[]'::jsonb)
     else '[]'::jsonb
   end;
-
-  v_candidate_row := (coalesce(v_candidate_row, '{}'::jsonb)
-    - 'is_ready_for_draft'
-    - 'is_review_required'
-    - 'has_any_delta'
-    - 'blockers'
-    - 'blocked_count'
-    - 'do_not_pay_count'
-    - 'blocked_case_count'
-    - 'safe_case_count'
-    - 'preview_blocked_timesheet_count'
-    - 'preview_ready_timesheet_count'
-    - 'gross_preview_ex_vat_non_mismatch'
-    - 'finance_due_total_ex_vat'
-    - 'finance_safe_due_total_ex_vat'
-    - 'finance_blocked_due_total_ex_vat'
-    - 'mismatch'
-    - 'overpayment_balance_remaining'
-    - 'loan_due_this_week'
-    - 'loan_repaid_wtd'
-    - 'min_take_home_wtd'
-    - 'max_possible_loan_take_this_run'
-    - 'paye_net_status'
-    - 'loan'
-    - 'computed_net_bank_amount_non_mismatch'
-  );
 
   select jsonb_build_object(
     'candidate_count', 1,
