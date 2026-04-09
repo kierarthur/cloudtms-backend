@@ -14675,6 +14675,852 @@ async function handleBankingPayPreview(env, req, user) {
   }
 }
 
+
+async function handleTimesheetCreateManualDaily(env, req) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const candidateId = String(body?.candidate_id || '').trim();
+  const clientId = String(body?.client_id || '').trim();
+
+  if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
+  if (!clientId) return withCORS(env, req, badRequest('client_id is required'));
+
+  const scheduleInput =
+    body && typeof body.schedule_json === 'object' && body.schedule_json && !Array.isArray(body.schedule_json)
+      ? body.schedule_json
+      : null;
+
+  if (!scheduleInput) {
+    return withCORS(env, req, badRequest('schedule_json is required and must be an object'));
+  }
+
+  const now = nowIso();
+
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
+  const lowerOrNull = (v) => {
+    const s = trimStr(v).toLowerCase();
+    return s || null;
+  };
+
+  const normRole = (v) => {
+    const s = trimStr(v).replace(/\s+/g, ' ').trim();
+    return s ? s.toUpperCase() : null;
+  };
+
+  const normBand = (v) => {
+    const s = trimStr(v);
+    if (!s) return null;
+
+    let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+
+    if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+    return s;
+  };
+
+  const toNumPos = (v) => {
+    if (v === '' || v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const normalizePayMethod = (v) => {
+    const s = trimStr(v).toUpperCase();
+    return s === 'PAYE' || s === 'UMBRELLA' ? s : null;
+  };
+
+  const parseYmd = (ymdStr) => {
+    const s = trimStr(ymdStr);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+
+    return { y, mo, d };
+  };
+
+  const addDaysYmd = (ymdStr, days) => {
+    const p = parseYmd(ymdStr);
+    if (!p) return null;
+
+    const dt = new Date(Date.UTC(p.y, p.mo - 1, p.d, 0, 0, 0, 0));
+    dt.setUTCDate(dt.getUTCDate() + Number(days || 0));
+
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+  };
+
+  const normaliseHHMM = (raw) => {
+    let s = trimStr(raw);
+    if (!s) return '';
+
+    if (/^\d{1,2}:\d{2}$/.test(s)) {
+      const [h, m] = s.split(':');
+      const hh = String(Number(h) || 0).padStart(2, '0');
+      const mm = String(Number(m) || 0).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+
+    s = s.replace(':', '');
+    if (!/^\d{1,4}$/.test(s)) return '';
+
+    if (s.length <= 2) {
+      const h = Number(s);
+      if (!Number.isFinite(h)) return '';
+      return `${String(h).padStart(2, '0')}:00`;
+    }
+
+    const mm = s.slice(-2);
+    const hh = s.slice(0, -2);
+    return `${String(Number(hh) || 0).padStart(2, '0')}:${String(Number(mm) || 0).padStart(2, '0')}`;
+  };
+
+  const hhmmToMinutes = (hhmm) => {
+    const m = trimStr(hhmm).match(/^(\d{2}):(\d{2})$/);
+    if (!m) return null;
+
+    const h = Number(m[1]);
+    const mi = Number(m[2]);
+
+    if (!Number.isFinite(h) || !Number.isFinite(mi)) return null;
+    if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+
+    return h * 60 + mi;
+  };
+
+  const uniqueLocalUtcCandidates = (ymdStr, hhmmStr) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushIso = (iso) => {
+      if (!iso) return;
+      const ms = new Date(String(iso)).getTime();
+      if (!Number.isFinite(ms)) return;
+
+      const normalizedIso = new Date(ms).toISOString();
+      if (seen.has(normalizedIso)) return;
+
+      seen.add(normalizedIso);
+      out.push({ iso: normalizedIso, ms });
+    };
+
+    pushIso(ukLocalToUtcISO(ymdStr, hhmmStr, { prefer: 'earlier' }));
+    pushIso(ukLocalToUtcISO(ymdStr, hhmmStr, { prefer: 'later' }));
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveLocalWindowToIso = (startYmd, startHHMM, endYmd, endHHMM, label) => {
+    const startCandidates = uniqueLocalUtcCandidates(startYmd, startHHMM);
+    if (!startCandidates.length) return { error: `Non-existent local start time on ${label}` };
+
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, endHHMM);
+    if (!endCandidates.length) return { error: `Non-existent local end time on ${label}` };
+
+    const pairMap = new Map();
+
+    const pushPair = (startIso, endIso) => {
+      if (!startIso || !endIso) return;
+
+      const startMs = new Date(String(startIso)).getTime();
+      const endMs = new Date(String(endIso)).getTime();
+
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return;
+
+      const key = `${startMs}|${endMs}`;
+      if (pairMap.has(key)) return;
+
+      pairMap.set(key, {
+        start_iso: new Date(startMs).toISOString(),
+        end_iso: new Date(endMs).toISOString(),
+        start_ms: startMs,
+        end_ms: endMs
+      });
+    };
+
+    for (const startCand of startCandidates) {
+      const endAfter = ukLocalToUtcISO(endYmd, endHHMM, { afterIso: startCand.iso, prefer: 'later' });
+      pushPair(startCand.iso, endAfter);
+
+      for (const endCand of endCandidates) {
+        pushPair(startCand.iso, endCand.iso);
+      }
+    }
+
+    const pairs = Array.from(pairMap.values()).sort((a, b) => a.start_ms - b.start_ms || a.end_ms - b.end_ms);
+
+    if (!pairs.length) return { error: `Invalid local time range on ${label}` };
+    if (pairs.length > 1) return { error: `Ambiguous local time range across DST change on ${label}` };
+
+    return pairs[0];
+  };
+
+  const mapScheduleJsonToIso = (scheduleJson, workedDateFallback) => {
+    const seg = scheduleJson && typeof scheduleJson === 'object' && !Array.isArray(scheduleJson) ? scheduleJson : null;
+    if (!seg) return { error: 'schedule_json must be an object.' };
+
+    const ymdStr = trimStr(seg.date || workedDateFallback || '');
+    if (!ymdStr || !parseYmd(ymdStr)) {
+      return { error: 'schedule_json.date must be a valid YYYY-MM-DD.' };
+    }
+
+    const startHHMM = normaliseHHMM(seg.start || '');
+    const endHHMM = normaliseHHMM(seg.end || '');
+
+    const hasStart = !!startHHMM;
+    const hasEnd = !!endHHMM;
+
+    if (hasStart !== hasEnd) {
+      return { error: 'schedule_json.start and schedule_json.end must both be present (or both blank).' };
+    }
+
+    let worked_start_iso = null;
+    let worked_end_iso = null;
+    let worked_minutes = null;
+
+    if (hasStart && hasEnd) {
+      const shiftStartMin0 = hhmmToMinutes(startHHMM);
+      const shiftEndMin0 = hhmmToMinutes(endHHMM);
+
+      if (shiftStartMin0 == null || shiftEndMin0 == null) {
+        return { error: 'schedule_json.start/end must be valid HH:MM.' };
+      }
+      if (shiftStartMin0 === shiftEndMin0) {
+        return { error: 'schedule_json.start cannot equal schedule_json.end.' };
+      }
+
+      const shiftEndAdj = shiftEndMin0 > shiftStartMin0 ? shiftEndMin0 : shiftEndMin0 + 1440;
+      const endDayAdd = Math.floor(shiftEndAdj / 1440);
+      const endYmd = addDaysYmd(ymdStr, endDayAdd);
+      const endHHMMAdj = `${String(Math.floor((shiftEndAdj % 1440) / 60)).padStart(2, '0')}:${String(shiftEndAdj % 60).padStart(2, '0')}`;
+
+      const workedResolved = resolveLocalWindowToIso(ymdStr, startHHMM, endYmd, endHHMMAdj, 'worked shift');
+      if (workedResolved.error) return { error: workedResolved.error };
+
+      worked_start_iso = workedResolved.start_iso;
+      worked_end_iso = workedResolved.end_iso;
+      worked_minutes = Math.round((workedResolved.end_ms - workedResolved.start_ms) / 60000);
+
+      if (!(worked_minutes > 0)) {
+        return { error: 'Worked shift duration must be at least 1 minute.' };
+      }
+    }
+
+    const breaksArr = Array.isArray(seg.breaks) ? seg.breaks.filter(Boolean) : [];
+    if (breaksArr.length > 1) {
+      return { error: 'schedule_json supports only one break window. Remove extra breaks or use break_minutes only.' };
+    }
+
+    const breakObj = breaksArr[0] || null;
+
+    const breakStartRaw = breakObj ? breakObj.start : seg.break_start;
+    const breakEndRaw = breakObj ? breakObj.end : seg.break_end;
+
+    const breakStartHHMM = normaliseHHMM(breakStartRaw || '');
+    const breakEndHHMM = normaliseHHMM(breakEndRaw || '');
+
+    const hasBrStart = !!breakStartHHMM;
+    const hasBrEnd = !!breakEndHHMM;
+
+    if (hasBrStart !== hasBrEnd) {
+      return { error: 'schedule_json.break_start and schedule_json.break_end must both be present (or both blank).' };
+    }
+
+    let break_start_iso = null;
+    let break_end_iso = null;
+    let break_minutes = null;
+
+    const rawBreakMinutes =
+      seg.break_minutes === '' || seg.break_minutes == null
+        ? null
+        : Number(seg.break_minutes);
+
+    if ((hasBrStart || hasBrEnd || rawBreakMinutes != null) && !(worked_start_iso && worked_end_iso)) {
+      return { error: 'You cannot set break times/minutes without worked start and end times.' };
+    }
+
+    if (hasBrStart && hasBrEnd) {
+      const shiftStartMs = new Date(worked_start_iso).getTime();
+      const shiftEndMs = new Date(worked_end_iso).getTime();
+      const shiftStartLocalMin = hhmmToMinutes(startHHMM);
+
+      const brStartMin0 = hhmmToMinutes(breakStartHHMM);
+      const brEndMin0 = hhmmToMinutes(breakEndHHMM);
+
+      if (brStartMin0 == null || brEndMin0 == null) {
+        return { error: 'schedule_json.break_start/end must be valid HH:MM.' };
+      }
+      if (brStartMin0 === brEndMin0) {
+        return { error: 'schedule_json.break_start cannot equal schedule_json.break_end.' };
+      }
+
+      let brStartAdj = brStartMin0;
+      let brEndAdj = brEndMin0;
+
+      while (brStartAdj < shiftStartLocalMin) brStartAdj += 1440;
+      if (brEndAdj <= brStartAdj) brEndAdj += 1440;
+
+      if (brEndAdj > shiftStartLocalMin + Math.round((shiftEndMs - shiftStartMs) / 60000)) {
+        return { error: 'Break window must be fully within the worked shift span.' };
+      }
+
+      const brStartDayAdd = Math.floor(brStartAdj / 1440);
+      const brEndDayAdd = Math.floor(brEndAdj / 1440);
+
+      const brStartYmd = addDaysYmd(ymdStr, brStartDayAdd);
+      const brEndYmd = addDaysYmd(ymdStr, brEndDayAdd);
+
+      const brStartHHMMAdj = `${String(Math.floor((brStartAdj % 1440) / 60)).padStart(2, '0')}:${String(brStartAdj % 60).padStart(2, '0')}`;
+      const brEndHHMMAdj = `${String(Math.floor((brEndAdj % 1440) / 60)).padStart(2, '0')}:${String(brEndAdj % 60).padStart(2, '0')}`;
+
+      const breakResolved = resolveLocalWindowToIso(brStartYmd, brStartHHMMAdj, brEndYmd, brEndHHMMAdj, 'break window');
+      if (breakResolved.error) return { error: breakResolved.error };
+
+      if (!(breakResolved.start_ms >= shiftStartMs && breakResolved.end_ms <= shiftEndMs)) {
+        return { error: 'Break window must be fully within the worked shift span.' };
+      }
+
+      break_start_iso = breakResolved.start_iso;
+      break_end_iso = breakResolved.end_iso;
+      break_minutes = Math.round((breakResolved.end_ms - breakResolved.start_ms) / 60000);
+
+      if (!(break_minutes > 0)) {
+        return { error: 'Break duration must be > 0 minutes.' };
+      }
+      if (worked_minutes != null && break_minutes > worked_minutes) {
+        return { error: 'Break duration cannot exceed the worked shift duration.' };
+      }
+    } else if (rawBreakMinutes != null) {
+      if (!Number.isFinite(rawBreakMinutes) || rawBreakMinutes < 0) {
+        return { error: 'schedule_json.break_minutes must be a non-negative number.' };
+      }
+
+      break_minutes = Math.round(rawBreakMinutes);
+
+      if (worked_minutes != null && break_minutes > worked_minutes) {
+        return { error: 'schedule_json.break_minutes cannot exceed the worked shift duration.' };
+      }
+    }
+
+    return {
+      ymd: ymdStr,
+      worked_start_iso,
+      worked_end_iso,
+      break_start_iso,
+      break_end_iso,
+      break_minutes,
+      worked_minutes,
+      normalized_schedule_json: {
+        date: ymdStr,
+        start: startHHMM || '',
+        end: endHHMM || '',
+        break_start: breakStartHHMM || '',
+        break_end: breakEndHHMM || '',
+        break_minutes: break_minutes == null ? '' : break_minutes
+      }
+    };
+  };
+
+  const candidate = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/candidates` +
+      `?id=eq.${enc(candidateId)}` +
+      `&select=id,display_name,first_name,last_name,key_norm,pay_method,umbrella_id,roles,mileage_pay_rate` +
+      `&limit=1`
+  );
+  if (!candidate) return withCORS(env, req, notFound('Candidate not found'));
+
+  const client = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/clients` +
+      `?id=eq.${enc(clientId)}` +
+      `&select=id,name,mileage_charge_rate` +
+      `&limit=1`
+  );
+  if (!client) return withCORS(env, req, notFound('Client not found'));
+
+  const workedDateFallback = trimStr(body?.worked_date_ymd || '');
+  const mappedSchedule = mapScheduleJsonToIso(scheduleInput, workedDateFallback);
+  if (mappedSchedule && mappedSchedule.error) {
+    return withCORS(env, req, badRequest(mappedSchedule.error));
+  }
+
+  const dateYmd = mappedSchedule.ymd;
+
+  const inputRole = normRole(body?.role);
+  const inputBand = normBand(body?.band);
+  const gradeRaw = trimStr(body?.gradeRaw || '') || null;
+
+  let resolvedRole = inputRole;
+  let resolvedBand = inputBand;
+
+  if (!resolvedRole && gradeRaw) {
+    const mappedRole = await mapRequestGradeToRole(env, {
+      client_id: clientId,
+      candidate_id: candidateId,
+      gradeRaw,
+      dateYmd,
+      candidate_roles: null
+    });
+
+    if (mappedRole?.role) resolvedRole = normRole(mappedRole.role);
+    if (!resolvedBand && mappedRole?.band) resolvedBand = normBand(mappedRole.band);
+  }
+
+  const generatedId =
+    (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`).toString();
+
+  const hospitalRaw = trimStr(body?.hospital || '') || trimStr(client?.name || '');
+  const wardRaw = trimStr(body?.ward || '');
+  const shiftLabelRaw = trimStr(body?.shift_label || '') || `daily-manual-${generatedId}`;
+
+  const occupantKeyNorm = lowerOrNull(
+    candidate?.key_norm ||
+    candidate?.display_name ||
+    [candidate?.first_name, candidate?.last_name].filter(Boolean).join(' ') ||
+    candidateId
+  );
+
+  const hospitalNorm = lowerOrNull(hospitalRaw);
+  const wardNorm = lowerOrNull(wardRaw);
+  const jobTitleNorm = lowerOrNull(resolvedRole);
+  const shiftLabelNorm = lowerOrNull(shiftLabelRaw);
+
+  const bookingId = await makeBookingId(
+    candidateId,
+    dateYmd,
+    hospitalNorm,
+    wardNorm,
+    jobTitleNorm,
+    shiftLabelNorm || ''
+  );
+
+  if (!bookingId || bookingId === '{}' || bookingId === 'null' || bookingId === 'undefined') {
+    return withCORS(env, req, badRequest(`Invalid booking_id produced: "${bookingId}"`));
+  }
+
+  const weekEndingDate = weekEndingSunday(dateYmd);
+
+  const candidateHintText = {
+    candidate_id: candidateId,
+    display_name: candidate?.display_name || null,
+    first_name: candidate?.first_name || null,
+    last_name: candidate?.last_name || null
+  };
+
+  const tsInsert = [{
+    booking_id: bookingId,
+    version: 1,
+    is_current: true,
+    status: 'RECEIVED',
+
+    occupant_key_norm: occupantKeyNorm,
+    hospital_norm: hospitalNorm,
+    ward_norm: wardNorm,
+    job_title_norm: jobTitleNorm,
+    shift_label_norm: shiftLabelNorm,
+
+    scheduled_start_iso: mappedSchedule.worked_start_iso,
+    scheduled_end_iso: mappedSchedule.worked_end_iso,
+    worked_start_iso: mappedSchedule.worked_start_iso,
+    worked_end_iso: mappedSchedule.worked_end_iso,
+    break_start_iso: mappedSchedule.break_start_iso,
+    break_end_iso: mappedSchedule.break_end_iso,
+    break_minutes: mappedSchedule.break_minutes,
+    worked_minutes: mappedSchedule.worked_minutes,
+
+    week_ending_date: weekEndingDate,
+
+    auth_name: null,
+    auth_job_title: null,
+    authorised_at_server: null,
+
+    r2_nurse_key: null,
+    r2_auth_key: null,
+    img_sha256_nurse: null,
+    img_sha256_auth: null,
+
+    reference_number: null,
+    reference_set_at: null,
+
+    idempotency_key: generatedId,
+    client_hash: null,
+    client_ua: req.headers.get('user-agent') || '',
+
+    created_at: now,
+    updated_at: now,
+
+    contract_id: null,
+    submission_mode: 'MANUAL',
+    manual_pdf_r2_key: null,
+    line_type: 'HOURS',
+    sheet_scope: 'DAILY',
+
+    actual_schedule_json: mappedSchedule.normalized_schedule_json,
+    additional_units_week: {},
+    additional_units_per_day: {},
+
+    qr_token: null,
+    qr_status: null,
+    qr_payload_json: {},
+    qr_generated_at: null,
+    qr_scanned_at: null,
+    qr_scan_info_json: null,
+    qr_r2_key: null,
+
+    day_references_json: null,
+    manual_pdf_rotation_degrees: 0,
+    qr_last_sent_hash: null,
+    qr_last_sent_at_utc: null,
+    qr_signed_hash: null,
+    qr_signed_at_utc: null,
+
+    candidate_hint_text: candidateHintText,
+    band: resolvedBand,
+    generated_pdf_at_utc: null,
+
+    is_adjustment: false,
+    parent_timesheet_id: null,
+
+    generated_pdf_refs_sig: null,
+    generated_pdf_refs_snapshot_json: null,
+    generated_pdf_refs_captured_at_utc: null,
+    qr_sent_refs_sig: null,
+    qr_sent_refs_snapshot_json: null,
+    qr_sent_refs_captured_at_utc: null,
+
+    correction_id: null,
+    correction_kind: null,
+    adjustment_origin: null
+  }];
+
+  const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheets`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify(tsInsert)
+  });
+
+  if (!ins.ok) {
+    return withCORS(env, req, serverError(await ins.text()));
+  }
+
+  const createdTs = (await ins.json().catch(() => []))[0] || null;
+  if (!createdTs?.timesheet_id) {
+    return withCORS(env, req, serverError('Failed to create manual daily timesheet'));
+  }
+
+  const policy = await loadPolicy(env, clientId, dateYmd);
+
+  let segments = [];
+  if (mappedSchedule.worked_start_iso && mappedSchedule.worked_end_iso) {
+    segments.push([mappedSchedule.worked_start_iso, mappedSchedule.worked_end_iso]);
+  }
+
+  segments = subtractBreak(
+    segments,
+    mappedSchedule.break_start_iso || null,
+    mappedSchedule.break_end_iso || null,
+    mappedSchedule.break_minutes || null
+  );
+
+  const hours = classifyMinutes(env, policy, segments);
+
+  const totalHoursWorked = round2(
+    (hours.hours_day || 0) +
+    (hours.hours_night || 0) +
+    (hours.hours_sat || 0) +
+    (hours.hours_sun || 0) +
+    (hours.hours_bh || 0)
+  );
+
+  const rates = await resolveRates(env, {
+    candidate_id: candidateId,
+    client_id: clientId,
+    role: resolvedRole || null,
+    band: resolvedBand || null,
+    dateYmd
+  });
+
+  const missingRates = anyMissingRates(
+    {
+      day: hours.hours_day,
+      night: hours.hours_night,
+      sat: hours.hours_sat,
+      sun: hours.hours_sun,
+      bh: hours.hours_bh
+    },
+    rates.pay,
+    rates.charge
+  );
+
+  let umbrella = null;
+  if (candidate?.umbrella_id) {
+    try {
+      umbrella = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/umbrellas` +
+          `?id=eq.${enc(candidate.umbrella_id)}` +
+          `&select=id,name,bank_name,sort_code,account_number` +
+          `&limit=1`
+      );
+    } catch {
+      umbrella = null;
+    }
+  }
+
+  let payChannelBad = false;
+  try {
+    if (typeof resolveEffectivePayChannel === 'function') {
+      const channel = resolveEffectivePayChannel({
+        pay_method: normalizePayMethod(candidate?.pay_method),
+        candidate,
+        umbrella
+      });
+      payChannelBad = !channel || channel.ok === false;
+    }
+  } catch {
+    payChannelBad = true;
+  }
+
+  let fin = null;
+  try {
+    const fwRows = await sbRpc(env, 'settings_finance_pick', { p_date: dateYmd || null });
+    const fw = Array.isArray(fwRows) ? fwRows[0] : fwRows;
+    fin = fw && typeof fw === 'object' ? fw : null;
+  } catch {
+    fin = null;
+  }
+
+  const mileagePayRate =
+    toNumPos(fin?.mileage_pay_defaults) ??
+    toNumPos(candidate?.mileage_pay_rate) ??
+    null;
+
+  const mileageChargeRate =
+    toNumPos(fin?.mileage_charge_defaults) ??
+    toNumPos(client?.mileage_charge_rate) ??
+    null;
+
+  const mileageRateSource =
+    (toNumPos(fin?.mileage_pay_defaults) != null || toNumPos(fin?.mileage_charge_defaults) != null)
+      ? 'FINANCE_WINDOW_DEFAULT'
+      : (toNumPos(candidate?.mileage_pay_rate) != null || toNumPos(client?.mileage_charge_rate) != null)
+          ? 'CANDIDATE_CLIENT'
+          : null;
+
+  const payMethod = normalizePayMethod(candidate?.pay_method);
+
+  const basePayExVat = round2(
+    (hours.hours_day * asNumberLocal(rates.pay?.day)) +
+    (hours.hours_night * asNumberLocal(rates.pay?.night)) +
+    (hours.hours_sat * asNumberLocal(rates.pay?.sat)) +
+    (hours.hours_sun * asNumberLocal(rates.pay?.sun)) +
+    (hours.hours_bh * asNumberLocal(rates.pay?.bh))
+  );
+
+  const baseChargeExVat = round2(
+    (hours.hours_day * asNumberLocal(rates.charge?.day)) +
+    (hours.hours_night * asNumberLocal(rates.charge?.night)) +
+    (hours.hours_sat * asNumberLocal(rates.charge?.sat)) +
+    (hours.hours_sun * asNumberLocal(rates.charge?.sun)) +
+    (hours.hours_bh * asNumberLocal(rates.charge?.bh))
+  );
+
+  const marginExVat = round2(baseChargeExVat - basePayExVat);
+
+  const paymentReadyLite = !!(
+    payMethod === 'PAYE' &&
+    !missingRates &&
+    !payChannelBad
+  );
+
+  const payWtrRatePctSnapshot =
+    paymentReadyLite
+      ? asNumberLocal(policy?.holiday_pay_pct, null)
+      : null;
+
+  const snapshot = {
+    timesheet_id: createdTs.timesheet_id,
+    timesheet_version: createdTs.version || 1,
+    basis: 'SELF_REPORTED',
+
+    occupant_key_norm: createdTs.occupant_key_norm || null,
+    worked_start_iso: createdTs.worked_start_iso || null,
+    worked_end_iso: createdTs.worked_end_iso || null,
+    break_start_iso: createdTs.break_start_iso || null,
+    break_end_iso: createdTs.break_end_iso || null,
+    break_minutes: createdTs.break_minutes ?? null,
+
+    candidate_id: candidateId,
+    client_id: clientId,
+
+    role: resolvedRole || null,
+    band: resolvedBand || null,
+
+    pay_method: payMethod,
+
+    policy_snapshot_json: policy,
+    rate_source_refs_json: {
+      ...(rates?.source && typeof rates.source === 'object' ? rates.source : {}),
+      mileage_rate_source: mileageRateSource
+    },
+
+    hours_day: hours.hours_day,
+    hours_night: hours.hours_night,
+    hours_sat: hours.hours_sat,
+    hours_sun: hours.hours_sun,
+    hours_bh: hours.hours_bh,
+
+    pay_day: rates.pay?.day ?? null,
+    pay_night: rates.pay?.night ?? null,
+    pay_sat: rates.pay?.sat ?? null,
+    pay_sun: rates.pay?.sun ?? null,
+    pay_bh: rates.pay?.bh ?? null,
+
+    charge_day: rates.charge?.day ?? null,
+    charge_night: rates.charge?.night ?? null,
+    charge_sat: rates.charge?.sat ?? null,
+    charge_sun: rates.charge?.sun ?? null,
+    charge_bh: rates.charge?.bh ?? null,
+
+    total_hours: totalHoursWorked,
+    total_pay_ex_vat: basePayExVat,
+    total_charge_ex_vat: baseChargeExVat,
+    margin_ex_vat: marginExVat,
+
+    additional_units_json: {},
+    additional_pay_ex_vat: 0,
+    additional_charge_ex_vat: 0,
+    additional_margin_ex_vat: 0,
+
+    expenses_pay_ex_vat: 0,
+    expenses_charge_ex_vat: 0,
+    expenses_description: null,
+    expenses_evidence_r2_key: null,
+    expenses_evidence_manifest: null,
+
+    mileage_units: 0,
+    mileage_pay_ex_vat: 0,
+    mileage_charge_ex_vat: 0,
+    mileage_evidence_r2_key: null,
+    mileage_evidence_manifest: null,
+    mileage_pay_rate: mileagePayRate,
+    mileage_charge_rate: mileageChargeRate,
+
+    pay_wtr_rate_pct_snapshot: payWtrRatePctSnapshot,
+    candidate_assignment: 'ASSIGNED',
+    processing_status: 'UNPROCESSED',
+
+    has_rate_issue: !!missingRates,
+    has_pay_channel_issue: !!payChannelBad,
+
+    invoice_breakdown_json: {
+      mode: 'AGGREGATE',
+      base_hours: {
+        day: hours.hours_day,
+        night: hours.hours_night,
+        sat: hours.hours_sat,
+        sun: hours.hours_sun,
+        bh: hours.hours_bh,
+        pay_rates: {
+          day: rates.pay?.day ?? null,
+          night: rates.pay?.night ?? null,
+          sat: rates.pay?.sat ?? null,
+          sun: rates.pay?.sun ?? null,
+          bh: rates.pay?.bh ?? null
+        },
+        charge_rates: {
+          day: rates.charge?.day ?? null,
+          night: rates.charge?.night ?? null,
+          sat: rates.charge?.sat ?? null,
+          sun: rates.charge?.sun ?? null,
+          bh: rates.charge?.bh ?? null
+        },
+        pay_ex_vat: basePayExVat,
+        charge_ex_vat: baseChargeExVat
+      },
+      additional: {
+        units: {},
+        pay_ex_vat: 0,
+        charge_ex_vat: 0,
+        margin_ex_vat: 0
+      },
+      totals: {
+        total_pay_ex_vat: basePayExVat,
+        total_charge_ex_vat: baseChargeExVat,
+        margin_ex_vat: marginExVat
+      }
+    },
+
+    created_at: now,
+    updated_at: now
+  };
+
+  try {
+    await writeSnapshot(env, snapshot);
+  } catch (e) {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(createdTs.timesheet_id)}&is_current=eq.true`,
+      {
+        method: 'DELETE',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
+      }
+    ).catch(() => {});
+
+    return withCORS(
+      env,
+      req,
+      serverError(String(e?.message || e || 'Failed to create initial TSFIN snapshot'))
+    );
+  }
+
+  try {
+    await writeAudit(
+      env,
+      user,
+      'TIMESHEET_CREATED',
+      {
+        timesheet_id: createdTs.timesheet_id,
+        candidate_id: candidateId,
+        client_id: clientId,
+        sheet_scope: 'DAILY',
+        submission_mode: 'MANUAL',
+        source: 'timesheet_create_manual_daily',
+        work_date: dateYmd,
+        created_unprocessed: true,
+        role: resolvedRole || null,
+        band: resolvedBand || null
+      },
+      { entity: 'timesheets', subject_id: createdTs.timesheet_id, req }
+    );
+  } catch {}
+
+  return withCORS(env, req, ok({
+    timesheet_id: createdTs.timesheet_id,
+    current_timesheet_id: createdTs.timesheet_id,
+    created_unprocessed: true
+  }));
+}
+
+
+
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -22251,20 +23097,25 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return (Number.isFinite(n) && n > 0) ? n : null;
   };
 
+  const normaliseExpenseNumber = (value, fieldName) => {
+    if (value == null || value === '') return 0;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new Error(`Invalid ${fieldName}; value must be >= 0`);
+    }
+    return round2(n);
+  };
+
   const normaliseExpenseDraft = (src) => {
     const obj = (src && typeof src === 'object') ? src : {};
-    const asNonNeg2 = (val) => {
-      const n = Number(val == null || val === '' ? 0 : val);
-      return (Number.isFinite(n) && n > 0) ? round2(n) : 0;
-    };
     return {
-      mileage_units: asNonNeg2(obj.mileage_units),
-      travel_pay: asNonNeg2(obj.travel_pay),
-      travel_charge: asNonNeg2(obj.travel_charge),
-      accommodation_pay: asNonNeg2(obj.accommodation_pay),
-      accommodation_charge: asNonNeg2(obj.accommodation_charge),
-      other_pay: asNonNeg2(obj.other_pay),
-      other_charge: asNonNeg2(obj.other_charge),
+      mileage_units: normaliseExpenseNumber(obj.mileage_units, 'expenses_draft.mileage_units'),
+      travel_pay: normaliseExpenseNumber(obj.travel_pay, 'expenses_draft.travel_pay'),
+      travel_charge: normaliseExpenseNumber(obj.travel_charge, 'expenses_draft.travel_charge'),
+      accommodation_pay: normaliseExpenseNumber(obj.accommodation_pay, 'expenses_draft.accommodation_pay'),
+      accommodation_charge: normaliseExpenseNumber(obj.accommodation_charge, 'expenses_draft.accommodation_charge'),
+      other_pay: normaliseExpenseNumber(obj.other_pay, 'expenses_draft.other_pay'),
+      other_charge: normaliseExpenseNumber(obj.other_charge, 'expenses_draft.other_charge'),
       note: String(obj.note ?? obj.notes ?? '').trim()
     };
   };
@@ -22512,7 +23363,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         // windows mode
         delete seg.break_mins;
         delete seg.break_minutes;
-        delete seg.break_minutes; // (keep once if duplicated)
+        delete seg.break_minutes;
       } else {
         // minutes mode (only if >0)
         const bm = Number(seg.break_mins ?? seg.break_minutes ?? 0);
@@ -22537,7 +23388,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return out;
   };
 
-   actual_schedule_json = normaliseSchedule(actual_schedule_json);
+  actual_schedule_json = normaliseSchedule(actual_schedule_json);
 
   wlog('schedule_normalised', {
     schedule_segments: actual_schedule_json.length
@@ -22593,7 +23444,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       if (!code) continue;
 
       const n = Number(vRaw);
-      // ✅ Only allow positive numbers (reject negatives + NaN + 0)
       if (!Number.isFinite(n) || n <= 0) continue;
 
       out[code] = n;
@@ -22614,7 +23464,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
 
         const n = Number(vRaw);
-        // ✅ Only allow positive numbers (reject negatives + NaN + 0)
         if (!Number.isFinite(n) || n <= 0) continue;
 
         days[ymd] = n;
@@ -22675,9 +23524,45 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   const existingWeekTotalsForDraft =
     (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
 
-  const expensesDraft = normaliseExpenseDraft(
-    parseMaybeJsonObj(existingWeekTotalsForDraft.expenses_draft) || {}
-  );
+  const hasExpensesDraftKey = !!(body && Object.prototype.hasOwnProperty.call(body, 'expenses_draft'));
+
+  let expensesDraft = null;
+  if (hasExpensesDraftKey) {
+    let parsedExpenseDraft = body.expenses_draft;
+
+    if (parsedExpenseDraft === null) {
+      parsedExpenseDraft = {};
+    } else if (typeof parsedExpenseDraft === 'string') {
+      const s = String(parsedExpenseDraft).trim();
+      if (!s) {
+        parsedExpenseDraft = {};
+      } else {
+        try {
+          parsedExpenseDraft = JSON.parse(s);
+        } catch {
+          return withCORS(env, req, badRequest('Invalid expenses_draft JSON'));
+        }
+      }
+    }
+
+    if (parsedExpenseDraft != null && typeof parsedExpenseDraft !== 'object') {
+      return withCORS(env, req, badRequest('expenses_draft must be an object'));
+    }
+
+    try {
+      expensesDraft = normaliseExpenseDraft(parsedExpenseDraft || {});
+    } catch (e) {
+      return withCORS(env, req, badRequest(e?.message || 'Invalid expenses_draft'));
+    }
+  } else {
+    try {
+      expensesDraft = normaliseExpenseDraft(
+        parseMaybeJsonObj(existingWeekTotalsForDraft.expenses_draft) || {}
+      );
+    } catch (e) {
+      return withCORS(env, req, badRequest(e?.message || 'Invalid stored expenses_draft'));
+    }
+  }
 
   wlog('expenses_draft_loaded', {
     has_expense_claims: hasPositiveExpenseDraftClaims(expensesDraft),
@@ -22858,7 +23743,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   additional_pay_ex_vat = +Number(additional_pay_ex_vat).toFixed(2);
   additional_charge_ex_vat = +Number(additional_charge_ex_vat).toFixed(2);
   const additional_margin_ex_vat = +Number(additional_charge_ex_vat - additional_pay_ex_vat).toFixed(2);
-  // Load current timesheet row (if exists)
+
   let ts = currentTimesheetIdForWeek
     ? await sbGetOne(
         env,
@@ -22932,17 +23817,14 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   }
 
   // ✅ Preserve financial adjustments across recompute (even when schedule changes)
-  // Use the current TSFIN snapshot (if present) as the source of truth.
   const preservedFin = finLock || null;
 
-  // Helper: rotate the current timesheet version (preserve old QR/signed evidence by revoking old current)
   const rotateTimesheetVersion = async (currentTs, revokeReason, qrActionForNew) => {
     if (!currentTs || !currentTs.timesheet_id) return currentTs;
 
     const bookingId = currentTs.booking_id || null;
     if (!bookingId) throw new Error('Cannot rotate: booking_id missing on current timesheet');
 
-    // Determine next version by booking_id
     let nextVersion = Number(currentTs.version || 1) + 1;
     try {
       const { rows: vRows } = await sbFetch(
@@ -22968,7 +23850,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       qr_action_for_new: qrActionForNew || null
     });
 
-    // Demote any current row for this booking_id
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?booking_id=eq.${enc(bookingId)}` +
@@ -23006,9 +23887,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       revoked_reason: null,
       revoked_by: null,
 
-      // ✅ New truth model:
-      // INVALIDATE/REISSUE/ISSUE => QR enabled but not issued (token/gen cleared, qr_status=PENDING)
-      // REVOKE_TO_MANUAL        => manual-only (qr fields cleared so QR UI won't show)
       qr_token: null,
       qr_status: newIsQrPending ? 'PENDING' : null,
       qr_payload_json: {},
@@ -23017,14 +23895,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       qr_scan_info_json: null,
       qr_r2_key: null,
 
-      // ✅ Hash-truth fields (must exist in DB)
       qr_last_sent_hash: null,
       qr_last_sent_at_utc: null,
       qr_signed_hash: null,
       qr_signed_at_utc: null,
 
-      // ✅ Critical: a rotated "new current" must NOT keep any signed/manual evidence or authorisation.
-      // The old signed copy remains on the revoked version for audit/history.
       manual_pdf_r2_key: null,
       authorised_at_server: null,
 
@@ -23055,7 +23930,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       new_is_manual_only: !!newIsManualOnly
     });
 
-    // ✅ NEW: Purge superseded versions immediately (best-effort; never blocks caller)
     try {
       await purgeSupersededTimesheetArtifactsForBooking(env, bookingId);
     } catch (e) {
@@ -23070,8 +23944,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return created || null;
   };
 
-  // Determine QR action (enum preferred, legacy booleans fallback)
-  let qrAction = null; // 'INVALIDATE' | 'REISSUE' | 'REVOKE_TO_MANUAL' | 'ISSUE' | null
+  let qrAction = null;
   if (enumOk(qrActionEnumRaw)) {
     qrAction = qrActionEnumRaw;
   } else {
@@ -23079,9 +23952,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     else if (rawRevokeQr) qrAction = 'REVOKE_TO_MANUAL';
   }
 
-  // If QR action on existing QR timesheet, rotate FIRST so:
-  // - the old signed/issued QR evidence stays on the revoked version for audit
-  // - the new current version is clean / truthy for hashes + UI rules
   const hadQrBefore = !!(ts && (ts.qr_status || ts.qr_token || ts.qr_generated_at || ts.qr_scanned_at));
 
   if (
@@ -23101,7 +23971,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     }
     ts = rotated;
 
-    // Move contract_week pointer to the new current timesheet id
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(cw.id)}`,
       {
@@ -23117,10 +23986,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     });
   }
 
-  // processing status:
-  // - INVALIDATE/REISSUE/ISSUE => QR-enabled but not issued (awaiting signature evidence once sent)
-  // - REVOKE_TO_MANUAL         => manual-only (admin will upload signature evidence manually)
-  // In both cases we are still awaiting signature evidence, so keep AWAITING_MANUAL_SIGNATURE.
   const processingStatus =
     (qrAction === 'INVALIDATE' || qrAction === 'REISSUE' || qrAction === 'ISSUE' || qrAction === 'REVOKE_TO_MANUAL')
       ? 'AWAITING_MANUAL_SIGNATURE'
@@ -23129,7 +23994,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   let createdNow = false;
 
   if (!ts) {
-    // create new timesheet for this contract_week
     const occupant_norm = (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase();
     const hospital_norm = (contract.display_site || client?.name || String(contract.client_id)).toLowerCase();
     const ward_norm     = (contract.ward_hint || 'contract').toLowerCase();
@@ -23152,27 +24016,21 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       hospital_norm, ward_norm, job_title_norm,
       shift_label_norm: 'weekly',
       week_ending_date: cw.week_ending_date,
-      r2_nurse_key: null, r2_auth_key: null,
+      r2_nurse_key: null,
+      r2_auth_key: null,
       contract_id: contract.id,
       sheet_scope: 'WEEKLY',
       submission_mode: 'MANUAL',
-
-         manual_pdf_r2_key: null,
+      manual_pdf_r2_key: null,
       manual_pdf_rotation_degrees: 0,
       line_type: 'HOURS',
-
-      // ✅ schedule-driven truth
       actual_schedule_json,
-
       additional_units_week: unitsWeek || {},
       additional_units_per_day: unitsPerDay || {},
-
-      // per-day refs are obsolete in this flow (per-shift ref_num lives inside schedule)
       day_references_json: null,
-
       authorised_at_server: null,
-      created_at: nowIso2, updated_at: nowIso2,
-
+      created_at: nowIso2,
+      updated_at: nowIso2,
       qr_payload_json: {},
       qr_status: null,
       qr_token: null,
@@ -23192,7 +24050,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     ts = (await ins.json().catch(() => []))[0];
     createdNow = true;
 
-     wlog('created_new_timesheet', {
+    wlog('created_new_timesheet', {
       timesheet_id: ts?.timesheet_id || null,
       booking_id: ts?.booking_id || null,
       version: ts?.version ?? null,
@@ -23271,7 +24129,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       );
     } catch {}
   } else {
-    // Patch existing current timesheet for this week (always schedule-driven)
     const patchBody = { updated_at: nowIso2 };
 
     patchBody.actual_schedule_json = actual_schedule_json;
@@ -23282,8 +24139,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
     if (hasUnitsWeekKey) patchBody.additional_units_week = unitsWeek || {};
     if (hasUnitsPerDayKey) patchBody.additional_units_per_day = unitsPerDay || {};
-
-    // do NOT set day_references_json here (obsolete)
 
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(ts.timesheet_id)}&is_current=eq.true`,
@@ -23297,7 +24152,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     });
   }
 
-  // policy snapshot (for holiday, etc.)
   let policySnapshot = {};
   try {
     policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
@@ -23311,10 +24165,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       ? Number(policySnapshot.holiday_pay_pct)
       : null;
 
-  // ─────────────────────────────────────────────────────────────
-  // TSFIN snapshot: ALWAYS SEGMENTS for schedule-driven weekly manual
-  // (supports multiple shifts per day + per-shift ref_num)
-  // ─────────────────────────────────────────────────────────────
   const segments = [];
 
   if (typeof ukLocalToUtcISO !== 'function') {
@@ -23446,7 +24296,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     };
   };
 
-  // Per-segment bucket calc (consistent w/ resolveBucketsFromSchedule)
   let segPayTotal = 0;
   let segChgTotal = 0;
 
@@ -23464,7 +24313,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       return withCORS(env, req, badRequest(utcRangeError || 'Invalid schedule segment'));
     }
 
-    // bucket mins for THIS segment using the same resolver
     let minsByBucketSeg = null;
     try {
       minsByBucketSeg = await resolveBucketsFromSchedule(env, contract, [seg]);
@@ -23514,19 +24362,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       start_utc: startUtcIso,
       end_utc: endUtcIso,
       break_mins: Number.isFinite(br) ? br : 0,
-
-      // ✅ per-shift reference number (supports multiple refs per day)
       ref_num: (seg.ref_num != null && String(seg.ref_num).trim()) ? String(seg.ref_num).trim() : null,
-
-      // optional: keep breaks array for audit/debug
       breaks: Array.isArray(seg.breaks) ? seg.breaks : [],
-
       hours_day:   h.hours_day   || 0,
       hours_night: h.hours_night || 0,
       hours_sat:   h.hours_sat   || 0,
       hours_sun:   h.hours_sun   || 0,
       hours_bh:    h.hours_bh    || 0,
-
       pay_amount: segPay,
       charge_amount: segChg,
       exclude_from_pay: false
@@ -23536,14 +24378,12 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   const basePay = round2(segPayTotal);
   const baseCharge = round2(segChgTotal);
 
-  // ✅ Preserve expenses + mileage values (and include in totals)
   const expPay   = round2(asNumberLocal(preservedFin?.expenses_pay_ex_vat ?? 0));
   const expChg   = round2(asNumberLocal(preservedFin?.expenses_charge_ex_vat ?? 0));
   const milPay   = round2(asNumberLocal(preservedFin?.mileage_pay_ex_vat ?? 0));
   const milChg   = round2(asNumberLocal(preservedFin?.mileage_charge_ex_vat ?? 0));
   const milUnits = round2(asNumberLocal(preservedFin?.mileage_units ?? 0));
 
-  // ✅ Negative margin check applies ONLY to base+additional (expenses/mileage may be negative margin)
   const corePay = round2(basePay + additional_pay_ex_vat);
   const coreChg = round2(baseCharge + additional_charge_ex_vat);
   const coreMargin = round2(coreChg - corePay);
@@ -23608,8 +24448,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     candidate_assignment: contract.candidate_id ? 'ASSIGNED' : 'UNASSIGNED',
     processing_status: processingStatus,
     pay_method: method,
-
-    // hours buckets derived from schedule (authoritative)
     hours_day: Number(hours.day || 0),
     hours_night: Number(hours.night || 0),
     hours_sat: Number(hours.sat || 0),
@@ -23622,27 +24460,28 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       Number(hours.sun || 0) +
       Number(hours.bh || 0)
     ),
-
-    pay_day: pay.day, pay_night: pay.night, pay_sat: pay.sat, pay_sun: pay.sun, pay_bh: pay.bh,
-    charge_day: charge.day, charge_night: charge.night, charge_sat: charge.sat, charge_sun: charge.sun, charge_bh: charge.bh,
-
+    pay_day: pay.day,
+    pay_night: pay.night,
+    pay_sat: pay.sat,
+    pay_sun: pay.sun,
+    pay_bh: pay.bh,
+    charge_day: charge.day,
+    charge_night: charge.night,
+    charge_sat: charge.sat,
+    charge_sun: charge.sun,
+    charge_bh: charge.bh,
     total_pay_ex_vat: total_pay,
     total_charge_ex_vat: total_chg,
     margin_ex_vat: margin,
-
     additional_units_json,
     additional_pay_ex_vat,
     additional_charge_ex_vat,
     additional_margin_ex_vat,
-
-    // ✅ PRESERVE expenses fields
     expenses_pay_ex_vat: expPay,
     expenses_charge_ex_vat: expChg,
     expenses_description: preservedFin?.expenses_description ?? null,
     expenses_evidence_r2_key: preservedFin?.expenses_evidence_r2_key ?? null,
     expenses_evidence_manifest: preservedFin?.expenses_evidence_manifest ?? null,
-
-    // ✅ PRESERVE mileage fields (+ units)
     mileage_units: milUnits,
     mileage_pay_ex_vat: milPay,
     mileage_charge_ex_vat: milChg,
@@ -23650,19 +24489,15 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     mileage_evidence_manifest: preservedFin?.mileage_evidence_manifest ?? null,
     mileage_pay_rate: preservedFin?.mileage_pay_rate ?? null,
     mileage_charge_rate: preservedFin?.mileage_charge_rate ?? null,
-
     pay_on_hold: false,
     pay_on_hold_reason: null,
     pay_on_hold_since_utc: null,
-
     paid_at_utc: null,
     paid_by_user_id: null,
     payment_reference: null,
-
     policy_snapshot_json: policySnapshot,
     rate_source_refs_json: { mode: 'CONTRACT_RATES_JSON', contract_id: contract.id || null },
     pay_wtr_rate_pct_snapshot,
-
     created_at: nowIso2,
     invoice_breakdown_json: {
       mode: 'SEGMENTS',
@@ -23681,22 +24516,15 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     }
   };
 
-  // ✅ Write TSFIN using SQL-backed outbox + batch writer.
-  // Uses your new RPCs:
-  // - enqueue_ts_financials_priority
-  // - tsfin_dequeue_specific
-  // - tsfin_write_snapshots_and_complete
   let outboxId = null;
   let wroteViaSql = false;
 
   try {
-    // 1) Ensure a single outbox row exists for this timesheet (unique constraint dedupes)
     await sbRpc(env, 'enqueue_ts_financials_priority', {
       _timesheet_ids: [ts.timesheet_id],
       _reason: 'CONTEXT_CHANGED'
     });
 
-    // ✅ FIX (C): RPC-only deterministic lease (no REST lookup of ts_financials_outbox)
     const leased = await sbRpc(env, 'tsfin_dequeue_specific', {
       p_timesheet_ids: [ts.timesheet_id],
       p_limit: 1
@@ -23709,7 +24537,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       outbox_id: outboxId
     });
 
-    // 3) Write snapshot + complete outbox in one RPC
     if (outboxId) {
       const wr = await rpcTsfinWriteSnapshotsAndComplete(env, {
         rows: [{
@@ -23741,11 +24568,9 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     });
   }
 
-  // Fallback: preserve legacy behaviour if SQL path fails (rare)
   if (!wroteViaSql) {
     await writeSnapshot(env, snap);
 
-    // ✅ best-effort: clear the outbox row we created so it doesn't churn later
     if (outboxId) {
       try { await sbRpc(env, 'tsfin_work_success', { p_id: outboxId }); } catch {}
     }
@@ -23783,6 +24608,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     null;
 
   const expenseHydrationNeeded =
+    hasExpensesDraftKey ||
     hasPositiveExpenseDraftClaims(expensesDraft) ||
     !!String(expensesDraft.note || '').trim();
 
@@ -23828,19 +24654,16 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     });
   }
 
-  // Persist week totals + schedule + weekly extras (draft-per-day refs removed)
   const existingWeekTotals = (cw.totals_json && typeof cw.totals_json === 'object') ? cw.totals_json : {};
   const mergedWeekTotals = { ...existingWeekTotals, hours };
 
-  // ✅ Persist weekly totals only when provided (frontend is source of truth)
   if (hasUnitsWeekKey) mergedWeekTotals.additional_units_week = unitsWeek || {};
-
-  // ✅ Persist per-day units when provided
   if (hasUnitsPerDayKey) mergedWeekTotals.additional_units_per_day = unitsPerDay || {};
+  mergedWeekTotals.expenses_draft = expensesDraft;
 
   const weekPatch = {
     totals_json: mergedWeekTotals,
-    planned_schedule_json: actual_schedule_json, // keep week schedule aligned for future view/processing
+    planned_schedule_json: actual_schedule_json,
     updated_at: nowIso2
   };
 
@@ -23870,7 +24693,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     created_now: !!createdNow
   }));
 }
-
 
 async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -30125,7 +30947,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       isLockedOrPaid = false;
     }
 
-    let summary = null;
+      let summary = null;
     try {
       summary = await sbGetOne(
         env,
@@ -30138,14 +30960,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       summary = null;
     }
 
-    const basisU = String(summary?.basis || '').trim().toUpperCase();
-    const importAuthoritative =
-      summary?.client_no_timesheet_required === true ||
-      basisU === 'NHSP' ||
-      basisU === 'NHSP_ADJUSTMENT' ||
-      basisU === 'HEALTHROSTER_SELF_BILL' ||
-      basisU === 'HEALTHROSTER_ADJUSTMENT';
-
+    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
     const routeEvidenceEditable = !isLockedOrPaid && !importAuthoritative;
 
     // ─────────────────────────────────────────────────────────────
@@ -30620,6 +31435,20 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
   }
 }
 
+
+function isImportAuthoritativeEvidenceContext(summary) {
+  const basisU = String(summary?.basis || '').trim().toUpperCase();
+
+  return (
+    summary?.client_no_timesheet_required === true ||
+    basisU === 'NHSP' ||
+    basisU === 'NHSP_ADJUSTMENT' ||
+    basisU === 'HEALTHROSTER_SELF_BILL' ||
+    basisU === 'HEALTHROSTER_ADJUSTMENT'
+  );
+}
+
+
 async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -30705,11 +31534,7 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
         `&limit=1`
     ).catch(() => null);
 
-    const basisU = String(summary?.basis || '').trim().toUpperCase();
-    const importAuthoritative =
-      summary?.client_no_timesheet_required === true ||
-      basisU === 'NHSP' ||
-      basisU === 'NHSP_ADJUSTMENT';
+    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
 
     if (importAuthoritative) {
       return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be returned to queue here'));
@@ -33551,6 +34376,8 @@ async function handleBulkAuthoriseDataset(env, req) {
   const includeQr = String(q('include_qr') || 'true').trim().toLowerCase() !== 'false';
   const includeElectronic = String(q('include_electronic') || 'true').trim().toLowerCase() !== 'false';
   const includeImportAuthoritative = String(q('include_import_authoritative') || 'true').trim().toLowerCase() !== 'false';
+  const includeImportNhsp = String(q('include_import_nhsp') || 'true').trim().toLowerCase() !== 'false';
+  const includeImportHealthrosterNoTimesheet = String(q('include_import_healthroster_no_timesheet') || 'true').trim().toLowerCase() !== 'false';
 
   const toBool = (v) => {
     if (v === true) return true;
@@ -33773,7 +34600,11 @@ async function handleBulkAuthoriseDataset(env, req) {
     if (family.route_family === 'MANUAL_NON_QR' && !includeManualNonQr) continue;
     if (family.route_family === 'QR' && !includeQr) continue;
     if (family.route_family === 'ELECTRONIC' && !includeElectronic) continue;
-    if (family.route_family === 'IMPORT_AUTHORITATIVE' && !includeImportAuthoritative) continue;
+    if (family.route_family === 'IMPORT_AUTHORITATIVE') {
+      if (!includeImportAuthoritative) continue;
+      if (family.route_subfamily === 'NHSP' && !includeImportNhsp) continue;
+      if (family.route_subfamily === 'HEALTHROSTER_NO_TIMESHEET' && !includeImportHealthrosterNoTimesheet) continue;
+    }
 
     filteredRows.push(row);
   }
@@ -33799,28 +34630,38 @@ async function handleBulkAuthoriseDataset(env, req) {
     const isLocked = !!(row?.locked_by_invoice_id || row?.paid_at_utc);
     const isAuthorised = !!row?.authorised_at_server;
     const isAdHoc = !!contractAdHocMap[String(row?.contract_id || '').trim()];
+    const canEditTimesheetData =
+      !isLocked &&
+      !isAuthorised &&
+      family.route_family === 'MANUAL_NON_QR';
 
-    let canEditTimesheetData = false;
-    let canManageEvidence = false;
-    let reviewOnly = true;
+    const canManageEvidence =
+      !isLocked &&
+      !family.is_import_authoritative;
 
-    if (family.route_family === 'MANUAL_NON_QR') {
-      canEditTimesheetData = !isLocked && !isAuthorised;
-      canManageEvidence = !isLocked;
-      reviewOnly = !!(isLocked || isAuthorised);
-    } else if (family.route_family === 'QR') {
-      canEditTimesheetData = false;
-      canManageEvidence = false;
-      reviewOnly = true;
-    } else if (family.route_family === 'ELECTRONIC') {
-      canEditTimesheetData = false;
-      canManageEvidence = false;
-      reviewOnly = true;
-    } else {
-      canEditTimesheetData = false;
-      canManageEvidence = false;
-      reviewOnly = true;
-    }
+    const reviewOnly =
+      !!isLocked ||
+      !!isAuthorised ||
+      family.route_family !== 'MANUAL_NON_QR';
+
+    const totalPayExVat = Number(row?.total_pay_ex_vat || 0) || 0;
+    const netDeltaExVat = Number(row?.net_delta_ex_vat || 0) || 0;
+
+    const nhspDeviationPct =
+      family.route_subfamily === 'NHSP' && totalPayExVat > 0
+        ? Number(((Math.abs(netDeltaExVat) / Math.abs(totalPayExVat)) * 100).toFixed(2))
+        : null;
+
+    const nhspHighlightRed =
+      !!isAdHoc ||
+      (nhspDeviationPct != null && Number.isFinite(nhspDeviationPct) && nhspDeviationPct > 20);
+
+    const nhspHighlightReason =
+      isAdHoc
+        ? 'AD_HOC'
+        : ((nhspDeviationPct != null && Number.isFinite(nhspDeviationPct) && nhspDeviationPct > 20)
+            ? 'DEVIATION_GT_20'
+            : null);
 
     return {
       ...row,
@@ -33841,12 +34682,12 @@ async function handleBulkAuthoriseDataset(env, req) {
       can_edit_timesheet_data: canEditTimesheetData,
       can_manage_evidence: canManageEvidence,
       review_only: reviewOnly,
-      can_unprocess: !isLocked,
-      can_add_additional_manual: !isLocked,
-      nhsp_deviation_pct: null,
+      can_unprocess: !isLocked && !isAuthorised,
+      can_add_additional_manual: !isLocked && !!tsId,
+      nhsp_deviation_pct: nhspDeviationPct,
       nhsp_is_ad_hoc: isAdHoc,
-      nhsp_highlight_red: !!isAdHoc,
-      nhsp_highlight_reason: isAdHoc ? 'AD_HOC' : null
+      nhsp_highlight_red: nhspHighlightRed,
+      nhsp_highlight_reason: nhspHighlightReason
     };
   });
 
@@ -33869,7 +34710,9 @@ async function handleBulkAuthoriseDataset(env, req) {
       include_manual_non_qr: includeManualNonQr,
       include_qr: includeQr,
       include_electronic: includeElectronic,
-      include_import_authoritative: includeImportAuthoritative
+      include_import_authoritative: includeImportAuthoritative,
+      include_import_nhsp: includeImportNhsp,
+      include_import_healthroster_no_timesheet: includeImportHealthrosterNoTimesheet
     },
     counts,
     rows
@@ -34268,30 +35111,6 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
     return out;
   };
 
-  const selections = normalizeSelections(body);
-  if (!selections.length) {
-    return withCORS(env, req, badRequest('A non-empty selected set is required'));
-  }
-
-  const readResponsePayload = async (res) => {
-    const text = await res.text().catch(() => '');
-    let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-    return { text, json };
-  };
-
-  const buildFailureReason = (payload, fallback) => {
-    if (payload && typeof payload === 'object') {
-      if (payload.message && String(payload.message).trim()) return String(payload.message).trim();
-      if (payload.error && typeof payload.error === 'string' && payload.error.trim()) return payload.error.trim();
-      if (payload.error_code && String(payload.error_code).trim()) return String(payload.error_code).trim();
-      if (payload.current_timesheet_id && payload.error === 'TIMESHEET_MOVED') {
-        return `TIMESHEET_MOVED:${String(payload.current_timesheet_id).trim()}`;
-      }
-    }
-    return fallback || 'Authorise failed';
-  };
-
   const queryRowsForSelection = async (items) => {
     const orParts = [];
     const tsIds = [...new Set(items.map(x => x.timesheet_id).filter(Boolean))];
@@ -34316,9 +35135,15 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
     return Array.isArray(rows) ? rows : [];
   };
 
+  const selections = normalizeSelections(body);
+  if (!selections.length) {
+    return withCORS(env, req, badRequest('A non-empty selected set is required'));
+  }
+
   const rows = await queryRowsForSelection(selections);
   const rowByTimesheetId = Object.create(null);
   const rowByContractWeekId = Object.create(null);
+
   for (const row of rows) {
     const tsId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
     const cwId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
@@ -34328,70 +35153,13 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
 
   const results = [];
 
-  for (const sel of selections) {
-    const tsId = sel.timesheet_id ? String(sel.timesheet_id).trim() : '';
-    const cwId = sel.contract_week_id ? String(sel.contract_week_id).trim() : '';
+  for (const selection of selections) {
+    const tsId = selection?.timesheet_id ? String(selection.timesheet_id).trim() : '';
+    const cwId = selection?.contract_week_id ? String(selection.contract_week_id).trim() : '';
     const row = (tsId && rowByTimesheetId[tsId]) || (cwId && rowByContractWeekId[cwId]) || null;
 
-    if (!row) {
-      results.push({
-        row_key: sel.row_key || null,
-        timesheet_id: tsId || null,
-        contract_week_id: cwId || null,
-        ok: false,
-        status: 'FAILED',
-        reason: 'Selected row was not found in the current summary dataset',
-        warnings: []
-      });
-      continue;
-    }
-
-    const currentTimesheetId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
-    const contractWeekId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
-    const submissionMode = String(row?.submission_mode || '').trim().toUpperCase();
-    const sheetScope = String(row?.sheet_scope || '').trim().toUpperCase();
-
-    let res;
-    if (contractWeekId && sheetScope === 'WEEKLY' && submissionMode === 'MANUAL') {
-      const subReq = new Request(req.url, {
-        method: 'POST',
-        headers: req.headers,
-        body: JSON.stringify({ expected_timesheet_id: currentTimesheetId })
-      });
-      res = await handleContractWeekManualAuthorise(env, subReq, contractWeekId);
-    } else {
-      const subReq = new Request(req.url, {
-        method: 'POST',
-        headers: req.headers,
-        body: JSON.stringify({ expected_timesheet_id: currentTimesheetId })
-      });
-      res = await handleTimesheetAuthoriseGeneric(env, subReq, currentTimesheetId);
-    }
-
-    const payload = await readResponsePayload(res);
-
-    if (res && res.ok) {
-      const warnings = Array.isArray(payload.json?.warnings) ? payload.json.warnings : [];
-      results.push({
-        row_key: sel.row_key || (currentTimesheetId ? `timesheet:${currentTimesheetId}` : null),
-        timesheet_id: currentTimesheetId || null,
-        contract_week_id: contractWeekId || null,
-        ok: true,
-        status: 'AUTHORISED',
-        reason: null,
-        warnings
-      });
-    } else {
-      results.push({
-        row_key: sel.row_key || (currentTimesheetId ? `timesheet:${currentTimesheetId}` : null),
-        timesheet_id: currentTimesheetId || null,
-        contract_week_id: contractWeekId || null,
-        ok: false,
-        status: 'FAILED',
-        reason: buildFailureReason(payload.json, payload.text || 'Authorise failed'),
-        warnings: Array.isArray(payload.json?.warnings) ? payload.json.warnings : []
-      });
-    }
+    const result = await runTimesheetAuthoriseDecision(env, req, selection, row);
+    results.push(result);
   }
 
   const success_count = results.filter(r => r.ok).length;
@@ -34459,7 +35227,39 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
       }
     }
 
+    if (Array.isArray(input?.contract_week_ids)) {
+      for (const raw of input.contract_week_ids) {
+        const v = String(raw || '').trim();
+        if (!v) continue;
+        add({ row_key: `contract_week:${v}`, contract_week_id: v });
+      }
+    }
+
     return out;
+  };
+
+  const queryRowsForSelection = async (items) => {
+    const orParts = [];
+    const tsIds = [...new Set(items.map(x => x.timesheet_id).filter(Boolean))];
+    const cwIds = [...new Set(items.map(x => x.contract_week_id).filter(Boolean))];
+
+    if (tsIds.length === 1) orParts.push(`timesheet_id.eq.${tsIds[0]}`);
+    else if (tsIds.length > 1) orParts.push(`timesheet_id.in.(${tsIds.join(',')})`);
+
+    if (cwIds.length === 1) orParts.push(`contract_week_id.eq.${cwIds[0]}`);
+    else if (cwIds.length > 1) orParts.push(`contract_week_id.in.(${cwIds.join(',')})`);
+
+    if (!orParts.length) return [];
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+        `?select=*` +
+        `&or=${enc(`(${orParts.join(',')})`)}`,
+      false
+    );
+
+    return Array.isArray(rows) ? rows : [];
   };
 
   const selections = normalizeSelections(body);
@@ -34467,6 +35267,135 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
     return withCORS(env, req, badRequest('A non-empty selected set is required'));
   }
 
+  const rows = await queryRowsForSelection(selections);
+  const rowByTimesheetId = Object.create(null);
+  const rowByContractWeekId = Object.create(null);
+
+  for (const row of rows) {
+    const tsId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
+    const cwId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
+    if (tsId) rowByTimesheetId[tsId] = row;
+    if (cwId) rowByContractWeekId[cwId] = row;
+  }
+
+  const results = [];
+
+  for (const selection of selections) {
+    const tsId = selection?.timesheet_id ? String(selection.timesheet_id).trim() : '';
+    const cwId = selection?.contract_week_id ? String(selection.contract_week_id).trim() : '';
+    const row = (tsId && rowByTimesheetId[tsId]) || (cwId && rowByContractWeekId[cwId]) || null;
+
+    const result = await runTimesheetUnauthoriseDecision(env, req, selection, row);
+    results.push(result);
+  }
+
+  const success_count = results.filter(r => r.ok).length;
+  const failure_count = results.length - success_count;
+
+  return withCORS(env, req, ok({
+    success_count,
+    failure_count,
+    results
+  }));
+}
+
+
+async function runTimesheetAuthoriseDecision(env, req, selection, row) {
+  const readResponsePayload = async (res) => {
+    const text = await res.text().catch(() => '');
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+    return { text, json };
+  };
+
+  const buildFailureReason = (payload, fallback) => {
+    if (payload && typeof payload === 'object') {
+      if (payload.message && String(payload.message).trim()) return String(payload.message).trim();
+      if (payload.error && typeof payload.error === 'string' && payload.error.trim()) return payload.error.trim();
+      if (payload.error_code && String(payload.error_code).trim()) return String(payload.error_code).trim();
+      if (payload.current_timesheet_id && payload.error === 'TIMESHEET_MOVED') {
+        return `TIMESHEET_MOVED:${String(payload.current_timesheet_id).trim()}`;
+      }
+    }
+    return fallback || 'Authorise failed';
+  };
+
+  const selectedRowKey = selection?.row_key ? String(selection.row_key).trim() : '';
+  const rowTimesheetId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
+  const rowContractWeekId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
+  const submissionMode = String(row?.submission_mode || '').trim().toUpperCase();
+  const sheetScope = String(row?.sheet_scope || '').trim().toUpperCase();
+
+  if (!row) {
+    return {
+      row_key: selectedRowKey || null,
+      timesheet_id: selection?.timesheet_id ? String(selection.timesheet_id).trim() || null : null,
+      contract_week_id: selection?.contract_week_id ? String(selection.contract_week_id).trim() || null : null,
+      ok: false,
+      status: 'FAILED',
+      reason: 'Selected row was not found in the current summary dataset',
+      warnings: []
+    };
+  }
+
+  if (!rowTimesheetId) {
+    return {
+      row_key: selectedRowKey || (rowContractWeekId ? `contract_week:${rowContractWeekId}` : null),
+      timesheet_id: null,
+      contract_week_id: rowContractWeekId || null,
+      ok: false,
+      status: 'FAILED',
+      reason: 'Selected row does not have a real timesheet to authorise',
+      warnings: []
+    };
+  }
+
+  const expectedTimesheetId = rowTimesheetId;
+
+  let res;
+  if (rowContractWeekId && sheetScope === 'WEEKLY' && submissionMode === 'MANUAL') {
+    const subReq = new Request(req.url, {
+      method: 'POST',
+      headers: req.headers,
+      body: JSON.stringify({ expected_timesheet_id: expectedTimesheetId })
+    });
+    res = await handleContractWeekManualAuthorise(env, subReq, rowContractWeekId);
+  } else {
+    const subReq = new Request(req.url, {
+      method: 'POST',
+      headers: req.headers,
+      body: JSON.stringify({ expected_timesheet_id: expectedTimesheetId })
+    });
+    res = await handleTimesheetAuthoriseGeneric(env, subReq, rowTimesheetId);
+  }
+
+  const payload = await readResponsePayload(res);
+
+  if (res && res.ok) {
+    const warnings = Array.isArray(payload.json?.warnings) ? payload.json.warnings : [];
+    return {
+      row_key: selectedRowKey || `timesheet:${rowTimesheetId}`,
+      timesheet_id: rowTimesheetId,
+      contract_week_id: rowContractWeekId || null,
+      ok: true,
+      status: 'AUTHORISED',
+      reason: null,
+      warnings
+    };
+  }
+
+  return {
+    row_key: selectedRowKey || `timesheet:${rowTimesheetId}`,
+    timesheet_id: rowTimesheetId,
+    contract_week_id: rowContractWeekId || null,
+    ok: false,
+    status: 'FAILED',
+    reason: buildFailureReason(payload.json, payload.text || 'Authorise failed'),
+    warnings: Array.isArray(payload.json?.warnings) ? payload.json.warnings : []
+  };
+}
+
+async function runTimesheetUnauthoriseDecision(env, req, selection, row) {
   const readResponsePayload = async (res) => {
     const text = await res.text().catch(() => '');
     let json = null;
@@ -34486,85 +35415,64 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
     return fallback || 'Unauthorise failed';
   };
 
-  const queryRowsForSelection = async (items) => {
-    const tsIds = [...new Set(items.map(x => x.timesheet_id).filter(Boolean))];
-    if (!tsIds.length) return [];
-    const { rows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-        `?select=*` +
-        `&timesheet_id=in.(${tsIds.map(enc).join(',')})`,
-      false
-    );
-    return Array.isArray(rows) ? rows : [];
+  const selectedRowKey = selection?.row_key ? String(selection.row_key).trim() : '';
+  const rowTimesheetId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
+  const rowContractWeekId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
+
+  if (!row) {
+    return {
+      row_key: selectedRowKey || null,
+      timesheet_id: selection?.timesheet_id ? String(selection.timesheet_id).trim() || null : null,
+      contract_week_id: selection?.contract_week_id ? String(selection.contract_week_id).trim() || null : null,
+      ok: false,
+      status: 'FAILED',
+      reason: 'Selected row was not found in the current summary dataset',
+      warnings: []
+    };
+  }
+
+  if (!rowTimesheetId) {
+    return {
+      row_key: selectedRowKey || (rowContractWeekId ? `contract_week:${rowContractWeekId}` : null),
+      timesheet_id: null,
+      contract_week_id: rowContractWeekId || null,
+      ok: false,
+      status: 'FAILED',
+      reason: 'Selected row does not have a real timesheet to unauthorise',
+      warnings: []
+    };
+  }
+
+  const subReq = new Request(req.url, {
+    method: 'POST',
+    headers: req.headers,
+    body: JSON.stringify({ expected_timesheet_id: rowTimesheetId })
+  });
+
+  const res = await handleTimesheetUnauthorise(env, subReq, rowTimesheetId);
+  const payload = await readResponsePayload(res);
+
+  if (res && res.ok) {
+    return {
+      row_key: selectedRowKey || `timesheet:${rowTimesheetId}`,
+      timesheet_id: rowTimesheetId,
+      contract_week_id: rowContractWeekId || null,
+      ok: true,
+      status: 'UNAUTHORISED',
+      reason: null,
+      warnings: []
+    };
+  }
+
+  return {
+    row_key: selectedRowKey || `timesheet:${rowTimesheetId}`,
+    timesheet_id: rowTimesheetId,
+    contract_week_id: rowContractWeekId || null,
+    ok: false,
+    status: 'FAILED',
+    reason: buildFailureReason(payload.json, payload.text || 'Unauthorise failed'),
+    warnings: []
   };
-
-  const rows = await queryRowsForSelection(selections);
-  const rowByTimesheetId = Object.create(null);
-  for (const row of rows) {
-    const tsId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
-    if (tsId) rowByTimesheetId[tsId] = row;
-  }
-
-  const results = [];
-
-  for (const sel of selections) {
-    const tsId = sel.timesheet_id ? String(sel.timesheet_id).trim() : '';
-    const row = tsId ? (rowByTimesheetId[tsId] || null) : null;
-
-    if (!row || !tsId) {
-      results.push({
-        row_key: sel.row_key || null,
-        timesheet_id: tsId || null,
-        contract_week_id: sel.contract_week_id || null,
-        ok: false,
-        status: 'FAILED',
-        reason: 'Selected row was not found in the current summary dataset',
-        warnings: []
-      });
-      continue;
-    }
-
-    const subReq = new Request(req.url, {
-      method: 'POST',
-      headers: req.headers,
-      body: JSON.stringify({ expected_timesheet_id: tsId })
-    });
-
-    const res = await handleTimesheetUnauthorise(env, subReq, tsId);
-    const payload = await readResponsePayload(res);
-
-    if (res && res.ok) {
-      results.push({
-        row_key: sel.row_key || `timesheet:${tsId}`,
-        timesheet_id: tsId,
-        contract_week_id: row?.contract_week_id ? String(row.contract_week_id).trim() : null,
-        ok: true,
-        status: 'UNAUTHORISED',
-        reason: null,
-        warnings: []
-      });
-    } else {
-      results.push({
-        row_key: sel.row_key || `timesheet:${tsId}`,
-        timesheet_id: tsId,
-        contract_week_id: row?.contract_week_id ? String(row.contract_week_id).trim() : null,
-        ok: false,
-        status: 'FAILED',
-        reason: buildFailureReason(payload.json, payload.text || 'Unauthorise failed'),
-        warnings: []
-      });
-    }
-  }
-
-  const success_count = results.filter(r => r.ok).length;
-  const failure_count = results.length - success_count;
-
-  return withCORS(env, req, ok({
-    success_count,
-    failure_count,
-    results
-  }));
 }
 
 async function handleTimesheetsSubmitWeekly(env, req) {
@@ -74672,11 +75580,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
         `&limit=1`
     ).catch(() => null);
 
-    const basisU = String(summary?.basis || '').trim().toUpperCase();
-    const importAuthoritative =
-      summary?.client_no_timesheet_required === true ||
-      basisU === 'NHSP' ||
-      basisU === 'NHSP_ADJUSTMENT';
+    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
 
     if (importAuthoritative) {
       return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be added here'));
@@ -74915,11 +75819,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
         `&limit=1`
     ).catch(() => null);
 
-    const basisU = String(summary?.basis || '').trim().toUpperCase();
-    const importAuthoritative =
-      summary?.client_no_timesheet_required === true ||
-      basisU === 'NHSP' ||
-      basisU === 'NHSP_ADJUSTMENT';
+    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
 
     if (importAuthoritative) {
       return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be edited here'));
@@ -75157,11 +76057,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
         `&limit=1`
     ).catch(() => null);
 
-    const basisU = String(summary?.basis || '').trim().toUpperCase();
-    const importAuthoritative =
-      summary?.client_no_timesheet_required === true ||
-      basisU === 'NHSP' ||
-      basisU === 'NHSP_ADJUSTMENT';
+    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
 
     if (importAuthoritative) {
       return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be deleted here'));
@@ -110373,7 +111269,121 @@ if (req.method === 'GET' && p === '/api/banking/id/ledger') {
     return handleBankingPayPreview(env, req, user);
   }
 
+// =============================================================================
+// NEW ROUTES — Bulk timesheet / staged evidence / daily manual lifecycle
+// Paste inside the existing fetch(req, env) router.
+// Important:
+// - keep the /api/timesheets/:id/... routes BEFORE the generic DELETE /api/timesheets/:id route
+// - keep the /api/contract-weeks/:id/... staged/detail routes near the other contract-week routes
+// - keep the /api/manual-timesheet-queue/:id/stage-to-contract-week route near the other queue routes
+// =============================================================================
 
+// -----------------------------------------------------------------------------
+// Contract-week planned-manual details + staged evidence
+// -----------------------------------------------------------------------------
+{
+  const m = matchPath(p, '/api/contract-weeks/:id/manual-draft-details');
+  if (m && req.method === 'GET') {
+    return handleContractWeekManualDraftDetails(env, req, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/contract-weeks/:id/staged-evidence');
+  if (m && req.method === 'GET') {
+    return handleContractWeekStagedEvidenceList(env, req, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/contract-weeks/:id/staged-evidence/:queue_id');
+  if (m && req.method === 'PATCH') {
+    return handleContractWeekStagedEvidenceUpdateKind(env, req, m.id, m.queue_id);
+  }
+  if (m && req.method === 'DELETE') {
+    return handleContractWeekStagedEvidenceDelete(env, req, m.id, m.queue_id);
+  }
+}
+{
+  const m = matchPath(p, '/api/contract-weeks/:id/staged-evidence/:queue_id/return-to-queue');
+  if (m && req.method === 'POST') {
+    return handleContractWeekStagedEvidenceReturnToQueue(env, req, m.id, m.queue_id);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Manual timesheet queue — stage queued file to contract week
+// -----------------------------------------------------------------------------
+{
+  const m = matchPath(p, '/api/manual-timesheet-queue/:id/stage-to-contract-week');
+  if (m && req.method === 'POST') {
+    return handleManualTimesheetQueueStageToContractWeek(env, req, m.id);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Daily manual lifecycle
+// IMPORTANT: keep these BEFORE the generic DELETE /api/timesheets/:id route
+// -----------------------------------------------------------------------------
+{
+  const m = matchPath(p, '/api/timesheets/:id/daily-manual-process');
+  if (m && req.method === 'POST') {
+    return handleTimesheetDailyManualProcess(env, req, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/timesheets/:id/process-daily-manual');
+  if (m && req.method === 'POST') {
+    return handleTimesheetDailyManualProcess(env, req, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/timesheets/:id/daily-manual-unprocess');
+  if (m && req.method === 'POST') {
+    return handleTimesheetDailyManualUnprocess(env, req, m.id);
+  }
+}
+{
+  const m = matchPath(p, '/api/timesheets/:id/unprocess-daily-manual');
+  if (m && req.method === 'POST') {
+    return handleTimesheetDailyManualUnprocess(env, req, m.id);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Attached evidence explicit return-to-queue
+// IMPORTANT: keep this near the existing /api/timesheets/:id/evidence routes
+// -----------------------------------------------------------------------------
+{
+  const m = matchPath(p, '/api/timesheets/:id/evidence/:evidence_id/return-to-queue');
+  if (m && req.method === 'POST') {
+    return withCORS(env, req, await handleTimesheetEvidenceReturnToQueue(env, req, m.id, m.evidence_id));
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Bulk Process / Bulk Authorise datasets + context + batch actions
+// -----------------------------------------------------------------------------
+if (req.method === 'GET' && p === '/api/timesheets/bulk-process-dataset') {
+  return handleBulkProcessDataset(env, req);
+}
+
+if (req.method === 'GET' && p === '/api/timesheets/bulk-authorise-dataset') {
+  return handleBulkAuthoriseDataset(env, req);
+}
+
+{
+  const m = matchPath(p, '/api/timesheets/:id/bulk-authorise-context');
+  if (m && req.method === 'GET') {
+    return handleTimesheetBulkAuthoriseContext(env, req, m.id);
+  }
+}
+
+if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-selected') {
+  return handleBulkTimesheetAuthoriseSelected(env, req);
+}
+
+if (req.method === 'POST' && p === '/api/timesheets/bulk-unauthorise-selected') {
+  return handleBulkTimesheetUnauthoriseSelected(env, req);
+}
   // ====================== BANKING (Invoice Discounting) ======================
 
 // GET /api/banking/id/preview
@@ -111687,6 +112697,7 @@ if (req.method === 'GET' && p === '/api/comms/by-recipient') {
     return handleBankingPayTaxableManualDebtResolution(env, req, user, m.id);
   }
 }
+
 // ─────────────────────────────────────────────────────────────
 // Users (admin) + self-service password change
 // ─────────────────────────────────────────────────────────────
@@ -111719,7 +112730,12 @@ if (req.method === 'POST' && p === '/api/users') {
     return withCORS(env, req, await handleUsersResetPassword(env, req, userId));
   }
 }
-
+{
+  const m = matchPath(p, '/api/timesheets/create-daily-manual');
+  if (m && req.method === 'POST') {
+    return handleTimesheetCreateManualDaily(env, req);
+  }
+}
       // FINAL: Not found – now CORS-safe
       return withCORS(env, req, new Response("Not found", {
         status: 404,
