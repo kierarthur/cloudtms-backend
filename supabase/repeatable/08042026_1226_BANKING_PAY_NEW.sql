@@ -8124,9 +8124,6 @@ ts_itemised as (
       on pfc.finance_case_id = vfcr.finance_case_id
      and pfc.closed_at_utc is null
      and coalesce(pfc.remaining_source_amount, 0) > 0
-    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
-      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
-      and coalesce(vfcr.outstanding_amount,0) > 0
   ),
   finance_case_component_review_rows as (
     select
