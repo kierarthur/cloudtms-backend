@@ -10215,7 +10215,7 @@ ts_itemised as (
     from finance_case_resolution_rollup fcrr
     where round(coalesce(fcrr.due_amount_ex_vat,0),2) > 0
   ),
-  canonical_preview_lines as (
+  timesheet_canonical_preview_lines as (
     select
       ctpr.candidate_id,
       (
@@ -10240,6 +10240,16 @@ ts_itemised as (
       ctpr.amount_ex_vat,
       ctpr.is_excluded_from_allocation
     from canonical_timesheet_presentation_rows ctpr
+  ),
+  canonical_preview_lines as (
+    select
+      tcpl.candidate_id,
+      tcpl.line_json,
+      tcpl.pay_channel,
+      tcpl.paye_treatment,
+      tcpl.amount_ex_vat,
+      tcpl.is_excluded_from_allocation
+    from timesheet_canonical_preview_lines tcpl
 
     union all
 
@@ -10451,7 +10461,7 @@ ts_itemised as (
      and tcr.candidate_id = ctpp.candidate_id
     group by ctpp.candidate_id
   ),
-  candidate_case_states_flat as (
+  timesheet_case_states_flat as (
     select
       tcr.candidate_id,
       tcr.cand_display_name as sort_candidate_display,
@@ -10490,9 +10500,8 @@ ts_itemised as (
     from timesheet_case_rollup_effective tcr
     where coalesce(tcr.case_needs_resolution, false) = true
       and coalesce(tcr.case_resolution_satisfied_now, false) = false
-
-    union all
-
+  ),
+  finance_case_states_flat as (
     select
       fcrr.candidate_id,
       fcrr.cand_display_name as sort_candidate_display,
@@ -10540,6 +10549,29 @@ ts_itemised as (
     where fcrr.due_amount_ex_vat > 0
       and coalesce(fcrr.case_needs_resolution, false) = true
       and coalesce(fcrr.case_resolution_satisfied_now, false) = false
+  ),
+  candidate_case_states_flat as (
+    select
+      tcsf.candidate_id,
+      tcsf.sort_candidate_display,
+      tcsf.sort_candidate_tms_ref,
+      tcsf.sort_case_order,
+      tcsf.case_key,
+      tcsf.is_blocked,
+      tcsf.case_json
+    from timesheet_case_states_flat tcsf
+
+    union all
+
+    select
+      fcsf.candidate_id,
+      fcsf.sort_candidate_display,
+      fcsf.sort_candidate_tms_ref,
+      fcsf.sort_case_order,
+      fcsf.case_key,
+      fcsf.is_blocked,
+      fcsf.case_json
+    from finance_case_states_flat fcsf
   ),
   candidate_case_states as (
     select
@@ -10613,6 +10645,128 @@ ts_itemised as (
       'net_side_deductions_ex_vat', round(coalesce(sum(case when cpl.pay_channel = 'PAYE' and cpl.paye_treatment = 'NET_DEDUCT' and cpl.is_excluded_from_allocation = false then abs(cpl.amount_ex_vat) else 0 end),0),2)
     ) as payload
     from canonical_preview_lines cpl
+  ),
+  timesheet_baseline_component_rows as (
+    select
+      1 as sort_scope,
+      ('timesheet:' || ttr.timesheet_id::text) as sort_case_key,
+      coalesce(ttr.component_fingerprint, '') as sort_component_fingerprint,
+      coalesce(ttr.component_key_type, '') as sort_component_key_type,
+      coalesce(ttr.component_key_value, '') as sort_component_key_value,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'component_scope', 'TIMESHEET',
+          'candidate_id', ttr.candidate_id::text,
+          'case_key', ('timesheet:' || ttr.timesheet_id::text),
+          'timesheet_id', ttr.timesheet_id::text,
+          'finance_case_id', null,
+          'finance_component_id', null,
+          'source_family_key', ttr.source_family_key,
+          'component_key_type', ttr.component_key_type,
+          'component_key_value', ttr.component_key_value,
+          'bucket_code', nullif(btrim(coalesce(ttr.source_basis_json->>'bucket_code', '')), ''),
+          'source_basis_json', coalesce(ttr.source_basis_json, '{}'::jsonb),
+          'source_basis_fingerprint', case when coalesce(ttr.source_basis_json, '{}'::jsonb) <> '{}'::jsonb then md5(ttr.source_basis_json::text) else null::text end,
+          'component_fingerprint', ttr.component_fingerprint,
+          'classification', ttr.classification::text,
+          'source_pay_method', ttr.source_pay_method,
+          'current_target_pay_method', ttr.current_target_pay_method,
+          'source_units', case when ttr.source_units is null then null else round(ttr.source_units, 6) end,
+          'source_rate', case when ttr.source_rate is null then null else round(ttr.source_rate, 6) end,
+          'source_charge_rate', case when ttr.source_charge_rate is null then null else round(ttr.source_charge_rate, 6) end,
+          'component_amount_ex_vat', round(coalesce(ttr.component_amount_ex_vat, 0), 2),
+          'source_charge_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat, 2) end,
+          'source_pay_ex_vat', case when ttr.source_pay_ex_vat is null then null else round(ttr.source_pay_ex_vat, 2) end,
+          'source_margin_ex_vat', case when ttr.source_margin_ex_vat is null then null else round(ttr.source_margin_ex_vat, 2) end,
+          'target_pay_ex_vat', case when ttr.target_pay_ex_vat is null then null else round(ttr.target_pay_ex_vat, 2) end,
+          'target_charge_ex_vat', case when ttr.target_charge_ex_vat is null then null else round(ttr.target_charge_ex_vat, 2) end,
+          'target_margin_ex_vat', case when ttr.target_margin_ex_vat is null then null else round(ttr.target_margin_ex_vat, 2) end,
+          'requires_resolution', coalesce(ttr.requires_resolution, false),
+          'case_resolution_satisfied_now_component', coalesce(ttr.case_resolution_satisfied_now_component, false),
+          'has_suggested_resolution', coalesce(ttr.has_suggested_resolution, false),
+          'suggestion_provenance', ttr.suggestion_provenance,
+          'approved_resolution_mode', case when ttr.approved_resolution_mode is null then null else ttr.approved_resolution_mode::text end,
+          'approved_target_rate', case when ttr.approved_target_rate is null then null else round(ttr.approved_target_rate, 6) end,
+          'suggested_resolution_payload_json', ttr.suggested_resolution_payload_json,
+          'suggested_resolution_result_json', ttr.suggested_resolution_result_json,
+          'is_actionable_resolution_row', coalesce(ttr.is_actionable_resolution_row, false),
+          'is_fixed_no_action_taxable_row', coalesce(ttr.is_fixed_no_action_taxable_row, false)
+        )
+      ) as row_json
+    from transient_timesheet_component_review_rows_effective ttr
+    where ttr.candidate_id = v_candidate_id
+  ),
+  finance_baseline_component_rows as (
+    select
+      2 as sort_scope,
+      ('finance:' || fcr.finance_case_id::text) as sort_case_key,
+      coalesce(fcr.current_component_fingerprint, '') as sort_component_fingerprint,
+      coalesce(fcr.component_key_type, '') as sort_component_key_type,
+      coalesce(fcr.component_key_value, '') as sort_component_key_value,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'component_scope', 'FINANCE_CASE',
+          'candidate_id', fcr.candidate_id::text,
+          'case_key', ('finance:' || fcr.finance_case_id::text),
+          'timesheet_id', null,
+          'finance_case_id', fcr.finance_case_id::text,
+          'finance_component_id', case when fcr.finance_component_id is null then null else fcr.finance_component_id::text end,
+          'case_type', fcr.case_type::text,
+          'taxability', case when fcr.taxability is null then null else fcr.taxability::text end,
+          'source_family_key', fcr.source_family_key,
+          'component_key_type', fcr.component_key_type,
+          'component_key_value', fcr.component_key_value,
+          'bucket_code', nullif(btrim(coalesce(fcr.source_basis_json->>'bucket_code', '')), ''),
+          'source_basis_json', coalesce(fcr.source_basis_json, '{}'::jsonb),
+          'source_basis_fingerprint', case when coalesce(fcr.source_basis_json, '{}'::jsonb) <> '{}'::jsonb then md5(fcr.source_basis_json::text) else null::text end,
+          'component_fingerprint', fcr.current_component_fingerprint,
+          'classification', fcr.classification::text,
+          'source_pay_method', fcr.source_pay_method,
+          'current_target_pay_method', fcr.current_target_pay_method,
+          'saved_target_pay_method', fcr.saved_target_pay_method,
+          'source_amount', round(coalesce(fcr.source_amount, 0), 2),
+          'remaining_source_amount', round(coalesce(fcr.remaining_source_amount, 0), 2),
+          'source_units', case when fcr.source_units is null then null else round(fcr.source_units, 6) end,
+          'source_rate', case when fcr.source_rate is null then null else round(fcr.source_rate, 6) end,
+          'source_charge_rate', case when fcr.source_charge_rate is null then null else round(fcr.source_charge_rate, 6) end,
+          'source_charge_ex_vat', case when fcr.source_charge_component_ex_vat is null then null else round(fcr.source_charge_component_ex_vat, 2) end,
+          'source_pay_ex_vat', case when fcr.source_pay_ex_vat is null then null else round(fcr.source_pay_ex_vat, 2) end,
+          'source_margin_ex_vat', case when fcr.source_margin_ex_vat is null then null else round(fcr.source_margin_ex_vat, 2) end,
+          'target_pay_ex_vat', case when fcr.target_pay_ex_vat is null then null else round(fcr.target_pay_ex_vat, 2) end,
+          'target_charge_ex_vat', case when fcr.target_charge_ex_vat is null then null else round(fcr.target_charge_ex_vat, 2) end,
+          'target_margin_ex_vat', case when fcr.target_margin_ex_vat is null then null else round(fcr.target_margin_ex_vat, 2) end,
+          'approved_resolution_mode', case when fcr.approved_resolution_mode is null then null else fcr.approved_resolution_mode::text end,
+          'approved_target_rate', case when fcr.approved_target_rate is null then null else round(fcr.approved_target_rate, 6) end,
+          'approved_nonbucket_resolution_mode', case when fcr.approved_nonbucket_resolution_mode is null then null else fcr.approved_nonbucket_resolution_mode::text end,
+          'approved_nonbucket_target_amount_ex_vat', case when fcr.approved_nonbucket_target_amount_ex_vat is null then null else round(fcr.approved_nonbucket_target_amount_ex_vat, 2) end,
+          'saved_resolution_mode', case when fcr.saved_resolution_mode is null then null else fcr.saved_resolution_mode::text end,
+          'saved_resolution_payload_json', fcr.saved_resolution_payload_json,
+          'saved_resolution_result_json', fcr.saved_resolution_result_json,
+          'resolution_fingerprint', fcr.resolution_fingerprint,
+          'is_resolution_stale', coalesce(fcr.is_resolution_stale, false),
+          'stale_reason', fcr.stale_reason,
+          'requires_resolution', coalesce(fcr.requires_resolution, false),
+          'case_resolution_satisfied_now_component', coalesce(fcr.case_resolution_satisfied_now_component, false),
+          'suggested_resolution_payload_json', fcr.suggested_resolution_payload_json,
+          'suggested_resolution_result_json', fcr.suggested_resolution_result_json,
+          'is_actionable_resolution_row', coalesce(fcr.is_actionable_resolution_row, false),
+          'is_fixed_no_action_taxable_row', coalesce(fcr.is_fixed_no_action_taxable_row, false)
+        )
+      ) as row_json
+    from finance_case_component_review_rows_effective fcr
+    where fcr.candidate_id = v_candidate_id
+  ),
+  baseline_component_rows_json as (
+    select
+      coalesce(
+        jsonb_agg(u.row_json order by u.sort_scope, u.sort_case_key, u.sort_component_fingerprint, u.sort_component_key_type, u.sort_component_key_value),
+        '[]'::jsonb
+      ) as payload
+    from (
+      select * from timesheet_baseline_component_rows
+      union all
+      select * from finance_baseline_component_rows
+    ) u
   )
 
 
@@ -11092,123 +11246,7 @@ ts_itemised as (
     coalesce((select jsonb_agg(cpl.line_json order by cpl.candidate_id, cpl.line_json->>'display_name', cpl.line_json->>'line_type', cpl.line_json->>'line_id') from canonical_preview_lines cpl), '[]'::jsonb),
     coalesce((select psbj.payload from paye_summary_breakdown_json psbj), '{}'::jsonb),
     coalesce((select crsj.payload from case_resolution_states_json crsj), '[]'::jsonb),
-    coalesce(
-      (
-        select jsonb_agg(u.row_json order by u.sort_scope, u.sort_case_key, u.sort_component_fingerprint, u.sort_component_key_type, u.sort_component_key_value)
-        from (
-          select
-            1 as sort_scope,
-            ('timesheet:' || ttr.timesheet_id::text) as sort_case_key,
-            coalesce(ttr.component_fingerprint, '') as sort_component_fingerprint,
-            coalesce(ttr.component_key_type, '') as sort_component_key_type,
-            coalesce(ttr.component_key_value, '') as sort_component_key_value,
-            jsonb_strip_nulls(
-              jsonb_build_object(
-                'component_scope', 'TIMESHEET',
-                'candidate_id', ttr.candidate_id::text,
-                'case_key', ('timesheet:' || ttr.timesheet_id::text),
-                'timesheet_id', ttr.timesheet_id::text,
-                'finance_case_id', null,
-                'finance_component_id', null,
-                'source_family_key', ttr.source_family_key,
-                'component_key_type', ttr.component_key_type,
-                'component_key_value', ttr.component_key_value,
-                'bucket_code', nullif(btrim(coalesce(ttr.source_basis_json->>'bucket_code', '')), ''),
-                'source_basis_json', coalesce(ttr.source_basis_json, '{}'::jsonb),
-                'source_basis_fingerprint', case when coalesce(ttr.source_basis_json, '{}'::jsonb) <> '{}'::jsonb then md5(ttr.source_basis_json::text) else null::text end,
-                'component_fingerprint', ttr.component_fingerprint,
-                'classification', ttr.classification::text,
-                'source_pay_method', ttr.source_pay_method,
-                'current_target_pay_method', ttr.current_target_pay_method,
-                'source_units', case when ttr.source_units is null then null else round(ttr.source_units, 6) end,
-                'source_rate', case when ttr.source_rate is null then null else round(ttr.source_rate, 6) end,
-                'source_charge_rate', case when ttr.source_charge_rate is null then null else round(ttr.source_charge_rate, 6) end,
-                'component_amount_ex_vat', round(coalesce(ttr.component_amount_ex_vat, 0), 2),
-                'source_charge_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat, 2) end,
-                'source_pay_ex_vat', case when ttr.source_pay_ex_vat is null then null else round(ttr.source_pay_ex_vat, 2) end,
-                'source_margin_ex_vat', case when ttr.source_margin_ex_vat is null then null else round(ttr.source_margin_ex_vat, 2) end,
-                'target_pay_ex_vat', case when ttr.target_pay_ex_vat is null then null else round(ttr.target_pay_ex_vat, 2) end,
-                'target_charge_ex_vat', case when ttr.target_charge_ex_vat is null then null else round(ttr.target_charge_ex_vat, 2) end,
-                'target_margin_ex_vat', case when ttr.target_margin_ex_vat is null then null else round(ttr.target_margin_ex_vat, 2) end,
-                'requires_resolution', coalesce(ttr.requires_resolution, false),
-                'case_resolution_satisfied_now_component', coalesce(ttr.case_resolution_satisfied_now_component, false),
-                'has_suggested_resolution', coalesce(ttr.has_suggested_resolution, false),
-                'suggestion_provenance', ttr.suggestion_provenance,
-                'approved_resolution_mode', case when ttr.approved_resolution_mode is null then null else ttr.approved_resolution_mode::text end,
-                'approved_target_rate', case when ttr.approved_target_rate is null then null else round(ttr.approved_target_rate, 6) end,
-                'suggested_resolution_payload_json', ttr.suggested_resolution_payload_json,
-                'suggested_resolution_result_json', ttr.suggested_resolution_result_json,
-                'is_actionable_resolution_row', coalesce(ttr.is_actionable_resolution_row, false),
-                'is_fixed_no_action_taxable_row', coalesce(ttr.is_fixed_no_action_taxable_row, false)
-              )
-            ) as row_json
-          from transient_timesheet_component_review_rows_effective ttr
-          where ttr.candidate_id = v_candidate_id
-
-          union all
-
-          select
-            2 as sort_scope,
-            ('finance:' || fcr.finance_case_id::text) as sort_case_key,
-            coalesce(fcr.current_component_fingerprint, '') as sort_component_fingerprint,
-            coalesce(fcr.component_key_type, '') as sort_component_key_type,
-            coalesce(fcr.component_key_value, '') as sort_component_key_value,
-            jsonb_strip_nulls(
-              jsonb_build_object(
-                'component_scope', 'FINANCE_CASE',
-                'candidate_id', fcr.candidate_id::text,
-                'case_key', ('finance:' || fcr.finance_case_id::text),
-                'timesheet_id', null,
-                'finance_case_id', fcr.finance_case_id::text,
-                'finance_component_id', case when fcr.finance_component_id is null then null else fcr.finance_component_id::text end,
-                'case_type', fcr.case_type::text,
-                'taxability', case when fcr.taxability is null then null else fcr.taxability::text end,
-                'source_family_key', fcr.source_family_key,
-                'component_key_type', fcr.component_key_type,
-                'component_key_value', fcr.component_key_value,
-                'bucket_code', nullif(btrim(coalesce(fcr.source_basis_json->>'bucket_code', '')), ''),
-                'source_basis_json', coalesce(fcr.source_basis_json, '{}'::jsonb),
-                'source_basis_fingerprint', case when coalesce(fcr.source_basis_json, '{}'::jsonb) <> '{}'::jsonb then md5(fcr.source_basis_json::text) else null::text end,
-                'component_fingerprint', fcr.current_component_fingerprint,
-                'classification', fcr.classification::text,
-                'source_pay_method', fcr.source_pay_method,
-                'current_target_pay_method', fcr.current_target_pay_method,
-                'saved_target_pay_method', fcr.saved_target_pay_method,
-                'source_amount', round(coalesce(fcr.source_amount, 0), 2),
-                'remaining_source_amount', round(coalesce(fcr.remaining_source_amount, 0), 2),
-                'source_units', case when fcr.source_units is null then null else round(fcr.source_units, 6) end,
-                'source_rate', case when fcr.source_rate is null then null else round(fcr.source_rate, 6) end,
-                'source_charge_rate', case when fcr.source_charge_rate is null then null else round(fcr.source_charge_rate, 6) end,
-                'source_charge_ex_vat', case when fcr.source_charge_component_ex_vat is null then null else round(fcr.source_charge_component_ex_vat, 2) end,
-                'source_pay_ex_vat', case when fcr.source_pay_ex_vat is null then null else round(fcr.source_pay_ex_vat, 2) end,
-                'source_margin_ex_vat', case when fcr.source_margin_ex_vat is null then null else round(fcr.source_margin_ex_vat, 2) end,
-                'target_pay_ex_vat', case when fcr.target_pay_ex_vat is null then null else round(fcr.target_pay_ex_vat, 2) end,
-                'target_charge_ex_vat', case when fcr.target_charge_ex_vat is null then null else round(fcr.target_charge_ex_vat, 2) end,
-                'target_margin_ex_vat', case when fcr.target_margin_ex_vat is null then null else round(fcr.target_margin_ex_vat, 2) end,
-                'approved_resolution_mode', case when fcr.approved_resolution_mode is null then null else fcr.approved_resolution_mode::text end,
-                'approved_target_rate', case when fcr.approved_target_rate is null then null else round(fcr.approved_target_rate, 6) end,
-                'approved_nonbucket_resolution_mode', case when fcr.approved_nonbucket_resolution_mode is null then null else fcr.approved_nonbucket_resolution_mode::text end,
-                'approved_nonbucket_target_amount_ex_vat', case when fcr.approved_nonbucket_target_amount_ex_vat is null then null else round(fcr.approved_nonbucket_target_amount_ex_vat, 2) end,
-                'saved_resolution_mode', case when fcr.saved_resolution_mode is null then null else fcr.saved_resolution_mode::text end,
-                'saved_resolution_payload_json', fcr.saved_resolution_payload_json,
-                'saved_resolution_result_json', fcr.saved_resolution_result_json,
-                'resolution_fingerprint', fcr.resolution_fingerprint,
-                'is_resolution_stale', coalesce(fcr.is_resolution_stale, false),
-                'stale_reason', fcr.stale_reason,
-                'requires_resolution', coalesce(fcr.requires_resolution, false),
-                'case_resolution_satisfied_now_component', coalesce(fcr.case_resolution_satisfied_now_component, false),
-                'suggested_resolution_payload_json', fcr.suggested_resolution_payload_json,
-                'suggested_resolution_result_json', fcr.suggested_resolution_result_json,
-                'is_actionable_resolution_row', coalesce(fcr.is_actionable_resolution_row, false),
-                'is_fixed_no_action_taxable_row', coalesce(fcr.is_fixed_no_action_taxable_row, false)
-              )
-            ) as row_json
-          from finance_case_component_review_rows_effective fcr
-          where fcr.candidate_id = v_candidate_id
-        ) u
-      ),
-      '[]'::jsonb
-    )
+    coalesce((select bcrj.payload from baseline_component_rows_json bcrj), '[]'::jsonb)
   into v_paye, v_nonpaye, v_blocked, v_do_not_pay, v_snoozed, v_payees, v_summary, v_canonical_preview_lines, v_paye_summary_breakdown, v_case_resolution_states, v_baseline_component_rows;
 
   if jsonb_typeof(v_paye) = 'array' and jsonb_array_length(v_paye) > 0 then
@@ -12468,6 +12506,3 @@ begin
   );
 end;
 $function$;
-
-
-
