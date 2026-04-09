@@ -1,15 +1,4 @@
-BEGIN;
 
-DROP FUNCTION IF EXISTS public.pay_preview(
-  date,
-  date,
-  uuid,
-  uuid,
-  uuid,
-  jsonb
-);
-
-COMMIT;
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_ensure_run(
   p_pay_date date,
