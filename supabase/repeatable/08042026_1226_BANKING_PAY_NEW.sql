@@ -7143,8 +7143,50 @@ ts_itemised as (
     left join public.candidates cand on cand.id = cr.candidate_id
   ),
 
+  finance_case_baseline_scope as (
+    select
+      vfcr.*
+    from public.v_finance_cases_register vfcr
+    where vfcr.case_type in (
+      'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+      'OVERPAYMENT'::public.pay_finance_case_type_enum,
+      'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+      'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+    )
+      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
+      and coalesce(vfcr.outstanding_amount,0) > 0
+      and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
+      and (
+        (
+          vfcr.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
+          and (
+            upper(coalesce(vfcr.payout_status::text,'')) <> 'PAID'
+            or vfcr.next_due_week_start is null
+            or vfcr.next_due_week_start <= v_week_start
+          )
+        )
+        or (
+          vfcr.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+          and (
+            vfcr.next_due_week_start is null
+            or vfcr.next_due_week_start <= v_week_start
+          )
+        )
+        or (
+          vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+          and (
+            vfcr.next_due_week_start is null
+            or vfcr.next_due_week_start <= v_week_start
+          )
+        )
+        or vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+      )
+      and (v_candidate_id is null or vfcr.candidate_id = v_candidate_id)
+      and (v_client_id is null or vfcr.client_id = v_client_id)
+  ),
+
   -- ✅ NEW: Payees section (candidate + umbrella) + readiness derived from bank_name_checks + bank_payee_map
-  payees_src as (
+  payee_baseline_rows as (
     select
       'CANDIDATE'::text as payee_entity_kind,
       ce.candidate_id as payee_entity_id,
@@ -7160,18 +7202,42 @@ ts_itemised as (
     union all
     select
       'CANDIDATE'::text as payee_entity_kind,
-      vfcr.candidate_id as payee_entity_id,
+      fcb.candidate_id as payee_entity_id,
       nullif(btrim(coalesce(obd.bank_details_hash,'')), '') as bank_details_hash
-    from public.v_finance_cases_register vfcr
+    from finance_case_baseline_scope fcb
     join public.pay_finance_case_oneoff_payout_bank_details obd
-      on obd.finance_case_id = vfcr.finance_case_id
-    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
-      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
-      and coalesce(vfcr.outstanding_amount,0) > 0
-      and vfcr.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum
-      and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
-      and (v_candidate_id is null or vfcr.candidate_id = v_candidate_id)
-      and (v_client_id is null or vfcr.client_id = v_client_id)
+      on obd.finance_case_id = fcb.finance_case_id
+    where fcb.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum
+    union all
+    select
+      case
+        when fcb.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then 'UMBRELLA'
+        else 'CANDIDATE'
+      end as payee_entity_kind,
+      case
+        when fcb.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then c_fc.umbrella_id
+        else fcb.candidate_id
+      end as payee_entity_id,
+      case
+        when fcb.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum then nullif(btrim(coalesce(obd.bank_details_hash,'')), '')
+        when fcb.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then nullif(btrim(coalesce(u_fc.bank_details_hash,'')), '')
+        else nullif(btrim(coalesce(c_fc.bank_details_hash,'')), '')
+      end as bank_details_hash
+    from finance_case_baseline_scope fcb
+    join public.candidates c_fc
+      on c_fc.id = fcb.candidate_id
+    left join public.umbrellas u_fc
+      on u_fc.id = c_fc.umbrella_id
+    left join public.pay_finance_case_oneoff_payout_bank_details obd
+      on obd.finance_case_id = fcb.finance_case_id
+  ),
+  payees_src as (
+    select
+      pbr.payee_entity_kind,
+      pbr.payee_entity_id,
+      pbr.bank_details_hash
+    from payee_baseline_rows pbr
+    where pbr.payee_entity_id is not null
   ),
   payees as (
     select
@@ -7236,18 +7302,12 @@ ts_itemised as (
         obd.sort_code,
         obd.account_number,
         obd.bank_details_hash
-      from public.v_finance_cases_register vfcr_oneoff
+      from finance_case_baseline_scope vfcr_oneoff
       join public.pay_finance_case_oneoff_payout_bank_details obd
         on obd.finance_case_id = vfcr_oneoff.finance_case_id
       where p.payee_entity_kind = 'CANDIDATE'
         and vfcr_oneoff.candidate_id = p.payee_entity_id
-        and vfcr_oneoff.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
-        and upper(coalesce(vfcr_oneoff.status::text,'')) = 'ACTIVE'
-        and coalesce(vfcr_oneoff.outstanding_amount,0) > 0
         and vfcr_oneoff.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::public.pay_finance_routing_kind_enum
-        and not (vfcr_oneoff.active_snooze_id is not null and vfcr_oneoff.active_snooze_until_date is null)
-        and (v_candidate_id is null or vfcr_oneoff.candidate_id = v_candidate_id)
-        and (v_client_id is null or vfcr_oneoff.client_id = v_client_id)
         and obd.bank_details_hash is not distinct from p.bank_details_hash
       order by vfcr_oneoff.finance_case_id
       limit 1
@@ -7629,7 +7689,7 @@ ts_itemised as (
         ),
         2
       )::numeric(12,2) as nominal_due_amount
-    from public.v_finance_cases_register vfcr
+    from finance_case_baseline_scope vfcr
     join candidate_rollup cr
       on cr.candidate_id = vfcr.candidate_id
     join public.candidates c
@@ -7639,35 +7699,10 @@ ts_itemised as (
     left join finance_case_repaid_wtd fcrw
       on fcrw.finance_case_id = vfcr.finance_case_id
     where vfcr.case_type in ('PAYMENT_ADVANCE','MANUAL_DEBT_ADJUSTMENT','OVERPAYMENT')
-      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
-      and coalesce(vfcr.outstanding_amount,0) > 0
-      and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
       and (
-        (
-          vfcr.case_type = 'PAYMENT_ADVANCE'
-          and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID'
-          and (
-            vfcr.next_due_week_start is null
-            or vfcr.next_due_week_start <= v_week_start
-          )
-        )
-        or (
-          vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT'
-          and (
-            vfcr.next_due_week_start is null
-            or vfcr.next_due_week_start <= v_week_start
-          )
-        )
-        or (
-          vfcr.case_type = 'OVERPAYMENT'
-          and (
-            vfcr.next_due_week_start is null
-            or vfcr.next_due_week_start <= v_week_start
-          )
-        )
+        (vfcr.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID')
+        or vfcr.case_type in ('MANUAL_DEBT_ADJUSTMENT','OVERPAYMENT')
       )
-      and (v_candidate_id is null or vfcr.candidate_id = v_candidate_id)
-      and (v_client_id is null or vfcr.client_id = v_client_id)
   ),
   manual_debt_recovery_rows as (
     select
@@ -8046,18 +8081,14 @@ ts_itemised as (
           when vfcr.routing_kind = 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum then u.account_number
           else c.account_number
         end as account_number
-      from public.v_finance_cases_register vfcr
+      from finance_case_baseline_scope vfcr
       join public.candidates c
         on c.id = vfcr.candidate_id
       left join public.umbrellas u
         on u.id = c.umbrella_id
       left join public.pay_finance_case_oneoff_payout_bank_details obd
         on obd.finance_case_id = vfcr.finance_case_id
-      where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
-        and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
-        and coalesce(vfcr.outstanding_amount,0) > 0
-        and (v_candidate_id is null or vfcr.candidate_id = v_candidate_id)
-        and (v_client_id is null or vfcr.client_id = v_client_id)
+      where vfcr.finance_case_id is not null
     ) f0
     left join public.bank_name_checks bnc
       on bnc.rail_provider = v_rail_provider_default
@@ -8112,7 +8143,7 @@ ts_itemised as (
         end,
         coalesce(pfc.saved_resolution_payload_json, pfc.saved_resolution_result_json, '{}'::jsonb)
       ) as current_component_fingerprint
-    from public.v_finance_cases_register vfcr
+    from finance_case_baseline_scope vfcr
     join cand_payee cp
       on cp.candidate_id = vfcr.candidate_id
     join public.pay_finance_case_components pfc
@@ -8589,16 +8620,12 @@ ts_itemised as (
         ),
         2
       ) as due_source_amount_ex_vat
-    from public.v_finance_cases_register vfcr
+    from finance_case_baseline_scope vfcr
     left join finance_case_repaid_wtd fcrw
       on fcrw.finance_case_id = vfcr.finance_case_id
     left join finance_case_protected_allocations fcpa
       on fcpa.finance_case_id = vfcr.finance_case_id
-    where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
-      and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
-      and coalesce(vfcr.outstanding_amount,0) > 0
-      and (v_candidate_id is null or vfcr.candidate_id = v_candidate_id)
-      and (v_client_id is null or vfcr.client_id = v_client_id)
+    where vfcr.finance_case_id is not null
   ),
   finance_case_component_due_source_base as (
     select
@@ -8996,7 +9023,7 @@ ts_itemised as (
           ) filter (where fccr.finance_component_id is not null),
           '[]'::jsonb
         ) as case_components_json
-      from public.v_finance_cases_register vfcr
+      from finance_case_baseline_scope vfcr
       join cand_payee cp
         on cp.candidate_id = vfcr.candidate_id
       left join finance_case_component_review_rows_effective fccr
@@ -9011,26 +9038,7 @@ ts_itemised as (
       left join finance_case_component_due_preview_allocations fcdpa
         on fcdpa.finance_case_id = fccr.finance_case_id
        and fcdpa.finance_component_id = fccr.finance_component_id
-      where vfcr.case_type in ('PAYMENT_ADVANCE','OVERPAYMENT','MANUAL_DEBT_ADJUSTMENT','MANUAL_CREDIT_ADJUSTMENT')
-        and upper(coalesce(vfcr.status::text,'')) = 'ACTIVE'
-        and coalesce(vfcr.outstanding_amount,0) > 0
-        and not (vfcr.active_snooze_id is not null and vfcr.active_snooze_until_date is null)
-        and (
-          (vfcr.case_type = 'PAYMENT_ADVANCE' and (
-            upper(coalesce(vfcr.payout_status::text,'')) <> 'PAID'
-            or vfcr.next_due_week_start is null
-            or vfcr.next_due_week_start <= v_week_start
-          ))
-          or (vfcr.case_type = 'OVERPAYMENT' and (
-            vfcr.next_due_week_start is null
-            or vfcr.next_due_week_start <= v_week_start
-          ))
-          or (vfcr.case_type = 'MANUAL_DEBT_ADJUSTMENT' and (
-            vfcr.next_due_week_start is null
-            or vfcr.next_due_week_start <= v_week_start
-          ))
-          or vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'
-        )
+      where vfcr.finance_case_id is not null
       group by
         vfcr.finance_case_id,
         vfcr.case_type,
