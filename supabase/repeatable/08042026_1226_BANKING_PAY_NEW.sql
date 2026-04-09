@@ -8694,7 +8694,7 @@ ts_itemised as (
           and fccr.source_rate is not null
           and fccr.source_charge_rate is not null
           and fccr.component_key_type <> 'ADJUSTMENT_CODE'
-          and fccr.case_type not = 'MANUAL_DEBT_ADJUSTMENT'
+and fccr.case_type <> 'MANUAL_DEBT_ADJUSTMENT'
         ) as is_actionable_bucket_resolution,
         (
           fccr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
@@ -8708,7 +8708,7 @@ ts_itemised as (
             and fccr.source_rate is not null
             and fccr.source_charge_rate is not null
             and fccr.component_key_type <> 'ADJUSTMENT_CODE'
-            and fccr.case_type not = 'MANUAL_DEBT_ADJUSTMENT'
+            and fccr.case_type <> 'MANUAL_DEBT_ADJUSTMENT'
           )
         ) as is_fixed_taxable_conversion
     ) fctx on true
