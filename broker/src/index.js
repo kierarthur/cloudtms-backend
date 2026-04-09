@@ -24694,6 +24694,303 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   }));
 }
 
+async function handleTimesheetManualDailyCreateOptions(env, req) {
+  const enc = encodeURIComponent;
+
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+
+  const toIsoYmd = (value) => {
+    const raw = trimStr(value);
+    if (!raw) return '';
+
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return '';
+
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return '';
+
+    const dt = new Date(Date.UTC(y, mo - 1, d, 0, 0, 0, 0));
+    if (
+      dt.getUTCFullYear() !== y ||
+      dt.getUTCMonth() + 1 !== mo ||
+      dt.getUTCDate() !== d
+    ) {
+      return '';
+    }
+
+    return `${m[1]}-${m[2]}-${m[3]}`;
+  };
+
+  const normRole = (value) => {
+    const s = trimStr(value).replace(/\s+/g, ' ').trim();
+    return s ? s.toUpperCase() : null;
+  };
+
+  const normBand = (value) => {
+    const s = trimStr(value);
+    if (!s) return null;
+
+    let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+    if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+
+    return s;
+  };
+
+  const parseCandidateRoleCodes = (rolesVal) => {
+    try {
+      let roles = rolesVal;
+      if (typeof roles === 'string') {
+        roles = JSON.parse(roles);
+      }
+      if (!Array.isArray(roles)) return [];
+
+      const out = [];
+      const seen = new Set();
+
+      for (const entry of roles) {
+        const codeRaw = (entry && typeof entry === 'object') ? entry.code : entry;
+        const code = normRole(codeRaw);
+        if (!code || seen.has(code)) continue;
+        seen.add(code);
+        out.push(code);
+      }
+
+      return out;
+    } catch {
+      return [];
+    }
+  };
+
+  const compareText = (a, b) => String(a || '').localeCompare(String(b || ''), 'en-GB', { numeric: true, sensitivity: 'base' });
+
+  const workedDateYmd = toIsoYmd(
+    body?.worked_date_ymd ||
+    body?.date ||
+    ''
+  );
+
+  if (!workedDateYmd) {
+    return withCORS(env, req, badRequest('worked_date_ymd is required (YYYY-MM-DD)'));
+  }
+
+  const clientIdIn = trimStr(body?.client_id || body?.clientId || '');
+  const roleIn = normRole(body?.role || body?.role_code || body?.roleCode || '');
+  const bandIn = normBand(body?.band || body?.band_norm || body?.bandNorm || '');
+
+  const fetchActiveRateRowsForDate = async (dateYmd) => {
+    const rowsOut = [];
+    const pageSize = 1000;
+    let offset = 0;
+
+    while (true) {
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/rates_client_defaults` +
+        `?date_from=lte.${enc(dateYmd)}` +
+        `&or=(date_to.gte.${enc(dateYmd)},date_to.is.null)` +
+        `&disabled_at_utc=is.null` +
+        `&select=client_id,role,band` +
+        `&order=client_id.asc,role.asc,band.asc` +
+        `&limit=${pageSize}&offset=${offset}`;
+
+      const { rows } = await sbFetch(env, url);
+      const batch = Array.isArray(rows) ? rows : [];
+      rowsOut.push(...batch);
+
+      if (batch.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return rowsOut;
+  };
+
+  const fetchClientsByIds = async (clientIds) => {
+    const ids = Array.from(new Set((Array.isArray(clientIds) ? clientIds : []).map((v) => trimStr(v)).filter(Boolean)));
+    if (!ids.length) return [];
+
+    const rowsOut = [];
+    const chunkSize = 100;
+
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/clients` +
+        `?id=in.(${chunk.map((id) => enc(id)).join(',')})` +
+        `&select=id,name`;
+
+      const { rows } = await sbFetch(env, url);
+      if (Array.isArray(rows) && rows.length) rowsOut.push(...rows);
+    }
+
+    return rowsOut;
+  };
+
+  const fetchActiveCandidates = async () => {
+    const rowsOut = [];
+    const pageSize = 1000;
+    let offset = 0;
+
+    while (true) {
+      const url =
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?active=eq.true` +
+        `&select=id,display_name,first_name,last_name,email,phone,tms_ref,roles,band,active` +
+        `&order=display_name.asc,last_name.asc,first_name.asc,id.asc` +
+        `&limit=${pageSize}&offset=${offset}`;
+
+      const { rows } = await sbFetch(env, url);
+      const batch = Array.isArray(rows) ? rows : [];
+      rowsOut.push(...batch);
+
+      if (batch.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return rowsOut;
+  };
+
+  const rateRowsRaw = await fetchActiveRateRowsForDate(workedDateYmd);
+
+  const rateRows = rateRowsRaw
+    .map((row) => ({
+      client_id: trimStr(row?.client_id || ''),
+      role: normRole(row?.role || ''),
+      band: normBand(row?.band || '')
+    }))
+    .filter((row) => row.client_id && row.role);
+
+  const eligibleClientIds = Array.from(new Set(rateRows.map((row) => row.client_id)));
+  const clientRows = await fetchClientsByIds(eligibleClientIds);
+
+  const clients = clientRows
+    .map((row) => ({
+      id: trimStr(row?.id || ''),
+      name: trimStr(row?.name || ''),
+      label: trimStr(row?.name || '')
+    }))
+    .filter((row) => row.id && row.name && eligibleClientIds.includes(row.id))
+    .sort((a, b) => compareText(a.name, b.name));
+
+  const defaultClientId = (clients.length === 1) ? clients[0].id : null;
+  const selectedClientId = (clientIdIn && clients.some((row) => row.id === clientIdIn)) ? clientIdIn : defaultClientId;
+
+  let roles = [];
+  let defaultRole = null;
+  let selectedRole = null;
+
+  if (selectedClientId) {
+    const roleSet = new Set();
+    for (const row of rateRows) {
+      if (row.client_id !== selectedClientId || !row.role) continue;
+      roleSet.add(row.role);
+    }
+
+    roles = Array.from(roleSet)
+      .sort((a, b) => compareText(a, b))
+      .map((role) => ({ role, label: role }));
+
+    defaultRole = (roles.length === 1) ? roles[0].role : null;
+    selectedRole = (roleIn && roles.some((row) => row.role === roleIn)) ? roleIn : defaultRole;
+  }
+
+  let bands = [];
+  let defaultBand = null;
+  let selectedBand = null;
+
+  if (selectedClientId && selectedRole) {
+    const bandSet = new Set();
+    for (const row of rateRows) {
+      if (row.client_id !== selectedClientId) continue;
+      if (row.role !== selectedRole) continue;
+      if (!row.band) continue;
+      bandSet.add(row.band);
+    }
+
+    bands = Array.from(bandSet)
+      .sort((a, b) => compareText(a, b))
+      .map((band) => ({ band, label: band }));
+
+    defaultBand = (bands.length === 1) ? bands[0].band : null;
+    selectedBand = (bandIn && bands.some((row) => row.band === bandIn)) ? bandIn : defaultBand;
+  }
+
+  const bandRequired = bands.length > 0;
+
+  let candidates = [];
+
+  if (selectedRole) {
+    const candidateRows = await fetchActiveCandidates();
+
+    candidates = candidateRows
+      .map((row) => {
+        const candidateBand = normBand(row?.band);
+        const roleCodes = parseCandidateRoleCodes(row?.roles);
+        const displayName = trimStr(
+          row?.display_name ||
+          [trimStr(row?.first_name || ''), trimStr(row?.last_name || '')].filter(Boolean).join(' ')
+        );
+        const label = displayName || trimStr(row?.tms_ref || '') || trimStr(row?.id || '');
+
+        return {
+          id: trimStr(row?.id || ''),
+          display_name: displayName || null,
+          first_name: trimStr(row?.first_name || '') || null,
+          last_name: trimStr(row?.last_name || '') || null,
+          email: trimStr(row?.email || '') || null,
+          phone: trimStr(row?.phone || '') || null,
+          tms_ref: trimStr(row?.tms_ref || '') || null,
+          roles: Array.isArray(row?.roles) || (row?.roles && typeof row.roles === 'object') ? row.roles : null,
+          role_codes: roleCodes,
+          band: candidateBand,
+          active: row?.active === true,
+          label
+        };
+      })
+      .filter((row) => row.id)
+      .filter((row) => row.active === true)
+      .filter((row) => row.role_codes.includes(selectedRole))
+      .filter((row) => {
+        if (!(bandRequired && selectedBand)) return true;
+        if (!row.band) return true;
+        return row.band === selectedBand;
+      })
+      .sort((a, b) => {
+        const aKey = trimStr(a.display_name || '') || [trimStr(a.last_name || ''), trimStr(a.first_name || '')].filter(Boolean).join(' ') || trimStr(a.tms_ref || '') || a.id;
+        const bKey = trimStr(b.display_name || '') || [trimStr(b.last_name || ''), trimStr(b.first_name || '')].filter(Boolean).join(' ') || trimStr(b.tms_ref || '') || b.id;
+        const cmp = compareText(aKey, bKey);
+        return cmp || compareText(a.id, b.id);
+      });
+  }
+
+  return withCORS(env, req, ok({
+    worked_date_ymd: workedDateYmd,
+    selected_client_id: selectedClientId || null,
+    selected_role: selectedRole || null,
+    selected_band: selectedBand || null,
+    default_client_id: defaultClientId || null,
+    default_role: defaultRole || null,
+    default_band: defaultBand || null,
+    band_required: bandRequired,
+    clients,
+    roles,
+    bands,
+    candidates
+  }));
+}
+
 async function handleContractWeeksList(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -112350,7 +112647,9 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
   }
 }
 
-
+if (req.method === 'POST' && p === '/api/timesheets/manual-daily-create-options') {
+  return handleTimesheetManualDailyCreateOptions(env, req);
+}
       // =============================================================================
       // NEW ROUTES — Weekly (electronic) – public broker
       // =============================================================================
