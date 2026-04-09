@@ -2052,11 +2052,18 @@ DECLARE
   v_case_resolution_states_raw jsonb := '[]'::jsonb;
   v_canonical_preview_lines_raw jsonb := '[]'::jsonb;
   v_payees_raw jsonb := '[]'::jsonb;
+  v_blocked_items_raw jsonb := '[]'::jsonb;
+  v_do_not_pay_items_raw jsonb := '[]'::jsonb;
+  v_snoozed_items_raw jsonb := '[]'::jsonb;
   v_paye_candidates jsonb := '[]'::jsonb;
   v_non_paye_payees jsonb := '[]'::jsonb;
   v_case_resolution_states jsonb := '[]'::jsonb;
   v_canonical_preview_lines jsonb := '[]'::jsonb;
   v_payees jsonb := '[]'::jsonb;
+  v_blocked_items jsonb := '[]'::jsonb;
+  v_do_not_pay_items jsonb := '[]'::jsonb;
+  v_snoozed_items jsonb := '[]'::jsonb;
+  v_paye_summary_breakdown jsonb := '{}'::jsonb;
   v_summary jsonb := '{}'::jsonb;
   v_candidate_count integer := 0;
   v_paye_candidates_count integer := 0;
@@ -2077,6 +2084,10 @@ DECLARE
   v_draftable_amount_ex_vat numeric := 0;
   v_draftable_amount_vat numeric := 0;
   v_draftable_amount_inc_vat numeric := 0;
+  v_gross_side_additions_ex_vat numeric := 0;
+  v_gross_side_deductions_ex_vat numeric := 0;
+  v_net_side_additions_ex_vat numeric := 0;
+  v_net_side_deductions_ex_vat numeric := 0;
   v_payees_need_name_check integer := 0;
   v_payees_need_payee_map integer := 0;
   v_payees_missing_bank_details integer := 0;
@@ -2112,6 +2123,18 @@ BEGIN
 
     IF jsonb_typeof(v_rollup->'payees') = 'array' THEN
       v_payees_raw := v_payees_raw || COALESCE(v_rollup->'payees', '[]'::jsonb);
+    END IF;
+
+    IF jsonb_typeof(v_rollup->'blocked_items') = 'array' THEN
+      v_blocked_items_raw := v_blocked_items_raw || COALESCE(v_rollup->'blocked_items', '[]'::jsonb);
+    END IF;
+
+    IF jsonb_typeof(v_rollup->'do_not_pay_items') = 'array' THEN
+      v_do_not_pay_items_raw := v_do_not_pay_items_raw || COALESCE(v_rollup->'do_not_pay_items', '[]'::jsonb);
+    END IF;
+
+    IF jsonb_typeof(v_rollup->'snoozed_items') = 'array' THEN
+      v_snoozed_items_raw := v_snoozed_items_raw || COALESCE(v_rollup->'snoozed_items', '[]'::jsonb);
     END IF;
   END LOOP;
 
@@ -2149,6 +2172,54 @@ BEGIN
     )
   INTO v_canonical_preview_lines
   FROM jsonb_array_elements(v_canonical_preview_lines_raw) AS elem(value)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        elem.value
+        ORDER BY
+          BTRIM(COALESCE(elem.value->>'candidate_id', '')),
+          BTRIM(COALESCE(elem.value->>'timesheet_id', elem.value->>'finance_case_id', '')),
+          BTRIM(COALESCE(elem.value->>'segment_id', elem.value->>'segment_stable_key', elem.value->>'line_id', elem.value->>'preview_row_id', elem.value->>'row_id', elem.value->>'id', '')),
+          BTRIM(COALESCE(elem.value->>'line_type', elem.value->>'category', elem.value->>'component_kind', elem.value->>'component_type', ''))
+      ),
+      '[]'::jsonb
+    )
+  INTO v_blocked_items
+  FROM jsonb_array_elements(v_blocked_items_raw) AS elem(value)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        elem.value
+        ORDER BY
+          BTRIM(COALESCE(elem.value->>'candidate_id', '')),
+          BTRIM(COALESCE(elem.value->>'timesheet_id', elem.value->>'finance_case_id', '')),
+          BTRIM(COALESCE(elem.value->>'segment_id', elem.value->>'segment_stable_key', elem.value->>'line_id', elem.value->>'preview_row_id', elem.value->>'row_id', elem.value->>'id', '')),
+          BTRIM(COALESCE(elem.value->>'line_type', elem.value->>'category', elem.value->>'component_kind', elem.value->>'component_type', ''))
+      ),
+      '[]'::jsonb
+    )
+  INTO v_do_not_pay_items
+  FROM jsonb_array_elements(v_do_not_pay_items_raw) AS elem(value)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        elem.value
+        ORDER BY
+          BTRIM(COALESCE(elem.value->>'candidate_id', '')),
+          BTRIM(COALESCE(elem.value->>'timesheet_id', elem.value->>'finance_case_id', '')),
+          BTRIM(COALESCE(elem.value->>'segment_id', elem.value->>'segment_stable_key', elem.value->>'line_id', elem.value->>'preview_row_id', elem.value->>'row_id', elem.value->>'id', '')),
+          BTRIM(COALESCE(elem.value->>'line_type', elem.value->>'category', elem.value->>'component_kind', elem.value->>'component_type', ''))
+      ),
+      '[]'::jsonb
+    )
+  INTO v_snoozed_items
+  FROM jsonb_array_elements(v_snoozed_items_raw) AS elem(value)
   WHERE jsonb_typeof(elem.value) = 'object';
 
   WITH payee_elements AS (
@@ -2363,6 +2434,62 @@ BEGIN
       )
     );
 
+  SELECT
+    ROUND(COALESCE(SUM(
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(elem.value->>'pay_channel', ''))) = 'PAYE'
+          AND UPPER(BTRIM(COALESCE(elem.value->>'paye_treatment', ''))) = 'GROSS_ADD'
+          AND COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_excluded_from_allocation', 'false'))), 'false') NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND BTRIM(COALESCE(elem.value->>'amount_ex_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN GREATEST((elem.value->>'amount_ex_vat')::numeric, 0)
+        ELSE 0
+      END
+    ), 0), 2),
+    ROUND(COALESCE(SUM(
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(elem.value->>'pay_channel', ''))) = 'PAYE'
+          AND UPPER(BTRIM(COALESCE(elem.value->>'paye_treatment', ''))) = 'GROSS_DEDUCT'
+          AND COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_excluded_from_allocation', 'false'))), 'false') NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND BTRIM(COALESCE(elem.value->>'amount_ex_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ABS((elem.value->>'amount_ex_vat')::numeric)
+        ELSE 0
+      END
+    ), 0), 2),
+    ROUND(COALESCE(SUM(
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(elem.value->>'pay_channel', ''))) = 'PAYE'
+          AND UPPER(BTRIM(COALESCE(elem.value->>'paye_treatment', ''))) = 'NET_ADD'
+          AND COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_excluded_from_allocation', 'false'))), 'false') NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND BTRIM(COALESCE(elem.value->>'amount_ex_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN GREATEST((elem.value->>'amount_ex_vat')::numeric, 0)
+        ELSE 0
+      END
+    ), 0), 2),
+    ROUND(COALESCE(SUM(
+      CASE
+        WHEN UPPER(BTRIM(COALESCE(elem.value->>'pay_channel', ''))) = 'PAYE'
+          AND UPPER(BTRIM(COALESCE(elem.value->>'paye_treatment', ''))) = 'NET_DEDUCT'
+          AND COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_excluded_from_allocation', 'false'))), 'false') NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND BTRIM(COALESCE(elem.value->>'amount_ex_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ABS((elem.value->>'amount_ex_vat')::numeric)
+        ELSE 0
+      END
+    ), 0), 2)
+  INTO
+    v_gross_side_additions_ex_vat,
+    v_gross_side_deductions_ex_vat,
+    v_net_side_additions_ex_vat,
+    v_net_side_deductions_ex_vat
+  FROM jsonb_array_elements(v_canonical_preview_lines) AS elem(value)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  v_paye_summary_breakdown := jsonb_build_object(
+    'gross_side_additions_ex_vat', v_gross_side_additions_ex_vat,
+    'gross_side_deductions_ex_vat', v_gross_side_deductions_ex_vat,
+    'net_side_additions_ex_vat', v_net_side_additions_ex_vat,
+    'net_side_deductions_ex_vat', v_net_side_deductions_ex_vat
+  );
+
   v_summary := jsonb_build_object(
     'readiness', jsonb_build_object(
       'payees_total', v_payees_count,
@@ -2393,17 +2520,29 @@ BEGIN
     'total_amount_inc_vat', v_total_amount_inc_vat,
     'draftable_amount_ex_vat', v_draftable_amount_ex_vat,
     'draftable_amount_vat', v_draftable_amount_vat,
-    'draftable_amount_inc_vat', v_draftable_amount_inc_vat
+    'draftable_amount_inc_vat', v_draftable_amount_inc_vat,
+    'paye_breakdown', v_paye_summary_breakdown
   );
 
   RETURN jsonb_build_object(
+    'pay_date', v_context_json->'pay_date',
+    'pay_week_start', v_context_json->'pay_week_start',
+    'week_ending_cutoff_date', v_context_json->'week_ending_cutoff_date',
+    'eligibility', COALESCE(v_context_json->'eligibility', '{}'::jsonb),
+    'filters', COALESCE(v_context_json->'filters', '{}'::jsonb),
+    'finance', COALESCE(v_context_json->'finance', '{}'::jsonb),
+    'settings', COALESCE(v_context_json->'settings', '{}'::jsonb),
     'summary', v_summary,
+    'paye_guardrails', COALESCE(v_context_json->'paye_guardrails', '{}'::jsonb),
+    'paye_summary_breakdown', v_paye_summary_breakdown,
+    'payees', v_payees,
+    'canonical_preview_lines', v_canonical_preview_lines,
+    'case_resolution_states', v_case_resolution_states,
     'paye_candidates', v_paye_candidates,
     'non_paye_payees', v_non_paye_payees,
-    'case_resolution_states', v_case_resolution_states,
-    'canonical_preview_lines', v_canonical_preview_lines,
-    'paye_guardrails', COALESCE(v_context_json->'paye_guardrails', '{}'::jsonb),
-    'payees', v_payees
+    'blocked_items', v_blocked_items,
+    'do_not_pay_items', v_do_not_pay_items,
+    'snoozed_items', v_snoozed_items
   );
 END;
 $function$;
