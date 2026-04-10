@@ -2644,7 +2644,7 @@ declare
   v_batch record;
   v_cfg record;
 
-  v_provider text := upper(btrim(coalesce(nullif(btrim(coalesce(p_schedule_kind,'')),''),'')));
+  v_provider text := null;
 
   v_sched_at timestamptz;
   v_warn jsonb;
@@ -2688,6 +2688,9 @@ declare
   v_remittance_error text := null;
   v_remittance_dispatch_required boolean := false;
   v_remittance_targeted_count int := 0;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
 begin
   if p_pay_batch_id is null then
     raise exception '%', jsonb_build_object(
@@ -2722,7 +2725,10 @@ begin
     pb.authoritative_payment_date,
     pb.authoritative_payment_date_source,
     pb.rail_provider_snapshot,
-    pb.rail_env_snapshot
+    pb.rail_env_snapshot,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -2734,6 +2740,25 @@ begin
       'code', 'PAY_BATCH_NOT_FOUND',
       'message', 'pay_batch_schedule: pay_batch not found',
       'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+  v_execution_commit_ref := v_batch.execution_commit_ref;
+  v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
+
+  if v_execution_commit_state <> 'NOT_SUBMITTED' then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_SCHEDULE',
+      'code', 'EXECUTION_STATE_CONFLICT',
+      'message', 'pay_batch_schedule: batch has already crossed the execution submission boundary',
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_execution_commit_ref,
+      'execution_committed_at_utc', case when v_execution_committed_at_utc is null then null else v_execution_committed_at_utc::text end
     )::text;
   end if;
 
@@ -3152,7 +3177,10 @@ begin
     authoritative_payment_date = v_authoritative_payment_date,
     authoritative_payment_date_source = 'SCHEDULED_AT_UTC',
     pay_date = v_authoritative_payment_date,
-    status = 'SCHEDULED'
+    status = 'SCHEDULED',
+    execution_commit_state = v_execution_commit_state,
+    execution_commit_ref = v_execution_commit_ref,
+    execution_committed_at_utc = v_execution_committed_at_utc
   where pb.id = p_pay_batch_id;
 
   update public.pay_advance_reservations par
@@ -3514,6 +3542,9 @@ begin
     'funds_warning_hours_json', v_warn,
     'rail_provider_snapshot', v_batch.rail_provider_snapshot,
     'rail_env_snapshot', v_batch.rail_env_snapshot,
+    'execution_commit_state', (select pb2.execution_commit_state from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'execution_commit_ref', (select pb2.execution_commit_ref from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'execution_committed_at_utc', (select case when pb2.execution_committed_at_utc is null then null else pb2.execution_committed_at_utc::text end from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
     'finance_reservations', jsonb_build_object(
       'committed_count', v_reservations_committed_count,
       'committed_amount', v_reservations_committed_amount
@@ -3522,6 +3553,13 @@ begin
   );
 end;
 $$;
+
+
+
+
+
+
+
 
 create or replace function public.pay_batch_prepare(
   p_pay_batch_id uuid,
