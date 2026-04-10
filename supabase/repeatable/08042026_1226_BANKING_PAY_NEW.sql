@@ -1400,6 +1400,10 @@ BEGIN
 END;
 $function$;
 
+
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview_build_candidate_rollup(
   p_context_json jsonb,
   p_candidate_effective_json jsonb
@@ -1422,6 +1426,7 @@ DECLARE
   v_payees_input jsonb := '[]'::jsonb;
   v_itemisation_input jsonb := '[]'::jsonb;
   v_baseline_component_rows jsonb := '[]'::jsonb;
+  v_timesheet_snapshots_input jsonb := '[]'::jsonb;
   v_explicit_blocked_input jsonb := '[]'::jsonb;
   v_explicit_do_not_pay_input jsonb := '[]'::jsonb;
   v_explicit_snoozed_input jsonb := '[]'::jsonb;
@@ -1429,6 +1434,7 @@ DECLARE
   v_normalized_lines jsonb := '[]'::jsonb;
   v_normalized_payees jsonb := '[]'::jsonb;
   v_normalized_itemisation jsonb := '[]'::jsonb;
+  v_timesheet_snapshots_json jsonb := '[]'::jsonb;
   v_blocked_items jsonb := '[]'::jsonb;
   v_do_not_pay_items jsonb := '[]'::jsonb;
   v_snoozed_items jsonb := '[]'::jsonb;
@@ -1573,6 +1579,14 @@ BEGIN
     ELSE '[]'::jsonb
   END;
 
+  v_timesheet_snapshots_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'timesheet_snapshots_json') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'timesheet_snapshots_json', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'timesheet_snapshots_json') = 'array'
+      THEN COALESCE(v_candidate_row_source->'timesheet_snapshots_json', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
   SELECT
     COALESCE(
       jsonb_agg(
@@ -1635,6 +1649,22 @@ BEGIN
     )
   INTO v_normalized_itemisation
   FROM jsonb_array_elements(v_itemisation_input) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        CASE
+          WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+            THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+          ELSE elem.value
+        END
+        ORDER BY elem.ord
+      ),
+      '[]'::jsonb
+    )
+  INTO v_timesheet_snapshots_json
+  FROM jsonb_array_elements(v_timesheet_snapshots_input) WITH ORDINALITY AS elem(value, ord)
   WHERE jsonb_typeof(elem.value) = 'object';
 
   IF jsonb_typeof(v_explicit_blocked_input) = 'array' AND jsonb_array_length(v_explicit_blocked_input) > 0 THEN
@@ -2079,6 +2109,7 @@ BEGIN
     'canonical_preview_lines', v_normalized_lines,
     'payees', v_normalized_payees,
     'itemisation', v_normalized_itemisation,
+    'timesheet_snapshots_json', v_timesheet_snapshots_json,
     'blocked_items', v_blocked_items,
     'do_not_pay_items', v_do_not_pay_items,
     'snoozed_items', v_snoozed_items,
@@ -2088,6 +2119,16 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_preview_assemble_payload(
   p_context_json jsonb,
@@ -2112,6 +2153,7 @@ DECLARE
   v_do_not_pay_items_raw jsonb := '[]'::jsonb;
   v_snoozed_items_raw jsonb := '[]'::jsonb;
   v_baseline_component_rows_raw jsonb := '[]'::jsonb;
+  v_timesheet_snapshots_raw jsonb := '[]'::jsonb;
   v_paye_candidates jsonb := '[]'::jsonb;
   v_non_paye_payees jsonb := '[]'::jsonb;
   v_case_resolution_states jsonb := '[]'::jsonb;
@@ -2122,6 +2164,7 @@ DECLARE
   v_do_not_pay_items jsonb := '[]'::jsonb;
   v_snoozed_items jsonb := '[]'::jsonb;
   v_baseline_component_rows jsonb := '[]'::jsonb;
+  v_timesheet_snapshots_json jsonb := '[]'::jsonb;
   v_paye_summary_breakdown jsonb := '{}'::jsonb;
   v_summary jsonb := '{}'::jsonb;
   v_candidate_count integer := 0;
@@ -2202,6 +2245,10 @@ BEGIN
 
     IF jsonb_typeof(v_rollup->'baseline_component_rows') = 'array' THEN
       v_baseline_component_rows_raw := v_baseline_component_rows_raw || COALESCE(v_rollup->'baseline_component_rows', '[]'::jsonb);
+    END IF;
+
+    IF jsonb_typeof(v_rollup->'timesheet_snapshots_json') = 'array' THEN
+      v_timesheet_snapshots_raw := v_timesheet_snapshots_raw || COALESCE(v_rollup->'timesheet_snapshots_json', '[]'::jsonb);
     END IF;
   END LOOP;
 
@@ -2329,6 +2376,38 @@ BEGIN
   INTO v_baseline_component_rows
   FROM jsonb_array_elements(v_baseline_component_rows_raw) AS elem(value)
   WHERE jsonb_typeof(elem.value) = 'object';
+
+  WITH timesheet_snapshot_elements AS (
+    SELECT
+      elem.value AS snapshot_json,
+      elem.ordinality AS snapshot_ordinality,
+      BTRIM(COALESCE(elem.value->>'candidate_id', '')) AS candidate_id_text,
+      BTRIM(COALESCE(elem.value->>'timesheet_id', '')) AS timesheet_id_text
+    FROM jsonb_array_elements(v_timesheet_snapshots_raw) WITH ORDINALITY AS elem(value, ordinality)
+    WHERE jsonb_typeof(elem.value) = 'object'
+  ), timesheet_snapshot_ranked AS (
+    SELECT
+      timesheet_snapshot_elements.snapshot_json,
+      timesheet_snapshot_elements.snapshot_ordinality,
+      timesheet_snapshot_elements.candidate_id_text,
+      timesheet_snapshot_elements.timesheet_id_text,
+      row_number() OVER (
+        PARTITION BY timesheet_snapshot_elements.candidate_id_text, timesheet_snapshot_elements.timesheet_id_text
+        ORDER BY timesheet_snapshot_elements.snapshot_ordinality ASC
+      ) AS rn
+    FROM timesheet_snapshot_elements
+  )
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        timesheet_snapshot_ranked.snapshot_json
+        ORDER BY timesheet_snapshot_ranked.candidate_id_text, timesheet_snapshot_ranked.timesheet_id_text, timesheet_snapshot_ranked.snapshot_ordinality
+      ),
+      '[]'::jsonb
+    )
+  INTO v_timesheet_snapshots_json
+  FROM timesheet_snapshot_ranked
+  WHERE timesheet_snapshot_ranked.rn = 1;
 
   WITH payee_elements AS (
     SELECT
@@ -2629,10 +2708,16 @@ BEGIN
     'blocked_items', v_blocked_items,
     'do_not_pay_items', v_do_not_pay_items,
     'snoozed_items', v_snoozed_items,
-    'baseline_component_rows', v_baseline_component_rows
+    'baseline_component_rows', v_baseline_component_rows,
+    'timesheet_snapshots_json', v_timesheet_snapshots_json
   );
 END;
 $function$;
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_preview_apply_candidate_overlay(
   p_candidate_baseline_json jsonb,
@@ -2659,6 +2744,7 @@ declare
   v_do_not_pay_items jsonb := '[]'::jsonb;
   v_snoozed_items jsonb := '[]'::jsonb;
   v_baseline_component_rows jsonb := '[]'::jsonb;
+  v_timesheet_snapshots_json jsonb := '[]'::jsonb;
   v_case_resolutions jsonb := '{}'::jsonb;
   v_exclude_timesheet_ids jsonb := '[]'::jsonb;
   v_linked_timesheet_map jsonb := '{}'::jsonb;
@@ -2835,6 +2921,7 @@ begin
   v_do_not_pay_items := case when jsonb_typeof(v_candidate_baseline_root->'do_not_pay_items') = 'array' then coalesce(v_candidate_baseline_root->'do_not_pay_items', '[]'::jsonb) else '[]'::jsonb end;
   v_snoozed_items := case when jsonb_typeof(v_candidate_baseline_root->'snoozed_items') = 'array' then coalesce(v_candidate_baseline_root->'snoozed_items', '[]'::jsonb) else '[]'::jsonb end;
   v_baseline_component_rows := case when jsonb_typeof(v_candidate_baseline_root->'baseline_component_rows') = 'array' then coalesce(v_candidate_baseline_root->'baseline_component_rows', '[]'::jsonb) else '[]'::jsonb end;
+  v_timesheet_snapshots_json := case when jsonb_typeof(v_candidate_baseline_root->'timesheet_snapshots_json') = 'array' then coalesce(v_candidate_baseline_root->'timesheet_snapshots_json', '[]'::jsonb) else '[]'::jsonb end;
 
   v_case_resolutions := case
     when jsonb_typeof(v_case_resolutions_input->'case_resolutions') = 'object' then coalesce(v_case_resolutions_input->'case_resolutions', '{}'::jsonb)
@@ -3739,10 +3826,14 @@ begin
     'blocked_items', coalesce(v_blocked_items, '[]'::jsonb),
     'do_not_pay_items', coalesce(v_do_not_pay_items, '[]'::jsonb),
     'snoozed_items', coalesce(v_snoozed_items, '[]'::jsonb),
-    'baseline_component_rows', coalesce(v_final_component_rows, '[]'::jsonb)
+    'baseline_component_rows', coalesce(v_final_component_rows, '[]'::jsonb),
+    'timesheet_snapshots_json', coalesce(v_timesheet_snapshots_json, '[]'::jsonb)
   );
 end;
 $function$;
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3815,7 +3906,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_build_candidate_baseline(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -3827,6 +3917,7 @@ SET search_path TO 'public'
 AS $function$
 declare
   v_payload jsonb := '{}'::jsonb;
+  v_timesheet_snapshot_payload jsonb := '{}'::jsonb;
 begin
   perform public.pay_preview_candidate_collect_scope(p_context_json, p_candidate_id);
   perform public.pay_preview_candidate_build_entitlement_rows(p_context_json, p_candidate_id);
@@ -3834,6 +3925,7 @@ begin
   perform public.pay_preview_candidate_build_payee_baseline(p_context_json, p_candidate_id);
   perform public.pay_preview_candidate_build_finance_case_baseline(p_context_json, p_candidate_id);
   perform public.pay_preview_candidate_build_canonical_lines(p_context_json, p_candidate_id);
+  v_timesheet_snapshot_payload := public.pay_preview_candidate_build_timesheet_snapshots(p_context_json, p_candidate_id);
   v_payload := public.pay_preview_candidate_build_summary_fragment(p_context_json, p_candidate_id);
 
   return jsonb_build_object(
@@ -3847,7 +3939,8 @@ begin
     'blocked_items', coalesce(v_payload->'blocked_items', '[]'::jsonb),
     'do_not_pay_items', coalesce(v_payload->'do_not_pay_items', '[]'::jsonb),
     'snoozed_items', coalesce(v_payload->'snoozed_items', '[]'::jsonb),
-    'baseline_component_rows', coalesce(v_payload->'baseline_component_rows', '[]'::jsonb)
+    'baseline_component_rows', coalesce(v_payload->'baseline_component_rows', '[]'::jsonb),
+    'timesheet_snapshots_json', coalesce(v_timesheet_snapshot_payload->'timesheet_snapshots_json', '[]'::jsonb)
   );
 end;
 $function$;
