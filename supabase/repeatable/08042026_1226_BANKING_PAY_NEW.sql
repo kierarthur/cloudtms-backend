@@ -22690,6 +22690,9 @@ $function$;
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -22863,7 +22866,7 @@ BEGIN
     v_resolution_payload_json->>'component_key_value',
     v_first_bucket_resolution_json->>'component_key_value',
     ''
-  )));
+  ));
 
   v_resolve_all_linked_timesheets := CASE
     WHEN LOWER(BTRIM(COALESCE(v_resolution_payload_json->>'resolve_all_linked_timesheets', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true
@@ -23250,6 +23253,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 
