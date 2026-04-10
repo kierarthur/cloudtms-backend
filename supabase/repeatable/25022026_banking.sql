@@ -10920,8 +10920,6 @@ begin
 end;
 $$;
 
-
-
 create or replace function public.pay_batch_auth_start(
   p_pay_batch_id uuid,
   p_schedule_kind text,
@@ -10977,6 +10975,9 @@ declare
 
   v_schedule_result jsonb := '{}'::jsonb;
   v_worker_communications jsonb := '{}'::jsonb;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_auth_start: pay_batch_id is required';
@@ -11033,7 +11034,10 @@ begin
     pb.rail_env_snapshot,
     pb.authoritative_payment_date,
     pb.authoritative_payment_date_source,
-    pb.pay_date
+    pb.pay_date,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -11041,6 +11045,25 @@ begin
 
   if v_batch.id is null then
     raise exception 'pay_batch_auth_start: pay_batch not found';
+  end if;
+
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+  v_execution_commit_ref := v_batch.execution_commit_ref;
+  v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
+
+  if v_execution_commit_state <> 'NOT_SUBMITTED' then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_AUTH_START',
+      'code', 'EXECUTION_STATE_CONFLICT',
+      'message', 'pay_batch_auth_start: batch has already crossed the execution submission boundary',
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_execution_commit_ref,
+      'execution_committed_at_utc', case when v_execution_committed_at_utc is null then null else v_execution_committed_at_utc::text end
+    )::text;
   end if;
 
   v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed,'')));
@@ -11399,7 +11422,8 @@ begin
       scheduled_at_utc = v_sched_at,
       scheduled_by_user_id = p_actor_user_id,
       funding_account_ref = v_funding,
-      funds_warning_hours_json = v_warn
+      funds_warning_hours_json = v_warn,
+      execution_commit_state = coalesce(nullif(btrim(coalesce(pb2.execution_commit_state, '')), ''), 'NOT_SUBMITTED')
     where pb2.id = p_pay_batch_id;
 
     v_schedule_result := jsonb_build_object(
@@ -11499,7 +11523,8 @@ begin
     set
       status = 'AUTHORISED_FOR_PAYMENT',
       authoritative_payment_date = coalesce(pb3.authoritative_payment_date, (pb3.scheduled_at_utc at time zone 'Europe/London')::date, pb3.pay_date),
-      authoritative_payment_date_source = coalesce(pb3.authoritative_payment_date_source, 'AUTH_START_SCHEDULED_AT_UTC')
+      authoritative_payment_date_source = coalesce(pb3.authoritative_payment_date_source, 'AUTH_START_SCHEDULED_AT_UTC'),
+      execution_commit_state = coalesce(nullif(btrim(coalesce(pb3.execution_commit_state, '')), ''), 'NOT_SUBMITTED')
     where pb3.id = p_pay_batch_id;
 
     begin
@@ -11537,11 +11562,16 @@ begin
       'became_authorised', true,
       'authoritative_payment_date', (select case when pb4.authoritative_payment_date is null then null else pb4.authoritative_payment_date::text end from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
       'authoritative_payment_date_source', (select pb4.authoritative_payment_date_source from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
+      'execution_commit_state', (select pb4.execution_commit_state from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
+      'execution_commit_ref', (select pb4.execution_commit_ref from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
+      'execution_committed_at_utc', (select case when pb4.execution_committed_at_utc is null then null else pb4.execution_committed_at_utc::text end from public.pay_batches pb4 where pb4.id = p_pay_batch_id),
       'worker_communications', v_worker_communications
     );
   else
     update public.pay_batches pb5
-    set status = 'AWAITING_AUTHORISATION'
+    set
+      status = 'AWAITING_AUTHORISATION',
+      execution_commit_state = coalesce(nullif(btrim(coalesce(pb5.execution_commit_state, '')), ''), 'NOT_SUBMITTED')
     where pb5.id = p_pay_batch_id;
 
     begin
@@ -11579,6 +11609,9 @@ begin
       'became_authorised', false,
       'authoritative_payment_date', (select case when pb6.authoritative_payment_date is null then null else pb6.authoritative_payment_date::text end from public.pay_batches pb6 where pb6.id = p_pay_batch_id),
       'authoritative_payment_date_source', (select pb6.authoritative_payment_date_source from public.pay_batches pb6 where pb6.id = p_pay_batch_id),
+      'execution_commit_state', (select pb6.execution_commit_state from public.pay_batches pb6 where pb6.id = p_pay_batch_id),
+      'execution_commit_ref', (select pb6.execution_commit_ref from public.pay_batches pb6 where pb6.id = p_pay_batch_id),
+      'execution_committed_at_utc', (select case when pb6.execution_committed_at_utc is null then null else pb6.execution_committed_at_utc::text end from public.pay_batches pb6 where pb6.id = p_pay_batch_id),
       'worker_communications', v_worker_communications
     );
   end if;
