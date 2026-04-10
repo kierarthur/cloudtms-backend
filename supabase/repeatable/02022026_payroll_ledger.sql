@@ -169,7 +169,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -190,6 +189,13 @@ declare
   v_reincluded_timesheet_ids jsonb := '[]'::jsonb;
   v_component_restored_count int := 0;
   v_component_restored_amount numeric := 0;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_completed_transfer_count int := 0;
+  v_pending_transfer_count int := 0;
+  v_total_transfer_count int := 0;
+  v_external_unwind_confirmed_count int := 0;
+  v_transfer_state_sample jsonb := '[]'::jsonb;
+  v_cancellation_outcome text := 'PRE_SUBMISSION_CANCEL';
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_cancel: pay_batch_id is required';
@@ -205,7 +211,13 @@ begin
     pb.authoritative_payment_date_source,
     pb.scheduled_at_utc,
     pb.schedule_kind,
-    pb.completed_at_utc
+    pb.completed_at_utc,
+    pb.source_workbench_session_id,
+    pb.source_snapshot_run_id,
+    pb.source_session_version,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -213,6 +225,136 @@ begin
 
   if v_batch.id is null then
     raise exception 'pay_batch_cancel: pay_batch not found';
+  end if;
+
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+
+  if v_execution_commit_state = 'COMMITTED' then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_CANCEL',
+      'code', 'CORRECTION_ONLY_REQUIRED',
+      'message', 'pay_batch_cancel: batch has already crossed the external commit boundary; correction flow is required',
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end
+    )::text;
+  elsif v_execution_commit_state = 'SUBMITTED_NOT_COMMITTED' then
+    select
+      count(*)::int,
+      count(*) filter (
+        where upper(coalesce(pbt.status,'')) = 'COMPLETED'
+           or pbt.completed_at_utc is not null
+      )::int,
+      count(*) filter (
+        where upper(coalesce(pbt.status,'')) = 'PENDING'
+      )::int
+    into
+      v_total_transfer_count,
+      v_completed_transfer_count,
+      v_pending_transfer_count
+    from public.pay_bank_transfers pbt
+    where pbt.pay_batch_id = p_pay_batch_id;
+
+    if v_batch.execution_committed_at_utc is not null
+       or v_batch.completed_at_utc is not null
+       or coalesce(v_completed_transfer_count, 0) > 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_CANCEL',
+        'code', 'CORRECTION_ONLY_REQUIRED',
+        'message', 'pay_batch_cancel: batch shows committed transfer activity; correction flow is required',
+        'pay_batch_id', p_pay_batch_id::text,
+        'execution_commit_state', v_execution_commit_state,
+        'execution_commit_ref', v_batch.execution_commit_ref,
+        'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
+        'completed_transfer_count', coalesce(v_completed_transfer_count, 0)
+      )::text;
+    end if;
+
+    if coalesce(v_pending_transfer_count, 0) > 0 then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_CANCEL',
+        'code', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED',
+        'message', 'pay_batch_cancel: external cancellation/unwind confirmation is required before cancelling a submitted batch',
+        'pay_batch_id', p_pay_batch_id::text,
+        'execution_commit_state', v_execution_commit_state,
+        'execution_commit_ref', v_batch.execution_commit_ref,
+        'pending_transfer_count', coalesce(v_pending_transfer_count, 0)
+      )::text;
+    end if;
+
+    select
+      count(*)::int
+    into v_external_unwind_confirmed_count
+    from public.pay_bank_transfers pbt
+    where pbt.pay_batch_id = p_pay_batch_id
+      and (
+        upper(coalesce(pbt.rail_state, '')) in (
+          'CANCELLED',
+          'CANCELED',
+          'REVOKED',
+          'VOIDED',
+          'ABORTED',
+          'UNWOUND',
+          'CANCEL_CONFIRMED',
+          'CANCELLATION_CONFIRMED',
+          'FAILED_BEFORE_COMMIT',
+          'SUBMISSION_FAILED'
+        )
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'cancellation_confirmed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'cancelled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'canceled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'revoked', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'voided', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'aborted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'unwound', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'submission_failed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'failed_before_commit', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+      );
+
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'transfer_id', pbt.id::text,
+          'status', pbt.status,
+          'rail_state', pbt.rail_state,
+          'rail_meta_json', pbt.rail_meta_json,
+          'completed_at_utc', case when pbt.completed_at_utc is null then null else pbt.completed_at_utc::text end
+        )
+        order by pbt.id
+      ),
+      '[]'::jsonb
+    )
+    into v_transfer_state_sample
+    from (
+      select pbt.id, pbt.status, pbt.rail_state, pbt.rail_meta_json, pbt.completed_at_utc
+      from public.pay_bank_transfers pbt
+      where pbt.pay_batch_id = p_pay_batch_id
+      order by pbt.id
+      limit 20
+    ) pbt;
+
+    if coalesce(v_total_transfer_count, 0) = 0
+       or coalesce(v_external_unwind_confirmed_count, 0) <> coalesce(v_total_transfer_count, 0) then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_BATCH_CANCEL',
+        'code', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED',
+        'message', 'pay_batch_cancel: external cancellation/unwind confirmation is required before cancelling a submitted batch',
+        'pay_batch_id', p_pay_batch_id::text,
+        'execution_commit_state', v_execution_commit_state,
+        'execution_commit_ref', v_batch.execution_commit_ref,
+        'total_transfer_count', coalesce(v_total_transfer_count, 0),
+        'externally_confirmed_unwind_count', coalesce(v_external_unwind_confirmed_count, 0),
+        'transfer_state_sample', v_transfer_state_sample
+      )::text;
+    end if;
+
+    v_cancellation_outcome := 'PRE_COMMIT_UNWIND';
+  else
+    v_cancellation_outcome := 'PRE_SUBMISSION_CANCEL';
   end if;
 
   if upper(coalesce(v_batch.status,'')) not in (
@@ -546,7 +688,11 @@ begin
     scheduled_at_utc = null,
     scheduled_by_user_id = null,
     funding_account_ref = null,
-    funds_warning_hours_json = null
+    funds_warning_hours_json = null,
+    execution_commit_state = case
+      when nullif(btrim(coalesce(pb.execution_commit_state, '')), '') is null then 'NOT_SUBMITTED'
+      else pb.execution_commit_state
+    end
   where pb.id = p_pay_batch_id;
 
   insert into public.audit_events(
@@ -575,7 +721,15 @@ begin
       'cleared_timesheet_override_count', v_cleared_timesheet_override_count,
       'reincluded_timesheet_ids', v_reincluded_timesheet_ids,
       'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
-      'authoritative_payment_date_source', v_batch.authoritative_payment_date_source
+      'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
+      'source_workbench_session_id', case when v_batch.source_workbench_session_id is null then null else v_batch.source_workbench_session_id::text end,
+      'source_snapshot_run_id', case when v_batch.source_snapshot_run_id is null then null else v_batch.source_snapshot_run_id::text end,
+      'source_session_version', v_batch.source_session_version,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
+      'cancellation_outcome', v_cancellation_outcome,
+      'source_session_preserved', true
     ),
     p_reason
   );
@@ -587,6 +741,14 @@ begin
     'cancelled_at_utc', (select pb3.cancelled_at_utc::text from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
     'cancelled_by_user_id', p_actor_user_id::text,
     'cancel_reason', p_reason,
+    'source_workbench_session_id', case when v_batch.source_workbench_session_id is null then null else v_batch.source_workbench_session_id::text end,
+    'source_snapshot_run_id', case when v_batch.source_snapshot_run_id is null then null else v_batch.source_snapshot_run_id::text end,
+    'source_session_version', v_batch.source_session_version,
+    'execution_commit_state', (select pb2.execution_commit_state from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'execution_commit_ref', (select pb2.execution_commit_ref from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'execution_committed_at_utc', (select case when pb2.execution_committed_at_utc is null then null else pb2.execution_committed_at_utc::text end from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
+    'cancellation_outcome', v_cancellation_outcome,
+    'source_session_preserved', true,
     'released_reservations', jsonb_build_object(
       'count', v_released_reservation_count,
       'amount', v_released_reservation_amount,
@@ -606,221 +768,6 @@ begin
       'remittance_sent_audit_preserved', true,
       'commit_stage_audit_preserved', true
     )
-  );
-end;
-$$;
-
-
--- =========================================================
--- A4.3 pay_set_paye_net_from_sage(p_pay_batch_id, p_csv_raw, p_actor_user_id, p_source_filename)
--- =========================================================
-
-create or replace function public.pay_batches_list(
-  p_limit int default 50,
-  p_offset int default 0,
-  p_status text default null
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_limit int := greatest(1, least(coalesce(p_limit,50), 500));
-  v_offset int := greatest(coalesce(p_offset,0), 0);
-  v_status text := upper(nullif(btrim(coalesce(p_status,'')), ''));
-  v_total int := 0;
-  v_rows jsonb := '[]'::jsonb;
-begin
-  select count(*)::int
-  into v_total
-  from public.pay_batches pb
-  where v_status is null or upper(coalesce(pb.status,'')) = v_status;
-
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'id', pb.id::text,
-        'pay_date', pb.pay_date::text,
-        'authoritative_payment_date', case when pb.authoritative_payment_date is null then null else pb.authoritative_payment_date::text end,
-        'authoritative_payment_date_source', pb.authoritative_payment_date_source,
-        'created_at_utc', pb.created_at_utc,
-        'created_by_user_id', case when pb.created_by_user_id is null then null else pb.created_by_user_id::text end,
-        'status', pb.status,
-        'banking_system_snapshot', pb.banking_system_snapshot,
-        'external_paye_system_snapshot', pb.external_paye_system_snapshot,
-
-        'batch_kind_fixed', pb.batch_kind_fixed,
-        'batch_kind', pb.batch_kind,
-        'pay_channels_present', pb.pay_channels_present,
-        'batch_display_classification', pb.batch_display_classification,
-
-        'same_week_paye_override_used', pb.same_week_paye_override_used,
-        'same_week_paye_override_reason', pb.same_week_paye_override_reason,
-        'same_week_paye_override_verified_at_utc', pb.same_week_paye_override_verified_at_utc,
-        'same_week_paye_override_verified_by_user_id', case when pb.same_week_paye_override_verified_by_user_id is null then null else pb.same_week_paye_override_verified_by_user_id::text end,
-
-        'source_workbench_session_id', case when pb.source_workbench_session_id is null then null else pb.source_workbench_session_id::text end,
-        'source_snapshot_run_id', case when pb.source_snapshot_run_id is null then null else pb.source_snapshot_run_id::text end,
-        'source_session_version', pb.source_session_version,
-        'execution_commit_state', pb.execution_commit_state,
-        'execution_commit_ref', pb.execution_commit_ref,
-        'execution_committed_at_utc', pb.execution_committed_at_utc,
-
-        'remittance_summary', jsonb_build_object(
-          'candidate_count', pb.remittance_candidate_count,
-          'sent_count', pb.remittance_sent_count,
-          'unsent_count', pb.remittance_unsent_count,
-          'error_count', pb.remittance_error_count,
-          'latest_sent_at_utc', pb.remittance_latest_sent_at_utc,
-          'all_sent', pb.remittance_all_sent,
-          'trigger_statuses', pb.remittance_trigger_statuses
-        ),
-
-        'rail_provider_snapshot', pb.rail_provider_snapshot,
-        'rail_env_snapshot', pb.rail_env_snapshot,
-        'schedule_kind', pb.schedule_kind,
-        'scheduled_at_utc', pb.scheduled_at_utc,
-        'executing_started_at_utc', pb.executing_started_at_utc,
-        'last_status_checked_at_utc', pb.last_status_checked_at_utc,
-
-        'funding_account_ref', pb.funding_account_ref,
-
-        'manual_confirmed_at_utc', pb.monzo_confirmed_at_utc,
-        'manual_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
-
-        'monzo_confirmed_at_utc', pb.monzo_confirmed_at_utc,
-        'monzo_confirmed_by_user_id', case when pb.monzo_confirmed_by_user_id is null then null else pb.monzo_confirmed_by_user_id::text end,
-
-        'total_bank_out', pb.total_bank_out,
-        'total_debt_created', pb.total_debt_created,
-
-        'bulk_ref_num', pb.bulk_ref_num,
-        'bulk_ref_date', case when pb.bulk_ref_date is null then null else pb.bulk_ref_date::text end,
-        'bulk_reference', pb.bulk_reference,
-
-        'auth_required_quantity', pb.auth_required_quantity,
-        'auth_approved_count', pb.auth_approved_count,
-        'auth_label', pb.auth_label,
-        'auth_state', pb.auth_state
-      )
-      order by pb.created_at_utc desc, pb.id desc
-    ),
-    '[]'::jsonb
-  )
-  into v_rows
-  from (
-    select
-      pb0.*,
-      case
-        when upper(coalesce(pb0.batch_kind_fixed,'')) = 'LOANS' then 'LOANS'
-        when ch.channels is null then null
-        when array_position(ch.channels,'PAYE') is not null and array_position(ch.channels,'UMBRELLA') is not null then 'MIXED'
-        when array_position(ch.channels,'PAYE') is not null then 'PAYE'
-        when array_position(ch.channels,'UMBRELLA') is not null then 'UMBRELLA'
-        else null
-      end as batch_kind,
-      coalesce(to_jsonb(ch.channels), '[]'::jsonb) as pay_channels_present,
-      case
-        when upper(coalesce(pb0.batch_kind_fixed,'')) = 'LOANS' and coalesce(ft.has_payment_advance,false) = true and coalesce(ft.has_manual_credit,false) = false then 'PAYMENT_ADVANCE_PAYOUTS'
-        when upper(coalesce(pb0.batch_kind_fixed,'')) = 'LOANS' and coalesce(ft.has_payment_advance,false) = false and coalesce(ft.has_manual_credit,false) = true then 'MANUAL_CREDIT_ADJUSTMENTS'
-        when upper(coalesce(pb0.batch_kind_fixed,'')) = 'LOANS' then 'FINANCE_PAYOUTS'
-        when ch.channels is null then null
-        when array_position(ch.channels,'PAYE') is not null and array_position(ch.channels,'UMBRELLA') is not null then 'MIXED_PAYROLL'
-        when array_position(ch.channels,'PAYE') is not null then 'PAYE_PAYROLL'
-        when array_position(ch.channels,'UMBRELLA') is not null then 'UMBRELLA_PAYROLL'
-        else null
-      end as batch_display_classification,
-      pbar.required_quantity as auth_required_quantity,
-      pbar.state as auth_state,
-      case
-        when pbar.id is null then null
-        else pbaa.approved_count
-      end as auth_approved_count,
-      case
-        when pbar.id is null then null
-        else (coalesce(pbaa.approved_count, 0)::text || '/' || pbar.required_quantity::text)
-      end as auth_label,
-      coalesce(rmt.candidate_count, 0) as remittance_candidate_count,
-      coalesce(rmt.sent_count, 0) as remittance_sent_count,
-      greatest(coalesce(rmt.candidate_count, 0) - coalesce(rmt.sent_count, 0), 0) as remittance_unsent_count,
-      coalesce(rmt.error_count, 0) as remittance_error_count,
-      rmt.latest_sent_at_utc as remittance_latest_sent_at_utc,
-      case
-        when coalesce(rmt.candidate_count, 0) = 0 then false
-        else coalesce(rmt.all_sent, false)
-      end as remittance_all_sent,
-      coalesce(rmt.trigger_statuses, '[]'::jsonb) as remittance_trigger_statuses
-    from public.pay_batches pb0
-    left join lateral (
-      select
-        array_agg(distinct upper(coalesce(pbi.pay_channel,'')) order by upper(coalesce(pbi.pay_channel,'')))
-          filter (where upper(coalesce(pbi.pay_channel,'')) in ('PAYE','UMBRELLA')) as channels
-      from public.pay_batch_items pbi
-      join public.pay_batch_candidates pbc
-        on pbc.id = pbi.pay_batch_candidate_id
-      where pbc.pay_batch_id = pb0.id
-        and pbi.item_type <> 'DEBT_CREATED'
-    ) ch on true
-    left join lateral (
-      select
-        bool_or(pa.case_type = 'PAYMENT_ADVANCE') as has_payment_advance,
-        bool_or(pa.case_type = 'MANUAL_CREDIT_ADJUSTMENT') as has_manual_credit
-      from public.pay_batch_items pbi
-      join public.pay_batch_candidates pbc
-        on pbc.id = pbi.pay_batch_candidate_id
-      join public.pay_advances pa
-        on pa.id = pbi.finance_case_id
-      where pbc.pay_batch_id = pb0.id
-        and pbi.finance_case_id is not null
-    ) ft on true
-    left join lateral (
-      select
-        pbar0.id,
-        pbar0.state,
-        pbar0.required_quantity
-      from public.pay_batch_auth_requests pbar0
-      where pbar0.pay_batch_id = pb0.id
-        and pbar0.state in ('AWAITING','AUTHORISED')
-      order by pbar0.created_at_utc desc, pbar0.id desc
-      limit 1
-    ) pbar on true
-    left join lateral (
-      select
-        count(*)::int as approved_count
-      from public.pay_batch_auth_actions pbaa0
-      where pbar.id is not null
-        and pbaa0.auth_request_id = pbar.id
-        and pbaa0.action in ('AUTHORISE','USE_GOLDEN_KEY')
-    ) pbaa on true
-    left join lateral (
-      select
-        count(*)::int as candidate_count,
-        count(*) filter (where pbc0.remittance_sent_at_utc is not null)::int as sent_count,
-        count(*) filter (where nullif(btrim(coalesce(pbc0.last_remittance_error,'')), '') is not null)::int as error_count,
-        max(pbc0.remittance_sent_at_utc) as latest_sent_at_utc,
-        bool_and(pbc0.remittance_sent_at_utc is not null) as all_sent,
-        coalesce(
-          to_jsonb(
-            array_agg(distinct pbc0.remittance_trigger_status order by pbc0.remittance_trigger_status)
-            filter (where pbc0.remittance_trigger_status is not null and btrim(coalesce(pbc0.remittance_trigger_status,'')) <> '')
-          ),
-          '[]'::jsonb
-        ) as trigger_statuses
-      from public.pay_batch_candidates pbc0
-      where pbc0.pay_batch_id = pb0.id
-    ) rmt on true
-    where v_status is null or upper(coalesce(pb0.status,'')) = v_status
-    order by pb0.created_at_utc desc, pb0.id desc
-    limit v_limit offset v_offset
-  ) pb;
-
-  return jsonb_build_object(
-    'ok', true,
-    'total_count', v_total,
-    'limit', v_limit,
-    'offset', v_offset,
-    'rows', v_rows
   );
 end;
 $$;
