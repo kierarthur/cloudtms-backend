@@ -22812,6 +22812,245 @@ $function$;
 
 
 
+CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
+  p_pay_date date,
+  p_week_ending_cutoff date,
+  p_pay_channel_scope text,
+  p_actor_user_id uuid,
+  p_preview_decisions_json jsonb,
+  p_candidate_id uuid DEFAULT NULL::uuid,
+  p_client_id uuid DEFAULT NULL::uuid,
+  p_force_include_timesheet_ids uuid[] DEFAULT NULL::uuid[],
+  p_override_reason text DEFAULT NULL::text,
+  p_override_mode public.pay_override_mode_enum DEFAULT 'NONE'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_scope text := upper(btrim(coalesce(p_pay_channel_scope, '')));
+  v_week_start date := public._pay_week_start_monday(p_pay_date);
+  v_preview_decisions_json jsonb := CASE
+    WHEN jsonb_typeof(coalesce(p_preview_decisions_json, '{}'::jsonb)) = 'object' THEN coalesce(p_preview_decisions_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+  v_preview_payload_json jsonb := '{}'::jsonb;
+  v_selected_preview_row_ids_input jsonb := '[]'::jsonb;
+  v_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_selected_preview_rows_supplied boolean := false;
+  v_requested_selected_preview_row_count integer := 0;
+  v_selected_preview_row_count integer := 0;
+  v_build_result jsonb := '{}'::jsonb;
+  v_pay_batch_id uuid := NULL::uuid;
+  v_consumed_timesheet_payment_override_count integer := 0;
+  v_consumed_timesheet_payment_overrides jsonb := '[]'::jsonb;
+BEGIN
+  IF p_pay_date IS NULL THEN
+    RAISE EXCEPTION 'pay_date is required';
+  END IF;
+
+  IF p_week_ending_cutoff IS NULL THEN
+    RAISE EXCEPTION 'week_ending_cutoff is required';
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'actor_user_id is required';
+  END IF;
+
+  IF v_scope NOT IN ('PAYE', 'UMBRELLA') THEN
+    RAISE EXCEPTION 'pay_channel_scope must be PAYE or UMBRELLA';
+  END IF;
+
+  IF (p_force_include_timesheet_ids IS NOT NULL AND coalesce(array_length(p_force_include_timesheet_ids, 1), 0) > 0)
+     OR p_override_reason IS NOT NULL
+     OR p_override_mode IS DISTINCT FROM 'NONE'::public.pay_override_mode_enum THEN
+    BEGIN
+      PERFORM public._imp_debug_audit(
+        p_actor_user_id,
+        'PAY_CREATE_DRAFT_BATCH:LEGACY_OVERRIDE_PARAMS_IGNORED',
+        jsonb_build_object(
+          'pay_date', p_pay_date::text,
+          'week_ending_cutoff', p_week_ending_cutoff::text,
+          'pay_channel_scope', v_scope,
+          'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+          'client_id', CASE WHEN p_client_id IS NULL THEN NULL ELSE p_client_id::text END,
+          'force_include_timesheet_ids_count', coalesce(array_length(p_force_include_timesheet_ids, 1), 0),
+          'override_reason', p_override_reason,
+          'override_mode', p_override_mode::text
+        ),
+        'pay_batches',
+        'legacy-pay-create-draft-batch',
+        NULL, NULL, NULL, NULL, NULL
+      );
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+  END IF;
+
+  v_preview_payload_json := public.pay_preview(
+    p_pay_date => p_pay_date,
+    p_week_ending_cutoff => p_week_ending_cutoff,
+    p_actor_user_id => p_actor_user_id,
+    p_candidate_id => p_candidate_id,
+    p_client_id => p_client_id,
+    p_preview_decisions_json => v_preview_decisions_json
+  );
+
+  IF jsonb_typeof(v_preview_payload_json) <> 'object' THEN
+    RAISE EXCEPTION 'pay_preview(...) must return a JSON object';
+  END IF;
+
+  v_selected_preview_row_ids_input := CASE
+    WHEN jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'array' THEN coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_selected_preview_rows_supplied := jsonb_array_length(v_selected_preview_row_ids_input) > 0;
+
+  SELECT count(*)::integer
+  INTO v_requested_selected_preview_row_count
+  FROM (
+    SELECT DISTINCT btrim(sel.value) AS selected_preview_row_id
+    FROM jsonb_array_elements_text(v_selected_preview_row_ids_input) AS sel(value)
+    WHERE btrim(sel.value) <> ''
+  ) AS requested_rows;
+
+  WITH preview_lines AS (
+    SELECT
+      line.value AS line_json
+    FROM jsonb_array_elements(coalesce(v_preview_payload_json->'canonical_preview_lines', '[]'::jsonb)) AS line(value)
+    WHERE jsonb_typeof(line.value) = 'object'
+  ),
+  preview_line_ids AS (
+    SELECT
+      coalesce(
+        nullif(btrim(coalesce(preview_lines.line_json->>'preview_row_id', '')), ''),
+        nullif(btrim(coalesce(preview_lines.line_json->>'line_id', '')), ''),
+        nullif(btrim(coalesce(preview_lines.line_json->>'row_id', '')), ''),
+        nullif(btrim(coalesce(preview_lines.line_json->>'id', '')), '')
+      ) AS preview_row_id,
+      upper(btrim(coalesce(preview_lines.line_json->>'pay_channel', ''))) AS pay_channel_scope,
+      coalesce(nullif(preview_lines.line_json->>'draftable', '')::boolean, false) AS is_draftable
+    FROM preview_lines
+  ),
+  selected_lines AS (
+    SELECT DISTINCT
+      preview_line_ids.preview_row_id
+    FROM preview_line_ids
+    WHERE preview_line_ids.preview_row_id IS NOT NULL
+      AND preview_line_ids.pay_channel_scope = v_scope
+      AND preview_line_ids.is_draftable = true
+      AND (
+        v_selected_preview_rows_supplied = false
+        OR preview_line_ids.preview_row_id IN (
+          SELECT btrim(sel.value)
+          FROM jsonb_array_elements_text(v_selected_preview_row_ids_input) AS sel(value)
+          WHERE btrim(sel.value) <> ''
+        )
+      )
+  )
+  SELECT
+    coalesce(jsonb_agg(to_jsonb(selected_lines.preview_row_id) ORDER BY selected_lines.preview_row_id), '[]'::jsonb),
+    count(*)::integer
+  INTO v_selected_preview_row_ids, v_selected_preview_row_count
+  FROM selected_lines;
+
+  IF v_selected_preview_row_count = 0 THEN
+    RAISE EXCEPTION 'No draftable preview rows found for requested pay channel scope %', v_scope;
+  END IF;
+
+  IF v_selected_preview_rows_supplied AND v_selected_preview_row_count <> v_requested_selected_preview_row_count THEN
+    RAISE EXCEPTION 'Selected preview rows did not resolve fully within requested pay channel scope %', v_scope;
+  END IF;
+
+  v_build_result := public.pay_build_batch_artifacts_from_preview(
+    p_pay_date => p_pay_date,
+    p_week_ending_cutoff => p_week_ending_cutoff,
+    p_actor_user_id => p_actor_user_id,
+    p_preview_payload_json => v_preview_payload_json,
+    p_selected_preview_row_ids => v_selected_preview_row_ids,
+    p_source_workbench_session_id => NULL::uuid,
+    p_source_snapshot_run_id => NULL::uuid,
+    p_source_session_version => NULL::bigint
+  );
+
+  IF jsonb_typeof(v_build_result) <> 'object' THEN
+    RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview(...) must return a JSON object';
+  END IF;
+
+  IF coalesce(nullif(btrim(coalesce(v_build_result->>'pay_batch_id', '')), ''), '') = '' THEN
+    RAISE EXCEPTION 'pay_build_batch_artifacts_from_preview(...) did not return pay_batch_id';
+  END IF;
+
+  v_pay_batch_id := (v_build_result->>'pay_batch_id')::uuid;
+
+  SELECT
+    count(*)::integer,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'override_id', tpo.id::text,
+          'timesheet_id', tpo.timesheet_id::text,
+          'candidate_id', CASE WHEN tpo.candidate_id IS NULL THEN NULL ELSE tpo.candidate_id::text END,
+          'override_type', tpo.override_type,
+          'reason', tpo.reason,
+          'created_at_utc', tpo.created_at_utc,
+          'created_by_user_id', CASE WHEN tpo.created_by_user_id IS NULL THEN NULL ELSE tpo.created_by_user_id::text END,
+          'consumed_by_pay_batch_id', CASE WHEN tpo.consumed_by_pay_batch_id IS NULL THEN NULL ELSE tpo.consumed_by_pay_batch_id::text END,
+          'consumed_at_utc', tpo.consumed_at_utc
+        )
+        ORDER BY tpo.timesheet_id::text, tpo.id::text
+      ),
+      '[]'::jsonb
+    )
+  INTO
+    v_consumed_timesheet_payment_override_count,
+    v_consumed_timesheet_payment_overrides
+  FROM public.timesheet_payment_overrides tpo
+  WHERE tpo.consumed_by_pay_batch_id = v_pay_batch_id
+    AND upper(coalesce(tpo.override_type, '')) = 'ADVANCE_THIS_PAYMENT';
+
+  BEGIN
+    PERFORM public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_CREATE_DRAFT_BATCH:LEGACY_ORCHESTRATOR_RETURN',
+      jsonb_build_object(
+        'pay_batch_id', v_pay_batch_id::text,
+        'pay_date', p_pay_date::text,
+        'pay_week_start', v_week_start::text,
+        'week_ending_cutoff_date', p_week_ending_cutoff::text,
+        'pay_channel_scope', v_scope,
+        'selected_preview_row_count', v_selected_preview_row_count,
+        'consumed_timesheet_payment_override_count', v_consumed_timesheet_payment_override_count,
+        'consumed_timesheet_payment_overrides', v_consumed_timesheet_payment_overrides
+      ),
+      'pay_batches',
+      v_pay_batch_id::text,
+      NULL, NULL, NULL, NULL, NULL
+    );
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'pay_batch_id', v_pay_batch_id::text,
+    'pay_date', coalesce(v_build_result->>'pay_date', p_pay_date::text),
+    'pay_week_start', coalesce(v_build_result->>'pay_week_start', v_week_start::text),
+    'week_ending_cutoff_date', coalesce(v_build_result->>'week_ending_cutoff_date', p_week_ending_cutoff::text),
+    'pay_channel_scope', coalesce(v_build_result->>'pay_channel_scope', v_scope),
+    'banking_system_snapshot', v_build_result->>'banking_system_snapshot',
+    'external_paye_system_snapshot', v_build_result->>'external_paye_system_snapshot',
+    'rail_provider_snapshot', v_build_result->>'rail_provider_snapshot',
+    'rail_env_snapshot', v_build_result->>'rail_env_snapshot',
+    'consumed_timesheet_payment_override_count', coalesce(v_consumed_timesheet_payment_override_count, 0),
+    'consumed_timesheet_payment_overrides', v_consumed_timesheet_payment_overrides
+  );
+END;
+$function$;
+
 
 
 
