@@ -16506,6 +16506,233 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_timesheet_snapshots(
+  p_context_json jsonb,
+  p_candidate_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_context_matches boolean := false;
+  v_context_row_count integer := 0;
+  v_context_json jsonb := coalesce(p_context_json, '{}'::jsonb);
+  v_candidate_id uuid := p_candidate_id;
+  v_pay_date date;
+  v_week_ending_cutoff date;
+  v_client_id uuid := null::uuid;
+  v_actor_user_id uuid := null::uuid;
+  v_week_start date;
+  v_today_uk date;
+  v_snapshot_count integer := 0;
+begin
+  if jsonb_typeof(v_context_json) <> 'object' then
+    raise exception 'p_context_json must be a JSON object';
+  end if;
+
+  if v_candidate_id is null then
+    raise exception 'candidate_id is required';
+  end if;
+
+  if to_regclass('pg_temp.pay_preview_candidate_context') is not null then
+    select count(*)::int
+    into v_context_row_count
+    from pg_temp.pay_preview_candidate_context as ctx;
+  else
+    v_context_row_count := 0;
+  end if;
+
+  if v_context_row_count > 0 then
+    select (
+      ctx.candidate_id is not distinct from v_candidate_id
+      and ctx.context_json = v_context_json
+    )
+    into v_context_matches
+    from pg_temp.pay_preview_candidate_context as ctx
+    limit 1;
+  else
+    v_context_matches := false;
+  end if;
+
+  if to_regclass('pg_temp.pay_preview_candidate_context') is null or coalesce(v_context_matches, false) = false then
+    perform public.pay_preview_candidate_collect_scope(v_context_json, v_candidate_id);
+  end if;
+
+  if to_regclass('pg_temp.ts_baseline') is null then
+    perform public.pay_preview_candidate_collect_scope(v_context_json, v_candidate_id);
+  end if;
+
+  select
+    ctx.candidate_id,
+    ctx.pay_date,
+    ctx.week_ending_cutoff,
+    ctx.client_id,
+    ctx.actor_user_id,
+    ctx.week_start,
+    ctx.today_uk
+  into
+    v_candidate_id,
+    v_pay_date,
+    v_week_ending_cutoff,
+    v_client_id,
+    v_actor_user_id,
+    v_week_start,
+    v_today_uk
+  from pg_temp.pay_preview_candidate_context as ctx
+  limit 1;
+
+  drop table if exists pg_temp.timesheet_snapshot_rows, pg_temp.timesheet_snapshot_rows_json;
+
+  create temporary table timesheet_snapshot_rows on commit drop as
+  with tf_live as (
+    select
+      tf.timesheet_id,
+      tf.candidate_id,
+      round(coalesce(tf.mileage_units, 0), 2) as mileage_units,
+      case
+        when tf.mileage_pay_rate is null then null::numeric
+        else round(tf.mileage_pay_rate, 6)
+      end as mileage_pay_rate
+    from public.timesheets_financials as tf
+    join pg_temp.ts_baseline as tb
+      on tb.timesheet_id = tf.timesheet_id
+     and tb.candidate_id = tf.candidate_id
+    where tf.is_current = true
+      and tb.candidate_id = v_candidate_id
+  ),
+  target_segments as (
+    select
+      tb.candidate_id,
+      tb.timesheet_id,
+      coalesce(
+        (
+          select jsonb_agg(
+            jsonb_strip_nulls(
+              jsonb_build_object(
+                'segment_id', nullif(btrim(coalesce(seg.seg_json->>'segment_id', '')), ''),
+                'segment_key', nullif(btrim(coalesce(seg.seg_json->>'segment_key', '')), ''),
+                'segment_stable_key', coalesce(
+                  nullif(btrim(coalesce(seg.seg_json->>'segment_stable_key', '')), ''),
+                  nullif(btrim(coalesce(seg.seg_json->>'segment_id', '')), ''),
+                  nullif(btrim(coalesce(seg.seg_json->>'segment_key', '')), ''),
+                  nullif(btrim(coalesce(seg.seg_json->>'date', '')), ''),
+                  nullif(btrim(coalesce(seg.seg_json->>'ref_num', '')), '')
+                ),
+                'date', nullif(btrim(coalesce(seg.seg_json->>'date', '')), ''),
+                'start_utc', nullif(btrim(coalesce(seg.seg_json->>'start_utc', '')), ''),
+                'end_utc', nullif(btrim(coalesce(seg.seg_json->>'end_utc', '')), ''),
+                'break_mins', coalesce(
+                  nullif(seg.seg_json->>'break_mins', '')::numeric,
+                  nullif(seg.seg_json->>'break_minutes', '')::numeric,
+                  0::numeric
+                ),
+                'breaks', case
+                  when jsonb_typeof(seg.seg_json->'breaks') = 'array' then seg.seg_json->'breaks'
+                  else '[]'::jsonb
+                end,
+                'hours_day', coalesce(nullif(seg.seg_json->>'hours_day', '')::numeric, 0::numeric),
+                'hours_night', coalesce(nullif(seg.seg_json->>'hours_night', '')::numeric, 0::numeric),
+                'hours_sat', coalesce(nullif(seg.seg_json->>'hours_sat', '')::numeric, 0::numeric),
+                'hours_sun', coalesce(nullif(seg.seg_json->>'hours_sun', '')::numeric, 0::numeric),
+                'hours_bh', coalesce(nullif(seg.seg_json->>'hours_bh', '')::numeric, 0::numeric),
+                'pay_amount', round(coalesce(nullif(seg.seg_json->>'pay_amount', '')::numeric, 0::numeric), 2),
+                'exclude_from_pay', coalesce(nullif(seg.seg_json->>'exclude_from_pay', '')::boolean, false),
+                'ref_num', nullif(btrim(coalesce(seg.seg_json->>'ref_num', '')), '')
+              )
+            )
+            order by seg.seg_ord
+          )
+          from jsonb_array_elements(coalesce(tb.current_segments_json, '[]'::jsonb)) with ordinality as seg(seg_json, seg_ord)
+          where seg.seg_json is not null
+            and jsonb_typeof(seg.seg_json) = 'object'
+        ),
+        '[]'::jsonb
+      ) as target_segments_json
+    from pg_temp.ts_baseline as tb
+    where tb.candidate_id = v_candidate_id
+  )
+  select
+    tb.candidate_id,
+    tb.timesheet_id,
+    tb.client_id,
+    tb.ts_week_ending_date as week_ending_date,
+    tb.ts_pay_method as source_pay_method,
+    tb.cand_pay_method as candidate_pay_method,
+    tb.baseline_signature,
+    coalesce(tb.base_json, '{}'::jsonb) as base_snapshot_json,
+    jsonb_build_object(
+      'segments', coalesce(ts.target_segments_json, '[]'::jsonb),
+      'additional_pay_ex_vat', round(coalesce(tb.current_additional_pay_ex_vat, 0), 2),
+      'additional_units_json', coalesce(tb.current_additional_units_json, '{}'::jsonb),
+      'hours_day', round(coalesce(tb.cur_hours_day, 0), 2),
+      'hours_night', round(coalesce(tb.cur_hours_night, 0), 2),
+      'hours_sat', round(coalesce(tb.cur_hours_sat, 0), 2),
+      'hours_sun', round(coalesce(tb.cur_hours_sun, 0), 2),
+      'hours_bh', round(coalesce(tb.cur_hours_bh, 0), 2),
+      'pay_day', round(coalesce(tb.cur_pay_day, 0), 2),
+      'pay_night', round(coalesce(tb.cur_pay_night, 0), 2),
+      'pay_sat', round(coalesce(tb.cur_pay_sat, 0), 2),
+      'pay_sun', round(coalesce(tb.cur_pay_sun, 0), 2),
+      'pay_bh', round(coalesce(tb.cur_pay_bh, 0), 2),
+      'mileage_units', round(coalesce(tfl.mileage_units, 0), 2),
+      'mileage_pay_rate', case
+        when tfl.mileage_pay_rate is null then null::numeric
+        else round(tfl.mileage_pay_rate, 6)
+      end,
+      'expenses', jsonb_build_object(
+        'expenses_pay_ex_vat', round(coalesce(tb.current_expenses_pay_ex_vat, 0), 2),
+        'travel_pay_ex_vat', round(coalesce(tb.current_travel_pay_ex_vat, 0), 2),
+        'accommodation_pay_ex_vat', round(coalesce(tb.current_accommodation_pay_ex_vat, 0), 2),
+        'other_pay_ex_vat', round(coalesce(tb.current_other_pay_ex_vat, 0), 2),
+        'mileage_pay_ex_vat', round(coalesce(tb.current_mileage_pay_ex_vat, 0), 2)
+      ),
+      'adjustments', coalesce(tb.current_adjustments_json, '[]'::jsonb),
+      'resolved_components', '[]'::jsonb
+    ) as target_snapshot_json
+  from pg_temp.ts_baseline as tb
+  left join target_segments as ts
+    on ts.candidate_id = tb.candidate_id
+   and ts.timesheet_id = tb.timesheet_id
+  left join tf_live as tfl
+    on tfl.candidate_id = tb.candidate_id
+   and tfl.timesheet_id = tb.timesheet_id
+  where tb.candidate_id = v_candidate_id;
+
+  create temporary table timesheet_snapshot_rows_json on commit drop as
+  select
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'candidate_id', tsr.candidate_id::text,
+          'timesheet_id', tsr.timesheet_id::text,
+          'client_id', case when tsr.client_id is null then null else tsr.client_id::text end,
+          'week_ending_date', case when tsr.week_ending_date is null then null else tsr.week_ending_date::text end,
+          'source_pay_method', tsr.source_pay_method,
+          'candidate_pay_method', tsr.candidate_pay_method,
+          'baseline_signature', tsr.baseline_signature,
+          'base_snapshot_json', tsr.base_snapshot_json,
+          'target_snapshot_json', tsr.target_snapshot_json,
+          'target_signature', md5(tsr.target_snapshot_json::text)
+        )
+        order by tsr.week_ending_date nulls last, tsr.timesheet_id::text
+      ),
+      '[]'::jsonb
+    ) as payload
+  from pg_temp.timesheet_snapshot_rows as tsr;
+
+  select count(*)::int
+  into v_snapshot_count
+  from pg_temp.timesheet_snapshot_rows as tsr;
+
+  return jsonb_build_object(
+    'candidate_id', v_candidate_id::text,
+    'timesheet_snapshot_count', v_snapshot_count,
+    'timesheet_snapshots_json', coalesce((select tsrj.payload from pg_temp.timesheet_snapshot_rows_json as tsrj), '[]'::jsonb)
+  );
+end;
+$function$;
 
 
 
