@@ -1184,8 +1184,6 @@ DROP FUNCTION IF EXISTS public.pay_create_draft_batches_split(
 );
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batches_split(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -1206,31 +1204,22 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-declare
-  v_preview_decisions_json jsonb := coalesce(p_preview_decisions_json, '{}'::jsonb);
+DECLARE
+  v_preview_decisions_json jsonb := CASE
+    WHEN jsonb_typeof(COALESCE(p_preview_decisions_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_preview_decisions_json, '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
   v_case_resolutions jsonb := '{}'::jsonb;
-  v_case_resolutions_present boolean := false;
   v_case_resolutions_supplied boolean := false;
-  v_case_resolutions_input_type text := null;
-  v_case_resolutions_normalized_present boolean := false;
-  v_case_resolutions_normalized_type text := null;
   v_umbrella_case_resolutions jsonb := '{}'::jsonb;
   v_paye_case_resolutions jsonb := '{}'::jsonb;
   v_umbrella_case_resolution_count integer := 0;
   v_paye_case_resolution_count integer := 0;
-  v_component_resolutions jsonb := null;
-  v_component_resolutions_present boolean := false;
-  v_component_resolutions_supplied boolean := false;
-  v_component_resolutions_input_type text := null;
-  v_component_resolutions_normalized_present boolean := false;
-  v_component_resolutions_normalized_type text := null;
   v_case_resolution_states jsonb := '[]'::jsonb;
   v_blocked_case_states jsonb := '[]'::jsonb;
   v_safe_case_states jsonb := '[]'::jsonb;
-  v_selected_preview_row_ids jsonb := null;
-  v_selected_preview_row_ids_present boolean := false;
+  v_selected_preview_row_ids jsonb := '[]'::jsonb;
   v_selected_preview_row_ids_supplied boolean := false;
-  v_selected_preview_row_ids_input_count integer := 0;
   v_selected_preview_row_ids_sanitized_count integer := 0;
   v_umbrella_selected_preview_row_ids jsonb := '[]'::jsonb;
   v_paye_selected_preview_row_ids jsonb := '[]'::jsonb;
@@ -1238,656 +1227,436 @@ declare
   v_paye_selected_preview_row_count integer := 0;
   v_umbrella_preview_decisions_json jsonb := '{}'::jsonb;
   v_paye_preview_decisions_json jsonb := '{}'::jsonb;
-
   v_umbrella_res jsonb := '{}'::jsonb;
   v_paye_res jsonb := '{}'::jsonb;
-
-  v_umbrella_pay_batch_id uuid;
-  v_paye_pay_batch_id uuid;
-
+  v_umbrella_pay_batch_id uuid := NULL::uuid;
+  v_paye_pay_batch_id uuid := NULL::uuid;
   v_umbrella_overpayment_sync_only boolean := false;
   v_paye_overpayment_sync_only boolean := false;
-
   v_umbrella_overpayment_sync jsonb := '{}'::jsonb;
   v_paye_overpayment_sync jsonb := '{}'::jsonb;
-
   v_umbrella_status text := 'NOT_RUN';
   v_paye_status text := 'NOT_RUN';
-
-  v_err text;
-
-  v_any_scope_outcome boolean := false;
-
   v_paye_guardrails jsonb := '{}'::jsonb;
   v_paye_scope_blocked boolean := false;
-  v_paye_block_reason_code text := null;
-  v_paye_block_message text := null;
+  v_paye_block_reason_code text := NULL;
+  v_paye_block_message text := NULL;
   v_paye_override_required boolean := false;
   v_paye_create_blocked boolean := false;
-begin
-  if p_pay_date is null then
-    raise exception 'pay_date is required';
-  end if;
+  v_has_any_scope_outcome boolean := false;
+  v_err text := '';
+BEGIN
+  IF p_pay_date IS NULL THEN
+    RAISE EXCEPTION 'pay_date is required';
+  END IF;
 
-  if p_week_ending_cutoff is null then
-    raise exception 'week_ending_cutoff is required';
-  end if;
+  IF p_week_ending_cutoff IS NULL THEN
+    RAISE EXCEPTION 'week_ending_cutoff is required';
+  END IF;
 
-  if p_actor_user_id is null then
-    raise exception 'actor_user_id is required';
-  end if;
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'actor_user_id is required';
+  END IF;
 
-  if coalesce(p_override_mode, 'NONE'::public.pay_override_mode_enum) = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum then
-    raise exception 'TIMESHEET_ADVANCE is no longer supported by pay_create_draft_batches_split';
-  end if;
+  IF COALESCE(p_override_mode, 'NONE'::public.pay_override_mode_enum) = 'TIMESHEET_ADVANCE'::public.pay_override_mode_enum THEN
+    RAISE EXCEPTION 'TIMESHEET_ADVANCE is no longer supported by pay_create_draft_batches_split';
+  END IF;
 
-  if jsonb_typeof(v_preview_decisions_json) <> 'object' then
-    raise exception 'preview_decisions_json must be a jsonb object';
-  end if;
+  IF jsonb_typeof(v_preview_decisions_json) <> 'object' THEN
+    RAISE EXCEPTION 'preview_decisions_json must be a jsonb object';
+  END IF;
 
-  v_component_resolutions_present := (v_preview_decisions_json ? 'component_resolutions');
-  v_component_resolutions_input_type := case
-    when v_component_resolutions_present then coalesce(jsonb_typeof(v_preview_decisions_json->'component_resolutions'), 'null')
-    else null
-  end;
+  IF NULLIF(BTRIM(COALESCE(v_preview_decisions_json->>'session_id', '')), '') IS NOT NULL THEN
+    RAISE EXCEPTION 'Session-backed draft creation must use public.pay_workbench_prepare_draft(...)';
+  END IF;
 
-  if v_component_resolutions_present then
-    if v_preview_decisions_json->'component_resolutions' is null
-       or jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'null' then
-      v_component_resolutions := null;
-      v_component_resolutions_supplied := false;
-    elsif jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'object' then
-      v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '{}'::jsonb);
-      v_component_resolutions_supplied := true;
-    elsif jsonb_typeof(v_preview_decisions_json->'component_resolutions') = 'array' then
-      v_component_resolutions := coalesce(v_preview_decisions_json->'component_resolutions', '[]'::jsonb);
-      v_component_resolutions_supplied := true;
-    else
-      v_component_resolutions := v_preview_decisions_json->'component_resolutions';
-      v_component_resolutions_supplied := true;
-    end if;
-  else
-    v_component_resolutions := null;
-    v_component_resolutions_supplied := false;
-  end if;
+  IF jsonb_typeof(COALESCE(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb)) = 'array' THEN
+    v_case_resolution_states := COALESCE(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb);
+  ELSE
+    v_case_resolution_states := '[]'::jsonb;
+  END IF;
 
-  v_case_resolutions_present := (v_preview_decisions_json ? 'case_resolutions');
-  v_case_resolutions_input_type := case
-    when v_case_resolutions_present then coalesce(jsonb_typeof(v_preview_decisions_json->'case_resolutions'), 'null')
-    else null
-  end;
+  IF jsonb_typeof(COALESCE(v_preview_decisions_json->'blocked_case_states', '[]'::jsonb)) = 'array' THEN
+    v_blocked_case_states := COALESCE(v_preview_decisions_json->'blocked_case_states', '[]'::jsonb);
+  ELSE
+    v_blocked_case_states := '[]'::jsonb;
+  END IF;
 
-  if v_case_resolutions_present then
-    if v_preview_decisions_json->'case_resolutions' is null
-       or jsonb_typeof(v_preview_decisions_json->'case_resolutions') = 'null' then
+  IF jsonb_typeof(COALESCE(v_preview_decisions_json->'safe_case_states', '[]'::jsonb)) = 'array' THEN
+    v_safe_case_states := COALESCE(v_preview_decisions_json->'safe_case_states', '[]'::jsonb);
+  ELSE
+    v_safe_case_states := '[]'::jsonb;
+  END IF;
+
+  IF v_preview_decisions_json ? 'case_resolutions' THEN
+    IF v_preview_decisions_json->'case_resolutions' IS NULL
+       OR jsonb_typeof(v_preview_decisions_json->'case_resolutions') = 'null' THEN
       v_case_resolutions := '{}'::jsonb;
       v_case_resolutions_supplied := false;
-    elsif jsonb_typeof(v_preview_decisions_json->'case_resolutions') = 'object' then
-      select
-        coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
-      into v_case_resolutions
-      from jsonb_each(coalesce(v_preview_decisions_json->'case_resolutions', '{}'::jsonb)) e
-      where nullif(btrim(e.key), '') is not null
-        and jsonb_typeof(e.value) = 'object'
-        and (
-          e.key ~ '^timesheet:[0-9a-fA-F-]{36}$'
-          or e.key ~ '^finance:[0-9a-fA-F-]{36}$'
+    ELSIF jsonb_typeof(v_preview_decisions_json->'case_resolutions') = 'object' THEN
+      SELECT COALESCE(jsonb_object_agg(case_entry.key, case_entry.value), '{}'::jsonb)
+      INTO v_case_resolutions
+      FROM jsonb_each(COALESCE(v_preview_decisions_json->'case_resolutions', '{}'::jsonb)) AS case_entry(key, value)
+      WHERE NULLIF(BTRIM(case_entry.key), '') IS NOT NULL
+        AND jsonb_typeof(case_entry.value) = 'object'
+        AND (
+          case_entry.key ~ '^timesheet:[0-9a-fA-F-]{36}$'
+          OR case_entry.key ~ '^finance:[0-9a-fA-F-]{36}$'
         );
 
-      v_case_resolutions_supplied := exists (
-        select 1
-        from jsonb_each(v_case_resolutions) e
-        limit 1
+      v_case_resolutions_supplied := EXISTS (
+        SELECT 1
+        FROM jsonb_each(v_case_resolutions) AS normalized_case_entry(key, value)
+        LIMIT 1
       );
-    else
-      raise exception 'preview_decisions_json.case_resolutions must be an object when supplied';
-    end if;
-  else
-    v_case_resolutions := '{}'::jsonb;
-    v_case_resolutions_supplied := false;
-  end if;
+    ELSE
+      RAISE EXCEPTION 'preview_decisions_json.case_resolutions must be an object when supplied';
+    END IF;
+  END IF;
 
-  if jsonb_typeof(coalesce(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb)) = 'array' then
-    v_case_resolution_states := coalesce(v_preview_decisions_json->'case_resolution_states', '[]'::jsonb);
-  else
-    v_case_resolution_states := '[]'::jsonb;
-  end if;
-
-  if jsonb_typeof(coalesce(v_preview_decisions_json->'blocked_case_states', '[]'::jsonb)) = 'array' then
-    v_blocked_case_states := coalesce(v_preview_decisions_json->'blocked_case_states', '[]'::jsonb);
-  else
-    v_blocked_case_states := '[]'::jsonb;
-  end if;
-
-  if jsonb_typeof(coalesce(v_preview_decisions_json->'safe_case_states', '[]'::jsonb)) = 'array' then
-    v_safe_case_states := coalesce(v_preview_decisions_json->'safe_case_states', '[]'::jsonb);
-  else
-    v_safe_case_states := '[]'::jsonb;
-  end if;
-
-  v_selected_preview_row_ids_present := (v_preview_decisions_json ? 'selected_preview_row_ids');
-
-  if v_selected_preview_row_ids_present then
-    if v_preview_decisions_json->'selected_preview_row_ids' is null
-       or jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'null' then
-      v_selected_preview_row_ids := null;
+  IF v_preview_decisions_json ? 'selected_preview_row_ids' THEN
+    IF v_preview_decisions_json->'selected_preview_row_ids' IS NULL
+       OR jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'null' THEN
+      v_selected_preview_row_ids := '[]'::jsonb;
       v_selected_preview_row_ids_supplied := false;
-      v_selected_preview_row_ids_input_count := 0;
       v_selected_preview_row_ids_sanitized_count := 0;
-    elsif jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'array' then
-      v_selected_preview_row_ids_input_count := coalesce(jsonb_array_length(v_preview_decisions_json->'selected_preview_row_ids'), 0);
-
-      select
-        coalesce(jsonb_agg(to_jsonb(s.row_id) order by s.ord), '[]'::jsonb),
-        count(*)::int
-      into
+    ELSIF jsonb_typeof(v_preview_decisions_json->'selected_preview_row_ids') = 'array' THEN
+      SELECT
+        COALESCE(jsonb_agg(to_jsonb(selected_row.row_id) ORDER BY selected_row.ord), '[]'::jsonb),
+        COUNT(*)::integer
+      INTO
         v_selected_preview_row_ids,
         v_selected_preview_row_ids_sanitized_count
-      from (
-        select distinct on (x.row_id)
-          x.ord,
-          x.row_id
-        from (
-          select
-            e.ord,
-            btrim(e.value) as row_id
-          from jsonb_array_elements_text(coalesce(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb)) with ordinality as e(value, ord)
-        ) x
-        where x.row_id <> ''
-        order by x.row_id, x.ord
-      ) s;
+      FROM (
+        SELECT DISTINCT ON (raw_row.row_id)
+          raw_row.ord,
+          raw_row.row_id
+        FROM (
+          SELECT
+            selected_element.ord,
+            BTRIM(selected_element.value) AS row_id
+          FROM jsonb_array_elements_text(COALESCE(v_preview_decisions_json->'selected_preview_row_ids', '[]'::jsonb)) WITH ORDINALITY AS selected_element(value, ord)
+        ) AS raw_row
+        WHERE raw_row.row_id <> ''
+        ORDER BY raw_row.row_id, raw_row.ord
+      ) AS selected_row;
 
-      if coalesce(v_selected_preview_row_ids_sanitized_count, 0) = 0 then
-        raise exception 'preview_decisions_json.selected_preview_row_ids must contain at least one non-blank preview row id when explicitly supplied';
-      end if;
+      IF COALESCE(v_selected_preview_row_ids_sanitized_count, 0) = 0 THEN
+        RAISE EXCEPTION 'preview_decisions_json.selected_preview_row_ids must contain at least one non-blank preview row id when supplied';
+      END IF;
 
       v_selected_preview_row_ids_supplied := true;
-    else
-      raise exception 'preview_decisions_json.selected_preview_row_ids must be an array when supplied';
-    end if;
-  else
-    v_selected_preview_row_ids := null;
-    v_selected_preview_row_ids_supplied := false;
-    v_selected_preview_row_ids_input_count := 0;
-    v_selected_preview_row_ids_sanitized_count := 0;
-  end if;
+    ELSE
+      RAISE EXCEPTION 'preview_decisions_json.selected_preview_row_ids must be an array when supplied';
+    END IF;
+  END IF;
 
-  v_preview_decisions_json := coalesce(v_preview_decisions_json, '{}'::jsonb)
-    - 'mismatch_choices'
-    - 'component_resolutions'
-    - 'case_resolutions'
-    - 'selected_preview_row_ids'
+  v_preview_decisions_json := (v_preview_decisions_json - 'case_resolutions' - 'selected_preview_row_ids')
     || jsonb_build_object(
-         'case_resolution_states', v_case_resolution_states,
-         'blocked_case_states', v_blocked_case_states,
-         'safe_case_states', v_safe_case_states
-       );
-
-  if v_case_resolutions_supplied then
-    v_preview_decisions_json := v_preview_decisions_json
-      || jsonb_build_object('case_resolutions', v_case_resolutions);
-  end if;
-
-  if v_selected_preview_row_ids_supplied then
-    v_preview_decisions_json := v_preview_decisions_json
-      || jsonb_build_object('selected_preview_row_ids', v_selected_preview_row_ids);
-  end if;
-
-  v_component_resolutions_normalized_present := false;
-  v_component_resolutions_normalized_type := null;
-  v_case_resolutions_normalized_present := (v_preview_decisions_json ? 'case_resolutions');
-  v_case_resolutions_normalized_type := case
-    when v_case_resolutions_normalized_present then coalesce(jsonb_typeof(v_preview_decisions_json->'case_resolutions'), 'null')
-    else null
-  end;
+      'case_resolution_states', v_case_resolution_states,
+      'blocked_case_states', v_blocked_case_states,
+      'safe_case_states', v_safe_case_states
+    );
 
   v_umbrella_preview_decisions_json := v_preview_decisions_json;
   v_paye_preview_decisions_json := v_preview_decisions_json;
 
-  if v_selected_preview_row_ids_supplied then
-    with selected_rows as (
-      select distinct on (x.preview_row_id)
-        x.preview_row_id,
-        x.ord
-      from (
-        select
-          btrim(e.value) as preview_row_id,
-          e.ord
-        from jsonb_array_elements_text(v_selected_preview_row_ids) with ordinality as e(value, ord)
-        where btrim(e.value) <> ''
-      ) x
-      order by x.preview_row_id, x.ord
+  IF v_selected_preview_row_ids_supplied THEN
+    WITH selected_rows AS (
+      SELECT DISTINCT ON (selected_row.preview_row_id)
+        selected_row.preview_row_id,
+        selected_row.ord
+      FROM (
+        SELECT
+          BTRIM(selected_element.value) AS preview_row_id,
+          selected_element.ord
+        FROM jsonb_array_elements_text(v_selected_preview_row_ids) WITH ORDINALITY AS selected_element(value, ord)
+        WHERE BTRIM(selected_element.value) <> ''
+      ) AS selected_row
+      ORDER BY selected_row.preview_row_id, selected_row.ord
     ),
-    selected_keys as (
-      select
-        sr.preview_row_id,
-        sr.ord,
-        case
-          when sr.preview_row_id ~ '^finance:[0-9a-fA-F-]{36}:' then nullif(btrim(split_part(sr.preview_row_id, ':', 2)), '')::uuid
-          else null::uuid
-        end as finance_case_id,
-        case
-          when sr.preview_row_id ~ '^[0-9a-fA-F-]{36}($|:)' then substring(sr.preview_row_id from '^[0-9a-fA-F-]{36}')::uuid
-          else null::uuid
-        end as timesheet_id
-      from selected_rows sr
+    selected_keys AS (
+      SELECT
+        selected_rows.preview_row_id,
+        selected_rows.ord,
+        CASE
+          WHEN selected_rows.preview_row_id ~ '^finance:[0-9a-fA-F-]{36}:' THEN NULLIF(BTRIM(split_part(selected_rows.preview_row_id, ':', 2)), '')::uuid
+          ELSE NULL::uuid
+        END AS finance_case_id,
+        CASE
+          WHEN selected_rows.preview_row_id ~ '^[0-9a-fA-F-]{36}($|:)' THEN substring(selected_rows.preview_row_id from '^[0-9a-fA-F-]{36}')::uuid
+          ELSE NULL::uuid
+        END AS timesheet_id
+      FROM selected_rows
     ),
-    scoped_rows as (
-      select distinct on (src.preview_row_id, src.pay_channel)
-        src.preview_row_id,
-        src.ord,
-        src.pay_channel
-      from (
-        select
-          sk.preview_row_id,
-          sk.ord,
-          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel
-        from selected_keys sk
-        join public.v_finance_cases_register vfcr
-          on vfcr.finance_case_id = sk.finance_case_id
-        join public.candidates c
-          on c.id = vfcr.candidate_id
-        where sk.finance_case_id is not null
+    scoped_rows AS (
+      SELECT DISTINCT ON (scope_row.preview_row_id, scope_row.pay_channel)
+        scope_row.preview_row_id,
+        scope_row.ord,
+        scope_row.pay_channel
+      FROM (
+        SELECT
+          selected_keys.preview_row_id,
+          selected_keys.ord,
+          UPPER(BTRIM(COALESCE(candidates_payee.pay_method, ''))) AS pay_channel
+        FROM selected_keys
+        JOIN public.v_finance_cases_register AS finance_case_register
+          ON finance_case_register.finance_case_id = selected_keys.finance_case_id
+        JOIN public.candidates AS candidates_payee
+          ON candidates_payee.id = finance_case_register.candidate_id
+        WHERE selected_keys.finance_case_id IS NOT NULL
 
-        union all
+        UNION ALL
 
-        select
-          sk.preview_row_id,
-          sk.ord,
-          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel
-        from selected_keys sk
-        join public.timesheets_financials tf
-          on tf.timesheet_id = sk.timesheet_id
-         and tf.is_current = true
-        join public.candidates c
-          on c.id = tf.candidate_id
-        where sk.finance_case_id is null
-          and sk.timesheet_id is not null
-      ) src
-      where src.pay_channel in ('UMBRELLA', 'PAYE')
-      order by src.preview_row_id, src.pay_channel, src.ord
+        SELECT
+          selected_keys.preview_row_id,
+          selected_keys.ord,
+          UPPER(BTRIM(COALESCE(candidates_timesheet.pay_method, ''))) AS pay_channel
+        FROM selected_keys
+        JOIN public.timesheets_financials AS timesheets_financials_current
+          ON timesheets_financials_current.timesheet_id = selected_keys.timesheet_id
+         AND timesheets_financials_current.is_current = true
+        JOIN public.candidates AS candidates_timesheet
+          ON candidates_timesheet.id = timesheets_financials_current.candidate_id
+        WHERE selected_keys.finance_case_id IS NULL
+          AND selected_keys.timesheet_id IS NOT NULL
+      ) AS scope_row
+      WHERE scope_row.pay_channel IN ('UMBRELLA', 'PAYE')
+      ORDER BY scope_row.preview_row_id, scope_row.pay_channel, scope_row.ord
     )
-    select
-      coalesce(
-        jsonb_agg(to_jsonb(sr.preview_row_id) order by sr.ord) filter (where sr.pay_channel = 'UMBRELLA'),
+    SELECT
+      COALESCE(
+        jsonb_agg(to_jsonb(scoped_rows.preview_row_id) ORDER BY scoped_rows.ord) FILTER (WHERE scoped_rows.pay_channel = 'UMBRELLA'),
         '[]'::jsonb
       ),
-      coalesce(count(*) filter (where sr.pay_channel = 'UMBRELLA'), 0)::int,
-      coalesce(
-        jsonb_agg(to_jsonb(sr.preview_row_id) order by sr.ord) filter (where sr.pay_channel = 'PAYE'),
+      COALESCE(COUNT(*) FILTER (WHERE scoped_rows.pay_channel = 'UMBRELLA'), 0)::integer,
+      COALESCE(
+        jsonb_agg(to_jsonb(scoped_rows.preview_row_id) ORDER BY scoped_rows.ord) FILTER (WHERE scoped_rows.pay_channel = 'PAYE'),
         '[]'::jsonb
       ),
-      coalesce(count(*) filter (where sr.pay_channel = 'PAYE'), 0)::int
-    into
+      COALESCE(COUNT(*) FILTER (WHERE scoped_rows.pay_channel = 'PAYE'), 0)::integer
+    INTO
       v_umbrella_selected_preview_row_ids,
       v_umbrella_selected_preview_row_count,
       v_paye_selected_preview_row_ids,
       v_paye_selected_preview_row_count
-    from scoped_rows sr;
+    FROM scoped_rows;
 
-    if coalesce(v_umbrella_selected_preview_row_count, 0) = 0
-       and coalesce(v_paye_selected_preview_row_count, 0) = 0 then
-      raise exception 'Selected preview rows are not valid for the current preview';
-    end if;
+    IF COALESCE(v_umbrella_selected_preview_row_count, 0) = 0
+       AND COALESCE(v_paye_selected_preview_row_count, 0) = 0 THEN
+      RAISE EXCEPTION 'Selected preview rows are not valid for the current preview';
+    END IF;
 
-    if coalesce(v_umbrella_selected_preview_row_count, 0) > 0 then
-      v_umbrella_preview_decisions_json := (v_umbrella_preview_decisions_json - 'selected_preview_row_ids')
-        || jsonb_build_object('selected_preview_row_ids', v_umbrella_selected_preview_row_ids);
-    else
-      v_umbrella_preview_decisions_json := v_umbrella_preview_decisions_json - 'selected_preview_row_ids';
-    end if;
+    IF COALESCE(v_umbrella_selected_preview_row_count, 0) > 0 THEN
+      v_umbrella_preview_decisions_json := v_umbrella_preview_decisions_json || jsonb_build_object('selected_preview_row_ids', v_umbrella_selected_preview_row_ids);
+    END IF;
 
-    if coalesce(v_paye_selected_preview_row_count, 0) > 0 then
-      v_paye_preview_decisions_json := (v_paye_preview_decisions_json - 'selected_preview_row_ids')
-        || jsonb_build_object('selected_preview_row_ids', v_paye_selected_preview_row_ids);
-    else
-      v_paye_preview_decisions_json := v_paye_preview_decisions_json - 'selected_preview_row_ids';
-    end if;
-  end if;
+    IF COALESCE(v_paye_selected_preview_row_count, 0) > 0 THEN
+      v_paye_preview_decisions_json := v_paye_preview_decisions_json || jsonb_build_object('selected_preview_row_ids', v_paye_selected_preview_row_ids);
+    END IF;
+  END IF;
 
-
-  if v_case_resolutions_supplied then
-    with case_entries as (
-      select
-        e.key as case_key,
-        e.value as resolution_json,
-        case
-          when e.key ~ '^finance:[0-9a-fA-F-]{36}$' then substring(e.key from 9)::uuid
-          else null::uuid
-        end as finance_case_id,
-        case
-          when e.key ~ '^timesheet:[0-9a-fA-F-]{36}$' then substring(e.key from 11)::uuid
-          else null::uuid
-        end as timesheet_id
-      from jsonb_each(v_case_resolutions) e
-      where nullif(btrim(e.key), '') is not null
-        and jsonb_typeof(e.value) = 'object'
+  IF v_case_resolutions_supplied THEN
+    WITH case_entries AS (
+      SELECT
+        case_entry.key AS case_key,
+        case_entry.value AS resolution_json,
+        CASE
+          WHEN case_entry.key ~ '^finance:[0-9a-fA-F-]{36}$' THEN substring(case_entry.key from 9)::uuid
+          ELSE NULL::uuid
+        END AS finance_case_id,
+        CASE
+          WHEN case_entry.key ~ '^timesheet:[0-9a-fA-F-]{36}$' THEN substring(case_entry.key from 11)::uuid
+          ELSE NULL::uuid
+        END AS timesheet_id
+      FROM jsonb_each(v_case_resolutions) AS case_entry(key, value)
+      WHERE NULLIF(BTRIM(case_entry.key), '') IS NOT NULL
+        AND jsonb_typeof(case_entry.value) = 'object'
     ),
-    selected_rows as (
-      select distinct on (x.preview_row_id)
-        x.preview_row_id,
-        x.ord
-      from (
-        select
-          btrim(e.value) as preview_row_id,
-          e.ord
-        from jsonb_array_elements_text(coalesce(v_selected_preview_row_ids, '[]'::jsonb)) with ordinality as e(value, ord)
-        where btrim(e.value) <> ''
-      ) x
-      order by x.preview_row_id, x.ord
+    selected_rows AS (
+      SELECT DISTINCT ON (selected_row.preview_row_id)
+        selected_row.preview_row_id,
+        selected_row.ord
+      FROM (
+        SELECT
+          BTRIM(selected_element.value) AS preview_row_id,
+          selected_element.ord
+        FROM jsonb_array_elements_text(COALESCE(v_selected_preview_row_ids, '[]'::jsonb)) WITH ORDINALITY AS selected_element(value, ord)
+        WHERE BTRIM(selected_element.value) <> ''
+      ) AS selected_row
+      ORDER BY selected_row.preview_row_id, selected_row.ord
     ),
-    selected_keys as (
-      select
-        sr.preview_row_id,
-        sr.ord,
-        case
-          when sr.preview_row_id ~ '^finance:[0-9a-fA-F-]{36}:' then nullif(btrim(split_part(sr.preview_row_id, ':', 2)), '')::uuid
-          else null::uuid
-        end as finance_case_id,
-        case
-          when sr.preview_row_id ~ '^[0-9a-fA-F-]{36}($|:)' then substring(sr.preview_row_id from '^[0-9a-fA-F-]{36}')::uuid
-          else null::uuid
-        end as timesheet_id
-      from selected_rows sr
+    selected_keys AS (
+      SELECT
+        selected_rows.preview_row_id,
+        selected_rows.ord,
+        CASE
+          WHEN selected_rows.preview_row_id ~ '^finance:[0-9a-fA-F-]{36}:' THEN NULLIF(BTRIM(split_part(selected_rows.preview_row_id, ':', 2)), '')::uuid
+          ELSE NULL::uuid
+        END AS finance_case_id,
+        CASE
+          WHEN selected_rows.preview_row_id ~ '^[0-9a-fA-F-]{36}($|:)' THEN substring(selected_rows.preview_row_id from '^[0-9a-fA-F-]{36}')::uuid
+          ELSE NULL::uuid
+        END AS timesheet_id
+      FROM selected_rows
     ),
-    snapshot_case_rows as (
-      select case_json
-      from jsonb_array_elements(coalesce(v_case_resolution_states, '[]'::jsonb)) as case_json
-      union all
-      select case_json
-      from jsonb_array_elements(coalesce(v_blocked_case_states, '[]'::jsonb)) as case_json
-      union all
-      select case_json
-      from jsonb_array_elements(coalesce(v_safe_case_states, '[]'::jsonb)) as case_json
+    snapshot_case_rows AS (
+      SELECT case_json.value AS case_json
+      FROM jsonb_array_elements(COALESCE(v_case_resolution_states, '[]'::jsonb)) AS case_json(value)
+      UNION ALL
+      SELECT case_json.value AS case_json
+      FROM jsonb_array_elements(COALESCE(v_blocked_case_states, '[]'::jsonb)) AS case_json(value)
+      UNION ALL
+      SELECT case_json.value AS case_json
+      FROM jsonb_array_elements(COALESCE(v_safe_case_states, '[]'::jsonb)) AS case_json(value)
     ),
-    snapshot_timesheet_case_links as (
-      select distinct
-        nullif(btrim(coalesce(scr.case_json->>'case_key','')), '') as case_key,
-        case
-          when nullif(btrim(coalesce(scr.case_json->>'case_key','')), '') ~ '^timesheet:[0-9a-fA-F-]{36}$'
-            then substring(scr.case_json->>'case_key' from 11)::uuid
-          else null::uuid
-        end as seed_timesheet_id,
-        linked_timesheet_id.value::uuid as linked_timesheet_id
-      from snapshot_case_rows scr
-      cross join lateral jsonb_array_elements_text(
-        coalesce(scr.case_json->'linked_resolution_scope_json'->'linked_timesheet_ids', '[]'::jsonb)
-      ) as linked_timesheet_id(value)
-      where jsonb_typeof(scr.case_json) = 'object'
-        and nullif(btrim(coalesce(scr.case_json->>'case_key','')), '') ~ '^timesheet:[0-9a-fA-F-]{36}$'
-        and linked_timesheet_id.value ~ '^[0-9a-fA-F-]{36}$'
+    snapshot_timesheet_case_links AS (
+      SELECT DISTINCT
+        NULLIF(BTRIM(COALESCE(snapshot_case_rows.case_json->>'case_key', '')), '') AS case_key,
+        CASE
+          WHEN NULLIF(BTRIM(COALESCE(snapshot_case_rows.case_json->>'case_key', '')), '') ~ '^timesheet:[0-9a-fA-F-]{36}$'
+            THEN substring(snapshot_case_rows.case_json->>'case_key' from 11)::uuid
+          ELSE NULL::uuid
+        END AS seed_timesheet_id,
+        linked_timesheet_id.value::uuid AS linked_timesheet_id
+      FROM snapshot_case_rows
+      CROSS JOIN LATERAL jsonb_array_elements_text(
+        COALESCE(snapshot_case_rows.case_json->'linked_resolution_scope_json'->'linked_timesheet_ids', '[]'::jsonb)
+      ) AS linked_timesheet_id(value)
+      WHERE jsonb_typeof(snapshot_case_rows.case_json) = 'object'
+        AND NULLIF(BTRIM(COALESCE(snapshot_case_rows.case_json->>'case_key', '')), '') ~ '^timesheet:[0-9a-fA-F-]{36}$'
+        AND linked_timesheet_id.value ~ '^[0-9a-fA-F-]{36}$'
     ),
-    selected_case_keys as (
-      select
-        direct_rows.case_key,
-        min(direct_rows.ord)::int as ord
-      from (
-        select
-          ('finance:' || sk.finance_case_id::text) as case_key,
-          sk.ord
-        from selected_keys sk
-        where sk.finance_case_id is not null
+    selected_case_keys AS (
+      SELECT
+        case_key_rows.case_key,
+        MIN(case_key_rows.ord)::integer AS ord
+      FROM (
+        SELECT
+          ('finance:' || selected_keys.finance_case_id::text) AS case_key,
+          selected_keys.ord
+        FROM selected_keys
+        WHERE selected_keys.finance_case_id IS NOT NULL
 
-        union all
+        UNION ALL
 
-        select
-          ('timesheet:' || sk.timesheet_id::text) as case_key,
-          sk.ord
-        from selected_keys sk
-        where sk.finance_case_id is null
-          and sk.timesheet_id is not null
+        SELECT
+          ('timesheet:' || selected_keys.timesheet_id::text) AS case_key,
+          selected_keys.ord
+        FROM selected_keys
+        WHERE selected_keys.finance_case_id IS NULL
+          AND selected_keys.timesheet_id IS NOT NULL
 
-        union all
+        UNION ALL
 
-        select
-          stcl.case_key,
-          sk.ord
-        from selected_keys sk
-        join snapshot_timesheet_case_links stcl
-          on stcl.linked_timesheet_id = sk.timesheet_id
-        where sk.finance_case_id is null
-          and sk.timesheet_id is not null
-          and stcl.case_key is not null
-      ) direct_rows
-      group by direct_rows.case_key
+        SELECT
+          snapshot_timesheet_case_links.case_key,
+          selected_keys.ord
+        FROM selected_keys
+        JOIN snapshot_timesheet_case_links
+          ON snapshot_timesheet_case_links.linked_timesheet_id = selected_keys.timesheet_id
+        WHERE selected_keys.finance_case_id IS NULL
+          AND selected_keys.timesheet_id IS NOT NULL
+          AND snapshot_timesheet_case_links.case_key IS NOT NULL
+      ) AS case_key_rows
+      GROUP BY case_key_rows.case_key
     ),
-    selected_scope_rows as (
-      select distinct on (src.case_key, src.pay_channel)
-        src.case_key,
-        src.pay_channel,
-        src.ord
-      from (
-        select
-          sck.case_key,
-          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel,
-          sck.ord
-        from selected_case_keys sck
-        join case_entries ce
-          on ce.case_key = sck.case_key
-        left join public.v_finance_cases_register vfcr
-          on vfcr.finance_case_id = ce.finance_case_id
-        left join public.timesheets_financials tf
-          on tf.timesheet_id = ce.timesheet_id
-         and tf.is_current = true
-        join public.candidates c
-          on c.id = coalesce(vfcr.candidate_id, tf.candidate_id)
-      ) src
-      where v_selected_preview_row_ids_supplied = true
-        and src.pay_channel in ('UMBRELLA', 'PAYE')
-      order by src.case_key, src.pay_channel, src.ord
+    selected_scope_rows AS (
+      SELECT DISTINCT ON (scope_row.case_key, scope_row.pay_channel)
+        scope_row.case_key,
+        scope_row.pay_channel,
+        scope_row.ord
+      FROM (
+        SELECT
+          selected_case_keys.case_key,
+          UPPER(BTRIM(COALESCE(candidates_case.pay_method, ''))) AS pay_channel,
+          selected_case_keys.ord
+        FROM selected_case_keys
+        JOIN case_entries
+          ON case_entries.case_key = selected_case_keys.case_key
+        LEFT JOIN public.v_finance_cases_register AS finance_case_register
+          ON finance_case_register.finance_case_id = case_entries.finance_case_id
+        LEFT JOIN public.timesheets_financials AS timesheets_financials_current
+          ON timesheets_financials_current.timesheet_id = case_entries.timesheet_id
+         AND timesheets_financials_current.is_current = true
+        JOIN public.candidates AS candidates_case
+          ON candidates_case.id = COALESCE(finance_case_register.candidate_id, timesheets_financials_current.candidate_id)
+      ) AS scope_row
+      WHERE v_selected_preview_row_ids_supplied = true
+        AND scope_row.pay_channel IN ('UMBRELLA', 'PAYE')
+      ORDER BY scope_row.case_key, scope_row.pay_channel, scope_row.ord
     ),
-    live_scope_rows as (
-      select distinct on (src.case_key, src.pay_channel)
-        src.case_key,
-        src.pay_channel,
-        1 as ord
-      from (
-        select
-          ce.case_key,
-          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel
-        from case_entries ce
-        join public.v_finance_cases_register vfcr
-          on vfcr.finance_case_id = ce.finance_case_id
-        join public.candidates c
-          on c.id = vfcr.candidate_id
-        where ce.finance_case_id is not null
+    live_scope_rows AS (
+      SELECT DISTINCT ON (scope_row.case_key, scope_row.pay_channel)
+        scope_row.case_key,
+        scope_row.pay_channel,
+        1 AS ord
+      FROM (
+        SELECT
+          case_entries.case_key,
+          UPPER(BTRIM(COALESCE(candidates_finance.pay_method, ''))) AS pay_channel
+        FROM case_entries
+        JOIN public.v_finance_cases_register AS finance_case_register
+          ON finance_case_register.finance_case_id = case_entries.finance_case_id
+        JOIN public.candidates AS candidates_finance
+          ON candidates_finance.id = finance_case_register.candidate_id
+        WHERE case_entries.finance_case_id IS NOT NULL
 
-        union all
+        UNION ALL
 
-        select
-          ce.case_key,
-          upper(btrim(coalesce(c.pay_method, ''))) as pay_channel
-        from case_entries ce
-        join public.timesheets_financials tf
-          on tf.timesheet_id = ce.timesheet_id
-         and tf.is_current = true
-        join public.candidates c
-          on c.id = tf.candidate_id
-        where ce.finance_case_id is null
-          and ce.timesheet_id is not null
-      ) src
-      where v_selected_preview_row_ids_supplied = false
-        and src.pay_channel in ('UMBRELLA', 'PAYE')
-      order by src.case_key, src.pay_channel, ord
+        SELECT
+          case_entries.case_key,
+          UPPER(BTRIM(COALESCE(candidates_timesheet.pay_method, ''))) AS pay_channel
+        FROM case_entries
+        JOIN public.timesheets_financials AS timesheets_financials_current
+          ON timesheets_financials_current.timesheet_id = case_entries.timesheet_id
+         AND timesheets_financials_current.is_current = true
+        JOIN public.candidates AS candidates_timesheet
+          ON candidates_timesheet.id = timesheets_financials_current.candidate_id
+        WHERE case_entries.finance_case_id IS NULL
+          AND case_entries.timesheet_id IS NOT NULL
+      ) AS scope_row
+      WHERE v_selected_preview_row_ids_supplied = false
+        AND scope_row.pay_channel IN ('UMBRELLA', 'PAYE')
+      ORDER BY scope_row.case_key, scope_row.pay_channel, ord
     ),
-    scope_rows as (
-      select ssr.case_key, ssr.pay_channel, ssr.ord
-      from selected_scope_rows ssr
-      union all
-      select lsr.case_key, lsr.pay_channel, lsr.ord
-      from live_scope_rows lsr
+    scope_rows AS (
+      SELECT selected_scope_rows.case_key, selected_scope_rows.pay_channel, selected_scope_rows.ord
+      FROM selected_scope_rows
+      UNION ALL
+      SELECT live_scope_rows.case_key, live_scope_rows.pay_channel, live_scope_rows.ord
+      FROM live_scope_rows
     )
-    select
-      coalesce(jsonb_object_agg(ce.case_key, ce.resolution_json) filter (where sr.pay_channel = 'UMBRELLA'), '{}'::jsonb),
-      coalesce(count(*) filter (where sr.pay_channel = 'UMBRELLA'), 0)::int,
-      coalesce(jsonb_object_agg(ce.case_key, ce.resolution_json) filter (where sr.pay_channel = 'PAYE'), '{}'::jsonb),
-      coalesce(count(*) filter (where sr.pay_channel = 'PAYE'), 0)::int
-    into
+    SELECT
+      COALESCE(jsonb_object_agg(case_entries.case_key, case_entries.resolution_json) FILTER (WHERE scope_rows.pay_channel = 'UMBRELLA'), '{}'::jsonb),
+      COALESCE(COUNT(*) FILTER (WHERE scope_rows.pay_channel = 'UMBRELLA'), 0)::integer,
+      COALESCE(jsonb_object_agg(case_entries.case_key, case_entries.resolution_json) FILTER (WHERE scope_rows.pay_channel = 'PAYE'), '{}'::jsonb),
+      COALESCE(COUNT(*) FILTER (WHERE scope_rows.pay_channel = 'PAYE'), 0)::integer
+    INTO
       v_umbrella_case_resolutions,
       v_umbrella_case_resolution_count,
       v_paye_case_resolutions,
       v_paye_case_resolution_count
-    from case_entries ce
-    join scope_rows sr
-      on sr.case_key = ce.case_key;
+    FROM case_entries
+    JOIN scope_rows
+      ON scope_rows.case_key = case_entries.case_key;
 
-    if coalesce(v_umbrella_case_resolution_count, 0) > 0 then
-      v_umbrella_preview_decisions_json := (v_umbrella_preview_decisions_json - 'case_resolutions')
-        || jsonb_build_object('case_resolutions', v_umbrella_case_resolutions);
-    else
-      v_umbrella_preview_decisions_json := v_umbrella_preview_decisions_json - 'case_resolutions';
-    end if;
+    IF COALESCE(v_umbrella_case_resolution_count, 0) > 0 THEN
+      v_umbrella_preview_decisions_json := v_umbrella_preview_decisions_json || jsonb_build_object('case_resolutions', v_umbrella_case_resolutions);
+    END IF;
 
-    if coalesce(v_paye_case_resolution_count, 0) > 0 then
-      v_paye_preview_decisions_json := (v_paye_preview_decisions_json - 'case_resolutions')
-        || jsonb_build_object('case_resolutions', v_paye_case_resolutions);
-    else
-      v_paye_preview_decisions_json := v_paye_preview_decisions_json - 'case_resolutions';
-    end if;
-  else
-    v_umbrella_preview_decisions_json := v_umbrella_preview_decisions_json - 'case_resolutions';
-    v_paye_preview_decisions_json := v_paye_preview_decisions_json - 'case_resolutions';
-  end if;
+    IF COALESCE(v_paye_case_resolution_count, 0) > 0 THEN
+      v_paye_preview_decisions_json := v_paye_preview_decisions_json || jsonb_build_object('case_resolutions', v_paye_case_resolutions);
+    END IF;
+  END IF;
 
-  begin
-    perform public._imp_debug_audit(
-      p_actor_user_id,
-      'PAY_CREATE_DRAFT_BATCHES_SPLIT:INPUTS',
-      jsonb_build_object(
-        'pay_date', p_pay_date::text,
-        'week_ending_cutoff', p_week_ending_cutoff::text,
-        'actor_user_id', p_actor_user_id::text,
-        'candidate_id_param', coalesce(p_candidate_id::text, null),
-        'client_id_param', coalesce(p_client_id::text, null),
-        'force_include_timesheet_ids_count', coalesce(array_length(p_force_include_timesheet_ids, 1), 0),
-        'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null),
-        'override_mode', coalesce(p_override_mode::text, null),
-        'override_continue', coalesce(p_override_continue, false),
-        'override_verified', coalesce(p_override_verified, false),
-        'override_verified_by_user_id', coalesce(p_override_verified_by_user_id::text, null),
-        'override_verified_at_utc', p_override_verified_at_utc,
-        'preview_decisions_json_input_keys_sample', (
-          select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
-          from (
-            select e.key
-            from jsonb_each(coalesce(p_preview_decisions_json, '{}'::jsonb)) e
-            order by e.key
-            limit 50
-          ) k
-        ),
-        'preview_decisions_json_keys_sample', (
-          select coalesce(jsonb_agg(k.key order by k.key), '[]'::jsonb)
-          from (
-            select e.key
-            from jsonb_each(v_preview_decisions_json) e
-            order by e.key
-            limit 50
-          ) k
-        ),
-        'component_resolution_present', v_component_resolutions_present,
-        'component_resolution_supplied', v_component_resolutions_supplied,
-        'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
-        'component_resolution_normalized_present', v_component_resolutions_normalized_present,
-        'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
-        'component_resolution_omitted_as_absent', (v_component_resolutions_present and not v_component_resolutions_supplied),
-        'component_resolution_shape', coalesce(v_component_resolutions_normalized_type, 'null'),
-        'component_resolution_count', 0,
-        'case_resolution_present', v_case_resolutions_present,
-        'case_resolution_supplied', v_case_resolutions_supplied,
-        'case_resolution_input_type', coalesce(v_case_resolutions_input_type, null),
-        'case_resolution_normalized_present', v_case_resolutions_normalized_present,
-        'case_resolution_normalized_type', coalesce(v_case_resolutions_normalized_type, null),
-        'case_resolution_count', (
-          case
-            when v_case_resolutions_normalized_type = 'object' then (
-              select count(*)::int
-              from jsonb_each(v_case_resolutions) e
-            )
-            else 0
-          end
-        ),
-        'umbrella_case_resolution_count', coalesce(v_umbrella_case_resolution_count, 0),
-        'paye_case_resolution_count', coalesce(v_paye_case_resolution_count, 0),
-        'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
-        'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
-        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
-        'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
-        'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
-        'selected_preview_row_input_count', (
-          case
-            when v_selected_preview_row_ids_present then v_selected_preview_row_ids_input_count
-            else null
-          end
-        ),
-        'selected_preview_row_count', (
-          case
-            when v_selected_preview_row_ids_supplied then coalesce(v_selected_preview_row_ids_sanitized_count, coalesce(jsonb_array_length(v_selected_preview_row_ids), 0))
-            else null
-          end
-        ),
-        'selected_preview_row_ids_sample', (
-          case
-            when v_selected_preview_row_ids_supplied then (
-              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-              from (
-                select elem
-                from jsonb_array_elements(v_selected_preview_row_ids) as elem
-                limit 50
-              ) x
-            )
-            else null
-          end
-        ),
-        'umbrella_selected_preview_row_count', coalesce(v_umbrella_selected_preview_row_count, 0),
-        'paye_selected_preview_row_count', coalesce(v_paye_selected_preview_row_count, 0),
-        'umbrella_selected_preview_row_ids_sample', (
-          case
-            when v_selected_preview_row_ids_supplied and coalesce(v_umbrella_selected_preview_row_count, 0) > 0 then (
-              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-              from (
-                select elem
-                from jsonb_array_elements(v_umbrella_selected_preview_row_ids) as elem
-                limit 50
-              ) x
-            )
-            else null
-          end
-        ),
-        'paye_selected_preview_row_ids_sample', (
-          case
-            when v_selected_preview_row_ids_supplied and coalesce(v_paye_selected_preview_row_count, 0) > 0 then (
-              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-              from (
-                select elem
-                from jsonb_array_elements(v_paye_selected_preview_row_ids) as elem
-                limit 50
-              ) x
-            )
-            else null
-          end
-        )
-      ),
-      'pay_create_draft_batches_split',
-      'pay_date:'||p_pay_date::text,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null
-    );
-  exception when others then
-    null;
-  end;
-
-  if v_selected_preview_row_ids_supplied and coalesce(v_umbrella_selected_preview_row_count, 0) = 0 then
-    v_umbrella_pay_batch_id := null;
+  IF v_selected_preview_row_ids_supplied AND COALESCE(v_umbrella_selected_preview_row_count, 0) = 0 THEN
+    v_umbrella_pay_batch_id := NULL::uuid;
     v_umbrella_overpayment_sync_only := false;
     v_umbrella_overpayment_sync := '{}'::jsonb;
     v_umbrella_status := 'NOTHING_RELEVANT';
-  else
-    v_umbrella_status := 'RUNNING';
-    begin
+  ELSE
+    BEGIN
       v_umbrella_res := public.pay_create_draft_batch(
         p_pay_date => p_pay_date,
         p_week_ending_cutoff => p_week_ending_cutoff,
@@ -1901,169 +1670,95 @@ begin
         p_override_mode => p_override_mode
       );
 
-      v_umbrella_pay_batch_id := nullif(btrim(coalesce(v_umbrella_res->>'pay_batch_id','')), '')::uuid;
-      v_umbrella_overpayment_sync_only := coalesce(nullif(v_umbrella_res->>'overpayment_sync_only','')::boolean, false);
-      v_umbrella_overpayment_sync := coalesce(v_umbrella_res->'overpayment_sync', '{}'::jsonb);
+      IF NULLIF(BTRIM(COALESCE(v_umbrella_res->>'pay_batch_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        v_umbrella_pay_batch_id := (v_umbrella_res->>'pay_batch_id')::uuid;
+      END IF;
 
-      if v_umbrella_pay_batch_id is not null then
+      v_umbrella_overpayment_sync_only := COALESCE(NULLIF(v_umbrella_res->>'overpayment_sync_only', '')::boolean, false);
+      v_umbrella_overpayment_sync := COALESCE(v_umbrella_res->'overpayment_sync', '{}'::jsonb);
+
+      IF v_umbrella_pay_batch_id IS NOT NULL THEN
         v_umbrella_status := 'BATCH_CREATED';
-      elsif v_umbrella_overpayment_sync_only then
+      ELSIF v_umbrella_overpayment_sync_only THEN
         v_umbrella_status := 'DEBT_SYNCED_NO_BATCH';
-      else
+      ELSE
         v_umbrella_status := 'NOTHING_RELEVANT';
-      end if;
-    exception
-    when others then
-      v_err := coalesce(SQLERRM, '');
-      if position('Nothing to pay' in v_err) = 1 then
-        v_umbrella_pay_batch_id := null;
-        v_umbrella_overpayment_sync_only := false;
-        v_umbrella_overpayment_sync := '{}'::jsonb;
-        v_umbrella_status := 'NOTHING_RELEVANT';
-      else
-        begin
-          perform public._imp_debug_audit(
-            p_actor_user_id,
-            'PAY_CREATE_DRAFT_BATCHES_SPLIT:UMBRELLA_ERROR',
-            jsonb_build_object(
-              'pay_date', p_pay_date::text,
-              'week_ending_cutoff', p_week_ending_cutoff::text,
-              'scope', 'UMBRELLA',
-              'error', v_err,
-              'component_resolution_present', v_component_resolutions_present,
-              'component_resolution_supplied', v_component_resolutions_supplied,
-              'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
-              'component_resolution_normalized_present', v_component_resolutions_normalized_present,
-              'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
-              'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
-              'selected_preview_row_count', (
-                case
-                  when v_selected_preview_row_ids_supplied then coalesce(v_selected_preview_row_ids_sanitized_count, coalesce(jsonb_array_length(v_selected_preview_row_ids), 0))
-                  else null
-                end
-              )
-            ),
-            'pay_create_draft_batches_split',
-            'pay_date:'||p_pay_date::text,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-          );
-        exception when others then
-          null;
-        end;
-        raise;
-      end if;
-    end;
-  end if;
+      END IF;
+    EXCEPTION
+      WHEN OTHERS THEN
+        v_err := COALESCE(SQLERRM, '');
+        IF position('Nothing to pay' in v_err) = 1 THEN
+          v_umbrella_pay_batch_id := NULL::uuid;
+          v_umbrella_overpayment_sync_only := false;
+          v_umbrella_overpayment_sync := '{}'::jsonb;
+          v_umbrella_status := 'NOTHING_RELEVANT';
+        ELSE
+          RAISE;
+        END IF;
+    END;
+  END IF;
 
-  perform pg_advisory_xact_lock(94201, 1);
+  PERFORM pg_advisory_xact_lock(94201, 1);
 
   v_paye_guardrails := public.pay_paye_guardrails(
     p_pay_date => p_pay_date,
-    p_ignore_pay_batch_id => null::uuid,
+    p_ignore_pay_batch_id => NULL::uuid,
     p_actor_user_id => p_actor_user_id
   );
 
-  v_paye_create_blocked := coalesce((v_paye_guardrails->>'create_paye_blocked')::boolean, false);
-  v_paye_override_required := coalesce((v_paye_guardrails->>'override_required')::boolean, false);
+  v_paye_create_blocked := COALESCE((v_paye_guardrails->>'create_paye_blocked')::boolean, false);
+  v_paye_override_required := COALESCE((v_paye_guardrails->>'override_required')::boolean, false);
 
-  begin
-    perform public._imp_debug_audit(
-      p_actor_user_id,
-      'PAY_CREATE_DRAFT_BATCHES_SPLIT:PAYE_GUARDRAILS',
-      jsonb_build_object(
-        'pay_date', p_pay_date::text,
-        'guardrails', v_paye_guardrails,
-        'create_paye_blocked', v_paye_create_blocked,
-        'override_required', v_paye_override_required,
-        'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null),
-        'override_mode', coalesce(p_override_mode::text, null),
-        'override_continue', coalesce(p_override_continue, false),
-        'override_verified', coalesce(p_override_verified, false),
-        'override_verified_by_user_id', coalesce(p_override_verified_by_user_id::text, null),
-        'override_verified_at_utc', p_override_verified_at_utc
-      ),
-      'pay_create_draft_batches_split',
-      'pay_date:'||p_pay_date::text,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null
-    );
-  exception when others then
-    null;
-  end;
-
-  if v_paye_create_blocked then
+  IF v_paye_create_blocked THEN
     v_paye_scope_blocked := true;
     v_paye_status := 'BLOCKED_EXISTING_PAYE_DRAFT';
     v_paye_block_reason_code := 'PAYE_DRAFT_ALREADY_EXISTS';
-    v_paye_block_message := coalesce(
+    v_paye_block_message := COALESCE(
       v_paye_guardrails #>> '{ui,existing_draft_block,message}',
       'A PAYE draft batch already exists. Cancel or delete the existing PAYE draft before creating another PAYE draft.'
     );
-    v_paye_pay_batch_id := null;
-    v_paye_overpayment_sync_only := false;
-    v_paye_overpayment_sync := '{}'::jsonb;
-  elsif v_paye_override_required then
-    if nullif(btrim(coalesce(p_override_reason,'')), '') is null then
+  ELSIF v_paye_override_required THEN
+    IF NULLIF(BTRIM(COALESCE(p_override_reason, '')), '') IS NULL THEN
       v_paye_scope_blocked := true;
       v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
       v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_REASON_REQUIRED';
       v_paye_block_message := 'A same-week PAYE override reason is required before creating another PAYE batch in the same Monday-based payroll week.';
-    elsif coalesce(p_override_continue, false) = false then
+    ELSIF COALESCE(p_override_continue, false) = false THEN
       v_paye_scope_blocked := true;
       v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
       v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_CONTINUE_REQUIRED';
       v_paye_block_message := 'Explicit continuation is required before creating another PAYE batch in the same Monday-based payroll week.';
-    elsif coalesce(p_override_verified, false) = false then
+    ELSIF COALESCE(p_override_verified, false) = false THEN
       v_paye_scope_blocked := true;
       v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
       v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFICATION_REQUIRED';
       v_paye_block_message := 'Valid password reauthentication and 2FA verification are required before creating another PAYE batch in the same Monday-based payroll week.';
-    elsif p_override_verified_by_user_id is null then
+    ELSIF p_override_verified_by_user_id IS NULL THEN
       v_paye_scope_blocked := true;
       v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
       v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_BY_REQUIRED';
       v_paye_block_message := 'The verified override user id is required for same-week PAYE override.';
-    elsif p_override_verified_by_user_id <> p_actor_user_id then
+    ELSIF p_override_verified_by_user_id <> p_actor_user_id THEN
       v_paye_scope_blocked := true;
       v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
       v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_BY_MISMATCH';
       v_paye_block_message := 'The same-week PAYE override verification must belong to the current actor user.';
-    elsif p_override_verified_at_utc is null then
+    ELSIF p_override_verified_at_utc IS NULL THEN
       v_paye_scope_blocked := true;
       v_paye_status := 'BLOCKED_SAME_WEEK_OVERRIDE_REQUIRED';
       v_paye_block_reason_code := 'SAME_WEEK_OVERRIDE_VERIFIED_AT_REQUIRED';
       v_paye_block_message := 'The verification timestamp is required for same-week PAYE override.';
-    else
-      v_paye_scope_blocked := false;
-      v_paye_block_reason_code := null;
-      v_paye_block_message := null;
-    end if;
+    END IF;
+  END IF;
 
-    if v_paye_scope_blocked then
-      v_paye_pay_batch_id := null;
-      v_paye_overpayment_sync_only := false;
-      v_paye_overpayment_sync := '{}'::jsonb;
-    end if;
-  end if;
-
-  if not v_paye_scope_blocked then
-    if v_selected_preview_row_ids_supplied and coalesce(v_paye_selected_preview_row_count, 0) = 0 then
-      v_paye_pay_batch_id := null;
+  IF v_paye_scope_blocked = false THEN
+    IF v_selected_preview_row_ids_supplied AND COALESCE(v_paye_selected_preview_row_count, 0) = 0 THEN
+      v_paye_pay_batch_id := NULL::uuid;
       v_paye_overpayment_sync_only := false;
       v_paye_overpayment_sync := '{}'::jsonb;
       v_paye_status := 'NOTHING_RELEVANT';
-    else
-      v_paye_status := 'RUNNING';
-      begin
+    ELSE
+      BEGIN
         v_paye_res := public.pay_create_draft_batch(
           p_pay_date => p_pay_date,
           p_week_ending_cutoff => p_week_ending_cutoff,
@@ -2077,256 +1772,104 @@ begin
           p_override_mode => p_override_mode
         );
 
-        v_paye_pay_batch_id := nullif(btrim(coalesce(v_paye_res->>'pay_batch_id','')), '')::uuid;
-        v_paye_overpayment_sync_only := coalesce(nullif(v_paye_res->>'overpayment_sync_only','')::boolean, false);
-        v_paye_overpayment_sync := coalesce(v_paye_res->'overpayment_sync', '{}'::jsonb);
+        IF NULLIF(BTRIM(COALESCE(v_paye_res->>'pay_batch_id', '')), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+          v_paye_pay_batch_id := (v_paye_res->>'pay_batch_id')::uuid;
+        END IF;
 
-        if v_paye_pay_batch_id is not null then
+        v_paye_overpayment_sync_only := COALESCE(NULLIF(v_paye_res->>'overpayment_sync_only', '')::boolean, false);
+        v_paye_overpayment_sync := COALESCE(v_paye_res->'overpayment_sync', '{}'::jsonb);
+
+        IF v_paye_pay_batch_id IS NOT NULL THEN
           v_paye_status := 'BATCH_CREATED';
-        elsif v_paye_overpayment_sync_only then
+        ELSIF v_paye_overpayment_sync_only THEN
           v_paye_status := 'DEBT_SYNCED_NO_BATCH';
-        else
+        ELSE
           v_paye_status := 'NOTHING_RELEVANT';
-        end if;
-      exception
-      when others then
-        v_err := coalesce(SQLERRM, '');
-        if position('Nothing to pay' in v_err) = 1 then
-          v_paye_pay_batch_id := null;
-          v_paye_overpayment_sync_only := false;
-          v_paye_overpayment_sync := '{}'::jsonb;
-          v_paye_status := 'NOTHING_RELEVANT';
-        else
-          begin
-            perform public._imp_debug_audit(
-              p_actor_user_id,
-              'PAY_CREATE_DRAFT_BATCHES_SPLIT:PAYE_ERROR',
-              jsonb_build_object(
-                'pay_date', p_pay_date::text,
-                'week_ending_cutoff', p_week_ending_cutoff::text,
-                'scope', 'PAYE',
-                'error', v_err,
-                'component_resolution_present', v_component_resolutions_present,
-                'component_resolution_supplied', v_component_resolutions_supplied,
-                'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
-                'component_resolution_normalized_present', v_component_resolutions_normalized_present,
-                'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
-                'case_resolution_present', v_case_resolutions_present,
-                'case_resolution_supplied', v_case_resolutions_supplied,
-                'case_resolution_input_type', coalesce(v_case_resolutions_input_type, null),
-                'case_resolution_normalized_present', v_case_resolutions_normalized_present,
-                'case_resolution_normalized_type', coalesce(v_case_resolutions_normalized_type, null),
-                'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
-                'selected_preview_row_count', (
-                  case
-                    when v_selected_preview_row_ids_supplied then coalesce(v_selected_preview_row_ids_sanitized_count, coalesce(jsonb_array_length(v_selected_preview_row_ids), 0))
-                    else null
-                  end
-                ),
-                'paye_scope_blocked', v_paye_scope_blocked,
-                'paye_block_reason_code', v_paye_block_reason_code
-              ),
-              'pay_create_draft_batches_split',
-              'pay_date:'||p_pay_date::text,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null
-            );
-          exception when others then
-            null;
-          end;
-          raise;
-        end if;
-      end;
-    end if;
-  end if;
+        END IF;
+      EXCEPTION
+        WHEN OTHERS THEN
+          v_err := COALESCE(SQLERRM, '');
+          IF position('Nothing to pay' in v_err) = 1 THEN
+            v_paye_pay_batch_id := NULL::uuid;
+            v_paye_overpayment_sync_only := false;
+            v_paye_overpayment_sync := '{}'::jsonb;
+            v_paye_status := 'NOTHING_RELEVANT';
+          ELSE
+            RAISE;
+          END IF;
+      END;
+    END IF;
+  END IF;
 
-  begin
-    perform public._imp_debug_audit(
-      p_actor_user_id,
-      'PAY_CREATE_DRAFT_BATCHES_SPLIT:RESULT',
-      jsonb_build_object(
-        'umbrella_status', v_umbrella_status,
-        'umbrella_pay_batch_id', coalesce(v_umbrella_pay_batch_id::text, null),
-        'umbrella_overpayment_sync_only', v_umbrella_overpayment_sync_only,
-        'umbrella_overpayment_sync', v_umbrella_overpayment_sync,
-        'paye_status', v_paye_status,
-        'paye_scope_blocked', v_paye_scope_blocked,
-        'paye_block_reason_code', v_paye_block_reason_code,
-        'paye_block_message', v_paye_block_message,
-        'paye_guardrails', v_paye_guardrails,
-        'paye_pay_batch_id', coalesce(v_paye_pay_batch_id::text, null),
-        'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
-        'paye_overpayment_sync', v_paye_overpayment_sync,
-        'component_resolution_present', v_component_resolutions_present,
-        'component_resolution_supplied', v_component_resolutions_supplied,
-        'component_resolution_input_type', coalesce(v_component_resolutions_input_type, null),
-        'component_resolution_normalized_present', v_component_resolutions_normalized_present,
-        'component_resolution_normalized_type', coalesce(v_component_resolutions_normalized_type, null),
-        'component_resolution_omitted_as_absent', (v_component_resolutions_present and not v_component_resolutions_supplied),
-        'component_resolution_shape', coalesce(v_component_resolutions_normalized_type, 'null'),
-        'component_resolution_count', 0,
-        'case_resolution_present', v_case_resolutions_present,
-        'case_resolution_supplied', v_case_resolutions_supplied,
-        'case_resolution_input_type', coalesce(v_case_resolutions_input_type, null),
-        'case_resolution_normalized_present', v_case_resolutions_normalized_present,
-        'case_resolution_normalized_type', coalesce(v_case_resolutions_normalized_type, null),
-        'case_resolution_count', (
-          case
-            when v_case_resolutions_normalized_type = 'object' then (
-              select count(*)::int
-              from jsonb_each(v_case_resolutions) e
-            )
-            else 0
-          end
-        ),
-        'umbrella_case_resolution_count', coalesce(v_umbrella_case_resolution_count, 0),
-        'paye_case_resolution_count', coalesce(v_paye_case_resolution_count, 0),
-        'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
-        'blocked_case_state_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
-        'safe_case_state_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
-        'selected_preview_row_ids_present', v_selected_preview_row_ids_present,
-        'selected_preview_row_ids_supplied', v_selected_preview_row_ids_supplied,
-        'selected_preview_row_input_count', (
-          case
-            when v_selected_preview_row_ids_present then v_selected_preview_row_ids_input_count
-            else null
-          end
-        ),
-        'selected_preview_row_count', (
-          case
-            when v_selected_preview_row_ids_supplied then coalesce(v_selected_preview_row_ids_sanitized_count, coalesce(jsonb_array_length(v_selected_preview_row_ids), 0))
-            else null
-          end
-        ),
-        'selected_preview_row_ids_sample', (
-          case
-            when v_selected_preview_row_ids_supplied then (
-              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-              from (
-                select elem
-                from jsonb_array_elements(v_selected_preview_row_ids) as elem
-                limit 50
-              ) x
-            )
-            else null
-          end
-        ),
-        'umbrella_selected_preview_row_count', coalesce(v_umbrella_selected_preview_row_count, 0),
-        'paye_selected_preview_row_count', coalesce(v_paye_selected_preview_row_count, 0),
-        'umbrella_selected_preview_row_ids_sample', (
-          case
-            when v_selected_preview_row_ids_supplied and coalesce(v_umbrella_selected_preview_row_count, 0) > 0 then (
-              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-              from (
-                select elem
-                from jsonb_array_elements(v_umbrella_selected_preview_row_ids) as elem
-                limit 50
-              ) x
-            )
-            else null
-          end
-        ),
-        'paye_selected_preview_row_ids_sample', (
-          case
-            when v_selected_preview_row_ids_supplied and coalesce(v_paye_selected_preview_row_count, 0) > 0 then (
-              select coalesce(jsonb_agg(x.elem), '[]'::jsonb)
-              from (
-                select elem
-                from jsonb_array_elements(v_paye_selected_preview_row_ids) as elem
-                limit 50
-              ) x
-            )
-            else null
-          end
-        )
-      ),
-      'pay_create_draft_batches_split',
-      'pay_date:'||p_pay_date::text,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null
-    );
-  exception when others then
-    null;
-  end;
+  v_has_any_scope_outcome :=
+       v_umbrella_pay_batch_id IS NOT NULL
+    OR v_paye_pay_batch_id IS NOT NULL
+    OR v_umbrella_overpayment_sync_only
+    OR v_paye_overpayment_sync_only
+    OR v_paye_scope_blocked;
 
-  v_any_scope_outcome :=
-       v_umbrella_pay_batch_id is not null
-    or v_paye_pay_batch_id is not null
-    or v_umbrella_overpayment_sync_only
-    or v_paye_overpayment_sync_only
-    or v_paye_scope_blocked;
+  IF v_has_any_scope_outcome = false THEN
+    RAISE EXCEPTION 'Nothing to pay (no payable items for UMBRELLA or PAYE after readiness blockers)';
+  END IF;
 
-  if not v_any_scope_outcome then
-    raise exception 'Nothing to pay (no payable items for UMBRELLA or PAYE after readiness blockers)';
-  end if;
-
-  return jsonb_build_object(
+  RETURN jsonb_build_object(
     'ok', true,
-    'umbrella_pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
-    'paye_pay_batch_id', case when v_paye_pay_batch_id is null then null else v_paye_pay_batch_id::text end,
+    'umbrella_pay_batch_id', CASE WHEN v_umbrella_pay_batch_id IS NULL THEN NULL ELSE v_umbrella_pay_batch_id::text END,
+    'paye_pay_batch_id', CASE WHEN v_paye_pay_batch_id IS NULL THEN NULL ELSE v_paye_pay_batch_id::text END,
     'umbrella_status', v_umbrella_status,
     'paye_status', v_paye_status,
     'umbrella_overpayment_sync_only', v_umbrella_overpayment_sync_only,
     'paye_overpayment_sync_only', v_paye_overpayment_sync_only,
-    'umbrella_overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
-    'paye_overpayment_sync', case when v_paye_overpayment_sync_only then v_paye_overpayment_sync else null end,
+    'umbrella_overpayment_sync', CASE WHEN v_umbrella_overpayment_sync_only THEN v_umbrella_overpayment_sync ELSE NULL END,
+    'paye_overpayment_sync', CASE WHEN v_paye_overpayment_sync_only THEN v_paye_overpayment_sync ELSE NULL END,
     'paye_guardrails', v_paye_guardrails,
     'blocked_case_states', v_blocked_case_states,
-    'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+    'blocked_case_count', COALESCE(jsonb_array_length(v_blocked_case_states), 0),
     'safe_case_states', v_safe_case_states,
-    'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0),
+    'safe_case_count', COALESCE(jsonb_array_length(v_safe_case_states), 0),
     'case_resolution_states', v_case_resolution_states,
-    'case_resolution_state_count', coalesce(jsonb_array_length(v_case_resolution_states), 0),
+    'case_resolution_state_count', COALESCE(jsonb_array_length(v_case_resolution_states), 0),
     'scope_results', jsonb_build_object(
       'UMBRELLA', jsonb_build_object(
         'status', v_umbrella_status,
-        'created', (v_umbrella_pay_batch_id is not null),
+        'created', (v_umbrella_pay_batch_id IS NOT NULL),
         'blocked', false,
-        'block_reason_code', null,
-        'block_message', null,
-        'pay_batch_id', case when v_umbrella_pay_batch_id is null then null else v_umbrella_pay_batch_id::text end,
+        'block_reason_code', NULL,
+        'block_message', NULL,
+        'pay_batch_id', CASE WHEN v_umbrella_pay_batch_id IS NULL THEN NULL ELSE v_umbrella_pay_batch_id::text END,
         'overpayment_sync_only', v_umbrella_overpayment_sync_only,
-        'overpayment_sync', case when v_umbrella_overpayment_sync_only then v_umbrella_overpayment_sync else null end,
-        'guardrails', null,
+        'overpayment_sync', CASE WHEN v_umbrella_overpayment_sync_only THEN v_umbrella_overpayment_sync ELSE NULL END,
+        'guardrails', NULL,
         'blocked_case_states', v_blocked_case_states,
-        'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+        'blocked_case_count', COALESCE(jsonb_array_length(v_blocked_case_states), 0),
         'safe_case_states', v_safe_case_states,
-        'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
+        'safe_case_count', COALESCE(jsonb_array_length(v_safe_case_states), 0)
       ),
       'PAYE', jsonb_build_object(
         'status', v_paye_status,
-        'created', (v_paye_pay_batch_id is not null),
+        'created', (v_paye_pay_batch_id IS NOT NULL),
         'blocked', v_paye_scope_blocked,
         'block_reason_code', v_paye_block_reason_code,
         'block_message', v_paye_block_message,
-        'pay_batch_id', case when v_paye_pay_batch_id is null then null else v_paye_pay_batch_id::text end,
+        'pay_batch_id', CASE WHEN v_paye_pay_batch_id IS NULL THEN NULL ELSE v_paye_pay_batch_id::text END,
         'overpayment_sync_only', v_paye_overpayment_sync_only,
-        'overpayment_sync', case when v_paye_overpayment_sync_only then v_paye_overpayment_sync else null end,
+        'overpayment_sync', CASE WHEN v_paye_overpayment_sync_only THEN v_paye_overpayment_sync ELSE NULL END,
         'guardrails', v_paye_guardrails,
         'override_required', v_paye_override_required,
-        'override_reason_present', (nullif(btrim(coalesce(p_override_reason,'')), '') is not null),
-        'override_continue', coalesce(p_override_continue, false),
-        'override_verified', coalesce(p_override_verified, false),
-        'override_verified_by_user_id', case when p_override_verified_by_user_id is null then null else p_override_verified_by_user_id::text end,
+        'override_reason_present', (NULLIF(BTRIM(COALESCE(p_override_reason, '')), '') IS NOT NULL),
+        'override_continue', COALESCE(p_override_continue, false),
+        'override_verified', COALESCE(p_override_verified, false),
+        'override_verified_by_user_id', CASE WHEN p_override_verified_by_user_id IS NULL THEN NULL ELSE p_override_verified_by_user_id::text END,
         'override_verified_at_utc', p_override_verified_at_utc,
         'blocked_case_states', v_blocked_case_states,
-        'blocked_case_count', coalesce(jsonb_array_length(v_blocked_case_states), 0),
+        'blocked_case_count', COALESCE(jsonb_array_length(v_blocked_case_states), 0),
         'safe_case_states', v_safe_case_states,
-        'safe_case_count', coalesce(jsonb_array_length(v_safe_case_states), 0)
+        'safe_case_count', COALESCE(jsonb_array_length(v_safe_case_states), 0)
       )
     )
   );
-end;
+END;
 $$;
-
 
 
 
