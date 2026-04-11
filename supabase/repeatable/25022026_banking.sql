@@ -4835,10 +4835,6 @@ begin
 end;
 $$;
 
-
-
-
-
 create or replace function public.pay_settle_manual_confirm(
   p_pay_batch_id uuid,
   p_scope text,
@@ -4866,6 +4862,9 @@ declare
   v_reservations_committed_count int := 0;
   v_reservations_committed_amount numeric := 0;
   v_settle_result jsonb := '{}'::jsonb;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_settle_manual_confirm: pay_batch_id is required';
@@ -4890,7 +4889,10 @@ begin
     pb.rail_provider_snapshot,
     pb.rail_env_snapshot,
     pb.authoritative_payment_date,
-    pb.authoritative_payment_date_source
+    pb.authoritative_payment_date_source,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -4903,6 +4905,13 @@ begin
   if upper(coalesce(v_batch.rail_provider_snapshot,'')) <> 'CSV' then
     raise exception 'pay_settle_manual_confirm: CSV-only (rail_provider_snapshot must be CSV; current=%)', v_batch.rail_provider_snapshot;
   end if;
+
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+  v_execution_commit_ref := v_batch.execution_commit_ref;
+  v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
 
   select count(*)::int
   into v_pending_count
@@ -4921,7 +4930,10 @@ begin
     authoritative_payment_date_source = 'MANUAL_CONFIRM_PAYMENT_DATE',
     pay_date = p_payment_date,
     monzo_confirmed_at_utc = v_now,
-    monzo_confirmed_by_user_id = p_actor_user_id
+    monzo_confirmed_by_user_id = p_actor_user_id,
+    execution_commit_state = 'COMMITTED',
+    execution_commit_ref = coalesce(nullif(btrim(coalesce(p_bank_confirm_ref,'')), ''), pb2.execution_commit_ref),
+    execution_committed_at_utc = coalesce(pb2.execution_committed_at_utc, v_now)
   where pb2.id = p_pay_batch_id;
 
   update public.pay_advance_reservations par
@@ -5057,6 +5069,9 @@ begin
         'scope', v_scope,
         'batch_kind_fixed', upper(coalesce(v_batch.batch_kind_fixed,'')),
         'authoritative_payment_date', p_payment_date::text,
+        'execution_commit_state', 'COMMITTED',
+        'execution_commit_ref', coalesce(nullif(btrim(coalesce(p_bank_confirm_ref,'')), ''), v_execution_commit_ref),
+        'execution_committed_at_utc', coalesce(v_execution_committed_at_utc, v_now)::text,
         'trigger_status', v_comm_trigger_status,
         'result', coalesce(v_comm_result, '{}'::jsonb)
       ),
@@ -5114,6 +5129,9 @@ begin
           'scope', v_scope,
           'batch_kind_fixed', upper(coalesce(v_batch.batch_kind_fixed,'')),
           'authoritative_payment_date', p_payment_date::text,
+          'execution_commit_state', 'COMMITTED',
+          'execution_commit_ref', coalesce(nullif(btrim(coalesce(p_bank_confirm_ref,'')), ''), v_execution_commit_ref),
+          'execution_committed_at_utc', coalesce(v_execution_committed_at_utc, v_now)::text,
           'trigger_status', v_comm_trigger_status,
           'error', v_comm_error
         ),
@@ -5173,12 +5191,18 @@ begin
     || jsonb_build_object(
       'authoritative_payment_date', p_payment_date::text,
       'authoritative_payment_date_source', 'MANUAL_CONFIRM_PAYMENT_DATE',
+      'execution_commit_state', (select pb3.execution_commit_state from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+      'execution_commit_ref', (select pb3.execution_commit_ref from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+      'execution_committed_at_utc', (select case when pb3.execution_committed_at_utc is null then null else pb3.execution_committed_at_utc::text end from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
       'reservations_committed_count', v_reservations_committed_count,
       'reservations_committed_amount', coalesce(v_reservations_committed_amount,0),
       'worker_communications', v_worker_communications
     );
 end;
 $$;
+
+
+
 
 
 
@@ -5250,6 +5274,12 @@ declare
   v_changed_channel_audit record;
   v_changed_channel_audit_after_json jsonb := null;
   v_changed_channel_settled_ct int := 0;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
+  v_completed_transfer_count int := 0;
+  v_detected_execution_commit_ref text := null;
+  v_detected_execution_committed_at_utc timestamptz := null;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_settle_rail: pay_batch_id is required';
@@ -5270,7 +5300,10 @@ begin
     pb.authoritative_payment_date_source,
     pb.rail_provider_snapshot,
     pb.rail_env_snapshot,
-    pb.batch_kind_fixed
+    pb.batch_kind_fixed,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -5279,6 +5312,13 @@ begin
   if v_batch.id is null then
     raise exception 'pay_settle_rail: pay_batch not found';
   end if;
+
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+  v_execution_commit_ref := v_batch.execution_commit_ref;
+  v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
 
   v_fresh := public.pay_batch_validate_freshness(p_pay_batch_id, p_actor_user_id);
   v_is_stale := coalesce((v_fresh->>'is_stale')::boolean, false);
@@ -5384,6 +5424,65 @@ begin
   from _tmp_settle_in t
   where pbt.id = t.transfer_id
     and pbt.pay_batch_id = p_pay_batch_id;
+
+  select
+    count(*) filter (
+      where upper(coalesce(pbt_exec.status,'')) = 'COMPLETED'
+         or pbt_exec.completed_at_utc is not null
+         or upper(coalesce(pbt_exec.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
+         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
+         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
+         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
+         or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
+    )::int,
+    (
+      select nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '')
+      from public.pay_bank_transfers pbt_exec_ref
+      where pbt_exec_ref.pay_batch_id = p_pay_batch_id
+        and (
+          upper(coalesce(pbt_exec_ref.status,'')) = 'COMPLETED'
+          or pbt_exec_ref.completed_at_utc is not null
+          or upper(coalesce(pbt_exec_ref.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
+        )
+        and nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '') is not null
+      order by pbt_exec_ref.completed_at_utc desc nulls last, pbt_exec_ref.id desc
+      limit 1
+    ),
+    (
+      select pbt_exec_ts.completed_at_utc
+      from public.pay_bank_transfers pbt_exec_ts
+      where pbt_exec_ts.pay_batch_id = p_pay_batch_id
+        and (
+          upper(coalesce(pbt_exec_ts.status,'')) = 'COMPLETED'
+          or pbt_exec_ts.completed_at_utc is not null
+          or upper(coalesce(pbt_exec_ts.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or lower(btrim(coalesce(pbt_exec_ts.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
+        )
+      order by pbt_exec_ts.completed_at_utc desc nulls last, pbt_exec_ts.id desc
+      limit 1
+    )
+  into
+    v_completed_transfer_count,
+    v_detected_execution_commit_ref,
+    v_detected_execution_committed_at_utc
+  from public.pay_bank_transfers pbt_exec
+  where pbt_exec.pay_batch_id = p_pay_batch_id;
+
+  if coalesce(v_completed_transfer_count, 0) > 0 then
+    v_execution_commit_state := 'COMMITTED';
+    v_execution_commit_ref := coalesce(v_execution_commit_ref, v_detected_execution_commit_ref);
+    v_execution_committed_at_utc := coalesce(v_execution_committed_at_utc, v_detected_execution_committed_at_utc, v_now);
+  end if;
 
   select count(distinct pbi_chk.pay_bank_transfer_id)::int
   into v_linked_transfer_ct
@@ -6267,7 +6366,19 @@ begin
   set
     status = v_batch_status,
     completed_at_utc = case when v_batch_status = 'SETTLED' then coalesce(pb2.completed_at_utc, v_now) else pb2.completed_at_utc end,
-    last_status_checked_at_utc = v_now
+    last_status_checked_at_utc = v_now,
+    execution_commit_state = case
+      when coalesce(v_completed_transfer_count, 0) > 0 then 'COMMITTED'
+      else coalesce(nullif(btrim(coalesce(pb2.execution_commit_state, '')), ''), 'NOT_SUBMITTED')
+    end,
+    execution_commit_ref = case
+      when coalesce(v_completed_transfer_count, 0) > 0 then coalesce(pb2.execution_commit_ref, v_execution_commit_ref)
+      else pb2.execution_commit_ref
+    end,
+    execution_committed_at_utc = case
+      when coalesce(v_completed_transfer_count, 0) > 0 then coalesce(pb2.execution_committed_at_utc, v_execution_committed_at_utc, v_now)
+      else pb2.execution_committed_at_utc
+    end
   where pb2.id = p_pay_batch_id;
 
   select exists (
@@ -6726,6 +6837,9 @@ begin
         'component_settlements_applied', v_component_settled_count,
         'component_settlement_amount', v_component_settled_amount,
         'batch_status', v_batch_status,
+        'execution_commit_state', case when coalesce(v_completed_transfer_count, 0) > 0 then 'COMMITTED' else v_execution_commit_state end,
+        'execution_commit_ref', coalesce(v_execution_commit_ref, v_detected_execution_commit_ref),
+        'execution_committed_at_utc', case when coalesce(v_execution_committed_at_utc, v_detected_execution_committed_at_utc) is null then null else coalesce(v_execution_committed_at_utc, v_detected_execution_committed_at_utc)::text end,
         'worker_communications', v_worker_communications
       ),
       'pay_batches',
@@ -6743,6 +6857,9 @@ begin
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
     'batch_status', (select pb3.status from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+    'execution_commit_state', (select pb3.execution_commit_state from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+    'execution_commit_ref', (select pb3.execution_commit_ref from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+    'execution_committed_at_utc', (select case when pb3.execution_committed_at_utc is null then null else pb3.execution_committed_at_utc::text end from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
     'newly_settled_candidates', v_newly_settled_candidates,
     'still_pending_transfers', v_pending_transfers,
     'failed_transfers', v_failed_transfers,
@@ -6767,11 +6884,6 @@ begin
   );
 end;
 $$;
-
-
-
-
-
 
 
 
