@@ -8076,6 +8076,7 @@ end;
 $$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -8157,7 +8158,10 @@ begin
     pb.status,
     pb.bulk_reference,
     pb.banking_system_snapshot,
-    pb.external_paye_system_snapshot
+    pb.external_paye_system_snapshot,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id;
@@ -8246,6 +8250,29 @@ begin
       join public.candidates c
         on c.id = uc.candidate_id
     ),
+    ts_scope_artifact as (
+      select distinct on (tss.candidate_id, tss.timesheet_id)
+        tss.candidate_id,
+        tss.timesheet_id,
+        case
+          when tss.target_snapshot_json is not null
+           and jsonb_typeof(tss.target_snapshot_json) = 'object'
+           and jsonb_typeof(tss.target_snapshot_json->'segments') = 'array'
+           and exists (
+             select 1
+             from jsonb_array_elements(tss.target_snapshot_json->'segments') s
+             where s is not null
+               and jsonb_typeof(s) = 'object'
+               and nullif(btrim(coalesce(s->>'date','')),'') is not null
+           )
+          then 'DAILY'
+          else 'WEEKLY'
+        end as sheet_scope_norm
+      from public.pay_batch_timesheet_snapshots tss
+      where tss.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(tss.pay_channel,'')) = 'UMBRELLA'
+      order by tss.candidate_id, tss.timesheet_id, tss.created_at_utc desc, tss.id desc
+    ),
     cand_items as (
       select
         uc.umbrella_id,
@@ -8261,21 +8288,22 @@ begin
         pbi.amount_inc_vat,
         pbi.pay_channel,
         pbi.umbrella_id,
-        upper(coalesce(vs.sheet_scope::text, v_missing_scope)) as sheet_scope_norm
+        upper(coalesce(tsa.sheet_scope_norm, v_missing_scope)) as sheet_scope_norm
       from umb_candidates uc
       join public.pay_batch_candidates pbc
         on pbc.pay_batch_id = p_pay_batch_id
        and pbc.candidate_id = uc.candidate_id
       join public.pay_batch_items pbi
         on pbi.pay_batch_candidate_id = pbc.id
-      left join public.v_timesheets_summary vs
-        on vs.timesheet_id = pbi.timesheet_id
+      left join ts_scope_artifact tsa
+        on tsa.candidate_id = pbc.candidate_id
+       and tsa.timesheet_id = pbi.timesheet_id
       where upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA'
         and pbi.item_type <> 'DEBT_CREATED'
         and coalesce(pbi.is_voided,false) = false
         and (
           case
-            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+            when upper(coalesce(tsa.sheet_scope_norm, v_missing_scope)) = 'DAILY' then
               (case
                  when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
                  then true else false end)
@@ -8290,18 +8318,19 @@ begin
       select
         ci.umbrella_id,
         ci.candidate_id,
-        ts.timesheet_id,
+        ci.timesheet_id,
         ts.week_ending_date,
         ts.reference_number,
         ts.contract_id,
         nullif(btrim(coalesce(ts.job_title_norm,'')),'') as job_title_norm,
         nullif(btrim(coalesce(ts.band,'')),'') as band_norm
       from cand_items ci
-      join public.timesheets ts
+      left join public.timesheets ts
         on ts.timesheet_id = ci.timesheet_id
        and ts.is_current = true
+      where ci.timesheet_id is not null
       group by
-        ci.umbrella_id, ci.candidate_id, ts.timesheet_id,
+        ci.umbrella_id, ci.candidate_id, ci.timesheet_id,
         ts.week_ending_date, ts.reference_number, ts.contract_id, ts.job_title_norm, ts.band
     ),
     ts_enrich as (
@@ -8313,7 +8342,7 @@ begin
         tm.reference_number,
         vs.client_id as client_id,
         vs.client_name as client_name,
-        upper(coalesce(vs.sheet_scope::text, v_missing_scope)) as sheet_scope,
+        upper(coalesce(tsa.sheet_scope_norm, v_missing_scope)) as sheet_scope,
         nullif(btrim(coalesce(ct.role, tm.job_title_norm)),'') as job_title,
         nullif(btrim(coalesce(ct.band, tm.band_norm)),'') as band
       from ts_meta tm
@@ -8321,6 +8350,9 @@ begin
         on ct.id = tm.contract_id
       left join public.v_timesheets_summary vs
         on vs.timesheet_id = tm.timesheet_id
+      left join ts_scope_artifact tsa
+        on tsa.candidate_id = tm.candidate_id
+       and tsa.timesheet_id = tm.timesheet_id
     ),
     ts_snap as (
       select
@@ -8982,6 +9014,29 @@ begin
       from cand_effective ce
       where ce.eff_paye_receive = true
     ),
+    ts_scope_artifact as (
+      select distinct on (tss.candidate_id, tss.timesheet_id)
+        tss.candidate_id,
+        tss.timesheet_id,
+        case
+          when tss.target_snapshot_json is not null
+           and jsonb_typeof(tss.target_snapshot_json) = 'object'
+           and jsonb_typeof(tss.target_snapshot_json->'segments') = 'array'
+           and exists (
+             select 1
+             from jsonb_array_elements(tss.target_snapshot_json->'segments') s
+             where s is not null
+               and jsonb_typeof(s) = 'object'
+               and nullif(btrim(coalesce(s->>'date','')),'') is not null
+           )
+          then 'DAILY'
+          else 'WEEKLY'
+        end as sheet_scope_norm
+      from public.pay_batch_timesheet_snapshots tss
+      where tss.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(tss.pay_channel,'')) = 'PAYE'
+      order by tss.candidate_id, tss.timesheet_id, tss.created_at_utc desc, tss.id desc
+    ),
     cand_items as (
       select
         ca.candidate_id,
@@ -9001,14 +9056,15 @@ begin
        and pbc.candidate_id = ca.candidate_id
       join public.pay_batch_items pbi
         on pbi.pay_batch_candidate_id = pbc.id
-      left join public.v_timesheets_summary vs
-        on vs.timesheet_id = pbi.timesheet_id
+      left join ts_scope_artifact tsa
+        on tsa.candidate_id = pbc.candidate_id
+       and tsa.timesheet_id = pbi.timesheet_id
       where upper(coalesce(pbi.pay_channel,'')) = 'PAYE'
         and pbi.item_type <> 'DEBT_CREATED'
         and coalesce(pbi.is_voided,false) = false
         and (
           case
-            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+            when upper(coalesce(tsa.sheet_scope_norm, v_missing_scope)) = 'DAILY' then
               (case
                  when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
                  then true else false end)
@@ -9022,17 +9078,18 @@ begin
     ts_meta as (
       select
         ci.candidate_id,
-        ts.timesheet_id,
+        ci.timesheet_id,
         ts.week_ending_date,
         ts.reference_number,
         ts.contract_id,
         nullif(btrim(coalesce(ts.job_title_norm,'')),'') as job_title_norm,
         nullif(btrim(coalesce(ts.band,'')),'') as band_norm
       from cand_items ci
-      join public.timesheets ts
+      left join public.timesheets ts
         on ts.timesheet_id = ci.timesheet_id
        and ts.is_current = true
-      group by ci.candidate_id, ts.timesheet_id, ts.week_ending_date, ts.reference_number, ts.contract_id, ts.job_title_norm, ts.band
+      where ci.timesheet_id is not null
+      group by ci.candidate_id, ci.timesheet_id, ts.week_ending_date, ts.reference_number, ts.contract_id, ts.job_title_norm, ts.band
     ),
     ts_enrich as (
       select
@@ -9042,7 +9099,7 @@ begin
         tm.reference_number,
         vs.client_id as client_id,
         vs.client_name as client_name,
-        upper(coalesce(vs.sheet_scope::text, v_missing_scope)) as sheet_scope,
+        upper(coalesce(tsa.sheet_scope_norm, v_missing_scope)) as sheet_scope,
         nullif(btrim(coalesce(ct.role, tm.job_title_norm)),'') as job_title,
         nullif(btrim(coalesce(ct.band, tm.band_norm)),'') as band
       from ts_meta tm
@@ -9050,6 +9107,9 @@ begin
         on ct.id = tm.contract_id
       left join public.v_timesheets_summary vs
         on vs.timesheet_id = tm.timesheet_id
+      left join ts_scope_artifact tsa
+        on tsa.candidate_id = tm.candidate_id
+       and tsa.timesheet_id = tm.timesheet_id
     ),
     ts_snap as (
       select
@@ -9732,6 +9792,29 @@ begin
       from cand_effective ce
       where ce.eff_copy = true
     ),
+    ts_scope_artifact as (
+      select distinct on (tss.candidate_id, tss.timesheet_id)
+        tss.candidate_id,
+        tss.timesheet_id,
+        case
+          when tss.target_snapshot_json is not null
+           and jsonb_typeof(tss.target_snapshot_json) = 'object'
+           and jsonb_typeof(tss.target_snapshot_json->'segments') = 'array'
+           and exists (
+             select 1
+             from jsonb_array_elements(tss.target_snapshot_json->'segments') s
+             where s is not null
+               and jsonb_typeof(s) = 'object'
+               and nullif(btrim(coalesce(s->>'date','')),'') is not null
+           )
+          then 'DAILY'
+          else 'WEEKLY'
+        end as sheet_scope_norm
+      from public.pay_batch_timesheet_snapshots tss
+      where tss.pay_batch_id = p_pay_batch_id
+        and upper(coalesce(tss.pay_channel,'')) = 'UMBRELLA'
+      order by tss.candidate_id, tss.timesheet_id, tss.created_at_utc desc, tss.id desc
+    ),
     cand_items as (
       select
         ca.candidate_id,
@@ -9751,14 +9834,15 @@ begin
        and pbc.candidate_id = ca.candidate_id
       join public.pay_batch_items pbi
         on pbi.pay_batch_candidate_id = pbc.id
-      left join public.v_timesheets_summary vs
-        on vs.timesheet_id = pbi.timesheet_id
+      left join ts_scope_artifact tsa
+        on tsa.candidate_id = pbc.candidate_id
+       and tsa.timesheet_id = pbi.timesheet_id
       where upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA'
         and pbi.item_type <> 'DEBT_CREATED'
         and coalesce(pbi.is_voided,false) = false
         and (
           case
-            when upper(coalesce(vs.sheet_scope::text, v_missing_scope)) = 'DAILY' then
+            when upper(coalesce(tsa.sheet_scope_norm, v_missing_scope)) = 'DAILY' then
               (case
                  when lower(coalesce(v_remittance_includes_json->'daily'->'include_item_types'->>pbi.item_type, v_unknown_item_type_default_text)) in ('true','1','yes','y','on')
                  then true else false end)
@@ -9772,17 +9856,18 @@ begin
     ts_meta as (
       select
         ci.candidate_id,
-        ts.timesheet_id,
+        ci.timesheet_id,
         ts.week_ending_date,
         ts.reference_number,
         ts.contract_id,
         nullif(btrim(coalesce(ts.job_title_norm,'')),'') as job_title_norm,
         nullif(btrim(coalesce(ts.band,'')),'') as band_norm
       from cand_items ci
-      join public.timesheets ts
+      left join public.timesheets ts
         on ts.timesheet_id = ci.timesheet_id
        and ts.is_current = true
-      group by ci.candidate_id, ts.timesheet_id, ts.week_ending_date, ts.reference_number, ts.contract_id, ts.job_title_norm, ts.band
+      where ci.timesheet_id is not null
+      group by ci.candidate_id, ci.timesheet_id, ts.week_ending_date, ts.reference_number, ts.contract_id, ts.job_title_norm, ts.band
     ),
     ts_enrich as (
       select
@@ -9792,7 +9877,7 @@ begin
         tm.reference_number,
         vs.client_id as client_id,
         vs.client_name as client_name,
-        upper(coalesce(vs.sheet_scope::text, v_missing_scope)) as sheet_scope,
+        upper(coalesce(tsa.sheet_scope_norm, v_missing_scope)) as sheet_scope,
         nullif(btrim(coalesce(ct.role, tm.job_title_norm)),'') as job_title,
         nullif(btrim(coalesce(ct.band, tm.band_norm)),'') as band
       from ts_meta tm
@@ -9800,6 +9885,9 @@ begin
         on ct.id = tm.contract_id
       left join public.v_timesheets_summary vs
         on vs.timesheet_id = tm.timesheet_id
+      left join ts_scope_artifact tsa
+        on tsa.candidate_id = tm.candidate_id
+       and tsa.timesheet_id = tm.timesheet_id
     ),
     ts_snap as (
       select
@@ -10395,12 +10483,19 @@ begin
           'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
           'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
     'bulk_reference', v_batch.bulk_reference,
+    'execution_commit_state', v_batch.execution_commit_state,
+    'execution_commit_ref', v_batch.execution_commit_ref,
+    'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
     'remittance_header_message', v_remittance_header_message,
     'remittance_footer_message', v_remittance_footer_message,
     'jobs', (coalesce(v_jobs_umb,'[]'::jsonb) || coalesce(v_jobs_paye,'[]'::jsonb) || coalesce(v_jobs_cand_umb_copy,'[]'::jsonb))
   );
 end;
 $function$;
+
+
+
+
 
 
 
@@ -19324,7 +19419,10 @@ begin
     pb.pay_date,
     pb.authoritative_payment_date,
     pb.authoritative_payment_date_source,
-    pb.bulk_reference
+    pb.bulk_reference,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -19417,15 +19515,21 @@ begin
         and coalesce(pbi.is_voided, false) = false
         and pbi.item_type <> 'DEBT_CREATED'
         and (
-          (v_scope = 'ALL' or v_scope = 'UMBRELLA')
-          and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA'
-        )
-        and not (
-          pbi.finance_case_id is not null
-          and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
-          and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
-          and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
-          and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          (
+            (v_scope = 'ALL' or v_scope = 'UMBRELLA')
+            and upper(coalesce(pbi.pay_channel, '')) = 'UMBRELLA'
+            and not (
+              pbi.finance_case_id is not null
+              and pbi.item_type in ('LOAN_PAYOUT', 'MANUAL_CREDIT_PAYOUT')
+              and jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
+              and upper(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind', '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
+              and lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            )
+          )
+          or (
+            (v_scope = 'ALL' or v_scope = 'PAYE')
+            and upper(coalesce(pbi.pay_channel, '')) = 'PAYE'
+          )
         )
     );
 
@@ -19442,6 +19546,9 @@ begin
       'automatic_commit_stage', true,
       'dispatch_required', false,
       'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
       'scope', v_scope,
       'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
       'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
@@ -19468,6 +19575,9 @@ begin
       'automatic_commit_stage', true,
       'dispatch_required', false,
       'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
       'scope', v_scope,
       'candidate_count_targeted', v_target_candidate_count,
       'candidate_count_ready', 0,
@@ -19488,6 +19598,9 @@ begin
       'automatic_commit_stage', true,
       'dispatch_required', false,
       'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
       'scope', v_scope,
       'candidate_count_targeted', v_target_candidate_count,
       'candidate_count_ready', 0,
@@ -19636,6 +19749,42 @@ begin
 
         v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
       end if;
+    elsif v_job_kind in ('PAYE_REMITTANCE', 'CANDIDATE_UMBRELLA_COPY_REMITTANCE') then
+      v_candidate_id_text := nullif(btrim(coalesce(v_job #>> '{recipient,candidate_id}', '')), '');
+      v_candidate_id := null;
+
+      if v_candidate_id_text is not null then
+        begin
+          v_candidate_id := v_candidate_id_text::uuid;
+        exception when invalid_text_representation then
+          v_candidate_id := null;
+        end;
+      end if;
+
+      if v_candidate_id is not null
+         and v_recipient_email is not null
+         and exists (
+           select 1
+           from pg_temp.tmp_commit_stage_target_candidates tc
+           where tc.candidate_id = v_candidate_id
+         ) then
+        v_filtered_jobs := v_filtered_jobs || jsonb_build_array(v_work_job);
+
+        insert into pg_temp.tmp_commit_stage_job_map(
+          candidate_id,
+          job_kind,
+          recipient_kind,
+          recipient_email,
+          umbrella_id
+        )
+        values (
+          v_candidate_id,
+          v_job_kind,
+          v_recipient_kind,
+          v_recipient_email,
+          null::uuid
+        );
+      end if;
     end if;
   end loop;
 
@@ -19768,6 +19917,9 @@ begin
     'automatic_commit_stage', true,
     'dispatch_required', (v_job_count > 0),
     'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
     'scope', v_scope,
     'pay_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
     'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
@@ -19783,6 +19935,10 @@ begin
   );
 end;
 $function$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_finance_payout_notice_queue_commit_stage(
   p_pay_batch_id uuid,
@@ -19835,7 +19991,10 @@ begin
     pb.pay_date,
     pb.authoritative_payment_date,
     pb.authoritative_payment_date_source,
-    pb.bulk_reference
+    pb.bulk_reference,
+    pb.execution_commit_state,
+    pb.execution_commit_ref,
+    pb.execution_committed_at_utc
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -19922,6 +20081,9 @@ begin
       'automatic_commit_stage', true,
       'dispatch_required', false,
       'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
       'scheduled_payment_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
       'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
       'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
@@ -19947,6 +20109,9 @@ begin
       'automatic_commit_stage', true,
       'dispatch_required', false,
       'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
       'candidate_count_targeted', v_target_candidate_count,
       'candidate_count_ready', 0,
       'candidate_count_without_jobs', v_target_candidate_count,
@@ -19966,6 +20131,9 @@ begin
       'automatic_commit_stage', true,
       'dispatch_required', false,
       'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
       'candidate_count_targeted', v_target_candidate_count,
       'candidate_count_ready', 0,
       'candidate_count_without_jobs', v_target_candidate_count,
@@ -20166,6 +20334,9 @@ begin
     'automatic_commit_stage', true,
     'dispatch_required', (v_job_count > 0),
     'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
     'scheduled_payment_date', case when coalesce(v_batch.authoritative_payment_date, v_batch.pay_date) is null then null else coalesce(v_batch.authoritative_payment_date, v_batch.pay_date)::text end,
     'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
     'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
@@ -20180,6 +20351,7 @@ begin
   );
 end;
 $function$;
+
 
 
 
