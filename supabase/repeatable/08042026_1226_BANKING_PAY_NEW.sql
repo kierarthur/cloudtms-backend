@@ -14993,18 +14993,19 @@ DECLARE
   v_candidate_id uuid := NULL::uuid;
   v_candidate_id_text text := '';
   v_case_key text := '';
-  v_resolution_family text := '';
-  v_timesheet_id uuid := NULL::uuid;
-  v_source_basis_fingerprint text := '';
-  v_source_family_key text := '';
-  v_bucket_code text := '';
-  v_component_key_type text := '';
-  v_component_key_value text := '';
-  v_resolution_identity_key text := '';
-  v_existing_row public.banking_pay_workbench_session_case_resolutions%ROWTYPE;
+  v_linked_timesheet_id uuid := NULL::uuid;
+  v_linked_timesheet_id_text text := '';
+  v_finance_case_id_text text := '';
+  v_matching_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_matching_candidate_count integer := 0;
   v_new_session_version bigint := 0;
   v_job_json jsonb := '{}'::jsonb;
   v_job_id uuid := NULL::uuid;
+  v_case_resolution_ids jsonb := '[]'::jsonb;
+  v_resolution_identity_keys jsonb := '[]'::jsonb;
+  v_case_resolution_id_text text := null;
+  v_deleted_count integer := 0;
+  v_existing_row public.banking_pay_workbench_session_case_resolutions%ROWTYPE;
   v_audit_before_json jsonb := NULL;
   v_audit_after_json jsonb := '{}'::jsonb;
 BEGIN
@@ -15043,79 +15044,141 @@ BEGIN
     v_resolution_payload_json #>> '{case,candidate_id}',
     ''
   ));
-
   IF v_candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     v_candidate_id := v_candidate_id_text::uuid;
   END IF;
 
-  v_case_key := BTRIM(COALESCE(v_resolution_payload_json->>'case_key', ''));
-  v_resolution_family := UPPER(BTRIM(COALESCE(v_resolution_payload_json->>'resolution_family', '')));
-
-  IF v_resolution_family = '' THEN
-    RAISE EXCEPTION 'resolution_family is required';
-  END IF;
-
+  v_case_key := BTRIM(COALESCE(
+    v_resolution_payload_json->>'case_key',
+    v_resolution_payload_json #>> '{case,case_key}',
+    ''
+  ));
   IF v_case_key = '' THEN
     RAISE EXCEPTION 'case_key is required';
   END IF;
 
-  IF BTRIM(COALESCE(v_resolution_payload_json->>'timesheet_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    v_timesheet_id := (v_resolution_payload_json->>'timesheet_id')::uuid;
+  v_linked_timesheet_id_text := BTRIM(COALESCE(
+    v_resolution_payload_json->>'linked_timesheet_id',
+    v_resolution_payload_json->>'timesheet_id',
+    ''
+  ));
+  IF v_linked_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_linked_timesheet_id := v_linked_timesheet_id_text::uuid;
   END IF;
 
-  v_source_basis_fingerprint := BTRIM(COALESCE(v_resolution_payload_json->>'source_basis_fingerprint', ''));
-  v_source_family_key := BTRIM(COALESCE(v_resolution_payload_json->>'source_family_key', ''));
-  v_bucket_code := BTRIM(COALESCE(v_resolution_payload_json->>'bucket_code', ''));
-  v_component_key_type := BTRIM(COALESCE(v_resolution_payload_json->>'component_key_type', ''));
-  v_component_key_value := BTRIM(COALESCE(v_resolution_payload_json->>'component_key_value', ''));
+  v_finance_case_id_text := BTRIM(COALESCE(
+    v_resolution_payload_json->>'finance_case_id',
+    v_resolution_payload_json #>> '{case,finance_case_id}',
+    ''
+  ));
 
-  v_resolution_identity_key := concat_ws(
-    '|',
-    COALESCE(NULLIF(v_resolution_family, ''), '~'),
-    COALESCE(NULLIF(v_case_key, ''), '~'),
-    COALESCE(CASE WHEN v_timesheet_id IS NULL THEN NULL ELSE v_timesheet_id::text END, '~'),
-    COALESCE(NULLIF(v_source_basis_fingerprint, ''), '~'),
-    COALESCE(NULLIF(v_source_family_key, ''), '~'),
-    COALESCE(NULLIF(v_bucket_code, ''), '~'),
-    COALESCE(NULLIF(v_component_key_type, ''), '~'),
-    COALESCE(NULLIF(v_component_key_value, ''), '~')
-  );
+  create temp table if not exists _tmp_bpay_session_case_resolution_existing
+  as
+  select *
+  from public.banking_pay_workbench_session_case_resolutions
+  with no data;
 
-  SELECT public.banking_pay_workbench_session_case_resolutions.*
-  INTO v_existing_row
-  FROM public.banking_pay_workbench_session_case_resolutions
-  WHERE public.banking_pay_workbench_session_case_resolutions.session_id = p_session_id
-    AND public.banking_pay_workbench_session_case_resolutions.resolution_identity_key = v_resolution_identity_key
-  LIMIT 1;
+  truncate table _tmp_bpay_session_case_resolution_existing;
 
-  IF v_existing_row.id IS NULL THEN
-    RAISE EXCEPTION 'session case resolution % not found in session %', v_resolution_identity_key, p_session_id;
+  IF v_candidate_id IS NULL THEN
+    SELECT COALESCE(array_agg(DISTINCT existing_resolution.candidate_id ORDER BY existing_resolution.candidate_id), ARRAY[]::uuid[])
+    INTO v_matching_candidate_ids
+    FROM public.banking_pay_workbench_session_case_resolutions AS existing_resolution
+    WHERE existing_resolution.session_id = p_session_id
+      AND existing_resolution.case_key = v_case_key
+      AND (
+        v_linked_timesheet_id IS NULL
+        OR existing_resolution.timesheet_id = v_linked_timesheet_id
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'linked_timesheet_id', '')), '') = v_linked_timesheet_id::text
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'timesheet_id', '')), '') = v_linked_timesheet_id::text
+      )
+      AND (
+        v_finance_case_id_text = ''
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') IS NULL
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') = v_finance_case_id_text
+      );
+
+    v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
+
+    IF v_matching_candidate_count = 0 THEN
+      RETURN jsonb_build_object(
+        'ok', true,
+        'session_id', p_session_id::text,
+        'candidate_id', null,
+        'session_version', v_session_row.version,
+        'job_id', null,
+        'case_resolution_id', null,
+        'case_resolution_ids', '[]'::jsonb,
+        'resolution_identity_keys', '[]'::jsonb,
+        'deleted_count', 0,
+        'cleared', false,
+        'state_changed', false
+      );
+    ELSIF v_matching_candidate_count > 1 THEN
+      RAISE EXCEPTION 'Ambiguous session case resolution clear target for case_key % in session %', v_case_key, p_session_id;
+    END IF;
+
+    v_candidate_id := v_matching_candidate_ids[1];
   END IF;
 
-  v_candidate_id := v_existing_row.candidate_id;
+  INSERT INTO _tmp_bpay_session_case_resolution_existing
+  SELECT existing_resolution.*
+  FROM public.banking_pay_workbench_session_case_resolutions AS existing_resolution
+  WHERE existing_resolution.session_id = p_session_id
+    AND existing_resolution.candidate_id = v_candidate_id
+    AND existing_resolution.case_key = v_case_key
+    AND (
+      v_linked_timesheet_id IS NULL
+      OR existing_resolution.timesheet_id = v_linked_timesheet_id
+      OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'linked_timesheet_id', '')), '') = v_linked_timesheet_id::text
+      OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'timesheet_id', '')), '') = v_linked_timesheet_id::text
+    )
+    AND (
+      v_finance_case_id_text = ''
+      OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') IS NULL
+      OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') = v_finance_case_id_text
+    );
+
+  SELECT COUNT(*)::integer
+  INTO v_deleted_count
+  FROM _tmp_bpay_session_case_resolution_existing;
+
+  IF v_deleted_count = 0 THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'session_id', p_session_id::text,
+      'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
+      'session_version', v_session_row.version,
+      'job_id', null,
+      'case_resolution_id', null,
+      'case_resolution_ids', '[]'::jsonb,
+      'resolution_identity_keys', '[]'::jsonb,
+      'deleted_count', 0,
+      'cleared', false,
+      'state_changed', false
+    );
+  END IF;
 
   IF NOT (COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[v_candidate_id]::uuid[]) THEN
     RAISE EXCEPTION 'candidate % is not in workbench session scope %', v_candidate_id, p_session_id;
   END IF;
 
-  v_audit_before_json := jsonb_build_object(
-    'id', v_existing_row.id::text,
-    'session_id', v_existing_row.session_id::text,
-    'candidate_id', v_existing_row.candidate_id::text,
-    'case_key', v_existing_row.case_key,
-    'resolution_family', v_existing_row.resolution_family,
-    'resolution_identity_key', v_existing_row.resolution_identity_key,
-    'timesheet_id', CASE WHEN v_existing_row.timesheet_id IS NULL THEN NULL ELSE v_existing_row.timesheet_id::text END,
-    'source_basis_fingerprint', v_existing_row.source_basis_fingerprint,
-    'source_family_key', v_existing_row.source_family_key,
-    'bucket_code', v_existing_row.bucket_code,
-    'component_key_type', v_existing_row.component_key_type,
-    'component_key_value', v_existing_row.component_key_value,
-    'payload_json', v_existing_row.payload_json
-  );
+  SELECT COALESCE(jsonb_agg(temp_existing.id::text ORDER BY temp_existing.id::text), '[]'::jsonb),
+         COALESCE(jsonb_agg(temp_existing.resolution_identity_key ORDER BY temp_existing.resolution_identity_key), '[]'::jsonb)
+  INTO v_case_resolution_ids, v_resolution_identity_keys
+  FROM _tmp_bpay_session_case_resolution_existing AS temp_existing;
 
-  DELETE FROM public.banking_pay_workbench_session_case_resolutions
-  WHERE public.banking_pay_workbench_session_case_resolutions.id = v_existing_row.id;
+  SELECT temp_existing.id::text
+  INTO v_case_resolution_id_text
+  FROM _tmp_bpay_session_case_resolution_existing AS temp_existing
+  ORDER BY temp_existing.id
+  LIMIT 1;
+
+  DELETE FROM public.banking_pay_workbench_session_case_resolutions AS delete_resolution
+  WHERE delete_resolution.id IN (
+    SELECT temp_existing.id
+    FROM _tmp_bpay_session_case_resolution_existing AS temp_existing
+  );
 
   UPDATE public.banking_pay_workbench_sessions
   SET version = public.banking_pay_workbench_sessions.version + 1,
@@ -15130,9 +15193,10 @@ BEGIN
     p_reason => 'SESSION_CASE_RESOLUTION_CLEARED',
     p_actor_user_id => p_actor_user_id,
     p_payload_json => jsonb_build_object(
-      'resolution_identity_key', v_resolution_identity_key,
-      'case_key', v_existing_row.case_key,
-      'resolution_family', v_existing_row.resolution_family
+      'case_key', v_case_key,
+      'finance_case_id', CASE WHEN v_finance_case_id_text = '' THEN NULL ELSE v_finance_case_id_text END,
+      'linked_timesheet_id', CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END,
+      'resolution_identity_keys', v_resolution_identity_keys
     )
   );
 
@@ -15140,43 +15204,62 @@ BEGIN
     v_job_id := (v_job_json->>'job_id')::uuid;
   END IF;
 
-  v_audit_after_json := jsonb_build_object(
-    'id', v_existing_row.id::text,
-    'session_id', v_existing_row.session_id::text,
-    'candidate_id', v_existing_row.candidate_id::text,
-    'case_key', v_existing_row.case_key,
-    'resolution_family', v_existing_row.resolution_family,
-    'resolution_identity_key', v_existing_row.resolution_identity_key,
-    'timesheet_id', CASE WHEN v_existing_row.timesheet_id IS NULL THEN NULL ELSE v_existing_row.timesheet_id::text END,
-    'source_basis_fingerprint', v_existing_row.source_basis_fingerprint,
-    'source_family_key', v_existing_row.source_family_key,
-    'bucket_code', v_existing_row.bucket_code,
-    'component_key_type', v_existing_row.component_key_type,
-    'component_key_value', v_existing_row.component_key_value,
-    'payload_json', v_existing_row.payload_json,
-    'session_version', v_new_session_version,
-    'pending_job_id', CASE WHEN v_job_id IS NULL THEN NULL ELSE v_job_id::text END,
-    'cleared_at_utc', v_now
-  );
+  FOR v_existing_row IN
+    SELECT temp_existing.*
+    FROM _tmp_bpay_session_case_resolution_existing AS temp_existing
+    ORDER BY temp_existing.resolution_family, temp_existing.resolution_identity_key
+  LOOP
+    v_audit_before_json := jsonb_build_object(
+      'id', v_existing_row.id::text,
+      'session_id', v_existing_row.session_id::text,
+      'candidate_id', v_existing_row.candidate_id::text,
+      'case_key', v_existing_row.case_key,
+      'resolution_family', v_existing_row.resolution_family,
+      'resolution_identity_key', v_existing_row.resolution_identity_key,
+      'timesheet_id', CASE WHEN v_existing_row.timesheet_id IS NULL THEN NULL ELSE v_existing_row.timesheet_id::text END,
+      'source_basis_fingerprint', v_existing_row.source_basis_fingerprint,
+      'source_family_key', v_existing_row.source_family_key,
+      'bucket_code', v_existing_row.bucket_code,
+      'component_key_type', v_existing_row.component_key_type,
+      'component_key_value', v_existing_row.component_key_value,
+      'payload_json', v_existing_row.payload_json
+    );
 
-  PERFORM public._audit_insert(
-    'banking_pay_workbench_session_case_resolution',
-    v_existing_row.id::text,
-    'SESSION_CASE_RESOLUTION_CLEARED',
-    v_audit_before_json,
-    v_audit_after_json,
-    'SESSION_CASE_RESOLUTION_CLEARED',
-    p_actor_user_id
-  );
+    v_audit_after_json := jsonb_build_object(
+      'id', v_existing_row.id::text,
+      'session_id', v_existing_row.session_id::text,
+      'candidate_id', v_existing_row.candidate_id::text,
+      'case_key', v_existing_row.case_key,
+      'resolution_family', v_existing_row.resolution_family,
+      'resolution_identity_key', v_existing_row.resolution_identity_key,
+      'timesheet_id', CASE WHEN v_existing_row.timesheet_id IS NULL THEN NULL ELSE v_existing_row.timesheet_id::text END,
+      'payload_json', v_existing_row.payload_json,
+      'session_version', v_new_session_version,
+      'pending_job_id', CASE WHEN v_job_id IS NULL THEN NULL ELSE v_job_id::text END,
+      'cleared_at_utc', v_now
+    );
+
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_session_case_resolution',
+      v_existing_row.id::text,
+      'SESSION_CASE_RESOLUTION_CLEARED',
+      v_audit_before_json,
+      v_audit_after_json,
+      'SESSION_CASE_RESOLUTION_CLEARED',
+      p_actor_user_id
+    );
+  END LOOP;
 
   RETURN jsonb_build_object(
     'ok', true,
     'session_id', p_session_id::text,
     'candidate_id', v_candidate_id::text,
-    'resolution_identity_key', v_resolution_identity_key,
     'session_version', v_new_session_version,
     'job_id', CASE WHEN v_job_id IS NULL THEN NULL ELSE v_job_id::text END,
-    'case_resolution_id', v_existing_row.id::text,
+    'case_resolution_id', v_case_resolution_id_text,
+    'case_resolution_ids', v_case_resolution_ids,
+    'resolution_identity_keys', v_resolution_identity_keys,
+    'deleted_count', v_deleted_count,
     'cleared', true,
     'state_changed', true
   );
@@ -22692,7 +22775,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -22710,37 +22792,56 @@ DECLARE
     WHEN jsonb_typeof(COALESCE(p_resolution_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_resolution_payload_json, '{}'::jsonb)
     ELSE '{}'::jsonb
   END;
-  v_source_basis_json jsonb := '{}'::jsonb;
+  v_top_source_basis_json jsonb := '{}'::jsonb;
   v_bucket_resolutions_json jsonb := '[]'::jsonb;
-  v_first_bucket_resolution_json jsonb := '{}'::jsonb;
-  v_normalized_payload_json jsonb := '{}'::jsonb;
   v_candidate_id uuid := NULL::uuid;
   v_candidate_id_text text := '';
   v_case_key text := '';
   v_resolution_family text := '';
-  v_resolution_mode text := '';
-  v_timesheet_id uuid := NULL::uuid;
-  v_timesheet_id_text text := '';
-  v_source_basis_fingerprint text := '';
-  v_source_family_key text := '';
-  v_bucket_code text := '';
-  v_component_key_type text := '';
-  v_component_key_value text := '';
-  v_resolution_identity_key text := '';
-  v_target_rate numeric := NULL::numeric;
-  v_target_amount_ex_vat numeric := NULL::numeric;
+  v_default_resolution_mode text := '';
+  v_linked_timesheet_id uuid := NULL::uuid;
+  v_linked_timesheet_id_text text := '';
+  v_finance_case_id_text text := '';
+  v_resolve_all_linked_timesheets boolean := false;
+  v_resolved_candidate_id uuid := NULL::uuid;
   v_matching_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_matching_candidate_count integer := 0;
   v_target_match_count integer := 0;
-  v_existing_row public.banking_pay_workbench_session_case_resolutions%ROWTYPE;
-  v_upserted_row public.banking_pay_workbench_session_case_resolutions%ROWTYPE;
+  v_bucket_count integer := 0;
+  v_existing_deleted_count integer := 0;
   v_new_session_version bigint := 0;
   v_job_json jsonb := '{}'::jsonb;
   v_job_id uuid := NULL::uuid;
+  v_case_resolution_ids jsonb := '[]'::jsonb;
+  v_resolution_identity_keys jsonb := '[]'::jsonb;
+  v_case_resolution_id_text text := null;
+  v_action text := 'SESSION_CASE_RESOLUTION_APPLIED';
+  v_target_amount_ex_vat numeric := NULL::numeric;
+  v_nonbucket_resolution_mode text := '';
+  v_nonbucket_resolution_identity_key text := '';
+  v_nonbucket_existing_row public.banking_pay_workbench_session_case_resolutions%ROWTYPE;
+  v_nonbucket_upserted_row public.banking_pay_workbench_session_case_resolutions%ROWTYPE;
+  v_existing_row public.banking_pay_workbench_session_case_resolutions%ROWTYPE;
+  v_upserted_row public.banking_pay_workbench_session_case_resolutions%ROWTYPE;
+  v_bucket_row record;
+  v_bucket_element record;
+  v_bucket_source_basis_json jsonb := '{}'::jsonb;
+  v_bucket_source_basis_fingerprint text := '';
+  v_bucket_source_family_key text := '';
+  v_bucket_bucket_code text := '';
+  v_bucket_component_key_type text := '';
+  v_bucket_component_key_value text := '';
+  v_bucket_resolution_mode text := '';
+  v_bucket_timesheet_id uuid := NULL::uuid;
+  v_bucket_timesheet_id_text text := '';
+  v_bucket_source_units numeric := NULL::numeric;
+  v_bucket_source_rate numeric := NULL::numeric;
+  v_bucket_source_charge_rate numeric := NULL::numeric;
+  v_bucket_target_rate numeric := NULL::numeric;
+  v_bucket_resolution_identity_key text := '';
+  v_normalized_payload_json jsonb := '{}'::jsonb;
   v_audit_before_json jsonb := NULL;
   v_audit_after_json jsonb := '{}'::jsonb;
-  v_action text := '';
-  v_resolve_all_linked_timesheets boolean := false;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -22775,96 +22876,38 @@ BEGIN
     v_resolution_payload_json #>> '{case,candidate_id}',
     ''
   ));
-
   IF v_candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     v_candidate_id := v_candidate_id_text::uuid;
   END IF;
 
-  v_case_key := BTRIM(COALESCE(v_resolution_payload_json->>'case_key', ''));
+  v_case_key := BTRIM(COALESCE(
+    v_resolution_payload_json->>'case_key',
+    v_resolution_payload_json #>> '{case,case_key}',
+    ''
+  ));
   IF v_case_key = '' THEN
     RAISE EXCEPTION 'case_key is required';
   END IF;
 
   v_resolution_family := UPPER(BTRIM(COALESCE(v_resolution_payload_json->>'resolution_family', '')));
-  v_resolution_mode := UPPER(BTRIM(COALESCE(
+  v_default_resolution_mode := UPPER(BTRIM(COALESCE(
     v_resolution_payload_json->>'resolution_mode',
     v_resolution_payload_json->>'mode',
     ''
   )));
 
-  v_bucket_resolutions_json := CASE
-    WHEN jsonb_typeof(v_resolution_payload_json->'bucket_resolutions') = 'array' THEN COALESCE(v_resolution_payload_json->'bucket_resolutions', '[]'::jsonb)
-    ELSE '[]'::jsonb
-  END;
-
-  IF jsonb_array_length(v_bucket_resolutions_json) > 1 THEN
-    RAISE EXCEPTION 'bucket_resolutions must contain exactly one entry for pay_workbench_session_apply_case_resolution';
-  END IF;
-
-  IF jsonb_array_length(v_bucket_resolutions_json) = 1 THEN
-    SELECT bucket_element.value
-    INTO v_first_bucket_resolution_json
-    FROM jsonb_array_elements(v_bucket_resolutions_json) AS bucket_element(value)
-    WHERE jsonb_typeof(bucket_element.value) = 'object'
-    LIMIT 1;
-
-    IF jsonb_typeof(v_first_bucket_resolution_json) <> 'object' THEN
-      RAISE EXCEPTION 'bucket_resolutions[0] must be a JSON object';
-    END IF;
-  ELSE
-    v_first_bucket_resolution_json := '{}'::jsonb;
-  END IF;
-
-  IF v_resolution_mode = '' THEN
-    v_resolution_mode := UPPER(BTRIM(COALESCE(v_first_bucket_resolution_json->>'resolution_mode', '')));
-  END IF;
-
-  IF v_resolution_mode = '' THEN
-    RAISE EXCEPTION 'resolution_mode is required';
-  END IF;
-
-  v_timesheet_id_text := BTRIM(COALESCE(
+  v_linked_timesheet_id_text := BTRIM(COALESCE(
+    v_resolution_payload_json->>'linked_timesheet_id',
     v_resolution_payload_json->>'timesheet_id',
-    v_first_bucket_resolution_json->>'timesheet_id',
     ''
   ));
-  IF v_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    v_timesheet_id := v_timesheet_id_text::uuid;
+  IF v_linked_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_linked_timesheet_id := v_linked_timesheet_id_text::uuid;
   END IF;
 
-  v_source_basis_json := CASE
-    WHEN jsonb_typeof(v_resolution_payload_json->'source_basis_json') = 'object' THEN COALESCE(v_resolution_payload_json->'source_basis_json', '{}'::jsonb)
-    WHEN jsonb_typeof(v_first_bucket_resolution_json->'source_basis_json') = 'object' THEN COALESCE(v_first_bucket_resolution_json->'source_basis_json', '{}'::jsonb)
-    ELSE '{}'::jsonb
-  END;
-
-  v_source_basis_fingerprint := BTRIM(COALESCE(
-    v_resolution_payload_json->>'source_basis_fingerprint',
-    v_first_bucket_resolution_json->>'source_basis_fingerprint',
-    ''
-  ));
-  IF v_source_basis_fingerprint = '' AND v_source_basis_json <> '{}'::jsonb THEN
-    v_source_basis_fingerprint := md5(v_source_basis_json::text);
-  END IF;
-
-  v_source_family_key := BTRIM(COALESCE(
-    v_resolution_payload_json->>'source_family_key',
-    v_first_bucket_resolution_json->>'source_family_key',
-    ''
-  ));
-  v_bucket_code := UPPER(BTRIM(COALESCE(
-    v_resolution_payload_json->>'bucket_code',
-    v_first_bucket_resolution_json->>'bucket_code',
-    ''
-  )));
-  v_component_key_type := UPPER(BTRIM(COALESCE(
-    v_resolution_payload_json->>'component_key_type',
-    v_first_bucket_resolution_json->>'component_key_type',
-    ''
-  )));
-  v_component_key_value := BTRIM(COALESCE(
-    v_resolution_payload_json->>'component_key_value',
-    v_first_bucket_resolution_json->>'component_key_value',
+  v_finance_case_id_text := BTRIM(COALESCE(
+    v_resolution_payload_json->>'finance_case_id',
+    v_resolution_payload_json #>> '{case,finance_case_id}',
     ''
   ));
 
@@ -22873,18 +22916,18 @@ BEGIN
     ELSE false
   END;
 
+  v_top_source_basis_json := CASE
+    WHEN jsonb_typeof(v_resolution_payload_json->'source_basis_json') = 'object' THEN COALESCE(v_resolution_payload_json->'source_basis_json', '{}'::jsonb)
+    ELSE '{}'::jsonb
+  END;
+
+  v_bucket_resolutions_json := CASE
+    WHEN jsonb_typeof(v_resolution_payload_json->'bucket_resolutions') = 'array' THEN COALESCE(v_resolution_payload_json->'bucket_resolutions', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
   IF v_resolution_family = '' THEN
-    IF v_resolution_mode = 'MANUAL_REPLACEMENT_RATE' THEN
-      v_resolution_family := 'BUCKETED';
-    ELSIF v_resolution_mode = 'MANUAL_AMOUNT' THEN
-      v_resolution_family := 'NON_BUCKET';
-    ELSIF jsonb_array_length(v_bucket_resolutions_json) = 1
-       OR v_source_basis_fingerprint <> ''
-       OR v_source_family_key <> ''
-       OR v_bucket_code <> ''
-       OR v_component_key_type <> ''
-       OR v_component_key_value <> ''
-       OR v_timesheet_id IS NOT NULL THEN
+    IF jsonb_array_length(v_bucket_resolutions_json) > 0 THEN
       v_resolution_family := 'BUCKETED';
     ELSE
       v_resolution_family := 'NON_BUCKET';
@@ -22895,90 +22938,496 @@ BEGIN
     RAISE EXCEPTION 'resolution_family must be BUCKETED or NON_BUCKET';
   END IF;
 
+  IF v_candidate_id IS NOT NULL
+     AND NOT (COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[v_candidate_id]::uuid[]) THEN
+    RAISE EXCEPTION 'candidate % is not in workbench session scope %', v_candidate_id, p_session_id;
+  END IF;
+
+  create temp table if not exists _tmp_bpay_session_case_resolution_existing
+  as
+  select *
+  from public.banking_pay_workbench_session_case_resolutions
+  with no data;
+
+  truncate table _tmp_bpay_session_case_resolution_existing;
+
   IF v_resolution_family = 'BUCKETED' THEN
-    IF v_resolution_mode NOT IN ('SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_REPLACEMENT_RATE') THEN
-      RAISE EXCEPTION 'BUCKETED resolution_mode must be SUGGESTED_EQUIVALENT_BASIS or MANUAL_REPLACEMENT_RATE';
+    IF jsonb_typeof(v_bucket_resolutions_json) <> 'array' OR jsonb_array_length(v_bucket_resolutions_json) = 0 THEN
+      RAISE EXCEPTION 'bucket_resolutions must be a non-empty JSON array for BUCKETED resolution';
     END IF;
 
-    IF v_source_family_key = '' THEN
-      RAISE EXCEPTION 'source_family_key is required for BUCKETED resolution';
+    create temp table if not exists _tmp_bpay_session_bucket_resolution (
+      bucket_ordinal integer not null,
+      timesheet_id uuid null,
+      source_basis_json jsonb not null,
+      source_basis_fingerprint text not null,
+      source_family_key text not null,
+      bucket_code text null,
+      component_key_type text not null,
+      component_key_value text not null,
+      source_units numeric not null,
+      source_rate numeric not null,
+      source_charge_rate numeric not null,
+      resolution_mode text not null,
+      target_rate numeric not null,
+      resolution_identity_key text not null,
+      matched_candidate_id uuid null
+    ) on commit drop;
+
+    truncate table _tmp_bpay_session_bucket_resolution;
+
+    FOR v_bucket_element IN
+      SELECT bucket_item.ordinality AS bucket_ordinal, bucket_item.value AS bucket_json
+      FROM jsonb_array_elements(v_bucket_resolutions_json) WITH ORDINALITY AS bucket_item(value, ordinality)
+      WHERE jsonb_typeof(bucket_item.value) = 'object'
+      ORDER BY bucket_item.ordinality
+    LOOP
+      v_bucket_source_basis_json := CASE
+        WHEN jsonb_typeof(v_bucket_element.bucket_json->'source_basis_json') = 'object' THEN COALESCE(v_bucket_element.bucket_json->'source_basis_json', '{}'::jsonb)
+        WHEN jsonb_typeof(v_resolution_payload_json->'source_basis_json') = 'object' THEN COALESCE(v_resolution_payload_json->'source_basis_json', '{}'::jsonb)
+        ELSE '{}'::jsonb
+      END;
+
+      v_bucket_source_basis_fingerprint := BTRIM(COALESCE(
+        v_bucket_element.bucket_json->>'source_basis_fingerprint',
+        v_resolution_payload_json->>'source_basis_fingerprint',
+        ''
+      ));
+      IF v_bucket_source_basis_fingerprint = '' AND v_bucket_source_basis_json <> '{}'::jsonb THEN
+        v_bucket_source_basis_fingerprint := md5(v_bucket_source_basis_json::text);
+      END IF;
+
+      v_bucket_source_family_key := BTRIM(COALESCE(
+        v_bucket_element.bucket_json->>'source_family_key',
+        v_resolution_payload_json->>'source_family_key',
+        ''
+      ));
+      v_bucket_bucket_code := UPPER(BTRIM(COALESCE(
+        v_bucket_element.bucket_json->>'bucket_code',
+        v_resolution_payload_json->>'bucket_code',
+        ''
+      )));
+      v_bucket_component_key_type := UPPER(BTRIM(COALESCE(
+        v_bucket_element.bucket_json->>'component_key_type',
+        v_resolution_payload_json->>'component_key_type',
+        ''
+      )));
+      v_bucket_component_key_value := BTRIM(COALESCE(
+        v_bucket_element.bucket_json->>'component_key_value',
+        v_resolution_payload_json->>'component_key_value',
+        ''
+      ));
+      v_bucket_resolution_mode := UPPER(BTRIM(COALESCE(
+        v_bucket_element.bucket_json->>'resolution_mode',
+        v_default_resolution_mode,
+        ''
+      )));
+      v_bucket_timesheet_id_text := BTRIM(COALESCE(
+        v_bucket_element.bucket_json->>'timesheet_id',
+        v_resolution_payload_json->>'linked_timesheet_id',
+        v_resolution_payload_json->>'timesheet_id',
+        ''
+      ));
+      v_bucket_timesheet_id := NULL::uuid;
+      IF v_bucket_timesheet_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        v_bucket_timesheet_id := v_bucket_timesheet_id_text::uuid;
+      END IF;
+
+      IF COALESCE(
+        v_bucket_element.bucket_json->>'source_units',
+        v_resolution_payload_json->>'source_units',
+        ''
+      ) !~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+        RAISE EXCEPTION 'source_units is required for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+      v_bucket_source_units := round(COALESCE(
+        NULLIF(v_bucket_element.bucket_json->>'source_units', '')::numeric,
+        NULLIF(v_resolution_payload_json->>'source_units', '')::numeric
+      ), 6);
+
+      IF COALESCE(
+        v_bucket_element.bucket_json->>'source_rate',
+        v_resolution_payload_json->>'source_rate',
+        ''
+      ) !~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+        RAISE EXCEPTION 'source_rate is required for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+      v_bucket_source_rate := round(COALESCE(
+        NULLIF(v_bucket_element.bucket_json->>'source_rate', '')::numeric,
+        NULLIF(v_resolution_payload_json->>'source_rate', '')::numeric
+      ), 6);
+
+      IF COALESCE(
+        v_bucket_element.bucket_json->>'source_charge_rate',
+        v_resolution_payload_json->>'source_charge_rate',
+        ''
+      ) !~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+        RAISE EXCEPTION 'source_charge_rate is required for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+      v_bucket_source_charge_rate := round(COALESCE(
+        NULLIF(v_bucket_element.bucket_json->>'source_charge_rate', '')::numeric,
+        NULLIF(v_resolution_payload_json->>'source_charge_rate', '')::numeric
+      ), 6);
+
+      IF COALESCE(
+        v_bucket_element.bucket_json->>'target_rate',
+        v_resolution_payload_json->>'target_rate',
+        ''
+      ) !~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+        RAISE EXCEPTION 'target_rate is required for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+      v_bucket_target_rate := round(COALESCE(
+        NULLIF(v_bucket_element.bucket_json->>'target_rate', '')::numeric,
+        NULLIF(v_resolution_payload_json->>'target_rate', '')::numeric
+      ), 2);
+
+      IF v_bucket_target_rate < 0 THEN
+        RAISE EXCEPTION 'target_rate must be non-negative for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+
+      IF v_bucket_resolution_mode NOT IN ('SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_REPLACEMENT_RATE') THEN
+        RAISE EXCEPTION 'BUCKETED resolution_mode must be SUGGESTED_EQUIVALENT_BASIS or MANUAL_REPLACEMENT_RATE for bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+
+      IF v_bucket_source_family_key = '' THEN
+        RAISE EXCEPTION 'source_family_key is required for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+
+      IF v_bucket_component_key_type = '' THEN
+        RAISE EXCEPTION 'component_key_type is required for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+
+      IF v_bucket_component_key_value = '' THEN
+        RAISE EXCEPTION 'component_key_value is required for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+
+      IF v_bucket_source_basis_fingerprint = '' THEN
+        RAISE EXCEPTION 'source_basis_fingerprint or source_basis_json is required for BUCKETED resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+
+      IF v_bucket_component_key_type IN ('TS_DAY', 'TS_TOTAL') AND v_bucket_bucket_code = '' THEN
+        RAISE EXCEPTION 'bucket_code is required for BUCKETED worked-time resolution bucket %', v_bucket_element.bucket_ordinal;
+      END IF;
+
+      v_bucket_resolution_identity_key := concat_ws(
+        '|',
+        'BUCKETED',
+        COALESCE(NULLIF(v_case_key, ''), '~'),
+        COALESCE(CASE WHEN v_bucket_timesheet_id IS NULL THEN NULL ELSE v_bucket_timesheet_id::text END, '~'),
+        COALESCE(NULLIF(v_bucket_source_basis_fingerprint, ''), '~'),
+        COALESCE(NULLIF(v_bucket_source_family_key, ''), '~'),
+        COALESCE(NULLIF(v_bucket_bucket_code, ''), '~'),
+        COALESCE(NULLIF(v_bucket_component_key_type, ''), '~'),
+        COALESCE(NULLIF(v_bucket_component_key_value, ''), '~')
+      );
+
+      INSERT INTO _tmp_bpay_session_bucket_resolution (
+        bucket_ordinal,
+        timesheet_id,
+        source_basis_json,
+        source_basis_fingerprint,
+        source_family_key,
+        bucket_code,
+        component_key_type,
+        component_key_value,
+        source_units,
+        source_rate,
+        source_charge_rate,
+        resolution_mode,
+        target_rate,
+        resolution_identity_key,
+        matched_candidate_id
+      )
+      VALUES (
+        v_bucket_element.bucket_ordinal,
+        v_bucket_timesheet_id,
+        v_bucket_source_basis_json,
+        v_bucket_source_basis_fingerprint,
+        v_bucket_source_family_key,
+        NULLIF(v_bucket_bucket_code, ''),
+        v_bucket_component_key_type,
+        v_bucket_component_key_value,
+        v_bucket_source_units,
+        v_bucket_source_rate,
+        v_bucket_source_charge_rate,
+        v_bucket_resolution_mode,
+        v_bucket_target_rate,
+        v_bucket_resolution_identity_key,
+        NULL::uuid
+      );
+    END LOOP;
+
+    SELECT COUNT(*)::integer
+    INTO v_bucket_count
+    FROM _tmp_bpay_session_bucket_resolution;
+
+    IF v_bucket_count = 0 THEN
+      RAISE EXCEPTION 'bucket_resolutions must contain at least one JSON object for BUCKETED resolution';
     END IF;
 
-    IF v_component_key_type = '' THEN
-      RAISE EXCEPTION 'component_key_type is required for BUCKETED resolution';
+    IF EXISTS (
+      SELECT 1
+      FROM _tmp_bpay_session_bucket_resolution AS tmp_duplicate_bucket
+      GROUP BY tmp_duplicate_bucket.resolution_identity_key
+      HAVING COUNT(*) > 1
+    ) THEN
+      RAISE EXCEPTION 'Duplicate bucket resolution identity detected for case_key %', v_case_key;
     END IF;
 
-    IF v_component_key_value = '' THEN
-      RAISE EXCEPTION 'component_key_value is required for BUCKETED resolution';
+    FOR v_bucket_row IN
+      SELECT *
+      FROM _tmp_bpay_session_bucket_resolution
+      ORDER BY bucket_ordinal
+    LOOP
+      IF v_candidate_id IS NULL THEN
+        SELECT COALESCE(array_agg(DISTINCT snapshot_component.candidate_id ORDER BY snapshot_component.candidate_id), ARRAY[]::uuid[])
+        INTO v_matching_candidate_ids
+        FROM public.banking_pay_snapshot_case_component_state AS snapshot_component
+        WHERE snapshot_component.snapshot_run_id = v_session_row.source_snapshot_run_id
+          AND COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[snapshot_component.candidate_id]::uuid[]
+          AND snapshot_component.case_key = v_case_key
+          AND COALESCE(snapshot_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
+          AND COALESCE(snapshot_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
+          AND COALESCE(snapshot_component.source_family_key, '') = v_bucket_row.source_family_key
+          AND COALESCE(snapshot_component.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
+          AND COALESCE(snapshot_component.component_key_type, '') = v_bucket_row.component_key_type
+          AND COALESCE(snapshot_component.component_key_value, '') = v_bucket_row.component_key_value;
+
+        v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
+        IF v_matching_candidate_count = 0 THEN
+          RAISE EXCEPTION 'No snapshot baseline target found for BUCKETED resolution in session % for case_key % bucket %', p_session_id, v_case_key, v_bucket_row.bucket_ordinal;
+        ELSIF v_matching_candidate_count > 1 THEN
+          RAISE EXCEPTION 'Ambiguous BUCKETED resolution target for case_key % in session % bucket %', v_case_key, p_session_id, v_bucket_row.bucket_ordinal;
+        END IF;
+
+        UPDATE _tmp_bpay_session_bucket_resolution
+        SET matched_candidate_id = v_matching_candidate_ids[1]
+        WHERE _tmp_bpay_session_bucket_resolution.bucket_ordinal = v_bucket_row.bucket_ordinal;
+      ELSE
+        SELECT COUNT(*)::integer
+        INTO v_target_match_count
+        FROM public.banking_pay_snapshot_case_component_state AS snapshot_component
+        WHERE snapshot_component.snapshot_run_id = v_session_row.source_snapshot_run_id
+          AND snapshot_component.candidate_id = v_candidate_id
+          AND snapshot_component.case_key = v_case_key
+          AND COALESCE(snapshot_component.timesheet_id::text, '') = COALESCE(v_bucket_row.timesheet_id::text, '')
+          AND COALESCE(snapshot_component.source_basis_fingerprint, '') = v_bucket_row.source_basis_fingerprint
+          AND COALESCE(snapshot_component.source_family_key, '') = v_bucket_row.source_family_key
+          AND COALESCE(snapshot_component.bucket_code, '') = COALESCE(v_bucket_row.bucket_code, '')
+          AND COALESCE(snapshot_component.component_key_type, '') = v_bucket_row.component_key_type
+          AND COALESCE(snapshot_component.component_key_value, '') = v_bucket_row.component_key_value;
+
+        IF v_target_match_count = 0 THEN
+          RAISE EXCEPTION 'No matching BUCKETED snapshot baseline target found for candidate % in session % bucket %', v_candidate_id, p_session_id, v_bucket_row.bucket_ordinal;
+        ELSIF v_target_match_count > 1 THEN
+          RAISE EXCEPTION 'Ambiguous BUCKETED snapshot baseline target found for candidate % in session % bucket %', v_candidate_id, p_session_id, v_bucket_row.bucket_ordinal;
+        END IF;
+
+        UPDATE _tmp_bpay_session_bucket_resolution
+        SET matched_candidate_id = v_candidate_id
+        WHERE _tmp_bpay_session_bucket_resolution.bucket_ordinal = v_bucket_row.bucket_ordinal;
+      END IF;
+    END LOOP;
+
+    IF v_candidate_id IS NULL THEN
+      SELECT COALESCE(array_agg(DISTINCT tmp_bucket.matched_candidate_id ORDER BY tmp_bucket.matched_candidate_id), ARRAY[]::uuid[])
+      INTO v_matching_candidate_ids
+      FROM _tmp_bpay_session_bucket_resolution AS tmp_bucket
+      WHERE tmp_bucket.matched_candidate_id IS NOT NULL;
+
+      v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
+      IF v_matching_candidate_count = 0 THEN
+        RAISE EXCEPTION 'Unable to resolve candidate_id for BUCKETED resolution in session % case_key %', p_session_id, v_case_key;
+      ELSIF v_matching_candidate_count > 1 THEN
+        RAISE EXCEPTION 'BUCKETED resolution payload spans multiple candidates for session % case_key %', p_session_id, v_case_key;
+      END IF;
+
+      v_resolved_candidate_id := v_matching_candidate_ids[1];
+    ELSE
+      v_resolved_candidate_id := v_candidate_id;
     END IF;
 
-    IF v_source_basis_fingerprint = '' THEN
-      RAISE EXCEPTION 'source_basis_fingerprint or source_basis_json is required for BUCKETED resolution';
+    INSERT INTO _tmp_bpay_session_case_resolution_existing
+    SELECT existing_resolution.*
+    FROM public.banking_pay_workbench_session_case_resolutions AS existing_resolution
+    WHERE existing_resolution.session_id = p_session_id
+      AND existing_resolution.candidate_id = v_resolved_candidate_id
+      AND existing_resolution.case_key = v_case_key
+      AND existing_resolution.resolution_family = 'BUCKETED'
+      AND (
+        v_linked_timesheet_id IS NULL
+        OR existing_resolution.timesheet_id = v_linked_timesheet_id
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'linked_timesheet_id', '')), '') = v_linked_timesheet_id::text
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'timesheet_id', '')), '') = v_linked_timesheet_id::text
+      )
+      AND (
+        v_finance_case_id_text = ''
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') IS NULL
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') = v_finance_case_id_text
+      );
+
+    SELECT COUNT(*)::integer
+    INTO v_existing_deleted_count
+    FROM _tmp_bpay_session_case_resolution_existing;
+
+    IF v_existing_deleted_count > 0 THEN
+      DELETE FROM public.banking_pay_workbench_session_case_resolutions AS delete_resolution
+      WHERE delete_resolution.id IN (
+        SELECT temp_existing.id
+        FROM _tmp_bpay_session_case_resolution_existing AS temp_existing
+      );
     END IF;
 
-    IF v_component_key_type IN ('TS_DAY', 'TS_TOTAL') AND v_bucket_code = '' THEN
-      RAISE EXCEPTION 'bucket_code is required for BUCKETED worked-time resolution';
-    END IF;
+    FOR v_bucket_row IN
+      SELECT *
+      FROM _tmp_bpay_session_bucket_resolution
+      ORDER BY bucket_ordinal
+    LOOP
+      v_existing_row := NULL;
+      SELECT temp_existing.*
+      INTO v_existing_row
+      FROM _tmp_bpay_session_case_resolution_existing AS temp_existing
+      WHERE temp_existing.resolution_identity_key = v_bucket_row.resolution_identity_key
+      LIMIT 1;
 
-    IF COALESCE(
-      v_resolution_payload_json->>'target_rate',
-      v_first_bucket_resolution_json->>'target_rate',
-      ''
-    ) !~ '^-?[0-9]+(\.[0-9]+)?$' THEN
-      RAISE EXCEPTION 'target_rate is required for BUCKETED resolution';
-    END IF;
-
-    v_target_rate := COALESCE(
-      NULLIF(v_resolution_payload_json->>'target_rate', '')::numeric,
-      NULLIF(v_first_bucket_resolution_json->>'target_rate', '')::numeric
-    );
-
-    IF v_target_rate < 0 THEN
-      RAISE EXCEPTION 'target_rate must be non-negative';
-    END IF;
-
-    v_normalized_payload_json := jsonb_strip_nulls(
-      COALESCE(v_resolution_payload_json, '{}'::jsonb) ||
-      jsonb_build_object(
-        'case_key', v_case_key,
-        'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
-        'resolution_family', 'BUCKETED',
-        'resolve_all_linked_timesheets', v_resolve_all_linked_timesheets,
-        'bucket_resolutions', jsonb_build_array(
-          jsonb_strip_nulls(
-            COALESCE(v_first_bucket_resolution_json, '{}'::jsonb) ||
-            jsonb_build_object(
-              'timesheet_id', CASE WHEN v_timesheet_id IS NULL THEN NULL ELSE v_timesheet_id::text END,
-              'source_basis_json', CASE WHEN v_source_basis_json = '{}'::jsonb THEN NULL ELSE v_source_basis_json END,
-              'source_basis_fingerprint', NULLIF(v_source_basis_fingerprint, ''),
-              'source_family_key', NULLIF(v_source_family_key, ''),
-              'bucket_code', NULLIF(v_bucket_code, ''),
-              'component_key_type', NULLIF(v_component_key_type, ''),
-              'component_key_value', NULLIF(v_component_key_value, ''),
-              'source_units', CASE
-                WHEN COALESCE(v_resolution_payload_json->>'source_units', v_first_bucket_resolution_json->>'source_units', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-                  THEN round(COALESCE(NULLIF(v_resolution_payload_json->>'source_units', '')::numeric, NULLIF(v_first_bucket_resolution_json->>'source_units', '')::numeric), 6)
-                ELSE NULL::numeric
-              END,
-              'source_rate', CASE
-                WHEN COALESCE(v_resolution_payload_json->>'source_rate', v_first_bucket_resolution_json->>'source_rate', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-                  THEN round(COALESCE(NULLIF(v_resolution_payload_json->>'source_rate', '')::numeric, NULLIF(v_first_bucket_resolution_json->>'source_rate', '')::numeric), 6)
-                ELSE NULL::numeric
-              END,
-              'source_charge_rate', CASE
-                WHEN COALESCE(v_resolution_payload_json->>'source_charge_rate', v_first_bucket_resolution_json->>'source_charge_rate', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-                  THEN round(COALESCE(NULLIF(v_resolution_payload_json->>'source_charge_rate', '')::numeric, NULLIF(v_first_bucket_resolution_json->>'source_charge_rate', '')::numeric), 6)
-                ELSE NULL::numeric
-              END,
-              'resolution_mode', v_resolution_mode,
-              'target_rate', round(v_target_rate, 2)
+      v_normalized_payload_json := jsonb_strip_nulls(
+        (COALESCE(v_resolution_payload_json, '{}'::jsonb) - 'bucket_resolutions' - 'resolution_mode' - 'mode' - 'candidate_id' - 'case_key' - 'resolution_family' - 'timesheet_id' - 'linked_timesheet_id' - 'target_rate' - 'source_units' - 'source_rate' - 'source_charge_rate')
+        || jsonb_build_object(
+          'case_key', v_case_key,
+          'candidate_id', v_resolved_candidate_id::text,
+          'finance_case_id', CASE WHEN v_finance_case_id_text = '' THEN NULL ELSE v_finance_case_id_text END,
+          'linked_timesheet_id', CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END,
+          'timesheet_id', CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END,
+          'resolution_family', 'BUCKETED',
+          'resolve_all_linked_timesheets', v_resolve_all_linked_timesheets,
+          'bucket_resolutions', jsonb_build_array(
+            jsonb_strip_nulls(
+              jsonb_build_object(
+                'timesheet_id', CASE WHEN v_bucket_row.timesheet_id IS NULL THEN NULL ELSE v_bucket_row.timesheet_id::text END,
+                'source_basis_json', CASE WHEN v_bucket_row.source_basis_json = '{}'::jsonb THEN NULL ELSE v_bucket_row.source_basis_json END,
+                'source_basis_fingerprint', NULLIF(v_bucket_row.source_basis_fingerprint, ''),
+                'source_family_key', NULLIF(v_bucket_row.source_family_key, ''),
+                'bucket_code', v_bucket_row.bucket_code,
+                'component_key_type', NULLIF(v_bucket_row.component_key_type, ''),
+                'component_key_value', NULLIF(v_bucket_row.component_key_value, ''),
+                'source_units', round(v_bucket_row.source_units, 6),
+                'source_rate', round(v_bucket_row.source_rate, 6),
+                'source_charge_rate', round(v_bucket_row.source_charge_rate, 6),
+                'resolution_mode', v_bucket_row.resolution_mode,
+                'target_rate', round(v_bucket_row.target_rate, 2)
+              )
             )
           )
         )
+      );
+
+      v_audit_before_json := CASE
+        WHEN v_existing_row.id IS NULL THEN NULL
+        ELSE jsonb_build_object(
+          'id', v_existing_row.id::text,
+          'session_id', v_existing_row.session_id::text,
+          'candidate_id', v_existing_row.candidate_id::text,
+          'case_key', v_existing_row.case_key,
+          'resolution_family', v_existing_row.resolution_family,
+          'resolution_identity_key', v_existing_row.resolution_identity_key,
+          'timesheet_id', CASE WHEN v_existing_row.timesheet_id IS NULL THEN NULL ELSE v_existing_row.timesheet_id::text END,
+          'source_basis_fingerprint', v_existing_row.source_basis_fingerprint,
+          'source_family_key', v_existing_row.source_family_key,
+          'bucket_code', v_existing_row.bucket_code,
+          'component_key_type', v_existing_row.component_key_type,
+          'component_key_value', v_existing_row.component_key_value,
+          'payload_json', v_existing_row.payload_json
+        )
+      END;
+
+      INSERT INTO public.banking_pay_workbench_session_case_resolutions (
+        session_id,
+        candidate_id,
+        case_key,
+        resolution_family,
+        resolution_identity_key,
+        timesheet_id,
+        source_basis_fingerprint,
+        source_family_key,
+        bucket_code,
+        component_key_type,
+        component_key_value,
+        payload_json,
+        created_at_utc,
+        updated_at_utc
       )
-    );
+      VALUES (
+        p_session_id,
+        v_resolved_candidate_id,
+        v_case_key,
+        'BUCKETED',
+        v_bucket_row.resolution_identity_key,
+        v_bucket_row.timesheet_id,
+        NULLIF(v_bucket_row.source_basis_fingerprint, ''),
+        NULLIF(v_bucket_row.source_family_key, ''),
+        v_bucket_row.bucket_code,
+        NULLIF(v_bucket_row.component_key_type, ''),
+        NULLIF(v_bucket_row.component_key_value, ''),
+        v_normalized_payload_json,
+        v_now,
+        v_now
+      )
+      ON CONFLICT (session_id, resolution_identity_key)
+      DO UPDATE
+      SET candidate_id = EXCLUDED.candidate_id,
+          case_key = EXCLUDED.case_key,
+          resolution_family = EXCLUDED.resolution_family,
+          timesheet_id = EXCLUDED.timesheet_id,
+          source_basis_fingerprint = EXCLUDED.source_basis_fingerprint,
+          source_family_key = EXCLUDED.source_family_key,
+          bucket_code = EXCLUDED.bucket_code,
+          component_key_type = EXCLUDED.component_key_type,
+          component_key_value = EXCLUDED.component_key_value,
+          payload_json = EXCLUDED.payload_json,
+          updated_at_utc = v_now
+      RETURNING public.banking_pay_workbench_session_case_resolutions.*
+      INTO v_upserted_row;
+
+      v_case_resolution_ids := v_case_resolution_ids || jsonb_build_array(v_upserted_row.id::text);
+      v_resolution_identity_keys := v_resolution_identity_keys || jsonb_build_array(v_upserted_row.resolution_identity_key);
+      IF v_case_resolution_id_text IS NULL THEN
+        v_case_resolution_id_text := v_upserted_row.id::text;
+      END IF;
+
+      v_audit_after_json := jsonb_build_object(
+        'id', v_upserted_row.id::text,
+        'session_id', v_upserted_row.session_id::text,
+        'candidate_id', v_upserted_row.candidate_id::text,
+        'case_key', v_upserted_row.case_key,
+        'resolution_family', v_upserted_row.resolution_family,
+        'resolution_identity_key', v_upserted_row.resolution_identity_key,
+        'timesheet_id', CASE WHEN v_upserted_row.timesheet_id IS NULL THEN NULL ELSE v_upserted_row.timesheet_id::text END,
+        'source_basis_fingerprint', v_upserted_row.source_basis_fingerprint,
+        'source_family_key', v_upserted_row.source_family_key,
+        'bucket_code', v_upserted_row.bucket_code,
+        'component_key_type', v_upserted_row.component_key_type,
+        'component_key_value', v_upserted_row.component_key_value,
+        'payload_json', v_upserted_row.payload_json
+      );
+
+      PERFORM public._audit_insert(
+        'banking_pay_workbench_session_case_resolution',
+        v_upserted_row.id::text,
+        CASE WHEN v_existing_row.id IS NULL THEN 'SESSION_CASE_RESOLUTION_CREATED' ELSE 'SESSION_CASE_RESOLUTION_UPDATED' END,
+        v_audit_before_json,
+        v_audit_after_json,
+        'SESSION_CASE_RESOLUTION_APPLIED',
+        p_actor_user_id
+      );
+    END LOOP;
   ELSE
-    IF v_resolution_mode NOT IN ('SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_AMOUNT') THEN
+    v_nonbucket_resolution_mode := UPPER(BTRIM(COALESCE(
+      v_resolution_payload_json->>'resolution_mode',
+      v_resolution_payload_json->>'mode',
+      ''
+    )));
+
+    IF v_nonbucket_resolution_mode NOT IN ('SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_AMOUNT') THEN
       RAISE EXCEPTION 'NON_BUCKET resolution_mode must be SUGGESTED_EQUIVALENT_BASIS or MANUAL_AMOUNT';
     END IF;
 
@@ -22992,201 +23441,189 @@ BEGIN
       RAISE EXCEPTION 'target_amount_ex_vat is required for NON_BUCKET resolution';
     END IF;
 
-    v_target_amount_ex_vat := COALESCE(
+    v_target_amount_ex_vat := round(COALESCE(
       NULLIF(v_resolution_payload_json->>'target_amount_ex_vat', '')::numeric,
       NULLIF(v_resolution_payload_json->>'target_amount', '')::numeric,
       NULLIF(v_resolution_payload_json->>'amount_ex_vat', '')::numeric,
       NULLIF(v_resolution_payload_json->>'amount', '')::numeric
-    );
+    ), 2);
 
     IF v_target_amount_ex_vat < 0 THEN
       RAISE EXCEPTION 'target_amount_ex_vat must be non-negative';
     END IF;
 
-    v_normalized_payload_json := jsonb_strip_nulls(
-      COALESCE(v_resolution_payload_json, '{}'::jsonb) ||
-      jsonb_build_object(
-        'case_key', v_case_key,
-        'candidate_id', CASE WHEN v_candidate_id IS NULL THEN NULL ELSE v_candidate_id::text END,
-        'resolution_family', 'NON_BUCKET',
-        'resolution_mode', v_resolution_mode,
-        'target_amount_ex_vat', round(v_target_amount_ex_vat, 2)
-      )
-    );
-  END IF;
-
-  IF v_candidate_id IS NOT NULL
-     AND NOT (COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[v_candidate_id]::uuid[]) THEN
-    RAISE EXCEPTION 'candidate % is not in workbench session scope %', v_candidate_id, p_session_id;
-  END IF;
-
-  IF v_resolution_family = 'BUCKETED' THEN
     IF v_candidate_id IS NULL THEN
-      SELECT COALESCE(array_agg(DISTINCT public.banking_pay_snapshot_case_component_state.candidate_id ORDER BY public.banking_pay_snapshot_case_component_state.candidate_id), ARRAY[]::uuid[])
+      SELECT COALESCE(array_agg(DISTINCT snapshot_case.candidate_id ORDER BY snapshot_case.candidate_id), ARRAY[]::uuid[])
       INTO v_matching_candidate_ids
-      FROM public.banking_pay_snapshot_case_component_state
-      WHERE public.banking_pay_snapshot_case_component_state.snapshot_run_id = v_session_row.source_snapshot_run_id
-        AND COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[public.banking_pay_snapshot_case_component_state.candidate_id]::uuid[]
-        AND public.banking_pay_snapshot_case_component_state.case_key = v_case_key
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.timesheet_id::text, '') = COALESCE(v_timesheet_id::text, '')
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.source_basis_fingerprint, '') = v_source_basis_fingerprint
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.source_family_key, '') = v_source_family_key
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.bucket_code, '') = v_bucket_code
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.component_key_type, '') = v_component_key_type
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.component_key_value, '') = v_component_key_value;
+      FROM public.banking_pay_snapshot_case_state AS snapshot_case
+      WHERE snapshot_case.snapshot_run_id = v_session_row.source_snapshot_run_id
+        AND COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[snapshot_case.candidate_id]::uuid[]
+        AND snapshot_case.case_key = v_case_key;
 
       v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
-
-      IF v_matching_candidate_count = 0 THEN
-        RAISE EXCEPTION 'No snapshot baseline target found for BUCKETED resolution in session % for case_key %', p_session_id, v_case_key;
-      ELSIF v_matching_candidate_count > 1 THEN
-        RAISE EXCEPTION 'Ambiguous BUCKETED resolution target for case_key % in session %', v_case_key, p_session_id;
-      END IF;
-
-      v_candidate_id := v_matching_candidate_ids[1];
-      v_normalized_payload_json := jsonb_set(v_normalized_payload_json, '{candidate_id}', to_jsonb(v_candidate_id::text), true);
-    ELSE
-      SELECT COUNT(*)::integer
-      INTO v_target_match_count
-      FROM public.banking_pay_snapshot_case_component_state
-      WHERE public.banking_pay_snapshot_case_component_state.snapshot_run_id = v_session_row.source_snapshot_run_id
-        AND public.banking_pay_snapshot_case_component_state.candidate_id = v_candidate_id
-        AND public.banking_pay_snapshot_case_component_state.case_key = v_case_key
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.timesheet_id::text, '') = COALESCE(v_timesheet_id::text, '')
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.source_basis_fingerprint, '') = v_source_basis_fingerprint
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.source_family_key, '') = v_source_family_key
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.bucket_code, '') = v_bucket_code
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.component_key_type, '') = v_component_key_type
-        AND COALESCE(public.banking_pay_snapshot_case_component_state.component_key_value, '') = v_component_key_value;
-
-      IF v_target_match_count = 0 THEN
-        RAISE EXCEPTION 'No matching BUCKETED snapshot baseline target found for candidate % in session %', v_candidate_id, p_session_id;
-      ELSIF v_target_match_count > 1 THEN
-        RAISE EXCEPTION 'Ambiguous BUCKETED snapshot baseline target found for candidate % in session %', v_candidate_id, p_session_id;
-      END IF;
-    END IF;
-  ELSE
-    IF v_candidate_id IS NULL THEN
-      SELECT COALESCE(array_agg(DISTINCT public.banking_pay_snapshot_case_state.candidate_id ORDER BY public.banking_pay_snapshot_case_state.candidate_id), ARRAY[]::uuid[])
-      INTO v_matching_candidate_ids
-      FROM public.banking_pay_snapshot_case_state
-      WHERE public.banking_pay_snapshot_case_state.snapshot_run_id = v_session_row.source_snapshot_run_id
-        AND COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[public.banking_pay_snapshot_case_state.candidate_id]::uuid[]
-        AND public.banking_pay_snapshot_case_state.case_key = v_case_key;
-
-      v_matching_candidate_count := COALESCE(array_length(v_matching_candidate_ids, 1), 0);
-
       IF v_matching_candidate_count = 0 THEN
         RAISE EXCEPTION 'No snapshot baseline case found for NON_BUCKET resolution in session % for case_key %', p_session_id, v_case_key;
       ELSIF v_matching_candidate_count > 1 THEN
         RAISE EXCEPTION 'Ambiguous NON_BUCKET resolution target for case_key % in session %', v_case_key, p_session_id;
       END IF;
 
-      v_candidate_id := v_matching_candidate_ids[1];
-      v_normalized_payload_json := jsonb_set(v_normalized_payload_json, '{candidate_id}', to_jsonb(v_candidate_id::text), true);
+      v_resolved_candidate_id := v_matching_candidate_ids[1];
     ELSE
       SELECT COUNT(*)::integer
       INTO v_target_match_count
-      FROM public.banking_pay_snapshot_case_state
-      WHERE public.banking_pay_snapshot_case_state.snapshot_run_id = v_session_row.source_snapshot_run_id
-        AND public.banking_pay_snapshot_case_state.candidate_id = v_candidate_id
-        AND public.banking_pay_snapshot_case_state.case_key = v_case_key;
+      FROM public.banking_pay_snapshot_case_state AS snapshot_case
+      WHERE snapshot_case.snapshot_run_id = v_session_row.source_snapshot_run_id
+        AND snapshot_case.candidate_id = v_candidate_id
+        AND snapshot_case.case_key = v_case_key;
 
       IF v_target_match_count = 0 THEN
         RAISE EXCEPTION 'No matching NON_BUCKET snapshot baseline case found for candidate % in session %', v_candidate_id, p_session_id;
       ELSIF v_target_match_count > 1 THEN
         RAISE EXCEPTION 'Ambiguous NON_BUCKET snapshot baseline case found for candidate % in session %', v_candidate_id, p_session_id;
       END IF;
+
+      v_resolved_candidate_id := v_candidate_id;
     END IF;
-  END IF;
 
-  v_resolution_identity_key := concat_ws(
-    '|',
-    COALESCE(NULLIF(v_resolution_family, ''), '~'),
-    COALESCE(NULLIF(v_case_key, ''), '~'),
-    COALESCE(CASE WHEN v_timesheet_id IS NULL THEN NULL ELSE v_timesheet_id::text END, '~'),
-    COALESCE(NULLIF(v_source_basis_fingerprint, ''), '~'),
-    COALESCE(NULLIF(v_source_family_key, ''), '~'),
-    COALESCE(NULLIF(v_bucket_code, ''), '~'),
-    COALESCE(NULLIF(v_component_key_type, ''), '~'),
-    COALESCE(NULLIF(v_component_key_value, ''), '~')
-  );
+    INSERT INTO _tmp_bpay_session_case_resolution_existing
+    SELECT existing_resolution.*
+    FROM public.banking_pay_workbench_session_case_resolutions AS existing_resolution
+    WHERE existing_resolution.session_id = p_session_id
+      AND existing_resolution.candidate_id = v_resolved_candidate_id
+      AND existing_resolution.case_key = v_case_key
+      AND existing_resolution.resolution_family = 'NON_BUCKET'
+      AND (
+        v_linked_timesheet_id IS NULL
+        OR existing_resolution.timesheet_id = v_linked_timesheet_id
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'linked_timesheet_id', '')), '') = v_linked_timesheet_id::text
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'timesheet_id', '')), '') = v_linked_timesheet_id::text
+      )
+      AND (
+        v_finance_case_id_text = ''
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') IS NULL
+        OR NULLIF(BTRIM(COALESCE(existing_resolution.payload_json->>'finance_case_id', '')), '') = v_finance_case_id_text
+      );
 
-  SELECT public.banking_pay_workbench_session_case_resolutions.*
-  INTO v_existing_row
-  FROM public.banking_pay_workbench_session_case_resolutions
-  WHERE public.banking_pay_workbench_session_case_resolutions.session_id = p_session_id
-    AND public.banking_pay_workbench_session_case_resolutions.resolution_identity_key = v_resolution_identity_key
-  LIMIT 1;
-
-  IF v_existing_row.id IS NOT NULL THEN
-    v_audit_before_json := jsonb_build_object(
-      'id', v_existing_row.id::text,
-      'session_id', v_existing_row.session_id::text,
-      'candidate_id', v_existing_row.candidate_id::text,
-      'case_key', v_existing_row.case_key,
-      'resolution_family', v_existing_row.resolution_family,
-      'resolution_identity_key', v_existing_row.resolution_identity_key,
-      'timesheet_id', CASE WHEN v_existing_row.timesheet_id IS NULL THEN NULL ELSE v_existing_row.timesheet_id::text END,
-      'source_basis_fingerprint', v_existing_row.source_basis_fingerprint,
-      'source_family_key', v_existing_row.source_family_key,
-      'bucket_code', v_existing_row.bucket_code,
-      'component_key_type', v_existing_row.component_key_type,
-      'component_key_value', v_existing_row.component_key_value,
-      'payload_json', v_existing_row.payload_json
+    v_nonbucket_resolution_identity_key := concat_ws(
+      '|',
+      'NON_BUCKET',
+      COALESCE(NULLIF(v_case_key, ''), '~'),
+      COALESCE(CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END, '~'),
+      '~',
+      '~',
+      '~',
+      '~',
+      '~'
     );
-    v_action := 'SESSION_CASE_RESOLUTION_UPDATED';
-  ELSE
-    v_action := 'SESSION_CASE_RESOLUTION_CREATED';
-  END IF;
 
-  INSERT INTO public.banking_pay_workbench_session_case_resolutions (
-    session_id,
-    candidate_id,
-    case_key,
-    resolution_family,
-    resolution_identity_key,
-    timesheet_id,
-    source_basis_fingerprint,
-    source_family_key,
-    bucket_code,
-    component_key_type,
-    component_key_value,
-    payload_json,
-    created_at_utc,
-    updated_at_utc
-  )
-  VALUES (
-    p_session_id,
-    v_candidate_id,
-    v_case_key,
-    v_resolution_family,
-    v_resolution_identity_key,
-    v_timesheet_id,
-    NULLIF(v_source_basis_fingerprint, ''),
-    NULLIF(v_source_family_key, ''),
-    NULLIF(v_bucket_code, ''),
-    NULLIF(v_component_key_type, ''),
-    NULLIF(v_component_key_value, ''),
-    v_normalized_payload_json,
-    v_now,
-    v_now
-  )
-  ON CONFLICT (session_id, resolution_identity_key)
-  DO UPDATE
-  SET candidate_id = EXCLUDED.candidate_id,
-      case_key = EXCLUDED.case_key,
-      resolution_family = EXCLUDED.resolution_family,
-      timesheet_id = EXCLUDED.timesheet_id,
-      source_basis_fingerprint = EXCLUDED.source_basis_fingerprint,
-      source_family_key = EXCLUDED.source_family_key,
-      bucket_code = EXCLUDED.bucket_code,
-      component_key_type = EXCLUDED.component_key_type,
-      component_key_value = EXCLUDED.component_key_value,
-      payload_json = EXCLUDED.payload_json,
-      updated_at_utc = v_now
-  RETURNING public.banking_pay_workbench_session_case_resolutions.*
-  INTO v_upserted_row;
+    v_nonbucket_existing_row := NULL;
+    SELECT temp_existing.*
+    INTO v_nonbucket_existing_row
+    FROM _tmp_bpay_session_case_resolution_existing AS temp_existing
+    WHERE temp_existing.resolution_identity_key = v_nonbucket_resolution_identity_key
+    LIMIT 1;
+
+    v_normalized_payload_json := jsonb_strip_nulls(
+      (COALESCE(v_resolution_payload_json, '{}'::jsonb) - 'bucket_resolutions' - 'candidate_id' - 'case_key' - 'resolution_family' - 'timesheet_id' - 'linked_timesheet_id')
+      || jsonb_build_object(
+        'case_key', v_case_key,
+        'candidate_id', v_resolved_candidate_id::text,
+        'finance_case_id', CASE WHEN v_finance_case_id_text = '' THEN NULL ELSE v_finance_case_id_text END,
+        'linked_timesheet_id', CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END,
+        'timesheet_id', CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END,
+        'resolution_family', 'NON_BUCKET',
+        'resolution_mode', v_nonbucket_resolution_mode,
+        'target_amount_ex_vat', round(v_target_amount_ex_vat, 2)
+      )
+    );
+
+    v_audit_before_json := CASE
+      WHEN v_nonbucket_existing_row.id IS NULL THEN NULL
+      ELSE jsonb_build_object(
+        'id', v_nonbucket_existing_row.id::text,
+        'session_id', v_nonbucket_existing_row.session_id::text,
+        'candidate_id', v_nonbucket_existing_row.candidate_id::text,
+        'case_key', v_nonbucket_existing_row.case_key,
+        'resolution_family', v_nonbucket_existing_row.resolution_family,
+        'resolution_identity_key', v_nonbucket_existing_row.resolution_identity_key,
+        'timesheet_id', CASE WHEN v_nonbucket_existing_row.timesheet_id IS NULL THEN NULL ELSE v_nonbucket_existing_row.timesheet_id::text END,
+        'source_basis_fingerprint', v_nonbucket_existing_row.source_basis_fingerprint,
+        'source_family_key', v_nonbucket_existing_row.source_family_key,
+        'bucket_code', v_nonbucket_existing_row.bucket_code,
+        'component_key_type', v_nonbucket_existing_row.component_key_type,
+        'component_key_value', v_nonbucket_existing_row.component_key_value,
+        'payload_json', v_nonbucket_existing_row.payload_json
+      )
+    END;
+
+    INSERT INTO public.banking_pay_workbench_session_case_resolutions (
+      session_id,
+      candidate_id,
+      case_key,
+      resolution_family,
+      resolution_identity_key,
+      timesheet_id,
+      source_basis_fingerprint,
+      source_family_key,
+      bucket_code,
+      component_key_type,
+      component_key_value,
+      payload_json,
+      created_at_utc,
+      updated_at_utc
+    )
+    VALUES (
+      p_session_id,
+      v_resolved_candidate_id,
+      v_case_key,
+      'NON_BUCKET',
+      v_nonbucket_resolution_identity_key,
+      v_linked_timesheet_id,
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      v_normalized_payload_json,
+      v_now,
+      v_now
+    )
+    ON CONFLICT (session_id, resolution_identity_key)
+    DO UPDATE
+    SET candidate_id = EXCLUDED.candidate_id,
+        case_key = EXCLUDED.case_key,
+        resolution_family = EXCLUDED.resolution_family,
+        timesheet_id = EXCLUDED.timesheet_id,
+        payload_json = EXCLUDED.payload_json,
+        updated_at_utc = v_now
+    RETURNING public.banking_pay_workbench_session_case_resolutions.*
+    INTO v_nonbucket_upserted_row;
+
+    v_case_resolution_ids := jsonb_build_array(v_nonbucket_upserted_row.id::text);
+    v_resolution_identity_keys := jsonb_build_array(v_nonbucket_upserted_row.resolution_identity_key);
+    v_case_resolution_id_text := v_nonbucket_upserted_row.id::text;
+
+    v_audit_after_json := jsonb_build_object(
+      'id', v_nonbucket_upserted_row.id::text,
+      'session_id', v_nonbucket_upserted_row.session_id::text,
+      'candidate_id', v_nonbucket_upserted_row.candidate_id::text,
+      'case_key', v_nonbucket_upserted_row.case_key,
+      'resolution_family', v_nonbucket_upserted_row.resolution_family,
+      'resolution_identity_key', v_nonbucket_upserted_row.resolution_identity_key,
+      'timesheet_id', CASE WHEN v_nonbucket_upserted_row.timesheet_id IS NULL THEN NULL ELSE v_nonbucket_upserted_row.timesheet_id::text END,
+      'payload_json', v_nonbucket_upserted_row.payload_json
+    );
+
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_session_case_resolution',
+      v_nonbucket_upserted_row.id::text,
+      CASE WHEN v_nonbucket_existing_row.id IS NULL THEN 'SESSION_CASE_RESOLUTION_CREATED' ELSE 'SESSION_CASE_RESOLUTION_UPDATED' END,
+      v_audit_before_json,
+      v_audit_after_json,
+      'SESSION_CASE_RESOLUTION_APPLIED',
+      p_actor_user_id
+    );
+  END IF;
 
   UPDATE public.banking_pay_workbench_sessions
   SET version = public.banking_pay_workbench_sessions.version + 1,
@@ -23197,13 +23634,15 @@ BEGIN
 
   v_job_json := public.pay_workbench_enqueue_session_candidate_refresh(
     p_session_id => p_session_id,
-    p_candidate_id => v_candidate_id,
+    p_candidate_id => COALESCE(v_resolved_candidate_id, v_candidate_id),
     p_reason => 'SESSION_CASE_RESOLUTION_APPLIED',
     p_actor_user_id => p_actor_user_id,
     p_payload_json => jsonb_build_object(
-      'resolution_identity_key', v_resolution_identity_key,
       'case_key', v_case_key,
-      'resolution_family', v_resolution_family
+      'resolution_family', v_resolution_family,
+      'finance_case_id', CASE WHEN v_finance_case_id_text = '' THEN NULL ELSE v_finance_case_id_text END,
+      'linked_timesheet_id', CASE WHEN v_linked_timesheet_id IS NULL THEN NULL ELSE v_linked_timesheet_id::text END,
+      'resolution_identity_keys', v_resolution_identity_keys
     )
   );
 
@@ -23211,49 +23650,21 @@ BEGIN
     v_job_id := (v_job_json->>'job_id')::uuid;
   END IF;
 
-  v_audit_after_json := jsonb_build_object(
-    'id', v_upserted_row.id::text,
-    'session_id', v_upserted_row.session_id::text,
-    'candidate_id', v_upserted_row.candidate_id::text,
-    'case_key', v_upserted_row.case_key,
-    'resolution_family', v_upserted_row.resolution_family,
-    'resolution_mode', v_resolution_mode,
-    'resolution_identity_key', v_upserted_row.resolution_identity_key,
-    'timesheet_id', CASE WHEN v_upserted_row.timesheet_id IS NULL THEN NULL ELSE v_upserted_row.timesheet_id::text END,
-    'source_basis_fingerprint', v_upserted_row.source_basis_fingerprint,
-    'source_family_key', v_upserted_row.source_family_key,
-    'bucket_code', v_upserted_row.bucket_code,
-    'component_key_type', v_upserted_row.component_key_type,
-    'component_key_value', v_upserted_row.component_key_value,
-    'payload_json', v_upserted_row.payload_json,
-    'session_version', v_new_session_version,
-    'pending_job_id', CASE WHEN v_job_id IS NULL THEN NULL ELSE v_job_id::text END
-  );
-
-  PERFORM public._audit_insert(
-    'banking_pay_workbench_session_case_resolution',
-    v_upserted_row.id::text,
-    v_action,
-    v_audit_before_json,
-    v_audit_after_json,
-    'SESSION_CASE_RESOLUTION_APPLIED',
-    p_actor_user_id
-  );
-
   RETURN jsonb_build_object(
     'ok', true,
     'session_id', p_session_id::text,
-    'candidate_id', v_candidate_id::text,
-    'resolution_identity_key', v_resolution_identity_key,
+    'candidate_id', COALESCE(v_resolved_candidate_id, v_candidate_id)::text,
     'session_version', v_new_session_version,
     'job_id', CASE WHEN v_job_id IS NULL THEN NULL ELSE v_job_id::text END,
-    'case_resolution_id', v_upserted_row.id::text,
+    'case_resolution_id', v_case_resolution_id_text,
+    'case_resolution_ids', v_case_resolution_ids,
+    'resolution_identity_keys', v_resolution_identity_keys,
+    'case_resolution_count', jsonb_array_length(v_case_resolution_ids),
     'state_changed', true,
     'action', v_action
   );
 END;
 $function$;
-
 
 
 
