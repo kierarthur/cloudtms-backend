@@ -2883,6 +2883,10 @@ declare
   v_nonbucket_resolution_applied boolean := false;
   v_nonbucket_case_allowed boolean := false;
   v_bucket_resolution_applied boolean := false;
+  v_case_state_is_timesheet_scope boolean := false;
+  v_itemisation_match_found boolean := false;
+  v_itemisation_append_json jsonb := '{}'::jsonb;
+  v_selected_case_line jsonb := null::jsonb;
 begin
   if jsonb_typeof(v_candidate_baseline_root) <> 'object' then
     raise exception 'p_candidate_baseline_json must be a JSON object';
@@ -2940,7 +2944,7 @@ begin
       continue;
     end if;
 
-    if upper(btrim(coalesce(v_case_state->>'case_scope', ''))) = 'TIMESHEET' then
+    if upper(btrim(coalesce(v_case_state->>'case_scope', ''))) in ('TIMESHEET', 'TIMESHEET_PAYMENT') then
       v_case_scope_linked_timesheet_ids := case
         when jsonb_typeof(v_case_state #> '{linked_resolution_scope_json,linked_timesheet_ids}') = 'array'
           then coalesce(v_case_state #> '{linked_resolution_scope_json,linked_timesheet_ids}', '[]'::jsonb)
@@ -3362,7 +3366,7 @@ begin
     end if;
 
     v_case_is_excluded := false;
-    if v_case_state_case_scope = 'TIMESHEET' and v_case_state_timesheet_id <> '' then
+    if v_case_state_case_scope in ('TIMESHEET', 'TIMESHEET_PAYMENT') and v_case_state_timesheet_id <> '' then
       if exists (
         select 1
         from jsonb_array_elements(v_exclude_timesheet_ids) as excluded(value)
@@ -3490,6 +3494,18 @@ begin
 
   v_updated_lines := '[]'::jsonb;
 
+  for v_line in
+    select elem.value
+    from jsonb_array_elements(v_lines) as elem(value)
+    where jsonb_typeof(elem.value) = 'object'
+  loop
+    v_line_case_key := btrim(coalesce(v_line->>'case_key', ''));
+    if v_line_case_key <> '' and jsonb_typeof(v_case_state_map->v_line_case_key) = 'object' then
+      continue;
+    end if;
+    v_updated_lines := v_updated_lines || jsonb_build_array(v_line);
+  end loop;
+
   for v_case_state in
     select elem.value
     from jsonb_array_elements(v_updated_case_states) as elem(value)
@@ -3498,12 +3514,14 @@ begin
     v_case_state_case_key := btrim(coalesce(v_case_state->>'case_key', ''));
     v_case_state_case_scope := upper(btrim(coalesce(v_case_state->>'case_scope', '')));
     v_case_state_timesheet_id := btrim(coalesce(v_case_state->>'timesheet_id', ''));
+    v_case_state_needs_resolution := coalesce(nullif(v_case_state->>'case_needs_resolution', '')::boolean, false);
+    v_case_state_is_timesheet_scope := (v_case_state_case_scope in ('TIMESHEET', 'TIMESHEET_PAYMENT'));
     v_case_ready_amount_ex_vat := case when coalesce(v_case_state->>'safe_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then round((v_case_state->>'safe_amount_ex_vat')::numeric, 2) else 0::numeric end;
     v_case_blocked_amount_ex_vat := case when coalesce(v_case_state->>'blocked_case_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then round((v_case_state->>'blocked_case_amount_ex_vat')::numeric, 2) else 0::numeric end;
     v_case_total_amount_ex_vat := round(v_case_ready_amount_ex_vat + v_case_blocked_amount_ex_vat, 2);
 
     v_case_is_excluded := false;
-    if v_case_state_case_scope = 'TIMESHEET' and v_case_state_timesheet_id <> '' then
+    if v_case_state_is_timesheet_scope = true and v_case_state_timesheet_id <> '' then
       if exists (
         select 1
         from jsonb_array_elements(v_exclude_timesheet_ids) as excluded(value)
@@ -3542,115 +3560,59 @@ begin
       end if;
     end loop;
 
-    if v_template_base_line is null then
-      if v_case_is_excluded = false
-         and v_case_state_needs_resolution = true
-         and round(v_case_blocked_amount_ex_vat, 2) <> 0 then
-        v_line_existing_line_id := btrim(coalesce(v_case_state_case_key, ''));
-        if v_line_existing_line_id = '' then
-          v_line_existing_line_id := 'case_resolution_required';
-        end if;
-        if right(v_line_existing_line_id, 20) <> ':resolution_required' then
-          v_line_existing_line_id := v_line_existing_line_id || ':resolution_required';
-        end if;
-
-        v_line_blocked_reason_codes := case
-          when jsonb_typeof(v_case_state->'blocked_reason_codes') = 'array' then coalesce(v_case_state->'blocked_reason_codes', '[]'::jsonb)
-          when jsonb_typeof(v_case_state #> '{case_resolution_summary,blocked_reason_codes}') = 'array' then coalesce(v_case_state #> '{case_resolution_summary,blocked_reason_codes}', '[]'::jsonb)
-          else '[]'::jsonb
-        end;
-        if not exists (
-          select 1
-          from jsonb_array_elements_text(v_line_blocked_reason_codes) as blocker(value)
-          where upper(btrim(blocker.value)) = 'RESOLUTION_REQUIRED'
-        ) then
-          v_line_blocked_reason_codes := v_line_blocked_reason_codes || jsonb_build_array('RESOLUTION_REQUIRED');
-        end if;
-
-        v_new_line := jsonb_build_object(
-          'preview_row_id', v_line_existing_line_id,
-          'line_id', v_line_existing_line_id,
-          'candidate_id', v_candidate_id,
-          'tms_ref', nullif(btrim(coalesce(v_candidate_row->>'tms_ref', '')), ''),
-          'display_name', nullif(btrim(coalesce(v_candidate_row->>'display_name', v_candidate_row->>'candidate_name', '')), ''),
-          'line_type', case
-            when upper(v_case_state_case_scope) = 'TIMESHEET_PAYMENT' then 'TIMESHEET_PAYMENT'
-            else coalesce(nullif(btrim(coalesce(v_case_state->>'case_type', '')), ''), 'TIMESHEET_PAYMENT')
-          end,
-          'finance_case_id', nullif(btrim(coalesce(v_case_state->>'finance_case_id', '')), ''),
-          'case_key', v_case_state_case_key,
-          'case_type', coalesce(nullif(btrim(coalesce(v_case_state->>'case_type', '')), ''), 'TIMESHEET_PAYMENT'),
-          'case_is_blocked', true,
-          'case_resolution_summary', coalesce(v_case_state->'case_resolution_summary', '{}'::jsonb),
-          'case_components', coalesce(v_case_state->'components', '[]'::jsonb),
+    if v_template_base_line is null and v_case_state_is_timesheet_scope = true then
+      v_template_base_line := jsonb_build_object(
+        'candidate_id', v_candidate_id,
+        'tms_ref', nullif(btrim(coalesce(v_candidate_row->>'tms_ref', '')), ''),
+        'display_name', nullif(btrim(coalesce(v_candidate_row->>'display_name', v_candidate_row->>'candidate_name', '')), ''),
+        'line_type', 'TIMESHEET_PAYMENT',
+        'finance_case_id', null,
+        'case_key', v_case_state_case_key,
+        'case_type', coalesce(nullif(btrim(coalesce(v_case_state->>'case_type', '')), ''), 'TIMESHEET_PAYMENT')
+      )
+      || jsonb_build_object(
+        'case_is_blocked', true,
+        'case_resolution_summary', coalesce(v_case_state->'case_resolution_summary', '{}'::jsonb),
+        'case_components', coalesce(v_case_state->'components', '[]'::jsonb),
+        'timesheet_id', nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''),
+        'booking_id', null,
+        'client_id', nullif(btrim(coalesce(v_case_state->>'client_id', '')), ''),
+        'client_name', nullif(btrim(coalesce(v_case_state->>'client_name', '')), ''),
+        'week_ending_date', nullif(btrim(coalesce(v_case_state->>'week_ending_date', '')), ''))
+      || jsonb_build_object(
+        'role', null,
+        'band', null,
+        'linked_shift_date', null,
+        'pay_channel', nullif(btrim(coalesce(v_case_state->>'candidate_pay_method', '')), ''),
+        'paye_treatment', case when upper(btrim(coalesce(v_case_state->>'candidate_pay_method', ''))) = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
+        'route_type', 'NORMAL_PAYMENT',
+        'adjustment_comment', null
+      )
+      || jsonb_build_object(
+        'has_active_timesheet_snooze', false,
+        'has_active_segment_snoozes', false,
+        'active_segment_snooze_count', 0,
+        'active_segment_dated_snooze_count', 0,
+        'active_segment_indefinite_snooze_count', 0,
+        'whole_timesheet_snooze_action_blocked', false,
+        'whole_timesheet_snooze_action_block_reason', null,
+        'segment_snooze_action_blocked', false,
+        'segment_snooze_action_block_reason', null
+      )
+      || jsonb_build_object(
+        'snooze_identity', jsonb_build_object(
+          'identity_type', 'TIMESHEET',
           'timesheet_id', nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''),
           'booking_id', null,
-          'client_id', nullif(btrim(coalesce(v_case_state->>'client_id', '')), ''),
-          'client_name', nullif(btrim(coalesce(v_case_state->>'client_name', '')), ''),
-          'week_ending_date', nullif(btrim(coalesce(v_case_state->>'week_ending_date', '')), ''),
-          'role', null,
-          'band', null,
-          'linked_shift_date', null,
-          'pay_channel', nullif(btrim(coalesce(v_case_state->>'candidate_pay_method', '')), ''),
-          'paye_treatment', case when upper(btrim(coalesce(v_case_state->>'candidate_pay_method', ''))) = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
-          'route_type', 'NORMAL_PAYMENT',
-          'adjustment_comment', null,
-          'amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
-          'amount_display', round(v_case_blocked_amount_ex_vat, 2),
-          'is_advanced', false,
-          'advanced_override_id', null,
-          'advanced_reason', null,
-          'blocked_reason_codes', v_line_blocked_reason_codes,
-          'is_excluded_from_allocation', false,
-          'is_ready_for_draft', false,
-          'draftable', false,
-          'segment_rows', '[]'::jsonb,
-          'segment_count', 0,
-          'presentation_section', 'BLOCKED_FOR_PAY',
-          'presentation_role', 'PARENT',
-          'presentation_line_id', v_line_existing_line_id,
-          'presentation_parent_line_id', coalesce(nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''), v_line_existing_line_id),
-          'real_business_timesheet_id', nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''),
-          'total_segment_count', 0,
-          'ready_segment_count', 0,
-          'blocked_visible_segment_count', 0,
-          'hidden_indefinite_segment_count', 0,
-          'is_partially_ready', false,
-          'is_partially_blocked', false,
-          'section_amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
-          'section_amount_display', round(v_case_blocked_amount_ex_vat, 2),
-          'section_segment_rows', '[]'::jsonb,
-          'section_segment_count', 0,
-          'section_non_segment_amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
-          'has_active_timesheet_snooze', false,
-          'has_active_segment_snoozes', false,
-          'active_segment_snooze_count', 0,
-          'active_segment_dated_snooze_count', 0,
-          'active_segment_indefinite_snooze_count', 0,
-          'whole_timesheet_snooze_action_blocked', false,
-          'whole_timesheet_snooze_action_block_reason', null,
-          'segment_snooze_action_blocked', false,
-          'segment_snooze_action_block_reason', null,
-          'presentation_reason', 'CASE_RESOLUTION_REQUIRED',
-          'presentation_advisory_text', null,
-          'readiness_state', 'BLOCKED_FOR_PAY',
-          'snooze_identity', jsonb_build_object(
-            'identity_type', 'TIMESHEET',
-            'timesheet_id', nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''),
-            'booking_id', null,
-            'segment_id', null,
-            'segment_stable_key', null,
-            'source_ref', null
-          ),
-          'snooze_state', jsonb_build_object('state', 'NONE')
-        );
+          'segment_id', null,
+          'segment_stable_key', null,
+          'source_ref', null
+        ),
+        'snooze_state', jsonb_build_object('state', 'NONE')
+      );
+    end if;
 
-        if jsonb_typeof(v_case_state->'taxable_manual_debt_resolution') = 'object' then
-          v_new_line := v_new_line || jsonb_build_object('taxable_manual_debt_resolution', v_case_state->'taxable_manual_debt_resolution');
-        end if;
-
-        v_updated_lines := v_updated_lines || jsonb_build_array(v_new_line);
-      end if;
+    if v_template_base_line is null then
       continue;
     end if;
 
@@ -3725,6 +3687,149 @@ begin
       end if;
 
       v_updated_lines := v_updated_lines || jsonb_build_array(v_new_line);
+    elsif v_case_state_is_timesheet_scope = true and v_case_state_needs_resolution = true and round(v_case_blocked_amount_ex_vat, 2) <> 0 then
+      v_line_existing_line_id := nullif(btrim(coalesce(v_case_state_timesheet_id, '')), '');
+      if v_line_existing_line_id is not null then
+        v_line_existing_line_id := v_line_existing_line_id || ':03:case';
+      else
+        v_line_existing_line_id := btrim(coalesce(v_template_base_line->>'line_id', v_case_state_case_key));
+        if v_line_existing_line_id = '' then
+          v_line_existing_line_id := 'case_resolution_required';
+        end if;
+        if right(v_line_existing_line_id, 8) <> ':03:case' then
+          v_line_existing_line_id := v_line_existing_line_id || ':03:case';
+        end if;
+      end if;
+
+      v_line_blocked_reason_codes := case
+        when jsonb_typeof(v_case_state->'blocked_reason_codes') = 'array' then coalesce(v_case_state->'blocked_reason_codes', '[]'::jsonb)
+        when jsonb_typeof(v_case_state #> '{case_resolution_summary,blocked_reason_codes}') = 'array' then coalesce(v_case_state #> '{case_resolution_summary,blocked_reason_codes}', '[]'::jsonb)
+        when jsonb_typeof(v_template_base_line->'blocked_reason_codes') = 'array' then coalesce(v_template_base_line->'blocked_reason_codes', '[]'::jsonb)
+        else '[]'::jsonb
+      end;
+      if not exists (
+        select 1
+        from jsonb_array_elements_text(v_line_blocked_reason_codes) as blocker(value)
+        where upper(btrim(blocker.value)) = 'RESOLUTION_REQUIRED'
+      ) then
+        v_line_blocked_reason_codes := v_line_blocked_reason_codes || jsonb_build_array('RESOLUTION_REQUIRED');
+      end if;
+
+      v_new_line := (v_template_base_line
+        - 'preview_row_id'
+        - 'line_id'
+        - 'presentation_line_id'
+        - 'presentation_section'
+        - 'presentation_reason'
+        - 'readiness_state'
+        - 'draftable'
+        - 'is_ready_for_draft'
+        - 'is_do_not_pay'
+        - 'is_excluded_from_allocation'
+        - 'blocked_reason_codes'
+        - 'amount_ex_vat'
+        - 'amount_display'
+        - 'segment_rows'
+        - 'segment_count'
+        - 'section_amount_ex_vat'
+        - 'section_amount_display'
+        - 'section_segment_rows'
+        - 'section_segment_count'
+        - 'section_non_segment_amount_ex_vat'
+        - 'presentation_advisory_text'
+        - 'case_resolution_summary'
+        - 'case_components'
+        - 'taxable_manual_debt_resolution')
+        || jsonb_build_object(
+          'preview_row_id', v_line_existing_line_id,
+          'line_id', v_line_existing_line_id,
+          'presentation_line_id', v_line_existing_line_id,
+          'presentation_parent_line_id', coalesce(nullif(v_case_state_timesheet_id, ''), v_line_existing_line_id),
+          'real_business_timesheet_id', nullif(v_case_state_timesheet_id, ''),
+          'amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
+          'amount_display', round(v_case_blocked_amount_ex_vat, 2),
+          'blocked_reason_codes', v_line_blocked_reason_codes,
+          'is_excluded_from_allocation', false,
+          'is_ready_for_draft', false,
+          'draftable', false
+        )
+        || jsonb_build_object(
+          'segment_rows', '[]'::jsonb,
+          'segment_count', 0,
+          'presentation_section', 'CASES_RESOLUTIONS',
+          'presentation_role', 'PARENT',
+          'presentation_reason', 'CASE_RESOLUTION_REQUIRED',
+          'presentation_advisory_text', 'Resolve this case before draft',
+          'readiness_state', 'CASES_RESOLUTIONS'
+        )
+        || jsonb_build_object(
+          'section_amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
+          'section_amount_display', round(v_case_blocked_amount_ex_vat, 2),
+          'section_segment_rows', '[]'::jsonb,
+          'section_segment_count', 0,
+          'section_non_segment_amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
+          'case_resolution_summary', coalesce(v_case_state->'case_resolution_summary', '{}'::jsonb),
+          'case_components', coalesce(v_case_state->'components', '[]'::jsonb)
+        );
+
+      if jsonb_typeof(v_case_state->'taxable_manual_debt_resolution') = 'object' then
+        v_new_line := v_new_line || jsonb_build_object('taxable_manual_debt_resolution', v_case_state->'taxable_manual_debt_resolution');
+      end if;
+
+      v_updated_lines := v_updated_lines || jsonb_build_array(v_new_line);
+    elsif v_case_state_is_timesheet_scope = false and v_case_state_needs_resolution = true and round(v_case_blocked_amount_ex_vat, 2) <> 0 then
+      v_line_existing_line_id := btrim(coalesce(v_template_blocked_line->>'line_id', v_template_base_line->>'line_id', v_case_state_case_key));
+      if v_line_existing_line_id = '' then
+        v_line_existing_line_id := v_case_state_case_key;
+      end if;
+
+      v_line_blocked_reason_codes := case
+        when jsonb_typeof(v_case_state->'blocked_reason_codes') = 'array' then coalesce(v_case_state->'blocked_reason_codes', '[]'::jsonb)
+        when jsonb_typeof(v_template_blocked_line->'blocked_reason_codes') = 'array' then coalesce(v_template_blocked_line->'blocked_reason_codes', '[]'::jsonb)
+        when jsonb_typeof(v_template_base_line->'blocked_reason_codes') = 'array' then coalesce(v_template_base_line->'blocked_reason_codes', '[]'::jsonb)
+        else '[]'::jsonb
+      end;
+
+      v_new_line := ((coalesce(v_template_blocked_line, v_template_base_line))
+        - 'preview_row_id'
+        - 'line_id'
+        - 'presentation_line_id'
+        - 'presentation_section'
+        - 'presentation_reason'
+        - 'readiness_state'
+        - 'draftable'
+        - 'is_ready_for_draft'
+        - 'is_do_not_pay'
+        - 'is_excluded_from_allocation'
+        - 'blocked_reason_codes'
+        - 'amount_ex_vat'
+        - 'amount_display'
+        - 'case_resolution_summary'
+        - 'case_components'
+        - 'taxable_manual_debt_resolution')
+        || jsonb_build_object(
+          'preview_row_id', coalesce(nullif(btrim(coalesce((coalesce(v_template_blocked_line, v_template_base_line))->>'preview_row_id', '')), ''), v_line_existing_line_id),
+          'line_id', v_line_existing_line_id,
+          'presentation_line_id', coalesce(nullif(btrim(coalesce((coalesce(v_template_blocked_line, v_template_base_line))->>'presentation_line_id', '')), ''), v_line_existing_line_id),
+          'presentation_section', 'BLOCKED_FOR_PAY',
+          'presentation_reason', 'CASE_BLOCKED',
+          'readiness_state', 'BLOCKED_FOR_PAY',
+          'draftable', false,
+          'is_ready_for_draft', false,
+          'is_do_not_pay', false,
+          'is_excluded_from_allocation', false,
+          'blocked_reason_codes', v_line_blocked_reason_codes,
+          'amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
+          'amount_display', round(v_case_blocked_amount_ex_vat, 2),
+          'case_resolution_summary', coalesce(v_case_state->'case_resolution_summary', '{}'::jsonb),
+          'case_components', coalesce(v_case_state->'components', '[]'::jsonb)
+        );
+
+      if jsonb_typeof(v_case_state->'taxable_manual_debt_resolution') = 'object' then
+        v_new_line := v_new_line || jsonb_build_object('taxable_manual_debt_resolution', v_case_state->'taxable_manual_debt_resolution');
+      end if;
+
+      v_updated_lines := v_updated_lines || jsonb_build_array(v_new_line);
     else
       if round(v_case_ready_amount_ex_vat, 2) <> 0 then
         v_line_existing_line_id := btrim(coalesce(v_template_ready_line->>'line_id', v_case_state_case_key));
@@ -3785,15 +3890,9 @@ begin
 
         v_line_blocked_reason_codes := case
           when jsonb_typeof(v_template_blocked_line->'blocked_reason_codes') = 'array' then coalesce(v_template_blocked_line->'blocked_reason_codes', '[]'::jsonb)
+          when jsonb_typeof(v_case_state->'blocked_reason_codes') = 'array' then coalesce(v_case_state->'blocked_reason_codes', '[]'::jsonb)
           else '[]'::jsonb
         end;
-        if not exists (
-          select 1
-          from jsonb_array_elements_text(v_line_blocked_reason_codes) as blocker(value)
-          where upper(btrim(blocker.value)) = 'RESOLUTION_REQUIRED'
-        ) then
-          v_line_blocked_reason_codes := v_line_blocked_reason_codes || jsonb_build_array('RESOLUTION_REQUIRED');
-        end if;
 
         v_new_line := (v_template_blocked_line
           - 'preview_row_id'
@@ -3839,6 +3938,32 @@ begin
     end if;
   end loop;
 
+  for v_line in
+    select baseline_line.value
+    from jsonb_array_elements(v_lines) as baseline_line(value)
+    where jsonb_typeof(baseline_line.value) = 'object'
+  loop
+    v_line_case_key := btrim(coalesce(v_line->>'case_key', ''));
+
+    if v_line_case_key <> '' then
+      if not exists (
+        select 1
+        from jsonb_array_elements(coalesce(v_updated_lines, '[]'::jsonb)) as rebuilt_line(value)
+        where jsonb_typeof(rebuilt_line.value) = 'object'
+          and btrim(coalesce(rebuilt_line.value->>'case_key', '')) = v_line_case_key
+      ) then
+        v_updated_lines := coalesce(v_updated_lines, '[]'::jsonb) || jsonb_build_array(v_line);
+      end if;
+    elsif not exists (
+      select 1
+      from jsonb_array_elements(coalesce(v_updated_lines, '[]'::jsonb)) as rebuilt_line(value)
+      where jsonb_typeof(rebuilt_line.value) = 'object'
+        and btrim(coalesce(rebuilt_line.value->>'line_id', '')) = btrim(coalesce(v_line->>'line_id', ''))
+    ) then
+      v_updated_lines := coalesce(v_updated_lines, '[]'::jsonb) || jsonb_build_array(v_line);
+    end if;
+  end loop;
+
   if jsonb_array_length(v_itemisation) > 0 then
     for v_item in
       select elem.value
@@ -3848,20 +3973,109 @@ begin
       v_line_case_key := btrim(coalesce(v_item->>'case_key', ''));
       if v_line_case_key <> '' and jsonb_typeof(v_case_state_map->v_line_case_key) = 'object' then
         v_case_state_from_map := v_case_state_map->v_line_case_key;
-        v_item := (v_item
-          - 'case_resolution_summary'
-          - 'components'
-          - 'taxable_manual_debt_resolution')
-          || jsonb_build_object(
-            'case_resolution_summary', coalesce(v_case_state_from_map->'case_resolution_summary', '{}'::jsonb),
-            'components', coalesce(v_case_state_from_map->'components', '[]'::jsonb)
-          );
+        v_selected_case_line := null::jsonb;
 
-        if jsonb_typeof(v_case_state_from_map->'taxable_manual_debt_resolution') = 'object' then
-          v_item := v_item || jsonb_build_object('taxable_manual_debt_resolution', v_case_state_from_map->'taxable_manual_debt_resolution');
+        select line_choice.value
+        into v_selected_case_line
+        from (
+          select
+            line_elem.value,
+            case upper(btrim(coalesce(line_elem.value->>'presentation_section', '')))
+              when 'CASES_RESOLUTIONS' then 0
+              when 'READY_TO_PAY' then 1
+              when 'BLOCKED_FOR_PAY' then 2
+              when 'DO_NOT_PAY' then 3
+              else 9
+            end as sort_ord
+          from jsonb_array_elements(coalesce(v_updated_lines, '[]'::jsonb)) as line_elem(value)
+          where jsonb_typeof(line_elem.value) = 'object'
+            and btrim(coalesce(line_elem.value->>'case_key', '')) = v_line_case_key
+        ) line_choice
+        order by line_choice.sort_ord, coalesce(line_choice.value->>'line_id', '')
+        limit 1;
+
+        if v_selected_case_line is not null then
+          v_line_presentation_section := upper(btrim(coalesce(v_selected_case_line->>'presentation_section', '')));
+          v_line_amount_ex_vat := case when coalesce(v_selected_case_line->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then round((v_selected_case_line->>'amount_ex_vat')::numeric, 2) else 0::numeric end;
+
+          v_item := (v_item
+            - 'preview_row_id'
+            - 'line_id'
+            - 'timesheet_id'
+            - 'week_ending_date'
+            - 'client_id'
+            - 'client_name'
+            - 'payment_amount_ex_vat'
+            - 'payment_amount_inc_vat'
+            - 'payment_amount'
+            - 'source_pay_method'
+            - 'candidate_pay_method'
+            - 'segment_deltas'
+            - 'presentation_section'
+            - 'presentation_role'
+            - 'total_segment_count'
+            - 'ready_segment_count'
+            - 'blocked_visible_segment_count'
+            - 'hidden_indefinite_segment_count'
+            - 'is_partially_ready'
+            - 'is_partially_blocked'
+            - 'case_resolution_summary'
+            - 'components'
+            - 'taxable_manual_debt_resolution'
+            - 'excluded_from_pay'
+            - 'is_do_not_pay')
+            || jsonb_build_object(
+              'preview_row_id', nullif(btrim(coalesce(v_selected_case_line->>'preview_row_id', '')), ''),
+              'line_id', nullif(btrim(coalesce(v_selected_case_line->>'line_id', '')), ''),
+              'timesheet_id', nullif(btrim(coalesce(v_selected_case_line->>'timesheet_id', v_case_state_from_map->>'timesheet_id', '')), ''),
+              'week_ending_date', nullif(btrim(coalesce(v_selected_case_line->>'week_ending_date', v_case_state_from_map->>'week_ending_date', '')), ''),
+              'client_id', nullif(btrim(coalesce(v_selected_case_line->>'client_id', v_case_state_from_map->>'client_id', '')), ''),
+              'client_name', nullif(btrim(coalesce(v_selected_case_line->>'client_name', v_case_state_from_map->>'client_name', '')), ''),
+              'payment_amount_ex_vat', round(v_line_amount_ex_vat, 2),
+              'payment_amount_inc_vat', case when coalesce(v_selected_case_line->>'amount_display', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then round((v_selected_case_line->>'amount_display')::numeric, 2) else round(v_line_amount_ex_vat, 2) end,
+              'payment_amount', case when coalesce(v_selected_case_line->>'amount_display', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then round((v_selected_case_line->>'amount_display')::numeric, 2) else round(v_line_amount_ex_vat, 2) end,
+              'source_pay_method', nullif(btrim(coalesce(v_case_state_from_map->>'source_pay_method', v_selected_case_line->>'source_pay_method', '')), ''),
+              'candidate_pay_method', nullif(btrim(coalesce(v_case_state_from_map->>'candidate_pay_method', v_selected_case_line->>'pay_channel', '')), ''),
+              'segment_deltas', case
+                when jsonb_typeof(v_selected_case_line->'section_segment_rows') = 'array' then coalesce(v_selected_case_line->'section_segment_rows', '[]'::jsonb)
+                when jsonb_typeof(v_selected_case_line->'segment_rows') = 'array' then coalesce(v_selected_case_line->'segment_rows', '[]'::jsonb)
+                else '[]'::jsonb
+              end,
+              'case_resolution_summary', coalesce(v_case_state_from_map->'case_resolution_summary', '{}'::jsonb),
+              'components', coalesce(v_case_state_from_map->'components', '[]'::jsonb)
+            )
+            || jsonb_build_object(
+              'presentation_section', coalesce(v_selected_case_line->>'presentation_section', v_item->>'presentation_section'),
+              'presentation_role', coalesce(v_selected_case_line->>'presentation_role', 'PARENT'),
+              'total_segment_count', case when coalesce(v_selected_case_line->>'total_segment_count', '') ~ '^[0-9]+$' then (v_selected_case_line->>'total_segment_count')::int else 0 end,
+              'ready_segment_count', case when coalesce(v_selected_case_line->>'ready_segment_count', '') ~ '^[0-9]+$' then (v_selected_case_line->>'ready_segment_count')::int else 0 end,
+              'blocked_visible_segment_count', case when coalesce(v_selected_case_line->>'blocked_visible_segment_count', '') ~ '^[0-9]+$' then (v_selected_case_line->>'blocked_visible_segment_count')::int else 0 end,
+              'hidden_indefinite_segment_count', case when coalesce(v_selected_case_line->>'hidden_indefinite_segment_count', '') ~ '^[0-9]+$' then (v_selected_case_line->>'hidden_indefinite_segment_count')::int else 0 end,
+              'is_partially_ready', coalesce(nullif(v_selected_case_line->>'is_partially_ready', '')::boolean, false),
+              'is_partially_blocked', coalesce(nullif(v_selected_case_line->>'is_partially_blocked', '')::boolean, false),
+              'excluded_from_pay', (v_line_presentation_section = 'DO_NOT_PAY'),
+              'is_do_not_pay', (v_line_presentation_section = 'DO_NOT_PAY')
+            );
+
+          if jsonb_typeof(v_case_state_from_map->'taxable_manual_debt_resolution') = 'object' then
+            v_item := v_item || jsonb_build_object('taxable_manual_debt_resolution', v_case_state_from_map->'taxable_manual_debt_resolution');
+          end if;
+        else
+          v_item := (v_item
+            - 'case_resolution_summary'
+            - 'components'
+            - 'taxable_manual_debt_resolution')
+            || jsonb_build_object(
+              'case_resolution_summary', coalesce(v_case_state_from_map->'case_resolution_summary', '{}'::jsonb),
+              'components', coalesce(v_case_state_from_map->'components', '[]'::jsonb)
+            );
+
+          if jsonb_typeof(v_case_state_from_map->'taxable_manual_debt_resolution') = 'object' then
+            v_item := v_item || jsonb_build_object('taxable_manual_debt_resolution', v_case_state_from_map->'taxable_manual_debt_resolution');
+          end if;
         end if;
 
-        if upper(btrim(coalesce(v_case_state_from_map->>'case_scope', ''))) = 'TIMESHEET' then
+        if upper(btrim(coalesce(v_case_state_from_map->>'case_scope', ''))) in ('TIMESHEET', 'TIMESHEET_PAYMENT') then
           v_case_state_timesheet_id := btrim(coalesce(v_case_state_from_map->>'timesheet_id', ''));
           if v_case_state_timesheet_id <> '' and exists (
             select 1
@@ -3878,6 +4092,99 @@ begin
     v_updated_itemisation := v_itemisation;
   end if;
 
+  for v_case_state in
+    select elem.value
+    from jsonb_array_elements(v_updated_case_states) as elem(value)
+    where jsonb_typeof(elem.value) = 'object'
+      and upper(btrim(coalesce(elem.value->>'case_scope', ''))) in ('TIMESHEET', 'TIMESHEET_PAYMENT')
+  loop
+    v_case_state_case_key := btrim(coalesce(v_case_state->>'case_key', ''));
+    if v_case_state_case_key = '' then
+      continue;
+    end if;
+
+    select exists (
+      select 1
+      from jsonb_array_elements(coalesce(v_updated_itemisation, '[]'::jsonb)) as item_elem(value)
+      where jsonb_typeof(item_elem.value) = 'object'
+        and btrim(coalesce(item_elem.value->>'case_key', '')) = v_case_state_case_key
+    ) into v_itemisation_match_found;
+
+    if v_itemisation_match_found then
+      continue;
+    end if;
+
+    select line_choice.value
+    into v_selected_case_line
+    from (
+      select
+        line_elem.value,
+        case upper(btrim(coalesce(line_elem.value->>'presentation_section', '')))
+          when 'CASES_RESOLUTIONS' then 0
+          when 'READY_TO_PAY' then 1
+          when 'BLOCKED_FOR_PAY' then 2
+          when 'DO_NOT_PAY' then 3
+          else 9
+        end as sort_ord
+      from jsonb_array_elements(coalesce(v_updated_lines, '[]'::jsonb)) as line_elem(value)
+      where jsonb_typeof(line_elem.value) = 'object'
+        and btrim(coalesce(line_elem.value->>'case_key', '')) = v_case_state_case_key
+    ) line_choice
+    order by line_choice.sort_ord, coalesce(line_choice.value->>'line_id', '')
+    limit 1;
+
+    if v_selected_case_line is null then
+      continue;
+    end if;
+
+    v_line_amount_ex_vat := case when coalesce(v_selected_case_line->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then round((v_selected_case_line->>'amount_ex_vat')::numeric, 2) else 0::numeric end;
+
+    v_itemisation_append_json := jsonb_build_object(
+      'preview_row_id', nullif(btrim(coalesce(v_selected_case_line->>'preview_row_id', '')), ''),
+      'line_id', nullif(btrim(coalesce(v_selected_case_line->>'line_id', '')), ''),
+      'timesheet_id', nullif(btrim(coalesce(v_selected_case_line->>'timesheet_id', v_case_state->>'timesheet_id', '')), ''),
+      'week_ending_date', nullif(btrim(coalesce(v_selected_case_line->>'week_ending_date', v_case_state->>'week_ending_date', '')), ''),
+      'client_id', nullif(btrim(coalesce(v_selected_case_line->>'client_id', v_case_state->>'client_id', '')), ''),
+      'client_name', nullif(btrim(coalesce(v_selected_case_line->>'client_name', v_case_state->>'client_name', '')), ''),
+      'payment_amount_ex_vat', round(v_line_amount_ex_vat, 2),
+      'payment_amount_inc_vat', case when coalesce(v_selected_case_line->>'amount_display', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then round((v_selected_case_line->>'amount_display')::numeric, 2) else round(v_line_amount_ex_vat, 2) end,
+      'payment_amount', case when coalesce(v_selected_case_line->>'amount_display', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then round((v_selected_case_line->>'amount_display')::numeric, 2) else round(v_line_amount_ex_vat, 2) end,
+      'source_pay_method', nullif(btrim(coalesce(v_case_state->>'source_pay_method', v_selected_case_line->>'source_pay_method', '')), ''),
+      'candidate_pay_method', nullif(btrim(coalesce(v_case_state->>'candidate_pay_method', v_selected_case_line->>'pay_channel', '')), ''),
+      'segment_deltas', case
+        when jsonb_typeof(v_selected_case_line->'section_segment_rows') = 'array' then coalesce(v_selected_case_line->'section_segment_rows', '[]'::jsonb)
+        when jsonb_typeof(v_selected_case_line->'segment_rows') = 'array' then coalesce(v_selected_case_line->'segment_rows', '[]'::jsonb)
+        else '[]'::jsonb
+      end,
+      'adjustment_deltas', '[]'::jsonb,
+      'delta_additional_pay_ex_vat', 0,
+      'additional_unit_deltas', '[]'::jsonb,
+      'reservation_overrun_detected', false,
+      'delta_expenses_pay_ex_vat', 0,
+      'delta_travel_pay_ex_vat', 0,
+      'delta_accommodation_pay_ex_vat', 0,
+      'delta_other_pay_ex_vat', 0,
+      'delta_mileage_pay_ex_vat', 0,
+      'case_key', v_case_state_case_key,
+      'case_resolution_summary', coalesce(v_case_state->'case_resolution_summary', '{}'::jsonb),
+      'components', coalesce(v_case_state->'components', '[]'::jsonb),
+      'presentation_section', coalesce(v_selected_case_line->>'presentation_section', 'CASES_RESOLUTIONS'),
+      'presentation_role', coalesce(v_selected_case_line->>'presentation_role', 'PARENT'),
+      'total_segment_count', case when coalesce(v_selected_case_line->>'total_segment_count', '') ~ '^[0-9]+$' then (v_selected_case_line->>'total_segment_count')::int else 0 end,
+      'ready_segment_count', case when coalesce(v_selected_case_line->>'ready_segment_count', '') ~ '^[0-9]+$' then (v_selected_case_line->>'ready_segment_count')::int else 0 end,
+      'blocked_visible_segment_count', case when coalesce(v_selected_case_line->>'blocked_visible_segment_count', '') ~ '^[0-9]+$' then (v_selected_case_line->>'blocked_visible_segment_count')::int else 0 end,
+      'hidden_indefinite_segment_count', case when coalesce(v_selected_case_line->>'hidden_indefinite_segment_count', '') ~ '^[0-9]+$' then (v_selected_case_line->>'hidden_indefinite_segment_count')::int else 0 end,
+      'is_partially_ready', coalesce(nullif(v_selected_case_line->>'is_partially_ready', '')::boolean, false),
+      'is_partially_blocked', coalesce(nullif(v_selected_case_line->>'is_partially_blocked', '')::boolean, false)
+    );
+
+    if jsonb_typeof(v_case_state->'taxable_manual_debt_resolution') = 'object' then
+      v_itemisation_append_json := v_itemisation_append_json || jsonb_build_object('taxable_manual_debt_resolution', v_case_state->'taxable_manual_debt_resolution');
+    end if;
+
+    v_updated_itemisation := coalesce(v_updated_itemisation, '[]'::jsonb) || jsonb_build_array(v_itemisation_append_json);
+  end loop;
+
   select coalesce(jsonb_agg(elem.value order by coalesce(elem.value->>'candidate_id', ''), coalesce(elem.value->>'display_name', ''), coalesce(elem.value->>'line_type', ''), coalesce(elem.value->>'line_id', '')), '[]'::jsonb)
   into v_updated_lines
   from jsonb_array_elements(v_updated_lines) as elem(value)
@@ -3886,6 +4193,18 @@ begin
       (coalesce(elem.value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' and round((elem.value->>'amount_ex_vat')::numeric, 2) <> 0)
       or upper(btrim(coalesce(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
     );
+
+
+  if jsonb_array_length(coalesce(v_updated_lines, '[]'::jsonb)) = 0 and jsonb_array_length(coalesce(v_lines, '[]'::jsonb)) > 0 then
+    select coalesce(jsonb_agg(baseline_line.value order by coalesce(baseline_line.value->>'candidate_id', ''), coalesce(baseline_line.value->>'display_name', ''), coalesce(baseline_line.value->>'line_type', ''), coalesce(baseline_line.value->>'line_id', '')), '[]'::jsonb)
+    into v_updated_lines
+    from jsonb_array_elements(v_lines) as baseline_line(value)
+    where jsonb_typeof(baseline_line.value) = 'object'
+      and (
+        (coalesce(baseline_line.value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' and round((baseline_line.value->>'amount_ex_vat')::numeric, 2) <> 0)
+        or upper(btrim(coalesce(baseline_line.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
+      );
+  end if;
 
   select coalesce(jsonb_agg(elem.value order by coalesce(elem.value->>'candidate_id', ''), coalesce(elem.value->>'timesheet_id', ''), coalesce(elem.value->>'line_id', '')), '[]'::jsonb)
   into v_blocked_items
@@ -3934,8 +4253,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
