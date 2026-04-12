@@ -11114,6 +11114,7 @@ end;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_payee_baseline(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -11468,9 +11469,9 @@ begin
         select
           cr.candidate_id,
           public._pay_candidate_arranged_pay_wtd_before(
-            v_candidate_id => cr.candidate_id,
+            p_candidate_id => cr.candidate_id,
             p_week_start => v_week_start,
-            v_pay_date => v_pay_date,
+            p_pay_date => v_pay_date,
             p_before_created_at_utc => null::timestamptz,
             p_before_pay_batch_id => null::uuid
           )::numeric(12,2) as paid_wtd_before
@@ -11950,6 +11951,7 @@ begin
   );
 end;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_summary_fragment(
