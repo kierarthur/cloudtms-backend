@@ -1402,8 +1402,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_preview_build_candidate_rollup(
   p_context_json jsonb,
   p_candidate_effective_json jsonb
@@ -1971,6 +1969,7 @@ BEGIN
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY')
       OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_do_not_pay', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'CASES_RESOLUTIONS'
       OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_snoozed', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
     );
@@ -2007,6 +2006,7 @@ BEGIN
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY')
       OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_do_not_pay', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'CASES_RESOLUTIONS'
       OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_snoozed', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
     );
@@ -2123,15 +2123,7 @@ $function$;
 
 
 
-
-
-
-
-
-
-
-CREATE OR REPLACE FUNCTION public.pay_preview_assemble_payload(
-  p_context_json jsonb,
+CREATE OR REPLACE FUNCTION public.pay_preview_assemble_payload(p_context_json jsonb,
   p_candidate_rollups_json jsonb
 )
 RETURNS jsonb
@@ -2503,6 +2495,7 @@ BEGIN
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY')
       OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_do_not_pay', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'CASES_RESOLUTIONS'
       OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_snoozed', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
     );
@@ -2542,6 +2535,7 @@ BEGIN
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY')
       OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_do_not_pay', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'CASES_RESOLUTIONS'
       OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_snoozed', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
       OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
     );
@@ -2713,6 +2707,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
