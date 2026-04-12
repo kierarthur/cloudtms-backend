@@ -2719,6 +2719,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_apply_candidate_overlay(
   p_candidate_baseline_json jsonb,
   p_case_resolutions_json jsonb DEFAULT NULL::jsonb,
@@ -3671,7 +3672,7 @@ begin
         v_updated_lines := v_updated_lines || jsonb_build_array(v_new_line);
       end if;
 
-      if round(v_case_blocked_amount_ex_vat, 2) <> 0 then
+      if round(v_case_blocked_amount_ex_vat, 2) <> 0 and v_case_state_needs_resolution = false then
         v_line_existing_line_id := btrim(coalesce(v_template_blocked_line->>'line_id', v_case_state_case_key));
         if v_line_existing_line_id = '' then
           v_line_existing_line_id := v_case_state_case_key || ':blocked';
@@ -3831,6 +3832,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 
