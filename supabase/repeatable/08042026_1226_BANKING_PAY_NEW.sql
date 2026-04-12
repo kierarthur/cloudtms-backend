@@ -4055,6 +4055,9 @@ begin
 end;
 $function$;
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -4785,8 +4788,24 @@ begin
   create temporary table canonical_timesheet_presentation_state on commit drop as
         select
           ctps.*,
+          coalesce(nullif(ctps.case_resolution_summary_json->>'case_needs_resolution','')::boolean, false) as case_needs_resolution,
+          exists (
+            select 1
+            from jsonb_array_elements(coalesce(ctps.case_components_json, '[]'::jsonb)) as case_component(value)
+            where coalesce(nullif(case_component.value->>'requires_resolution','')::boolean, false) = true
+              and coalesce(nullif(case_component.value->>'is_actionable_resolution_row','')::boolean, false) = true
+          ) as has_actionable_resolution_component,
           round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) as ready_section_amount_ex_vat,
           round(coalesce(ctps.blocked_visible_segment_amount_ex_vat, 0), 2) as blocked_section_amount_ex_vat,
+          round(
+            coalesce(
+              nullif(ctps.case_resolution_summary_json->>'blocked_case_amount_ex_vat', '')::numeric,
+              nullif(ctps.case_resolution_summary_json->>'unresolved_taxable_amount_ex_vat', '')::numeric,
+              nullif(ctps.case_resolution_summary_json->>'safe_amount_ex_vat', '')::numeric,
+              0::numeric
+            ),
+            2
+          ) as case_resolution_section_amount_ex_vat,
           round(
             case
               when ctps.source_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2), v_vat_rate_pct, ctps.umb_vat_chargeable)->>'inc')::numeric
@@ -4801,6 +4820,33 @@ begin
             end,
             2
           ) as blocked_section_amount_display,
+          round(
+            case
+              when ctps.source_pay_method = 'UMBRELLA' then (public._pay_umbrella_vat_calc(
+                round(
+                  coalesce(
+                    nullif(ctps.case_resolution_summary_json->>'blocked_case_amount_ex_vat', '')::numeric,
+                    nullif(ctps.case_resolution_summary_json->>'unresolved_taxable_amount_ex_vat', '')::numeric,
+                    nullif(ctps.case_resolution_summary_json->>'safe_amount_ex_vat', '')::numeric,
+                    0::numeric
+                  ),
+                  2
+                ),
+                v_vat_rate_pct,
+                ctps.umb_vat_chargeable
+              )->>'inc')::numeric
+              else round(
+                coalesce(
+                  nullif(ctps.case_resolution_summary_json->>'blocked_case_amount_ex_vat', '')::numeric,
+                  nullif(ctps.case_resolution_summary_json->>'unresolved_taxable_amount_ex_vat', '')::numeric,
+                  nullif(ctps.case_resolution_summary_json->>'safe_amount_ex_vat', '')::numeric,
+                  0::numeric
+                ),
+                2
+              )
+            end,
+            2
+          ) as case_resolution_section_amount_display,
           (
             round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
             or coalesce(ctps.ready_segment_count, 0) > 0
@@ -4831,6 +4877,39 @@ begin
           ) as has_blocked_presentation,
           (
             ctps.has_active_timesheet_snooze = false
+            and ctps.case_is_blocked = true
+            and coalesce(nullif(ctps.case_resolution_summary_json->>'case_needs_resolution','')::boolean, false) = true
+            and (
+              round(
+                coalesce(
+                  nullif(ctps.case_resolution_summary_json->>'blocked_case_amount_ex_vat', '')::numeric,
+                  nullif(ctps.case_resolution_summary_json->>'unresolved_taxable_amount_ex_vat', '')::numeric,
+                  nullif(ctps.case_resolution_summary_json->>'safe_amount_ex_vat', '')::numeric,
+                  0::numeric
+                ),
+                2
+              ) <> 0
+              or exists (
+                select 1
+                from jsonb_array_elements(coalesce(ctps.case_components_json, '[]'::jsonb)) as actionable_component(value)
+                where coalesce(nullif(actionable_component.value->>'requires_resolution','')::boolean, false) = true
+                  and coalesce(nullif(actionable_component.value->>'is_actionable_resolution_row','')::boolean, false) = true
+              )
+            )
+            and coalesce(ctps.blocked_visible_segment_count, 0) = 0
+            and not (
+              ctps.case_is_blocked = false
+              and ctps.has_active_timesheet_snooze = false
+              and ctps.is_ready_for_draft = false
+              and coalesce(nullif(ctps.case_resolution_summary_json->>'case_needs_resolution','')::boolean, false) = false
+              and (
+                round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
+                or coalesce(ctps.ready_segment_count, 0) > 0
+              )
+            )
+          ) as has_case_resolution_presentation,
+          (
+            ctps.has_active_timesheet_snooze = false
             and ctps.case_is_blocked = false
             and (
               round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
@@ -4848,7 +4927,7 @@ begin
             and coalesce(ctps.blocked_visible_segment_count, 0) > 0
           ) as is_partially_blocked
         from canonical_timesheet_presentation_seed ctps
-  
+
   ;
 
   create temporary table canonical_timesheet_presentation_rows on commit drop as
@@ -4965,6 +5044,110 @@ begin
           and ctpp.case_is_blocked = false
           and ctpp.has_ready_presentation = true
           and ctpp.is_ready_for_draft = true
+        union all
+
+        select
+          ctpp.candidate_id,
+          (
+            jsonb_build_object(
+              'line_id', (ctpp.timesheet_id::text || ':03:case'),
+              'candidate_id', ctpp.candidate_id::text,
+              'tms_ref', ctpp.cand_tms_ref,
+              'display_name', ctpp.cand_display_name,
+              'line_type', 'TIMESHEET_PAYMENT',
+              'finance_case_id', null,
+              'case_key', ('timesheet:' || ctpp.timesheet_id::text),
+              'case_type', 'TIMESHEET_PAYMENT',
+              'case_is_blocked', ctpp.case_is_blocked,
+              'case_resolution_summary', ctpp.case_resolution_summary_json,
+              'case_components', ctpp.case_components_json,
+              'timesheet_id', ctpp.timesheet_id::text,
+              'booking_id', ctpp.booking_id,
+              'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
+              'client_name', ctpp.client_name,
+              'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
+              'role', ctpp.ts_role,
+              'band', ctpp.ts_band,
+              'linked_shift_date', null,
+              'pay_channel', ctpp.candidate_pay_method,
+              'paye_treatment', case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
+              'route_type', 'NORMAL_PAYMENT',
+              'adjustment_comment', null
+            )
+            || jsonb_build_object(
+              'amount_ex_vat', ctpp.case_resolution_section_amount_ex_vat,
+              'amount_display', ctpp.case_resolution_section_amount_display,
+              'is_advanced', (ctpp.override_id is not null),
+              'advanced_override_id', case when ctpp.override_id is null then null else ctpp.override_id::text end,
+              'advanced_reason', ctpp.override_reason,
+              'blocked_reason_codes', case
+                when jsonb_typeof(ctpp.case_resolution_summary_json->'blocked_reason_codes') = 'array'
+                then coalesce(ctpp.case_resolution_summary_json->'blocked_reason_codes', '[]'::jsonb)
+                else '[]'::jsonb
+              end,
+              'is_excluded_from_allocation', false,
+              'is_ready_for_draft', false,
+              'segment_rows', '[]'::jsonb,
+              'segment_count', 0
+            )
+            || jsonb_build_object(
+              'presentation_section', 'CASES_RESOLUTIONS',
+              'presentation_role', 'PARENT',
+              'presentation_line_id', (ctpp.timesheet_id::text || ':03:case'),
+              'presentation_parent_line_id', ctpp.timesheet_id::text,
+              'real_business_timesheet_id', ctpp.timesheet_id::text,
+              'total_segment_count', ctpp.total_segment_count,
+              'ready_segment_count', ctpp.ready_segment_count,
+              'blocked_visible_segment_count', ctpp.blocked_visible_segment_count,
+              'hidden_indefinite_segment_count', ctpp.hidden_indefinite_segment_count,
+              'is_partially_ready', false,
+              'is_partially_blocked', false,
+              'section_amount_ex_vat', ctpp.case_resolution_section_amount_ex_vat,
+              'section_amount_display', ctpp.case_resolution_section_amount_display,
+              'section_segment_rows', '[]'::jsonb,
+              'section_segment_count', 0,
+              'section_non_segment_amount_ex_vat', ctpp.case_resolution_section_amount_ex_vat
+            )
+            || jsonb_build_object(
+              'has_active_timesheet_snooze', ctpp.has_active_timesheet_snooze,
+              'has_active_segment_snoozes', ctpp.has_active_segment_snoozes,
+              'active_segment_snooze_count', ctpp.active_segment_snooze_count,
+              'active_segment_dated_snooze_count', ctpp.active_segment_dated_snooze_count,
+              'active_segment_indefinite_snooze_count', ctpp.active_segment_indefinite_snooze_count,
+              'whole_timesheet_snooze_action_blocked', ctpp.has_active_segment_snoozes,
+              'whole_timesheet_snooze_action_block_reason', case when ctpp.has_active_segment_snoozes then 'ACTIVE_SEGMENT_SNOOZES_EXIST' else null end,
+              'segment_snooze_action_blocked', ctpp.has_active_timesheet_snooze,
+              'segment_snooze_action_block_reason', case when ctpp.has_active_timesheet_snooze then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end,
+              'presentation_reason', 'CASE_RESOLUTION_REQUIRED',
+              'presentation_advisory_text', 'Resolve this case before draft'
+            )
+            || jsonb_build_object(
+              'snooze_identity', jsonb_build_object(
+                'identity_type', 'TIMESHEET',
+                'timesheet_id', ctpp.timesheet_id::text,
+                'booking_id', ctpp.booking_id,
+                'segment_id', null,
+                'segment_stable_key', null,
+                'source_ref', null
+              ),
+              'snooze_state', case
+                when ctpp.snooze_id is null then jsonb_build_object('state', 'NONE')
+                else jsonb_build_object(
+                  'state', 'DATED_SNOOZED',
+                  'snooze_id', ctpp.snooze_id::text,
+                  'snooze_until_date', ctpp.snooze_until_date::text,
+                  'note', ctpp.snooze_note
+                )
+              end
+            )
+          ) as line_json,
+          ctpp.candidate_pay_method as pay_channel,
+          case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
+          ctpp.case_resolution_section_amount_ex_vat as amount_ex_vat,
+          false as is_excluded_from_allocation
+        from canonical_timesheet_presentation_state ctpp
+        where ctpp.has_case_resolution_presentation = true
+
 
         union all
 
@@ -5261,6 +5444,8 @@ begin
             || jsonb_build_object(
               'preview_row_id', coalesce(nullif(btrim(coalesce(ctpr.line_json->>'line_id','')), ''), md5(ctpr.line_json::text)),
               'readiness_state', case
+                when upper(coalesce(ctpr.line_json->>'presentation_section','')) = 'CASES_RESOLUTIONS'
+                then 'CASES_RESOLUTIONS'
                 when upper(coalesce(ctpr.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY'
                   or coalesce(nullif(ctpr.line_json->>'is_ready_for_draft','')::boolean, false) = false
                 then 'BLOCKED_FOR_PAY'
@@ -5278,7 +5463,7 @@ begin
           ctpr.amount_ex_vat,
           ctpr.is_excluded_from_allocation
         from canonical_timesheet_presentation_rows ctpr
-  
+
   ;
 
   create temporary table canonical_preview_lines on commit drop as
@@ -12222,7 +12407,7 @@ begin
   from pg_temp.pay_preview_candidate_context ctx
   limit 1;
 
-  drop table if exists pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
+  drop table if exists pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.candidate_timesheet_itemisation_merged, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
 
   create temporary table summary_json on commit drop as
         select
@@ -12471,6 +12656,101 @@ begin
         from finance_case_lines fcl
         group by fcl.candidate_id
   
+  ;
+
+  create temporary table candidate_timesheet_itemisation_merged on commit drop as
+        select
+          ce.candidate_id,
+          (
+            coalesce(
+              (
+                select
+                  jsonb_agg(
+                    case
+                      when ready_match.ready_item is null then base_items.base_item
+                      else (base_items.base_item || ready_match.ready_item)
+                    end
+                    order by base_items.base_ord
+                  )
+                from (
+                  select
+                    base_entry.base_ord,
+                    base_entry.base_item,
+                    coalesce(
+                      nullif(btrim(coalesce(base_entry.base_item->>'case_key', '')), ''),
+                      case
+                        when nullif(btrim(coalesce(base_entry.base_item->>'timesheet_id', '')), '') is null then null
+                        else ('timesheet:' || nullif(btrim(coalesce(base_entry.base_item->>'timesheet_id', '')), ''))
+                      end
+                    ) as match_key
+                  from jsonb_array_elements(coalesce(ce.timesheets_itemisation, '[]'::jsonb)) with ordinality as base_entry(base_item, base_ord)
+                ) base_items
+                left join lateral (
+                  select
+                    ready_items.ready_item
+                  from (
+                    select
+                      ready_entry.ready_item,
+                      ready_entry.ready_ord,
+                      coalesce(
+                        nullif(btrim(coalesce(ready_entry.ready_item->>'case_key', '')), ''),
+                        case
+                          when nullif(btrim(coalesce(ready_entry.ready_item->>'timesheet_id', '')), '') is null then null
+                          else ('timesheet:' || nullif(btrim(coalesce(ready_entry.ready_item->>'timesheet_id', '')), ''))
+                        end
+                      ) as match_key
+                    from jsonb_array_elements(coalesce(cptr.ready_timesheets_itemisation, '[]'::jsonb)) with ordinality as ready_entry(ready_item, ready_ord)
+                  ) ready_items
+                  where ready_items.match_key is not null
+                    and ready_items.match_key = base_items.match_key
+                  order by ready_items.ready_ord
+                  limit 1
+                ) ready_match on true
+              ),
+              '[]'::jsonb
+            )
+            ||
+            coalesce(
+              (
+                select
+                  jsonb_agg(ready_items.ready_item order by ready_items.ready_ord)
+                from (
+                  select
+                    ready_entry.ready_item,
+                    ready_entry.ready_ord,
+                    coalesce(
+                      nullif(btrim(coalesce(ready_entry.ready_item->>'case_key', '')), ''),
+                      case
+                        when nullif(btrim(coalesce(ready_entry.ready_item->>'timesheet_id', '')), '') is null then null
+                        else ('timesheet:' || nullif(btrim(coalesce(ready_entry.ready_item->>'timesheet_id', '')), ''))
+                      end
+                    ) as match_key
+                  from jsonb_array_elements(coalesce(cptr.ready_timesheets_itemisation, '[]'::jsonb)) with ordinality as ready_entry(ready_item, ready_ord)
+                ) ready_items
+                where not exists (
+                  select 1
+                  from (
+                    select
+                      coalesce(
+                        nullif(btrim(coalesce(base_entry.base_item->>'case_key', '')), ''),
+                        case
+                          when nullif(btrim(coalesce(base_entry.base_item->>'timesheet_id', '')), '') is null then null
+                          else ('timesheet:' || nullif(btrim(coalesce(base_entry.base_item->>'timesheet_id', '')), ''))
+                        end
+                      ) as match_key
+                    from jsonb_array_elements(coalesce(ce.timesheets_itemisation, '[]'::jsonb)) with ordinality as base_entry(base_item, base_ord)
+                  ) base_keys
+                  where base_keys.match_key is not null
+                    and base_keys.match_key = ready_items.match_key
+                )
+              ),
+              '[]'::jsonb
+            )
+          ) as merged_timesheets_itemisation
+        from cand_payee ce
+        left join candidate_preview_timesheet_rollup cptr
+          on cptr.candidate_id = ce.candidate_id
+
   ;
 
   create temporary table paye_summary_breakdown_json on commit drop as
@@ -12736,7 +13016,7 @@ begin
               )
             ),
             'computed_net_bank_amount_non_mismatch', null,
-            'itemisation', (coalesce(cptr.ready_timesheets_itemisation, ce.timesheets_itemisation, '[]'::jsonb) || coalesce(cfi.finance_itemisation, '[]'::jsonb))
+            'itemisation', (coalesce(ctim.merged_timesheets_itemisation, ce.timesheets_itemisation, '[]'::jsonb) || coalesce(cfi.finance_itemisation, '[]'::jsonb))
           )
           order by ce.cand_display_name nulls last, ce.cand_tms_ref nulls last, ce.candidate_id
         )
@@ -12749,6 +13029,8 @@ begin
           on cptr.candidate_id = ce.candidate_id
         left join candidate_finance_itemisation cfi
           on cfi.candidate_id = ce.candidate_id
+        left join candidate_timesheet_itemisation_merged ctim
+          on ctim.candidate_id = ce.candidate_id
         left join candidate_preview_line_rollup cplr
           on cplr.candidate_id = ce.candidate_id
         where ce.cand_pay_method = 'PAYE'
@@ -12879,7 +13161,7 @@ begin
             ),
             'computed_net_bank_amount_non_mismatch',
               (public._pay_umbrella_vat_calc(coalesce(cptr.ready_timesheet_total_ex_vat, ce.non_mismatch_total_ex, 0), v_vat_rate_pct, ce.umb_vat_chargeable)->>'inc')::numeric,
-            'itemisation', (coalesce(cptr.ready_timesheets_itemisation, ce.timesheets_itemisation, '[]'::jsonb) || coalesce(cfi.finance_itemisation, '[]'::jsonb))
+            'itemisation', (coalesce(ctim.merged_timesheets_itemisation, ce.timesheets_itemisation, '[]'::jsonb) || coalesce(cfi.finance_itemisation, '[]'::jsonb))
           )
           order by ce.cand_display_name nulls last, ce.cand_tms_ref nulls last, ce.candidate_id
         )
@@ -12892,6 +13174,8 @@ begin
           on cptr.candidate_id = ce.candidate_id
         left join candidate_finance_itemisation cfi
           on cfi.candidate_id = ce.candidate_id
+        left join candidate_timesheet_itemisation_merged ctim
+          on ctim.candidate_id = ce.candidate_id
         left join candidate_preview_line_rollup cplr
           on cplr.candidate_id = ce.candidate_id
         where ce.cand_pay_method <> 'PAYE'
