@@ -9261,6 +9261,847 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   return [];
 }
 
+async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(id)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const enc = encodeURIComponent;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+  const readUuid = (value) => {
+    const text = trimStr(value);
+    return uuidRe.test(text) ? text : '';
+  };
+  const readNumber = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return NaN;
+    return Number(value);
+  };
+  const normalizeBucketResolution = (bucket, fallback = {}) => {
+    const bucketObj = isPlainObject(bucket) ? bucket : null;
+    if (!bucketObj) return { error: 'Each bucket_resolutions entry must be an object.' };
+
+    const sourceBasisJsonRaw = isPlainObject(bucketObj.source_basis_json)
+      ? cloneJson(bucketObj.source_basis_json)
+      : (isPlainObject(fallback.source_basis_json) ? cloneJson(fallback.source_basis_json) : undefined);
+    const timesheetId = readUuid(
+      bucketObj.timesheet_id ?? bucketObj.timesheetId ??
+      fallback.linked_timesheet_id ?? fallback.linkedTimesheetId ??
+      fallback.timesheet_id ?? fallback.timesheetId
+    );
+    const sourceBasisFingerprint = trimStr(
+      bucketObj.source_basis_fingerprint ?? bucketObj.sourceBasisFingerprint ??
+      fallback.source_basis_fingerprint ?? fallback.sourceBasisFingerprint
+    );
+    const sourceFamilyKey = trimStr(
+      bucketObj.source_family_key ?? bucketObj.sourceFamilyKey ??
+      fallback.source_family_key ?? fallback.sourceFamilyKey
+    );
+    const bucketCode = trimStr(bucketObj.bucket_code ?? bucketObj.bucketCode ?? fallback.bucket_code ?? fallback.bucketCode).toUpperCase();
+    const componentKeyType = trimStr(
+      bucketObj.component_key_type ?? bucketObj.componentKeyType ??
+      fallback.component_key_type ?? fallback.componentKeyType
+    ).toUpperCase();
+    const componentKeyValue = trimStr(
+      bucketObj.component_key_value ?? bucketObj.componentKeyValue ??
+      fallback.component_key_value ?? fallback.componentKeyValue
+    );
+    const resolutionMode = trimStr(
+      bucketObj.resolution_mode ?? bucketObj.resolutionMode ??
+      fallback.resolution_mode ?? fallback.resolutionMode ??
+      fallback.mode
+    ).toUpperCase();
+    const sourceUnits = readNumber(bucketObj.source_units ?? bucketObj.sourceUnits ?? fallback.source_units ?? fallback.sourceUnits);
+    const sourceRate = readNumber(bucketObj.source_rate ?? bucketObj.sourceRate ?? fallback.source_rate ?? fallback.sourceRate);
+    const sourceChargeRate = readNumber(bucketObj.source_charge_rate ?? bucketObj.sourceChargeRate ?? fallback.source_charge_rate ?? fallback.sourceChargeRate);
+    const targetRate = readNumber(bucketObj.target_rate ?? bucketObj.targetRate ?? fallback.target_rate ?? fallback.targetRate);
+
+    if (!sourceFamilyKey) return { error: 'source_family_key is required for BUCKETED resolution.' };
+    if (!componentKeyType) return { error: 'component_key_type is required for BUCKETED resolution.' };
+    if (!componentKeyValue) return { error: 'component_key_value is required for BUCKETED resolution.' };
+    if (!sourceBasisFingerprint && !sourceBasisJsonRaw) return { error: 'source_basis_fingerprint or source_basis_json is required for BUCKETED resolution.' };
+    if ((componentKeyType === 'TS_DAY' || componentKeyType === 'TS_TOTAL') && !bucketCode) {
+      return { error: 'bucket_code is required for BUCKETED worked-time resolution.' };
+    }
+    if (!resolutionMode) return { error: 'resolution_mode is required for BUCKETED resolution.' };
+    if (!['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_REPLACEMENT_RATE'].includes(resolutionMode)) {
+      return { error: 'BUCKETED resolution_mode must be SUGGESTED_EQUIVALENT_BASIS or MANUAL_REPLACEMENT_RATE.' };
+    }
+    if (!Number.isFinite(sourceUnits)) return { error: 'source_units must be a number for BUCKETED resolution.' };
+    if (!Number.isFinite(sourceRate)) return { error: 'source_rate must be a number for BUCKETED resolution.' };
+    if (!Number.isFinite(sourceChargeRate)) return { error: 'source_charge_rate must be a number for BUCKETED resolution.' };
+    if (!Number.isFinite(targetRate)) return { error: 'target_rate must be a number for BUCKETED resolution.' };
+
+    const normalizedBucket = {
+      ...(timesheetId ? { timesheet_id: timesheetId } : {}),
+      ...(sourceBasisJsonRaw ? { source_basis_json: sourceBasisJsonRaw } : {}),
+      ...(sourceBasisFingerprint ? { source_basis_fingerprint: sourceBasisFingerprint } : {}),
+      source_family_key: sourceFamilyKey,
+      ...(bucketCode ? { bucket_code: bucketCode } : {}),
+      component_key_type: componentKeyType,
+      component_key_value: componentKeyValue,
+      source_units: sourceUnits,
+      source_rate: sourceRate,
+      source_charge_rate: sourceChargeRate,
+      resolution_mode: resolutionMode,
+      target_rate: targetRate
+    };
+
+    return { value: normalizedBucket };
+  };
+
+  const candidateId = readUuid(body.candidate_id ?? body.candidateId);
+  const financeCaseId = readUuid(body.finance_case_id ?? body.financeCaseId);
+  const linkedTimesheetId = readUuid(body.linked_timesheet_id ?? body.linkedTimesheetId ?? body.timesheet_id ?? body.timesheetId);
+  const caseKey = trimStr(body.case_key ?? body.caseKey);
+  const resolveAllLinkedTimesheetsRaw = body.resolve_all_linked_timesheets ?? body.resolveAllLinkedTimesheets;
+  const resolutionFamilyRaw = trimStr(body.resolution_family ?? body.resolutionFamily).toUpperCase();
+  const hasBucketResolutions = Array.isArray(body.bucket_resolutions) || Array.isArray(body.bucketResolutions);
+  const resolutionFamily = resolutionFamilyRaw || (hasBucketResolutions ? 'BUCKETED' : 'NON_BUCKET');
+
+  if (!caseKey) {
+    return withCORS(env, req, badRequest('case_key is required'));
+  }
+  if ((body.candidate_id !== undefined || body.candidateId !== undefined) && !candidateId) {
+    return withCORS(env, req, badRequest('candidate_id must be a UUID when supplied'));
+  }
+  if ((body.finance_case_id !== undefined || body.financeCaseId !== undefined) && !financeCaseId) {
+    return withCORS(env, req, badRequest('finance_case_id must be a UUID when supplied'));
+  }
+  if ((body.linked_timesheet_id !== undefined || body.linkedTimesheetId !== undefined || body.timesheet_id !== undefined || body.timesheetId !== undefined) && !linkedTimesheetId) {
+    return withCORS(env, req, badRequest('linked_timesheet_id must be a UUID when supplied'));
+  }
+  if (resolveAllLinkedTimesheetsRaw !== undefined && resolveAllLinkedTimesheetsRaw !== null && typeof resolveAllLinkedTimesheetsRaw !== 'boolean') {
+    return withCORS(env, req, badRequest('resolve_all_linked_timesheets must be a boolean when supplied'));
+  }
+  if (!['BUCKETED', 'NON_BUCKET'].includes(resolutionFamily)) {
+    return withCORS(env, req, badRequest('resolution_family must be BUCKETED or NON_BUCKET'));
+  }
+
+  let resolutionPayloadJson = null;
+
+  if (resolutionFamily === 'BUCKETED') {
+    const rawBucketResolutions = Array.isArray(body.bucket_resolutions)
+      ? body.bucket_resolutions
+      : (Array.isArray(body.bucketResolutions) ? body.bucketResolutions : []);
+
+    let normalizedBucketResolutions = [];
+    if (rawBucketResolutions.length > 0) {
+      for (const bucketResolution of rawBucketResolutions) {
+        const normalized = normalizeBucketResolution(bucketResolution, body);
+        if (normalized.error) {
+          return withCORS(env, req, badRequest(normalized.error));
+        }
+        normalizedBucketResolutions.push(normalized.value);
+      }
+    } else {
+      const normalized = normalizeBucketResolution(body, body);
+      if (normalized.error) {
+        return withCORS(env, req, badRequest(normalized.error));
+      }
+      normalizedBucketResolutions = [normalized.value];
+    }
+
+    if (!normalizedBucketResolutions.length) {
+      return withCORS(env, req, badRequest('bucket_resolutions must be a non-empty array for BUCKETED resolution'));
+    }
+
+    resolutionPayloadJson = {
+      ...(candidateId ? { candidate_id: candidateId } : {}),
+      case_key: caseKey,
+      ...(financeCaseId ? { finance_case_id: financeCaseId } : {}),
+      ...(linkedTimesheetId ? { linked_timesheet_id: linkedTimesheetId, timesheet_id: linkedTimesheetId } : {}),
+      resolution_family: 'BUCKETED',
+      ...(resolveAllLinkedTimesheetsRaw !== undefined && resolveAllLinkedTimesheetsRaw !== null ? { resolve_all_linked_timesheets: !!resolveAllLinkedTimesheetsRaw } : {}),
+      bucket_resolutions: normalizedBucketResolutions
+    };
+  } else {
+    const resolutionMode = trimStr(body.resolution_mode ?? body.resolutionMode ?? body.mode).toUpperCase();
+    const targetAmountExVatValue = readNumber(body.target_amount_ex_vat ?? body.targetAmountExVat ?? body.target_amount ?? body.targetAmount ?? body.amount_ex_vat ?? body.amountExVat ?? body.amount);
+
+    if (!resolutionMode) {
+      return withCORS(env, req, badRequest('resolution_mode is required for NON_BUCKET resolution'));
+    }
+    if (!['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_AMOUNT'].includes(resolutionMode)) {
+      return withCORS(env, req, badRequest('NON_BUCKET resolution_mode must be SUGGESTED_EQUIVALENT_BASIS or MANUAL_AMOUNT'));
+    }
+    if (!Number.isFinite(targetAmountExVatValue)) {
+      return withCORS(env, req, badRequest('target_amount_ex_vat must be a number for NON_BUCKET resolution'));
+    }
+
+    resolutionPayloadJson = {
+      ...(candidateId ? { candidate_id: candidateId } : {}),
+      case_key: caseKey,
+      ...(financeCaseId ? { finance_case_id: financeCaseId } : {}),
+      ...(linkedTimesheetId ? { linked_timesheet_id: linkedTimesheetId, timesheet_id: linkedTimesheetId } : {}),
+      resolution_family: 'NON_BUCKET',
+      resolution_mode: resolutionMode,
+      target_amount_ex_vat: targetAmountExVatValue
+    };
+  }
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+      return withCORS(env, req, forbidden('Forbidden'));
+    }
+    if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
+      return withCORS(env, req, badRequest('Workbench session is not open'));
+    }
+
+    const rpcRes = await sbRpc(env, 'pay_workbench_session_apply_case_resolution', {
+      p_session_id: id,
+      p_actor_user_id: actorUserId,
+      p_resolution_payload_json: resolutionPayloadJson
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_workbench_session_apply_case_resolution');
+    return withCORS(env, req, ok(payload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(id)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const enc = encodeURIComponent;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+  const readUuid = (value) => {
+    const text = trimStr(value);
+    return uuidRe.test(text) ? text : '';
+  };
+
+  const caseKey = trimStr(body.case_key ?? body.caseKey);
+  const candidateId = readUuid(body.candidate_id ?? body.candidateId);
+  const financeCaseId = readUuid(body.finance_case_id ?? body.financeCaseId);
+  const linkedTimesheetId = readUuid(body.linked_timesheet_id ?? body.linkedTimesheetId ?? body.timesheet_id ?? body.timesheetId);
+
+  if (!caseKey) {
+    return withCORS(env, req, badRequest('case_key is required'));
+  }
+  if ((body.candidate_id !== undefined || body.candidateId !== undefined) && !candidateId) {
+    return withCORS(env, req, badRequest('candidate_id must be a UUID when supplied'));
+  }
+  if ((body.finance_case_id !== undefined || body.financeCaseId !== undefined) && !financeCaseId) {
+    return withCORS(env, req, badRequest('finance_case_id must be a UUID when supplied'));
+  }
+  if ((body.linked_timesheet_id !== undefined || body.linkedTimesheetId !== undefined || body.timesheet_id !== undefined || body.timesheetId !== undefined) && !linkedTimesheetId) {
+    return withCORS(env, req, badRequest('linked_timesheet_id must be a UUID when supplied'));
+  }
+
+  const resolutionPayloadJson = {
+    case_key: caseKey,
+    ...(candidateId ? { candidate_id: candidateId } : {}),
+    ...(financeCaseId ? { finance_case_id: financeCaseId } : {}),
+    ...(linkedTimesheetId ? { linked_timesheet_id: linkedTimesheetId, timesheet_id: linkedTimesheetId } : {})
+  };
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+      return withCORS(env, req, forbidden('Forbidden'));
+    }
+    if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
+      return withCORS(env, req, badRequest('Workbench session is not open'));
+    }
+
+    const rpcRes = await sbRpc(env, 'pay_workbench_session_clear_case_resolution', {
+      p_session_id: id,
+      p_actor_user_id: actorUserId,
+      p_resolution_payload_json: resolutionPayloadJson
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_workbench_session_clear_case_resolution');
+    return withCORS(env, req, ok(payload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(id)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const enc = encodeURIComponent;
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const candidateId = trimStr(body.candidate_id ?? body.candidateId);
+  const timesheetId = trimStr(body.timesheet_id ?? body.timesheetId);
+  const isExcludedRaw = body.is_excluded ?? body.isExcluded ?? body.exclude ?? body.excluded;
+
+  if (!uuidRe.test(candidateId)) {
+    return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+  }
+  if (!uuidRe.test(timesheetId)) {
+    return withCORS(env, req, badRequest('timesheet_id must be a UUID'));
+  }
+  if (typeof isExcludedRaw !== 'boolean') {
+    return withCORS(env, req, badRequest('is_excluded must be a boolean'));
+  }
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+      return withCORS(env, req, forbidden('Forbidden'));
+    }
+    if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
+      return withCORS(env, req, badRequest('Workbench session is not open'));
+    }
+
+    const rpcRes = await sbRpc(env, 'pay_workbench_session_set_timesheet_exclusion', {
+      p_session_id: id,
+      p_candidate_id: candidateId,
+      p_timesheet_id: timesheetId,
+      p_is_excluded: isExcludedRaw,
+      p_actor_user_id: actorUserId
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_workbench_session_set_timesheet_exclusion');
+    return withCORS(env, req, ok(payload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(id)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const enc = encodeURIComponent;
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const selectedPreviewRowIds = body.selected_preview_row_ids ?? body.selectedPreviewRowIds;
+  if (!Array.isArray(selectedPreviewRowIds)) {
+    return withCORS(env, req, badRequest('selected_preview_row_ids must be an array'));
+  }
+  for (const rowId of selectedPreviewRowIds) {
+    if (typeof rowId !== 'string' || !String(rowId).trim()) {
+      return withCORS(env, req, badRequest('selected_preview_row_ids must contain non-empty strings only'));
+    }
+  }
+
+  const normalizedSelectedPreviewRowIds = selectedPreviewRowIds.map((rowId) => String(rowId).trim());
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+      return withCORS(env, req, forbidden('Forbidden'));
+    }
+    if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
+      return withCORS(env, req, badRequest('Workbench session is not open'));
+    }
+
+    const rpcRes = await sbRpc(env, 'pay_workbench_session_set_selected_rows', {
+      p_session_id: id,
+      p_selected_preview_row_ids: normalizedSelectedPreviewRowIds,
+      p_actor_user_id: actorUserId
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_workbench_session_set_selected_rows');
+    return withCORS(env, req, ok(payload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(id)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+
+  const enc = encodeURIComponent;
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+      return withCORS(env, req, forbidden('Forbidden'));
+    }
+
+    const rpcRes = await sbRpc(env, 'pay_workbench_session_discard', {
+      p_session_id: id,
+      p_actor_user_id: actorUserId
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_workbench_session_discard');
+    return withCORS(env, req, ok(payload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const payDateRaw = String(body.pay_date || body.payDate || '').trim();
+  const payDate = parseIsoOrUkDateToIso(payDateRaw);
+  if (!payDate) {
+    return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
+  }
+
+  const cutoffRaw = String(
+    body.week_ending_cutoff_date
+    || body.weekEndingCutoffDate
+    || body.week_ending_cutoff
+    || body.weekEndingCutoff
+    || ''
+  ).trim();
+  const weekEndingCutoff = parseIsoOrUkDateToIso(cutoffRaw);
+  if (!weekEndingCutoff) {
+    return withCORS(env, req, badRequest('week_ending_cutoff_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
+  }
+
+  const sessionSignature = String(body.session_signature || body.sessionSignature || '').trim();
+  if (!sessionSignature) {
+    return withCORS(env, req, badRequest('session_signature is required'));
+  }
+
+  const filtersSrc =
+    (isPlainObject(body.filters_json) ? body.filters_json : null)
+    || (isPlainObject(body.filters) ? body.filters : null)
+    || {};
+
+  const filtersJson = JSON.parse(JSON.stringify(filtersSrc));
+
+  try {
+    const openRpc = await sbRpc(env, 'pay_workbench_session_open', {
+      p_actor_user_id: actorUserId,
+      p_pay_date: payDate,
+      p_week_ending_cutoff: weekEndingCutoff,
+      p_filters_json: filtersJson,
+      p_session_signature: sessionSignature
+    });
+
+    const openPayload = unwrapRpc(openRpc, 'pay_workbench_session_open');
+    const sessionId = String(openPayload.session_id || '').trim();
+    if (!uuidRe.test(sessionId)) {
+      return withCORS(env, req, serverError('pay_workbench_session_open did not return a valid session_id'));
+    }
+
+    const previewRpc = await sbRpc(env, 'pay_workbench_session_get_preview', {
+      p_session_id: sessionId
+    });
+
+    const previewPayload = unwrapRpc(previewRpc, 'pay_workbench_session_get_preview');
+    const out = { ...previewPayload };
+
+    if (!out.session_id) out.session_id = sessionId;
+    if (!out.snapshot_run_id && openPayload.snapshot_run_id) out.snapshot_run_id = openPayload.snapshot_run_id;
+    if ((out.session_version === undefined || out.session_version === null) && openPayload.session_version !== undefined) {
+      out.session_version = openPayload.session_version;
+    }
+
+    return withCORS(env, req, ok(out));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(id)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+
+  const enc = encodeURIComponent;
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+
+    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+      return withCORS(env, req, forbidden('Forbidden'));
+    }
+
+    const previewRpc = await sbRpc(env, 'pay_workbench_session_get_preview', {
+      p_session_id: id
+    });
+
+    const previewPayload = unwrapRpc(previewRpc, 'pay_workbench_session_get_preview');
+    return withCORS(env, req, ok(previewPayload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sessionId, candidateId) {
+  const sessionIdText = String(sessionId || '').trim();
+  const candidateIdText = String(candidateId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(sessionIdText)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+  if (!uuidRe.test(candidateIdText)) {
+    return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+  }
+
+  const enc = encodeURIComponent;
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(sessionIdText)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+
+    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+      return withCORS(env, req, forbidden('Forbidden'));
+    }
+
+    const candidateRpc = await sbRpc(env, 'pay_workbench_session_get_candidate_preview', {
+      p_session_id: sessionIdText,
+      p_candidate_id: candidateIdText
+    });
+
+    const candidatePayload = unwrapRpc(candidateRpc, 'pay_workbench_session_get_candidate_preview');
+    return withCORS(env, req, ok(candidatePayload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(id)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+
+  const enc = encodeURIComponent;
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+
+    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+      return withCORS(env, req, forbidden('Forbidden'));
+    }
+
+    const progressRpc = await sbRpc(env, 'pay_workbench_session_get_progress', {
+      p_session_id: id
+    });
+
+    const progressPayload = unwrapRpc(progressRpc, 'pay_workbench_session_get_progress');
+    return withCORS(env, req, ok(progressPayload));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
+}
+
+
+
 async function handleContractsCloneAndExtend(env, req, contractId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -11137,7 +11978,6 @@ async function handleBankingIdBalanceNow(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -11183,6 +12023,16 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
       }
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _extractExecutionFields = (batchPayload) => {
+    const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
+    const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : payload;
+    return {
+      execution_commit_state: batchObj.execution_commit_state ?? payload.execution_commit_state ?? null,
+      execution_commit_ref: batchObj.execution_commit_ref ?? payload.execution_commit_ref ?? null,
+      execution_committed_at_utc: batchObj.execution_committed_at_utc ?? payload.execution_committed_at_utc ?? null
+    };
   };
 
   const jsonResponse = (status, payload) => {
@@ -11278,14 +12128,15 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
 
       const afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
       const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
+      const executionFields = _extractExecutionFields(afterGet);
 
-      return withCORS(env, req, ok(
-        ((settleOnlyRes && typeof settleOnlyRes === 'object') ? settleOnlyRes : {})
-        && {
-          ...((settleOnlyRes && typeof settleOnlyRes === 'object') ? settleOnlyRes : {}),
-          batch_get: afterGet
-        }
-      ));
+      return withCORS(env, req, ok({
+        ...((settleOnlyRes && typeof settleOnlyRes === 'object') ? settleOnlyRes : {}),
+        execution_commit_state: executionFields.execution_commit_state,
+        execution_commit_ref: executionFields.execution_commit_ref,
+        execution_committed_at_utc: executionFields.execution_committed_at_utc,
+        batch_get: afterGet
+      }));
     }
 
     if (!bankConfirmRef) {
@@ -11323,9 +12174,13 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
 
     const afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
     const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
+    const executionFields = _extractExecutionFields(afterGet);
 
     return withCORS(env, req, ok({
       ...((out && typeof out === 'object') ? out : {}),
+      execution_commit_state: executionFields.execution_commit_state,
+      execution_commit_ref: executionFields.execution_commit_ref,
+      execution_committed_at_utc: executionFields.execution_committed_at_utc,
       batch_get: afterGet
     }));
   } catch (e) {
@@ -11337,6 +12192,10 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Manual confirm failed.', message: 'Manual confirm failed.', error_code: 'SETTLE_FAILED' }));
   }
 }
+
+
+
+
 
 async function handleBankingPayBatchRemittancesSend(env, req, payBatchId) {
   const user = await requireUser(env, req, ['admin']);
@@ -13596,6 +14455,376 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
+
+async function handleBankingPayPreview(env, req, user) {
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+
+  const trimStr = (value) => String(value ?? '').trim();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+  const stableStringify = (value) => {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+    }
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value == null ? null : value);
+  };
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = trimStr(raw);
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
+  const parseBooleanLike = (raw, defaultValue) => {
+    if (raw === undefined || raw === null || trimStr(raw) === '') return defaultValue;
+    if (typeof raw === 'boolean') return raw;
+    const s = trimStr(raw).toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(s)) return false;
+    return defaultValue;
+  };
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const buildPreviewErrorResponse = (status, code, message, details, canRetry) => {
+    const payload = {
+      ok: false,
+      preview_unavailable: true,
+      can_retry: !!canRetry,
+      error: {
+        code: String(code || 'BANKING_PAY_PREVIEW_FAILED'),
+        message: String(message || 'Unable to load Banking preview')
+      }
+    };
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+      payload.error.details = details;
+    }
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS }));
+  };
+
+  const payDateRaw = trimStr(body.pay_date || body.payDate || '');
+  const payDate = parseIsoOrUkDateToIso(payDateRaw);
+  if (!payDate) {
+    return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
+  }
+
+  const cutoffRaw = trimStr(
+    body.week_ending_cutoff_date ||
+    body.weekEndingCutoffDate ||
+    body.week_ending_cutoff ||
+    body.weekEndingCutoff ||
+    ''
+  );
+  const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
+  if (!cutoffIso) {
+    return withCORS(env, req, badRequest('week_ending_cutoff_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
+  }
+
+  const candidateRaw = trimStr(
+    body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || ''
+  );
+  const clientRaw = trimStr(
+    body.client_id || body.clientId || body.client_filter_id || body.clientFilterId || body.client_filter || ''
+  );
+
+  const candidateId = candidateRaw || null;
+  const clientId = clientRaw || null;
+
+  if (candidateId && !uuidRe.test(candidateId)) {
+    return withCORS(env, req, badRequest('candidate_id must be a UUID (or empty)'));
+  }
+  if (clientId && !uuidRe.test(clientId)) {
+    return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
+  }
+
+  const allowLegacyFallback = parseBooleanLike(
+    env?.BANKING_PAY_PREVIEW_LEGACY_FALLBACK,
+    false
+  ) === true;
+
+  const baseFiltersSrc =
+    (isPlainObject(body.filters_json) ? body.filters_json : null) ||
+    (isPlainObject(body.filters) ? body.filters : null) ||
+    {};
+
+  const filtersJson = cloneJson(baseFiltersSrc) || {};
+  if (candidateId) filtersJson.candidate_id = candidateId;
+  if (clientId) filtersJson.client_id = clientId;
+
+  const previewDecisionsSource = isPlainObject(body.preview_decisions_json) ? body.preview_decisions_json : {};
+  const mergedLegacyDecisionInput = cloneJson(previewDecisionsSource) || {};
+
+  if (Object.prototype.hasOwnProperty.call(body, 'case_resolutions')) {
+    mergedLegacyDecisionInput.case_resolutions = cloneJson(body.case_resolutions);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'selected_preview_row_ids')) {
+    mergedLegacyDecisionInput.selected_preview_row_ids = cloneJson(body.selected_preview_row_ids);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'selectedPreviewRowIds')) {
+    mergedLegacyDecisionInput.selected_preview_row_ids = cloneJson(body.selectedPreviewRowIds);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_reason')) {
+    mergedLegacyDecisionInput.same_week_paye_override_reason = body.same_week_paye_override_reason;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideReason')) {
+    mergedLegacyDecisionInput.same_week_paye_override_reason = body.sameWeekPayeOverrideReason;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_continue')) {
+    mergedLegacyDecisionInput.same_week_paye_override_continue = body.same_week_paye_override_continue;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideContinue')) {
+    mergedLegacyDecisionInput.same_week_paye_override_continue = body.sameWeekPayeOverrideContinue;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_verified')) {
+    mergedLegacyDecisionInput.same_week_paye_override_verified = body.same_week_paye_override_verified;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideVerified')) {
+    mergedLegacyDecisionInput.same_week_paye_override_verified = body.sameWeekPayeOverrideVerified;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_verified_by_user_id')) {
+    mergedLegacyDecisionInput.same_week_paye_override_verified_by_user_id = body.same_week_paye_override_verified_by_user_id;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideVerifiedByUserId')) {
+    mergedLegacyDecisionInput.same_week_paye_override_verified_by_user_id = body.sameWeekPayeOverrideVerifiedByUserId;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_verified_at_utc')) {
+    mergedLegacyDecisionInput.same_week_paye_override_verified_at_utc = body.same_week_paye_override_verified_at_utc;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideVerifiedAtUtc')) {
+    mergedLegacyDecisionInput.same_week_paye_override_verified_at_utc = body.sameWeekPayeOverrideVerifiedAtUtc;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'candidate_ids')) {
+    mergedLegacyDecisionInput.candidate_ids = cloneJson(body.candidate_ids);
+  }
+  if (Object.prototype.hasOwnProperty.call(previewDecisionsSource, 'candidate_ids') && !Object.prototype.hasOwnProperty.call(mergedLegacyDecisionInput, 'candidate_ids')) {
+    mergedLegacyDecisionInput.candidate_ids = cloneJson(previewDecisionsSource.candidate_ids);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'exclude_timesheet_ids')) {
+    mergedLegacyDecisionInput.exclude_timesheet_ids = cloneJson(body.exclude_timesheet_ids);
+  }
+  if (Object.prototype.hasOwnProperty.call(previewDecisionsSource, 'exclude_timesheet_ids') && !Object.prototype.hasOwnProperty.call(mergedLegacyDecisionInput, 'exclude_timesheet_ids')) {
+    mergedLegacyDecisionInput.exclude_timesheet_ids = cloneJson(previewDecisionsSource.exclude_timesheet_ids);
+  }
+
+  const normalizedDecisions = normalizeBankingPayPreviewDecisions(mergedLegacyDecisionInput);
+  if (!normalizedDecisions || normalizedDecisions.ok !== true) {
+    return withCORS(env, req, badRequest(String(normalizedDecisions?.error || 'Invalid preview_decisions_json')));
+  }
+
+  const explicitDecisionInputPresent = !!(
+    normalizedDecisions.explicit.case_resolutions ||
+    normalizedDecisions.explicit.selected_preview_row_ids ||
+    normalizedDecisions.explicit.same_week_paye_override_reason ||
+    normalizedDecisions.explicit.same_week_paye_override_continue ||
+    normalizedDecisions.explicit.same_week_paye_override_verified ||
+    normalizedDecisions.explicit.same_week_paye_override_verified_by_user_id ||
+    normalizedDecisions.explicit.same_week_paye_override_verified_at_utc
+  );
+
+  const sessionSignature = trimStr(body.session_signature || body.sessionSignature || '') || stableStringify({
+    kind: 'BANKING_PAY_WORKBENCH',
+    pay_date: payDate,
+    week_ending_cutoff: cutoffIso,
+    filters_json: filtersJson
+  });
+
+  const previewSafeDetails = {
+    pay_date: payDate,
+    week_ending_cutoff: cutoffIso,
+    has_candidate_id: !!candidateId,
+    has_client_id: !!clientId,
+    session_signature_supplied: !!trimStr(body.session_signature || body.sessionSignature || ''),
+    session_id_supplied: !!trimStr(body.session_id || body.sessionId || ''),
+    case_resolution_count: Array.isArray(normalizedDecisions.normalized_resolution_payloads)
+      ? normalizedDecisions.normalized_resolution_payloads.length
+      : 0,
+    selected_preview_row_count: Array.isArray(normalizedDecisions?.value?.selected_preview_row_ids)
+      ? normalizedDecisions.value.selected_preview_row_ids.length
+      : 0
+  };
+
+  try {
+    const openRpc = await sbRpc(env, 'pay_workbench_session_open', {
+      p_actor_user_id: actorUserId,
+      p_pay_date: payDate,
+      p_week_ending_cutoff: cutoffIso,
+      p_filters_json: filtersJson,
+      p_session_signature: sessionSignature
+    });
+
+    const openPayload = unwrapRpc(openRpc, 'pay_workbench_session_open');
+    const sessionId = trimStr(openPayload.session_id || body.session_id || body.sessionId || '');
+    if (!uuidRe.test(sessionId)) {
+      throw new Error('pay_workbench_session_open did not return a valid session_id');
+    }
+
+    let syncResult = {
+      ok: true,
+      session_id: sessionId,
+      snapshot_run_id: trimStr(openPayload.snapshot_run_id || '') || null,
+      session_version: openPayload.session_version ?? null,
+      applied_case_resolution_results: [],
+      cleared_case_resolution_results: [],
+      unchanged_case_resolution_count: 0,
+      selected_rows_result: null,
+      state_changed: false,
+      touched_candidate_ids: [],
+      job_ids: []
+    };
+
+    if (explicitDecisionInputPresent) {
+      syncResult = await syncBankingPayPreviewDecisionsToSession(
+        env,
+        actorUserId,
+        sessionId,
+        normalizedDecisions
+      );
+    }
+
+    const previewRpc = await sbRpc(env, 'pay_workbench_session_get_preview', {
+      p_session_id: sessionId
+    });
+    const previewPayload = unwrapRpc(previewRpc, 'pay_workbench_session_get_preview');
+
+    const fullPreviewPayload = {
+      ...previewPayload,
+      session_id: trimStr(previewPayload.session_id || sessionId) || sessionId,
+      snapshot_run_id: trimStr(previewPayload.snapshot_run_id || syncResult.snapshot_run_id || openPayload.snapshot_run_id || '') || null,
+      session_version:
+        previewPayload.session_version ??
+        syncResult.session_version ??
+        openPayload.session_version ??
+        null
+    };
+
+    const payeesProcessed = Array.isArray(fullPreviewPayload.payees) ? fullPreviewPayload.payees.length : 0;
+
+    return withCORS(env, req, ok({
+      ok: true,
+      preview: fullPreviewPayload,
+      readiness: {
+        performed: false,
+        attempted_count: 0,
+        success_count: 0,
+        failed_count: 0,
+        payees_processed: payeesProcessed,
+        did_work: false,
+        diagnostics: []
+      },
+      session: {
+        session_id: fullPreviewPayload.session_id,
+        snapshot_run_id: fullPreviewPayload.snapshot_run_id,
+        session_version: fullPreviewPayload.session_version,
+        session_signature: sessionSignature
+      },
+      decision_sync: {
+        explicit_input_present: explicitDecisionInputPresent,
+        state_changed: !!syncResult.state_changed,
+        applied_case_resolution_count: Array.isArray(syncResult.applied_case_resolution_results) ? syncResult.applied_case_resolution_results.length : 0,
+        cleared_case_resolution_count: Array.isArray(syncResult.cleared_case_resolution_results) ? syncResult.cleared_case_resolution_results.length : 0,
+        unchanged_case_resolution_count: Number.isFinite(Number(syncResult.unchanged_case_resolution_count))
+          ? Number(syncResult.unchanged_case_resolution_count)
+          : 0,
+        touched_candidate_ids: Array.isArray(syncResult.touched_candidate_ids) ? syncResult.touched_candidate_ids : [],
+        job_ids: Array.isArray(syncResult.job_ids) ? syncResult.job_ids : []
+      }
+    }));
+  } catch (e) {
+    if (allowLegacyFallback !== true) {
+      return buildPreviewErrorResponse(
+        500,
+        'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+        'Banking preview could not be loaded from the workbench session path.',
+        { ...previewSafeDetails, reason: String(e?.message || e || 'Unknown error'), legacy_fallback_enabled: false },
+        true
+      );
+    }
+
+    try {
+      const legacyPreviewDecisionsJson = isPlainObject(normalizedDecisions.value)
+        ? cloneJson(normalizedDecisions.value) || {}
+        : {};
+
+      const legacyRpc = await sbRpc(env, 'pay_preview', {
+        p_pay_date: payDate,
+        p_week_ending_cutoff: cutoffIso,
+        p_actor_user_id: actorUserId,
+        p_candidate_id: candidateId,
+        p_client_id: clientId,
+        p_preview_decisions_json: legacyPreviewDecisionsJson
+      });
+
+      const legacyPreviewPayload = unwrapRpc(legacyRpc, 'pay_preview');
+      const payeesProcessed = Array.isArray(legacyPreviewPayload.payees) ? legacyPreviewPayload.payees.length : 0;
+
+      return withCORS(env, req, ok({
+        ok: true,
+        preview: legacyPreviewPayload,
+        readiness: {
+          performed: false,
+          attempted_count: 0,
+          success_count: 0,
+          failed_count: 0,
+          payees_processed: payeesProcessed,
+          did_work: false,
+          diagnostics: []
+        },
+        warning: {
+          code: 'BANKING_PAY_PREVIEW_LEGACY_FALLBACK_USED',
+          message: 'Banking preview loaded using the legacy fallback path.',
+          details: {
+            reason: String(e?.message || e || 'Unknown error')
+          }
+        }
+      }));
+    } catch (fallbackErr) {
+      return buildPreviewErrorResponse(
+        500,
+        'BANKING_PAY_PREVIEW_FAILED',
+        'Banking preview could not be loaded.',
+        {
+          ...previewSafeDetails,
+          session_backed_reason: String(e?.message || e || 'Unknown error'),
+          legacy_fallback_reason: String(fallbackErr?.message || fallbackErr || 'Unknown error'),
+          legacy_fallback_enabled: true
+        },
+        true
+      );
+    }
+  }
+}
+
+
 async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUserId) {
   const envRaw = (railEnv !== undefined && railEnv !== null) ? String(railEnv).trim() : '';
   const railEnvNorm = (envRaw ? envRaw : 'PROD').toUpperCase();
@@ -14052,628 +15281,6 @@ async function handleBankingCapabilities(env, req, user) {
   }
 }
 
-
-async function handleBankingPayPreview(env, req, user) {
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
-
-  const payDate = String(body.pay_date || '').trim();
-  if (!payDate) return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD)'));
-
-  const cutoffRaw = String(
-    body.week_ending_cutoff_date || body.weekEndingCutoffDate || body.week_ending_cutoff || body.weekEndingCutoff || ''
-  ).trim();
-  if (!cutoffRaw) return withCORS(env, req, badRequest('week_ending_cutoff_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
-
-  const parseIsoOrUkDateToIso = (raw) => {
-    const s = String(raw || '').trim();
-    if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) {
-      const dd = m[1], mm = m[2], yyyy = m[3];
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    return null;
-  };
-
-  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-
-  const cloneJson = (value) => {
-    try {
-      return JSON.parse(JSON.stringify(value));
-    } catch {
-      return null;
-    }
-  };
-
-  const trimStr = (value) => String(value ?? '').trim();
-
-  const upperTrim = (value) => trimStr(value).toUpperCase();
-
-  const round2 = (value) => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return null;
-    return Math.round(n * 100) / 100;
-  };
-
-  const normalizeResolutionMode = (value) => upperTrim(value).replace(/\s+/g, '_');
-
-  const parseNonNegativeTwoDpNumber = (raw, label) => {
-    if (raw === undefined || raw === null || String(raw).trim() === '') {
-      return { error: `${label} is required` };
-    }
-
-    const n = Number(raw);
-    if (!Number.isFinite(n) || n < 0) {
-      return { error: `${label} must be a non-negative number` };
-    }
-
-    if (Math.abs((n * 100) - Math.round(n * 100)) > 1e-9) {
-      return { error: `${label} must have at most 2 decimal places` };
-    }
-
-    return { value: Number(n.toFixed(2)) };
-  };
-
-  const sanitizeCaseResolutions = (input) => {
-    const src = (input && typeof input === 'object' && !Array.isArray(input)) ? input : {};
-    const out = {};
-    const errors = [];
-
-    const caseKeyRe = /^(timesheet|finance):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    const financeComponentIdRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    const allowedBucketComponentKeyTypes = new Set(['TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE']);
-    const allowedBucketModes = new Set(['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_REPLACEMENT_RATE']);
-    const allowedNonBucketModes = new Set(['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_AMOUNT']);
-
-    const round6 = (n) => {
-      const x = Number(n);
-      if (!Number.isFinite(x)) return null;
-      return Math.round(x * 1000000) / 1000000;
-    };
-
-    const stableStringify = (value) => {
-      if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
-      if (value && typeof value === 'object') {
-        return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
-      }
-      return JSON.stringify(value == null ? null : value);
-    };
-
-    const normalizeSourceBasisJson = (value) => {
-      if (!isPlainObject(value)) return {};
-      return JSON.parse(JSON.stringify(value));
-    };
-
-    for (const [rawCaseKey, rawResolution] of Object.entries(src)) {
-      const caseKey = trimStr(rawCaseKey);
-      if (!caseKey) continue;
-
-      if (!caseKeyRe.test(caseKey)) {
-        errors.push(`Case resolution "${caseKey}" has an invalid case_key.`);
-        continue;
-      }
-
-      if (!isPlainObject(rawResolution)) {
-        errors.push(`Case resolution "${caseKey}" is not a valid resolution object.`);
-        continue;
-      }
-
-      const embeddedCaseKey = trimStr(rawResolution.case_key || caseKey);
-      if (!embeddedCaseKey || embeddedCaseKey !== caseKey) {
-        errors.push(`Case resolution "${caseKey}" must contain a matching case_key.`);
-        continue;
-      }
-
-      const resolutionFamily = upperTrim(rawResolution.resolution_family || '');
-      if (resolutionFamily === 'BUCKETED') {
-        const bucketResolutions = Array.isArray(rawResolution.bucket_resolutions) ? rawResolution.bucket_resolutions : [];
-        if (bucketResolutions.length <= 0) {
-          errors.push(`Case resolution "${caseKey}" must contain a non-empty bucket_resolutions array.`);
-          continue;
-        }
-
-        const sanitizedBuckets = [];
-        const seenBucketKeys = new Set();
-        let bucketFailed = false;
-
-        for (let i = 0; i < bucketResolutions.length; i++) {
-          const bucket = bucketResolutions[i];
-          const label = `Case resolution "${caseKey}" bucket ${i + 1}`;
-
-          if (!isPlainObject(bucket)) {
-            errors.push(`${label} is not a valid bucket resolution object.`);
-            bucketFailed = true;
-            break;
-          }
-
-          const sourceFamilyKey = trimStr(bucket.source_family_key);
-          const componentKeyType = upperTrim(bucket.component_key_type || '');
-          const componentKeyValue = trimStr(bucket.component_key_value);
-          const resolutionMode = normalizeResolutionMode(bucket.resolution_mode || bucket.mode || '');
-          const targetRate = round2(bucket.target_rate);
-
-          if (!sourceFamilyKey) {
-            errors.push(`${label} is missing source_family_key.`);
-            bucketFailed = true;
-            break;
-          }
-
-          if (!allowedBucketComponentKeyTypes.has(componentKeyType)) {
-            errors.push(`${label} has an invalid component_key_type.`);
-            bucketFailed = true;
-            break;
-          }
-
-          if (!componentKeyValue) {
-            errors.push(`${label} is missing component_key_value.`);
-            bucketFailed = true;
-            break;
-          }
-
-          if (!allowedBucketModes.has(resolutionMode)) {
-            errors.push(`${label} has an invalid resolution_mode.`);
-            bucketFailed = true;
-            break;
-          }
-
-          if (targetRate === null || targetRate < 0) {
-            errors.push(`${label} is missing a valid non-negative 2dp target_rate.`);
-            bucketFailed = true;
-            break;
-          }
-
-          const financeComponentId = trimStr(bucket.finance_component_id || '');
-          if (financeComponentId && !financeComponentIdRe.test(financeComponentId)) {
-            errors.push(`${label} has an invalid finance_component_id.`);
-            bucketFailed = true;
-            break;
-          }
-
-          const sourceBasisJson = normalizeSourceBasisJson(bucket.source_basis_json);
-          const sourceBasisFingerprint = trimStr(
-            bucket.source_basis_fingerprint ||
-            (Object.keys(sourceBasisJson).length ? stableStringify(sourceBasisJson) : '')
-          );
-          const bucketCode = upperTrim(bucket.bucket_code || sourceBasisJson.bucket_code || '');
-          const sourceUnits = round6(
-            bucket.source_units ??
-            sourceBasisJson.source_units ??
-            sourceBasisJson.units ??
-            sourceBasisJson.hours
-          );
-          const sourceRate = round6(bucket.source_rate ?? sourceBasisJson.source_rate ?? sourceBasisJson.rate);
-          const sourceChargeRate = round6(
-            bucket.source_charge_rate ??
-            sourceBasisJson.source_charge_rate ??
-            sourceBasisJson.charge_rate
-          );
-
-          const hasRateBearingIdentity =
-            sourceUnits !== null &&
-            sourceUnits > 0 &&
-            sourceRate !== null &&
-            sourceChargeRate !== null;
-
-          const hasExactRowDiscriminator =
-            !!sourceBasisFingerprint ||
-            (
-              (componentKeyType === 'TS_DAY' || componentKeyType === 'TS_TOTAL') &&
-              !!bucketCode &&
-              sourceRate !== null &&
-              sourceChargeRate !== null
-            ) ||
-            (
-              componentKeyType === 'ADDITIONAL_CODE' &&
-              componentKeyValue !== 'TOTAL' &&
-              hasRateBearingIdentity
-            );
-
-          if (componentKeyType === 'ADJUSTMENT_CODE') {
-            errors.push(`${label} cannot be submitted as a bucketed rate-bearing resolution because ADJUSTMENT_CODE rows are amount-led.`);
-            bucketFailed = true;
-            break;
-          }
-
-          if (componentKeyType === 'ADDITIONAL_CODE' && componentKeyValue === 'TOTAL') {
-            errors.push(`${label} cannot be submitted as a bucketed rate-bearing resolution because ADDITIONAL_CODE TOTAL rows are amount-led.`);
-            bucketFailed = true;
-            break;
-          }
-
-          if ((componentKeyType === 'TS_DAY' || componentKeyType === 'TS_TOTAL' || componentKeyType === 'ADDITIONAL_CODE') && !hasRateBearingIdentity) {
-            errors.push(`${label} is missing the exact rate-bearing row semantics required for bucketed resolution (source_units, source_rate, source_charge_rate).`);
-            bucketFailed = true;
-            break;
-          }
-
-          if (!hasExactRowDiscriminator) {
-            errors.push(`${label} is missing the exact row discriminator required to preserve bucket identity across preview overlay matching.`);
-            bucketFailed = true;
-            break;
-          }
-
-          const duplicateKey = [
-            sourceFamilyKey,
-            componentKeyType,
-            componentKeyValue,
-            sourceBasisFingerprint || '',
-            bucketCode || '',
-            sourceUnits == null ? '' : String(sourceUnits),
-            sourceRate == null ? '' : String(sourceRate),
-            sourceChargeRate == null ? '' : String(sourceChargeRate)
-          ].join('|');
-
-          if (seenBucketKeys.has(duplicateKey)) {
-            errors.push(`${label} duplicates another exact bucket resolution in "${caseKey}".`);
-            bucketFailed = true;
-            break;
-          }
-          seenBucketKeys.add(duplicateKey);
-
-          const sanitizedBucket = {
-            finance_component_id: financeComponentId || null,
-            source_family_key: sourceFamilyKey,
-            component_key_type: componentKeyType,
-            component_key_value: componentKeyValue,
-            resolution_mode: resolutionMode,
-            target_rate: targetRate
-          };
-
-          if (Object.keys(sourceBasisJson).length) sanitizedBucket.source_basis_json = sourceBasisJson;
-          if (sourceBasisFingerprint) sanitizedBucket.source_basis_fingerprint = sourceBasisFingerprint;
-          if (bucketCode) sanitizedBucket.bucket_code = bucketCode;
-          if (sourceUnits !== null) sanitizedBucket.source_units = sourceUnits;
-          if (sourceRate !== null) sanitizedBucket.source_rate = sourceRate;
-          if (sourceChargeRate !== null) sanitizedBucket.source_charge_rate = sourceChargeRate;
-
-          sanitizedBuckets.push(sanitizedBucket);
-        }
-
-        if (bucketFailed) continue;
-
-        out[caseKey] = {
-          case_key: caseKey,
-          resolution_family: 'BUCKETED',
-          resolve_all_linked_timesheets: rawResolution.resolve_all_linked_timesheets === true,
-          bucket_resolutions: sanitizedBuckets
-        };
-        continue;
-      }
-
-      if (resolutionFamily === 'NON_BUCKET') {
-        const resolutionMode = normalizeResolutionMode(rawResolution.resolution_mode || rawResolution.mode || '');
-        const targetAmountExVat = round2(
-          rawResolution.target_amount_ex_vat ??
-          rawResolution.target_amount ??
-          rawResolution.amount_ex_vat ??
-          rawResolution.amount
-        );
-
-        if (!allowedNonBucketModes.has(resolutionMode)) {
-          errors.push(`Case resolution "${caseKey}" has an invalid resolution_mode.`);
-          continue;
-        }
-
-        if (targetAmountExVat === null || targetAmountExVat < 0) {
-          errors.push(`Case resolution "${caseKey}" is missing a valid non-negative 2dp target_amount_ex_vat.`);
-          continue;
-        }
-
-        out[caseKey] = {
-          case_key: caseKey,
-          resolution_family: 'NON_BUCKET',
-          resolution_mode: resolutionMode,
-          target_amount_ex_vat: targetAmountExVat
-        };
-        continue;
-      }
-
-      errors.push(`Case resolution "${caseKey}" must declare resolution_family as BUCKETED or NON_BUCKET.`);
-    }
-
-    return {
-      value: out,
-      errors,
-      error: errors.length ? errors.join(' ') : null
-    };
-  };
-
-  const buildPreviewErrorResponse = (status, code, message, details, canRetry) => {
-    const payload = {
-      ok: false,
-      preview_unavailable: true,
-      can_retry: !!canRetry,
-      error: {
-        code: String(code || 'BANKING_PAY_PREVIEW_FAILED'),
-        message: String(message || 'Unable to load Banking preview')
-      }
-    };
-    if (details && typeof details === 'object' && !Array.isArray(details)) {
-      payload.error.details = details;
-    }
-    return withCORS(env, req, new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS }));
-  };
-
-  const classifyPreviewError = (err, safeDetails) => {
-    const msg = String(err?.message || err || '');
-    const lower = msg.toLowerCase();
-
-    if (lower.includes('rail_env_mismatch')) {
-      return {
-        status: 500,
-        code: 'BANKING_PAY_PREVIEW_ENV_MISMATCH',
-        message: 'Banking preview could not be loaded because the payment rail environment is misconfigured.',
-        details: { ...(safeDetails || {}), reason: msg },
-        canRetry: false
-      };
-    }
-
-    if (
-      lower.includes('rejected filter parameters') ||
-      lower.includes('could not choose the best candidate function between') ||
-      lower.includes('no function matches the given name and argument types') ||
-      lower.includes('42883') ||
-      (lower.includes('pay_preview') && lower.includes('signature')) ||
-      (lower.includes('pay_preview') && lower.includes('function') && lower.includes('candidate')) ||
-      (lower.includes('pay_preview') && lower.includes('failed 404'))
-    ) {
-      return {
-        status: 500,
-        code: 'BANKING_PAY_PREVIEW_RPC_SIGNATURE_MISMATCH',
-        message: 'Banking preview could not be loaded because the preview RPC signature does not match the backend request.',
-        details: { ...(safeDetails || {}), reason: msg },
-        canRetry: false
-      };
-    }
-
-    return {
-      status: 500,
-      code: 'BANKING_PAY_PREVIEW_FAILED',
-      message: 'Banking preview could not be loaded. Please try again.',
-      details: { ...(safeDetails || {}), reason: msg },
-      canRetry: true
-    };
-  };
-
-  const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
-  if (!cutoffIso) return withCORS(env, req, badRequest('week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY'));
-
-  const prcIn =
-    (body.perform_readiness_checks !== undefined) ? body.perform_readiness_checks
-    : (body.performReadinessChecks !== undefined) ? body.performReadinessChecks
-    : (body.perform_readiness !== undefined) ? body.perform_readiness
-    : (body.performReadiness !== undefined) ? body.performReadiness
-    : undefined;
-
-  const performReadinessChecks = (() => {
-    if (prcIn === undefined || prcIn === null) return true;
-    if (typeof prcIn === 'boolean') return prcIn;
-    const s = String(prcIn).trim().toLowerCase();
-    if (!s) return true;
-    if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
-    if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
-    return true;
-  })();
-
-  const candRaw = String(
-    body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || ''
-  ).trim();
-  const clientRaw = String(
-    body.client_id || body.clientId || body.client_filter_id || body.clientFilterId || body.client_filter || ''
-  ).trim();
-
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-  const candidateId = candRaw ? candRaw : null;
-  const clientId = clientRaw ? clientRaw : null;
-
-  if (candidateId && !uuidRe.test(candidateId)) {
-    return withCORS(env, req, badRequest('candidate_id must be a UUID (or empty)'));
-  }
-  if (clientId && !uuidRe.test(clientId)) {
-    return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
-  }
-
-  const previewDecisionsIn =
-    (body.preview_decisions_json && typeof body.preview_decisions_json === 'object' && !Array.isArray(body.preview_decisions_json))
-      ? body.preview_decisions_json
-      : {};
-
-  const previewCaseResolutionSource =
-    (Object.prototype.hasOwnProperty.call(body, 'case_resolutions'))
-      ? body.case_resolutions
-      : previewDecisionsIn.case_resolutions;
-
-  const sanitizedCaseResolutionsResult = sanitizeCaseResolutions(previewCaseResolutionSource);
-  if (sanitizedCaseResolutionsResult.error) {
-    return withCORS(env, req, badRequest(sanitizedCaseResolutionsResult.error));
-  }
-
-  const previewDecisionsForRpc =
-    Object.keys(sanitizedCaseResolutionsResult.value || {}).length > 0
-      ? { case_resolutions: cloneJson(sanitizedCaseResolutionsResult.value) || {} }
-      : {};
-
-  const argsWithFilters = {
-    p_pay_date: payDate,
-    p_week_ending_cutoff: cutoffIso,
-    p_actor_user_id: user.id,
-    p_candidate_id: candidateId,
-    p_client_id: clientId,
-    p_preview_decisions_json: previewDecisionsForRpc
-  };
-
-  const unwrapPayPreviewRpc = (rpcRes) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_preview')) {
-        payload = payload.pay_preview;
-      }
-    } catch {}
-    return (payload && typeof payload === 'object') ? payload : {};
-  };
-
-  const callPayPreview = async () => {
-    const rpcRes = await sbRpc(env, 'pay_preview', argsWithFilters);
-    return unwrapPayPreviewRpc(rpcRes);
-  };
-
-  const deriveWorkerEnvFromApiBase = (apiBase) => {
-    const b = (apiBase === undefined || apiBase === null) ? '' : String(apiBase);
-    return (b.toLowerCase().includes('sandbox')) ? 'SANDBOX' : 'PROD';
-  };
-
-  const normalizeEnv = (v, fallback) => {
-    const f = (fallback === undefined || fallback === null) ? 'PROD' : String(fallback).trim().toUpperCase();
-    const s = (v === undefined || v === null) ? '' : String(v).trim();
-    const u = s ? s.toUpperCase() : '';
-    return u || f || 'PROD';
-  };
-
-  const previewSafeDetails = {
-    pay_date: payDate,
-    week_ending_cutoff: cutoffIso,
-    has_candidate_id: !!candidateId,
-    has_client_id: !!clientId,
-    perform_readiness_checks: performReadinessChecks,
-    case_resolution_count: Object.keys(sanitizedCaseResolutionsResult.value || {}).length
-  };
-
-  let preview0 = null;
-  try {
-    preview0 = await callPayPreview();
-  } catch (e) {
-    const classified = classifyPreviewError(e, previewSafeDetails);
-    return buildPreviewErrorResponse(classified.status, classified.code, classified.message, classified.details, classified.canRetry);
-  }
-
-  if (!performReadinessChecks) {
-    return withCORS(env, req, ok({
-      ok: true,
-      preview: preview0,
-      readiness: {
-        performed: false,
-        attempted_count: 0,
-        success_count: 0,
-        failed_count: 0,
-        payees_processed: 0,
-        did_work: false,
-        diagnostics: []
-      }
-    }));
-  }
-
-  try {
-    const settings = (preview0 && typeof preview0 === 'object' && preview0.settings && typeof preview0.settings === 'object')
-      ? preview0.settings
-      : {};
-
-    const rail = (settings.rail && typeof settings.rail === 'object') ? settings.rail : {};
-
-    const providerDefault = String(
-      rail.provider_default || rail.providerDefault || rail.rail_provider_default || rail.provider || 'CSV'
-    ).trim().toUpperCase() || 'CSV';
-
-    const envDefaultRaw = String(
-      rail.env_default || rail.envDefault || rail.rail_env_default || rail.env || 'PROD'
-    ).trim();
-
-    const railEnv = normalizeEnv(envDefaultRaw, 'PROD');
-
-    const needNameCheck = (rail.need_name_check === true);
-    const requiresPayeeMap = (rail.requires_payee_map === true);
-
-    const payees0 = Array.isArray(preview0.payees) ? preview0.payees : [];
-
-    if (!payees0.length || providerDefault === 'CSV' || (!needNameCheck && !requiresPayeeMap)) {
-      return withCORS(env, req, ok({
-        ok: true,
-        preview: preview0,
-        readiness: {
-          performed: false,
-          attempted_count: 0,
-          success_count: 0,
-          failed_count: 0,
-          payees_processed: payees0.length || 0,
-          did_work: false,
-          diagnostics: []
-        }
-      }));
-    }
-
-    if (providerDefault !== 'REVOLUT') {
-      return withCORS(env, req, ok({
-        ok: true,
-        preview: preview0,
-        readiness: {
-          performed: false,
-          attempted_count: 0,
-          success_count: 0,
-          failed_count: 0,
-          payees_processed: payees0.length || 0,
-          did_work: false,
-          diagnostics: [{
-            code: 'READINESS_PROVIDER_NOT_IMPLEMENTED',
-            provider: providerDefault
-          }]
-        }
-      }));
-    }
-
-    const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
-    const workerEnv = deriveWorkerEnvFromApiBase(apiBase || '');
-    const expectedEnv = normalizeEnv(railEnv, workerEnv);
-
-    if (expectedEnv !== workerEnv) {
-      throw new Error(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`);
-    }
-
-    const diag = await revolutEnsurePayeesReadyFromPreview(env, railEnv, payees0, user.id);
-
-    const preview1 = (diag && diag.did_work === true) ? await callPayPreview() : preview0;
-
-    return withCORS(env, req, ok({
-      ok: true,
-      preview: preview1,
-      readiness: {
-        performed: true,
-        attempted_count: Number.isFinite(Number(diag?.attempted_count)) ? Number(diag.attempted_count) : 0,
-        success_count: Number.isFinite(Number(diag?.success_count)) ? Number(diag.success_count) : 0,
-        failed_count: Number.isFinite(Number(diag?.failed_count)) ? Number(diag.failed_count) : 0,
-        payees_processed: Number.isFinite(Number(diag?.payees_processed)) ? Number(diag.payees_processed) : (payees0.length || 0),
-        did_work: !!(diag && diag.did_work === true),
-        diagnostics: Array.isArray(diag?.diagnostics) ? diag.diagnostics : []
-      }
-    }));
-  } catch (e) {
-    return withCORS(env, req, ok({
-      ok: true,
-      preview: preview0,
-      readiness: {
-        performed: true,
-        attempted_count: 0,
-        success_count: 0,
-        failed_count: 0,
-        payees_processed: Array.isArray(preview0?.payees) ? preview0.payees.length : 0,
-        did_work: false,
-        diagnostics: [{
-          code: 'READINESS_FAILED',
-          message: String(e?.message || e || 'Readiness checks failed')
-        }]
-      },
-      warning: {
-        code: 'BANKING_PREVIEW_READINESS_FAILED',
-        message: 'Banking preview loaded, but readiness checks could not be completed.'
-      }
-    }));
-  }
-}
 
 
 async function handleTimesheetCreateManualDaily(env, req) {
@@ -15520,7 +16127,6 @@ async function handleTimesheetCreateManualDaily(env, req) {
 }
 
 
-
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -15561,6 +16167,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
   const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
   if (!cutoffIso) return withCORS(env, req, badRequest('week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY'));
 
+  const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -16172,6 +16779,201 @@ async function handleBankingPayCreateDraft(env, req, user) {
     if (includeFilters && effectiveClientId) args.p_client_id = effectiveClientId;
     return args;
   };
+
+  const sessionIdText = trimStr(body.session_id || body.sessionId || '');
+  const payChannelScopeRaw = trimStr(body.pay_channel_scope || body.payChannelScope || body.scope || '');
+  const payChannelScope = (() => {
+    const s = payChannelScopeRaw.toUpperCase();
+    if (!s) return null;
+    return (s === 'ALL' || s === 'PAYE' || s === 'UMBRELLA') ? s : null;
+  })();
+
+  if (sessionIdText && !uuidRe.test(sessionIdText)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID when supplied'));
+  }
+  if (payChannelScopeRaw && !payChannelScope) {
+    return withCORS(env, req, badRequest('pay_channel_scope must be ALL, PAYE, or UMBRELLA when supplied'));
+  }
+
+  if (sessionIdText) {
+    const enc = encodeURIComponent;
+
+    const mergedSessionDecisionInput = cloneJson(previewDecisionsIn) || {};
+
+    if (Object.prototype.hasOwnProperty.call(body, 'case_resolutions')) {
+      mergedSessionDecisionInput.case_resolutions = cloneJson(body.case_resolutions);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'selected_preview_row_ids')) {
+      mergedSessionDecisionInput.selected_preview_row_ids = cloneJson(body.selected_preview_row_ids);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'selectedPreviewRowIds')) {
+      mergedSessionDecisionInput.selected_preview_row_ids = cloneJson(body.selectedPreviewRowIds);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_reason')) {
+      mergedSessionDecisionInput.same_week_paye_override_reason = body.same_week_paye_override_reason;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideReason')) {
+      mergedSessionDecisionInput.same_week_paye_override_reason = body.sameWeekPayeOverrideReason;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_continue')) {
+      mergedSessionDecisionInput.same_week_paye_override_continue = body.same_week_paye_override_continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideContinue')) {
+      mergedSessionDecisionInput.same_week_paye_override_continue = body.sameWeekPayeOverrideContinue;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_verified')) {
+      mergedSessionDecisionInput.same_week_paye_override_verified = body.same_week_paye_override_verified;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideVerified')) {
+      mergedSessionDecisionInput.same_week_paye_override_verified = body.sameWeekPayeOverrideVerified;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_verified_by_user_id')) {
+      mergedSessionDecisionInput.same_week_paye_override_verified_by_user_id = body.same_week_paye_override_verified_by_user_id;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideVerifiedByUserId')) {
+      mergedSessionDecisionInput.same_week_paye_override_verified_by_user_id = body.sameWeekPayeOverrideVerifiedByUserId;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'same_week_paye_override_verified_at_utc')) {
+      mergedSessionDecisionInput.same_week_paye_override_verified_at_utc = body.same_week_paye_override_verified_at_utc;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'sameWeekPayeOverrideVerifiedAtUtc')) {
+      mergedSessionDecisionInput.same_week_paye_override_verified_at_utc = body.sameWeekPayeOverrideVerifiedAtUtc;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'candidate_ids')) {
+      mergedSessionDecisionInput.candidate_ids = cloneJson(body.candidate_ids);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'exclude_timesheet_ids')) {
+      mergedSessionDecisionInput.exclude_timesheet_ids = cloneJson(body.exclude_timesheet_ids);
+    }
+
+    const normalizedSessionDecisions = normalizeBankingPayPreviewDecisions(mergedSessionDecisionInput);
+    if (!normalizedSessionDecisions || normalizedSessionDecisions.ok !== true) {
+      return withCORS(env, req, badRequest(String(normalizedSessionDecisions?.error || 'Invalid preview_decisions_json')));
+    }
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+        `?id=eq.${enc(sessionIdText)}` +
+        `&select=id,actor_user_id,status,source_snapshot_run_id,version` +
+        `&limit=1`,
+        false
+      );
+
+      const sessionRow = (rows && rows[0]) ? rows[0] : null;
+      if (!sessionRow) {
+        return withCORS(env, req, notFound('Workbench session not found'));
+      }
+      if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
+        return withCORS(env, req, forbidden('Forbidden'));
+      }
+      if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
+        return withCORS(env, req, badRequest('Workbench session is not open'));
+      }
+
+      const explicitDecisionInputPresent = !!(
+        normalizedSessionDecisions.explicit.case_resolutions ||
+        normalizedSessionDecisions.explicit.selected_preview_row_ids ||
+        normalizedSessionDecisions.explicit.same_week_paye_override_reason ||
+        normalizedSessionDecisions.explicit.same_week_paye_override_continue ||
+        normalizedSessionDecisions.explicit.same_week_paye_override_verified ||
+        normalizedSessionDecisions.explicit.same_week_paye_override_verified_by_user_id ||
+        normalizedSessionDecisions.explicit.same_week_paye_override_verified_at_utc
+      );
+
+      let syncResult = {
+        ok: true,
+        session_id: sessionIdText,
+        snapshot_run_id: String(sessionRow.source_snapshot_run_id || '').trim() || null,
+        session_version: sessionRow.version ?? null,
+        applied_case_resolution_results: [],
+        cleared_case_resolution_results: [],
+        unchanged_case_resolution_count: 0,
+        selected_rows_result: null,
+        state_changed: false,
+        touched_candidate_ids: [],
+        job_ids: []
+      };
+
+      if (explicitDecisionInputPresent) {
+        syncResult = await syncBankingPayPreviewDecisionsToSession(
+          env,
+          actorUserId,
+          sessionIdText,
+          normalizedSessionDecisions
+        );
+      }
+
+      const prepareRpc = await sbRpc(env, 'pay_workbench_prepare_draft', {
+        p_session_id: sessionIdText,
+        p_actor_user_id: actorUserId,
+        p_selected_preview_row_ids: null,
+        p_pay_channel_scope: payChannelScope,
+        p_override_reason: overrideReason,
+        p_override_continue: overrideContinue,
+        p_override_verified: overrideVerified,
+        p_override_verified_by_user_id: overrideVerifiedByUserId,
+        p_override_verified_at_utc: overrideVerifiedAtUtc
+      });
+
+      let preparePayload = prepareRpc;
+      try {
+        if (Array.isArray(prepareRpc) && prepareRpc.length === 1 && prepareRpc[0] && typeof prepareRpc[0] === 'object') {
+          preparePayload = prepareRpc[0];
+        }
+        if (preparePayload && typeof preparePayload === 'object' && Object.prototype.hasOwnProperty.call(preparePayload, 'pay_workbench_prepare_draft')) {
+          preparePayload = preparePayload.pay_workbench_prepare_draft;
+        }
+      } catch {}
+
+      const outPayload = (preparePayload && typeof preparePayload === 'object' && !Array.isArray(preparePayload))
+        ? { ...preparePayload }
+        : {};
+
+      outPayload.override_verification = overrideVerification;
+      outPayload.session = {
+        session_id: sessionIdText,
+        snapshot_run_id: outPayload.source_snapshot_run_id || syncResult.snapshot_run_id || (String(sessionRow.source_snapshot_run_id || '').trim() || null),
+        source_session_version: outPayload.source_session_version ?? syncResult.session_version ?? sessionRow.version ?? null
+      };
+      outPayload.decision_sync = {
+        explicit_input_present: explicitDecisionInputPresent,
+        state_changed: !!syncResult.state_changed,
+        applied_case_resolution_count: Array.isArray(syncResult.applied_case_resolution_results) ? syncResult.applied_case_resolution_results.length : 0,
+        cleared_case_resolution_count: Array.isArray(syncResult.cleared_case_resolution_results) ? syncResult.cleared_case_resolution_results.length : 0,
+        unchanged_case_resolution_count: Number.isFinite(Number(syncResult.unchanged_case_resolution_count))
+          ? Number(syncResult.unchanged_case_resolution_count)
+          : 0,
+        touched_candidate_ids: Array.isArray(syncResult.touched_candidate_ids) ? syncResult.touched_candidate_ids : [],
+        job_ids: Array.isArray(syncResult.job_ids) ? syncResult.job_ids : []
+      };
+
+      logRouteDebug('info', 'PAY_CREATE_DRAFT_SESSION_PREPARE_SUCCESS', {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        session_id: sessionIdText,
+        pay_channel_scope: payChannelScope || 'ALL',
+        umbrella_status: String(outPayload?.umbrella_status || '').trim() || null,
+        umbrella_pay_batch_id: String(outPayload?.umbrella_pay_batch_id || '').trim() || null,
+        paye_status: String(outPayload?.paye_status || '').trim() || null,
+        paye_pay_batch_id: String(outPayload?.paye_pay_batch_id || '').trim() || null,
+        source_snapshot_run_id: outPayload?.source_snapshot_run_id || syncResult.snapshot_run_id || null,
+        source_session_version: outPayload?.source_session_version ?? syncResult.session_version ?? null
+      });
+
+      return withCORS(env, req, ok(outPayload));
+    } catch (e) {
+      logRouteDebug('error', 'PAY_CREATE_DRAFT_SESSION_PREPARE_FAILED', {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        session_id: sessionIdText,
+        pay_channel_scope: payChannelScope || 'ALL',
+        error: String(e?.message || e || '')
+      });
+      return withCORS(env, req, serverError(String(e?.message || e)));
+    }
+  }
 
   const unwrapPayPreviewRpc = (rpcRes) => {
     let payload = rpcRes;
@@ -16979,6 +17781,8 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
@@ -17828,6 +18632,7 @@ async function handleBankingIdLedgerList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -17884,6 +18689,16 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _extractExecutionFields = (batchPayload) => {
+    const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
+    const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : payload;
+    return {
+      execution_commit_state: batchObj.execution_commit_state ?? payload.execution_commit_state ?? null,
+      execution_commit_ref: batchObj.execution_commit_ref ?? payload.execution_commit_ref ?? null,
+      execution_committed_at_utc: batchObj.execution_committed_at_utc ?? payload.execution_committed_at_utc ?? null
+    };
   };
 
   const jsonResponse = (status, payload) => {
@@ -18107,6 +18922,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         return withCORS(env, req, jsonResponse(norm.status, norm.body));
       }
       const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
+      const executionFields = _extractExecutionFields(afterGet);
 
       const msg = 'PREVIEW_GATE_NOT_SATISFIED: batch has hard blockers; rerun preview and resolve Blocked for Pay items.';
       return withCORS(env, req, jsonResponse(400, {
@@ -18116,7 +18932,10 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         pay_batch_id: id,
         executed: execRes,
         prepared: prepRes,
-        batch_get: afterGet
+        batch_get: afterGet,
+        execution_commit_state: executionFields.execution_commit_state,
+        execution_commit_ref: executionFields.execution_commit_ref,
+        execution_committed_at_utc: executionFields.execution_committed_at_utc
       }));
     }
 
@@ -18325,6 +19144,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return withCORS(env, req, jsonResponse(norm.status, norm.body));
     }
     const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
+    const executionFields = _extractExecutionFields(afterGet);
 
     return withCORS(env, req, ok({
       ok: true,
@@ -18336,6 +19156,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       remittances: workerCommunications,
       communications: workerCommunications,
       worker_communications: workerCommunications,
+      execution_commit_state: executionFields.execution_commit_state,
+      execution_commit_ref: executionFields.execution_commit_ref,
+      execution_committed_at_utc: executionFields.execution_committed_at_utc,
       batch_get: afterGet
     }));
   } catch (e) {
@@ -18352,6 +19175,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
 }
+
+
+
 async function handleBankingPaySnoozeUpsert(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -19813,6 +20639,29 @@ async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
     };
   };
 
+  const _unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const _extractExecutionFields = (batchPayload) => {
+    const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
+    const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : payload;
+    return {
+      execution_commit_state: batchObj.execution_commit_state ?? payload.execution_commit_state ?? null,
+      execution_commit_ref: batchObj.execution_commit_ref ?? payload.execution_commit_ref ?? null,
+      execution_committed_at_utc: batchObj.execution_committed_at_utc ?? payload.execution_committed_at_utc ?? null
+    };
+  };
+
   try {
     const rpcRes = await sbRpc(env, 'pay_execute_bank', {
       p_pay_batch_id: id,
@@ -19820,17 +20669,23 @@ async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
       p_actor_user_id: user.id
     });
 
-    let payload = rpcRes;
+    const executedPayload = _unwrapRpcPayload(rpcRes, 'pay_execute_bank');
+
+    let batchGetPayload = {};
     try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_execute_bank')) {
-        payload = payload.pay_execute_bank;
-      }
+      const batchGetRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+      batchGetPayload = _unwrapRpcPayload(batchGetRes, 'pay_batch_get');
     } catch {}
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    const executionFields = _extractExecutionFields(batchGetPayload);
+
+    return withCORS(env, req, ok({
+      ...(executedPayload && typeof executedPayload === 'object' ? executedPayload : {}),
+      execution_commit_state: executionFields.execution_commit_state,
+      execution_commit_ref: executionFields.execution_commit_ref,
+      execution_committed_at_utc: executionFields.execution_committed_at_utc,
+      batch_get: batchGetPayload
+    }));
   } catch (e) {
     const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
     return withCORS(env, req, jsonResponse(norm.status, norm.body));
@@ -20264,6 +21119,7 @@ async function handleBankingPayBatchPrepare(env, req, user, payBatchId) {
   }
 }
 
+
 async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -20275,9 +21131,6 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   const scheduleKindRaw = String(body.schedule_kind || '').trim().toUpperCase();
   if (!scheduleKindRaw) return withCORS(env, req, badRequest('schedule_kind is required'));
 
-  // ✅ Normalize legacy UI/backend value -> DB canonical enum
-  // DB expects: IMMEDIATE | SCHEDULED
-  // We accept legacy: AT_TIME (treated as SCHEDULED)
   const scheduleKind =
     (scheduleKindRaw === 'AT_TIME')
       ? 'SCHEDULED'
@@ -20296,14 +21149,12 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     return withCORS(env, req, badRequest('scheduled_at_utc is required when schedule_kind=SCHEDULED (or legacy AT_TIME)'));
   }
 
-  // ✅ Only pass scheduled_at_utc to the DB when scheduled
   const scheduledAtUtc = (scheduleKind === 'SCHEDULED') ? scheduledAtUtcIn : null;
 
   const fundingAccountRef = (body.funding_account_ref === null || body.funding_account_ref === undefined)
     ? null
     : String(body.funding_account_ref).trim() || null;
 
-  // ✅ DB expects warning_hours_json to be a JSON array (or null). Reject objects to avoid DB exceptions.
   let warningHoursJson = null;
   if (body.warning_hours_json === null || body.warning_hours_json === undefined) {
     warningHoursJson = null;
@@ -20367,7 +21218,30 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     return null;
   };
 
-  // ✅ Re-auth required (password + 2FA already done client-side; server requires reauth_token)
+  const _unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const _extractExecutionFields = (batchPayload) => {
+    const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
+    const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : payload;
+    return {
+      execution_commit_state: batchObj.execution_commit_state ?? payload.execution_commit_state ?? null,
+      execution_commit_ref: batchObj.execution_commit_ref ?? payload.execution_commit_ref ?? null,
+      execution_committed_at_utc: batchObj.execution_committed_at_utc ?? payload.execution_committed_at_utc ?? null,
+      source_workbench_session_id: batchObj.source_workbench_session_id ?? payload.source_workbench_session_id ?? null,
+      source_snapshot_run_id: batchObj.source_snapshot_run_id ?? payload.source_snapshot_run_id ?? null,
+      source_session_version: batchObj.source_session_version ?? payload.source_session_version ?? null
+    };
+  };
+
   const reauthToken = String(body.reauth_token || '').trim();
   if (!reauthToken) return withCORS(env, req, badRequest('reauth_token is required'));
 
@@ -20379,7 +21253,6 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   if (String(rtp.purpose || '').trim() !== 'PAYMENT_SCHEDULE') return withCORS(env, req, unauthorized('Invalid reauth_token'));
   if (String(rtp.sub || '').trim() !== String(user.id || '').trim()) return withCORS(env, req, unauthorized('Invalid reauth_token'));
 
-  // ✅ Initiator must be a payment authoriser
   try {
     const enc = encodeURIComponent;
     const { rows: urows } = await sbFetch(
@@ -20396,22 +21269,12 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to validate payment authoriser')));
   }
 
-  // Optional: initiator can choose to use golden key (still optional; DB enforces eligibility)
   const actorIntentRaw = String(body.actor_intent || '').trim().toUpperCase();
   const actorIntent = (actorIntentRaw === 'USE_GOLDEN_KEY') ? 'USE_GOLDEN_KEY' : null;
 
   try {
-    // Determine provider from batch snapshot
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
-
-    let batchPayload = batchRes;
-    try {
-      if (Array.isArray(batchRes) && batchRes.length === 1 && batchRes[0] && typeof batchRes[0] === 'object') batchPayload = batchRes[0];
-      if (batchPayload && typeof batchPayload === 'object' && Object.prototype.hasOwnProperty.call(batchPayload, 'pay_batch_get')) {
-        batchPayload = batchPayload.pay_batch_get;
-      }
-    } catch {}
-
+    const batchPayload = _unwrapRpcPayload(batchRes, 'pay_batch_get');
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
     const providerRaw = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
     const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
@@ -20421,7 +21284,6 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
     }
 
-    // ✅ Generic availability gate via adapter.capabilities()
     let caps = null;
     try {
       if (adapter && typeof adapter.capabilities === 'function') {
@@ -20436,13 +21298,10 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(msg));
     }
 
-    // ✅ Scheduling must be supported for this rail
     if (!adapter || typeof adapter.scheduleBatch !== 'function') {
       return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
     }
 
-    // ✅ Rail-generic env mismatch guard (no provider branching here)
-    // Compare DB batch env snapshot (partition key) with adapter-reported worker_env (derived from the rail’s actual credentials/base URL).
     const batchEnvRaw = (batchObj && batchObj.rail_env_snapshot !== undefined && batchObj.rail_env_snapshot !== null)
       ? String(batchObj.rail_env_snapshot).trim().toUpperCase()
       : '';
@@ -20461,7 +21320,6 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
     }
 
-    // ✅ NEW: Authorisation-start (transactional) — do NOT call pay_batch_schedule directly
     const rpcRes = await sbRpc(env, 'pay_batch_auth_start', {
       p_pay_batch_id: id,
       p_schedule_kind: scheduleKind,
@@ -20472,20 +21330,30 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
       p_actor_intent: actorIntent
     });
 
-    let payload = rpcRes;
+    const payload = _unwrapRpcPayload(rpcRes, 'pay_batch_auth_start');
+    const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? { ...payload } : {};
+
+    let refreshedBatchPayload = null;
     try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_auth_start')) {
-        payload = payload.pay_batch_auth_start;
-      }
+      const refreshedRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+      refreshedBatchPayload = _unwrapRpcPayload(refreshedRes, 'pay_batch_get');
     } catch {}
 
-    const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const executionFields = _extractExecutionFields(refreshedBatchPayload || batchPayload || {});
 
-    // ✅ If fully authorised, queue “payment scheduled” notifications to ALL authorisers (best-effort; never blocks scheduling)
+    const responsePayload = {
+      ...out,
+      execution_commit_state: executionFields.execution_commit_state,
+      execution_commit_ref: executionFields.execution_commit_ref,
+      execution_committed_at_utc: executionFields.execution_committed_at_utc,
+      source_workbench_session_id: executionFields.source_workbench_session_id,
+      source_snapshot_run_id: executionFields.source_snapshot_run_id,
+      source_session_version: executionFields.source_session_version
+    };
+
     try {
-      const becameAuthorised = (out.became_authorised === true) || (String(out.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
-      const authRequestId = (out.auth_request_id != null && String(out.auth_request_id).trim()) ? String(out.auth_request_id).trim() : null;
+      const becameAuthorised = (responsePayload.became_authorised === true) || (String(responsePayload.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
+      const authRequestId = (responsePayload.auth_request_id != null && String(responsePayload.auth_request_id).trim()) ? String(responsePayload.auth_request_id).trim() : null;
 
       if (becameAuthorised) {
         await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user?.id || null);
@@ -20494,7 +21362,7 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
       // best-effort only
     }
 
-    return withCORS(env, req, ok(out));
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     const stale409 = _maybeStale409(e);
     if (stale409) return stale409;
@@ -20506,6 +21374,9 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(msg));
   }
 }
+
+
+
 async function handlePaymentAuthorisersList(env, req, user) {
   const enc = encodeURIComponent;
 
@@ -21918,8 +22789,6 @@ async function handleBankingPayBatchNotifyScheduled(env, req, user, payBatchId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'NOTIFY_FAILED')));
   }
 }
-
-
 async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -21934,9 +22803,159 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   const reason = String(body.reason || '').trim();
   if (!reason) return withCORS(env, req, badRequest('reason is required'));
 
-  // ✅ Password-only confirmation (no 2FA)
+  const discardSession = (() => {
+    const raw = body.discard_session ?? body.discardSession;
+    if (typeof raw === 'boolean') return raw;
+    if (raw == null) return false;
+    const s = String(raw).trim().toLowerCase();
+    if (!s) return false;
+    if (['1', 'true', 't', 'yes', 'y', 'on'].includes(s)) return true;
+    if (['0', 'false', 'f', 'no', 'n', 'off'].includes(s)) return false;
+    return false;
+  })();
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const envObj = _safeJsonParse(e.body);
+        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (envObj && typeof envObj === 'object') {
+            if (typeof envObj.message === 'string') msg = envObj.message;
+            if (!msg && typeof envObj.code === 'string') return envObj;
+          }
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const _analyzeCancelPayload = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const code = String(p.code || '').trim().toUpperCase() || null;
+    const cancellationOutcome = String(p.cancellation_outcome || '').trim().toUpperCase() || null;
+    const executionCommitState = String(p.execution_commit_state || '').trim().toUpperCase() || null;
+    const status = String(p.status || '').trim().toUpperCase() || null;
+    const explicitOk = (typeof p.ok === 'boolean') ? p.ok : null;
+
+    const correctionOnly = (
+      code === 'CORRECTION_ONLY_REQUIRED' ||
+      cancellationOutcome === 'CORRECTION_ONLY' ||
+      cancellationOutcome === 'POST_COMMIT_CORRECTION_ONLY' ||
+      p.correction_only === true
+    );
+
+    const externalCancelConfirmationRequired = (
+      code === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' ||
+      cancellationOutcome === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' ||
+      cancellationOutcome === 'AWAITING_EXTERNAL_CANCEL_CONFIRMATION' ||
+      p.external_cancel_confirmation_required === true
+    );
+
+    const preSubmissionCancel = (cancellationOutcome === 'PRE_SUBMISSION_CANCEL');
+    const preCommitUnwind = (cancellationOutcome === 'PRE_COMMIT_UNWIND');
+
+    const cancelSucceeded = (
+      explicitOk === true ||
+      preSubmissionCancel ||
+      preCommitUnwind ||
+      status === 'CANCELLED' ||
+      !!String(p.cancelled_at_utc || '').trim()
+    ) && !correctionOnly && !externalCancelConfirmationRequired;
+
+    return {
+      code,
+      cancellation_outcome: cancellationOutcome,
+      execution_commit_state: executionCommitState,
+      status,
+      cancel_succeeded: cancelSucceeded,
+      pre_submission_cancel: preSubmissionCancel,
+      pre_commit_unwind: preCommitUnwind,
+      correction_only: correctionOnly,
+      external_cancel_confirmation_required: externalCancelConfirmationRequired
+    };
+  };
+
+  const _buildCancelFlow = (payload) => {
+    const analysis = _analyzeCancelPayload(payload);
+    return {
+      cancellation_outcome: analysis.cancellation_outcome,
+      execution_commit_state: analysis.execution_commit_state,
+      pre_submission_cancel: analysis.pre_submission_cancel,
+      pre_commit_unwind: analysis.pre_commit_unwind,
+      correction_only: analysis.correction_only,
+      external_cancel_confirmation_required: analysis.external_cancel_confirmation_required
+    };
+  };
+
+  const _buildConflictResponse = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const cancelFlow = _buildCancelFlow(p);
+    const responsePayload = {
+      ok: false,
+      pay_batch_id: id,
+      error: p,
+      cancel_flow: cancelFlow,
+      session_discard: {
+        requested: discardSession,
+        attempted: false,
+        ok: false,
+        skipped_reason: 'BATCH_CANCEL_NOT_FINALIZED'
+      }
+    };
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify(responsePayload), {
+        status: 409,
+        headers: JSON_HEADERS
+      })
+    );
+  };
+
   try {
-    const userRow = await sbGetUserById(env, user.id); // includes password_hash per existing helper
+    const userRow = await sbGetUserById(env, user.id);
     if (!userRow || userRow.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
 
     const okPw = await pbkdf2Verify(password, userRow.password_hash || '');
@@ -21952,19 +22971,69 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       p_reason: reason
     });
 
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_cancel')) {
-        payload = payload.pay_batch_cancel;
-      }
-    } catch {}
+    const payload = _unwrapRpcPayload(rpcRes, 'pay_batch_cancel');
+    const cancelAnalysis = _analyzeCancelPayload(payload);
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+    if (!cancelAnalysis.cancel_succeeded) {
+      return _buildConflictResponse(payload);
+    }
+
+    const sourceSessionId = String(payload.source_workbench_session_id || '').trim();
+
+    const sessionDiscardResult = {
+      requested: discardSession,
+      attempted: false,
+      ok: false,
+      discarded_session_id: null,
+      skipped_reason: null,
+      result: null,
+      error: null
+    };
+
+    if (discardSession === true) {
+      if (uuidRe.test(sourceSessionId)) {
+        sessionDiscardResult.attempted = true;
+        try {
+          const discardRpc = await sbRpc(env, 'pay_workbench_session_discard', {
+            p_session_id: sourceSessionId,
+            p_actor_user_id: user.id
+          });
+          const discardPayload = _unwrapRpcPayload(discardRpc, 'pay_workbench_session_discard');
+          sessionDiscardResult.ok = true;
+          sessionDiscardResult.discarded_session_id = sourceSessionId;
+          sessionDiscardResult.result = discardPayload;
+        } catch (discardErr) {
+          sessionDiscardResult.ok = false;
+          sessionDiscardResult.discarded_session_id = sourceSessionId;
+          sessionDiscardResult.error = String(discardErr?.message || discardErr);
+        }
+      } else {
+        sessionDiscardResult.skipped_reason = 'NO_SOURCE_SESSION';
+      }
+    } else {
+      sessionDiscardResult.skipped_reason = 'SESSION_PRESERVED_BY_DEFAULT';
+    }
+
+    const responsePayload = {
+      ...(payload && typeof payload === 'object' ? payload : {}),
+      cancel_flow: _buildCancelFlow(payload),
+      session_discard: sessionDiscardResult
+    };
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
+    const dbPayload = _extractDbRaisedJson(e);
+    if (
+      dbPayload &&
+      typeof dbPayload === 'object' &&
+      ['CORRECTION_ONLY_REQUIRED', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED'].includes(String(dbPayload.code || '').trim().toUpperCase())
+    ) {
+      return _buildConflictResponse(dbPayload);
+    }
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
@@ -22342,6 +23411,16 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
   };
 
+  const _extractExecutionFields = (batchPayload) => {
+    const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
+    const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : payload;
+    return {
+      execution_commit_state: batchObj.execution_commit_state ?? payload.execution_commit_state ?? null,
+      execution_commit_ref: batchObj.execution_commit_ref ?? payload.execution_commit_ref ?? null,
+      execution_committed_at_utc: batchObj.execution_committed_at_utc ?? payload.execution_committed_at_utc ?? null
+    };
+  };
+
   const _settlementAdvanced = (settledObj) => {
     if (!settledObj || typeof settledObj !== 'object') return false;
 
@@ -22376,7 +23455,6 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   };
 
   try {
-    // Determine provider from batch snapshot
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
 
     let batchPayload = batchRes;
@@ -22410,30 +23488,35 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     const THROTTLE_MS = 2 * 60 * 1000;
 
     if (hasPending && lastCheckedMs > 0 && (nowMs - lastCheckedMs) < THROTTLE_MS) {
-      // ✅ Throttled: rely on prior poll/settle; return current batch state without calling rail.
       const freshObj = (batchPayload && typeof batchPayload === 'object') ? batchPayload : {};
+      const executionFields = _extractExecutionFields(freshObj);
       return withCORS(env, req, ok({
         ...freshObj,
         poll_result: { ok: true, skipped: true, reason: 'THROTTLED', throttle_ms: THROTTLE_MS, last_status_checked_at_utc: lastCheckedIso },
         poll_provider: provider,
         poll_server_utc: new Date().toISOString(),
-        remittances: { attempted: false, ok: false, reason: 'THROTTLED' }
+        remittances: { attempted: false, ok: false, reason: 'THROTTLED' },
+        execution_commit_state: executionFields.execution_commit_state,
+        execution_commit_ref: executionFields.execution_commit_ref,
+        execution_committed_at_utc: executionFields.execution_committed_at_utc
       }));
     }
 
-    // If nothing is pending, skip poll (but still return fresh batch state)
     if (!hasPending) {
       const freshObj = (batchPayload && typeof batchPayload === 'object') ? batchPayload : {};
+      const executionFields = _extractExecutionFields(freshObj);
       return withCORS(env, req, ok({
         ...freshObj,
         poll_result: { ok: true, skipped: true, reason: 'NO_PENDING' },
         poll_provider: provider,
         poll_server_utc: new Date().toISOString(),
-        remittances: { attempted: false, ok: false, reason: 'NO_PENDING' }
+        remittances: { attempted: false, ok: false, reason: 'NO_PENDING' },
+        execution_commit_state: executionFields.execution_commit_state,
+        execution_commit_ref: executionFields.execution_commit_ref,
+        execution_committed_at_utc: executionFields.execution_committed_at_utc
       }));
     }
 
-    // ✅ If pending exists but nothing is pollable, do NOT call rail; return safe skipped result.
     if (!hasPollable) {
       let settleNoopRes = null;
       try {
@@ -22458,22 +23541,24 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       } catch {}
 
       const freshObj2 = (freshPayload2 && typeof freshPayload2 === 'object') ? freshPayload2 : {};
+      const executionFields = _extractExecutionFields(freshObj2);
       return withCORS(env, req, ok({
         ...freshObj2,
         poll_result: { ok: true, skipped: true, reason: 'NO_POLLABLE_RAIL_TX_ID' },
         poll_provider: provider,
         poll_server_utc: new Date().toISOString(),
-        remittances: remitInfo
+        remittances: remitInfo,
+        execution_commit_state: executionFields.execution_commit_state,
+        execution_commit_ref: executionFields.execution_commit_ref,
+        execution_committed_at_utc: executionFields.execution_committed_at_utc
       }));
     }
 
-    // Always delegate polling/settlement to adapter (CSV adapter returns a no-op poll result).
     const adapter = getRailAdapter(provider);
     if (!adapter || typeof adapter.pollBatch !== 'function') {
       return withCORS(env, req, badRequest('POLL_NOT_SUPPORTED_FOR_THIS_RAIL'));
     }
 
-    // ✅ Generic availability + supports gate via adapter.capabilities() (capability-driven)
     try {
       if (adapter && typeof adapter.capabilities === 'function') {
         const caps = await adapter.capabilities(env);
@@ -22515,7 +23600,6 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
         || msgU.includes('"CODE":3006')
         || msgU.includes('CODE\":3006');
 
-      // ✅ Soft-fail: do NOT 500-loop on rail "not found" during pending states; return safe skipped.
       if (isRevolutNotFound) {
         let settleNoopRes2 = null;
         try {
@@ -22540,19 +23624,22 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
         } catch {}
 
         const freshObj3 = (freshPayload3 && typeof freshPayload3 === 'object') ? freshPayload3 : {};
+        const executionFields = _extractExecutionFields(freshObj3);
         return withCORS(env, req, ok({
           ...freshObj3,
           poll_result: { ok: true, skipped: true, reason: 'RAIL_RESOURCE_NOT_FOUND', detail: msg },
           poll_provider: provider,
           poll_server_utc: new Date().toISOString(),
-          remittances: remitInfo
+          remittances: remitInfo,
+          execution_commit_state: executionFields.execution_commit_state,
+          execution_commit_ref: executionFields.execution_commit_ref,
+          execution_committed_at_utc: executionFields.execution_committed_at_utc
         }));
       }
 
       throw e;
     }
 
-    // ✅ If adapter didn't call settle (no updates), still bump last_status_checked_at_utc via a no-op settle.
     try {
       const settledObj = (polled && typeof polled === 'object') ? polled.settled : null;
       if (!settledObj) {
@@ -22564,7 +23651,6 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       }
     } catch {}
 
-    // ✅ Remittances: if settlement advanced, send now (idempotent sender handles repeats safely)
     try {
       const settledObj2 = (polled && typeof polled === 'object') ? polled.settled : null;
       remitInfoFromPoll = await trySendRemittancesIfAdvanced(settledObj2, provider);
@@ -22573,7 +23659,6 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       remitInfoFromPoll = { attempted: true, ok: false, reason: msg, provider };
     }
 
-    // ✅ Always return refreshed pay_batch_get for UI
     const batchRes2 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
 
     let freshPayload = batchRes2;
@@ -22585,18 +23670,23 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     } catch {}
 
     const freshObj = (freshPayload && typeof freshPayload === 'object') ? freshPayload : {};
+    const executionFields = _extractExecutionFields(freshObj);
 
     return withCORS(env, req, ok({
       ...freshObj,
       poll_result: (polled && typeof polled === 'object') ? polled : {},
       poll_provider: provider,
       poll_server_utc: new Date().toISOString(),
-      remittances: remitInfoFromPoll
+      remittances: remitInfoFromPoll,
+      execution_commit_state: executionFields.execution_commit_state,
+      execution_commit_ref: executionFields.execution_commit_ref,
+      execution_committed_at_utc: executionFields.execution_committed_at_utc
     }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 
@@ -34299,7 +35389,6 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
-
 async function handleBulkProcessDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -34611,6 +35700,8 @@ async function handleBulkProcessDataset(env, req) {
     const processingDisplay = String(row?.processing_status_display || '').trim().toUpperCase();
     const isLocked = !!(row?.locked_by_invoice_id || row?.paid_at_utc);
     const isAuthorised = !!row?.authorised_at_server;
+    const canEditTimesheetData = !isLocked && !isAuthorised;
+    const reviewOnly = isLocked || isAuthorised;
 
     const isUnprocessed =
       (!tsId && !!row?.contract_week_id) ||
@@ -34634,12 +35725,12 @@ async function handleBulkProcessDataset(env, req) {
       is_contract_week_only: !tsId && !!row?.contract_week_id,
       is_real_timesheet_row: !!tsId,
       bulk_process_bucket: isUnprocessed ? 'UNPROCESSED' : 'PROCESSED',
-      can_save: true,
-      can_process: isUnprocessed,
-      can_unprocess: !!tsId && !isLocked && !isAuthorised,
-      can_edit_timesheet_data: !isLocked && !isAuthorised,
+      can_save: canEditTimesheetData,
+      can_process: isUnprocessed && canEditTimesheetData,
+      can_unprocess: !!tsId && !isUnprocessed && canEditTimesheetData,
+      can_edit_timesheet_data: canEditTimesheetData,
       can_manage_evidence: true,
-      review_only: !!isLocked,
+      review_only: reviewOnly,
       ...badgeInfo
     };
 
@@ -103874,12 +104965,10 @@ async function handlePayCandidateAdvancesReport(env, req, candidateIdParam) {
   }
 }
 
-
 async function handleTimesheetBucketPreview(env, req) {
   const enc    = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-  // ✅ YYYY-MM-DD in Europe/London (stable, no locale ordering assumptions)
   const toLondonYmd = (dt) => {
     try {
       const d = (dt instanceof Date) ? dt : new Date(dt);
@@ -103903,6 +104992,383 @@ async function handleTimesheetBucketPreview(env, req) {
     }
   };
 
+  const boolish = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+  };
+
+  const norm = (s) => String(s || '').trim();
+  const normRole = (s) => norm(s).replace(/\s+/g, ' ').trim().toUpperCase();
+  const normBand = (v) => {
+    const s = norm(v);
+    if (!s) return null;
+    let m = s.match(/^\s*band\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*b\s*([0-9]+)\s*$/i);
+    if (!m) m = s.match(/^\s*([0-9]+)\s*$/);
+    if (m && m[1]) return `Band ${parseInt(m[1], 10)}`;
+    return s;
+  };
+
+  const parseCandidateRoleCodes = (rolesVal) => {
+    try {
+      let roles = rolesVal;
+      if (typeof roles === 'string') roles = JSON.parse(roles);
+      if (!Array.isArray(roles)) return [];
+      return roles
+        .map((r) => (r && typeof r === 'object' ? r.code : r))
+        .map((c) => normRole(c))
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+
+  const pctToMultiplier = (pctMaybe) => {
+    let p = Number(pctMaybe);
+    if (!Number.isFinite(p) || p <= 0) return 1;
+    if (p > 1) p = p / 100;
+    const m = 1 + p;
+    return (Number.isFinite(m) && m > 0) ? m : 1;
+  };
+
+  const parseHHMM = (s) => {
+    const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+
+  const normaliseDailyHHMM = (raw) => {
+    let s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    if (/^\d{1,2}:\d{2}$/.test(s)) {
+      const parts = s.split(':');
+      const hh = String(Number(parts[0]) || 0).padStart(2, '0');
+      const mm = String(Number(parts[1]) || 0).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+    s = s.replace(':', '');
+    if (!/^\d{1,4}$/.test(s)) return '';
+    if (s.length <= 2) {
+      const h = Number(s);
+      if (!Number.isFinite(h)) return '';
+      return `${String(h).padStart(2, '0')}:00`;
+    }
+    const mm = s.slice(-2);
+    const hh = s.slice(0, -2);
+    return `${String(Number(hh) || 0).padStart(2, '0')}:${String(Number(mm) || 0).padStart(2, '0')}`;
+  };
+
+  const parseBreakMinutes = (v) => {
+    const s = String(v == null ? '' : v).trim();
+    if (!s) return '';
+    if (!/^\d{1,4}$/.test(s)) return NaN;
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 0) return NaN;
+    return Math.floor(n);
+  };
+
+  const addDaysYmdLocal = (ymd, days) => {
+    try {
+      const d = new Date(`${String(ymd || '').slice(0, 10)}T00:00:00Z`);
+      if (Number.isNaN(d.getTime())) return String(ymd || '').slice(0, 10);
+      d.setUTCDate(d.getUTCDate() + Number(days || 0));
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    } catch {
+      return String(ymd || '').slice(0, 10);
+    }
+  };
+
+  const buildLocalHm = (mins) => {
+    const m = Number(mins);
+    if (!Number.isFinite(m)) return '';
+    const mm = ((m % 1440) + 1440) % 1440;
+    const hh = String(Math.floor(mm / 60)).padStart(2, '0');
+    const mi = String(mm % 60).padStart(2, '0');
+    return `${hh}:${mi}`;
+  };
+
+  const formatLondonLocalParts = (dt) => {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        hourCycle: 'h23'
+      });
+      const parts = fmt.formatToParts(dt);
+      const year  = parts.find(p => p.type === 'year')?.value || '';
+      const month = parts.find(p => p.type === 'month')?.value || '';
+      const day   = parts.find(p => p.type === 'day')?.value || '';
+      let hour    = parts.find(p => p.type === 'hour')?.value || '';
+      const min   = parts.find(p => p.type === 'minute')?.value || '';
+      if (hour === '24') hour = '00';
+      return {
+        ymd:  (year && month && day) ? `${year}-${month}-${day}` : '',
+        hhmm: (hour && min) ? `${hour}:${min}` : ''
+      };
+    } catch {
+      return { ymd: '', hhmm: '' };
+    }
+  };
+
+  const uniqueLocalUtcCandidates = (ymd, hhmm) => {
+    const ymdStr = String(ymd || '').slice(0, 10);
+    const hm = String(hhmm || '').trim();
+    const mDate = ymdStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const mTime = hm.match(/^(\d{2}):(\d{2})$/);
+    if (!mDate || !mTime) return [];
+
+    const Y  = Number(mDate[1]);
+    const Mo = Number(mDate[2]);
+    const D  = Number(mDate[3]);
+    const H  = Number(mTime[1]);
+    const Mi = Number(mTime[2]);
+    if (!Number.isFinite(Y) || !Number.isFinite(Mo) || !Number.isFinite(D) || !Number.isFinite(H) || !Number.isFinite(Mi)) return [];
+
+    const out = [];
+    const seen = new Set();
+
+    for (const offsetHours of [0, 1]) {
+      const dt = new Date(Date.UTC(Y, Mo - 1, D, H - offsetHours, Mi, 0, 0));
+      if (Number.isNaN(dt.getTime())) continue;
+
+      const loc = formatLondonLocalParts(dt);
+      if (loc.ymd !== ymdStr || loc.hhmm !== hm) continue;
+
+      const iso = dt.toISOString();
+      if (seen.has(iso)) continue;
+      seen.add(iso);
+      out.push({ iso, ms: dt.getTime() });
+    }
+
+    out.sort((a, b) => a.ms - b.ms);
+    return out;
+  };
+
+  const resolveShiftWindowFromLocal = (ymd, startHHMM, endHHMM) => {
+    const s0 = parseHHMM(startHHMM);
+    const e0 = parseHHMM(endHHMM);
+    if (s0 == null || e0 == null || s0 === e0) return null;
+
+    const shiftStartAdj = s0;
+    const shiftEndAdj = (e0 > s0) ? e0 : (e0 + 1440);
+    const endYmd = addDaysYmdLocal(ymd, Math.floor(shiftEndAdj / 1440));
+    const resolvedEndHHMM = buildLocalHm(shiftEndAdj);
+
+    const startCandidates = uniqueLocalUtcCandidates(ymd, startHHMM);
+    const endCandidates = uniqueLocalUtcCandidates(endYmd, resolvedEndHHMM);
+    if (!startCandidates.length || !endCandidates.length) return null;
+
+    const pairs = new Map();
+    for (const a of startCandidates) {
+      for (const b of endCandidates) {
+        if (b.ms <= a.ms) continue;
+        const key = `${a.ms}|${b.ms}`;
+        if (pairs.has(key)) continue;
+        pairs.set(key, {
+          startMs: a.ms,
+          endMs: b.ms,
+          startIso: a.iso,
+          endIso: b.iso,
+          shiftStartAdj,
+          shiftEndAdj
+        });
+      }
+    }
+
+    const uniquePairs = Array.from(pairs.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+    if (uniquePairs.length !== 1) return null;
+    return uniquePairs[0];
+  };
+
+  const resolveBreakWindowWithinShift = (ymd, shiftInfo, breakStartHHMM, breakEndHHMM) => {
+    if (!shiftInfo) return null;
+
+    const bs0 = parseHHMM(breakStartHHMM);
+    const be0 = parseHHMM(breakEndHHMM);
+    if (bs0 == null || be0 == null || bs0 === be0) return null;
+
+    let bsAdj = bs0;
+    if (bsAdj < shiftInfo.shiftStartAdj) bsAdj += 1440;
+
+    let beAdj = be0;
+    if (beAdj < bsAdj) beAdj += 1440;
+
+    if (bsAdj < shiftInfo.shiftStartAdj || beAdj > shiftInfo.shiftEndAdj || beAdj <= bsAdj) return null;
+
+    const bsYmd = addDaysYmdLocal(ymd, Math.floor(bsAdj / 1440));
+    const beYmd = addDaysYmdLocal(ymd, Math.floor(beAdj / 1440));
+    const bsHHMM = buildLocalHm(bsAdj);
+    const beHHMM = buildLocalHm(beAdj);
+
+    const startCandidates = uniqueLocalUtcCandidates(bsYmd, bsHHMM);
+    const endCandidates = uniqueLocalUtcCandidates(beYmd, beHHMM);
+    if (!startCandidates.length || !endCandidates.length) return null;
+
+    const pairs = new Map();
+    for (const a of startCandidates) {
+      for (const b of endCandidates) {
+        if (b.ms <= a.ms) continue;
+        if (a.ms < shiftInfo.startMs || b.ms > shiftInfo.endMs) continue;
+        const key = `${a.ms}|${b.ms}`;
+        if (pairs.has(key)) continue;
+        pairs.set(key, {
+          startMs: a.ms,
+          endMs: b.ms,
+          startIso: a.iso,
+          endIso: b.iso,
+          minutes: Math.round((b.ms - a.ms) / 60000)
+        });
+      }
+    }
+
+    const uniquePairs = Array.from(pairs.values()).sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+    if (uniquePairs.length !== 1) return null;
+    if (!(uniquePairs[0].minutes > 0)) return null;
+    return uniquePairs[0];
+  };
+
+  const parseDailyDraftSchedule = (bodyObj) => {
+    const bodySafe = (bodyObj && typeof bodyObj === 'object') ? bodyObj : {};
+    let src = null;
+
+    if (bodySafe.schedule_json != null) {
+      src = bodySafe.schedule_json;
+    } else if (bodySafe.actual_schedule_json != null) {
+      src = bodySafe.actual_schedule_json;
+    }
+
+    if (src == null) return null;
+
+    let parsed = src;
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch {
+        return null;
+      }
+    }
+
+    if (Array.isArray(parsed)) {
+      const first = parsed.find((x) => x && typeof x === 'object') || null;
+      parsed = first;
+    }
+
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const breakMinutesParsed = parseBreakMinutes(
+      parsed.break_minutes ??
+      parsed.break_mins ??
+      ''
+    );
+
+    return {
+      date: norm(parsed.date || parsed.work_date || parsed.date_ymd || ''),
+      start: normaliseDailyHHMM(parsed.start || ''),
+      end: normaliseDailyHHMM(parsed.end || ''),
+      break_start: normaliseDailyHHMM(parsed.break_start || ''),
+      break_end: normaliseDailyHHMM(parsed.break_end || ''),
+      break_minutes:
+        (breakMinutesParsed === '' || Number.isNaN(breakMinutesParsed))
+          ? (breakMinutesParsed === '' ? '' : NaN)
+          : breakMinutesParsed
+    };
+  };
+
+  const validateDailyDraftSchedule = (draft) => {
+    const errors = [];
+    const clean = {
+      date: norm(draft?.date || ''),
+      start: normaliseDailyHHMM(draft?.start || ''),
+      end: normaliseDailyHHMM(draft?.end || ''),
+      break_start: normaliseDailyHHMM(draft?.break_start || ''),
+      break_end: normaliseDailyHHMM(draft?.break_end || ''),
+      break_minutes: ''
+    };
+
+    const breakMinutesParsed = parseBreakMinutes(draft?.break_minutes);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(clean.date)) {
+      errors.push('Date is required.');
+    }
+
+    if (!!clean.start !== !!clean.end) {
+      errors.push('Start and End must both be present (or both blank).');
+    }
+
+    const hasBreakWindow = !!(clean.break_start || clean.break_end);
+    if (!!clean.break_start !== !!clean.break_end) {
+      errors.push('Break start and Break end must both be present (or both blank).');
+    }
+
+    if (breakMinutesParsed !== '' && Number.isNaN(breakMinutesParsed)) {
+      errors.push('Break (mins) must be a non-negative whole number.');
+    }
+
+    if (hasBreakWindow && breakMinutesParsed !== '') {
+      errors.push('Use either Break start/end windows or Break (mins), not both.');
+    }
+
+    let shiftInfo = null;
+    let shiftMinutes = null;
+
+    if (clean.start && clean.end) {
+      shiftInfo = resolveShiftWindowFromLocal(clean.date, clean.start, clean.end);
+      if (!shiftInfo) {
+        errors.push('Start and End must form one valid worked shift in Europe/London.');
+      } else {
+        shiftMinutes = Math.round((shiftInfo.endMs - shiftInfo.startMs) / 60000);
+      }
+    }
+
+    if (!clean.start && !clean.end && (hasBreakWindow || breakMinutesParsed !== '')) {
+      errors.push('You cannot set break times/minutes without a worked Start and End.');
+    }
+
+    let breakInfo = null;
+    if (hasBreakWindow && clean.start && clean.end && shiftInfo) {
+      breakInfo = resolveBreakWindowWithinShift(clean.date, shiftInfo, clean.break_start, clean.break_end);
+      if (!breakInfo) {
+        errors.push('Break window must be fully within the worked shift span.');
+      }
+    }
+
+    if (breakMinutesParsed !== '' && Number.isFinite(shiftMinutes) && breakMinutesParsed > shiftMinutes) {
+      errors.push('Break (mins) cannot exceed the worked shift duration.');
+    }
+
+    clean.break_minutes = (breakMinutesParsed === '' || Number.isNaN(breakMinutesParsed)) ? '' : breakMinutesParsed;
+
+    return {
+      ok: errors.length === 0,
+      errors,
+      clean,
+      shiftInfo,
+      breakInfo
+    };
+  };
+
+  const anyMissing = (h, P, C) =>
+    (Number(h?.day || 0)   > 0 && (P?.day   == null || C?.day   == null)) ||
+    (Number(h?.night || 0) > 0 && (P?.night == null || C?.night == null)) ||
+    (Number(h?.sat || 0)   > 0 && (P?.sat   == null || C?.sat   == null)) ||
+    (Number(h?.sun || 0)   > 0 && (P?.sun   == null || C?.sun   == null)) ||
+    (Number(h?.bh || 0)    > 0 && (P?.bh    == null || C?.bh    == null));
+
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -103924,11 +105390,7 @@ async function handleTimesheetBucketPreview(env, req) {
   let cw       = null;
   let contract = null;
 
-  // ─────────────────────
-  // 0) Load context
-  // ─────────────────────
   if (timesheetId) {
-    // Existing timesheet: use CURRENT weekly context
     ts = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -103940,14 +105402,335 @@ async function handleTimesheetBucketPreview(env, req) {
       return withCORS(env, req, notFound('Timesheet not found'));
     }
 
-    const ctx = await loadWeeklyContext(env, ts); // { cw, contract } for weekly TS
+    const tsScope = String(ts?.sheet_scope || '').toUpperCase();
+
+    if (tsScope === 'DAILY') {
+      let financeAnchorYmd  = null;
+      let financeAnchorKind = 'TODAY';
+
+      try {
+        const authIso = ts?.authorised_at_server || null;
+        const authYmd = authIso ? toLondonYmd(authIso) : null;
+        if (authYmd) {
+          financeAnchorYmd  = authYmd;
+          financeAnchorKind = 'AUTHORISED_AT_SERVER';
+        } else {
+          financeAnchorYmd  = toLondonYmd(new Date()) || null;
+          financeAnchorKind = 'TODAY';
+        }
+      } catch {
+        financeAnchorYmd  = toLondonYmd(new Date()) || null;
+        financeAnchorKind = 'TODAY';
+      }
+
+      const ctxRows = await rpcTsfinLoadContextBatch(env, { timesheetIds: [String(timesheetId)] });
+      const ctx = Array.isArray(ctxRows)
+        ? (
+            ctxRows.find((r) => String(r?.effective_timesheet_id || '') === String(timesheetId)) ||
+            ctxRows.find((r) => String(r?.out_timesheet?.timesheet_id || '') === String(timesheetId)) ||
+            ctxRows[0] ||
+            null
+          )
+        : null;
+
+      if (!ctx || !ctx.out_timesheet) {
+        return withCORS(env, req, badRequest('Could not load daily timesheet context'));
+      }
+
+      const dailyTs = ctx.out_timesheet || ts;
+      const candidate = ctx.out_candidate || null;
+      const client_id = ctx.out_client_id || null;
+      const policy = (ctx.out_policy && typeof ctx.out_policy === 'object') ? ctx.out_policy : {};
+      const candidate_id = candidate?.id || null;
+      const candidate_assignment = candidate_id ? 'ASSIGNED' : 'UNASSIGNED';
+
+      const candidateRoleCodes = parseCandidateRoleCodes(candidate?.roles);
+      const tsRoleRaw = norm(dailyTs?.job_title_norm || '');
+      const tsRole = tsRoleRaw ? normRole(tsRoleRaw) : null;
+      const tsBand = normBand(dailyTs?.band);
+
+      let roleForRates = null;
+      if (candidate_id) {
+        if (tsRole && candidateRoleCodes.includes(tsRole)) {
+          roleForRates = tsRole;
+        } else {
+          roleForRates = null;
+        }
+      } else {
+        roleForRates = tsRole;
+      }
+
+      const bandForRates = tsBand || null;
+
+      let rate_type = 'UMBRELLA';
+      const candidatePayMethodUpper = String(candidate?.pay_method || '').toUpperCase();
+      if (candidatePayMethodUpper === 'PAYE' || candidatePayMethodUpper === 'UMBRELLA') {
+        rate_type = candidatePayMethodUpper;
+      }
+
+      const storedPayMethod =
+        String(candidate?.pay_method || '').toUpperCase() === 'PAYE' ? 'PAYE'
+        : String(candidate?.pay_method || '').toUpperCase() === 'UMBRELLA' ? 'UMBRELLA'
+        : (dailyTs?.pay_method || null);
+
+      const applyErniTo = String(policy?.apply_erni_to || 'PAYE_ONLY').toUpperCase();
+      const erniPctRaw = Number(policy?.erni_pct ?? 0);
+      const erniMult = pctToMultiplier(erniPctRaw);
+
+      const erniApplies =
+        (applyErniTo === 'ALL') ||
+        (applyErniTo === 'PAYE_ONLY' && String(storedPayMethod || '').toUpperCase() === 'PAYE');
+
+      let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+      let hoursWorkerShape = {
+        hours_day: 0,
+        hours_night: 0,
+        hours_sat: 0,
+        hours_sun: 0,
+        hours_bh: 0
+      };
+      let dailyDraftSchedule = null;
+      let workedDateYmd = dailyTs?.worked_start_iso ? (toLondonYmd(dailyTs.worked_start_iso) || null) : null;
+
+      const parsedDraft = parseDailyDraftSchedule(body);
+
+      if (parsedDraft) {
+        const checked = validateDailyDraftSchedule(parsedDraft);
+        if (!checked.ok) {
+          return withCORS(
+            env,
+            req,
+            badRequest(checked.errors[0] || 'Invalid daily schedule.')
+          );
+        }
+
+        dailyDraftSchedule = checked.clean;
+        workedDateYmd = checked.clean.date || workedDateYmd || null;
+
+        let segments = [];
+        if (checked.shiftInfo) {
+          segments.push([checked.shiftInfo.startIso, checked.shiftInfo.endIso]);
+        }
+
+        if (checked.breakInfo) {
+          segments = subtractBreak(
+            segments,
+            checked.breakInfo.startIso,
+            checked.breakInfo.endIso,
+            null
+          );
+        } else if (checked.clean.break_minutes !== '') {
+          segments = subtractBreak(
+            segments,
+            null,
+            null,
+            checked.clean.break_minutes
+          );
+        }
+
+        const classified = classifyMinutes(env, policy, segments);
+        hoursWorkerShape = {
+          hours_day: Number(classified?.hours_day || 0) || 0,
+          hours_night: Number(classified?.hours_night || 0) || 0,
+          hours_sat: Number(classified?.hours_sat || 0) || 0,
+          hours_sun: Number(classified?.hours_sun || 0) || 0,
+          hours_bh: Number(classified?.hours_bh || 0) || 0
+        };
+        hours = {
+          day:   round2(hoursWorkerShape.hours_day),
+          night: round2(hoursWorkerShape.hours_night),
+          sat:   round2(hoursWorkerShape.hours_sat),
+          sun:   round2(hoursWorkerShape.hours_sun),
+          bh:    round2(hoursWorkerShape.hours_bh)
+        };
+      } else if (body?.hours && typeof body.hours === 'object') {
+        const n = (v) => (v == null ? 0 : Number(v) || 0);
+        hours = {
+          day:   n(body.hours.day),
+          night: n(body.hours.night),
+          sat:   n(body.hours.sat),
+          sun:   n(body.hours.sun),
+          bh:    n(body.hours.bh)
+        };
+        hoursWorkerShape = {
+          hours_day: hours.day,
+          hours_night: hours.night,
+          hours_sat: hours.sat,
+          hours_sun: hours.sun,
+          hours_bh: hours.bh
+        };
+      } else {
+        let segments = [];
+        if (dailyTs?.worked_start_iso && dailyTs?.worked_end_iso) {
+          segments.push([dailyTs.worked_start_iso, dailyTs.worked_end_iso]);
+        }
+
+        segments = subtractBreak(
+          segments,
+          dailyTs?.break_start_iso || null,
+          dailyTs?.break_end_iso || null,
+          dailyTs?.break_minutes || null
+        );
+
+        const classified = classifyMinutes(env, policy, segments);
+        hoursWorkerShape = {
+          hours_day: Number(classified?.hours_day || 0) || 0,
+          hours_night: Number(classified?.hours_night || 0) || 0,
+          hours_sat: Number(classified?.hours_sat || 0) || 0,
+          hours_sun: Number(classified?.hours_sun || 0) || 0,
+          hours_bh: Number(classified?.hours_bh || 0) || 0
+        };
+        hours = {
+          day:   round2(hoursWorkerShape.hours_day),
+          night: round2(hoursWorkerShape.hours_night),
+          sat:   round2(hoursWorkerShape.hours_sat),
+          sun:   round2(hoursWorkerShape.hours_sun),
+          bh:    round2(hoursWorkerShape.hours_bh)
+        };
+      }
+
+      const ratesRows = await rpcTsfinResolveRatesBatch(env, {
+        items: [{
+          k: String(timesheetId),
+          candidate_id: candidate_id || null,
+          client_id: client_id || null,
+          role: roleForRates || null,
+          band: bandForRates || null,
+          date: workedDateYmd || null,
+          rate_type
+        }]
+      });
+
+      const rateRow = Array.isArray(ratesRows)
+        ? (
+            ratesRows.find((r) => String(r?.k || '') === String(timesheetId)) ||
+            ratesRows[0] ||
+            null
+          )
+        : null;
+
+      if (!rateRow) {
+        return withCORS(env, req, badRequest('Could not resolve daily rates'));
+      }
+
+      const pay = {
+        day:   rateRow?.pay_day   ?? null,
+        night: rateRow?.pay_night ?? null,
+        sat:   rateRow?.pay_sat   ?? null,
+        sun:   rateRow?.pay_sun   ?? null,
+        bh:    rateRow?.pay_bh    ?? null
+      };
+      const charge = {
+        day:   rateRow?.charge_day   ?? null,
+        night: rateRow?.charge_night ?? null,
+        sat:   rateRow?.charge_sat   ?? null,
+        sun:   rateRow?.charge_sun   ?? null,
+        bh:    rateRow?.charge_bh    ?? null
+      };
+
+      if (anyMissing(hours, pay, charge)) {
+        return withCORS(
+          env,
+          req,
+          badRequest('Missing rate(s) for one or more entered daily hour buckets')
+        );
+      }
+
+      const total_pay_ex_vat = round2(
+        hoursWorkerShape.hours_day   * (Number(pay.day || 0) || 0) +
+        hoursWorkerShape.hours_night * (Number(pay.night || 0) || 0) +
+        hoursWorkerShape.hours_sat   * (Number(pay.sat || 0) || 0) +
+        hoursWorkerShape.hours_sun   * (Number(pay.sun || 0) || 0) +
+        hoursWorkerShape.hours_bh    * (Number(pay.bh || 0) || 0)
+      );
+
+      const total_charge_ex_vat = round2(
+        hoursWorkerShape.hours_day   * (Number(charge.day || 0) || 0) +
+        hoursWorkerShape.hours_night * (Number(charge.night || 0) || 0) +
+        hoursWorkerShape.hours_sat   * (Number(charge.sat || 0) || 0) +
+        hoursWorkerShape.hours_sun   * (Number(charge.sun || 0) || 0) +
+        hoursWorkerShape.hours_bh    * (Number(charge.bh || 0) || 0)
+      );
+
+      const total_pay_cost_ex_vat = round2(erniApplies ? (total_pay_ex_vat * erniMult) : total_pay_ex_vat);
+      const margin_ex_vat = round2(total_charge_ex_vat - total_pay_cost_ex_vat);
+
+      if (margin_ex_vat < 0) {
+        return withCORS(
+          env,
+          req,
+          badRequest(
+            erniApplies
+              ? 'Negative margin (PAYE + ERNI applied): total charge is less than total pay cost including ERNI.'
+              : 'Negative margin: total charge is less than total pay for the staged hours/rates.'
+          )
+        );
+      }
+
+      const rate_source_refs_json = {
+        kind: rateRow?.source_kind || 'NONE',
+        source_kind: rateRow?.source_kind || 'NONE',
+        override_id: rateRow?.override_id || null,
+        default_id: rateRow?.default_id || null,
+        rate_type: rateRow?.rate_type || rate_type || null
+      };
+
+      return withCORS(env, req, ok({
+        sheet_scope: 'DAILY',
+        timesheet_id: String(timesheetId),
+        candidate_id: candidate_id || null,
+        client_id: client_id || null,
+        candidate_assignment,
+        role: roleForRates || null,
+        band: bandForRates || null,
+        pay_method: storedPayMethod || null,
+        worked_date_ymd: workedDateYmd || null,
+        schedule_json: dailyDraftSchedule
+          ? [{
+              date: dailyDraftSchedule.date,
+              start: dailyDraftSchedule.start,
+              end: dailyDraftSchedule.end,
+              break_start: dailyDraftSchedule.break_start,
+              break_end: dailyDraftSchedule.break_end,
+              break_minutes: dailyDraftSchedule.break_minutes
+            }]
+          : null,
+
+        hours,
+        pay,
+        charge,
+
+        finance: {
+          apply_erni_to: applyErniTo,
+          erni_pct: Number(erniPctRaw ?? 0),
+          erni_multiplier: erniMult,
+          erni_applies: !!erniApplies,
+          anchor: financeAnchorKind,
+          anchor_ymd: financeAnchorYmd
+        },
+
+        rate_source_refs_json,
+
+        additional_units_json: {},
+        additional_pay_ex_vat: 0,
+        additional_charge_ex_vat: 0,
+        additional_margin_ex_vat: 0,
+
+        total_pay_ex_vat,
+        total_charge_ex_vat,
+        margin_ex_vat,
+
+        ...(erniApplies ? { total_pay_cost_ex_vat_including_erni: total_pay_cost_ex_vat } : {})
+      }));
+    }
+
+    const ctx = await loadWeeklyContext(env, ts);
     if (!ctx) {
       return withCORS(env, req, badRequest('Not a weekly contract-driven timesheet'));
     }
     cw       = ctx.cw;
     contract = ctx.contract;
   } else {
-    // Planned week: no TS yet
     cw = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}&select=*`
@@ -103965,11 +105748,6 @@ async function handleTimesheetBucketPreview(env, req) {
     }
   }
 
-  // ─────────────────────
-  // 0.5) Finance globals (anchor aligned to TSFIN rules)
-  //   - authorised TS  -> authorised_at_server (London date)
-  //   - otherwise      -> today (London date)
-  // ─────────────────────
   let financeAnchorYmd  = null;
   let financeAnchorKind = 'TODAY';
 
@@ -103990,20 +105768,10 @@ async function handleTimesheetBucketPreview(env, req) {
 
   const finance = await loadFinanceGlobals(env, financeAnchorYmd || null).catch(() => ({}));
 
-  // Robust pct normaliser: accepts 15 or 0.15
-  const pctToMultiplier = (pctMaybe) => {
-    let p = Number(pctMaybe);
-    if (!Number.isFinite(p) || p <= 0) return 1;
-    if (p > 1) p = p / 100; // treat as percent
-    const m = 1 + p;
-    return (Number.isFinite(m) && m > 0) ? m : 1;
-  };
-
   const applyErniTo = String(finance?.apply_erni_to || 'PAYE_ONLY').toUpperCase();
   const erniPctRaw  = finance?.erni_pct ?? 0;
   const erniMult    = pctToMultiplier(erniPctRaw);
 
-  // Determine the contract pay method (PAYE vs UMBRELLA)
   const contractPayMethod = String(
     contract?.pay_method_snapshot || contract?.pay_method || ''
   ).toUpperCase();
@@ -104012,14 +105780,10 @@ async function handleTimesheetBucketPreview(env, req) {
     (applyErniTo === 'ALL') ||
     (applyErniTo === 'PAYE_ONLY' && contractPayMethod === 'PAYE');
 
-  // ─────────────────────
-  // 1) Derive hours by buckets
-  // ─────────────────────
   let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   let actual_schedule_json = null;
 
-  // 1a) FE schedule override from Lines
-   if (Array.isArray(body.actual_schedule_json) && body.actual_schedule_json.length) {
+  if (Array.isArray(body.actual_schedule_json) && body.actual_schedule_json.length) {
     actual_schedule_json = normaliseScheduleBreakFields(body.actual_schedule_json);
 
     try {
@@ -104044,8 +105808,6 @@ async function handleTimesheetBucketPreview(env, req) {
     } catch (e) {
       return withCORS(env, req, badRequest(e.message || 'Invalid actual_schedule_json'));
     }
-
-  // 1b) Direct hours override
   } else if (body?.hours) {
     const n = (v) => (v == null ? 0 : Number(v) || 0);
     hours = {
@@ -104055,13 +105817,9 @@ async function handleTimesheetBucketPreview(env, req) {
       sun:   n(body.hours.sun),
       bh:    n(body.hours.bh)
     };
-
-  // 1c) Existing TS: fallback to computeWeeklyHours
   } else if (ts) {
     const h = await computeWeeklyHours(env, ts, contract);
     hours = h;
-
-  // 1d) Planned week: use planned or std schedule
   } else {
     let sched = cw.planned_schedule_json || cw.std_schedule_json || contract.std_schedule_json || null;
 
@@ -104081,7 +105839,7 @@ async function handleTimesheetBucketPreview(env, req) {
       );
     }
 
-     actual_schedule_json = normaliseScheduleBreakFields(sched);
+    actual_schedule_json = normaliseScheduleBreakFields(sched);
 
     try {
       validateScheduleStructure(actual_schedule_json);
@@ -104092,7 +105850,6 @@ async function handleTimesheetBucketPreview(env, req) {
         badRequest(e.message || 'Invalid planned schedule (overlap/breaks).')
       );
     }
-
 
     try {
       const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
@@ -104108,17 +105865,7 @@ async function handleTimesheetBucketPreview(env, req) {
     }
   }
 
-  // ─────────────────────
-  // 2) Rates and missing-rate guard (core buckets)
-  // ─────────────────────
   const { pay, charge } = payChargeFromContract(contract);
-
-  const anyMissing = (h, P, C) =>
-    (h.day   > 0 && (P.day   == null || C.day   == null)) ||
-    (h.night > 0 && (P.night == null || C.night == null)) ||
-    (h.sat   > 0 && (P.sat   == null || C.sat   == null)) ||
-    (h.sun   > 0 && (P.sun   == null || C.sun   == null)) ||
-    (h.bh    > 0 && (P.bh    == null || C.bh    == null));
 
   if (anyMissing(hours, pay, charge)) {
     return withCORS(
@@ -104128,14 +105875,9 @@ async function handleTimesheetBucketPreview(env, req) {
     );
   }
 
-  // ─────────────────────
-  // 3) Additional units + totals (inline, no computeWeeklyAdditionalFromTs)
-  // ─────────────────────
-  // Staged week units from FE (e.g. { "CALL": 2, "TRAIN": 1 })
   let unitsWeek = body?.additional_units_week || {};
   if (!unitsWeek || typeof unitsWeek !== 'object') unitsWeek = {};
 
-  // Contract additional rates config
   let cfgArr = contract.additional_rates_json || [];
   if (typeof cfgArr === 'string') {
     try { cfgArr = JSON.parse(cfgArr); } catch { cfgArr = []; }
@@ -104164,7 +105906,6 @@ async function handleTimesheetBucketPreview(env, req) {
     const payEx = round2(units * payRate);
     const chgEx = round2(units * chargeRate);
 
-    // ✅ PAYE margin must include ERNI (finance window by anchor), when applicable
     const payCostEx = erniApplies ? round2(payEx * erniMult) : payEx;
     const marEx     = round2(chgEx - payCostEx);
 
@@ -104178,8 +105919,6 @@ async function handleTimesheetBucketPreview(env, req) {
       pay_ex_vat:  payEx,
       charge_ex_vat: chgEx,
       margin_ex_vat: marEx,
-
-      // helpful for UI/debugging
       ...(erniApplies ? { pay_cost_ex_vat_including_erni: payCostEx } : {})
     };
 
@@ -104190,13 +105929,9 @@ async function handleTimesheetBucketPreview(env, req) {
   additional_pay_ex_vat    = round2(additional_pay_ex_vat);
   additional_charge_ex_vat = round2(additional_charge_ex_vat);
 
-  // ✅ additional margin uses ERNI-adjusted pay cost when PAYE
   const additional_pay_cost_ex_vat = erniApplies ? round2(additional_pay_ex_vat * erniMult) : additional_pay_ex_vat;
   const additional_margin_ex_vat   = round2(additional_charge_ex_vat - additional_pay_cost_ex_vat);
 
-  // ─────────────────────
-  // 4) Core hours totals + overall totals
-  // ─────────────────────
   const hoursPayEx = round2(
     hours.day   * (pay.day   || 0) +
     hours.night * (pay.night || 0) +
@@ -104213,7 +105948,6 @@ async function handleTimesheetBucketPreview(env, req) {
     hours.bh    * (charge.bh    || 0)
   );
 
-  // Totals (pay totals remain "worker pay"; margin uses employer-cost if PAYE+ERNI applies)
   const total_pay_ex_vat    = round2(hoursPayEx + additional_pay_ex_vat);
   const total_charge_ex_vat = round2(hoursChargeEx + additional_charge_ex_vat);
 
@@ -104236,8 +105970,6 @@ async function handleTimesheetBucketPreview(env, req) {
     hours,
     pay,
     charge,
-
-    // finance context (anchored to match TSFIN rules)
     finance: {
       apply_erni_to: applyErniTo,
       erni_pct: Number(erniPctRaw ?? 0),
@@ -104256,7 +105988,6 @@ async function handleTimesheetBucketPreview(env, req) {
     total_charge_ex_vat,
     margin_ex_vat,
 
-    // helpful for UI/debugging (PAYE employer-cost view)
     ...(erniApplies ? { total_pay_cost_ex_vat_including_erni: total_pay_cost_ex_vat } : {})
   }));
 }
@@ -106498,7 +108229,6 @@ async function csvAdapter_confirmManual(env, batchId, bankConfirmRef, actorUserI
   });
 }
 
-
 async function bankingCronTick(env, opts = {}) {
   const nowUtc = (() => {
     const v = opts && opts.nowUtc ? new Date(opts.nowUtc) : new Date();
@@ -106524,6 +108254,26 @@ async function bankingCronTick(env, opts = {}) {
     return Math.max(1, Math.min(2000, Math.trunc(n)));
   })();
 
+  const workbenchClaimLimit = (() => {
+    const n = Number(opts && opts.workbenchClaimLimit);
+    if (!Number.isFinite(n)) return 20;
+    return Math.max(1, Math.min(200, Math.trunc(n)));
+  })();
+
+  const workbenchSeedEnabled = (() => {
+    if (opts && Object.prototype.hasOwnProperty.call(opts, 'workbenchSeedEnabled')) {
+      return !!opts.workbenchSeedEnabled;
+    }
+    return true;
+  })();
+
+  const workbenchEnabled = (() => {
+    if (opts && Object.prototype.hasOwnProperty.call(opts, 'workbenchEnabled')) {
+      return !!opts.workbenchEnabled;
+    }
+    return true;
+  })();
+
   const actorUserId = (() => {
     const a = (env && env.PAY_ACTOR_USER_ID && String(env.PAY_ACTOR_USER_ID).trim()) ? String(env.PAY_ACTOR_USER_ID).trim() : '';
     const b = (env && env.INVOICE_ACTOR_USER_ID && String(env.INVOICE_ACTOR_USER_ID).trim()) ? String(env.INVOICE_ACTOR_USER_ID).trim() : '';
@@ -106536,6 +108286,16 @@ async function bankingCronTick(env, opts = {}) {
   const summary = {
     ok: true,
     now_utc: nowIso,
+    workbench: {
+      enabled: workbenchEnabled,
+      ensured_runs: [],
+      seeded_runs: [],
+      claimed_jobs: [],
+      processed_jobs: [],
+      rebuilt_runs: [],
+      warnings: [],
+      errors: []
+    },
     claimed: [],
     blocked_funds: [],
     submitted: [],
@@ -106546,6 +108306,19 @@ async function bankingCronTick(env, opts = {}) {
   };
 
   const _errMsg = (e) => (e && e.message) ? String(e.message) : String(e || 'unknown');
+
+  const _unwrapRpcPayload = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
 
   const _isEnvMismatchError = (msg) => {
     const m = String(msg || '');
@@ -106569,6 +108342,40 @@ async function bankingCronTick(env, opts = {}) {
     const s = Math.max(1, Number(size) || 50);
     for (let i = 0; i < (arr || []).length; i += s) out.push(arr.slice(i, i + s));
     return out;
+  };
+
+  const _deriveWorkerEnvFromApiBase = (apiBase) => {
+    const s = String(apiBase || '').trim().toLowerCase();
+    if (!s) return 'PROD';
+    if (s.includes('sandbox')) return 'SANDBOX';
+    return 'PROD';
+  };
+
+  const _normalizeEnv = (value, fallback) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (raw === 'SANDBOX' || raw === 'PROD') return raw;
+    return String(fallback || 'PROD').trim().toUpperCase() || 'PROD';
+  };
+
+  const _londonYmd = (dateObj) => {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/London',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return fmt.format(dateObj);
+  };
+
+  const _addDaysYmd = (ymd, days) => {
+    const m = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    dt.setUTCDate(dt.getUTCDate() + Number(days || 0));
+    const y = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    return `${y}-${mm}-${dd}`;
   };
 
   const _revertBatchesToScheduled = async (payBatchIds, provider, errorMsg, phase) => {
@@ -106633,6 +108440,341 @@ async function bankingCronTick(env, opts = {}) {
 
     return false;
   };
+
+  const _processWorkbenchJobs = async () => {
+    if (!workbenchEnabled) return;
+
+    const currentPayDate = String((opts && opts.currentPayDate) || _londonYmd(nowUtc)).trim();
+    const currentWeekEndingCutoff = String((opts && opts.currentWeekEndingCutoff) || currentPayDate).trim();
+    const nextPayDate = String((opts && opts.nextPayDate) || _addDaysYmd(currentPayDate, 7) || currentPayDate).trim();
+    const nextWeekEndingCutoff = String((opts && opts.nextWeekEndingCutoff) || nextPayDate).trim();
+
+    const ensuredRuns = [];
+    const rebuiltRunIds = new Set();
+
+    const ensureOneRun = async (payDate, weekEndingCutoff, cycleLabel) => {
+      const ensureRes = await sbRpc(env, 'pay_workbench_snapshot_ensure_run', {
+        p_pay_date: payDate,
+        p_week_ending_cutoff: weekEndingCutoff,
+        p_actor_user_id: actorUserId
+      });
+      const ensurePayload = _unwrapRpcPayload(ensureRes, 'pay_workbench_snapshot_ensure_run');
+      const snapshotRunId = String(ensurePayload.snapshot_run_id || '').trim();
+      summary.workbench.ensured_runs.push({
+        cycle: cycleLabel,
+        pay_date: payDate,
+        week_ending_cutoff: weekEndingCutoff,
+        result: ensurePayload
+      });
+      if (snapshotRunId) {
+        ensuredRuns.push({ cycle: cycleLabel, payDate, weekEndingCutoff, snapshotRunId, payload: ensurePayload });
+      }
+      return snapshotRunId;
+    };
+
+    try {
+      await ensureOneRun(currentPayDate, currentWeekEndingCutoff, 'CURRENT');
+      await ensureOneRun(nextPayDate, nextWeekEndingCutoff, 'NEXT');
+    } catch (e) {
+      summary.workbench.errors.push({ code: 'WORKBENCH_ENSURE_RUN_FAILED', error: _errMsg(e) });
+    }
+
+    if (workbenchSeedEnabled) {
+      for (const run of ensuredRuns) {
+        try {
+          const seedRes = await sbRpc(env, 'pay_workbench_snapshot_enqueue_scope', {
+            p_snapshot_run_id: run.snapshotRunId,
+            p_candidate_id: null,
+            p_client_id: null,
+            p_actor_user_id: actorUserId
+          });
+          const seedPayload = _unwrapRpcPayload(seedRes, 'pay_workbench_snapshot_enqueue_scope');
+          summary.workbench.seeded_runs.push({
+            cycle: run.cycle,
+            snapshot_run_id: run.snapshotRunId,
+            result: seedPayload
+          });
+        } catch (e) {
+          summary.workbench.errors.push({
+            code: 'WORKBENCH_SEED_SCOPE_FAILED',
+            snapshot_run_id: run.snapshotRunId,
+            error: _errMsg(e)
+          });
+        }
+      }
+    }
+
+    let claimedRes;
+    try {
+      claimedRes = await sbRpc(env, 'pay_workbench_claim_due_jobs', {
+        p_limit: workbenchClaimLimit,
+        p_now_utc: nowIso
+      });
+    } catch (e) {
+      summary.workbench.errors.push({ code: 'WORKBENCH_CLAIM_FAILED', error: _errMsg(e) });
+      return;
+    }
+
+    const claimedPayload = _unwrapRpcPayload(claimedRes, 'pay_workbench_claim_due_jobs');
+    const claimedJobs = Array.isArray(claimedPayload.claimed) ? claimedPayload.claimed : (Array.isArray(claimedPayload) ? claimedPayload : []);
+    summary.workbench.claimed_jobs = claimedJobs;
+
+    const priorityOrder = {
+      SESSION_CANDIDATE_RECOMPUTE: 1,
+      SNAPSHOT_CANDIDATE_REFRESH: 2,
+      PAYEE_READINESS_ENSURE: 3,
+      CONTRACT_CLIENT_DIRTY_FANOUT: 4
+    };
+
+    const workJobs = [...claimedJobs]
+      .filter((job) => {
+        const jt = String(job?.job_type || '').trim().toUpperCase();
+        return Object.prototype.hasOwnProperty.call(priorityOrder, jt);
+      })
+      .sort((a, b) => {
+        const jtA = String(a?.job_type || '').trim().toUpperCase();
+        const jtB = String(b?.job_type || '').trim().toUpperCase();
+        const oa = priorityOrder[jtA] || 999;
+        const ob = priorityOrder[jtB] || 999;
+        if (oa !== ob) return oa - ob;
+        const pa = Number(a?.priority);
+        const pb = Number(b?.priority);
+        if (Number.isFinite(pa) && Number.isFinite(pb) && pa !== pb) return pa - pb;
+        const ra = String(a?.run_at_utc || '');
+        const rb = String(b?.run_at_utc || '');
+        if (ra !== rb) return ra.localeCompare(rb);
+        return String(a?.job_id || '').localeCompare(String(b?.job_id || ''));
+      });
+
+    for (const job of workJobs) {
+      const jobId = String(job?.job_id || '').trim();
+      const jobType = String(job?.job_type || '').trim().toUpperCase();
+      const snapshotRunId = String(job?.snapshot_run_id || '').trim() || null;
+      const sessionId = String(job?.session_id || '').trim() || null;
+      const candidateId = String(job?.candidate_id || '').trim() || null;
+      const payloadJson = (job?.payload_json && typeof job.payload_json === 'object' && !Array.isArray(job.payload_json))
+        ? job.payload_json
+        : {};
+
+      const completeJob = async (resultJson) => {
+        await sbRpc(env, 'pay_workbench_complete_job', {
+          p_job_id: jobId,
+          p_result_json: resultJson && typeof resultJson === 'object' ? resultJson : {}
+        });
+      };
+
+      const failJob = async (errorJson, retryAfterSeconds) => {
+        await sbRpc(env, 'pay_workbench_fail_job', {
+          p_job_id: jobId,
+          p_error_json: errorJson,
+          p_retry_after_seconds: retryAfterSeconds
+        });
+      };
+
+      try {
+        if (jobType === 'SESSION_CANDIDATE_RECOMPUTE') {
+          if (!sessionId || !candidateId) {
+            throw new Error('SESSION_CANDIDATE_RECOMPUTE missing session_id or candidate_id');
+          }
+          const recomputeRes = await sbRpc(env, 'pay_workbench_session_recompute_candidate', {
+            p_session_id: sessionId,
+            p_candidate_id: candidateId,
+            p_job_id: jobId
+          });
+          const recomputePayload = _unwrapRpcPayload(recomputeRes, 'pay_workbench_session_recompute_candidate');
+          await completeJob(recomputePayload);
+          summary.workbench.processed_jobs.push({
+            job_id: jobId,
+            job_type: jobType,
+            status: 'SUCCEEDED',
+            result: recomputePayload
+          });
+        } else if (jobType === 'SNAPSHOT_CANDIDATE_REFRESH') {
+          if (!snapshotRunId || !candidateId) {
+            throw new Error('SNAPSHOT_CANDIDATE_REFRESH missing snapshot_run_id or candidate_id');
+          }
+          const refreshRes = await sbRpc(env, 'pay_workbench_snapshot_refresh_candidate', {
+            p_snapshot_run_id: snapshotRunId,
+            p_candidate_id: candidateId
+          });
+          const refreshPayload = _unwrapRpcPayload(refreshRes, 'pay_workbench_snapshot_refresh_candidate');
+          await completeJob(refreshPayload);
+          rebuiltRunIds.add(snapshotRunId);
+          summary.workbench.processed_jobs.push({
+            job_id: jobId,
+            job_type: jobType,
+            status: 'SUCCEEDED',
+            result: refreshPayload
+          });
+        } else if (jobType === 'PAYEE_READINESS_ENSURE') {
+          const payees = Array.isArray(payloadJson.payees_json) ? payloadJson.payees_json : [];
+          const apiBase = (env && env.REVOLUT_API_BASE !== undefined && env.REVOLUT_API_BASE !== null) ? String(env.REVOLUT_API_BASE) : '';
+          const railEnvRaw = String(payloadJson.rail_env || payloadJson.railEnv || payloadJson.rail_env_snapshot || '').trim();
+          const railEnv = _normalizeEnv(railEnvRaw, _deriveWorkerEnvFromApiBase(apiBase || ''));
+          let readinessDiag;
+          if (!payees.length) {
+            readinessDiag = {
+              ok: true,
+              did_work: false,
+              payees_processed: 0,
+              attempted_count: 0,
+              success_count: 0,
+              failed_count: 0,
+              diagnostics: []
+            };
+          } else {
+            readinessDiag = await revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUserId);
+          }
+
+          if (snapshotRunId && candidateId) {
+            try {
+              await sbRpc(env, 'pay_workbench_enqueue_candidate_refresh', {
+                p_snapshot_run_id: snapshotRunId,
+                p_candidate_id: candidateId,
+                p_reason: 'PAYEE_READINESS_ENSURE',
+                p_actor_user_id: actorUserId,
+                p_payload_json: {
+                  source_job_id: jobId,
+                  readiness_result: readinessDiag
+                }
+              });
+            } catch (enqueueErr) {
+              summary.workbench.warnings.push({
+                code: 'PAYEE_READINESS_REFRESH_ENQUEUE_FAILED',
+                job_id: jobId,
+                snapshot_run_id: snapshotRunId,
+                candidate_id: candidateId,
+                error: _errMsg(enqueueErr)
+              });
+            }
+          } else if (sessionId && candidateId) {
+            try {
+              await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
+                p_session_id: sessionId,
+                p_candidate_id: candidateId,
+                p_reason: 'PAYEE_READINESS_ENSURE',
+                p_actor_user_id: actorUserId,
+                p_payload_json: {
+                  source_job_id: jobId,
+                  readiness_result: readinessDiag
+                }
+              });
+            } catch (enqueueErr) {
+              summary.workbench.warnings.push({
+                code: 'PAYEE_READINESS_SESSION_REFRESH_ENQUEUE_FAILED',
+                job_id: jobId,
+                session_id: sessionId,
+                candidate_id: candidateId,
+                error: _errMsg(enqueueErr)
+              });
+            }
+          }
+
+          await completeJob(readinessDiag && typeof readinessDiag === 'object' ? readinessDiag : {});
+          summary.workbench.processed_jobs.push({
+            job_id: jobId,
+            job_type: jobType,
+            status: 'SUCCEEDED',
+            result: readinessDiag
+          });
+        } else if (jobType === 'CONTRACT_CLIENT_DIRTY_FANOUT') {
+          const scopeKind = String(payloadJson.scope_kind || '').trim().toUpperCase();
+          const scopeCandidateId = String(payloadJson.candidate_id || '').trim() || null;
+          const scopeClientId = String(payloadJson.client_id || '').trim() || null;
+          const fanoutResults = [];
+          for (const run of ensuredRuns) {
+            try {
+              const fanoutRes = await sbRpc(env, 'pay_workbench_snapshot_enqueue_scope', {
+                p_snapshot_run_id: run.snapshotRunId,
+                p_candidate_id: scopeCandidateId,
+                p_client_id: scopeCandidateId ? null : scopeClientId,
+                p_actor_user_id: actorUserId
+              });
+              const fanoutPayload = _unwrapRpcPayload(fanoutRes, 'pay_workbench_snapshot_enqueue_scope');
+              fanoutResults.push({
+                snapshot_run_id: run.snapshotRunId,
+                scope_kind: scopeKind || null,
+                result: fanoutPayload
+              });
+            } catch (fanoutErr) {
+              fanoutResults.push({
+                snapshot_run_id: run.snapshotRunId,
+                scope_kind: scopeKind || null,
+                error: _errMsg(fanoutErr)
+              });
+            }
+          }
+          await completeJob({ fanout_results: fanoutResults });
+          summary.workbench.processed_jobs.push({
+            job_id: jobId,
+            job_type: jobType,
+            status: 'SUCCEEDED',
+            result: { fanout_results: fanoutResults }
+          });
+        }
+      } catch (e) {
+        const errJson = {
+          code: `${jobType || 'WORKBENCH_JOB'}_FAILED`,
+          message: _errMsg(e),
+          job_id: jobId || null,
+          job_type: jobType || null,
+          snapshot_run_id: snapshotRunId,
+          session_id: sessionId,
+          candidate_id: candidateId,
+          failed_at_utc: nowIso
+        };
+        let retryAfterSeconds = 120;
+        if (jobType === 'SESSION_CANDIDATE_RECOMPUTE') retryAfterSeconds = 30;
+        else if (jobType === 'SNAPSHOT_CANDIDATE_REFRESH') retryAfterSeconds = 60;
+        else if (jobType === 'PAYEE_READINESS_ENSURE') retryAfterSeconds = 180;
+        else if (jobType === 'CONTRACT_CLIENT_DIRTY_FANOUT') retryAfterSeconds = 300;
+
+        try {
+          await failJob(errJson, retryAfterSeconds);
+        } catch (failErr) {
+          summary.workbench.errors.push({
+            code: 'WORKBENCH_FAIL_JOB_FAILED',
+            job_id: jobId,
+            job_type: jobType,
+            error: _errMsg(failErr)
+          });
+        }
+        summary.workbench.errors.push(errJson);
+        summary.workbench.processed_jobs.push({
+          job_id: jobId,
+          job_type: jobType,
+          status: 'FAILED',
+          error: errJson
+        });
+      }
+    }
+
+    for (const snapshotRunId of rebuiltRunIds) {
+      try {
+        const rebuildRes = await sbRpc(env, 'pay_workbench_snapshot_rebuild_summary', {
+          p_snapshot_run_id: snapshotRunId
+        });
+        const rebuildPayload = _unwrapRpcPayload(rebuildRes, 'pay_workbench_snapshot_rebuild_summary');
+        summary.workbench.rebuilt_runs.push({
+          snapshot_run_id: snapshotRunId,
+          result: rebuildPayload
+        });
+      } catch (e) {
+        summary.workbench.errors.push({
+          code: 'WORKBENCH_REBUILD_SUMMARY_FAILED',
+          snapshot_run_id: snapshotRunId,
+          error: _errMsg(e)
+        });
+      }
+    }
+  };
+
+  try {
+    await _processWorkbenchJobs();
+  } catch (e) {
+    summary.workbench.errors.push({ code: 'WORKBENCH_CRON_SECTION_FAILED', error: _errMsg(e) });
+    summary.warnings.push({ code: 'WORKBENCH_CRON_SECTION_FAILED', error: _errMsg(e) });
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 1) Claim due scheduled batches (DB) and delegate execution to adapters by provider
@@ -106840,8 +108982,950 @@ async function bankingCronTick(env, opts = {}) {
 
 
 
+function normalizeBankingPayPreviewDecisions(input, options = {}) {
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+  const trimStr = (value) => String(value ?? '').trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+  const out = {};
+  const errors = [];
+  const explicit = {
+    case_resolutions: false,
+    selected_preview_row_ids: false,
+    same_week_paye_override_reason: false,
+    same_week_paye_override_continue: false,
+    same_week_paye_override_verified: false,
+    same_week_paye_override_verified_by_user_id: false,
+    same_week_paye_override_verified_at_utc: false
+  };
+  const normalizedResolutionPayloads = [];
 
+  const src = isPlainObject(input) ? (cloneJson(input) || {}) : {};
+
+  const normalizeStringArray = (raw, label) => {
+    if (raw === undefined || raw === null) return null;
+    if (!Array.isArray(raw)) {
+      errors.push(`${label} must be an array when supplied`);
+      return null;
+    }
+    const seen = new Set();
+    const result = [];
+    for (const value of raw) {
+      const text = trimStr(value);
+      if (!text) {
+        errors.push(`${label} must contain non-empty strings only`);
+        return null;
+      }
+      if (!seen.has(text)) {
+        seen.add(text);
+        result.push(text);
+      }
+    }
+    return result;
+  };
+
+  const normalizeUuidStringArray = (raw, label) => {
+    const arr = normalizeStringArray(raw, label);
+    if (arr === null) return null;
+    for (const value of arr) {
+      if (!uuidRe.test(value)) {
+        errors.push(`${label} must contain UUID strings only`);
+        return null;
+      }
+    }
+    return arr;
+  };
+
+  const parseBooleanLike = (raw, label, { required = false } = {}) => {
+    if (raw === undefined || raw === null || trimStr(raw) === '') {
+      if (required) errors.push(`${label} is required`);
+      return null;
+    }
+    if (typeof raw === 'boolean') return raw;
+    const text = trimStr(raw).toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(text)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(text)) return false;
+    errors.push(`${label} must be a boolean when supplied`);
+    return null;
+  };
+
+  const parseOptionalNonNegativeSixDp = (raw, label) => {
+    if (raw === undefined || raw === null || trimStr(raw) === '') return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+      errors.push(`${label} must be a non-negative number when supplied`);
+      return null;
+    }
+    return Math.round(n * 1000000) / 1000000;
+  };
+
+  const parseRequiredNonNegativeTwoDp = (raw, label) => {
+    if (raw === undefined || raw === null || trimStr(raw) === '') {
+      errors.push(`${label} is required`);
+      return null;
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+      errors.push(`${label} must be a non-negative number`);
+      return null;
+    }
+    if (Math.abs((n * 100) - Math.round(n * 100)) > 1e-9) {
+      errors.push(`${label} must have at most 2 decimal places`);
+      return null;
+    }
+    return Number(n.toFixed(2));
+  };
+
+  const normalizeSourceBasisJson = (value) => {
+    if (!isPlainObject(value)) return {};
+    return cloneJson(value) || {};
+  };
+
+  const stableStringify = (value) => {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+    }
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value == null ? null : value);
+  };
+
+  const buildResolutionIdentityKey = (payload) => {
+    const payloadObj = isPlainObject(payload) ? payload : {};
+    const bucket = Array.isArray(payloadObj.bucket_resolutions) && payloadObj.bucket_resolutions.length > 0 && isPlainObject(payloadObj.bucket_resolutions[0])
+      ? payloadObj.bucket_resolutions[0]
+      : payloadObj;
+    const sourceBasisJson = normalizeSourceBasisJson(
+      bucket.source_basis_json ??
+      bucket.sourceBasisJson ??
+      payloadObj.source_basis_json ??
+      payloadObj.sourceBasisJson
+    );
+    const sourceBasisKey = Object.keys(sourceBasisJson).length > 0
+      ? stableStringify(sourceBasisJson)
+      : trimStr(
+          bucket.source_basis_fingerprint ??
+          bucket.sourceBasisFingerprint ??
+          payloadObj.source_basis_fingerprint ??
+          payloadObj.sourceBasisFingerprint ??
+          ''
+        );
+
+    return [
+      upperTrim(payloadObj.resolution_family || payloadObj.resolutionFamily || ''),
+      trimStr(payloadObj.case_key || payloadObj.caseKey || ''),
+      trimStr(payloadObj.timesheet_id || payloadObj.timesheetId || bucket.timesheet_id || bucket.timesheetId || ''),
+      sourceBasisKey || '~',
+      trimStr(payloadObj.source_family_key || payloadObj.sourceFamilyKey || bucket.source_family_key || bucket.sourceFamilyKey || ''),
+      upperTrim(payloadObj.bucket_code || payloadObj.bucketCode || bucket.bucket_code || bucket.bucketCode || ''),
+      upperTrim(payloadObj.component_key_type || payloadObj.componentKeyType || bucket.component_key_type || bucket.componentKeyType || ''),
+      trimStr(payloadObj.component_key_value || payloadObj.componentKeyValue || bucket.component_key_value || bucket.componentKeyValue || '')
+    ].map((part) => part || '~').join('|');
+  };
+
+  const buildComparableResolutionShape = (payload) => {
+    const payloadObj = isPlainObject(payload) ? payload : {};
+    const bucket = Array.isArray(payloadObj.bucket_resolutions) && payloadObj.bucket_resolutions.length > 0 && isPlainObject(payloadObj.bucket_resolutions[0])
+      ? payloadObj.bucket_resolutions[0]
+      : payloadObj;
+    const sourceBasisJson = normalizeSourceBasisJson(
+      bucket.source_basis_json ??
+      bucket.sourceBasisJson ??
+      payloadObj.source_basis_json ??
+      payloadObj.sourceBasisJson
+    );
+    const sourceBasisKey = Object.keys(sourceBasisJson).length > 0
+      ? stableStringify(sourceBasisJson)
+      : trimStr(
+          bucket.source_basis_fingerprint ??
+          bucket.sourceBasisFingerprint ??
+          payloadObj.source_basis_fingerprint ??
+          payloadObj.sourceBasisFingerprint ??
+          ''
+        );
+
+    const resolutionFamily = upperTrim(payloadObj.resolution_family || payloadObj.resolutionFamily || '');
+    if (resolutionFamily === 'BUCKETED') {
+      return {
+        resolution_family: 'BUCKETED',
+        case_key: trimStr(payloadObj.case_key || payloadObj.caseKey || ''),
+        resolution_mode: upperTrim(payloadObj.resolution_mode || payloadObj.resolutionMode || bucket.resolution_mode || bucket.resolutionMode || ''),
+        resolve_all_linked_timesheets: payloadObj.resolve_all_linked_timesheets === true || payloadObj.resolveAllLinkedTimesheets === true,
+        timesheet_id: trimStr(payloadObj.timesheet_id || payloadObj.timesheetId || bucket.timesheet_id || bucket.timesheetId || ''),
+        source_basis_key: sourceBasisKey,
+        source_family_key: trimStr(payloadObj.source_family_key || payloadObj.sourceFamilyKey || bucket.source_family_key || bucket.sourceFamilyKey || ''),
+        bucket_code: upperTrim(payloadObj.bucket_code || payloadObj.bucketCode || bucket.bucket_code || bucket.bucketCode || ''),
+        component_key_type: upperTrim(payloadObj.component_key_type || payloadObj.componentKeyType || bucket.component_key_type || bucket.componentKeyType || ''),
+        component_key_value: trimStr(payloadObj.component_key_value || payloadObj.componentKeyValue || bucket.component_key_value || bucket.componentKeyValue || ''),
+        finance_component_id: trimStr(payloadObj.finance_component_id || payloadObj.financeComponentId || bucket.finance_component_id || bucket.financeComponentId || ''),
+        source_units: parseOptionalNonNegativeSixDp(bucket.source_units ?? bucket.sourceUnits ?? payloadObj.source_units ?? payloadObj.sourceUnits, 'source_units'),
+        source_rate: parseOptionalNonNegativeSixDp(bucket.source_rate ?? bucket.sourceRate ?? payloadObj.source_rate ?? payloadObj.sourceRate, 'source_rate'),
+        source_charge_rate: parseOptionalNonNegativeSixDp(bucket.source_charge_rate ?? bucket.sourceChargeRate ?? payloadObj.source_charge_rate ?? payloadObj.sourceChargeRate, 'source_charge_rate'),
+        target_rate: parseRequiredNonNegativeTwoDp(bucket.target_rate ?? bucket.targetRate ?? payloadObj.target_rate ?? payloadObj.targetRate, 'target_rate')
+      };
+    }
+
+    return {
+      resolution_family: 'NON_BUCKET',
+      case_key: trimStr(payloadObj.case_key || payloadObj.caseKey || ''),
+      resolution_mode: upperTrim(payloadObj.resolution_mode || payloadObj.resolutionMode || ''),
+      finance_component_id: trimStr(payloadObj.finance_component_id || payloadObj.financeComponentId || ''),
+      target_amount_ex_vat: parseRequiredNonNegativeTwoDp(
+        payloadObj.target_amount_ex_vat ?? payloadObj.targetAmountExVat ?? payloadObj.target_amount ?? payloadObj.targetAmount,
+        'target_amount_ex_vat'
+      )
+    };
+  };
+
+  const buildBucketedResolutionPayload = (caseKey, resolution, bucket) => {
+    const sourceBasisJson = normalizeSourceBasisJson(bucket.source_basis_json ?? bucket.sourceBasisJson);
+    const sourceBasisFingerprint = trimStr(
+      bucket.source_basis_fingerprint ??
+      bucket.sourceBasisFingerprint ??
+      resolution.source_basis_fingerprint ??
+      resolution.sourceBasisFingerprint ??
+      ''
+    );
+
+    const sourceUnitsRaw = bucket.source_units ?? bucket.sourceUnits ?? sourceBasisJson.source_units ?? sourceBasisJson.sourceUnits;
+    const sourceRateRaw = bucket.source_rate ?? bucket.sourceRate ?? sourceBasisJson.source_rate ?? sourceBasisJson.sourceRate;
+    const sourceChargeRateRaw = bucket.source_charge_rate ?? bucket.sourceChargeRate ?? sourceBasisJson.source_charge_rate ?? sourceBasisJson.sourceChargeRate;
+    const targetRateRaw = bucket.target_rate ?? bucket.targetRate;
+
+    const payload = {
+      case_key: caseKey,
+      resolution_family: 'BUCKETED',
+      resolve_all_linked_timesheets: resolution.resolve_all_linked_timesheets === true || resolution.resolveAllLinkedTimesheets === true,
+      resolution_mode: upperTrim(bucket.resolution_mode || bucket.resolutionMode || resolution.resolution_mode || resolution.resolutionMode || ''),
+      timesheet_id: trimStr(bucket.timesheet_id || bucket.timesheetId || resolution.timesheet_id || resolution.timesheetId || ''),
+      source_family_key: trimStr(bucket.source_family_key || bucket.sourceFamilyKey || ''),
+      bucket_code: upperTrim(bucket.bucket_code || bucket.bucketCode || sourceBasisJson.bucket_code || sourceBasisJson.bucketCode || ''),
+      component_key_type: upperTrim(bucket.component_key_type || bucket.componentKeyType || ''),
+      component_key_value: trimStr(bucket.component_key_value || bucket.componentKeyValue || ''),
+      finance_component_id: trimStr(bucket.finance_component_id || bucket.financeComponentId || ''),
+      bucket_resolutions: [
+        {
+          finance_component_id: trimStr(bucket.finance_component_id || bucket.financeComponentId || '') || null,
+          source_family_key: trimStr(bucket.source_family_key || bucket.sourceFamilyKey || ''),
+          component_key_type: upperTrim(bucket.component_key_type || bucket.componentKeyType || ''),
+          component_key_value: trimStr(bucket.component_key_value || bucket.componentKeyValue || ''),
+          resolution_mode: upperTrim(bucket.resolution_mode || bucket.resolutionMode || resolution.resolution_mode || resolution.resolutionMode || ''),
+          target_rate: parseRequiredNonNegativeTwoDp(targetRateRaw, 'target_rate'),
+          source_units: parseOptionalNonNegativeSixDp(sourceUnitsRaw, 'source_units'),
+          source_rate: parseOptionalNonNegativeSixDp(sourceRateRaw, 'source_rate'),
+          source_charge_rate: parseOptionalNonNegativeSixDp(sourceChargeRateRaw, 'source_charge_rate'),
+          bucket_code: upperTrim(bucket.bucket_code || bucket.bucketCode || sourceBasisJson.bucket_code || sourceBasisJson.bucketCode || '')
+        }
+      ]
+    };
+
+    if (sourceBasisFingerprint) payload.source_basis_fingerprint = sourceBasisFingerprint;
+    if (Object.keys(sourceBasisJson).length > 0) {
+      payload.source_basis_json = sourceBasisJson;
+      payload.bucket_resolutions[0].source_basis_json = sourceBasisJson;
+    }
+
+    if (payload.timesheet_id === '') delete payload.timesheet_id;
+    if (payload.finance_component_id === '') delete payload.finance_component_id;
+    if (payload.bucket_resolutions[0].finance_component_id == null) delete payload.bucket_resolutions[0].finance_component_id;
+    if (payload.bucket_resolutions[0].source_units === null) delete payload.bucket_resolutions[0].source_units;
+    if (payload.bucket_resolutions[0].source_rate === null) delete payload.bucket_resolutions[0].source_rate;
+    if (payload.bucket_resolutions[0].source_charge_rate === null) delete payload.bucket_resolutions[0].source_charge_rate;
+
+    return payload;
+  };
+
+  const buildNonBucketResolutionPayload = (caseKey, resolution) => {
+    const payload = {
+      case_key: caseKey,
+      resolution_family: 'NON_BUCKET',
+      resolution_mode: upperTrim(resolution.resolution_mode || resolution.resolutionMode || ''),
+      target_amount_ex_vat: parseRequiredNonNegativeTwoDp(
+        resolution.target_amount_ex_vat ?? resolution.targetAmountExVat ?? resolution.target_amount ?? resolution.targetAmount,
+        'target_amount_ex_vat'
+      ),
+      finance_component_id: trimStr(resolution.finance_component_id || resolution.financeComponentId || '')
+    };
+
+    if (payload.finance_component_id === '') delete payload.finance_component_id;
+    return payload;
+  };
+
+  const caseResolutionSource = hasOwn(src, 'case_resolutions')
+    ? src.case_resolutions
+    : hasOwn(src, 'caseResolutions')
+      ? src.caseResolutions
+      : undefined;
+
+  if (caseResolutionSource !== undefined) {
+    explicit.case_resolutions = true;
+    if (caseResolutionSource !== null && !isPlainObject(caseResolutionSource)) {
+      errors.push('preview_decisions_json.case_resolutions must be an object when provided');
+    } else {
+      const caseKeyRe = /^(timesheet|finance):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const normalizedCaseResolutions = {};
+
+      for (const [rawCaseKey, rawResolution] of Object.entries(caseResolutionSource || {})) {
+        const caseKey = trimStr(rawCaseKey);
+        if (!caseKey) continue;
+        if (!caseKeyRe.test(caseKey)) {
+          errors.push(`preview_decisions_json.case_resolutions contains invalid case_key: ${caseKey}`);
+          continue;
+        }
+        if (!isPlainObject(rawResolution)) {
+          errors.push(`preview_decisions_json.case_resolutions.${caseKey} must be an object`);
+          continue;
+        }
+
+        const embeddedCaseKey = trimStr(rawResolution.case_key ?? rawResolution.caseKey ?? caseKey);
+        if (!embeddedCaseKey || embeddedCaseKey !== caseKey) {
+          errors.push(`preview_decisions_json.case_resolutions.${caseKey}.case_key must exactly match the object key`);
+          continue;
+        }
+
+        const inferredResolutionFamily = (() => {
+          const explicitFamily = upperTrim(rawResolution.resolution_family || rawResolution.resolutionFamily || '');
+          if (explicitFamily) return explicitFamily;
+
+          const bucketResolutions = Array.isArray(rawResolution.bucket_resolutions)
+            ? rawResolution.bucket_resolutions
+            : Array.isArray(rawResolution.bucketResolutions)
+              ? rawResolution.bucketResolutions
+              : [];
+          if (bucketResolutions.length > 0) return 'BUCKETED';
+
+          const resolutionMode = upperTrim(rawResolution.resolution_mode || rawResolution.resolutionMode || rawResolution.mode || '');
+          if (resolutionMode === 'MANUAL_AMOUNT') return 'NON_BUCKET';
+          if (resolutionMode === 'MANUAL_REPLACEMENT_RATE') return 'BUCKETED';
+
+          if (
+            rawResolution.target_amount_ex_vat !== undefined ||
+            rawResolution.targetAmountExVat !== undefined ||
+            rawResolution.target_amount !== undefined ||
+            rawResolution.targetAmount !== undefined
+          ) return 'NON_BUCKET';
+
+          if (
+            rawResolution.target_rate !== undefined ||
+            rawResolution.targetRate !== undefined ||
+            rawResolution.timesheet_id !== undefined ||
+            rawResolution.timesheetId !== undefined ||
+            rawResolution.source_basis_fingerprint !== undefined ||
+            rawResolution.sourceBasisFingerprint !== undefined ||
+            rawResolution.source_basis_json !== undefined ||
+            rawResolution.sourceBasisJson !== undefined ||
+            rawResolution.source_family_key !== undefined ||
+            rawResolution.sourceFamilyKey !== undefined ||
+            rawResolution.bucket_code !== undefined ||
+            rawResolution.bucketCode !== undefined ||
+            rawResolution.component_key_type !== undefined ||
+            rawResolution.componentKeyType !== undefined ||
+            rawResolution.component_key_value !== undefined ||
+            rawResolution.componentKeyValue !== undefined
+          ) return 'BUCKETED';
+
+          return '';
+        })();
+
+        if (inferredResolutionFamily === 'BUCKETED') {
+          const bucketResolutions = Array.isArray(rawResolution.bucket_resolutions)
+            ? rawResolution.bucket_resolutions
+            : Array.isArray(rawResolution.bucketResolutions)
+              ? rawResolution.bucketResolutions
+              : [];
+          if (bucketResolutions.length <= 0) {
+            errors.push(`preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions must be a non-empty array`);
+            continue;
+          }
+
+          const sanitizedBuckets = [];
+          const seenBucketIdentityKeys = new Set();
+          let bucketFailed = false;
+
+          for (let i = 0; i < bucketResolutions.length; i++) {
+            const bucket = bucketResolutions[i];
+            const label = `preview_decisions_json.case_resolutions.${caseKey}.bucket_resolutions[${i}]`;
+
+            if (!isPlainObject(bucket)) {
+              errors.push(`${label} must be an object`);
+              bucketFailed = true;
+              break;
+            }
+
+            const sanitizedPayload = buildBucketedResolutionPayload(caseKey, rawResolution, bucket);
+            const componentKeyType = upperTrim(sanitizedPayload.component_key_type || '');
+            const componentKeyValue = trimStr(sanitizedPayload.component_key_value || '');
+            const sourceFamilyKey = trimStr(sanitizedPayload.source_family_key || '');
+            const bucketCode = upperTrim(sanitizedPayload.bucket_code || '');
+            const targetRate = sanitizedPayload.bucket_resolutions[0].target_rate;
+            const sourceUnits = sanitizedPayload.bucket_resolutions[0].source_units;
+            const sourceRate = sanitizedPayload.bucket_resolutions[0].source_rate;
+            const sourceChargeRate = sanitizedPayload.bucket_resolutions[0].source_charge_rate;
+            const sourceBasisJson = normalizeSourceBasisJson(sanitizedPayload.source_basis_json);
+
+            if (!sourceFamilyKey) {
+              errors.push(`${label}.source_family_key is required`);
+              bucketFailed = true;
+              break;
+            }
+            if (!['TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'ADJUSTMENT_CODE'].includes(componentKeyType)) {
+              errors.push(`${label}.component_key_type is invalid`);
+              bucketFailed = true;
+              break;
+            }
+            if (!componentKeyValue) {
+              errors.push(`${label}.component_key_value is required`);
+              bucketFailed = true;
+              break;
+            }
+            if (!['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_REPLACEMENT_RATE'].includes(upperTrim(sanitizedPayload.resolution_mode || ''))) {
+              errors.push(`${label}.resolution_mode is invalid`);
+              bucketFailed = true;
+              break;
+            }
+            if (componentKeyType === 'ADJUSTMENT_CODE') {
+              errors.push(`${label} cannot be submitted as a bucketed rate-bearing resolution because ADJUSTMENT_CODE rows are amount-led.`);
+              bucketFailed = true;
+              break;
+            }
+            if ((componentKeyType === 'TS_DAY' || componentKeyType === 'TS_TOTAL') && !bucketCode) {
+              errors.push(`${label}.bucket_code is required for worked-time bucketed resolutions`);
+              bucketFailed = true;
+              break;
+            }
+            if (Object.keys(sourceBasisJson).length === 0 && !trimStr(sanitizedPayload.source_basis_fingerprint || '')) {
+              errors.push(`${label}.source_basis_fingerprint or source_basis_json is required`);
+              bucketFailed = true;
+              break;
+            }
+            if (sourceUnits === null || sourceUnits <= 0 || sourceRate === null || sourceChargeRate === null || targetRate === null) {
+              errors.push(`${label} must carry exact rate-bearing row identity (source_units, source_rate, source_charge_rate, target_rate)`);
+              bucketFailed = true;
+              break;
+            }
+
+            const financeComponentId = trimStr(
+              sanitizedPayload.finance_component_id ||
+              sanitizedPayload.bucket_resolutions[0].finance_component_id ||
+              ''
+            );
+            if (financeComponentId && !uuidRe.test(financeComponentId)) {
+              errors.push(`${label}.finance_component_id must be a UUID when provided`);
+              bucketFailed = true;
+              break;
+            }
+
+            const identityKey = buildResolutionIdentityKey(sanitizedPayload);
+            if (seenBucketIdentityKeys.has(identityKey)) {
+              errors.push(`${label} duplicates another exact bucket resolution in ${caseKey}`);
+              bucketFailed = true;
+              break;
+            }
+            seenBucketIdentityKeys.add(identityKey);
+
+            sanitizedBuckets.push(cloneJson(sanitizedPayload.bucket_resolutions[0]));
+            normalizedResolutionPayloads.push(cloneJson(sanitizedPayload));
+          }
+
+          if (bucketFailed) continue;
+
+          normalizedCaseResolutions[caseKey] = {
+            case_key: caseKey,
+            resolution_family: 'BUCKETED',
+            resolve_all_linked_timesheets: rawResolution.resolve_all_linked_timesheets === true || rawResolution.resolveAllLinkedTimesheets === true,
+            bucket_resolutions: sanitizedBuckets
+          };
+          continue;
+        }
+
+        if (inferredResolutionFamily === 'NON_BUCKET') {
+          const sanitizedPayload = buildNonBucketResolutionPayload(caseKey, rawResolution);
+          if (!['SUGGESTED_EQUIVALENT_BASIS', 'MANUAL_AMOUNT'].includes(upperTrim(sanitizedPayload.resolution_mode || ''))) {
+            errors.push(`preview_decisions_json.case_resolutions.${caseKey}.resolution_mode is invalid`);
+            continue;
+          }
+          if (sanitizedPayload.target_amount_ex_vat === null) {
+            errors.push(`preview_decisions_json.case_resolutions.${caseKey}.target_amount_ex_vat is required`);
+            continue;
+          }
+          if (sanitizedPayload.finance_component_id && !uuidRe.test(sanitizedPayload.finance_component_id)) {
+            errors.push(`preview_decisions_json.case_resolutions.${caseKey}.finance_component_id must be a UUID when provided`);
+            continue;
+          }
+
+          normalizedCaseResolutions[caseKey] = cloneJson(sanitizedPayload);
+          normalizedResolutionPayloads.push(cloneJson(sanitizedPayload));
+          continue;
+        }
+
+        errors.push(`preview_decisions_json.case_resolutions.${caseKey}.resolution_family must be BUCKETED or NON_BUCKET`);
+      }
+
+      if (Object.keys(normalizedCaseResolutions).length > 0) {
+        out.case_resolutions = normalizedCaseResolutions;
+      } else if (explicit.case_resolutions) {
+        out.case_resolutions = {};
+      }
+    }
+  }
+
+  const selectedPreviewRowIdsSource = hasOwn(src, 'selected_preview_row_ids')
+    ? src.selected_preview_row_ids
+    : hasOwn(src, 'selectedPreviewRowIds')
+      ? src.selectedPreviewRowIds
+      : undefined;
+
+  if (selectedPreviewRowIdsSource !== undefined) {
+    explicit.selected_preview_row_ids = true;
+    const normalizedSelectedPreviewRowIds = normalizeStringArray(selectedPreviewRowIdsSource, 'preview_decisions_json.selected_preview_row_ids');
+    if (normalizedSelectedPreviewRowIds !== null) {
+      if (normalizedSelectedPreviewRowIds.length <= 0) {
+        errors.push('No preview rows selected. Tick at least one preview row or use Tick all.');
+      } else {
+        out.selected_preview_row_ids = normalizedSelectedPreviewRowIds;
+      }
+    }
+  }
+
+  const overrideReasonSource = hasOwn(src, 'same_week_paye_override_reason')
+    ? src.same_week_paye_override_reason
+    : hasOwn(src, 'sameWeekPayeOverrideReason')
+      ? src.sameWeekPayeOverrideReason
+      : undefined;
+
+  if (overrideReasonSource !== undefined) {
+    explicit.same_week_paye_override_reason = true;
+    const overrideReason = trimStr(overrideReasonSource);
+    if (!overrideReason) {
+      errors.push('same_week_paye_override_reason must be a non-empty string when supplied');
+    } else {
+      out.same_week_paye_override_reason = overrideReason;
+    }
+  }
+
+  const overrideContinueSource = hasOwn(src, 'same_week_paye_override_continue')
+    ? src.same_week_paye_override_continue
+    : hasOwn(src, 'sameWeekPayeOverrideContinue')
+      ? src.sameWeekPayeOverrideContinue
+      : undefined;
+
+  if (overrideContinueSource !== undefined) {
+    explicit.same_week_paye_override_continue = true;
+    const overrideContinue = parseBooleanLike(overrideContinueSource, 'same_week_paye_override_continue');
+    if (overrideContinue !== null) out.same_week_paye_override_continue = overrideContinue;
+  }
+
+  const overrideVerifiedSource = hasOwn(src, 'same_week_paye_override_verified')
+    ? src.same_week_paye_override_verified
+    : hasOwn(src, 'sameWeekPayeOverrideVerified')
+      ? src.sameWeekPayeOverrideVerified
+      : undefined;
+
+  if (overrideVerifiedSource !== undefined) {
+    explicit.same_week_paye_override_verified = true;
+    const overrideVerified = parseBooleanLike(overrideVerifiedSource, 'same_week_paye_override_verified');
+    if (overrideVerified !== null) out.same_week_paye_override_verified = overrideVerified;
+  }
+
+  const overrideVerifiedBySource = hasOwn(src, 'same_week_paye_override_verified_by_user_id')
+    ? src.same_week_paye_override_verified_by_user_id
+    : hasOwn(src, 'sameWeekPayeOverrideVerifiedByUserId')
+      ? src.sameWeekPayeOverrideVerifiedByUserId
+      : undefined;
+
+  if (overrideVerifiedBySource !== undefined) {
+    explicit.same_week_paye_override_verified_by_user_id = true;
+    const overrideVerifiedBy = trimStr(overrideVerifiedBySource);
+    if (!uuidRe.test(overrideVerifiedBy)) {
+      errors.push('same_week_paye_override_verified_by_user_id must be a UUID when supplied');
+    } else {
+      out.same_week_paye_override_verified_by_user_id = overrideVerifiedBy;
+    }
+  }
+
+  const overrideVerifiedAtSource = hasOwn(src, 'same_week_paye_override_verified_at_utc')
+    ? src.same_week_paye_override_verified_at_utc
+    : hasOwn(src, 'sameWeekPayeOverrideVerifiedAtUtc')
+      ? src.sameWeekPayeOverrideVerifiedAtUtc
+      : undefined;
+
+  if (overrideVerifiedAtSource !== undefined) {
+    explicit.same_week_paye_override_verified_at_utc = true;
+    const overrideVerifiedAt = trimStr(overrideVerifiedAtSource);
+    const parsedTs = Date.parse(overrideVerifiedAt);
+    if (!overrideVerifiedAt || Number.isNaN(parsedTs)) {
+      errors.push('same_week_paye_override_verified_at_utc must be a valid ISO datetime when supplied');
+    } else {
+      out.same_week_paye_override_verified_at_utc = new Date(parsedTs).toISOString();
+    }
+  }
+
+  if (hasOwn(src, 'candidate_ids')) {
+    const normalizedCandidateIds = normalizeUuidStringArray(src.candidate_ids, 'preview_decisions_json.candidate_ids');
+    if (normalizedCandidateIds !== null) out.candidate_ids = normalizedCandidateIds;
+  }
+
+  if (hasOwn(src, 'exclude_timesheet_ids')) {
+    const normalizedExcludeTimesheetIds = normalizeUuidStringArray(src.exclude_timesheet_ids, 'preview_decisions_json.exclude_timesheet_ids');
+    if (normalizedExcludeTimesheetIds !== null) out.exclude_timesheet_ids = normalizedExcludeTimesheetIds;
+  }
+
+  if (errors.length > 0) {
+    return {
+      ok: false,
+      error: errors[0],
+      errors,
+      value: null,
+      explicit,
+      normalized_resolution_payloads: []
+    };
+  }
+
+  return {
+    ok: true,
+    error: null,
+    errors: [],
+    explicit,
+    value: out,
+    normalized_resolution_payloads: normalizedResolutionPayloads,
+    __normalizedBankingPayPreviewDecisions: true
+  };
+}
+
+async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, sessionId, normalizedInput, options = {}) {
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+  const trimStr = (value) => String(value ?? '').trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const stableStringify = (value) => {
+    if (Array.isArray(value)) {
+      return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+    }
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value == null ? null : value);
+  };
+
+  const parseOptionalNonNegativeSixDp = (raw) => {
+    if (raw === undefined || raw === null || trimStr(raw) === '') return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n * 1000000) / 1000000;
+  };
+
+  const parseOptionalTwoDp = (raw) => {
+    if (raw === undefined || raw === null || trimStr(raw) === '') return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    return Number(n.toFixed(2));
+  };
+
+  const buildResolutionIdentityKey = (payload) => {
+    const payloadObj = isPlainObject(payload) ? payload : {};
+    const bucket = Array.isArray(payloadObj.bucket_resolutions) && payloadObj.bucket_resolutions.length > 0 && isPlainObject(payloadObj.bucket_resolutions[0])
+      ? payloadObj.bucket_resolutions[0]
+      : payloadObj;
+    const sourceBasisJsonCandidate =
+      bucket.source_basis_json ??
+      bucket.sourceBasisJson ??
+      payloadObj.source_basis_json ??
+      payloadObj.sourceBasisJson;
+    const sourceBasisJson = isPlainObject(sourceBasisJsonCandidate) ? sourceBasisJsonCandidate : {};
+    const sourceBasisKey = Object.keys(sourceBasisJson).length > 0
+      ? stableStringify(sourceBasisJson)
+      : trimStr(
+          bucket.source_basis_fingerprint ??
+          bucket.sourceBasisFingerprint ??
+          payloadObj.source_basis_fingerprint ??
+          payloadObj.sourceBasisFingerprint ??
+          ''
+        );
+
+    return [
+      upperTrim(payloadObj.resolution_family || payloadObj.resolutionFamily || ''),
+      trimStr(payloadObj.case_key || payloadObj.caseKey || ''),
+      trimStr(payloadObj.timesheet_id || payloadObj.timesheetId || bucket.timesheet_id || bucket.timesheetId || ''),
+      sourceBasisKey || '~',
+      trimStr(payloadObj.source_family_key || payloadObj.sourceFamilyKey || bucket.source_family_key || bucket.sourceFamilyKey || ''),
+      upperTrim(payloadObj.bucket_code || payloadObj.bucketCode || bucket.bucket_code || bucket.bucketCode || ''),
+      upperTrim(payloadObj.component_key_type || payloadObj.componentKeyType || bucket.component_key_type || bucket.componentKeyType || ''),
+      trimStr(payloadObj.component_key_value || payloadObj.componentKeyValue || bucket.component_key_value || bucket.componentKeyValue || '')
+    ].map((part) => part || '~').join('|');
+  };
+
+  const buildComparableResolutionShape = (payload) => {
+    const payloadObj = isPlainObject(payload) ? payload : {};
+    const bucket = Array.isArray(payloadObj.bucket_resolutions) && payloadObj.bucket_resolutions.length > 0 && isPlainObject(payloadObj.bucket_resolutions[0])
+      ? payloadObj.bucket_resolutions[0]
+      : payloadObj;
+    const sourceBasisJsonCandidate =
+      bucket.source_basis_json ??
+      bucket.sourceBasisJson ??
+      payloadObj.source_basis_json ??
+      payloadObj.sourceBasisJson;
+    const sourceBasisJson = isPlainObject(sourceBasisJsonCandidate) ? sourceBasisJsonCandidate : {};
+    const sourceBasisKey = Object.keys(sourceBasisJson).length > 0
+      ? stableStringify(sourceBasisJson)
+      : trimStr(
+          bucket.source_basis_fingerprint ??
+          bucket.sourceBasisFingerprint ??
+          payloadObj.source_basis_fingerprint ??
+          payloadObj.sourceBasisFingerprint ??
+          ''
+        );
+
+    const resolutionFamily = upperTrim(payloadObj.resolution_family || payloadObj.resolutionFamily || '');
+    if (resolutionFamily === 'BUCKETED') {
+      return {
+        resolution_family: 'BUCKETED',
+        case_key: trimStr(payloadObj.case_key || payloadObj.caseKey || ''),
+        resolution_mode: upperTrim(payloadObj.resolution_mode || payloadObj.resolutionMode || bucket.resolution_mode || bucket.resolutionMode || ''),
+        resolve_all_linked_timesheets: payloadObj.resolve_all_linked_timesheets === true || payloadObj.resolveAllLinkedTimesheets === true,
+        timesheet_id: trimStr(payloadObj.timesheet_id || payloadObj.timesheetId || bucket.timesheet_id || bucket.timesheetId || ''),
+        source_basis_key: sourceBasisKey,
+        source_family_key: trimStr(payloadObj.source_family_key || payloadObj.sourceFamilyKey || bucket.source_family_key || bucket.sourceFamilyKey || ''),
+        bucket_code: upperTrim(payloadObj.bucket_code || payloadObj.bucketCode || bucket.bucket_code || bucket.bucketCode || ''),
+        component_key_type: upperTrim(payloadObj.component_key_type || payloadObj.componentKeyType || bucket.component_key_type || bucket.componentKeyType || ''),
+        component_key_value: trimStr(payloadObj.component_key_value || payloadObj.componentKeyValue || bucket.component_key_value || bucket.componentKeyValue || ''),
+        finance_component_id: trimStr(payloadObj.finance_component_id || payloadObj.financeComponentId || bucket.finance_component_id || bucket.financeComponentId || ''),
+        source_units: parseOptionalNonNegativeSixDp(bucket.source_units ?? bucket.sourceUnits ?? payloadObj.source_units ?? payloadObj.sourceUnits),
+        source_rate: parseOptionalNonNegativeSixDp(bucket.source_rate ?? bucket.sourceRate ?? payloadObj.source_rate ?? payloadObj.sourceRate),
+        source_charge_rate: parseOptionalNonNegativeSixDp(bucket.source_charge_rate ?? bucket.sourceChargeRate ?? payloadObj.source_charge_rate ?? payloadObj.sourceChargeRate),
+        target_rate: parseOptionalTwoDp(bucket.target_rate ?? bucket.targetRate ?? payloadObj.target_rate ?? payloadObj.targetRate)
+      };
+    }
+
+    return {
+      resolution_family: 'NON_BUCKET',
+      case_key: trimStr(payloadObj.case_key || payloadObj.caseKey || ''),
+      resolution_mode: upperTrim(payloadObj.resolution_mode || payloadObj.resolutionMode || ''),
+      finance_component_id: trimStr(payloadObj.finance_component_id || payloadObj.financeComponentId || ''),
+      target_amount_ex_vat: parseOptionalTwoDp(payloadObj.target_amount_ex_vat ?? payloadObj.targetAmountExVat ?? payloadObj.target_amount ?? payloadObj.targetAmount)
+    };
+  };
+
+  const normalizeInput = (value) => {
+    if (value && value.__normalizedBankingPayPreviewDecisions === true && value.ok === true && isPlainObject(value.value)) {
+      return value;
+    }
+    return normalizeBankingPayPreviewDecisions(value, options);
+  };
+
+  const buildExistingResolutionPayloadForClear = (row) => {
+    const payload = (row && isPlainObject(row.payload_json)) ? (cloneJson(row.payload_json) || {}) : {};
+    if (!payload.case_key && row && row.case_key) payload.case_key = row.case_key;
+    if (!payload.resolution_family && row && row.payload_json && row.payload_json.resolution_family) {
+      payload.resolution_family = row.payload_json.resolution_family;
+    }
+    if (!payload.resolution_family && row && row.resolution_identity_key) {
+      const firstPart = trimStr(String(row.resolution_identity_key).split('|')[0] || '');
+      if (firstPart) payload.resolution_family = firstPart;
+    }
+    if (row && row.candidate_id && !payload.candidate_id) payload.candidate_id = row.candidate_id;
+    return payload;
+  };
+
+  const sessionIdText = trimStr(sessionId);
+  const actorIdText = trimStr(actorUserId);
+
+  if (!uuidRe.test(actorIdText)) {
+    throw new Error('actor_user_id must be a UUID');
+  }
+  if (!uuidRe.test(sessionIdText)) {
+    throw new Error('session_id must be a UUID');
+  }
+
+  const normalized = normalizeInput(normalizedInput);
+  if (!normalized || normalized.ok !== true || !isPlainObject(normalized.value)) {
+    throw new Error(String(normalized?.error || 'Invalid preview decisions'));
+  }
+
+  const { rows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(sessionIdText)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id,server_selected_preview_row_ids,version` +
+      `&limit=1`,
+    false
+  );
+
+  const sessionRow = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  if (!sessionRow) {
+    throw new Error('Workbench session not found');
+  }
+  if (trimStr(sessionRow.actor_user_id) !== actorIdText) {
+    throw new Error('Forbidden');
+  }
+  if (upperTrim(sessionRow.status) !== 'OPEN') {
+    throw new Error('Workbench session is not open');
+  }
+
+  const result = {
+    ok: true,
+    session_id: sessionIdText,
+    snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id) || null,
+    session_version: sessionRow.version ?? null,
+    applied_case_resolution_results: [],
+    cleared_case_resolution_results: [],
+    unchanged_case_resolution_count: 0,
+    selected_rows_result: null,
+    state_changed: false,
+    touched_candidate_ids: [],
+    job_ids: []
+  };
+
+  if (normalized.explicit.case_resolutions === true) {
+    const existingRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_session_case_resolutions` +
+        `?session_id=eq.${enc(sessionIdText)}` +
+        `&select=id,candidate_id,case_key,resolution_identity_key,payload_json`,
+      false
+    );
+
+    const existingRows = Array.isArray(existingRes?.rows) ? existingRes.rows : [];
+    const existingByIdentityKey = new Map();
+    for (const row of existingRows) {
+      const existingIdentityKey = trimStr(row?.resolution_identity_key) || buildResolutionIdentityKey(row?.payload_json || {});
+      if (!existingIdentityKey) continue;
+      existingByIdentityKey.set(existingIdentityKey, row);
+    }
+
+    const desiredPayloads = Array.isArray(normalized.normalized_resolution_payloads)
+      ? normalized.normalized_resolution_payloads.map((payload) => cloneJson(payload)).filter((payload) => isPlainObject(payload))
+      : [];
+    const desiredByIdentityKey = new Map();
+    for (const payload of desiredPayloads) {
+      const desiredIdentityKey = buildResolutionIdentityKey(payload);
+      if (!desiredIdentityKey) continue;
+      desiredByIdentityKey.set(desiredIdentityKey, payload);
+    }
+
+    for (const [existingIdentityKey, existingRow] of existingByIdentityKey.entries()) {
+      if (desiredByIdentityKey.has(existingIdentityKey)) continue;
+
+      const clearPayload = buildExistingResolutionPayloadForClear(existingRow);
+      const clearRpc = await sbRpc(env, 'pay_workbench_session_clear_case_resolution', {
+        p_session_id: sessionIdText,
+        p_actor_user_id: actorIdText,
+        p_resolution_payload_json: clearPayload
+      });
+      const clearPayloadOut = unwrapRpc(clearRpc, 'pay_workbench_session_clear_case_resolution');
+      result.cleared_case_resolution_results.push(clearPayloadOut);
+      result.state_changed = true;
+
+      const touchedCandidateId = trimStr(clearPayloadOut.candidate_id || existingRow.candidate_id || '');
+      if (uuidRe.test(touchedCandidateId) && !result.touched_candidate_ids.includes(touchedCandidateId)) {
+        result.touched_candidate_ids.push(touchedCandidateId);
+      }
+      const jobId = trimStr(clearPayloadOut.job_id || '');
+      if (uuidRe.test(jobId) && !result.job_ids.includes(jobId)) {
+        result.job_ids.push(jobId);
+      }
+      if (clearPayloadOut.session_version !== undefined && clearPayloadOut.session_version !== null) {
+        result.session_version = clearPayloadOut.session_version;
+      }
+    }
+
+    for (const [desiredIdentityKey, desiredPayload] of desiredByIdentityKey.entries()) {
+      const existingRow = existingByIdentityKey.get(desiredIdentityKey) || null;
+      const desiredComparable = stableStringify(buildComparableResolutionShape(desiredPayload));
+      const existingComparable = existingRow ? stableStringify(buildComparableResolutionShape(existingRow.payload_json || {})) : null;
+
+      if (existingComparable !== null && existingComparable === desiredComparable) {
+        result.unchanged_case_resolution_count += 1;
+        continue;
+      }
+
+      const applyRpc = await sbRpc(env, 'pay_workbench_session_apply_case_resolution', {
+        p_session_id: sessionIdText,
+        p_actor_user_id: actorIdText,
+        p_resolution_payload_json: desiredPayload
+      });
+      const applyPayloadOut = unwrapRpc(applyRpc, 'pay_workbench_session_apply_case_resolution');
+      result.applied_case_resolution_results.push(applyPayloadOut);
+      result.state_changed = true;
+
+      const touchedCandidateId = trimStr(applyPayloadOut.candidate_id || desiredPayload.candidate_id || '');
+      if (uuidRe.test(touchedCandidateId) && !result.touched_candidate_ids.includes(touchedCandidateId)) {
+        result.touched_candidate_ids.push(touchedCandidateId);
+      }
+      const jobId = trimStr(applyPayloadOut.job_id || '');
+      if (uuidRe.test(jobId) && !result.job_ids.includes(jobId)) {
+        result.job_ids.push(jobId);
+      }
+      if (applyPayloadOut.session_version !== undefined && applyPayloadOut.session_version !== null) {
+        result.session_version = applyPayloadOut.session_version;
+      }
+    }
+  }
+
+  if (normalized.explicit.selected_preview_row_ids === true) {
+    const existingSelectedRows = Array.isArray(sessionRow.server_selected_preview_row_ids)
+      ? sessionRow.server_selected_preview_row_ids.map((value) => trimStr(value)).filter(Boolean)
+      : [];
+    const desiredSelectedRows = cloneJson(normalized.value.selected_preview_row_ids || []);
+    const existingKey = stableStringify(existingSelectedRows);
+    const desiredKey = stableStringify(desiredSelectedRows);
+
+    if (existingKey !== desiredKey) {
+      const selectedRowsRpc = await sbRpc(env, 'pay_workbench_session_set_selected_rows', {
+        p_session_id: sessionIdText,
+        p_selected_preview_row_ids: desiredSelectedRows,
+        p_actor_user_id: actorIdText
+      });
+      const selectedRowsPayload = unwrapRpc(selectedRowsRpc, 'pay_workbench_session_set_selected_rows');
+      result.selected_rows_result = selectedRowsPayload;
+      result.state_changed = true;
+      if (selectedRowsPayload.session_version !== undefined && selectedRowsPayload.session_version !== null) {
+        result.session_version = selectedRowsPayload.session_version;
+      }
+    } else {
+      result.selected_rows_result = {
+        ok: true,
+        session_id: sessionIdText,
+        session_version: result.session_version,
+        selected_preview_row_ids: desiredSelectedRows,
+        unchanged: true
+      };
+    }
+  }
+
+  return result;
+}
 
 
 
@@ -111548,7 +114632,69 @@ if (req.method === 'POST' && p === '/api/banking/pay/auth-token/action') {
     return withCORS(env, req, await handleBankingPayBatchNotifyScheduled(env, req, user, m[1]));
   }
 }
+{
+  const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/case-resolution\/clear$/i);
+  if (m && req.method === 'POST') {
+    return handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, m[1]);
+  }
+}
 
+{
+  const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/case-resolution$/i);
+  if (m && req.method === 'POST') {
+    return handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, m[1]);
+  }
+}
+
+{
+  const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/timesheet-exclusion$/i);
+  if (m && req.method === 'POST') {
+    return handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, m[1]);
+  }
+}
+
+{
+  const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/selected-rows$/i);
+  if (m && req.method === 'POST') {
+    return handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, m[1]);
+  }
+}
+
+{
+  const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/discard$/i);
+  if (m && req.method === 'POST') {
+    return handleBankingPayWorkbenchSessionDiscard(env, req, user, m[1]);
+  }
+}
+
+// ====================== BANKING PAY WORKBENCH SESSION ROUTES ======================
+// Insert inside the existing: if (p.startsWith('/api/banking/')) { ... } block,
+// after `user` has been resolved, alongside the other /api/banking/pay/* routes.
+
+if (req.method === 'POST' && p === '/api/banking/pay/workbench/session/open') {
+  return handleBankingPayWorkbenchSessionOpen(env, req, user);
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/workbench/session/:id/candidate/:candidateId');
+  if (m && req.method === 'GET') {
+    return handleBankingPayWorkbenchSessionGetCandidate(env, req, user, m.id, m.candidateId);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/workbench/session/:id/progress');
+  if (m && req.method === 'GET') {
+    return handleBankingPayWorkbenchSessionProgress(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/workbench/session/:id');
+  if (m && req.method === 'GET') {
+    return handleBankingPayWorkbenchSessionGet(env, req, user, m.id);
+  }
+}
 
 
 // Send (or resend) invite links for a given auth request
