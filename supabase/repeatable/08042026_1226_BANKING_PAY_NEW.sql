@@ -2719,7 +2719,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_apply_candidate_overlay(
   p_candidate_baseline_json jsonb,
   p_case_resolutions_json jsonb DEFAULT NULL::jsonb,
@@ -3549,6 +3548,114 @@ begin
     end loop;
 
     if v_template_base_line is null then
+      if v_case_is_excluded = false
+         and v_case_state_needs_resolution = true
+         and round(v_case_blocked_amount_ex_vat, 2) <> 0 then
+        v_line_existing_line_id := btrim(coalesce(v_case_state_case_key, ''));
+        if v_line_existing_line_id = '' then
+          v_line_existing_line_id := 'case_resolution_required';
+        end if;
+        if right(v_line_existing_line_id, 20) <> ':resolution_required' then
+          v_line_existing_line_id := v_line_existing_line_id || ':resolution_required';
+        end if;
+
+        v_line_blocked_reason_codes := case
+          when jsonb_typeof(v_case_state->'blocked_reason_codes') = 'array' then coalesce(v_case_state->'blocked_reason_codes', '[]'::jsonb)
+          when jsonb_typeof(v_case_state #> '{case_resolution_summary,blocked_reason_codes}') = 'array' then coalesce(v_case_state #> '{case_resolution_summary,blocked_reason_codes}', '[]'::jsonb)
+          else '[]'::jsonb
+        end;
+        if not exists (
+          select 1
+          from jsonb_array_elements_text(v_line_blocked_reason_codes) as blocker(value)
+          where upper(btrim(blocker.value)) = 'RESOLUTION_REQUIRED'
+        ) then
+          v_line_blocked_reason_codes := v_line_blocked_reason_codes || jsonb_build_array('RESOLUTION_REQUIRED');
+        end if;
+
+        v_new_line := jsonb_build_object(
+          'preview_row_id', v_line_existing_line_id,
+          'line_id', v_line_existing_line_id,
+          'candidate_id', v_candidate_id,
+          'tms_ref', nullif(btrim(coalesce(v_candidate_row->>'tms_ref', '')), ''),
+          'display_name', nullif(btrim(coalesce(v_candidate_row->>'display_name', v_candidate_row->>'candidate_name', '')), ''),
+          'line_type', case
+            when upper(v_case_state_case_scope) = 'TIMESHEET_PAYMENT' then 'TIMESHEET_PAYMENT'
+            else coalesce(nullif(btrim(coalesce(v_case_state->>'case_type', '')), ''), 'TIMESHEET_PAYMENT')
+          end,
+          'finance_case_id', nullif(btrim(coalesce(v_case_state->>'finance_case_id', '')), ''),
+          'case_key', v_case_state_case_key,
+          'case_type', coalesce(nullif(btrim(coalesce(v_case_state->>'case_type', '')), ''), 'TIMESHEET_PAYMENT'),
+          'case_is_blocked', true,
+          'case_resolution_summary', coalesce(v_case_state->'case_resolution_summary', '{}'::jsonb),
+          'case_components', coalesce(v_case_state->'components', '[]'::jsonb),
+          'timesheet_id', nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''),
+          'booking_id', null,
+          'client_id', nullif(btrim(coalesce(v_case_state->>'client_id', '')), ''),
+          'client_name', nullif(btrim(coalesce(v_case_state->>'client_name', '')), ''),
+          'week_ending_date', nullif(btrim(coalesce(v_case_state->>'week_ending_date', '')), ''),
+          'role', null,
+          'band', null,
+          'linked_shift_date', null,
+          'pay_channel', nullif(btrim(coalesce(v_case_state->>'candidate_pay_method', '')), ''),
+          'paye_treatment', case when upper(btrim(coalesce(v_case_state->>'candidate_pay_method', ''))) = 'PAYE' then 'GROSS_ADD' else 'NONE' end,
+          'route_type', 'NORMAL_PAYMENT',
+          'adjustment_comment', null,
+          'amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
+          'amount_display', round(v_case_blocked_amount_ex_vat, 2),
+          'is_advanced', false,
+          'advanced_override_id', null,
+          'advanced_reason', null,
+          'blocked_reason_codes', v_line_blocked_reason_codes,
+          'is_excluded_from_allocation', false,
+          'is_ready_for_draft', false,
+          'draftable', false,
+          'segment_rows', '[]'::jsonb,
+          'segment_count', 0,
+          'presentation_section', 'BLOCKED_FOR_PAY',
+          'presentation_role', 'PARENT',
+          'presentation_line_id', v_line_existing_line_id,
+          'presentation_parent_line_id', coalesce(nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''), v_line_existing_line_id),
+          'real_business_timesheet_id', nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''),
+          'total_segment_count', 0,
+          'ready_segment_count', 0,
+          'blocked_visible_segment_count', 0,
+          'hidden_indefinite_segment_count', 0,
+          'is_partially_ready', false,
+          'is_partially_blocked', false,
+          'section_amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
+          'section_amount_display', round(v_case_blocked_amount_ex_vat, 2),
+          'section_segment_rows', '[]'::jsonb,
+          'section_segment_count', 0,
+          'section_non_segment_amount_ex_vat', round(v_case_blocked_amount_ex_vat, 2),
+          'has_active_timesheet_snooze', false,
+          'has_active_segment_snoozes', false,
+          'active_segment_snooze_count', 0,
+          'active_segment_dated_snooze_count', 0,
+          'active_segment_indefinite_snooze_count', 0,
+          'whole_timesheet_snooze_action_blocked', false,
+          'whole_timesheet_snooze_action_block_reason', null,
+          'segment_snooze_action_blocked', false,
+          'segment_snooze_action_block_reason', null,
+          'presentation_reason', 'CASE_RESOLUTION_REQUIRED',
+          'presentation_advisory_text', null,
+          'readiness_state', 'BLOCKED_FOR_PAY',
+          'snooze_identity', jsonb_build_object(
+            'identity_type', 'TIMESHEET',
+            'timesheet_id', nullif(btrim(coalesce(v_case_state->>'timesheet_id', '')), ''),
+            'booking_id', null,
+            'segment_id', null,
+            'segment_stable_key', null,
+            'source_ref', null
+          ),
+          'snooze_state', jsonb_build_object('state', 'NONE')
+        );
+
+        if jsonb_typeof(v_case_state->'taxable_manual_debt_resolution') = 'object' then
+          v_new_line := v_new_line || jsonb_build_object('taxable_manual_debt_resolution', v_case_state->'taxable_manual_debt_resolution');
+        end if;
+
+        v_updated_lines := v_updated_lines || jsonb_build_array(v_new_line);
+      end if;
       continue;
     end if;
 
@@ -3948,7 +4055,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -4283,8 +4389,13 @@ begin
           case
             when ass_match.snooze_id is not null and ass_match.snooze_until_date is null then 'HIDDEN_INDEFINITE'
             when ass_match.snooze_id is not null then 'BLOCKED_VISIBLE'
-            when coalesce(ss_match.is_blocked, false) = true or coalesce(ss_match.is_do_not_pay, false) = true then 'BLOCKED_VISIBLE'
-            when round(coalesce(ttre_match.ready_preview_amount_ex_vat, ttre_match.preview_component_amount_ex_vat, ss_match.eff_delta_ex, 0), 2) <> 0 then 'READY'
+            when coalesce(ss_match.is_do_not_pay, false) = true then 'BLOCKED_VISIBLE'
+            when coalesce(ss_match.is_blocked, false) = true
+             and not (coalesce(ttre_match.requires_resolution, false) = true and coalesce(ttre_match.is_actionable_resolution_row, false) = true)
+            then 'BLOCKED_VISIBLE'
+            when round(coalesce(ttre_match.ready_preview_amount_ex_vat, ttre_match.preview_component_amount_ex_vat, ss_match.eff_delta_ex, 0), 2) <> 0
+             and not (coalesce(ttre_match.requires_resolution, false) = true and coalesce(ttre_match.is_actionable_resolution_row, false) = true)
+            then 'READY'
             else 'IGNORED'
           end as presentation_segment_state,
           jsonb_build_object(
@@ -4321,19 +4432,28 @@ begin
             'presentation_segment_state', case
               when ass_match.snooze_id is not null and ass_match.snooze_until_date is null then 'HIDDEN_INDEFINITE'
               when ass_match.snooze_id is not null then 'BLOCKED_VISIBLE'
-              when coalesce(ss_match.is_blocked, false) = true or coalesce(ss_match.is_do_not_pay, false) = true then 'BLOCKED_VISIBLE'
-              when round(coalesce(ttre_match.ready_preview_amount_ex_vat, ttre_match.preview_component_amount_ex_vat, ss_match.eff_delta_ex, 0), 2) <> 0 then 'READY'
+              when coalesce(ss_match.is_do_not_pay, false) = true then 'BLOCKED_VISIBLE'
+              when coalesce(ss_match.is_blocked, false) = true
+               and not (coalesce(ttre_match.requires_resolution, false) = true and coalesce(ttre_match.is_actionable_resolution_row, false) = true)
+              then 'BLOCKED_VISIBLE'
+              when round(coalesce(ttre_match.ready_preview_amount_ex_vat, ttre_match.preview_component_amount_ex_vat, ss_match.eff_delta_ex, 0), 2) <> 0
+               and not (coalesce(ttre_match.requires_resolution, false) = true and coalesce(ttre_match.is_actionable_resolution_row, false) = true)
+              then 'READY'
               else 'IGNORED'
             end,
             'is_ready_segment', (
               ass_match.snooze_id is null
               and coalesce(ss_match.is_blocked, false) = false
               and coalesce(ss_match.is_do_not_pay, false) = false
+              and not (coalesce(ttre_match.requires_resolution, false) = true and coalesce(ttre_match.is_actionable_resolution_row, false) = true)
               and round(coalesce(ttre_match.ready_preview_amount_ex_vat, ttre_match.preview_component_amount_ex_vat, ss_match.eff_delta_ex, 0), 2) <> 0
             ),
             'is_blocked_visible_segment', (
               (ass_match.snooze_id is not null and ass_match.snooze_until_date is not null)
-              or coalesce(ss_match.is_blocked, false) = true
+              or (
+                coalesce(ss_match.is_blocked, false) = true
+                and not (coalesce(ttre_match.requires_resolution, false) = true and coalesce(ttre_match.is_actionable_resolution_row, false) = true)
+              )
               or coalesce(ss_match.is_do_not_pay, false) = true
             ),
             'is_hidden_indefinite_segment', (ass_match.snooze_id is not null and ass_match.snooze_until_date is null),
@@ -4433,7 +4553,9 @@ begin
         left join lateral (
           select
             round(sum(coalesce(ttre.preview_component_amount_ex_vat, 0)), 2) as preview_component_amount_ex_vat,
-            round(sum(coalesce(ttre.ready_preview_amount_ex_vat, ttre.preview_component_amount_ex_vat, 0)), 2) as ready_preview_amount_ex_vat
+            round(sum(coalesce(ttre.ready_preview_amount_ex_vat, ttre.preview_component_amount_ex_vat, 0)), 2) as ready_preview_amount_ex_vat,
+            bool_or(coalesce(ttre.requires_resolution, false)) as requires_resolution,
+            bool_or(coalesce(ttre.is_actionable_resolution_row, false)) as is_actionable_resolution_row
           from transient_timesheet_component_review_rows_effective ttre
           where ttre.candidate_id = ctl.candidate_id
             and ttre.timesheet_id = ctl.timesheet_id
@@ -4684,11 +4806,23 @@ begin
             or coalesce(ctps.ready_segment_count, 0) > 0
           ) as has_ready_presentation,
           (
+            ctps.case_is_blocked = false
+            and ctps.has_active_timesheet_snooze = false
+            and ctps.is_ready_for_draft = false
+            and coalesce(nullif(ctps.case_resolution_summary_json->>'case_needs_resolution','')::boolean, false) = false
+            and (
+              round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
+              or coalesce(ctps.ready_segment_count, 0) > 0
+            )
+          ) as has_non_resolution_readiness_block,
+          (
             ctps.has_active_timesheet_snooze = true
-            or ctps.case_is_blocked = true
             or coalesce(ctps.blocked_visible_segment_count, 0) > 0
             or (
-              ctps.is_ready_for_draft = false
+              ctps.case_is_blocked = false
+              and ctps.has_active_timesheet_snooze = false
+              and ctps.is_ready_for_draft = false
+              and coalesce(nullif(ctps.case_resolution_summary_json->>'case_needs_resolution','')::boolean, false) = false
               and (
                 round(coalesce(ctps.ready_segment_amount_ex_vat, 0) + coalesce(ctps.non_segment_amount_ex_vat, 0), 2) <> 0
                 or coalesce(ctps.ready_segment_count, 0) > 0
@@ -4871,11 +5005,11 @@ begin
             )
             || jsonb_build_object(
               'amount_ex_vat', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_ex_vat
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.amount_ex_vat
                 else ctpp.blocked_section_amount_ex_vat
               end,
               'amount_display', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_display
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.amount_display
                 else ctpp.blocked_section_amount_display
               end,
               'is_advanced', (ctpp.override_id is not null),
@@ -4886,24 +5020,18 @@ begin
                   when ctpp.has_active_timesheet_snooze = true then jsonb_build_array('BLOCKED_DATED_SNOOZE')
                   else '[]'::jsonb
                 end)
-                ||
-                (case
-                  when ctpp.case_is_blocked = true then jsonb_build_array('BLOCKED_TAXABLE_RESOLUTION')
-                  else '[]'::jsonb
-                end)
               ),
               'is_excluded_from_allocation', (ctpp.has_active_timesheet_snooze = true),
               'is_ready_for_draft', case
                 when ctpp.has_active_timesheet_snooze = true then ctpp.is_ready_for_draft
-                when ctpp.case_is_blocked = true then ctpp.is_ready_for_draft
                 else false
               end,
               'segment_rows', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.visible_segment_rows_json
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.visible_segment_rows_json
                 else ctpp.blocked_visible_segment_rows_json
               end,
               'segment_count', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
                 else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
               end
             )
@@ -4927,23 +5055,23 @@ begin
               'is_partially_ready', ctpp.is_partially_ready,
               'is_partially_blocked', ctpp.is_partially_blocked,
               'section_amount_ex_vat', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_ex_vat
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.amount_ex_vat
                 else ctpp.blocked_section_amount_ex_vat
               end,
               'section_amount_display', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_display
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.amount_display
                 else ctpp.blocked_section_amount_display
               end,
               'section_segment_rows', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.visible_segment_rows_json
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.visible_segment_rows_json
                 else ctpp.blocked_visible_segment_rows_json
               end,
               'section_segment_count', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then jsonb_array_length(coalesce(ctpp.visible_segment_rows_json, '[]'::jsonb))
                 else jsonb_array_length(coalesce(ctpp.blocked_visible_segment_rows_json, '[]'::jsonb))
               end,
               'section_non_segment_amount_ex_vat', case
-                when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.non_segment_amount_ex_vat
+                when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.non_segment_amount_ex_vat
                 else 0
               end
             )
@@ -4959,7 +5087,6 @@ begin
               'segment_snooze_action_block_reason', case when ctpp.has_active_timesheet_snooze then 'WHOLE_TIMESHEET_SNOOZE_ACTIVE' else null end,
               'presentation_reason', case
                 when ctpp.has_active_timesheet_snooze = true then 'WHOLE_TIMESHEET_SNOOZED'
-                when ctpp.case_is_blocked = true then 'CASE_BLOCKED'
                 when ctpp.is_partially_blocked then 'PARTIAL_BLOCKED_FOR_PAY'
                 else 'BLOCKED_FOR_PAY'
               end,
@@ -4991,7 +5118,7 @@ begin
           ctpp.candidate_pay_method as pay_channel,
           case when ctpp.candidate_pay_method = 'PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
           case
-            when ctpp.has_active_timesheet_snooze = true or ctpp.case_is_blocked = true or ctpp.is_ready_for_draft = false then ctpp.amount_ex_vat
+            when ctpp.has_active_timesheet_snooze = true or ctpp.has_non_resolution_readiness_block = true then ctpp.amount_ex_vat
             else ctpp.blocked_section_amount_ex_vat
           end as amount_ex_vat,
           (ctpp.has_active_timesheet_snooze = true) as is_excluded_from_allocation
@@ -4999,8 +5126,7 @@ begin
         where ctpp.has_blocked_presentation = true
           and (
             ctpp.has_active_timesheet_snooze = true
-            or ctpp.case_is_blocked = true
-            or ctpp.is_ready_for_draft = false
+            or ctpp.has_non_resolution_readiness_block = true
             or ctpp.blocked_visible_segment_count > 0
           )
   
@@ -5389,6 +5515,8 @@ begin
   );
 end;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(
   p_context_json jsonb,
