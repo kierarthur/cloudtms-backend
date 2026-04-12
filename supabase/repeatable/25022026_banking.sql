@@ -11026,6 +11026,10 @@ declare
   v_execution_commit_state text := 'NOT_SUBMITTED';
   v_execution_commit_ref text := null;
   v_execution_committed_at_utc timestamptz := null;
+  v_previous_execution_commit_state text := 'NOT_SUBMITTED';
+  v_previous_execution_commit_ref text := null;
+  v_previous_execution_committed_at_utc timestamptz := null;
+  v_transitioned_to_submitted boolean := false;
 
   v_updated_count int := 0;
   v_input_count int := 0;
@@ -11034,6 +11038,8 @@ declare
 
   v_missing jsonb := '[]'::jsonb;
   v_duplicates jsonb := '[]'::jsonb;
+  v_audit_before_json jsonb := null;
+  v_audit_after_json jsonb := null;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_bank_transfers_apply_rail_updates: pay_batch_id is required';
@@ -11059,6 +11065,10 @@ begin
   end if;
   v_execution_commit_ref := v_batch_row.execution_commit_ref;
   v_execution_committed_at_utc := v_batch_row.execution_committed_at_utc;
+
+  v_previous_execution_commit_state := v_execution_commit_state;
+  v_previous_execution_commit_ref := v_execution_commit_ref;
+  v_previous_execution_committed_at_utc := v_execution_committed_at_utc;
 
   create temp table if not exists _tmp_pbt_updates (
     transfer_id uuid not null,
@@ -11215,6 +11225,7 @@ begin
       v_execution_commit_ref := v_detected_execution_commit_ref;
     end if;
     v_execution_committed_at_utc := null;
+    v_transitioned_to_submitted := true;
   end if;
 
   update public.pay_batches
@@ -11224,6 +11235,36 @@ begin
     execution_commit_ref = v_execution_commit_ref,
     execution_committed_at_utc = v_execution_committed_at_utc
   where public.pay_batches.id = p_pay_batch_id;
+
+  if v_transitioned_to_submitted then
+    v_audit_before_json := jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_previous_execution_commit_state,
+      'execution_commit_ref', v_previous_execution_commit_ref,
+      'execution_committed_at_utc', v_previous_execution_committed_at_utc
+    );
+
+    v_audit_after_json := jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_execution_commit_ref,
+      'execution_committed_at_utc', v_execution_committed_at_utc,
+      'representative_submission_ref', v_execution_commit_ref,
+      'updated_transfer_count', v_updated_count,
+      'submitted_transfer_count', v_detected_submitted_count,
+      'last_status_checked_at_utc', v_now
+    );
+
+    perform public._audit_insert(
+      'pay_batch',
+      p_pay_batch_id::text,
+      'PAY_BATCH_EXECUTION_BOUNDARY_SUBMITTED',
+      v_audit_before_json,
+      v_audit_after_json,
+      'PAY_BATCH_TRANSFER_SUBMISSION_DETECTED',
+      null
+    );
+  end if;
 
   return jsonb_build_object(
     'ok', true,
@@ -11238,6 +11279,8 @@ begin
   );
 end;
 $$;
+
+
 
 
 create or replace function public.pay_batch_auth_start(
