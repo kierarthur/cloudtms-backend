@@ -11010,7 +11010,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
   p_updates jsonb
@@ -11023,8 +11022,15 @@ as $$
 declare
   v_now timestamptz := now();
 
+  v_batch_row public.pay_batches%rowtype;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_execution_commit_ref text := null;
+  v_execution_committed_at_utc timestamptz := null;
+
   v_updated_count int := 0;
   v_input_count int := 0;
+  v_detected_submitted_count int := 0;
+  v_detected_execution_commit_ref text := null;
 
   v_missing jsonb := '[]'::jsonb;
   v_duplicates jsonb := '[]'::jsonb;
@@ -11033,9 +11039,26 @@ begin
     raise exception 'pay_bank_transfers_apply_rail_updates: pay_batch_id is required';
   end if;
 
+  select public.pay_batches.*
+  into v_batch_row
+  from public.pay_batches
+  where public.pay_batches.id = p_pay_batch_id
+  for update;
+
+  if v_batch_row.id is null then
+    raise exception 'pay_bank_transfers_apply_rail_updates: pay_batch % not found', p_pay_batch_id;
+  end if;
+
   if p_updates is null or jsonb_typeof(p_updates) <> 'array' then
     raise exception 'pay_bank_transfers_apply_rail_updates: updates must be a JSON array';
   end if;
+
+  v_execution_commit_state := upper(btrim(coalesce(v_batch_row.execution_commit_state, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+  v_execution_commit_ref := v_batch_row.execution_commit_ref;
+  v_execution_committed_at_utc := v_batch_row.execution_committed_at_utc;
 
   create temp table if not exists _tmp_pbt_updates (
     transfer_id uuid not null,
@@ -11059,100 +11082,148 @@ begin
     completed_at_utc
   )
   select
-    nullif(btrim(coalesce(e->>'transfer_id','')),'')::uuid as transfer_id,
-    upper(btrim(coalesce(e->>'status',''))) as status,
-    nullif(btrim(coalesce(e->>'rail_tx_id','')),'') as rail_tx_id,
-    nullif(btrim(coalesce(e->>'rail_state','')),'') as rail_state,
+    nullif(btrim(coalesce(update_element.value->>'transfer_id','')),'')::uuid as transfer_id,
+    upper(btrim(coalesce(update_element.value->>'status',''))) as status,
+    nullif(btrim(coalesce(update_element.value->>'rail_tx_id','')),'') as rail_tx_id,
+    nullif(btrim(coalesce(update_element.value->>'rail_state','')),'') as rail_state,
     case
-      when (e ? 'rail_meta_json') and jsonb_typeof(e->'rail_meta_json') in ('object','array','string','number','boolean','null')
-        then e->'rail_meta_json'
+      when (update_element.value ? 'rail_meta_json')
+       and jsonb_typeof(update_element.value->'rail_meta_json') in ('object','array','string','number','boolean','null')
+        then update_element.value->'rail_meta_json'
       else null
     end as rail_meta_json,
-    nullif(btrim(coalesce(e->>'failed_reason','')),'') as failed_reason,
-    nullif(btrim(coalesce(e->>'completed_at_utc','')),'')::timestamptz as completed_at_utc
-  from jsonb_array_elements(p_updates) e
-  where e is not null and jsonb_typeof(e) = 'object';
+    nullif(btrim(coalesce(update_element.value->>'failed_reason','')),'') as failed_reason,
+    nullif(btrim(coalesce(update_element.value->>'completed_at_utc','')),'')::timestamptz as completed_at_utc
+  from jsonb_array_elements(p_updates) as update_element(value)
+  where update_element.value is not null
+    and jsonb_typeof(update_element.value) = 'object';
 
   select count(*)::int
   into v_input_count
-  from _tmp_pbt_updates t;
+  from _tmp_pbt_updates as tmp_update_count;
 
   if v_input_count = 0 then
+    update public.pay_batches
+    set last_status_checked_at_utc = v_now
+    where public.pay_batches.id = p_pay_batch_id;
+
     return jsonb_build_object(
       'ok', true,
       'pay_batch_id', p_pay_batch_id::text,
       'server_utc', v_now,
       'input_count', 0,
       'updated_count', 0,
-      'missing_transfer_ids', '[]'::jsonb
+      'missing_transfer_ids', '[]'::jsonb,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_execution_commit_ref,
+      'execution_committed_at_utc', v_execution_committed_at_utc
     );
   end if;
 
-  if exists (select 1 from _tmp_pbt_updates t where t.transfer_id is null limit 1) then
+  if exists (
+    select 1
+    from _tmp_pbt_updates as tmp_invalid_transfer
+    where tmp_invalid_transfer.transfer_id is null
+    limit 1
+  ) then
     raise exception 'pay_bank_transfers_apply_rail_updates: updates contains an invalid or missing transfer_id';
   end if;
 
   if exists (
     select 1
-    from _tmp_pbt_updates t
-    where t.status not in ('PENDING','COMPLETED','FAILED','BLOCKED')
+    from _tmp_pbt_updates as tmp_invalid_status
+    where tmp_invalid_status.status not in ('PENDING','COMPLETED','FAILED','BLOCKED')
     limit 1
   ) then
     raise exception 'pay_bank_transfers_apply_rail_updates: invalid status in updates (allowed: PENDING|COMPLETED|FAILED|BLOCKED)';
   end if;
 
-  select coalesce(jsonb_agg(d.transfer_id::text order by d.transfer_id), '[]'::jsonb)
+  select coalesce(jsonb_agg(duplicate_rows.transfer_id::text order by duplicate_rows.transfer_id), '[]'::jsonb)
   into v_duplicates
   from (
-    select t.transfer_id
-    from _tmp_pbt_updates t
-    group by t.transfer_id
+    select tmp_duplicates.transfer_id
+    from _tmp_pbt_updates as tmp_duplicates
+    group by tmp_duplicates.transfer_id
     having count(*) > 1
-  ) d;
+  ) as duplicate_rows;
 
   if jsonb_array_length(v_duplicates) > 0 then
     raise exception 'pay_bank_transfers_apply_rail_updates: duplicate transfer_id values %', v_duplicates::text;
   end if;
 
   select coalesce(
-    jsonb_agg(t.transfer_id::text order by t.transfer_id),
+    jsonb_agg(tmp_missing.transfer_id::text order by tmp_missing.transfer_id),
     '[]'::jsonb
   )
   into v_missing
-  from _tmp_pbt_updates t
-  left join public.pay_bank_transfers pbt_chk
-    on pbt_chk.id = t.transfer_id
-   and pbt_chk.pay_batch_id = p_pay_batch_id
-  where pbt_chk.id is null;
+  from _tmp_pbt_updates as tmp_missing
+  left join public.pay_bank_transfers as existing_transfer
+    on existing_transfer.id = tmp_missing.transfer_id
+   and existing_transfer.pay_batch_id = p_pay_batch_id
+  where existing_transfer.id is null;
 
-  update public.pay_bank_transfers pbt
+  update public.pay_bank_transfers as pay_bank_transfer
   set
-    status = t.status,
-    rail_tx_id = coalesce(t.rail_tx_id, pbt.rail_tx_id),
-    rail_state = coalesce(t.rail_state, pbt.rail_state),
+    status = tmp_update.status,
+    rail_tx_id = coalesce(tmp_update.rail_tx_id, pay_bank_transfer.rail_tx_id),
+    rail_state = coalesce(tmp_update.rail_state, pay_bank_transfer.rail_state),
     rail_meta_json = case
-      when t.rail_meta_json is null then pbt.rail_meta_json
-      when pbt.rail_meta_json is null then t.rail_meta_json
-      else (pbt.rail_meta_json || t.rail_meta_json)
+      when tmp_update.rail_meta_json is null then pay_bank_transfer.rail_meta_json
+      when pay_bank_transfer.rail_meta_json is null then tmp_update.rail_meta_json
+      else (pay_bank_transfer.rail_meta_json || tmp_update.rail_meta_json)
     end,
     completed_at_utc = case
-      when t.status = 'COMPLETED' then coalesce(t.completed_at_utc, pbt.completed_at_utc, v_now)
-      when t.status = 'FAILED' then coalesce(t.completed_at_utc, pbt.completed_at_utc)
-      else pbt.completed_at_utc
+      when tmp_update.status = 'COMPLETED' then coalesce(tmp_update.completed_at_utc, pay_bank_transfer.completed_at_utc, v_now)
+      when tmp_update.status = 'FAILED' then coalesce(tmp_update.completed_at_utc, pay_bank_transfer.completed_at_utc)
+      else pay_bank_transfer.completed_at_utc
     end,
     failed_reason = case
-      when t.status = 'FAILED' then coalesce(nullif(btrim(coalesce(t.failed_reason,'')), ''), pbt.failed_reason, nullif(btrim(coalesce(t.rail_state,'')), ''))
-      else pbt.failed_reason
+      when tmp_update.status = 'FAILED' then coalesce(
+        nullif(btrim(coalesce(tmp_update.failed_reason,'')), ''),
+        pay_bank_transfer.failed_reason,
+        nullif(btrim(coalesce(tmp_update.rail_state,'')), '')
+      )
+      else pay_bank_transfer.failed_reason
     end
-  from _tmp_pbt_updates t
-  where pbt.id = t.transfer_id
-    and pbt.pay_batch_id = p_pay_batch_id;
+  from _tmp_pbt_updates as tmp_update
+  where pay_bank_transfer.id = tmp_update.transfer_id
+    and pay_bank_transfer.pay_batch_id = p_pay_batch_id;
 
   get diagnostics v_updated_count = row_count;
 
-  update public.pay_batches pb
-  set last_status_checked_at_utc = v_now
-  where pb.id = p_pay_batch_id;
+  select
+    count(*)::int,
+    (
+      select nullif(btrim(coalesce(submitted_transfer.rail_tx_id, '')), '')
+      from public.pay_bank_transfers as submitted_transfer
+      where submitted_transfer.pay_batch_id = p_pay_batch_id
+        and nullif(btrim(coalesce(submitted_transfer.rail_tx_id, '')), '') is not null
+      order by submitted_transfer.id asc
+      limit 1
+    )
+  into
+    v_detected_submitted_count,
+    v_detected_execution_commit_ref
+  from public.pay_bank_transfers as submitted_transfer_count
+  where submitted_transfer_count.pay_batch_id = p_pay_batch_id
+    and nullif(btrim(coalesce(submitted_transfer_count.rail_tx_id, '')), '') is not null;
+
+  if v_execution_commit_state = 'NOT_SUBMITTED'
+     and coalesce(v_detected_submitted_count, 0) > 0 then
+    v_execution_commit_state := 'SUBMITTED_NOT_COMMITTED';
+    if nullif(btrim(coalesce(v_execution_commit_ref, '')), '') is null then
+      v_execution_commit_ref := v_detected_execution_commit_ref;
+    end if;
+    v_execution_committed_at_utc := null;
+  end if;
+
+  update public.pay_batches
+  set
+    last_status_checked_at_utc = v_now,
+    execution_commit_state = v_execution_commit_state,
+    execution_commit_ref = v_execution_commit_ref,
+    execution_committed_at_utc = v_execution_committed_at_utc
+  where public.pay_batches.id = p_pay_batch_id;
 
   return jsonb_build_object(
     'ok', true,
@@ -11160,10 +11231,14 @@ begin
     'server_utc', v_now,
     'input_count', v_input_count,
     'updated_count', v_updated_count,
-    'missing_transfer_ids', v_missing
+    'missing_transfer_ids', v_missing,
+    'execution_commit_state', v_execution_commit_state,
+    'execution_commit_ref', v_execution_commit_ref,
+    'execution_committed_at_utc', v_execution_committed_at_utc
   );
 end;
 $$;
+
 
 create or replace function public.pay_batch_auth_start(
   p_pay_batch_id uuid,
