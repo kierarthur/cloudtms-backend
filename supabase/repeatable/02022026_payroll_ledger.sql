@@ -4,6 +4,7 @@ begin;
 -- Helpers (private)
 -- =========================================================
 
+
 -- Normalize percent: supports 20 or 0.2 -> returns 0.2
 create or replace function public._pay_pct_to_frac(p_pct numeric)
 returns numeric
