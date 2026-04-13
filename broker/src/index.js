@@ -9383,7 +9383,7 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     return { value: normalizedBucket };
   };
 
-    const rawCandidateId = trimStr(body.candidate_id ?? body.candidateId);
+  const rawCandidateId = trimStr(body.candidate_id ?? body.candidateId);
   const rawFinanceCaseId = trimStr(body.finance_case_id ?? body.financeCaseId);
   const rawLinkedTimesheetId = trimStr(body.linked_timesheet_id ?? body.linkedTimesheetId ?? body.timesheet_id ?? body.timesheetId);
   const candidateId = rawCandidateId ? readUuid(rawCandidateId) : '';
@@ -9504,7 +9504,46 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_workbench_session_apply_case_resolution');
-    return withCORS(env, req, ok(payload));
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const fastLaneCandidateId = readUuid(payloadObj.candidate_id ?? payloadObj.candidateId);
+    const fastLaneJobId = readUuid(payloadObj.job_id ?? payloadObj.jobId);
+    const fastLaneShouldRun = payloadObj.no_op !== true && !!fastLaneCandidateId && !!fastLaneJobId;
+
+    let responsePayload = payloadObj;
+    if (fastLaneShouldRun && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          id,
+          fastLaneCandidateId,
+          actorUserId,
+          fastLaneJobId,
+          'SESSION_CASE_RESOLUTION_APPLY'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane apply failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
@@ -9607,11 +9646,51 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_workbench_session_clear_case_resolution');
-    return withCORS(env, req, ok(payload));
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const fastLaneCandidateId = readUuid(payloadObj.candidate_id ?? payloadObj.candidateId);
+    const fastLaneJobId = readUuid(payloadObj.job_id ?? payloadObj.jobId);
+    const fastLaneShouldRun = payloadObj.no_op !== true && !!fastLaneCandidateId && !!fastLaneJobId;
+
+    let responsePayload = payloadObj;
+    if (fastLaneShouldRun && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          id,
+          fastLaneCandidateId,
+          actorUserId,
+          fastLaneJobId,
+          'SESSION_CASE_RESOLUTION_CLEAR'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane clear failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, user, sessionId) {
   const id = String(sessionId || '').trim();
@@ -9644,6 +9723,17 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
       }
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+  const readUuid = (value) => {
+    const text = trimStr(value);
+    return uuidRe.test(text) ? text : '';
   };
 
   const candidateId = trimStr(body.candidate_id ?? body.candidateId);
@@ -9690,11 +9780,52 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_workbench_session_set_timesheet_exclusion');
-    return withCORS(env, req, ok(payload));
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const fastLaneCandidateId = readUuid(payloadObj.candidate_id ?? payloadObj.candidateId);
+    const fastLaneJobId = readUuid(payloadObj.job_id ?? payloadObj.jobId);
+    const fastLaneShouldRun = payloadObj.no_op !== true && !!fastLaneCandidateId && !!fastLaneJobId;
+
+    let responsePayload = payloadObj;
+    if (fastLaneShouldRun && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          id,
+          fastLaneCandidateId,
+          actorUserId,
+          fastLaneJobId,
+          'SESSION_TIMESHEET_EXCLUSION'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane exclusion failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
 async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, sessionId) {
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
@@ -19190,6 +19321,17 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const trimStr = (v) => String(v == null ? '' : v).trim();
+  const readUuid = (value) => {
+    const text = trimStr(value);
+    return uuidRe.test(text) ? text : '';
+  };
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
 
   const jsonResponse = (status, payload) => {
     const headers = new Headers();
@@ -19321,6 +19463,8 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
 
+  const optionalWorkbenchSessionId = readUuid(body.workbench_session_id ?? body.workbenchSessionId);
+
   const timesheetIdRaw = trimStr(body.timesheet_id);
   const timesheetIdAlt = trimStr(body.timesheetId);
   const timesheetId = timesheetIdRaw || timesheetIdAlt || null;
@@ -19328,9 +19472,6 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     return withCORS(env, req, badRequest('timesheet_id must be a UUID (or null)'));
   }
 
-  // Advisory only: the installed pay_snooze_upsert(...) derives stable identity
-  // server-side from the current timesheet / segment and does not accept these
-  // fields as authoritative RPC parameters.
   const bookingIdHint = trimStr(body.booking_id || body.bookingId) || null;
   const segmentId = trimStr(body.segment_id || body.segmentId) || null;
   const segmentStableKeyHint = trimStr(body.segment_stable_key || body.segmentStableKey) || null;
@@ -19519,7 +19660,42 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
       })()
     };
 
-    return withCORS(env, req, ok(canonical));
+    let responsePayload = canonical;
+    const fastLaneCandidateId = readUuid(canonical.candidate_id);
+    if (optionalWorkbenchSessionId && fastLaneCandidateId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          optionalWorkbenchSessionId,
+          fastLaneCandidateId,
+          String(user?.id || '').trim(),
+          null,
+          'BANKING_PAY_SNOOZE_UPSERT'
+        );
+        responsePayload = {
+          ...canonical,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...canonical,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane snooze upsert failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     const conflictPayload = normalizeConflictPayload(extractDbRaisedJson(e));
     if (conflictPayload) {
@@ -19528,6 +19704,10 @@ async function handleBankingPaySnoozeUpsert(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
+
+
 async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -19686,6 +19866,7 @@ async function handleTimesheetSnoozePaymentClear(env, req, timesheetId) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear timesheet payment snooze')));
   }
 }
+
 async function handleBankingPaySnoozeClear(env, req, user) {
   const authUser = user || await requireUser(env, req, ['admin']);
   if (!authUser) return withCORS(env, req, unauthorized());
@@ -19699,6 +19880,17 @@ async function handleBankingPaySnoozeClear(env, req, user) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const enc = encodeURIComponent;
   const trimStr = (v) => String(v == null ? '' : v).trim();
+  const readUuid = (value) => {
+    const text = trimStr(value);
+    return uuidRe.test(text) ? text : '';
+  };
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
 
   const snoozeId = trimStr(body.snooze_id || body.snoozeId);
   if (!snoozeId) {
@@ -19707,6 +19899,8 @@ async function handleBankingPaySnoozeClear(env, req, user) {
   if (!uuidRe.test(snoozeId)) {
     return withCORS(env, req, badRequest('snooze_id must be a UUID'));
   }
+
+  const optionalWorkbenchSessionId = readUuid(body.workbench_session_id ?? body.workbenchSessionId);
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -19800,7 +19994,7 @@ async function handleBankingPaySnoozeClear(env, req, user) {
     const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
     const payState = await fetchPayState(storedRow.timesheet_id);
 
-    return withCORS(env, req, ok({
+    const canonical = {
       ...payloadObj,
       ok: true,
       snooze_id: trimStr(payloadObj.snooze_id || storedRow.id || snoozeId) || snoozeId,
@@ -19820,11 +20014,49 @@ async function handleBankingPaySnoozeClear(env, req, user) {
           : storedRow.note
       ) || null,
       pay_state: payState
-    }));
+    };
+
+    let responsePayload = canonical;
+    const fastLaneCandidateId = readUuid(canonical.candidate_id);
+    if (optionalWorkbenchSessionId && fastLaneCandidateId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          optionalWorkbenchSessionId,
+          fastLaneCandidateId,
+          String(authUser?.id || '').trim(),
+          null,
+          'BANKING_PAY_SNOOZE_CLEAR'
+        );
+        responsePayload = {
+          ...canonical,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...canonical,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane snooze clear failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to clear snooze')));
   }
 }
+
 
 
 async function ensureRailPayeeMapForHash(env, { provider, rail_env, entity_kind, entity_id, bank_details_hash, actor_user_id } = {}) {
@@ -40007,6 +40239,1023 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
 }
 
 
+async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidateId, actorUserId, existingSessionJobId = null, originLabel = '') {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+  const normalizedSessionId = trimStr(sessionId);
+  const normalizedCandidateId = trimStr(candidateId);
+  const normalizedActorUserId = trimStr(actorUserId);
+  const normalizedExistingSessionJobId = trimStr(existingSessionJobId);
+  const normalizedOriginLabel = trimStr(originLabel) || 'INTERACTIVE_WORKBENCH_FAST_LANE';
+
+  const result = {
+    ok: true,
+    best_effort: true,
+    session_id: uuidRe.test(normalizedSessionId) ? normalizedSessionId : null,
+    candidate_id: uuidRe.test(normalizedCandidateId) ? normalizedCandidateId : null,
+    actor_user_id: uuidRe.test(normalizedActorUserId) ? normalizedActorUserId : null,
+    existing_session_job_id: uuidRe.test(normalizedExistingSessionJobId) ? normalizedExistingSessionJobId : null,
+    origin_label: normalizedOriginLabel,
+    attempted: false,
+    skipped: false,
+    skip_reason: null,
+    settled: false,
+    waiting_for_background: false,
+    final_session_job_id: null,
+    final_snapshot_job_id: null,
+    final_payload: null,
+    error: null,
+    steps: []
+  };
+
+  const pushStep = (step, extra = {}) => {
+    result.steps.push({
+      step,
+      at_utc: new Date().toISOString(),
+      ...extra
+    });
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const errToString = (error) => {
+    try {
+      if (error && typeof error === 'object') {
+        if (typeof error.message === 'string' && error.message.trim()) return error.message.trim();
+        return JSON.stringify(error);
+      }
+      return String(error == null ? '' : error);
+    } catch {
+      return String(error == null ? '' : error);
+    }
+  };
+
+  const normalizeUuidArray = (value) => {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => trimStr(item))
+        .filter((item) => uuidRe.test(item));
+    }
+    const text = trimStr(value);
+    if (!text) return [];
+    if (text.startsWith('{') && text.endsWith('}')) {
+      return text
+        .slice(1, -1)
+        .split(',')
+        .map((item) => trimStr(item).replace(/^"|"$/g, ''))
+        .filter((item) => uuidRe.test(item));
+    }
+    return uuidRe.test(text) ? [text] : [];
+  };
+
+  const buildErrorJson = (code, error, extra = {}) => ({
+    code,
+    message: errToString(error),
+    session_id: result.session_id,
+    candidate_id: result.candidate_id,
+    actor_user_id: result.actor_user_id,
+    origin_label: normalizedOriginLabel,
+    failed_at_utc: new Date().toISOString(),
+    ...extra
+  });
+
+  const completeJob = async (jobId, payload) => {
+    return sbRpc(env, 'pay_workbench_complete_job', {
+      p_job_id: jobId,
+      p_result_json: (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {}
+    });
+  };
+
+  const failJob = async (jobId, errorJson, retryAfterSeconds = null) => {
+    return sbRpc(env, 'pay_workbench_fail_job', {
+      p_job_id: jobId,
+      p_error_json: (errorJson && typeof errorJson === 'object' && !Array.isArray(errorJson)) ? errorJson : buildErrorJson('FAST_LANE_FAILURE', errorJson),
+      p_retry_after_seconds: Number.isFinite(Number(retryAfterSeconds)) ? Number(retryAfterSeconds) : null
+    });
+  };
+
+  const fetchJobContext = async (jobId) => {
+    const jobIdText = trimStr(jobId);
+    if (!uuidRe.test(jobIdText)) return null;
+    const fetchRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_jobs` +
+        `?id=eq.${enc(jobIdText)}` +
+        `&select=id,job_type,status,session_id,candidate_id,snapshot_run_id` +
+        `&limit=1`,
+      false
+    );
+    const jobRow = (fetchRes && Array.isArray(fetchRes.rows) && fetchRes.rows[0] && typeof fetchRes.rows[0] === 'object')
+      ? fetchRes.rows[0]
+      : null;
+    return jobRow;
+  };
+
+  const prevalidateJobContext = async (jobId, expectedContext = {}) => {
+    const jobIdText = trimStr(jobId);
+    const expectedType = trimStr(expectedContext.jobType).toUpperCase();
+    const expectedSessionId = trimStr(expectedContext.sessionId);
+    const expectedCandidateId = trimStr(expectedContext.candidateId);
+    const expectedSnapshotRunId = trimStr(expectedContext.snapshotRunId);
+
+    if (!uuidRe.test(jobIdText)) {
+      return { ok: false, reason: 'INVALID_JOB_ID', job: null };
+    }
+
+    let jobRow = null;
+    try {
+      jobRow = await fetchJobContext(jobIdText);
+    } catch (error) {
+      return {
+        ok: false,
+        reason: 'JOB_FETCH_FAILED',
+        job: null,
+        error: buildErrorJson('FAST_LANE_JOB_FETCH_FAILED', error, { job_id: jobIdText })
+      };
+    }
+
+    if (!jobRow) {
+      return { ok: false, reason: 'JOB_NOT_FOUND', job: null };
+    }
+
+    const jobType = trimStr(jobRow.job_type).toUpperCase();
+    const jobSessionId = trimStr(jobRow.session_id);
+    const jobCandidateId = trimStr(jobRow.candidate_id);
+    const jobSnapshotRunId = trimStr(jobRow.snapshot_run_id);
+
+    if (expectedType && jobType !== expectedType) {
+      return { ok: false, reason: 'WRONG_JOB_TYPE', job: jobRow };
+    }
+    if (expectedSessionId && (!uuidRe.test(jobSessionId) || jobSessionId !== expectedSessionId)) {
+      return { ok: false, reason: 'WRONG_SESSION_CONTEXT', job: jobRow };
+    }
+    if (expectedCandidateId && (!uuidRe.test(jobCandidateId) || jobCandidateId !== expectedCandidateId)) {
+      return { ok: false, reason: 'WRONG_CANDIDATE_CONTEXT', job: jobRow };
+    }
+    if (expectedSnapshotRunId && (!uuidRe.test(jobSnapshotRunId) || jobSnapshotRunId !== expectedSnapshotRunId)) {
+      return { ok: false, reason: 'WRONG_SNAPSHOT_CONTEXT', job: jobRow };
+    }
+
+    return { ok: true, reason: null, job: jobRow };
+  };
+
+  const claimJobNow = async (jobId) => {
+    const jobIdText = trimStr(jobId);
+    if (!uuidRe.test(jobIdText)) {
+      return {
+        ok: true,
+        claimed: false,
+        no_op: true,
+        reason: 'INVALID_JOB_ID',
+        job_id: null
+      };
+    }
+    const claimRpc = await sbRpc(env, 'pay_workbench_claim_job_now', {
+      p_job_id: jobIdText,
+      p_now_utc: new Date().toISOString()
+    });
+    return unwrapRpc(claimRpc, 'pay_workbench_claim_job_now');
+  };
+
+  const enqueueSessionRefresh = async (reason, payloadJson = {}) => {
+    const rpcRes = await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
+      p_session_id: result.session_id,
+      p_candidate_id: result.candidate_id,
+      p_reason: reason,
+      p_actor_user_id: result.actor_user_id,
+      p_payload_json: (payloadJson && typeof payloadJson === 'object' && !Array.isArray(payloadJson)) ? payloadJson : {}
+    });
+    return unwrapRpc(rpcRes, 'pay_workbench_enqueue_session_candidate_refresh');
+  };
+
+  const classifyClaimResult = (claimPayload, expectedContext = {}) => {
+    const payload = (claimPayload && typeof claimPayload === 'object' && !Array.isArray(claimPayload)) ? claimPayload : {};
+    const payloadJobType = trimStr(payload.job_type).toUpperCase();
+    const payloadReason = trimStr(payload.reason).toUpperCase();
+    const payloadStatus = trimStr(payload.status).toUpperCase();
+    const payloadSessionId = trimStr(payload.session_id);
+    const payloadCandidateId = trimStr(payload.candidate_id);
+    const payloadSnapshotRunId = trimStr(payload.snapshot_run_id);
+    const expectedType = trimStr(expectedContext.jobType).toUpperCase();
+    const expectedSessionId = trimStr(expectedContext.sessionId);
+    const expectedCandidateId = trimStr(expectedContext.candidateId);
+    const expectedSnapshotRunId = trimStr(expectedContext.snapshotRunId);
+
+    if (payload.claimed === true && payloadJobType === expectedType) {
+      if (expectedSessionId && (!uuidRe.test(payloadSessionId) || payloadSessionId !== expectedSessionId)) {
+        return { kind: 'WRONG_SESSION_CONTEXT', payload };
+      }
+      if (expectedCandidateId && (!uuidRe.test(payloadCandidateId) || payloadCandidateId !== expectedCandidateId)) {
+        return { kind: 'WRONG_CANDIDATE_CONTEXT', payload };
+      }
+      if (expectedSnapshotRunId && (!uuidRe.test(payloadSnapshotRunId) || payloadSnapshotRunId !== expectedSnapshotRunId)) {
+        return { kind: 'WRONG_SNAPSHOT_CONTEXT', payload };
+      }
+      return { kind: 'CLAIMED', payload };
+    }
+    if (payload.claimed === true && payloadJobType && payloadJobType !== expectedType) {
+      return { kind: 'WRONG_JOB_TYPE', payload };
+    }
+    if (payload.terminalized === true || payloadStatus === 'DEAD' || payloadReason === 'MAX_ATTEMPTS_EXHAUSTED') {
+      return { kind: 'TERMINAL_OR_UNCLAIMABLE', payload };
+    }
+    if (payload.no_op === true) {
+      if (payloadReason === 'FRESH_RUNNING' || payloadReason === 'JOB_NOT_DUE_YET') {
+        return { kind: 'LET_BACKGROUND_FINISH', payload };
+      }
+      if (payloadReason === 'TERMINAL_STATUS' || payloadReason === 'STATUS_NOT_CLAIMABLE') {
+        return { kind: 'TERMINAL_OR_UNCLAIMABLE', payload };
+      }
+      if (payloadReason === 'JOB_NOT_FOUND' || payloadReason === 'JOB_ID_REQUIRED' || payloadReason === 'INVALID_JOB_ID' || payloadReason === 'UNSUPPORTED_JOB_TYPE') {
+        return { kind: 'INVALID_TARGET', payload };
+      }
+      return { kind: 'NO_OP', payload };
+    }
+    if (payloadReason === 'JOB_NOT_FOUND' || payloadReason === 'JOB_ID_REQUIRED' || payloadReason === 'INVALID_JOB_ID') {
+      return { kind: 'INVALID_TARGET', payload };
+    }
+    return { kind: 'NO_OP', payload };
+  };
+
+  const claimDecisionWaitsForBackground = (decisionKind) => decisionKind === 'LET_BACKGROUND_FINISH';
+
+  const validateSession = async () => {
+    if (!result.session_id || !result.candidate_id || !result.actor_user_id) {
+      return { ok: false, reason: 'INVALID_CONTEXT_UUIDS', session: null };
+    }
+    const fetchRes = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+        `?id=eq.${enc(result.session_id)}` +
+        `&select=id,actor_user_id,status,source_snapshot_run_id,scope_candidate_ids,version` +
+        `&limit=1`,
+      false
+    );
+    const sessionRow = (fetchRes && Array.isArray(fetchRes.rows) && fetchRes.rows[0] && typeof fetchRes.rows[0] === 'object')
+      ? fetchRes.rows[0]
+      : null;
+    if (!sessionRow) {
+      return { ok: false, reason: 'SESSION_NOT_FOUND', session: null };
+    }
+    if (trimStr(sessionRow.actor_user_id) !== result.actor_user_id) {
+      return { ok: false, reason: 'SESSION_NOT_OWNED_BY_ACTOR', session: sessionRow };
+    }
+    if (trimStr(sessionRow.status).toUpperCase() !== 'OPEN') {
+      return { ok: false, reason: 'SESSION_NOT_OPEN', session: sessionRow };
+    }
+    const scopeCandidateIds = normalizeUuidArray(sessionRow.scope_candidate_ids);
+    if (!scopeCandidateIds.includes(result.candidate_id)) {
+      return { ok: false, reason: 'CANDIDATE_NOT_IN_SESSION_SCOPE', session: sessionRow };
+    }
+    return { ok: true, reason: null, session: sessionRow };
+  };
+
+  const executeSessionRecompute = async (sessionJobId, sessionRow, allowStaleRetry, phaseLabel) => {
+    const safePhaseLabel = trimStr(phaseLabel) || 'SESSION_RECOMPUTE';
+    let recomputePayload = {};
+
+    try {
+      const recomputeRpc = await sbRpc(env, 'pay_workbench_session_recompute_candidate', {
+        p_session_id: result.session_id,
+        p_candidate_id: result.candidate_id,
+        p_job_id: sessionJobId
+      });
+      recomputePayload = unwrapRpc(recomputeRpc, 'pay_workbench_session_recompute_candidate');
+      pushStep('session_recompute_result', {
+        phase: safePhaseLabel,
+        session_job_id: sessionJobId,
+        payload: cloneJson(recomputePayload)
+      });
+    } catch (error) {
+      const errorJson = buildErrorJson('FAST_LANE_SESSION_RECOMPUTE_FAILED', error, {
+        phase: safePhaseLabel,
+        session_job_id: sessionJobId
+      });
+      try {
+        await failJob(sessionJobId, errorJson, null);
+        pushStep('session_recompute_failed_job_marked', {
+          phase: safePhaseLabel,
+          session_job_id: sessionJobId,
+          error: cloneJson(errorJson)
+        });
+      } catch (failError) {
+        pushStep('session_recompute_failed_job_mark_error', {
+          phase: safePhaseLabel,
+          session_job_id: sessionJobId,
+          error: errToString(failError)
+        });
+      }
+      result.waiting_for_background = true;
+      result.error = cloneJson(errorJson);
+      return {
+        settled: false,
+        waiting_for_background: true,
+        payload: null,
+        reason: 'SESSION_RECOMPUTE_EXECUTION_FAILED'
+      };
+    }
+
+    if (recomputePayload && typeof recomputePayload === 'object' && recomputePayload.waiting_for_snapshot === true) {
+      try {
+        await completeJob(sessionJobId, recomputePayload);
+        pushStep('session_recompute_completed_waiting_for_snapshot', {
+          phase: safePhaseLabel,
+          session_job_id: sessionJobId,
+          payload: cloneJson(recomputePayload)
+        });
+      } catch (completeError) {
+        const errorJson = buildErrorJson('FAST_LANE_COMPLETE_WAITING_FOR_SNAPSHOT_FAILED', completeError, {
+          phase: safePhaseLabel,
+          session_job_id: sessionJobId,
+          payload: cloneJson(recomputePayload)
+        });
+        try {
+          await failJob(sessionJobId, errorJson, null);
+        } catch {}
+        result.waiting_for_background = true;
+        result.error = cloneJson(errorJson);
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'COMPLETE_WAITING_FOR_SNAPSHOT_FAILED'
+        };
+      }
+
+      const snapshotRefreshJobId = trimStr(recomputePayload.snapshot_refresh_job_id);
+      result.final_snapshot_job_id = uuidRe.test(snapshotRefreshJobId) ? snapshotRefreshJobId : (result.final_snapshot_job_id || null);
+
+      if (!uuidRe.test(snapshotRefreshJobId)) {
+        result.waiting_for_background = true;
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'SNAPSHOT_JOB_ID_MISSING'
+        };
+      }
+
+      const snapshotRunId = trimStr(recomputePayload.snapshot_run_id) || trimStr(sessionRow?.source_snapshot_run_id);
+      if (!uuidRe.test(snapshotRunId)) {
+        result.waiting_for_background = true;
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'SNAPSHOT_RUN_ID_MISSING'
+        };
+      }
+
+      const snapshotPrevalidation = await prevalidateJobContext(snapshotRefreshJobId, {
+        jobType: 'SNAPSHOT_CANDIDATE_REFRESH',
+        candidateId: result.candidate_id,
+        snapshotRunId
+      });
+      pushStep('snapshot_job_prevalidation', {
+        phase: safePhaseLabel,
+        snapshot_job_id: snapshotRefreshJobId,
+        result: cloneJson(snapshotPrevalidation)
+      });
+      if (!snapshotPrevalidation.ok) {
+        result.waiting_for_background = true;
+        if (snapshotPrevalidation.error) result.error = cloneJson(snapshotPrevalidation.error);
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: `SNAPSHOT_PREVALIDATION_${snapshotPrevalidation.reason || 'FAILED'}`
+        };
+      }
+
+      let snapshotClaimPayload;
+      try {
+        snapshotClaimPayload = await claimJobNow(snapshotRefreshJobId);
+        pushStep('snapshot_job_claim_attempt', {
+          phase: safePhaseLabel,
+          snapshot_job_id: snapshotRefreshJobId,
+          payload: cloneJson(snapshotClaimPayload)
+        });
+      } catch (claimError) {
+        result.waiting_for_background = true;
+        result.error = buildErrorJson('FAST_LANE_SNAPSHOT_CLAIM_FAILED', claimError, {
+          phase: safePhaseLabel,
+          snapshot_job_id: snapshotRefreshJobId
+        });
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'SNAPSHOT_CLAIM_FAILED'
+        };
+      }
+
+      const snapshotClaimDecision = classifyClaimResult(snapshotClaimPayload, {
+        jobType: 'SNAPSHOT_CANDIDATE_REFRESH',
+        candidateId: result.candidate_id,
+        snapshotRunId
+      });
+      if (snapshotClaimDecision.kind !== 'CLAIMED') {
+        const snapshotShouldWaitForBackground = claimDecisionWaitsForBackground(snapshotClaimDecision.kind);
+        result.waiting_for_background = snapshotShouldWaitForBackground;
+        return {
+          settled: false,
+          waiting_for_background: snapshotShouldWaitForBackground,
+          payload: recomputePayload,
+          reason: `SNAPSHOT_${snapshotClaimDecision.kind}`
+        };
+      }
+
+      let snapshotPayload = {};
+      try {
+        const snapshotRpc = await sbRpc(env, 'pay_workbench_snapshot_refresh_candidate', {
+          p_snapshot_run_id: snapshotRunId,
+          p_candidate_id: result.candidate_id
+        });
+        snapshotPayload = unwrapRpc(snapshotRpc, 'pay_workbench_snapshot_refresh_candidate');
+        pushStep('snapshot_refresh_result', {
+          phase: safePhaseLabel,
+          snapshot_job_id: snapshotRefreshJobId,
+          snapshot_run_id: snapshotRunId,
+          payload: cloneJson(snapshotPayload)
+        });
+      } catch (snapshotError) {
+        const errorJson = buildErrorJson('FAST_LANE_SNAPSHOT_REFRESH_FAILED', snapshotError, {
+          phase: safePhaseLabel,
+          snapshot_job_id: snapshotRefreshJobId,
+          snapshot_run_id: snapshotRunId
+        });
+        try {
+          await failJob(snapshotRefreshJobId, errorJson, null);
+          pushStep('snapshot_refresh_failed_job_marked', {
+            phase: safePhaseLabel,
+            snapshot_job_id: snapshotRefreshJobId,
+            error: cloneJson(errorJson)
+          });
+        } catch (failError) {
+          pushStep('snapshot_refresh_failed_job_mark_error', {
+            phase: safePhaseLabel,
+            snapshot_job_id: snapshotRefreshJobId,
+            error: errToString(failError)
+          });
+        }
+        result.waiting_for_background = true;
+        result.error = cloneJson(errorJson);
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'SNAPSHOT_REFRESH_EXECUTION_FAILED'
+        };
+      }
+
+      try {
+        await completeJob(snapshotRefreshJobId, snapshotPayload);
+        pushStep('snapshot_refresh_completed', {
+          phase: safePhaseLabel,
+          snapshot_job_id: snapshotRefreshJobId,
+          payload: cloneJson(snapshotPayload)
+        });
+      } catch (completeSnapshotError) {
+        const errorJson = buildErrorJson('FAST_LANE_SNAPSHOT_COMPLETE_FAILED', completeSnapshotError, {
+          phase: safePhaseLabel,
+          snapshot_job_id: snapshotRefreshJobId,
+          payload: cloneJson(snapshotPayload)
+        });
+        try {
+          await failJob(snapshotRefreshJobId, errorJson, null);
+        } catch {}
+        result.waiting_for_background = true;
+        result.error = cloneJson(errorJson);
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: snapshotPayload,
+          reason: 'SNAPSHOT_COMPLETE_FAILED'
+        };
+      }
+
+      let followUpEnqueuePayload;
+      try {
+        followUpEnqueuePayload = await enqueueSessionRefresh(`${normalizedOriginLabel}:AFTER_SNAPSHOT`, {
+          source_job_id: sessionJobId,
+          source_snapshot_job_id: snapshotRefreshJobId,
+          fast_lane: true,
+          fast_lane_phase: 'AFTER_SNAPSHOT',
+          origin_label: normalizedOriginLabel
+        });
+        pushStep('session_followup_enqueue_after_snapshot', {
+          phase: safePhaseLabel,
+          payload: cloneJson(followUpEnqueuePayload)
+        });
+      } catch (enqueueError) {
+        result.waiting_for_background = true;
+        result.error = buildErrorJson('FAST_LANE_SESSION_REQUEUE_AFTER_SNAPSHOT_FAILED', enqueueError, {
+          phase: safePhaseLabel,
+          session_job_id: sessionJobId,
+          snapshot_job_id: snapshotRefreshJobId
+        });
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'SESSION_REQUEUE_AFTER_SNAPSHOT_FAILED'
+        };
+      }
+
+      const followUpSessionJobId = trimStr(followUpEnqueuePayload.job_id);
+      if (!uuidRe.test(followUpSessionJobId)) {
+        result.waiting_for_background = true;
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'FOLLOWUP_SESSION_JOB_ID_MISSING'
+        };
+      }
+
+      const followUpPrevalidation = await prevalidateJobContext(followUpSessionJobId, {
+        jobType: 'SESSION_CANDIDATE_RECOMPUTE',
+        sessionId: result.session_id,
+        candidateId: result.candidate_id
+      });
+      pushStep('session_followup_prevalidation_after_snapshot', {
+        phase: safePhaseLabel,
+        session_job_id: followUpSessionJobId,
+        result: cloneJson(followUpPrevalidation)
+      });
+      if (!followUpPrevalidation.ok) {
+        result.waiting_for_background = true;
+        if (followUpPrevalidation.error) result.error = cloneJson(followUpPrevalidation.error);
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: `SESSION_FOLLOWUP_PREVALIDATION_${followUpPrevalidation.reason || 'FAILED'}`
+        };
+      }
+
+      let followUpClaimPayload;
+      try {
+        followUpClaimPayload = await claimJobNow(followUpSessionJobId);
+        pushStep('session_followup_claim_after_snapshot', {
+          phase: safePhaseLabel,
+          session_job_id: followUpSessionJobId,
+          payload: cloneJson(followUpClaimPayload)
+        });
+      } catch (claimError) {
+        result.waiting_for_background = true;
+        result.error = buildErrorJson('FAST_LANE_SESSION_FOLLOWUP_CLAIM_FAILED', claimError, {
+          phase: safePhaseLabel,
+          session_job_id: followUpSessionJobId
+        });
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'SESSION_FOLLOWUP_CLAIM_FAILED'
+        };
+      }
+
+      const followUpDecision = classifyClaimResult(followUpClaimPayload, {
+        jobType: 'SESSION_CANDIDATE_RECOMPUTE',
+        sessionId: result.session_id,
+        candidateId: result.candidate_id
+      });
+      if (followUpDecision.kind !== 'CLAIMED') {
+        const followUpShouldWaitForBackground = claimDecisionWaitsForBackground(followUpDecision.kind);
+        result.waiting_for_background = followUpShouldWaitForBackground;
+        return {
+          settled: false,
+          waiting_for_background: followUpShouldWaitForBackground,
+          payload: recomputePayload,
+          reason: `SESSION_FOLLOWUP_${followUpDecision.kind}`
+        };
+      }
+
+      result.final_session_job_id = followUpSessionJobId;
+      return executeSessionRecompute(followUpSessionJobId, sessionRow, false, `${safePhaseLabel}_AFTER_SNAPSHOT`);
+    }
+
+    if (recomputePayload && typeof recomputePayload === 'object' && recomputePayload.no_op === true && trimStr(recomputePayload.reason).toUpperCase() === 'STALE_SESSION_VERSION' && allowStaleRetry) {
+      try {
+        await completeJob(sessionJobId, recomputePayload);
+        pushStep('session_recompute_completed_stale_version', {
+          phase: safePhaseLabel,
+          session_job_id: sessionJobId,
+          payload: cloneJson(recomputePayload)
+        });
+      } catch (completeError) {
+        const errorJson = buildErrorJson('FAST_LANE_STALE_VERSION_COMPLETE_FAILED', completeError, {
+          phase: safePhaseLabel,
+          session_job_id: sessionJobId,
+          payload: cloneJson(recomputePayload)
+        });
+        try {
+          await failJob(sessionJobId, errorJson, null);
+        } catch {}
+        result.waiting_for_background = true;
+        result.error = cloneJson(errorJson);
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'STALE_VERSION_COMPLETE_FAILED'
+        };
+      }
+
+      let retryEnqueuePayload;
+      try {
+        retryEnqueuePayload = await enqueueSessionRefresh(`${normalizedOriginLabel}:STALE_SESSION_VERSION_RETRY`, {
+          source_job_id: sessionJobId,
+          fast_lane: true,
+          fast_lane_phase: 'STALE_SESSION_VERSION_RETRY',
+          origin_label: normalizedOriginLabel
+        });
+        pushStep('session_retry_enqueue_stale_version', {
+          phase: safePhaseLabel,
+          payload: cloneJson(retryEnqueuePayload)
+        });
+      } catch (enqueueError) {
+        result.waiting_for_background = true;
+        result.error = buildErrorJson('FAST_LANE_STALE_VERSION_REQUEUE_FAILED', enqueueError, {
+          phase: safePhaseLabel,
+          session_job_id: sessionJobId
+        });
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'STALE_VERSION_REQUEUE_FAILED'
+        };
+      }
+
+      const retrySessionJobId = trimStr(retryEnqueuePayload.job_id);
+      if (!uuidRe.test(retrySessionJobId)) {
+        result.waiting_for_background = true;
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'STALE_VERSION_RETRY_JOB_ID_MISSING'
+        };
+      }
+
+      const retryPrevalidation = await prevalidateJobContext(retrySessionJobId, {
+        jobType: 'SESSION_CANDIDATE_RECOMPUTE',
+        sessionId: result.session_id,
+        candidateId: result.candidate_id
+      });
+      pushStep('session_retry_prevalidation_stale_version', {
+        phase: safePhaseLabel,
+        session_job_id: retrySessionJobId,
+        result: cloneJson(retryPrevalidation)
+      });
+      if (!retryPrevalidation.ok) {
+        result.waiting_for_background = true;
+        if (retryPrevalidation.error) result.error = cloneJson(retryPrevalidation.error);
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: `STALE_VERSION_RETRY_PREVALIDATION_${retryPrevalidation.reason || 'FAILED'}`
+        };
+      }
+
+      let retryClaimPayload;
+      try {
+        retryClaimPayload = await claimJobNow(retrySessionJobId);
+        pushStep('session_retry_claim_stale_version', {
+          phase: safePhaseLabel,
+          session_job_id: retrySessionJobId,
+          payload: cloneJson(retryClaimPayload)
+        });
+      } catch (claimError) {
+        result.waiting_for_background = true;
+        result.error = buildErrorJson('FAST_LANE_STALE_VERSION_RETRY_CLAIM_FAILED', claimError, {
+          phase: safePhaseLabel,
+          session_job_id: retrySessionJobId
+        });
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: 'STALE_VERSION_RETRY_CLAIM_FAILED'
+        };
+      }
+
+      const retryDecision = classifyClaimResult(retryClaimPayload, {
+        jobType: 'SESSION_CANDIDATE_RECOMPUTE',
+        sessionId: result.session_id,
+        candidateId: result.candidate_id
+      });
+      if (retryDecision.kind !== 'CLAIMED') {
+        const retryShouldWaitForBackground = claimDecisionWaitsForBackground(retryDecision.kind);
+        result.waiting_for_background = retryShouldWaitForBackground;
+        return {
+          settled: false,
+          waiting_for_background: retryShouldWaitForBackground,
+          payload: recomputePayload,
+          reason: `STALE_VERSION_RETRY_${retryDecision.kind}`
+        };
+      }
+
+      result.final_session_job_id = retrySessionJobId;
+      return executeSessionRecompute(retrySessionJobId, sessionRow, false, `${safePhaseLabel}_STALE_VERSION_RETRY`);
+    }
+
+    try {
+      await completeJob(sessionJobId, recomputePayload);
+      pushStep('session_recompute_completed', {
+        phase: safePhaseLabel,
+        session_job_id: sessionJobId,
+        payload: cloneJson(recomputePayload)
+      });
+    } catch (completeError) {
+      const errorJson = buildErrorJson('FAST_LANE_SESSION_COMPLETE_FAILED', completeError, {
+        phase: safePhaseLabel,
+        session_job_id: sessionJobId,
+        payload: cloneJson(recomputePayload)
+      });
+      try {
+        await failJob(sessionJobId, errorJson, null);
+      } catch {}
+      result.waiting_for_background = true;
+      result.error = cloneJson(errorJson);
+      return {
+        settled: false,
+        waiting_for_background: true,
+        payload: recomputePayload,
+        reason: 'SESSION_COMPLETE_FAILED'
+      };
+    }
+
+    if (recomputePayload && typeof recomputePayload === 'object' && recomputePayload.no_op === true) {
+      if (trimStr(recomputePayload.reason).toUpperCase() === 'SESSION_DISCARDED') {
+        return {
+          settled: true,
+          waiting_for_background: false,
+          payload: recomputePayload,
+          reason: 'SESSION_DISCARDED'
+        };
+      }
+      result.waiting_for_background = true;
+      return {
+        settled: false,
+        waiting_for_background: true,
+        payload: recomputePayload,
+        reason: trimStr(recomputePayload.reason).toUpperCase() || 'SESSION_RECOMPUTE_NO_OP'
+      };
+    }
+
+    return {
+      settled: true,
+      waiting_for_background: false,
+      payload: recomputePayload,
+      reason: 'SETTLED'
+    };
+  };
+
+  try {
+    if (!result.session_id || !result.candidate_id || !result.actor_user_id) {
+      result.skipped = true;
+      result.skip_reason = 'INVALID_CONTEXT_UUIDS';
+      pushStep('fast_lane_skipped', { reason: result.skip_reason });
+      return result;
+    }
+
+    let sessionValidation;
+    try {
+      sessionValidation = await validateSession();
+    } catch (validationError) {
+      result.skipped = true;
+      result.skip_reason = 'SESSION_VALIDATION_FAILED';
+      result.error = buildErrorJson('FAST_LANE_SESSION_VALIDATION_FAILED', validationError);
+      pushStep('fast_lane_skipped', {
+        reason: result.skip_reason,
+        error: cloneJson(result.error)
+      });
+      return result;
+    }
+
+    if (!sessionValidation.ok) {
+      result.skipped = true;
+      result.skip_reason = sessionValidation.reason || 'SESSION_NOT_ELIGIBLE';
+      pushStep('fast_lane_skipped', {
+        reason: result.skip_reason,
+        session: cloneJson(sessionValidation.session)
+      });
+      return result;
+    }
+
+    const sessionRow = sessionValidation.session;
+    pushStep('fast_lane_session_validated', {
+      session: cloneJson(sessionRow)
+    });
+
+    let sessionJobId = null;
+    let claimPayload = null;
+
+    if (result.existing_session_job_id) {
+      const existingPrevalidation = await prevalidateJobContext(result.existing_session_job_id, {
+        jobType: 'SESSION_CANDIDATE_RECOMPUTE',
+        sessionId: result.session_id,
+        candidateId: result.candidate_id
+      });
+      pushStep('session_job_prevalidation_existing', {
+        session_job_id: result.existing_session_job_id,
+        result: cloneJson(existingPrevalidation)
+      });
+      if (!existingPrevalidation.ok) {
+        result.skipped = true;
+        result.skip_reason = `EXISTING_JOB_PREVALIDATION_${existingPrevalidation.reason || 'FAILED'}`;
+        if (existingPrevalidation.error) result.error = cloneJson(existingPrevalidation.error);
+        return result;
+      }
+
+      try {
+        claimPayload = await claimJobNow(result.existing_session_job_id);
+        pushStep('session_job_claim_existing', {
+          session_job_id: result.existing_session_job_id,
+          payload: cloneJson(claimPayload)
+        });
+      } catch (claimError) {
+        result.waiting_for_background = true;
+        result.error = buildErrorJson('FAST_LANE_EXISTING_JOB_CLAIM_FAILED', claimError, {
+          existing_session_job_id: result.existing_session_job_id
+        });
+        pushStep('fast_lane_waiting_for_background', {
+          reason: 'EXISTING_JOB_CLAIM_FAILED',
+          error: cloneJson(result.error)
+        });
+        return result;
+      }
+
+      const claimDecision = classifyClaimResult(claimPayload, {
+        jobType: 'SESSION_CANDIDATE_RECOMPUTE',
+        sessionId: result.session_id,
+        candidateId: result.candidate_id
+      });
+      if (claimDecision.kind !== 'CLAIMED') {
+        const existingJobShouldWaitForBackground = claimDecisionWaitsForBackground(claimDecision.kind);
+        result.attempted = true;
+        result.waiting_for_background = existingJobShouldWaitForBackground;
+        result.skipped = !existingJobShouldWaitForBackground;
+        result.skip_reason = `EXISTING_JOB_${claimDecision.kind}`;
+        pushStep('fast_lane_claim_existing_not_claimed', {
+          decision: claimDecision.kind,
+          payload: cloneJson(claimDecision.payload)
+        });
+        return result;
+      }
+
+      sessionJobId = trimStr(claimDecision.payload.job_id);
+      result.final_session_job_id = uuidRe.test(sessionJobId) ? sessionJobId : null;
+    } else {
+      let enqueuePayload;
+      try {
+        enqueuePayload = await enqueueSessionRefresh(normalizedOriginLabel, {
+          fast_lane: true,
+          fast_lane_phase: 'INITIAL',
+          origin_label: normalizedOriginLabel
+        });
+        pushStep('session_job_enqueued', {
+          payload: cloneJson(enqueuePayload)
+        });
+      } catch (enqueueError) {
+        result.skipped = true;
+        result.skip_reason = 'SESSION_ENQUEUE_FAILED';
+        result.error = buildErrorJson('FAST_LANE_SESSION_ENQUEUE_FAILED', enqueueError);
+        pushStep('fast_lane_skipped', {
+          reason: result.skip_reason,
+          error: cloneJson(result.error)
+        });
+        return result;
+      }
+
+      const enqueuedJobId = trimStr(enqueuePayload.job_id);
+      if (!uuidRe.test(enqueuedJobId)) {
+        result.skipped = true;
+        result.skip_reason = 'SESSION_ENQUEUE_JOB_ID_MISSING';
+        pushStep('fast_lane_skipped', {
+          reason: result.skip_reason,
+          payload: cloneJson(enqueuePayload)
+        });
+        return result;
+      }
+
+      const enqueuedPrevalidation = await prevalidateJobContext(enqueuedJobId, {
+        jobType: 'SESSION_CANDIDATE_RECOMPUTE',
+        sessionId: result.session_id,
+        candidateId: result.candidate_id
+      });
+      pushStep('session_job_prevalidation_enqueued', {
+        session_job_id: enqueuedJobId,
+        result: cloneJson(enqueuedPrevalidation)
+      });
+      if (!enqueuedPrevalidation.ok) {
+        result.skipped = true;
+        result.skip_reason = `ENQUEUED_JOB_PREVALIDATION_${enqueuedPrevalidation.reason || 'FAILED'}`;
+        if (enqueuedPrevalidation.error) result.error = cloneJson(enqueuedPrevalidation.error);
+        return result;
+      }
+
+      try {
+        claimPayload = await claimJobNow(enqueuedJobId);
+        pushStep('session_job_claim_enqueued', {
+          session_job_id: enqueuedJobId,
+          payload: cloneJson(claimPayload)
+        });
+      } catch (claimError) {
+        result.waiting_for_background = true;
+        result.error = buildErrorJson('FAST_LANE_ENQUEUED_JOB_CLAIM_FAILED', claimError, {
+          session_job_id: enqueuedJobId
+        });
+        pushStep('fast_lane_waiting_for_background', {
+          reason: 'ENQUEUED_JOB_CLAIM_FAILED',
+          error: cloneJson(result.error)
+        });
+        return result;
+      }
+
+      const claimDecision = classifyClaimResult(claimPayload, {
+        jobType: 'SESSION_CANDIDATE_RECOMPUTE',
+        sessionId: result.session_id,
+        candidateId: result.candidate_id
+      });
+      if (claimDecision.kind !== 'CLAIMED') {
+        const enqueuedJobShouldWaitForBackground = claimDecisionWaitsForBackground(claimDecision.kind);
+        result.attempted = true;
+        result.waiting_for_background = enqueuedJobShouldWaitForBackground;
+        result.skipped = !enqueuedJobShouldWaitForBackground;
+        result.skip_reason = `ENQUEUED_JOB_${claimDecision.kind}`;
+        pushStep('fast_lane_claim_enqueued_not_claimed', {
+          decision: claimDecision.kind,
+          payload: cloneJson(claimDecision.payload)
+        });
+        return result;
+      }
+
+      sessionJobId = trimStr(claimDecision.payload.job_id);
+      result.final_session_job_id = uuidRe.test(sessionJobId) ? sessionJobId : null;
+    }
+
+    if (!uuidRe.test(sessionJobId)) {
+      result.skipped = true;
+      result.skip_reason = 'SESSION_JOB_ID_INVALID';
+      pushStep('fast_lane_skipped', { reason: result.skip_reason });
+      return result;
+    }
+
+    result.attempted = true;
+    const executionResult = await executeSessionRecompute(sessionJobId, sessionRow, true, 'INITIAL');
+    result.final_payload = cloneJson(executionResult.payload);
+    result.settled = executionResult.settled === true;
+    result.waiting_for_background = executionResult.waiting_for_background === true;
+    if (!result.settled && !result.waiting_for_background && executionResult.reason) {
+      result.skipped = true;
+      result.skip_reason = executionResult.reason;
+    }
+
+    pushStep('fast_lane_complete', {
+      settled: result.settled,
+      waiting_for_background: result.waiting_for_background,
+      reason: executionResult.reason || null,
+      final_payload: cloneJson(executionResult.payload)
+    });
+
+    return result;
+  } catch (error) {
+    result.error = buildErrorJson('FAST_LANE_UNHANDLED_ERROR', error);
+    result.waiting_for_background = true;
+    pushStep('fast_lane_unhandled_error', {
+      error: cloneJson(result.error)
+    });
+    return result;
+  }
+}
+
+
+
 async function handleBankingPaymentAdvanceCreate(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -40059,9 +41308,24 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
     return null;
   };
 
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const readUuid = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return uuidRe.test(text) ? text : '';
+  };
+
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+
+  const optionalWorkbenchSessionId = readUuid(body.workbench_session_id ?? body.workbenchSessionId);
 
   const principalAmount = Number(body.principal_amount ?? body.principalAmount ?? body.amount);
   if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
@@ -40174,11 +41438,48 @@ async function handleBankingPaymentAdvanceCreate(env, req, user) {
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_payment_advance_create');
-    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object') ? payload : {};
+
+    let responsePayload = payloadObj;
+    if (optionalWorkbenchSessionId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          optionalWorkbenchSessionId,
+          candidateId,
+          String(user?.id || '').trim(),
+          null,
+          'BANKING_PAYMENT_ADVANCE_CREATE'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane payment advance create failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create payment advance')));
   }
 }
+
 async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -40191,6 +41492,22 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
+
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const readUuid = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return uuidRe.test(text) ? text : '';
+  };
+
+  const optionalWorkbenchSessionId = readUuid(body.workbench_session_id ?? body.workbenchSessionId);
+  const optionalCandidateId = readUuid(body.candidate_id ?? body.candidateId);
 
   const parseIsoOrUkDateToIso = (raw) => {
     const s = String(raw || '').trim();
@@ -40369,11 +41686,48 @@ async function handleBankingPaymentAdvanceUpdate(env, req, user, financeCaseId) 
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_payment_advance_update');
-    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object') ? payload : {};
+
+    let responsePayload = payloadObj;
+    if (optionalWorkbenchSessionId && optionalCandidateId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          optionalWorkbenchSessionId,
+          optionalCandidateId,
+          String(user?.id || '').trim(),
+          null,
+          'BANKING_PAYMENT_ADVANCE_UPDATE'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane payment advance update failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update payment advance')));
   }
 }
+
 async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -40401,9 +41755,24 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
     return null;
   };
 
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const readUuid = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return uuidRe.test(text) ? text : '';
+  };
+
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+
+  const optionalWorkbenchSessionId = readUuid(body.workbench_session_id ?? body.workbenchSessionId);
 
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -40452,7 +41821,43 @@ async function handleBankingManualCreditAdjustmentCreate(env, req, user) {
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_credit_adjustment_create');
-    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object') ? payload : {};
+
+    let responsePayload = payloadObj;
+    if (optionalWorkbenchSessionId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          optionalWorkbenchSessionId,
+          candidateId,
+          String(user?.id || '').trim(),
+          null,
+          'BANKING_MANUAL_CREDIT_ADJUSTMENT_CREATE'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane manual credit create failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create manual credit adjustment')));
   }
@@ -40470,6 +41875,22 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
+
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const readUuid = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return uuidRe.test(text) ? text : '';
+  };
+
+  const optionalWorkbenchSessionId = readUuid(body.workbench_session_id ?? body.workbenchSessionId);
+  const optionalCandidateId = readUuid(body.candidate_id ?? body.candidateId);
 
   const normalizeTaxability = (raw) => {
     const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -40566,11 +41987,48 @@ async function handleBankingManualCreditAdjustmentUpdate(env, req, user, finance
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_credit_adjustment_update');
-    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object') ? payload : {};
+
+    let responsePayload = payloadObj;
+    if (optionalWorkbenchSessionId && optionalCandidateId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          optionalWorkbenchSessionId,
+          optionalCandidateId,
+          String(user?.id || '').trim(),
+          null,
+          'BANKING_MANUAL_CREDIT_ADJUSTMENT_UPDATE'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane manual credit update failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update manual credit adjustment')));
   }
 }
+
 async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -40579,6 +42037,19 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
   }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const readUuid = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return uuidRe.test(text) ? text : '';
+  };
 
   const parseIsoOrUkDateToIso = (raw) => {
     const s = String(raw || '').trim();
@@ -40624,6 +42095,8 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
   const candidateId = String(body.candidate_id || body.candidateId || '').trim();
   if (!candidateId) return withCORS(env, req, badRequest('candidate_id is required'));
   if (!uuidRe.test(candidateId)) return withCORS(env, req, badRequest('candidate_id must be a UUID'));
+
+  const optionalWorkbenchSessionId = readUuid(body.workbench_session_id ?? body.workbenchSessionId);
 
   const amount = Number(body.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -40739,11 +42212,49 @@ async function handleBankingManualDebtAdjustmentCreate(env, req, user) {
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_create');
-    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object') ? payload : {};
+
+    let responsePayload = payloadObj;
+    if (optionalWorkbenchSessionId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          optionalWorkbenchSessionId,
+          candidateId,
+          String(user?.id || '').trim(),
+          null,
+          'BANKING_MANUAL_DEBT_ADJUSTMENT_CREATE'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane manual debt create failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to create manual debt adjustment')));
   }
 }
+
+
 async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -40756,6 +42267,22 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
+
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+
+  const readUuid = (value) => {
+    const text = String(value == null ? '' : value).trim();
+    return uuidRe.test(text) ? text : '';
+  };
+
+  const optionalWorkbenchSessionId = readUuid(body.workbench_session_id ?? body.workbenchSessionId);
+  const optionalCandidateId = readUuid(body.candidate_id ?? body.candidateId);
 
   const parseIsoOrUkDateToIso = (raw) => {
     const s = String(raw || '').trim();
@@ -40917,11 +42444,51 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
     });
 
     const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_update');
-    return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
+    const payloadObj = (payload && typeof payload === 'object') ? payload : {};
+
+    let responsePayload = payloadObj;
+    if (optionalWorkbenchSessionId && optionalCandidateId && typeof runInteractiveWorkbenchCandidateFastLane === 'function') {
+      try {
+        const fastLane = await runInteractiveWorkbenchCandidateFastLane(
+          env,
+          optionalWorkbenchSessionId,
+          optionalCandidateId,
+          String(user?.id || '').trim(),
+          null,
+          'BANKING_MANUAL_DEBT_ADJUSTMENT_UPDATE'
+        );
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: cloneJson(fastLane)
+        };
+      } catch (fastLaneError) {
+        responsePayload = {
+          ...payloadObj,
+          fast_lane: {
+            ok: true,
+            best_effort: true,
+            attempted: true,
+            skipped: false,
+            waiting_for_background: true,
+            settled: false,
+            error: {
+              code: 'FAST_LANE_HANDLER_ERROR',
+              message: String(fastLaneError?.message || fastLaneError || 'Fast-lane manual debt update failed')
+            }
+          }
+        };
+      }
+    }
+
+    return withCORS(env, req, ok(responsePayload));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to update manual debt adjustment')));
   }
 }
+
+
+
+
 async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
