@@ -25399,3 +25399,312 @@ BEGIN
   );
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_claim_job_now(p_job_id uuid, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := now();
+  v_cutoff timestamptz := COALESCE(p_now_utc, v_now);
+  v_stale_running_seconds integer := 600;
+  v_stale_cutoff timestamptz := NULL;
+  v_job_row public.banking_pay_workbench_jobs%ROWTYPE;
+  v_before_json jsonb := NULL;
+  v_after_json jsonb := '{}'::jsonb;
+  v_claimed boolean := false;
+  v_reclaimed_stale boolean := false;
+  v_no_op boolean := false;
+  v_terminalized boolean := false;
+  v_reason text := NULL;
+  v_audit_action text := NULL;
+  v_audit_reason text := NULL;
+  v_last_activity_utc timestamptz := NULL;
+  v_supported_job_type boolean := false;
+  v_due_now boolean := false;
+  v_stale_now boolean := false;
+  v_attempt_count_after integer := 0;
+  v_max_attempts integer := 0;
+  v_attempts_exhausted boolean := false;
+  v_terminal_error_json jsonb := NULL;
+BEGIN
+  IF p_job_id IS NULL THEN
+    RAISE EXCEPTION 'job_id is required';
+  END IF;
+
+  v_stale_cutoff := v_cutoff - make_interval(secs => v_stale_running_seconds);
+
+  SELECT public.banking_pay_workbench_jobs.*
+  INTO v_job_row
+  FROM public.banking_pay_workbench_jobs
+  WHERE public.banking_pay_workbench_jobs.id = p_job_id
+  FOR UPDATE;
+
+  IF v_job_row.id IS NULL THEN
+    RAISE EXCEPTION 'banking_pay_workbench_jobs row % not found', p_job_id;
+  END IF;
+
+  v_last_activity_utc := COALESCE(
+    v_job_row.updated_at_utc,
+    v_job_row.started_at_utc,
+    v_job_row.created_at_utc,
+    v_job_row.run_at_utc
+  );
+
+  v_supported_job_type := COALESCE(v_job_row.job_type, '') IN ('SESSION_CANDIDATE_RECOMPUTE', 'SNAPSHOT_CANDIDATE_REFRESH');
+  v_due_now := COALESCE(v_job_row.status, '') = 'QUEUED'
+               AND v_job_row.run_at_utc IS NOT NULL
+               AND v_job_row.run_at_utc <= v_cutoff;
+  v_stale_now := COALESCE(v_job_row.status, '') = 'RUNNING'
+                 AND v_last_activity_utc IS NOT NULL
+                 AND v_last_activity_utc <= v_stale_cutoff;
+  v_max_attempts := COALESCE(v_job_row.max_attempts, 8);
+  v_attempts_exhausted := COALESCE(v_job_row.attempt_count, 0) >= v_max_attempts;
+
+  v_before_json := jsonb_build_object(
+    'id', v_job_row.id::text,
+    'job_type', v_job_row.job_type,
+    'status', v_job_row.status,
+    'priority', v_job_row.priority,
+    'run_at_utc', v_job_row.run_at_utc,
+    'attempt_count', v_job_row.attempt_count,
+    'max_attempts', v_job_row.max_attempts,
+    'dedupe_key', v_job_row.dedupe_key,
+    'snapshot_run_id', CASE WHEN v_job_row.snapshot_run_id IS NULL THEN NULL ELSE v_job_row.snapshot_run_id::text END,
+    'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
+    'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
+    'payload_json', v_job_row.payload_json,
+    'created_at_utc', v_job_row.created_at_utc,
+    'updated_at_utc', v_job_row.updated_at_utc,
+    'started_at_utc', v_job_row.started_at_utc,
+    'completed_at_utc', v_job_row.completed_at_utc,
+    'failed_at_utc', v_job_row.failed_at_utc,
+    'last_error_json', v_job_row.last_error_json
+  );
+
+  IF NOT v_supported_job_type THEN
+    v_no_op := true;
+    v_reason := 'UNSUPPORTED_JOB_TYPE';
+    v_audit_action := 'CLAIM_DENIED';
+    v_audit_reason := 'WORKBENCH_JOB_TARGET_CLAIM_DENIED_UNSUPPORTED';
+  ELSIF COALESCE(v_job_row.status, '') IN ('SUCCEEDED', 'DEAD') THEN
+    v_no_op := true;
+    v_reason := 'TERMINAL_STATUS';
+    v_audit_action := 'CLAIM_DENIED';
+    v_audit_reason := 'WORKBENCH_JOB_TARGET_CLAIM_DENIED_TERMINAL';
+  ELSIF COALESCE(v_job_row.status, '') = 'RUNNING' AND NOT v_stale_now THEN
+    v_no_op := true;
+    v_reason := 'FRESH_RUNNING';
+    v_audit_action := 'CLAIM_DENIED';
+    v_audit_reason := 'WORKBENCH_JOB_TARGET_CLAIM_DENIED_FRESH_RUNNING';
+  ELSIF v_due_now THEN
+    IF v_attempts_exhausted THEN
+      v_terminalized := true;
+      v_reason := 'MAX_ATTEMPTS_EXHAUSTED';
+      v_audit_action := 'DEAD';
+      v_audit_reason := 'WORKBENCH_JOB_TARGET_MAX_ATTEMPTS_DEAD';
+      v_terminal_error_json := jsonb_build_object(
+        'code', 'MAX_ATTEMPTS_EXHAUSTED',
+        'message', 'Targeted workbench job claim refused because max_attempts has been reached.',
+        'job_id', v_job_row.id::text,
+        'job_type', v_job_row.job_type,
+        'status', v_job_row.status,
+        'attempt_count', COALESCE(v_job_row.attempt_count, 0),
+        'max_attempts', v_max_attempts,
+        'targeted_claim_at_utc', v_now
+      );
+
+      UPDATE public.banking_pay_workbench_jobs AS update_job
+      SET status = 'DEAD',
+          updated_at_utc = v_now,
+          completed_at_utc = NULL,
+          failed_at_utc = v_now,
+          last_error_json = v_terminal_error_json,
+          payload_json = COALESCE(update_job.payload_json, '{}'::jsonb) || jsonb_build_object('last_failure_json', v_terminal_error_json)
+      WHERE update_job.id = p_job_id
+      RETURNING update_job.*
+      INTO v_job_row;
+    ELSE
+      v_claimed := true;
+      v_reason := 'CLAIMED_QUEUED_JOB';
+      v_audit_action := 'RUNNING';
+      v_audit_reason := 'WORKBENCH_JOB_TARGET_CLAIMED';
+
+      UPDATE public.banking_pay_workbench_jobs AS update_job
+      SET status = 'RUNNING',
+          attempt_count = COALESCE(update_job.attempt_count, 0) + 1,
+          started_at_utc = COALESCE(update_job.started_at_utc, v_now),
+          updated_at_utc = v_now,
+          last_error_json = NULL
+      WHERE update_job.id = p_job_id
+      RETURNING update_job.*
+      INTO v_job_row;
+    END IF;
+  ELSIF v_stale_now THEN
+    IF v_attempts_exhausted THEN
+      v_terminalized := true;
+      v_reason := 'MAX_ATTEMPTS_EXHAUSTED';
+      v_audit_action := 'DEAD';
+      v_audit_reason := 'WORKBENCH_JOB_TARGET_MAX_ATTEMPTS_DEAD';
+      v_terminal_error_json := jsonb_build_object(
+        'code', 'MAX_ATTEMPTS_EXHAUSTED',
+        'message', 'Targeted workbench job claim refused because max_attempts has been reached.',
+        'job_id', v_job_row.id::text,
+        'job_type', v_job_row.job_type,
+        'status', v_job_row.status,
+        'attempt_count', COALESCE(v_job_row.attempt_count, 0),
+        'max_attempts', v_max_attempts,
+        'targeted_claim_at_utc', v_now
+      );
+
+      UPDATE public.banking_pay_workbench_jobs AS update_job
+      SET status = 'DEAD',
+          updated_at_utc = v_now,
+          completed_at_utc = NULL,
+          failed_at_utc = v_now,
+          last_error_json = v_terminal_error_json,
+          payload_json = COALESCE(update_job.payload_json, '{}'::jsonb) || jsonb_build_object('last_failure_json', v_terminal_error_json)
+      WHERE update_job.id = p_job_id
+      RETURNING update_job.*
+      INTO v_job_row;
+    ELSE
+      v_claimed := true;
+      v_reclaimed_stale := true;
+      v_reason := 'RECLAIMED_STALE_RUNNING_JOB';
+      v_audit_action := 'RUNNING';
+      v_audit_reason := 'WORKBENCH_JOB_TARGET_STALE_RECLAIMED';
+
+      UPDATE public.banking_pay_workbench_jobs AS update_job
+      SET status = 'RUNNING',
+          attempt_count = COALESCE(update_job.attempt_count, 0) + 1,
+          started_at_utc = v_now,
+          updated_at_utc = v_now,
+          last_error_json = NULL
+      WHERE update_job.id = p_job_id
+      RETURNING update_job.*
+      INTO v_job_row;
+    END IF;
+  ELSIF COALESCE(v_job_row.status, '') = 'QUEUED' THEN
+    IF v_attempts_exhausted THEN
+      v_terminalized := true;
+      v_reason := 'MAX_ATTEMPTS_EXHAUSTED';
+      v_audit_action := 'DEAD';
+      v_audit_reason := 'WORKBENCH_JOB_TARGET_MAX_ATTEMPTS_DEAD';
+      v_terminal_error_json := jsonb_build_object(
+        'code', 'MAX_ATTEMPTS_EXHAUSTED',
+        'message', 'Targeted workbench job claim refused because max_attempts has been reached.',
+        'job_id', v_job_row.id::text,
+        'job_type', v_job_row.job_type,
+        'status', v_job_row.status,
+        'attempt_count', COALESCE(v_job_row.attempt_count, 0),
+        'max_attempts', v_max_attempts,
+        'targeted_claim_at_utc', v_now
+      );
+
+      UPDATE public.banking_pay_workbench_jobs AS update_job
+      SET status = 'DEAD',
+          updated_at_utc = v_now,
+          completed_at_utc = NULL,
+          failed_at_utc = v_now,
+          last_error_json = v_terminal_error_json,
+          payload_json = COALESCE(update_job.payload_json, '{}'::jsonb) || jsonb_build_object('last_failure_json', v_terminal_error_json)
+      WHERE update_job.id = p_job_id
+      RETURNING update_job.*
+      INTO v_job_row;
+    ELSE
+      v_no_op := true;
+      v_reason := 'JOB_NOT_DUE_YET';
+      v_audit_action := 'CLAIM_DENIED';
+      v_audit_reason := 'WORKBENCH_JOB_TARGET_CLAIM_DENIED_NOT_DUE';
+    END IF;
+  ELSE
+    v_no_op := true;
+    v_reason := 'STATUS_NOT_CLAIMABLE';
+    v_audit_action := 'CLAIM_DENIED';
+    v_audit_reason := 'WORKBENCH_JOB_TARGET_CLAIM_DENIED_STATUS';
+  END IF;
+
+  v_last_activity_utc := COALESCE(
+    v_job_row.updated_at_utc,
+    v_job_row.started_at_utc,
+    v_job_row.created_at_utc,
+    v_job_row.run_at_utc
+  );
+  v_attempt_count_after := COALESCE(v_job_row.attempt_count, 0);
+
+  v_after_json := jsonb_build_object(
+    'id', v_job_row.id::text,
+    'job_type', v_job_row.job_type,
+    'status', v_job_row.status,
+    'priority', v_job_row.priority,
+    'run_at_utc', v_job_row.run_at_utc,
+    'attempt_count', v_job_row.attempt_count,
+    'max_attempts', v_job_row.max_attempts,
+    'dedupe_key', v_job_row.dedupe_key,
+    'snapshot_run_id', CASE WHEN v_job_row.snapshot_run_id IS NULL THEN NULL ELSE v_job_row.snapshot_run_id::text END,
+    'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
+    'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
+    'payload_json', v_job_row.payload_json,
+    'created_at_utc', v_job_row.created_at_utc,
+    'updated_at_utc', v_job_row.updated_at_utc,
+    'started_at_utc', v_job_row.started_at_utc,
+    'completed_at_utc', v_job_row.completed_at_utc,
+    'failed_at_utc', v_job_row.failed_at_utc,
+    'last_error_json', v_job_row.last_error_json,
+    'claimed', v_claimed,
+    'reclaimed_stale', v_reclaimed_stale,
+    'no_op', v_no_op,
+    'terminalized', v_terminalized,
+    'reason', v_reason,
+    'cutoff_utc', v_cutoff,
+    'stale_cutoff_utc', v_stale_cutoff,
+    'stale_running_seconds', v_stale_running_seconds,
+    'last_activity_utc', v_last_activity_utc,
+    'supported_job_type', v_supported_job_type
+  );
+
+  PERFORM public._audit_insert(
+    'banking_pay_workbench_job',
+    p_job_id::text,
+    COALESCE(v_audit_action, 'CLAIM_DENIED'),
+    v_before_json,
+    v_after_json,
+    COALESCE(v_audit_reason, 'WORKBENCH_JOB_TARGET_CLAIM_DENIED_STATUS'),
+    NULL
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'job_id', v_job_row.id::text,
+    'job_type', v_job_row.job_type,
+    'status', v_job_row.status,
+    'priority', v_job_row.priority,
+    'run_at_utc', v_job_row.run_at_utc,
+    'attempt_count', v_attempt_count_after,
+    'max_attempts', v_max_attempts,
+    'snapshot_run_id', CASE WHEN v_job_row.snapshot_run_id IS NULL THEN NULL ELSE v_job_row.snapshot_run_id::text END,
+    'session_id', CASE WHEN v_job_row.session_id IS NULL THEN NULL ELSE v_job_row.session_id::text END,
+    'candidate_id', CASE WHEN v_job_row.candidate_id IS NULL THEN NULL ELSE v_job_row.candidate_id::text END,
+    'payload_json', v_job_row.payload_json,
+    'started_at_utc', v_job_row.started_at_utc,
+    'updated_at_utc', v_job_row.updated_at_utc,
+    'created_at_utc', v_job_row.created_at_utc,
+    'completed_at_utc', v_job_row.completed_at_utc,
+    'failed_at_utc', v_job_row.failed_at_utc,
+    'last_error_json', v_job_row.last_error_json,
+    'claimed', v_claimed,
+    'reclaimed_stale', v_reclaimed_stale,
+    'no_op', v_no_op,
+    'terminalized', v_terminalized,
+    'reason', v_reason,
+    'cutoff_utc', v_cutoff,
+    'stale_cutoff_utc', v_stale_cutoff,
+    'stale_running_seconds', v_stale_running_seconds,
+    'last_activity_utc', v_last_activity_utc,
+    'supported_job_type', v_supported_job_type
+  );
+END;
+$function$
+
