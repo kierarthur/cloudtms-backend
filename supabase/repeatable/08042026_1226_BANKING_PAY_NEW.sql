@@ -7397,8 +7397,8 @@ begin
                 'source_margin_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end,
                 'target_pay_ex_vat', round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2),
                 'target_charge_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat,2) end,
-                'target_margin_ex_vat', case when ttr.source_charge_ex_vat is null or ttrs.target_amounts_json is null then null else round(ttr.source_charge_ex_vat - round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2),2) end,
-                'margin_delta_ex_vat', case when ttr.source_charge_ex_vat is null or ttrs.target_amounts_json is null then null else round(ttr.component_amount_ex_vat - round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2),2) end
+                'target_margin_ex_vat', case when ttr.source_charge_ex_vat is null or ttrs.target_amounts_json is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end,
+                'margin_delta_ex_vat', case when ttr.source_charge_ex_vat is null or ttrs.target_amounts_json is null then null else 0::numeric end
               )
             )
             else null::jsonb
@@ -7408,8 +7408,8 @@ begin
           case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end as source_margin_ex_vat,
           case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttrs.target_amounts_json is not null then round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2) else null end as target_pay_ex_vat,
           case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null then round(ttr.source_charge_ex_vat,2) else null end as target_charge_ex_vat,
-          case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then round(ttr.source_charge_ex_vat - round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2),2) else null end as target_margin_ex_vat,
-          case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then round(ttr.component_amount_ex_vat - round(coalesce((ttrs.target_amounts_json->>'ex')::numeric,0),2),2) else null end as margin_delta_ex_vat,
+          case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) else null end as target_margin_ex_vat,
+          case when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and upper(coalesce(ttr.source_pay_method,'')) is distinct from upper(coalesce(ttr.current_target_pay_method,'')) and ttr.source_charge_ex_vat is not null and ttrs.target_amounts_json is not null then 0::numeric else null end as margin_delta_ex_vat,
           case
             when ttr.classification <> 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'Fixed reimbursements are not channel-converted and do not participate in suggested-rates review.'
             when upper(coalesce(ttr.source_pay_method,'')) is not distinct from upper(coalesce(ttr.current_target_pay_method,'')) then 'No suggested rates are required because this taxable component already aligns with the current target pay method.'
@@ -7614,8 +7614,8 @@ begin
                 'source_margin_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end,
                 'target_pay_ex_vat', round(coalesce(nullif(ttam.suggested_target_amounts_json->>'ex','')::numeric, tts.suggested_target_pay_ex_vat, 0),2),
                 'target_charge_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat,2) end,
-                'target_margin_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - round(coalesce(nullif(ttam.suggested_target_amounts_json->>'ex','')::numeric, tts.suggested_target_pay_ex_vat, 0),2),2) end,
-                'margin_delta_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.component_amount_ex_vat - round(coalesce(nullif(ttam.suggested_target_amounts_json->>'ex','')::numeric, tts.suggested_target_pay_ex_vat, 0),2),2) end
+                'target_margin_ex_vat', case when ttr.source_charge_ex_vat is null then null else round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat,2) end,
+                'margin_delta_ex_vat', case when ttr.source_charge_ex_vat is null then null else 0::numeric end
               )
             )
             else null::jsonb
@@ -7634,28 +7634,12 @@ begin
           end as target_charge_ex_vat,
           case
             when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and ttr.source_charge_ex_vat is not null
-              then round(
-                ttr.source_charge_ex_vat
-                - case
-                    when upper(coalesce(ttr.source_pay_method,'')) is not distinct from upper(coalesce(ttr.current_target_pay_method,'')) then round(coalesce(ttr.component_amount_ex_vat,0),2)
-                    else round(coalesce(tts.suggested_target_pay_ex_vat, ttr.component_amount_ex_vat, 0),2)
-                  end,
-                2
-              )
+              then round(ttr.source_charge_ex_vat - ttr.component_amount_ex_vat, 2)
             else null::numeric
           end as target_margin_ex_vat,
           case
             when ttr.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum and ttr.source_charge_ex_vat is not null
-              then round(
-                (
-                  ttr.source_charge_ex_vat
-                  - case
-                      when upper(coalesce(ttr.source_pay_method,'')) is not distinct from upper(coalesce(ttr.current_target_pay_method,'')) then round(coalesce(ttr.component_amount_ex_vat,0),2)
-                      else round(coalesce(tts.suggested_target_pay_ex_vat, ttr.component_amount_ex_vat, 0),2)
-                    end
-                ) - (ttr.source_charge_ex_vat - ttr.component_amount_ex_vat),
-                2
-              )
+              then 0::numeric
             else null::numeric
           end as margin_delta_ex_vat,
           case
