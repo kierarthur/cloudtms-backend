@@ -833,69 +833,407 @@ DECLARE
   v_limit integer := GREATEST(1, LEAST(COALESCE(p_limit, 25), 500));
   v_now timestamptz := now();
   v_cutoff timestamptz := COALESCE(p_now_utc, v_now);
+  v_stale_running_seconds integer := 600;
+  v_stale_cutoff timestamptz := COALESCE(p_now_utc, v_now) - make_interval(secs => 600);
+  v_recovered_stale jsonb := '[]'::jsonb;
+  v_dead_stale jsonb := '[]'::jsonb;
   v_claimed jsonb := '[]'::jsonb;
+  v_recovered_stale_count integer := 0;
+  v_dead_stale_count integer := 0;
   v_claimed_count integer := 0;
+  v_stale_row record;
+  v_stale_before_json jsonb := NULL;
+  v_stale_after_json jsonb := '{}'::jsonb;
+  v_stale_error_json jsonb := NULL;
   v_claimed_row record;
 BEGIN
+  FOR v_stale_row IN
+    WITH stale_candidates AS (
+      SELECT
+        stale_job.id,
+        stale_job.job_type,
+        stale_job.status,
+        stale_job.priority,
+        stale_job.run_at_utc,
+        stale_job.attempt_count,
+        stale_job.max_attempts,
+        stale_job.dedupe_key,
+        stale_job.snapshot_run_id,
+        stale_job.session_id,
+        stale_job.candidate_id,
+        stale_job.payload_json,
+        stale_job.created_at_utc,
+        stale_job.updated_at_utc,
+        stale_job.started_at_utc,
+        stale_job.completed_at_utc,
+        stale_job.failed_at_utc,
+        stale_job.last_error_json,
+        COALESCE(
+          stale_job.updated_at_utc,
+          stale_job.started_at_utc,
+          stale_job.created_at_utc,
+          stale_job.run_at_utc
+        ) AS last_activity_utc
+      FROM public.banking_pay_workbench_jobs AS stale_job
+      WHERE stale_job.status = 'RUNNING'
+        AND stale_job.job_type IN ('SNAPSHOT_CANDIDATE_REFRESH', 'SESSION_CANDIDATE_RECOMPUTE')
+        AND stale_job.completed_at_utc IS NULL
+        AND stale_job.failed_at_utc IS NULL
+        AND COALESCE(
+              stale_job.updated_at_utc,
+              stale_job.started_at_utc,
+              stale_job.created_at_utc,
+              stale_job.run_at_utc
+            ) <= v_stale_cutoff
+      ORDER BY
+        COALESCE(
+          stale_job.updated_at_utc,
+          stale_job.started_at_utc,
+          stale_job.created_at_utc,
+          stale_job.run_at_utc
+        ) ASC,
+        stale_job.priority ASC,
+        stale_job.run_at_utc ASC,
+        stale_job.created_at_utc ASC,
+        stale_job.id ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT v_limit
+    )
+    SELECT
+      stale_candidates.id,
+      stale_candidates.job_type,
+      stale_candidates.status,
+      stale_candidates.priority,
+      stale_candidates.run_at_utc,
+      stale_candidates.attempt_count,
+      stale_candidates.max_attempts,
+      stale_candidates.dedupe_key,
+      stale_candidates.snapshot_run_id,
+      stale_candidates.session_id,
+      stale_candidates.candidate_id,
+      stale_candidates.payload_json,
+      stale_candidates.created_at_utc,
+      stale_candidates.updated_at_utc,
+      stale_candidates.started_at_utc,
+      stale_candidates.completed_at_utc,
+      stale_candidates.failed_at_utc,
+      stale_candidates.last_error_json,
+      stale_candidates.last_activity_utc
+    FROM stale_candidates
+  LOOP
+    v_stale_before_json := jsonb_build_object(
+      'id', v_stale_row.id::text,
+      'job_type', v_stale_row.job_type,
+      'status', v_stale_row.status,
+      'priority', v_stale_row.priority,
+      'run_at_utc', v_stale_row.run_at_utc,
+      'attempt_count', v_stale_row.attempt_count,
+      'max_attempts', v_stale_row.max_attempts,
+      'dedupe_key', v_stale_row.dedupe_key,
+      'snapshot_run_id', CASE WHEN v_stale_row.snapshot_run_id IS NULL THEN NULL ELSE v_stale_row.snapshot_run_id::text END,
+      'session_id', CASE WHEN v_stale_row.session_id IS NULL THEN NULL ELSE v_stale_row.session_id::text END,
+      'candidate_id', CASE WHEN v_stale_row.candidate_id IS NULL THEN NULL ELSE v_stale_row.candidate_id::text END,
+      'payload_json', v_stale_row.payload_json,
+      'created_at_utc', v_stale_row.created_at_utc,
+      'updated_at_utc', v_stale_row.updated_at_utc,
+      'started_at_utc', v_stale_row.started_at_utc,
+      'completed_at_utc', v_stale_row.completed_at_utc,
+      'failed_at_utc', v_stale_row.failed_at_utc,
+      'last_error_json', v_stale_row.last_error_json,
+      'last_activity_utc', v_stale_row.last_activity_utc
+    );
+
+    v_stale_error_json := jsonb_build_object(
+      'code', 'STALE_RUNNING_RECOVERY',
+      'message', 'Recovered stale RUNNING workbench job during due-job claim cycle.',
+      'job_id', v_stale_row.id::text,
+      'job_type', v_stale_row.job_type,
+      'previous_status', v_stale_row.status,
+      'attempt_count', COALESCE(v_stale_row.attempt_count, 0),
+      'max_attempts', COALESCE(v_stale_row.max_attempts, 8),
+      'last_activity_utc', v_stale_row.last_activity_utc,
+      'stale_cutoff_utc', v_stale_cutoff,
+      'stale_running_seconds', v_stale_running_seconds,
+      'recovered_at_utc', v_now
+    );
+
+    IF COALESCE(v_stale_row.attempt_count, 0) >= COALESCE(v_stale_row.max_attempts, 8) THEN
+      UPDATE public.banking_pay_workbench_jobs AS dead_job
+      SET status = 'DEAD',
+          updated_at_utc = v_now,
+          completed_at_utc = NULL,
+          failed_at_utc = v_now,
+          last_error_json = v_stale_error_json,
+          payload_json = COALESCE(dead_job.payload_json, '{}'::jsonb) || jsonb_build_object('last_failure_json', v_stale_error_json)
+      WHERE dead_job.id = v_stale_row.id
+      RETURNING
+        dead_job.id,
+        dead_job.job_type,
+        dead_job.status,
+        dead_job.priority,
+        dead_job.run_at_utc,
+        dead_job.attempt_count,
+        dead_job.max_attempts,
+        dead_job.dedupe_key,
+        dead_job.snapshot_run_id,
+        dead_job.session_id,
+        dead_job.candidate_id,
+        dead_job.payload_json,
+        dead_job.created_at_utc,
+        dead_job.updated_at_utc,
+        dead_job.started_at_utc,
+        dead_job.completed_at_utc,
+        dead_job.failed_at_utc,
+        dead_job.last_error_json
+      INTO
+        v_stale_row.id,
+        v_stale_row.job_type,
+        v_stale_row.status,
+        v_stale_row.priority,
+        v_stale_row.run_at_utc,
+        v_stale_row.attempt_count,
+        v_stale_row.max_attempts,
+        v_stale_row.dedupe_key,
+        v_stale_row.snapshot_run_id,
+        v_stale_row.session_id,
+        v_stale_row.candidate_id,
+        v_stale_row.payload_json,
+        v_stale_row.created_at_utc,
+        v_stale_row.updated_at_utc,
+        v_stale_row.started_at_utc,
+        v_stale_row.completed_at_utc,
+        v_stale_row.failed_at_utc,
+        v_stale_row.last_error_json;
+
+      v_stale_after_json := jsonb_build_object(
+        'id', v_stale_row.id::text,
+        'job_type', v_stale_row.job_type,
+        'status', v_stale_row.status,
+        'priority', v_stale_row.priority,
+        'run_at_utc', v_stale_row.run_at_utc,
+        'attempt_count', v_stale_row.attempt_count,
+        'max_attempts', v_stale_row.max_attempts,
+        'dedupe_key', v_stale_row.dedupe_key,
+        'snapshot_run_id', CASE WHEN v_stale_row.snapshot_run_id IS NULL THEN NULL ELSE v_stale_row.snapshot_run_id::text END,
+        'session_id', CASE WHEN v_stale_row.session_id IS NULL THEN NULL ELSE v_stale_row.session_id::text END,
+        'candidate_id', CASE WHEN v_stale_row.candidate_id IS NULL THEN NULL ELSE v_stale_row.candidate_id::text END,
+        'payload_json', v_stale_row.payload_json,
+        'created_at_utc', v_stale_row.created_at_utc,
+        'updated_at_utc', v_stale_row.updated_at_utc,
+        'started_at_utc', v_stale_row.started_at_utc,
+        'completed_at_utc', v_stale_row.completed_at_utc,
+        'failed_at_utc', v_stale_row.failed_at_utc,
+        'last_error_json', v_stale_row.last_error_json,
+        'last_activity_utc', COALESCE(
+          v_stale_row.updated_at_utc,
+          v_stale_row.started_at_utc,
+          v_stale_row.created_at_utc,
+          v_stale_row.run_at_utc
+        ),
+        'stale_recovery', true,
+        'dead_lettered', true,
+        'stale_cutoff_utc', v_stale_cutoff,
+        'stale_running_seconds', v_stale_running_seconds
+      );
+
+      v_dead_stale := v_dead_stale || jsonb_build_array(
+        jsonb_build_object(
+          'job_id', v_stale_row.id::text,
+          'job_type', v_stale_row.job_type,
+          'priority', v_stale_row.priority,
+          'run_at_utc', v_stale_row.run_at_utc,
+          'attempt_count', v_stale_row.attempt_count,
+          'max_attempts', v_stale_row.max_attempts,
+          'snapshot_run_id', CASE WHEN v_stale_row.snapshot_run_id IS NULL THEN NULL ELSE v_stale_row.snapshot_run_id::text END,
+          'session_id', CASE WHEN v_stale_row.session_id IS NULL THEN NULL ELSE v_stale_row.session_id::text END,
+          'candidate_id', CASE WHEN v_stale_row.candidate_id IS NULL THEN NULL ELSE v_stale_row.candidate_id::text END,
+          'payload_json', v_stale_row.payload_json,
+          'failed_at_utc', v_stale_row.failed_at_utc,
+          'last_error_json', v_stale_row.last_error_json
+        )
+      );
+
+      v_dead_stale_count := v_dead_stale_count + 1;
+
+      PERFORM public._audit_insert(
+        'banking_pay_workbench_job',
+        v_stale_row.id::text,
+        'DEAD',
+        v_stale_before_json,
+        v_stale_after_json,
+        'WORKBENCH_JOB_STALE_RUNNER_DEAD',
+        NULL
+      );
+    ELSE
+      UPDATE public.banking_pay_workbench_jobs AS requeue_job
+      SET status = 'QUEUED',
+          run_at_utc = v_cutoff,
+          updated_at_utc = v_now,
+          started_at_utc = NULL,
+          completed_at_utc = NULL,
+          failed_at_utc = NULL,
+          last_error_json = v_stale_error_json
+      WHERE requeue_job.id = v_stale_row.id
+      RETURNING
+        requeue_job.id,
+        requeue_job.job_type,
+        requeue_job.status,
+        requeue_job.priority,
+        requeue_job.run_at_utc,
+        requeue_job.attempt_count,
+        requeue_job.max_attempts,
+        requeue_job.dedupe_key,
+        requeue_job.snapshot_run_id,
+        requeue_job.session_id,
+        requeue_job.candidate_id,
+        requeue_job.payload_json,
+        requeue_job.created_at_utc,
+        requeue_job.updated_at_utc,
+        requeue_job.started_at_utc,
+        requeue_job.completed_at_utc,
+        requeue_job.failed_at_utc,
+        requeue_job.last_error_json
+      INTO
+        v_stale_row.id,
+        v_stale_row.job_type,
+        v_stale_row.status,
+        v_stale_row.priority,
+        v_stale_row.run_at_utc,
+        v_stale_row.attempt_count,
+        v_stale_row.max_attempts,
+        v_stale_row.dedupe_key,
+        v_stale_row.snapshot_run_id,
+        v_stale_row.session_id,
+        v_stale_row.candidate_id,
+        v_stale_row.payload_json,
+        v_stale_row.created_at_utc,
+        v_stale_row.updated_at_utc,
+        v_stale_row.started_at_utc,
+        v_stale_row.completed_at_utc,
+        v_stale_row.failed_at_utc,
+        v_stale_row.last_error_json;
+
+      v_stale_after_json := jsonb_build_object(
+        'id', v_stale_row.id::text,
+        'job_type', v_stale_row.job_type,
+        'status', v_stale_row.status,
+        'priority', v_stale_row.priority,
+        'run_at_utc', v_stale_row.run_at_utc,
+        'attempt_count', v_stale_row.attempt_count,
+        'max_attempts', v_stale_row.max_attempts,
+        'dedupe_key', v_stale_row.dedupe_key,
+        'snapshot_run_id', CASE WHEN v_stale_row.snapshot_run_id IS NULL THEN NULL ELSE v_stale_row.snapshot_run_id::text END,
+        'session_id', CASE WHEN v_stale_row.session_id IS NULL THEN NULL ELSE v_stale_row.session_id::text END,
+        'candidate_id', CASE WHEN v_stale_row.candidate_id IS NULL THEN NULL ELSE v_stale_row.candidate_id::text END,
+        'payload_json', v_stale_row.payload_json,
+        'created_at_utc', v_stale_row.created_at_utc,
+        'updated_at_utc', v_stale_row.updated_at_utc,
+        'started_at_utc', v_stale_row.started_at_utc,
+        'completed_at_utc', v_stale_row.completed_at_utc,
+        'failed_at_utc', v_stale_row.failed_at_utc,
+        'last_error_json', v_stale_row.last_error_json,
+        'last_activity_utc', COALESCE(
+          v_stale_row.updated_at_utc,
+          v_stale_row.started_at_utc,
+          v_stale_row.created_at_utc,
+          v_stale_row.run_at_utc
+        ),
+        'stale_recovery', true,
+        'requeued', true,
+        'stale_cutoff_utc', v_stale_cutoff,
+        'stale_running_seconds', v_stale_running_seconds
+      );
+
+      v_recovered_stale := v_recovered_stale || jsonb_build_array(
+        jsonb_build_object(
+          'job_id', v_stale_row.id::text,
+          'job_type', v_stale_row.job_type,
+          'priority', v_stale_row.priority,
+          'run_at_utc', v_stale_row.run_at_utc,
+          'attempt_count', v_stale_row.attempt_count,
+          'max_attempts', v_stale_row.max_attempts,
+          'snapshot_run_id', CASE WHEN v_stale_row.snapshot_run_id IS NULL THEN NULL ELSE v_stale_row.snapshot_run_id::text END,
+          'session_id', CASE WHEN v_stale_row.session_id IS NULL THEN NULL ELSE v_stale_row.session_id::text END,
+          'candidate_id', CASE WHEN v_stale_row.candidate_id IS NULL THEN NULL ELSE v_stale_row.candidate_id::text END,
+          'payload_json', v_stale_row.payload_json,
+          'updated_at_utc', v_stale_row.updated_at_utc,
+          'last_error_json', v_stale_row.last_error_json
+        )
+      );
+
+      v_recovered_stale_count := v_recovered_stale_count + 1;
+
+      PERFORM public._audit_insert(
+        'banking_pay_workbench_job',
+        v_stale_row.id::text,
+        'REQUEUED',
+        v_stale_before_json,
+        v_stale_after_json,
+        'WORKBENCH_JOB_STALE_RUNNER_REQUEUED',
+        NULL
+      );
+    END IF;
+  END LOOP;
+
   FOR v_claimed_row IN
     WITH claim AS (
       SELECT
-        j.id,
-        j.job_type,
-        j.priority,
-        j.run_at_utc,
-        j.attempt_count,
-        j.max_attempts,
-        j.snapshot_run_id,
-        j.session_id,
-        j.candidate_id,
-        j.payload_json,
-        j.created_at_utc
-      FROM public.banking_pay_workbench_jobs j
-      WHERE j.status = 'QUEUED'
-        AND j.run_at_utc <= v_cutoff
-      ORDER BY j.priority ASC, j.run_at_utc ASC, j.created_at_utc ASC, j.id ASC
+        claim_job.id,
+        claim_job.job_type,
+        claim_job.priority,
+        claim_job.run_at_utc,
+        claim_job.attempt_count,
+        claim_job.max_attempts,
+        claim_job.snapshot_run_id,
+        claim_job.session_id,
+        claim_job.candidate_id,
+        claim_job.payload_json,
+        claim_job.created_at_utc
+      FROM public.banking_pay_workbench_jobs AS claim_job
+      WHERE claim_job.status = 'QUEUED'
+        AND claim_job.run_at_utc <= v_cutoff
+      ORDER BY claim_job.priority ASC, claim_job.run_at_utc ASC, claim_job.created_at_utc ASC, claim_job.id ASC
       FOR UPDATE SKIP LOCKED
       LIMIT v_limit
     ),
     upd AS (
-      UPDATE public.banking_pay_workbench_jobs j2
+      UPDATE public.banking_pay_workbench_jobs AS upd_job
       SET status = 'RUNNING',
-          attempt_count = COALESCE(j2.attempt_count, 0) + 1,
-          started_at_utc = COALESCE(j2.started_at_utc, v_now),
+          attempt_count = COALESCE(upd_job.attempt_count, 0) + 1,
+          started_at_utc = COALESCE(upd_job.started_at_utc, v_now),
           updated_at_utc = v_now,
           last_error_json = NULL
-      FROM claim c
-      WHERE j2.id = c.id
+      FROM claim AS claim_row
+      WHERE upd_job.id = claim_row.id
       RETURNING
-        j2.id,
-        j2.job_type,
-        j2.priority,
-        j2.run_at_utc,
-        j2.attempt_count,
-        j2.max_attempts,
-        j2.snapshot_run_id,
-        j2.session_id,
-        j2.candidate_id,
-        j2.payload_json,
-        j2.started_at_utc,
-        j2.created_at_utc
+        upd_job.id,
+        upd_job.job_type,
+        upd_job.priority,
+        upd_job.run_at_utc,
+        upd_job.attempt_count,
+        upd_job.max_attempts,
+        upd_job.snapshot_run_id,
+        upd_job.session_id,
+        upd_job.candidate_id,
+        upd_job.payload_json,
+        upd_job.started_at_utc,
+        upd_job.created_at_utc
     )
     SELECT
-      u.id,
-      u.job_type,
-      u.priority,
-      u.run_at_utc,
-      u.attempt_count,
-      u.max_attempts,
-      u.snapshot_run_id,
-      u.session_id,
-      u.candidate_id,
-      u.payload_json,
-      u.started_at_utc,
-      u.created_at_utc
-    FROM upd u
-    ORDER BY u.priority ASC, u.run_at_utc ASC, u.created_at_utc ASC, u.id ASC
+      upd.id,
+      upd.job_type,
+      upd.priority,
+      upd.run_at_utc,
+      upd.attempt_count,
+      upd.max_attempts,
+      upd.snapshot_run_id,
+      upd.session_id,
+      upd.candidate_id,
+      upd.payload_json,
+      upd.started_at_utc,
+      upd.created_at_utc
+    FROM upd
+    ORDER BY upd.priority ASC, upd.run_at_utc ASC, upd.created_at_utc ASC, upd.id ASC
   LOOP
     v_claimed := v_claimed || jsonb_build_array(
       jsonb_build_object(
@@ -942,12 +1280,20 @@ BEGIN
     'ok', true,
     'server_utc', v_now,
     'cutoff_utc', v_cutoff,
+    'stale_cutoff_utc', v_stale_cutoff,
+    'stale_running_seconds', v_stale_running_seconds,
     'limit', v_limit,
+    'recovered_stale_count', v_recovered_stale_count,
+    'dead_stale_count', v_dead_stale_count,
     'claimed_count', v_claimed_count,
+    'recovered_stale', v_recovered_stale,
+    'dead_stale', v_dead_stale,
     'claimed', v_claimed
   );
 END;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(
   p_job_id uuid,
