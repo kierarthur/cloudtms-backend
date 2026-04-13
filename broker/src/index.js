@@ -9383,9 +9383,12 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     return { value: normalizedBucket };
   };
 
-  const candidateId = readUuid(body.candidate_id ?? body.candidateId);
-  const financeCaseId = readUuid(body.finance_case_id ?? body.financeCaseId);
-  const linkedTimesheetId = readUuid(body.linked_timesheet_id ?? body.linkedTimesheetId ?? body.timesheet_id ?? body.timesheetId);
+    const rawCandidateId = trimStr(body.candidate_id ?? body.candidateId);
+  const rawFinanceCaseId = trimStr(body.finance_case_id ?? body.financeCaseId);
+  const rawLinkedTimesheetId = trimStr(body.linked_timesheet_id ?? body.linkedTimesheetId ?? body.timesheet_id ?? body.timesheetId);
+  const candidateId = rawCandidateId ? readUuid(rawCandidateId) : '';
+  const financeCaseId = rawFinanceCaseId ? readUuid(rawFinanceCaseId) : '';
+  const linkedTimesheetId = rawLinkedTimesheetId ? readUuid(rawLinkedTimesheetId) : '';
   const caseKey = trimStr(body.case_key ?? body.caseKey);
   const resolveAllLinkedTimesheetsRaw = body.resolve_all_linked_timesheets ?? body.resolveAllLinkedTimesheets;
   const resolutionFamilyRaw = trimStr(body.resolution_family ?? body.resolutionFamily).toUpperCase();
@@ -9395,13 +9398,13 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
   if (!caseKey) {
     return withCORS(env, req, badRequest('case_key is required'));
   }
-  if ((body.candidate_id !== undefined || body.candidateId !== undefined) && !candidateId) {
+  if (rawCandidateId && !candidateId) {
     return withCORS(env, req, badRequest('candidate_id must be a UUID when supplied'));
   }
-  if ((body.finance_case_id !== undefined || body.financeCaseId !== undefined) && !financeCaseId) {
+  if (rawFinanceCaseId && !financeCaseId) {
     return withCORS(env, req, badRequest('finance_case_id must be a UUID when supplied'));
   }
-  if ((body.linked_timesheet_id !== undefined || body.linkedTimesheetId !== undefined || body.timesheet_id !== undefined || body.timesheetId !== undefined) && !linkedTimesheetId) {
+  if (rawLinkedTimesheetId && !linkedTimesheetId) {
     return withCORS(env, req, badRequest('linked_timesheet_id must be a UUID when supplied'));
   }
   if (resolveAllLinkedTimesheetsRaw !== undefined && resolveAllLinkedTimesheetsRaw !== null && typeof resolveAllLinkedTimesheetsRaw !== 'boolean') {
@@ -28402,10 +28405,61 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
 
     const isAdjustment = !!(cw.is_adjustment === true || Number(cw.additional_seq || 0) > 0);
     const isElectronic = (submissionModeSnapshot === 'ELECTRONIC');
-    const routeType = isElectronic ? 'WEEKLY_ELECTRONIC' : 'WEEKLY_MANUAL';
-    const routeDisplay = isAdjustment
-      ? (isElectronic ? 'Electronic Adjustment' : 'Manual Adjustment')
-      : (isElectronic ? 'Weekly Electronic' : 'Weekly Manual');
+
+    let resolvedImportAuthoritative = null;
+    try {
+      resolvedImportAuthoritative = await resolveImportAuthoritative(env, {
+        contract_week_id: cw.id,
+        contract_id: contract.id || cw.contract_id || null
+      });
+    } catch {
+      resolvedImportAuthoritative = null;
+    }
+
+    const resolvedRouteType = String(resolvedImportAuthoritative?.route_type || '').trim().toUpperCase();
+    const resolvedImportAuthoritativeFlag = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.is_import_authoritative === true);
+
+    let routeType = '';
+    if (resolvedRouteType === 'WEEKLY_NHSP' || resolvedRouteType === 'WEEKLY_NHSP_ADJUSTMENT') {
+      routeType = resolvedRouteType;
+    } else if (resolvedRouteType === 'WEEKLY_HEALTHROSTER') {
+      routeType = 'WEEKLY_HEALTHROSTER';
+    } else if (clientIsNhsp) {
+      routeType = isAdjustment ? 'WEEKLY_NHSP_ADJUSTMENT' : 'WEEKLY_NHSP';
+    } else if (clientAutoprocessHr && clientNoTimesheetRequired) {
+      routeType = 'WEEKLY_HEALTHROSTER';
+    } else {
+      routeType = isElectronic ? 'WEEKLY_ELECTRONIC' : 'WEEKLY_MANUAL';
+    }
+
+    const isImportAuthoritative =
+      resolvedImportAuthoritativeFlag ||
+      routeType === 'WEEKLY_NHSP' ||
+      routeType === 'WEEKLY_NHSP_ADJUSTMENT' ||
+      (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired === true);
+
+    const compareBlockRequired =
+      (routeType === 'WEEKLY_HEALTHROSTER') &&
+      (clientNoTimesheetRequired !== true);
+
+    const underlyingChannelFamily = isImportAuthoritative
+      ? null
+      : (isElectronic ? 'ELECTRONIC' : 'MANUAL_NON_QR');
+
+    const routeFamily = isImportAuthoritative ? 'IMPORT_AUTHORITATIVE' : underlyingChannelFamily;
+
+    const routeDisplay = (() => {
+      if (routeType === 'WEEKLY_NHSP_ADJUSTMENT') return 'NHSP Adjustment';
+      if (routeType === 'WEEKLY_NHSP') return 'NHSP';
+      if (routeType === 'WEEKLY_HEALTHROSTER') {
+        return clientNoTimesheetRequired ? 'HealthRoster (no timesheets)' : 'HealthRoster (timesheets required)';
+      }
+      if (isAdjustment) {
+        return isElectronic ? 'Electronic Adjustment' : 'Manual Adjustment';
+      }
+      return isElectronic ? 'Weekly Electronic' : 'Weekly Manual';
+    })();
+
     const summaryStage = 'UNPROCESSED';
 
     const effective = {
@@ -28444,21 +28498,23 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       can_snooze_payment: false,
       can_clear_payment_snooze: false,
       is_unprocessed: true,
-      route_family: isElectronic ? 'ELECTRONIC' : 'MANUAL_NON_QR',
-      underlying_channel_family: isElectronic ? 'ELECTRONIC' : 'MANUAL_NON_QR',
-      is_import_authoritative: false,
-      compare_block_required: false,
+      route_family: routeFamily,
+      underlying_channel_family: underlyingChannelFamily,
+      is_import_authoritative: isImportAuthoritative,
+      compare_block_required: compareBlockRequired,
       has_primary_artifact: !!uploadedPdfKey,
       primary_left_pane_mode: uploadedPdfKey ? 'TIMESHEET_ARTIFACT' : 'NONE',
       primary_artifact_storage_key: uploadedPdfKey,
       electronic_artifact_exists: isElectronic && !!uploadedPdfKey,
-      healthroster_compare_required: false,
+      healthroster_compare_required: compareBlockRequired,
       cw_submission_mode_snapshot: submissionModeSnapshot,
       submission_mode_snapshot: submissionModeSnapshot
     };
 
     const contractWeekOut = {
       ...cw,
+      route_type: routeType,
+      route_display: routeDisplay,
       planned_schedule_json: plannedScheduleJson,
       std_schedule_json: stdScheduleJson,
       submission_mode_snapshot: submissionModeSnapshot,
@@ -28471,11 +28527,28 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       }
     };
 
+    const weeklyModeOut = (() => {
+      if (routeType === 'WEEKLY_NHSP' || routeType === 'WEEKLY_NHSP_ADJUSTMENT' || clientIsNhsp) {
+        return 'NHSP';
+      }
+      if (routeType === 'WEEKLY_HEALTHROSTER' || (clientAutoprocessHr && clientNoTimesheetRequired)) {
+        return 'HEALTHROSTER';
+      }
+      return 'NONE';
+    })();
+
+    const hrWeeklyBehaviourOut = (() => {
+      if (routeType === 'WEEKLY_HEALTHROSTER') {
+        return clientNoTimesheetRequired ? 'CREATE' : 'VERIFY';
+      }
+      return '';
+    })();
+
     const policyOut = {
       ...policy,
       bh_list: bhList,
-      weekly_mode: 'NONE',
-      hr_weekly_behaviour: '',
+      weekly_mode: weeklyModeOut,
+      hr_weekly_behaviour: hrWeeklyBehaviourOut,
       requires_hr: clientRequiresHr,
       autoprocess_hr: clientAutoprocessHr,
       no_timesheet_required: clientNoTimesheetRequired,
@@ -28488,8 +28561,12 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       week_ending_date: cw.week_ending_date || null,
       submission_mode_snapshot: submissionModeSnapshot,
       is_adjustment: isAdjustment,
+      resolved_import_authoritative_source: resolvedImportAuthoritative?.source || null,
+      resolved_import_authoritative: resolvedImportAuthoritativeFlag,
       route_type: routeType,
       route_display: routeDisplay,
+      route_family: routeFamily,
+      compare_block_required: compareBlockRequired,
       summary_stage: summaryStage
     });
 
@@ -28555,6 +28632,7 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to load contract week manual draft details'));
   }
 }
+
 
 async function handleTimesheetDetails(env, req, timesheetId) {
   const enc = encodeURIComponent;
