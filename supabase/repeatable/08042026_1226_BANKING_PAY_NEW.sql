@@ -24381,8 +24381,6 @@ $function$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress(
   p_session_id uuid
 )
@@ -24543,6 +24541,7 @@ BEGIN
     'pending_candidate_ids', v_pending_candidate_ids_jsonb,
     'failed_candidate_ids', v_failed_candidate_ids_jsonb,
     'pending_job_ids', v_pending_job_ids_jsonb,
+    'candidate_status_rows', v_candidate_statuses_jsonb,
     'candidate_statuses', v_candidate_statuses_jsonb,
     'recent_jobs', v_recent_jobs_jsonb
   );
