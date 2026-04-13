@@ -24793,6 +24793,7 @@ DECLARE
   v_pending_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_failed_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_stale_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_unresolved_selected_preview_row_count integer := 0;
   v_payee_blocked_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_filter_candidate_id uuid := NULL::uuid;
   v_filter_client_id uuid := NULL::uuid;
@@ -24937,6 +24938,49 @@ BEGIN
     ORDER BY raw_rows.preview_row_id, raw_rows.ord
   ) AS requested_rows;
 
+  DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state;
+  CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state AS
+  WITH session_candidate_rows AS (
+    SELECT
+      public.banking_pay_workbench_session_candidate_state.candidate_id,
+      public.banking_pay_workbench_session_candidate_state.status,
+      public.banking_pay_workbench_session_candidate_state.effective_canonical_preview_lines_json
+    FROM public.banking_pay_workbench_session_candidate_state
+    WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
+  ),
+  exploded_lines AS (
+    SELECT
+      session_candidate_rows.candidate_id,
+      session_candidate_rows.status,
+      BTRIM(COALESCE(
+        line_element.value->>'preview_row_id',
+        line_element.value->>'line_id',
+        line_element.value->>'row_id',
+        line_element.value->>'id',
+        ''
+      )) AS preview_row_id,
+      UPPER(BTRIM(COALESCE(line_element.value->>'pay_channel', ''))) AS pay_channel
+    FROM session_candidate_rows
+    CROSS JOIN LATERAL jsonb_array_elements(
+      CASE
+        WHEN jsonb_typeof(session_candidate_rows.effective_canonical_preview_lines_json) = 'array' THEN COALESCE(session_candidate_rows.effective_canonical_preview_lines_json, '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS line_element(value)
+    WHERE jsonb_typeof(line_element.value) = 'object'
+  )
+  SELECT
+    exploded_lines.preview_row_id,
+    exploded_lines.candidate_id,
+    exploded_lines.status,
+    exploded_lines.pay_channel,
+    requested_rows.ord
+  FROM exploded_lines
+  JOIN pg_temp.tmp_pay_workbench_prepare_requested_rows requested_rows
+    ON requested_rows.preview_row_id = exploded_lines.preview_row_id
+  WHERE exploded_lines.preview_row_id <> ''
+    AND exploded_lines.pay_channel IN ('PAYE', 'UMBRELLA');
+
   DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_prepare_selected_rows;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_prepare_selected_rows AS
   WITH ready_candidate_rows AS (
@@ -24985,14 +25029,38 @@ BEGIN
     AND exploded_lines.pay_channel IN ('PAYE', 'UMBRELLA')
     AND (v_scope_filter = 'ALL' OR exploded_lines.pay_channel = v_scope_filter);
 
-  IF (SELECT COUNT(*)::integer FROM pg_temp.tmp_pay_workbench_prepare_selected_rows) = 0 THEN
-    RAISE EXCEPTION 'No selected preview rows are available in READY session state for session % and scope %', p_session_id, v_scope_filter;
+  SELECT COUNT(*)::integer
+  INTO v_unresolved_selected_preview_row_count
+  FROM pg_temp.tmp_pay_workbench_prepare_requested_rows AS requested_rows
+  LEFT JOIN (
+    SELECT DISTINCT pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.preview_row_id
+    FROM pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state
+  ) AS resolved_rows
+    ON resolved_rows.preview_row_id = requested_rows.preview_row_id
+  WHERE resolved_rows.preview_row_id IS NULL;
+
+  IF v_unresolved_selected_preview_row_count > 0 THEN
+    RAISE EXCEPTION 'Selected preview rows did not resolve against session state for session %', p_session_id;
   END IF;
 
-  IF v_scope_filter = 'ALL' THEN
-    IF (SELECT COUNT(DISTINCT pg_temp.tmp_pay_workbench_prepare_selected_rows.preview_row_id)::integer FROM pg_temp.tmp_pay_workbench_prepare_selected_rows) <> v_selected_preview_row_count THEN
-      RAISE EXCEPTION 'Selected preview rows did not resolve fully against READY session state for session %', p_session_id;
-    END IF;
+  SELECT COALESCE(array_agg(DISTINCT pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.candidate_id ORDER BY pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.candidate_id), ARRAY[]::uuid[])
+  INTO v_pending_candidate_ids
+  FROM pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state
+  WHERE pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.status = 'PENDING'
+    AND (v_scope_filter = 'ALL' OR pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.pay_channel = v_scope_filter);
+
+  IF COALESCE(array_length(v_pending_candidate_ids, 1), 0) > 0 THEN
+    RAISE EXCEPTION 'Cannot prepare draft while touched candidates are pending: %', array_to_string(v_pending_candidate_ids, ',');
+  END IF;
+
+  SELECT COALESCE(array_agg(DISTINCT pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.candidate_id ORDER BY pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.candidate_id), ARRAY[]::uuid[])
+  INTO v_failed_candidate_ids
+  FROM pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state
+  WHERE pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.status = 'FAILED'
+    AND (v_scope_filter = 'ALL' OR pg_temp.tmp_pay_workbench_prepare_requested_rows_any_state.pay_channel = v_scope_filter);
+
+  IF (SELECT COUNT(*)::integer FROM pg_temp.tmp_pay_workbench_prepare_selected_rows) = 0 THEN
+    RAISE EXCEPTION 'No selected preview rows are available in READY session state for session % and scope %', p_session_id, v_scope_filter;
   END IF;
 
   SELECT COALESCE(array_agg(DISTINCT pg_temp.tmp_pay_workbench_prepare_selected_rows.candidate_id ORDER BY pg_temp.tmp_pay_workbench_prepare_selected_rows.candidate_id), ARRAY[]::uuid[])
@@ -25003,28 +25071,6 @@ BEGIN
 
   IF v_touched_candidate_count = 0 THEN
     RAISE EXCEPTION 'No touched candidates resolved from selected preview rows for session %', p_session_id;
-  END IF;
-
-  SELECT COALESCE(array_agg(session_candidate.candidate_id ORDER BY session_candidate.candidate_id), ARRAY[]::uuid[])
-  INTO v_pending_candidate_ids
-  FROM public.banking_pay_workbench_session_candidate_state AS session_candidate
-  WHERE session_candidate.session_id = p_session_id
-    AND session_candidate.candidate_id = ANY(v_touched_candidate_ids)
-    AND session_candidate.status = 'PENDING';
-
-  IF COALESCE(array_length(v_pending_candidate_ids, 1), 0) > 0 THEN
-    RAISE EXCEPTION 'Cannot prepare draft while touched candidates are pending: %', array_to_string(v_pending_candidate_ids, ',');
-  END IF;
-
-  SELECT COALESCE(array_agg(session_candidate.candidate_id ORDER BY session_candidate.candidate_id), ARRAY[]::uuid[])
-  INTO v_failed_candidate_ids
-  FROM public.banking_pay_workbench_session_candidate_state AS session_candidate
-  WHERE session_candidate.session_id = p_session_id
-    AND session_candidate.candidate_id = ANY(v_touched_candidate_ids)
-    AND session_candidate.status = 'FAILED';
-
-  IF COALESCE(array_length(v_failed_candidate_ids, 1), 0) > 0 THEN
-    RAISE EXCEPTION 'Cannot prepare draft while touched candidates have failed session state: %', array_to_string(v_failed_candidate_ids, ',');
   END IF;
 
   SELECT COALESCE(array_agg(stale_rows.candidate_id ORDER BY stale_rows.candidate_id), ARRAY[]::uuid[])
@@ -25354,4 +25400,3 @@ BEGIN
   );
 END;
 $$;
-
