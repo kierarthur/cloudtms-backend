@@ -40239,6 +40239,7 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
 }
 
 
+
 async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidateId, actorUserId, existingSessionJobId = null, originLabel = '') {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -40369,6 +40370,141 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
       ? fetchRes.rows[0]
       : null;
     return jobRow;
+  };
+
+  const fetchRows = async (tableName, query) => {
+    const url = `${env.SUPABASE_URL}/rest/v1/${tableName}?${query.toString()}`;
+    const fetchRes = await sbFetch(env, url, false);
+    return (fetchRes && Array.isArray(fetchRes.rows)) ? fetchRes.rows : [];
+  };
+
+  const loadSnapshotCandidateState = async (snapshotRunId, candidateId) => {
+    const snapshotRunIdText = trimStr(snapshotRunId);
+    const candidateIdText = trimStr(candidateId);
+    if (!uuidRe.test(snapshotRunIdText) || !uuidRe.test(candidateIdText)) return null;
+    const query = new URLSearchParams();
+    query.set('select', 'id,status,source_change_seq');
+    query.set('snapshot_run_id', `eq.${snapshotRunIdText}`);
+    query.set('candidate_id', `eq.${candidateIdText}`);
+    query.set('limit', '1');
+    const rows = await fetchRows('banking_pay_snapshot_candidate_state', query);
+    return (rows[0] && typeof rows[0] === 'object') ? rows[0] : null;
+  };
+
+  const loadLiveCandidateChangeSeq = async (candidateId) => {
+    const candidateIdText = trimStr(candidateId);
+    if (!uuidRe.test(candidateIdText)) return 0;
+    const query = new URLSearchParams();
+    query.set('select', 'seq');
+    query.set('entity_key', `eq.pay_candidate:${candidateIdText}`);
+    query.set('limit', '1');
+    const rows = await fetchRows('app_change_counters', query);
+    const seqValue = Number(rows?.[0]?.seq);
+    return Number.isFinite(seqValue) ? seqValue : 0;
+  };
+
+  const loadActiveWorkbenchJobs = async () => {
+    const query = new URLSearchParams();
+    query.set('select', 'id,job_type,status,session_id,candidate_id,snapshot_run_id,run_at_utc,started_at_utc,updated_at_utc');
+    query.set('status', 'in.(QUEUED,RUNNING)');
+    query.set('order', 'updated_at_utc.desc.nullslast,started_at_utc.desc.nullslast,run_at_utc.asc,id.asc');
+    query.set('limit', '25');
+    return fetchRows('banking_pay_workbench_jobs', query);
+  };
+
+  const assessSnapshotInlineExecution = async (snapshotRunId, snapshotJobId) => {
+    const snapshotRunIdText = trimStr(snapshotRunId);
+    const snapshotJobIdText = trimStr(snapshotJobId);
+    const assessment = {
+      allow_inline: false,
+      reason: 'INLINE_NOT_ALLOWED',
+      snapshot_run_id: uuidRe.test(snapshotRunIdText) ? snapshotRunIdText : null,
+      snapshot_job_id: uuidRe.test(snapshotJobIdText) ? snapshotJobIdText : null,
+      queue_pressure_non_trivial: false,
+      active_job_count: 0,
+      other_active_job_count: 0,
+      equivalent_snapshot_job_ids: [],
+      other_active_job_ids: [],
+      snapshot_candidate_state_status: null,
+      snapshot_candidate_state_source_change_seq: null,
+      live_candidate_change_seq: null
+    };
+
+    if (!assessment.snapshot_run_id || !result.candidate_id) {
+      assessment.reason = 'INVALID_SNAPSHOT_CONTEXT';
+      return assessment;
+    }
+
+    let snapshotStateRow = null;
+    let liveCandidateChangeSeq = 0;
+    try {
+      const assessedValues = await Promise.all([
+        loadSnapshotCandidateState(assessment.snapshot_run_id, result.candidate_id),
+        loadLiveCandidateChangeSeq(result.candidate_id)
+      ]);
+      snapshotStateRow = assessedValues[0];
+      liveCandidateChangeSeq = Number.isFinite(Number(assessedValues[1])) ? Number(assessedValues[1]) : 0;
+    } catch {
+      assessment.reason = 'SNAPSHOT_STATE_CHECK_FAILED';
+      return assessment;
+    }
+
+    const snapshotCandidateStateStatus = trimStr(snapshotStateRow?.status).toUpperCase() || null;
+    const snapshotCandidateStateSourceChangeSeq = Number(snapshotStateRow?.source_change_seq);
+    const normalizedSnapshotCandidateStateSourceChangeSeq = Number.isFinite(snapshotCandidateStateSourceChangeSeq) ? snapshotCandidateStateSourceChangeSeq : 0;
+
+    assessment.snapshot_candidate_state_status = snapshotCandidateStateStatus;
+    assessment.snapshot_candidate_state_source_change_seq = normalizedSnapshotCandidateStateSourceChangeSeq;
+    assessment.live_candidate_change_seq = liveCandidateChangeSeq;
+
+    if (
+      (snapshotCandidateStateStatus === 'READY' || snapshotCandidateStateStatus === 'PENDING') &&
+      normalizedSnapshotCandidateStateSourceChangeSeq >= liveCandidateChangeSeq
+    ) {
+      assessment.reason = `SNAPSHOT_STATE_${snapshotCandidateStateStatus}_AT_OR_AHEAD_OF_LIVE_SEQ`;
+      return assessment;
+    }
+
+    let activeJobs = [];
+    try {
+      activeJobs = await loadActiveWorkbenchJobs();
+    } catch {
+      assessment.reason = 'QUEUE_PRESSURE_CHECK_FAILED';
+      return assessment;
+    }
+
+    const normalizedActiveJobs = Array.isArray(activeJobs) ? activeJobs : [];
+    assessment.active_job_count = normalizedActiveJobs.length;
+
+    const otherActiveJobs = normalizedActiveJobs.filter((job) => trimStr(job?.id) !== assessment.snapshot_job_id);
+    assessment.other_active_job_count = otherActiveJobs.length;
+    assessment.other_active_job_ids = otherActiveJobs
+      .map((job) => trimStr(job?.id))
+      .filter((jobId) => uuidRe.test(jobId));
+
+    const equivalentSnapshotJobs = otherActiveJobs
+      .filter((job) => trimStr(job?.job_type).toUpperCase() === 'SNAPSHOT_CANDIDATE_REFRESH')
+      .filter((job) => trimStr(job?.snapshot_run_id) === assessment.snapshot_run_id)
+      .filter((job) => trimStr(job?.candidate_id) === result.candidate_id);
+
+    assessment.equivalent_snapshot_job_ids = equivalentSnapshotJobs
+      .map((job) => trimStr(job?.id))
+      .filter((jobId) => uuidRe.test(jobId));
+
+    if (assessment.equivalent_snapshot_job_ids.length > 0) {
+      assessment.reason = 'MATCHING_SNAPSHOT_WORK_EXISTS';
+      return assessment;
+    }
+
+    assessment.queue_pressure_non_trivial = assessment.other_active_job_count > 0;
+    if (assessment.queue_pressure_non_trivial) {
+      assessment.reason = 'QUEUE_PRESSURE_NON_TRIVIAL';
+      return assessment;
+    }
+
+    assessment.allow_inline = true;
+    assessment.reason = 'LOW_RISK_INLINE_ALLOWED';
+    return assessment;
   };
 
   const prevalidateJobContext = async (jobId, expectedContext = {}) => {
@@ -40623,6 +40759,23 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
           waiting_for_background: true,
           payload: recomputePayload,
           reason: 'SNAPSHOT_RUN_ID_MISSING'
+        };
+      }
+
+      const snapshotInlineAssessment = await assessSnapshotInlineExecution(snapshotRunId, snapshotRefreshJobId);
+      pushStep('snapshot_inline_assessment', {
+        phase: safePhaseLabel,
+        snapshot_job_id: snapshotRefreshJobId,
+        snapshot_run_id: snapshotRunId,
+        assessment: cloneJson(snapshotInlineAssessment)
+      });
+      if (!snapshotInlineAssessment.allow_inline) {
+        result.waiting_for_background = true;
+        return {
+          settled: false,
+          waiting_for_background: true,
+          payload: recomputePayload,
+          reason: `SNAPSHOT_${snapshotInlineAssessment.reason || 'BACKGROUND_ONLY'}`
         };
       }
 
@@ -109874,6 +110027,7 @@ async function csvAdapter_confirmManual(env, batchId, bankConfirmRef, actorUserI
   });
 }
 
+
 async function bankingCronTick(env, opts = {}) {
   const nowUtc = (() => {
     const v = opts && opts.nowUtc ? new Date(opts.nowUtc) : new Date();
@@ -109917,6 +110071,19 @@ async function bankingCronTick(env, opts = {}) {
       return !!opts.workbenchEnabled;
     }
     return true;
+  })();
+
+  const workbenchForceSeed = (() => {
+    if (opts && Object.prototype.hasOwnProperty.call(opts, 'workbenchForceSeed')) {
+      return !!opts.workbenchForceSeed;
+    }
+    if (opts && Object.prototype.hasOwnProperty.call(opts, 'forceWorkbenchSeed')) {
+      return !!opts.forceWorkbenchSeed;
+    }
+    if (opts && Object.prototype.hasOwnProperty.call(opts, 'forceSeed')) {
+      return !!opts.forceSeed;
+    }
+    return false;
   })();
 
   const actorUserId = (() => {
@@ -110023,6 +110190,121 @@ async function bankingCronTick(env, opts = {}) {
     return `${y}-${mm}-${dd}`;
   };
 
+  const _fetchRows = async (tableName, query) => {
+    const url = `${env.SUPABASE_URL}/rest/v1/${tableName}?${query.toString()}`;
+    const res = await sbFetch(env, url);
+    return (res && Array.isArray(res.rows)) ? res.rows : [];
+  };
+
+  const _findActiveSnapshotRun = async (payDate, weekEndingCutoff) => {
+    const q = new URLSearchParams();
+    q.set('select', 'id,status,is_active,ready_at_utc,failed_at_utc,created_at_utc,updated_at_utc');
+    q.set('pay_date', `eq.${payDate}`);
+    q.set('week_ending_cutoff', `eq.${weekEndingCutoff}`);
+    q.set('is_active', 'eq.true');
+    q.set('order', 'created_at_utc.desc,id.desc');
+    q.set('limit', '1');
+    const rows = await _fetchRows('banking_pay_snapshot_runs', q);
+    return rows[0] || null;
+  };
+
+  const _hasSnapshotState = async (snapshotRunId, statusText) => {
+    const q = new URLSearchParams();
+    q.set('select', 'id');
+    q.set('snapshot_run_id', `eq.${snapshotRunId}`);
+    if (statusText) q.set('status', `eq.${String(statusText).trim().toUpperCase()}`);
+    q.set('limit', '1');
+    const rows = await _fetchRows('banking_pay_snapshot_candidate_state', q);
+    return rows.length > 0;
+  };
+
+  const _loadSnapshotRunSignals = async (snapshotRunId) => {
+    const q = new URLSearchParams();
+    q.set('select', 'id,status,is_active,ready_at_utc,failed_at_utc,created_at_utc,updated_at_utc');
+    q.set('id', `eq.${snapshotRunId}`);
+    q.set('limit', '1');
+    const runRows = await _fetchRows('banking_pay_snapshot_runs', q);
+    const runRow = runRows[0] || null;
+    const hasAnyState = snapshotRunId ? await _hasSnapshotState(snapshotRunId, null) : false;
+    const hasPending = snapshotRunId ? await _hasSnapshotState(snapshotRunId, 'PENDING') : false;
+    const hasFailed = snapshotRunId ? await _hasSnapshotState(snapshotRunId, 'FAILED') : false;
+    const status = String(runRow?.status || '').trim().toUpperCase() || null;
+    return {
+      runRow,
+      hasAnyState,
+      hasPending,
+      hasFailed,
+      status,
+      isEmpty: !hasAnyState,
+      isDirty: status !== 'READY' || hasPending || hasFailed || !!runRow?.failed_at_utc
+    };
+  };
+
+  const _meaningfulReadinessChange = (diag) => {
+    const root = (diag && typeof diag === 'object') ? diag : {};
+    if (root.did_work === true) return true;
+    const diagnostics = Array.isArray(root.diagnostics) ? root.diagnostics : [];
+    for (const item of diagnostics) {
+      const nc = (item && item.name_check && typeof item.name_check === 'object') ? item.name_check : null;
+      const pm = (item && item.payee_map && typeof item.payee_map === 'object') ? item.payee_map : null;
+      if (nc && nc.attempted === true && nc.ok === true) return true;
+      if (pm && pm.attempted === true && pm.ok === true) return true;
+    }
+    return false;
+  };
+
+  const _cleanupWorkbenchActiveRuns = async (preserveRunIds) => {
+    const preserved = new Set((preserveRunIds || []).map((id) => String(id || '').trim()).filter(Boolean));
+
+    const openSessionQuery = new URLSearchParams();
+    openSessionQuery.set('select', 'source_snapshot_run_id');
+    openSessionQuery.set('status', 'eq.OPEN');
+    const openSessions = await _fetchRows('banking_pay_workbench_sessions', openSessionQuery);
+    for (const row of openSessions) {
+      const snapshotRunId = String(row?.source_snapshot_run_id || '').trim();
+      if (snapshotRunId) preserved.add(snapshotRunId);
+    }
+
+    if (!preserved.size) return [];
+
+    const activeRunQuery = new URLSearchParams();
+    activeRunQuery.set('select', 'id,pay_date,week_ending_cutoff,status,is_active');
+    activeRunQuery.set('is_active', 'eq.true');
+    activeRunQuery.set('order', 'created_at_utc.desc,id.desc');
+    const activeRuns = await _fetchRows('banking_pay_snapshot_runs', activeRunQuery);
+
+    const toDeactivate = activeRuns
+      .map((row) => {
+        const id = String(row?.id || '').trim();
+        return id ? {
+          id,
+          pay_date: row?.pay_date || null,
+          week_ending_cutoff: row?.week_ending_cutoff || null,
+          status: row?.status || null
+        } : null;
+      })
+      .filter(Boolean)
+      .filter((row) => !preserved.has(row.id));
+
+    if (!toDeactivate.length) return [];
+
+    for (const part of _chunk(toDeactivate, 50)) {
+      const q = new URLSearchParams();
+      q.set('id', `in.(${part.map((row) => row.id).join(',')})`);
+      const url = `${env.SUPABASE_URL}/rest/v1/banking_pay_snapshot_runs?${q.toString()}`;
+      await sbFetch(env, url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          is_active: false,
+          updated_at_utc: nowIso
+        })
+      });
+    }
+
+    return toDeactivate;
+  };
+
   const _revertBatchesToScheduled = async (payBatchIds, provider, errorMsg, phase) => {
     const ids = (payBatchIds || []).map(x => String(x || '').trim()).filter(Boolean);
     if (!ids.length) return { ok: true, reverted: 0 };
@@ -110098,6 +110380,7 @@ async function bankingCronTick(env, opts = {}) {
     const rebuiltRunIds = new Set();
 
     const ensureOneRun = async (payDate, weekEndingCutoff, cycleLabel) => {
+      const existingBefore = await _findActiveSnapshotRun(payDate, weekEndingCutoff);
       const ensureRes = await sbRpc(env, 'pay_workbench_snapshot_ensure_run', {
         p_pay_date: payDate,
         p_week_ending_cutoff: weekEndingCutoff,
@@ -110105,14 +110388,24 @@ async function bankingCronTick(env, opts = {}) {
       });
       const ensurePayload = _unwrapRpcPayload(ensureRes, 'pay_workbench_snapshot_ensure_run');
       const snapshotRunId = String(ensurePayload.snapshot_run_id || '').trim();
+      const wasCreated = !existingBefore || String(existingBefore.id || '').trim() !== snapshotRunId;
       summary.workbench.ensured_runs.push({
         cycle: cycleLabel,
         pay_date: payDate,
         week_ending_cutoff: weekEndingCutoff,
-        result: ensurePayload
+        result: ensurePayload,
+        was_created: wasCreated
       });
       if (snapshotRunId) {
-        ensuredRuns.push({ cycle: cycleLabel, payDate, weekEndingCutoff, snapshotRunId, payload: ensurePayload });
+        ensuredRuns.push({
+          cycle: cycleLabel,
+          payDate,
+          weekEndingCutoff,
+          snapshotRunId,
+          payload: ensurePayload,
+          wasCreated,
+          existingBefore
+        });
       }
       return snapshotRunId;
     };
@@ -110124,9 +110417,51 @@ async function bankingCronTick(env, opts = {}) {
       summary.workbench.errors.push({ code: 'WORKBENCH_ENSURE_RUN_FAILED', error: _errMsg(e) });
     }
 
+    if (ensuredRuns.length) {
+      try {
+        const deactivatedRuns = await _cleanupWorkbenchActiveRuns(ensuredRuns.map((run) => run.snapshotRunId));
+        if (deactivatedRuns.length) {
+          summary.workbench.warnings.push({
+            code: 'WORKBENCH_ACTIVE_RUNS_DEACTIVATED',
+            deactivated_count: deactivatedRuns.length,
+            runs: deactivatedRuns
+          });
+        }
+      } catch (e) {
+        summary.workbench.errors.push({
+          code: 'WORKBENCH_ACTIVE_RUN_CLEANUP_FAILED',
+          error: _errMsg(e)
+        });
+      }
+    }
+
     if (workbenchSeedEnabled) {
       for (const run of ensuredRuns) {
         try {
+          const runSignals = await _loadSnapshotRunSignals(run.snapshotRunId);
+          const shouldSeed = !!(
+            workbenchForceSeed ||
+            run.wasCreated ||
+            runSignals.isEmpty ||
+            runSignals.isDirty
+          );
+
+          if (!shouldSeed) {
+            summary.workbench.seeded_runs.push({
+              cycle: run.cycle,
+              snapshot_run_id: run.snapshotRunId,
+              skipped: true,
+              reason: 'RUN_ALREADY_WARM_AND_UNCHANGED',
+              run_status: runSignals.status,
+              has_any_state: runSignals.hasAnyState,
+              has_pending_state: runSignals.hasPending,
+              has_failed_state: runSignals.hasFailed,
+              was_created: run.wasCreated,
+              force_seed: workbenchForceSeed
+            });
+            continue;
+          }
+
           const seedRes = await sbRpc(env, 'pay_workbench_snapshot_enqueue_scope', {
             p_snapshot_run_id: run.snapshotRunId,
             p_candidate_id: null,
@@ -110137,7 +110472,14 @@ async function bankingCronTick(env, opts = {}) {
           summary.workbench.seeded_runs.push({
             cycle: run.cycle,
             snapshot_run_id: run.snapshotRunId,
-            result: seedPayload
+            result: seedPayload,
+            seeded: true,
+            was_created: run.wasCreated,
+            force_seed: workbenchForceSeed,
+            run_status: runSignals.status,
+            has_any_state: runSignals.hasAnyState,
+            has_pending_state: runSignals.hasPending,
+            has_failed_state: runSignals.hasFailed
           });
         } catch (e) {
           summary.workbench.errors.push({
@@ -110271,7 +110613,9 @@ async function bankingCronTick(env, opts = {}) {
             readinessDiag = await revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUserId);
           }
 
-          if (snapshotRunId && candidateId) {
+          const shouldEnqueueRefresh = _meaningfulReadinessChange(readinessDiag);
+
+          if (shouldEnqueueRefresh && snapshotRunId && candidateId) {
             try {
               await sbRpc(env, 'pay_workbench_enqueue_candidate_refresh', {
                 p_snapshot_run_id: snapshotRunId,
@@ -110292,7 +110636,7 @@ async function bankingCronTick(env, opts = {}) {
                 error: _errMsg(enqueueErr)
               });
             }
-          } else if (sessionId && candidateId) {
+          } else if (shouldEnqueueRefresh && sessionId && candidateId) {
             try {
               await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
                 p_session_id: sessionId,
@@ -110313,6 +110657,18 @@ async function bankingCronTick(env, opts = {}) {
                 error: _errMsg(enqueueErr)
               });
             }
+          } else if (!shouldEnqueueRefresh) {
+            summary.workbench.warnings.push({
+              code: 'PAYEE_READINESS_NO_EFFECTIVE_CHANGE',
+              job_id: jobId,
+              snapshot_run_id: snapshotRunId,
+              session_id: sessionId,
+              candidate_id: candidateId,
+              did_work: !!(readinessDiag && readinessDiag.did_work),
+              attempted_count: Number(readinessDiag?.attempted_count || 0),
+              success_count: Number(readinessDiag?.success_count || 0),
+              failed_count: Number(readinessDiag?.failed_count || 0)
+            });
           }
 
           await completeJob(readinessDiag && typeof readinessDiag === 'object' ? readinessDiag : {});
