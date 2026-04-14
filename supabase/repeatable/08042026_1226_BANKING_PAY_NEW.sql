@@ -428,6 +428,8 @@ BEGIN
 END;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_session_candidate_refresh(
   p_session_id uuid,
   p_candidate_id uuid,
@@ -450,6 +452,14 @@ DECLARE
   v_job_id uuid;
   v_job_status text;
   v_job_was_inserted boolean := false;
+  v_existing_session_candidate_status text := NULL;
+  v_existing_session_candidate_source_change_seq bigint := 0;
+  v_existing_session_candidate_session_version bigint := 0;
+  v_existing_session_candidate_pending_job_id uuid := NULL;
+  v_existing_job_id uuid := NULL;
+  v_existing_job_status text := NULL;
+  v_existing_job_source_change_seq bigint := 0;
+  v_existing_job_session_version bigint := 0;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -459,15 +469,9 @@ BEGIN
     RAISE EXCEPTION 'candidate_id is required';
   END IF;
 
-  SELECT
-    ws.version,
-    ws.source_snapshot_run_id,
-    ws.status
-  INTO
-    v_session_version,
-    v_source_snapshot_run_id,
-    v_session_status
-  FROM public.banking_pay_workbench_sessions ws
+  SELECT ws.version, ws.source_snapshot_run_id, ws.status
+  INTO v_session_version, v_source_snapshot_run_id, v_session_status
+  FROM public.banking_pay_workbench_sessions AS ws
   WHERE ws.id = p_session_id;
 
   IF NOT FOUND THEN
@@ -479,7 +483,7 @@ BEGIN
   END IF;
 
   PERFORM 1
-  FROM public.banking_pay_workbench_sessions ws
+  FROM public.banking_pay_workbench_sessions AS ws
   WHERE ws.id = p_session_id
     AND ws.scope_candidate_ids @> ARRAY[p_candidate_id]::uuid[];
 
@@ -489,15 +493,163 @@ BEGIN
 
   SELECT COALESCE(snap.source_change_seq, 0)
   INTO v_source_change_seq
-  FROM public.banking_pay_snapshot_candidate_state snap
+  FROM public.banking_pay_snapshot_candidate_state AS snap
   WHERE snap.snapshot_run_id = v_source_snapshot_run_id
     AND snap.candidate_id = p_candidate_id;
 
   IF v_source_change_seq = 0 THEN
     SELECT COALESCE(acc.seq, 0)
     INTO v_source_change_seq
-    FROM public.app_change_counters acc
+    FROM public.app_change_counters AS acc
     WHERE acc.entity_key = 'pay_candidate:' || p_candidate_id::text;
+  END IF;
+
+  SELECT COALESCE(scs.status, NULL),
+         COALESCE(scs.source_change_seq, 0),
+         COALESCE(scs.session_version, 0),
+         scs.pending_job_id
+  INTO v_existing_session_candidate_status,
+       v_existing_session_candidate_source_change_seq,
+       v_existing_session_candidate_session_version,
+       v_existing_session_candidate_pending_job_id
+  FROM public.banking_pay_workbench_session_candidate_state AS scs
+  WHERE scs.session_id = p_session_id
+    AND scs.candidate_id = p_candidate_id
+  LIMIT 1;
+
+  SELECT j.id,
+         j.status,
+         COALESCE(
+           CASE
+             WHEN COALESCE(j.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+               THEN (j.payload_json->>'source_change_seq')::bigint
+             ELSE 0::bigint
+           END,
+           0::bigint
+         ),
+         COALESCE(
+           CASE
+             WHEN COALESCE(j.payload_json->>'session_version', '') ~ '^[0-9]+$'
+               THEN (j.payload_json->>'session_version')::bigint
+             ELSE 0::bigint
+           END,
+           0::bigint
+         )
+  INTO v_existing_job_id,
+       v_existing_job_status,
+       v_existing_job_source_change_seq,
+       v_existing_job_session_version
+  FROM public.banking_pay_workbench_jobs AS j
+  WHERE j.session_id = p_session_id
+    AND j.candidate_id = p_candidate_id
+    AND j.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
+    AND j.status IN ('QUEUED', 'RUNNING')
+  ORDER BY COALESCE(
+             CASE
+               WHEN COALESCE(j.payload_json->>'session_version', '') ~ '^[0-9]+$'
+                 THEN (j.payload_json->>'session_version')::bigint
+               ELSE 0::bigint
+             END,
+             0::bigint
+           ) DESC,
+           COALESCE(
+             CASE
+               WHEN COALESCE(j.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+                 THEN (j.payload_json->>'source_change_seq')::bigint
+               ELSE 0::bigint
+             END,
+             0::bigint
+           ) DESC,
+           j.updated_at_utc DESC NULLS LAST,
+           j.created_at_utc DESC NULLS LAST,
+           j.id DESC
+  LIMIT 1;
+
+  IF UPPER(COALESCE(v_existing_session_candidate_status, '')) = 'READY'
+     AND v_existing_session_candidate_session_version >= v_session_version
+     AND v_existing_session_candidate_source_change_seq >= v_source_change_seq THEN
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_job',
+      NULL,
+      'NO_OP',
+      NULL,
+      jsonb_build_object(
+        'job_type', 'SESSION_CANDIDATE_RECOMPUTE',
+        'session_id', p_session_id::text,
+        'candidate_id', p_candidate_id::text,
+        'session_version', v_session_version,
+        'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
+        'source_change_seq', v_source_change_seq,
+        'reason', p_reason
+      ),
+      'WORKBENCH_JOB_ENQUEUE',
+      p_actor_user_id
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'job_id', NULL,
+      'job_type', 'SESSION_CANDIDATE_RECOMPUTE',
+      'session_id', p_session_id::text,
+      'candidate_id', p_candidate_id::text,
+      'session_version', v_session_version,
+      'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
+      'source_change_seq', v_source_change_seq,
+      'dedupe_key', NULL,
+      'reason', p_reason,
+      'no_op', true,
+      'reused', false
+    );
+  END IF;
+
+  IF UPPER(COALESCE(v_existing_session_candidate_status, '')) = 'PENDING'
+     AND v_existing_job_id IS NOT NULL
+     AND v_existing_job_session_version >= v_session_version
+     AND v_existing_job_source_change_seq >= v_source_change_seq THEN
+    UPDATE public.banking_pay_workbench_session_candidate_state AS scs
+    SET status = 'PENDING',
+        source_change_seq = GREATEST(COALESCE(scs.source_change_seq, 0), v_source_change_seq),
+        session_version = GREATEST(COALESCE(scs.session_version, 0), v_session_version),
+        pending_job_id = COALESCE(v_existing_job_id, scs.pending_job_id),
+        updated_at_utc = v_now,
+        last_error_json = NULL
+    WHERE scs.session_id = p_session_id
+      AND scs.candidate_id = p_candidate_id;
+
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_job',
+      v_existing_job_id::text,
+      'REUSED',
+      NULL,
+      jsonb_build_object(
+        'id', v_existing_job_id::text,
+        'job_type', 'SESSION_CANDIDATE_RECOMPUTE',
+        'status', v_existing_job_status,
+        'session_id', p_session_id::text,
+        'candidate_id', p_candidate_id::text,
+        'session_version', v_session_version,
+        'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
+        'source_change_seq', v_source_change_seq,
+        'reason', p_reason
+      ),
+      'WORKBENCH_JOB_ENQUEUE',
+      p_actor_user_id
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'job_id', v_existing_job_id::text,
+      'job_type', 'SESSION_CANDIDATE_RECOMPUTE',
+      'session_id', p_session_id::text,
+      'candidate_id', p_candidate_id::text,
+      'session_version', v_session_version,
+      'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
+      'source_change_seq', v_source_change_seq,
+      'dedupe_key', NULL,
+      'reason', p_reason,
+      'no_op', false,
+      'reused', true
+    );
   END IF;
 
   v_dedupe_key := 'SESSION_CANDIDATE_RECOMPUTE:' || p_session_id::text || ':' || p_candidate_id::text || ':v' || v_session_version::text || ':s' || v_source_change_seq::text;
@@ -601,7 +753,7 @@ BEGIN
   DO UPDATE
   SET status = 'PENDING',
       source_change_seq = GREATEST(public.banking_pay_workbench_session_candidate_state.source_change_seq, EXCLUDED.source_change_seq),
-      session_version = EXCLUDED.session_version,
+      session_version = GREATEST(public.banking_pay_workbench_session_candidate_state.session_version, EXCLUDED.session_version),
       pending_job_id = v_job_id,
       updated_at_utc = v_now,
       last_error_json = NULL;
@@ -636,10 +788,572 @@ BEGIN
     'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
     'source_change_seq', v_source_change_seq,
     'dedupe_key', v_dedupe_key,
-    'reason', p_reason
+    'reason', p_reason,
+    'no_op', false,
+    'reused', (NOT v_job_was_inserted)
   );
 END;
 $function$;
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_refresh_candidate(p_snapshot_run_id uuid, p_candidate_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := now();
+  v_snapshot_run_row public.banking_pay_snapshot_runs%ROWTYPE;
+  v_existing_snapshot_candidate_row public.banking_pay_snapshot_candidate_state%ROWTYPE;
+  v_context_json jsonb := '{}'::jsonb;
+  v_baseline_json jsonb := '{}'::jsonb;
+  v_candidate_rollup_json jsonb := '{}'::jsonb;
+  v_payees_json jsonb := '[]'::jsonb;
+  v_case_resolution_states_json jsonb := '[]'::jsonb;
+  v_canonical_preview_lines_json jsonb := '[]'::jsonb;
+  v_baseline_component_rows_json jsonb := '[]'::jsonb;
+  v_source_change_seq bigint := 0;
+  v_last_error_json jsonb := NULL;
+  v_payee_needs_readiness boolean := false;
+  v_payee_readiness_enqueued boolean := false;
+  v_payee_readiness_fingerprint_changed boolean := false;
+  v_previous_payees_fingerprint text := '';
+  v_current_payees_fingerprint text := '';
+  v_audit_after_json jsonb := '{}'::jsonb;
+  v_lock_source text := '';
+  v_lock_hash_1 integer := 0;
+  v_lock_hash_2 integer := 0;
+  v_lock_key bigint := 0;
+  v_case_state_count integer := 0;
+  v_component_count integer := 0;
+  v_line_count integer := 0;
+  v_session_refresh_count integer := 0;
+  v_force_refresh boolean := false;
+BEGIN
+  IF p_snapshot_run_id IS NULL THEN
+    RAISE EXCEPTION 'snapshot_run_id is required';
+  END IF;
+
+  IF p_candidate_id IS NULL THEN
+    RAISE EXCEPTION 'candidate_id is required';
+  END IF;
+
+  v_lock_source := 'PAY_WORKBENCH_SNAPSHOT_REFRESH:' || p_snapshot_run_id::text || ':' || p_candidate_id::text;
+  v_lock_hash_1 := hashtext(v_lock_source);
+  v_lock_hash_2 := hashtext(v_lock_source || ':2');
+  v_lock_key := (((v_lock_hash_1::bigint & 4294967295) << 32) | (v_lock_hash_2::bigint & 4294967295));
+
+  PERFORM pg_advisory_xact_lock(v_lock_key);
+
+  SELECT sr.*
+  INTO v_snapshot_run_row
+  FROM public.banking_pay_snapshot_runs AS sr
+  WHERE sr.id = p_snapshot_run_id
+  LIMIT 1;
+
+  IF v_snapshot_run_row.id IS NULL THEN
+    RAISE EXCEPTION 'banking_pay_snapshot_runs row % not found', p_snapshot_run_id;
+  END IF;
+
+  PERFORM 1
+  FROM public.candidates AS c
+  WHERE c.id = p_candidate_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'candidates row % not found', p_candidate_id;
+  END IF;
+
+  SELECT COALESCE(acc.seq, 0)
+  INTO v_source_change_seq
+  FROM public.app_change_counters AS acc
+  WHERE acc.entity_key = 'pay_candidate:' || p_candidate_id::text
+  LIMIT 1;
+
+  SELECT snap.*
+  INTO v_existing_snapshot_candidate_row
+  FROM public.banking_pay_snapshot_candidate_state AS snap
+  WHERE snap.snapshot_run_id = p_snapshot_run_id
+    AND snap.candidate_id = p_candidate_id
+  LIMIT 1;
+
+  v_previous_payees_fingerprint := md5(COALESCE(v_existing_snapshot_candidate_row.payees_json, '[]'::jsonb)::text);
+
+  IF NOT v_force_refresh
+     AND v_existing_snapshot_candidate_row.id IS NOT NULL
+     AND UPPER(COALESCE(v_existing_snapshot_candidate_row.status, '')) = 'READY'
+     AND COALESCE(v_existing_snapshot_candidate_row.source_change_seq, 0) >= v_source_change_seq THEN
+    PERFORM public._audit_insert(
+      'banking_pay_snapshot_candidate_state',
+      p_snapshot_run_id::text || ':' || p_candidate_id::text,
+      'SNAPSHOT_CANDIDATE_REFRESH_NO_OP',
+      NULL,
+      jsonb_build_object(
+        'snapshot_run_id', p_snapshot_run_id::text,
+        'candidate_id', p_candidate_id::text,
+        'source_change_seq', v_source_change_seq,
+        'existing_status', v_existing_snapshot_candidate_row.status,
+        'existing_source_change_seq', COALESCE(v_existing_snapshot_candidate_row.source_change_seq, 0),
+        'no_op_reason', 'ALREADY_CURRENT'
+      ),
+      'SNAPSHOT_CANDIDATE_REFRESH',
+      NULL::uuid
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'snapshot_run_id', p_snapshot_run_id::text,
+      'candidate_id', p_candidate_id::text,
+      'source_change_seq', v_source_change_seq,
+      'payee_readiness_enqueued', false,
+      'session_refresh_enqueued_count', 0,
+      'case_state_count', 0,
+      'line_count', 0,
+      'component_count', 0,
+      'refreshed_at_utc', v_now,
+      'no_op', true,
+      'reason', 'ALREADY_CURRENT'
+    );
+  END IF;
+
+  PERFORM public._audit_insert(
+    'banking_pay_snapshot_candidate_state',
+    p_snapshot_run_id::text || ':' || p_candidate_id::text,
+    'SNAPSHOT_CANDIDATE_REFRESH_STARTED',
+    NULL,
+    jsonb_build_object(
+      'snapshot_run_id', p_snapshot_run_id::text,
+      'candidate_id', p_candidate_id::text,
+      'source_change_seq', v_source_change_seq,
+      'started_at_utc', v_now
+    ),
+    'SNAPSHOT_CANDIDATE_REFRESH',
+    NULL::uuid
+  );
+
+  v_context_json := public.pay_preview_build_context(
+    p_pay_date => v_snapshot_run_row.pay_date,
+    p_week_ending_cutoff => v_snapshot_run_row.week_ending_cutoff,
+    p_actor_user_id => NULL::uuid,
+    p_candidate_id => p_candidate_id,
+    p_client_id => NULL::uuid,
+    p_preview_decisions_json => NULL::jsonb
+  );
+
+  v_baseline_json := public.pay_preview_build_candidate_baseline(
+    p_context_json => v_context_json,
+    p_candidate_id => p_candidate_id
+  );
+
+  v_candidate_rollup_json := public.pay_preview_build_candidate_rollup(
+    p_context_json => v_context_json,
+    p_candidate_effective_json => v_baseline_json
+  );
+
+  v_payees_json := CASE
+    WHEN jsonb_typeof(v_candidate_rollup_json->'payees') = 'array' THEN COALESCE(v_candidate_rollup_json->'payees', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_case_resolution_states_json := CASE
+    WHEN jsonb_typeof(v_candidate_rollup_json->'case_resolution_states') = 'array' THEN COALESCE(v_candidate_rollup_json->'case_resolution_states', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_canonical_preview_lines_json := CASE
+    WHEN jsonb_typeof(v_candidate_rollup_json->'canonical_preview_lines') = 'array' THEN COALESCE(v_candidate_rollup_json->'canonical_preview_lines', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_baseline_component_rows_json := CASE
+    WHEN jsonb_typeof(v_baseline_json->'baseline_component_rows') = 'array' THEN COALESCE(v_baseline_json->'baseline_component_rows', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_current_payees_fingerprint := md5(COALESCE(v_payees_json, '[]'::jsonb)::text);
+  v_payee_readiness_fingerprint_changed := (
+    v_existing_snapshot_candidate_row.id IS NULL
+    OR v_previous_payees_fingerprint <> v_current_payees_fingerprint
+  );
+
+  INSERT INTO public.banking_pay_snapshot_candidate_state (
+    snapshot_run_id,
+    candidate_id,
+    status,
+    candidate_fragment_json,
+    summary_fragment_json,
+    paye_candidate_json,
+    non_paye_payee_json,
+    payees_json,
+    case_resolution_states_json,
+    canonical_preview_lines_json,
+    source_change_seq,
+    created_at_utc,
+    updated_at_utc,
+    last_refreshed_at_utc,
+    last_error_json
+  )
+  VALUES (
+    p_snapshot_run_id,
+    p_candidate_id,
+    'READY',
+    COALESCE(v_baseline_json, '{}'::jsonb),
+    COALESCE(v_candidate_rollup_json->'summary_fragment', '{}'::jsonb),
+    CASE WHEN jsonb_typeof(v_candidate_rollup_json->'paye_candidate') = 'object' THEN v_candidate_rollup_json->'paye_candidate' ELSE NULL END,
+    CASE WHEN jsonb_typeof(v_candidate_rollup_json->'non_paye_payee') = 'object' THEN v_candidate_rollup_json->'non_paye_payee' ELSE NULL END,
+    v_payees_json,
+    v_case_resolution_states_json,
+    v_canonical_preview_lines_json,
+    v_source_change_seq,
+    v_now,
+    v_now,
+    v_now,
+    NULL
+  )
+  ON CONFLICT (snapshot_run_id, candidate_id)
+  DO UPDATE
+  SET status = 'READY',
+      candidate_fragment_json = EXCLUDED.candidate_fragment_json,
+      summary_fragment_json = EXCLUDED.summary_fragment_json,
+      paye_candidate_json = EXCLUDED.paye_candidate_json,
+      non_paye_payee_json = EXCLUDED.non_paye_payee_json,
+      payees_json = EXCLUDED.payees_json,
+      case_resolution_states_json = EXCLUDED.case_resolution_states_json,
+      canonical_preview_lines_json = EXCLUDED.canonical_preview_lines_json,
+      source_change_seq = EXCLUDED.source_change_seq,
+      updated_at_utc = v_now,
+      last_refreshed_at_utc = v_now,
+      last_error_json = NULL;
+
+  DELETE FROM public.banking_pay_snapshot_case_state AS scs
+  WHERE scs.snapshot_run_id = p_snapshot_run_id
+    AND scs.candidate_id = p_candidate_id;
+
+  INSERT INTO public.banking_pay_snapshot_case_state (
+    snapshot_run_id,
+    candidate_id,
+    case_key,
+    finance_case_id,
+    case_state_json,
+    is_blocked,
+    is_resolved,
+    created_at_utc,
+    updated_at_utc
+  )
+  SELECT
+    p_snapshot_run_id,
+    p_candidate_id,
+    case_state_rows.case_key,
+    case_state_rows.finance_case_id,
+    case_state_rows.case_state_json,
+    case_state_rows.is_blocked,
+    case_state_rows.is_resolved,
+    v_now,
+    v_now
+  FROM (
+    SELECT
+      BTRIM(COALESCE(case_state_element.value->>'case_key', '')) AS case_key,
+      CASE
+        WHEN BTRIM(COALESCE(case_state_element.value->>'finance_case_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (case_state_element.value->>'finance_case_id')::uuid
+        ELSE NULL::uuid
+      END AS finance_case_id,
+      case_state_element.value AS case_state_json,
+      CASE
+        WHEN LOWER(BTRIM(COALESCE(case_state_element.value->>'is_blocked', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true
+        ELSE false
+      END AS is_blocked,
+      CASE
+        WHEN LOWER(BTRIM(COALESCE(case_state_element.value->>'case_resolution_satisfied_now', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true
+        ELSE false
+      END AS is_resolved
+    FROM jsonb_array_elements(v_case_resolution_states_json) AS case_state_element(value)
+    WHERE jsonb_typeof(case_state_element.value) = 'object'
+  ) AS case_state_rows
+  WHERE case_state_rows.case_key <> '';
+
+  GET DIAGNOSTICS v_case_state_count = ROW_COUNT;
+
+  DELETE FROM public.banking_pay_snapshot_case_component_state AS scps
+  WHERE scps.snapshot_run_id = p_snapshot_run_id
+    AND scps.candidate_id = p_candidate_id;
+
+  INSERT INTO public.banking_pay_snapshot_case_component_state (
+    snapshot_run_id,
+    candidate_id,
+    case_key,
+    timesheet_id,
+    component_fingerprint,
+    source_basis_fingerprint,
+    source_family_key,
+    bucket_code,
+    component_key_type,
+    component_key_value,
+    component_state_json,
+    created_at_utc,
+    updated_at_utc
+  )
+  SELECT
+    p_snapshot_run_id,
+    p_candidate_id,
+    component_rows.case_key,
+    component_rows.timesheet_id,
+    component_rows.component_fingerprint,
+    component_rows.source_basis_fingerprint,
+    component_rows.source_family_key,
+    component_rows.bucket_code,
+    component_rows.component_key_type,
+    component_rows.component_key_value,
+    component_rows.component_state_json,
+    v_now,
+    v_now
+  FROM (
+    SELECT
+      BTRIM(COALESCE(component_element.value->>'case_key', '')) AS case_key,
+      CASE
+        WHEN BTRIM(COALESCE(component_element.value->>'timesheet_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (component_element.value->>'timesheet_id')::uuid
+        ELSE NULL::uuid
+      END AS timesheet_id,
+      BTRIM(COALESCE(component_element.value->>'component_fingerprint', '')) AS component_fingerprint,
+      CASE
+        WHEN BTRIM(COALESCE(component_element.value->>'source_basis_fingerprint', '')) <> ''
+          THEN BTRIM(COALESCE(component_element.value->>'source_basis_fingerprint', ''))
+        ELSE md5(COALESCE(component_element.value->'source_basis_json', '{}'::jsonb)::text)
+      END AS source_basis_fingerprint,
+      NULLIF(BTRIM(COALESCE(component_element.value->>'source_family_key', '')), '') AS source_family_key,
+      NULLIF(BTRIM(COALESCE(component_element.value->>'bucket_code', '')), '') AS bucket_code,
+      NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_type', '')), '') AS component_key_type,
+      NULLIF(BTRIM(COALESCE(component_element.value->>'component_key_value', '')), '') AS component_key_value,
+      component_element.value AS component_state_json
+    FROM jsonb_array_elements(v_baseline_component_rows_json) AS component_element(value)
+    WHERE jsonb_typeof(component_element.value) = 'object'
+  ) AS component_rows
+  WHERE component_rows.case_key <> ''
+    AND component_rows.component_fingerprint <> '';
+
+  GET DIAGNOSTICS v_component_count = ROW_COUNT;
+
+  DELETE FROM public.banking_pay_snapshot_line_state AS sls
+  WHERE sls.snapshot_run_id = p_snapshot_run_id
+    AND sls.candidate_id = p_candidate_id;
+
+  INSERT INTO public.banking_pay_snapshot_line_state (
+    snapshot_run_id,
+    candidate_id,
+    preview_row_id,
+    timesheet_id,
+    case_key,
+    pay_channel,
+    component_key_type,
+    component_key_value,
+    canonical_line_json,
+    created_at_utc,
+    updated_at_utc
+  )
+  SELECT
+    p_snapshot_run_id,
+    p_candidate_id,
+    line_rows.preview_row_id,
+    line_rows.timesheet_id,
+    line_rows.case_key,
+    line_rows.pay_channel,
+    line_rows.component_key_type,
+    line_rows.component_key_value,
+    line_rows.canonical_line_json,
+    v_now,
+    v_now
+  FROM (
+    SELECT
+      BTRIM(COALESCE(line_element.value->>'preview_row_id', '')) AS preview_row_id,
+      CASE
+        WHEN BTRIM(COALESCE(line_element.value->>'timesheet_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (line_element.value->>'timesheet_id')::uuid
+        ELSE NULL::uuid
+      END AS timesheet_id,
+      NULLIF(BTRIM(COALESCE(line_element.value->>'case_key', '')), '') AS case_key,
+      NULLIF(BTRIM(COALESCE(line_element.value->>'pay_channel', '')), '') AS pay_channel,
+      NULLIF(BTRIM(COALESCE(line_element.value->>'component_key_type', '')), '') AS component_key_type,
+      NULLIF(BTRIM(COALESCE(line_element.value->>'component_key_value', '')), '') AS component_key_value,
+      line_element.value AS canonical_line_json
+    FROM jsonb_array_elements(v_canonical_preview_lines_json) AS line_element(value)
+    WHERE jsonb_typeof(line_element.value) = 'object'
+  ) AS line_rows
+  WHERE line_rows.preview_row_id <> '';
+
+  GET DIAGNOSTICS v_line_count = ROW_COUNT;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_payees_json) AS payee_element(value)
+    WHERE jsonb_typeof(payee_element.value) = 'object'
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements_text(
+          CASE
+            WHEN jsonb_typeof(payee_element.value->'blockers') = 'array' THEN COALESCE(payee_element.value->'blockers', '[]'::jsonb)
+            ELSE '[]'::jsonb
+          END
+        ) AS blocker_element(value)
+        WHERE UPPER(BTRIM(blocker_element.value)) IN ('BLOCKED_NAME_CHECK', 'BLOCKED_NO_PAYEE_MAP')
+      )
+  )
+  INTO v_payee_needs_readiness;
+
+  IF v_payee_needs_readiness AND v_payee_readiness_fingerprint_changed THEN
+    PERFORM public.pay_workbench_enqueue_payee_readiness_ensure(
+      p_candidate_id => p_candidate_id,
+      p_payees_json => v_payees_json,
+      p_snapshot_run_id => p_snapshot_run_id,
+      p_session_id => NULL::uuid,
+      p_reason => 'SNAPSHOT_CANDIDATE_REFRESH',
+      p_actor_user_id => NULL::uuid,
+      p_payload_json => jsonb_build_object(
+        'snapshot_run_id', p_snapshot_run_id::text,
+        'candidate_id', p_candidate_id::text,
+        'source_change_seq', v_source_change_seq,
+        'readiness_fingerprint', v_current_payees_fingerprint
+      )
+    );
+    v_payee_readiness_enqueued := true;
+  END IF;
+
+  PERFORM public.pay_workbench_enqueue_session_candidate_refresh(
+    p_session_id => ws.id,
+    p_candidate_id => p_candidate_id,
+    p_reason => 'SNAPSHOT_CANDIDATE_REFRESH',
+    p_actor_user_id => NULL::uuid,
+    p_payload_json => jsonb_build_object(
+      'snapshot_run_id', p_snapshot_run_id::text,
+      'candidate_id', p_candidate_id::text,
+      'source_change_seq', v_source_change_seq
+    )
+  )
+  FROM public.banking_pay_workbench_sessions AS ws
+  LEFT JOIN public.banking_pay_workbench_session_candidate_state AS scs
+    ON scs.session_id = ws.id
+   AND scs.candidate_id = p_candidate_id
+  WHERE ws.status = 'OPEN'
+    AND ws.source_snapshot_run_id = p_snapshot_run_id
+    AND ws.scope_candidate_ids @> ARRAY[p_candidate_id]::uuid[]
+    AND (
+      scs.id IS NULL
+      OR UPPER(COALESCE(scs.status, '')) <> 'READY'
+      OR COALESCE(scs.source_change_seq, 0) < v_source_change_seq
+      OR COALESCE(scs.session_version, 0) < COALESCE(ws.version, 0)
+    );
+
+  GET DIAGNOSTICS v_session_refresh_count = ROW_COUNT;
+
+  v_audit_after_json := jsonb_build_object(
+    'snapshot_run_id', p_snapshot_run_id::text,
+    'candidate_id', p_candidate_id::text,
+    'source_change_seq', v_source_change_seq,
+    'summary_fragment_json', COALESCE(v_candidate_rollup_json->'summary_fragment', '{}'::jsonb),
+    'paye_candidate_json', CASE WHEN jsonb_typeof(v_candidate_rollup_json->'paye_candidate') = 'object' THEN v_candidate_rollup_json->'paye_candidate' ELSE NULL END,
+    'non_paye_payee_json', CASE WHEN jsonb_typeof(v_candidate_rollup_json->'non_paye_payee') = 'object' THEN v_candidate_rollup_json->'non_paye_payee' ELSE NULL END,
+    'payees_count', jsonb_array_length(v_payees_json),
+    'case_state_count', v_case_state_count,
+    'canonical_preview_line_count', v_line_count,
+    'baseline_component_row_count', v_component_count,
+    'session_refresh_enqueued_count', v_session_refresh_count,
+    'payee_readiness_enqueued', v_payee_readiness_enqueued,
+    'last_refreshed_at_utc', v_now
+  );
+
+  PERFORM public._audit_insert(
+    'banking_pay_snapshot_candidate_state',
+    p_snapshot_run_id::text || ':' || p_candidate_id::text,
+    'SNAPSHOT_CANDIDATE_REFRESH_SUCCEEDED',
+    NULL,
+    v_audit_after_json,
+    'SNAPSHOT_CANDIDATE_REFRESH',
+    NULL::uuid
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'snapshot_run_id', p_snapshot_run_id::text,
+    'candidate_id', p_candidate_id::text,
+    'source_change_seq', v_source_change_seq,
+    'payee_readiness_enqueued', v_payee_readiness_enqueued,
+    'session_refresh_enqueued_count', v_session_refresh_count,
+    'case_state_count', v_case_state_count,
+    'line_count', v_line_count,
+    'component_count', v_component_count,
+    'refreshed_at_utc', v_now,
+    'no_op', false
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    v_last_error_json := jsonb_build_object(
+      'sqlstate', SQLSTATE,
+      'message', SQLERRM,
+      'snapshot_run_id', CASE WHEN p_snapshot_run_id IS NULL THEN NULL ELSE p_snapshot_run_id::text END,
+      'candidate_id', CASE WHEN p_candidate_id IS NULL THEN NULL ELSE p_candidate_id::text END,
+      'failed_at_utc', now()
+    );
+
+    IF p_snapshot_run_id IS NOT NULL AND p_candidate_id IS NOT NULL THEN
+      INSERT INTO public.banking_pay_snapshot_candidate_state (
+        snapshot_run_id,
+        candidate_id,
+        status,
+        candidate_fragment_json,
+        summary_fragment_json,
+        paye_candidate_json,
+        non_paye_payee_json,
+        payees_json,
+        case_resolution_states_json,
+        canonical_preview_lines_json,
+        source_change_seq,
+        created_at_utc,
+        updated_at_utc,
+        last_refreshed_at_utc,
+        last_error_json
+      )
+      VALUES (
+        p_snapshot_run_id,
+        p_candidate_id,
+        'FAILED',
+        '{}'::jsonb,
+        '{}'::jsonb,
+        NULL,
+        NULL,
+        '[]'::jsonb,
+        '[]'::jsonb,
+        '[]'::jsonb,
+        COALESCE(v_source_change_seq, 0),
+        now(),
+        now(),
+        NULL,
+        v_last_error_json
+      )
+      ON CONFLICT (snapshot_run_id, candidate_id)
+      DO UPDATE
+      SET status = 'FAILED',
+          source_change_seq = GREATEST(public.banking_pay_snapshot_candidate_state.source_change_seq, COALESCE(v_source_change_seq, 0)),
+          updated_at_utc = now(),
+          last_refreshed_at_utc = NULL,
+          last_error_json = v_last_error_json;
+
+      PERFORM public._audit_insert(
+        'banking_pay_snapshot_candidate_state',
+        p_snapshot_run_id::text || ':' || p_candidate_id::text,
+        'SNAPSHOT_CANDIDATE_REFRESH_FAILED',
+        NULL,
+        v_last_error_json,
+        'SNAPSHOT_CANDIDATE_REFRESH',
+        NULL::uuid
+      );
+    END IF;
+
+    RAISE;
+END;
+$function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_payee_readiness_ensure(
   p_candidate_id uuid,
@@ -660,17 +1374,20 @@ DECLARE
   v_source_change_seq bigint := 0;
   v_session_version bigint := NULL;
   v_resolved_snapshot_run_id uuid := p_snapshot_run_id;
+  v_readiness_fingerprint text := md5(COALESCE(p_payees_json::text, '[]'));
   v_dedupe_key text;
   v_job_id uuid;
   v_job_status text;
   v_job_was_inserted boolean := false;
+  v_completed_job_id uuid := NULL;
+  v_completed_job_status text := NULL;
 BEGIN
   IF p_candidate_id IS NULL THEN
     RAISE EXCEPTION 'candidate_id is required';
   END IF;
 
   PERFORM 1
-  FROM public.candidates c
+  FROM public.candidates AS c
   WHERE c.id = p_candidate_id;
 
   IF NOT FOUND THEN
@@ -686,13 +1403,9 @@ BEGIN
   END IF;
 
   IF p_session_id IS NOT NULL THEN
-    SELECT
-      ws.source_snapshot_run_id,
-      ws.version
-    INTO
-      v_resolved_snapshot_run_id,
-      v_session_version
-    FROM public.banking_pay_workbench_sessions ws
+    SELECT ws.source_snapshot_run_id, ws.version
+    INTO v_resolved_snapshot_run_id, v_session_version
+    FROM public.banking_pay_workbench_sessions AS ws
     WHERE ws.id = p_session_id;
 
     IF NOT FOUND THEN
@@ -703,7 +1416,7 @@ BEGIN
   IF v_resolved_snapshot_run_id IS NOT NULL THEN
     SELECT COALESCE(snap.source_change_seq, 0)
     INTO v_source_change_seq
-    FROM public.banking_pay_snapshot_candidate_state snap
+    FROM public.banking_pay_snapshot_candidate_state AS snap
     WHERE snap.snapshot_run_id = v_resolved_snapshot_run_id
       AND snap.candidate_id = p_candidate_id;
   END IF;
@@ -711,7 +1424,7 @@ BEGIN
   IF v_source_change_seq = 0 THEN
     SELECT COALESCE(acc.seq, 0)
     INTO v_source_change_seq
-    FROM public.app_change_counters acc
+    FROM public.app_change_counters AS acc
     WHERE acc.entity_key = 'pay_candidate:' || p_candidate_id::text;
   END IF;
 
@@ -724,7 +1437,57 @@ BEGIN
     || ':s'
     || v_source_change_seq::text
     || ':'
-    || md5(COALESCE(p_payees_json::text, '[]'));
+    || v_readiness_fingerprint;
+
+  SELECT j.id, j.status
+  INTO v_completed_job_id, v_completed_job_status
+  FROM public.banking_pay_workbench_jobs AS j
+  WHERE j.job_type = 'PAYEE_READINESS_ENSURE'
+    AND j.dedupe_key = v_dedupe_key
+    AND j.completed_at_utc IS NOT NULL
+    AND j.failed_at_utc IS NULL
+  ORDER BY j.completed_at_utc DESC, j.id DESC
+  LIMIT 1;
+
+  IF v_completed_job_id IS NOT NULL THEN
+    PERFORM public._audit_insert(
+      'banking_pay_workbench_job',
+      v_completed_job_id::text,
+      'NO_OP',
+      NULL,
+      jsonb_build_object(
+        'id', v_completed_job_id::text,
+        'job_type', 'PAYEE_READINESS_ENSURE',
+        'status', v_completed_job_status,
+        'snapshot_run_id', CASE WHEN v_resolved_snapshot_run_id IS NULL THEN NULL ELSE v_resolved_snapshot_run_id::text END,
+        'session_id', CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
+        'candidate_id', p_candidate_id::text,
+        'session_version', v_session_version,
+        'source_change_seq', v_source_change_seq,
+        'dedupe_key', v_dedupe_key,
+        'reason', p_reason,
+        'readiness_fingerprint', v_readiness_fingerprint
+      ),
+      'WORKBENCH_JOB_ENQUEUE',
+      p_actor_user_id
+    );
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'job_id', v_completed_job_id::text,
+      'job_type', 'PAYEE_READINESS_ENSURE',
+      'snapshot_run_id', CASE WHEN v_resolved_snapshot_run_id IS NULL THEN NULL ELSE v_resolved_snapshot_run_id::text END,
+      'session_id', CASE WHEN p_session_id IS NULL THEN NULL ELSE p_session_id::text END,
+      'candidate_id', p_candidate_id::text,
+      'session_version', v_session_version,
+      'source_change_seq', v_source_change_seq,
+      'dedupe_key', v_dedupe_key,
+      'reason', p_reason,
+      'readiness_fingerprint', v_readiness_fingerprint,
+      'no_op', true,
+      'reused', false
+    );
+  END IF;
 
   INSERT INTO public.banking_pay_workbench_jobs (
     job_type,
@@ -766,7 +1529,8 @@ BEGIN
         'session_version', v_session_version,
         'source_change_seq', v_source_change_seq,
         'payees_json', p_payees_json,
-        'job_type', 'PAYEE_READINESS_ENSURE'
+        'job_type', 'PAYEE_READINESS_ENSURE',
+        'readiness_fingerprint', v_readiness_fingerprint
       ),
     v_now,
     v_now,
@@ -799,7 +1563,8 @@ BEGIN
       'session_version', v_session_version,
       'source_change_seq', v_source_change_seq,
       'dedupe_key', v_dedupe_key,
-      'reason', p_reason
+      'reason', p_reason,
+      'readiness_fingerprint', v_readiness_fingerprint
     ),
     'WORKBENCH_JOB_ENQUEUE',
     p_actor_user_id
@@ -815,10 +1580,17 @@ BEGIN
     'session_version', v_session_version,
     'source_change_seq', v_source_change_seq,
     'dedupe_key', v_dedupe_key,
-    'reason', p_reason
+    'reason', p_reason,
+    'readiness_fingerprint', v_readiness_fingerprint,
+    'no_op', false,
+    'reused', (NOT v_job_was_inserted)
   );
 END;
 $function$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_claim_due_jobs(
   p_limit integer DEFAULT 25,
@@ -14986,6 +15758,8 @@ begin
 end;
 $function$;
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(
   p_actor_user_id uuid,
   p_pay_date date,
@@ -15019,6 +15793,9 @@ DECLARE
   v_session_version bigint := 0;
   v_enqueue_candidate_refresh_json jsonb := '{}'::jsonb;
   v_pending_job_id uuid := NULL::uuid;
+  v_scope_live_change_seq bigint := 0;
+  v_existing_snapshot_job_id uuid := NULL::uuid;
+  v_existing_snapshot_job_source_change_seq bigint := 0;
 BEGIN
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'actor_user_id is required';
@@ -15037,8 +15814,8 @@ BEGIN
   END IF;
 
   PERFORM 1
-  FROM public.tms_users
-  WHERE public.tms_users.id = p_actor_user_id;
+  FROM public.tms_users AS tu
+  WHERE tu.id = p_actor_user_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'tms_users row % not found', p_actor_user_id;
@@ -15086,12 +15863,12 @@ BEGIN
     WHERE BTRIM(scope_candidate.scope_candidate_id_text) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ) AS scope_candidate_ids_subquery;
 
-  SELECT public.banking_pay_workbench_sessions.*
+  SELECT ws.*
   INTO v_existing_session_row
-  FROM public.banking_pay_workbench_sessions
-  WHERE public.banking_pay_workbench_sessions.actor_user_id = p_actor_user_id
-    AND public.banking_pay_workbench_sessions.session_signature = v_session_signature
-    AND public.banking_pay_workbench_sessions.status = 'OPEN'
+  FROM public.banking_pay_workbench_sessions AS ws
+  WHERE ws.actor_user_id = p_actor_user_id
+    AND ws.session_signature = v_session_signature
+    AND ws.status = 'OPEN'
   LIMIT 1;
 
   IF v_existing_session_row.id IS NULL THEN
@@ -15138,14 +15915,14 @@ BEGIN
 
     v_action := 'WORKBENCH_SESSION_CREATED';
   ELSE
-    UPDATE public.banking_pay_workbench_sessions
+    UPDATE public.banking_pay_workbench_sessions AS ws
     SET pay_date = p_pay_date,
         week_ending_cutoff = p_week_ending_cutoff,
         filters_json = v_filters_json,
         scope_candidate_ids = v_scope_candidate_ids,
         source_snapshot_run_id = v_snapshot_run_id,
         updated_at_utc = v_now
-    WHERE public.banking_pay_workbench_sessions.id = v_existing_session_row.id;
+    WHERE ws.id = v_existing_session_row.id;
 
     v_session_id := v_existing_session_row.id;
     v_action := 'WORKBENCH_SESSION_RESUMED';
@@ -15161,25 +15938,32 @@ BEGIN
     );
   END IF;
 
-  SELECT public.banking_pay_workbench_sessions.version
+  SELECT ws.version
   INTO v_session_version
-  FROM public.banking_pay_workbench_sessions
-  WHERE public.banking_pay_workbench_sessions.id = v_session_id;
+  FROM public.banking_pay_workbench_sessions AS ws
+  WHERE ws.id = v_session_id;
 
-  FOR v_scope_candidate_id IN
-    SELECT scope_candidate_id_value
-    FROM unnest(v_scope_candidate_ids) AS scope_candidate_id_value
+  FOREACH v_scope_candidate_id IN ARRAY v_scope_candidate_ids
   LOOP
     v_pending_job_id := NULL::uuid;
+    v_existing_snapshot_job_id := NULL::uuid;
+    v_existing_snapshot_job_source_change_seq := 0;
 
-    SELECT public.banking_pay_snapshot_candidate_state.*
+    SELECT COALESCE(acc.seq, 0)
+    INTO v_scope_live_change_seq
+    FROM public.app_change_counters AS acc
+    WHERE acc.entity_key = 'pay_candidate:' || v_scope_candidate_id::text;
+
+    SELECT snap.*
     INTO v_snapshot_candidate_row
-    FROM public.banking_pay_snapshot_candidate_state
-    WHERE public.banking_pay_snapshot_candidate_state.snapshot_run_id = v_snapshot_run_id
-      AND public.banking_pay_snapshot_candidate_state.candidate_id = v_scope_candidate_id
+    FROM public.banking_pay_snapshot_candidate_state AS snap
+    WHERE snap.snapshot_run_id = v_snapshot_run_id
+      AND snap.candidate_id = v_scope_candidate_id
     LIMIT 1;
 
-    IF v_snapshot_candidate_row.id IS NOT NULL AND v_snapshot_candidate_row.status = 'READY' THEN
+    IF v_snapshot_candidate_row.id IS NOT NULL
+       AND UPPER(COALESCE(v_snapshot_candidate_row.status, '')) = 'READY'
+       AND COALESCE(v_snapshot_candidate_row.source_change_seq, 0) >= v_scope_live_change_seq THEN
       INSERT INTO public.banking_pay_workbench_session_candidate_state (
         session_id,
         candidate_id,
@@ -15235,21 +16019,61 @@ BEGIN
           last_recomputed_at_utc = v_now,
           last_error_json = NULL;
     ELSE
-      v_enqueue_candidate_refresh_json := public.pay_workbench_enqueue_candidate_refresh(
-        p_snapshot_run_id => v_snapshot_run_id,
-        p_candidate_id => v_scope_candidate_id,
-        p_reason => 'SESSION_OPEN_WARMUP',
-        p_actor_user_id => p_actor_user_id,
-        p_payload_json => jsonb_build_object(
-          'session_id', v_session_id::text,
-          'session_signature', v_session_signature,
-          'pay_date', p_pay_date::text,
-          'week_ending_cutoff', p_week_ending_cutoff::text
-        )
-      );
+      SELECT j.id,
+             COALESCE(
+               CASE
+                 WHEN COALESCE(j.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+                   THEN (j.payload_json->>'source_change_seq')::bigint
+                 ELSE 0::bigint
+               END,
+               0::bigint
+             )
+      INTO v_existing_snapshot_job_id, v_existing_snapshot_job_source_change_seq
+      FROM public.banking_pay_workbench_jobs AS j
+      WHERE j.snapshot_run_id = v_snapshot_run_id
+        AND j.candidate_id = v_scope_candidate_id
+        AND j.job_type = 'SNAPSHOT_CANDIDATE_REFRESH'
+        AND j.status IN ('QUEUED', 'RUNNING')
+      ORDER BY COALESCE(
+                 CASE
+                   WHEN COALESCE(j.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+                     THEN (j.payload_json->>'source_change_seq')::bigint
+                   ELSE 0::bigint
+                 END,
+                 0::bigint
+               ) DESC,
+               j.updated_at_utc DESC NULLS LAST,
+               j.created_at_utc DESC NULLS LAST,
+               j.id DESC
+      LIMIT 1;
 
-      IF BTRIM(COALESCE(v_enqueue_candidate_refresh_json->>'job_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-        v_pending_job_id := (v_enqueue_candidate_refresh_json->>'job_id')::uuid;
+      IF v_existing_snapshot_job_id IS NOT NULL
+         AND (
+           v_existing_snapshot_job_source_change_seq >= v_scope_live_change_seq
+           OR (
+             v_snapshot_candidate_row.id IS NOT NULL
+             AND UPPER(COALESCE(v_snapshot_candidate_row.status, '')) = 'PENDING'
+             AND COALESCE(v_snapshot_candidate_row.source_change_seq, 0) >= v_scope_live_change_seq
+           )
+         ) THEN
+        v_pending_job_id := v_existing_snapshot_job_id;
+      ELSE
+        v_enqueue_candidate_refresh_json := public.pay_workbench_enqueue_candidate_refresh(
+          p_snapshot_run_id => v_snapshot_run_id,
+          p_candidate_id => v_scope_candidate_id,
+          p_reason => 'SESSION_OPEN_WARMUP',
+          p_actor_user_id => p_actor_user_id,
+          p_payload_json => jsonb_build_object(
+            'session_id', v_session_id::text,
+            'session_signature', v_session_signature,
+            'pay_date', p_pay_date::text,
+            'week_ending_cutoff', p_week_ending_cutoff::text
+          )
+        );
+
+        IF BTRIM(COALESCE(v_enqueue_candidate_refresh_json->>'job_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+          v_pending_job_id := (v_enqueue_candidate_refresh_json->>'job_id')::uuid;
+        END IF;
       END IF;
 
       INSERT INTO public.banking_pay_workbench_session_candidate_state (
@@ -15282,7 +16106,7 @@ BEGIN
         '[]'::jsonb,
         '[]'::jsonb,
         '[]'::jsonb,
-        COALESCE(v_snapshot_candidate_row.source_change_seq, 0),
+        GREATEST(v_scope_live_change_seq, COALESCE(v_snapshot_candidate_row.source_change_seq, 0), COALESCE(v_existing_snapshot_job_source_change_seq, 0)),
         v_session_version,
         v_pending_job_id,
         v_now,
@@ -15300,9 +16124,9 @@ BEGIN
           effective_payees_json = '[]'::jsonb,
           effective_case_resolution_states_json = '[]'::jsonb,
           effective_canonical_preview_lines_json = '[]'::jsonb,
-          source_change_seq = GREATEST(public.banking_pay_workbench_session_candidate_state.source_change_seq, EXCLUDED.source_change_seq),
-          session_version = EXCLUDED.session_version,
-          pending_job_id = EXCLUDED.pending_job_id,
+          source_change_seq = GREATEST(public.banking_pay_workbench_session_candidate_state.source_change_seq, GREATEST(v_scope_live_change_seq, COALESCE(v_snapshot_candidate_row.source_change_seq, 0), COALESCE(v_existing_snapshot_job_source_change_seq, 0))),
+          session_version = GREATEST(public.banking_pay_workbench_session_candidate_state.session_version, v_session_version),
+          pending_job_id = COALESCE(v_pending_job_id, public.banking_pay_workbench_session_candidate_state.pending_job_id),
           updated_at_utc = v_now,
           last_recomputed_at_utc = NULL,
           last_error_json = NULL;
@@ -15345,6 +16169,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview(
   p_session_id uuid
@@ -16735,6 +17562,8 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid, uuid);
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_candidate(
   p_session_id uuid,
   p_candidate_id uuid,
@@ -16766,6 +17595,8 @@ DECLARE
   v_live_change_seq bigint := 0;
   v_snapshot_refresh_json jsonb := '{}'::jsonb;
   v_snapshot_refresh_job_id uuid := NULL::uuid;
+  v_existing_snapshot_job_id uuid := NULL::uuid;
+  v_existing_snapshot_job_source_change_seq bigint := 0;
   v_last_error_json jsonb := NULL;
   v_audit_before_json jsonb := NULL;
   v_audit_after_json jsonb := '{}'::jsonb;
@@ -16778,10 +17609,10 @@ BEGIN
     RAISE EXCEPTION 'candidate_id is required';
   END IF;
 
-  SELECT public.banking_pay_workbench_sessions.*
+  SELECT ws.*
   INTO v_session_row
-  FROM public.banking_pay_workbench_sessions
-  WHERE public.banking_pay_workbench_sessions.id = p_session_id
+  FROM public.banking_pay_workbench_sessions AS ws
+  WHERE ws.id = p_session_id
   FOR UPDATE;
 
   IF v_session_row.id IS NULL THEN
@@ -16807,35 +17638,33 @@ BEGIN
     RAISE EXCEPTION 'candidate % is not in workbench session scope %', p_candidate_id, p_session_id;
   END IF;
 
-  SELECT public.banking_pay_workbench_session_candidate_state.*
+  SELECT scs.*
   INTO v_session_candidate_row
-  FROM public.banking_pay_workbench_session_candidate_state
-  WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
-    AND public.banking_pay_workbench_session_candidate_state.candidate_id = p_candidate_id
+  FROM public.banking_pay_workbench_session_candidate_state AS scs
+  WHERE scs.session_id = p_session_id
+    AND scs.candidate_id = p_candidate_id
   LIMIT 1;
 
-  SELECT public.banking_pay_snapshot_candidate_state.*
+  SELECT snap.*
   INTO v_snapshot_candidate_row
-  FROM public.banking_pay_snapshot_candidate_state
-  WHERE public.banking_pay_snapshot_candidate_state.snapshot_run_id = v_session_row.source_snapshot_run_id
-    AND public.banking_pay_snapshot_candidate_state.candidate_id = p_candidate_id
+  FROM public.banking_pay_snapshot_candidate_state AS snap
+  WHERE snap.snapshot_run_id = v_session_row.source_snapshot_run_id
+    AND snap.candidate_id = p_candidate_id
   LIMIT 1;
 
-  SELECT COALESCE(public.app_change_counters.seq, 0)
+  SELECT COALESCE(acc.seq, 0)
   INTO v_live_change_seq
-  FROM public.app_change_counters
-  WHERE public.app_change_counters.entity_key = 'pay_candidate:' || p_candidate_id::text;
-
-  v_live_change_seq := COALESCE(v_live_change_seq, 0);
+  FROM public.app_change_counters AS acc
+  WHERE acc.entity_key = 'pay_candidate:' || p_candidate_id::text;
 
   IF p_job_id IS NOT NULL THEN
-    SELECT public.banking_pay_workbench_jobs.*
+    SELECT j.*
     INTO v_claimed_job_row
-    FROM public.banking_pay_workbench_jobs
-    WHERE public.banking_pay_workbench_jobs.id = p_job_id
-      AND public.banking_pay_workbench_jobs.session_id = p_session_id
-      AND public.banking_pay_workbench_jobs.candidate_id = p_candidate_id
-      AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
+    FROM public.banking_pay_workbench_jobs AS j
+    WHERE j.id = p_job_id
+      AND j.session_id = p_session_id
+      AND j.candidate_id = p_candidate_id
+      AND j.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
     LIMIT 1;
 
     IF v_claimed_job_row.id IS NULL THEN
@@ -16856,23 +17685,23 @@ BEGIN
   ELSE
     SELECT COUNT(*)::integer
     INTO v_running_job_count
-    FROM public.banking_pay_workbench_jobs
-    WHERE public.banking_pay_workbench_jobs.session_id = p_session_id
-      AND public.banking_pay_workbench_jobs.candidate_id = p_candidate_id
-      AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
-      AND public.banking_pay_workbench_jobs.status = 'RUNNING';
+    FROM public.banking_pay_workbench_jobs AS j
+    WHERE j.session_id = p_session_id
+      AND j.candidate_id = p_candidate_id
+      AND j.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
+      AND j.status = 'RUNNING';
 
     IF v_running_job_count = 1 THEN
-      SELECT public.banking_pay_workbench_jobs.*
+      SELECT j.*
       INTO v_claimed_job_row
-      FROM public.banking_pay_workbench_jobs
-      WHERE public.banking_pay_workbench_jobs.session_id = p_session_id
-        AND public.banking_pay_workbench_jobs.candidate_id = p_candidate_id
-        AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
-        AND public.banking_pay_workbench_jobs.status = 'RUNNING'
-      ORDER BY public.banking_pay_workbench_jobs.started_at_utc DESC NULLS LAST,
-               public.banking_pay_workbench_jobs.updated_at_utc DESC,
-               public.banking_pay_workbench_jobs.id DESC
+      FROM public.banking_pay_workbench_jobs AS j
+      WHERE j.session_id = p_session_id
+        AND j.candidate_id = p_candidate_id
+        AND j.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
+        AND j.status = 'RUNNING'
+      ORDER BY j.started_at_utc DESC NULLS LAST,
+               j.updated_at_utc DESC,
+               j.id DESC
       LIMIT 1;
     ELSIF v_running_job_count = 0 THEN
       RETURN jsonb_build_object(
@@ -16909,19 +17738,19 @@ BEGIN
   SELECT COALESCE(
            MAX(
              CASE
-               WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'session_version', '') ~ '^[0-9]+$'
-                 THEN (public.banking_pay_workbench_jobs.payload_json->>'session_version')::bigint
+               WHEN COALESCE(j.payload_json->>'session_version', '') ~ '^[0-9]+$'
+                 THEN (j.payload_json->>'session_version')::bigint
                ELSE NULL::bigint
              END
            ),
            0
          )
   INTO v_max_inflight_session_version
-  FROM public.banking_pay_workbench_jobs
-  WHERE public.banking_pay_workbench_jobs.session_id = p_session_id
-    AND public.banking_pay_workbench_jobs.candidate_id = p_candidate_id
-    AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
-    AND public.banking_pay_workbench_jobs.status IN ('QUEUED', 'RUNNING');
+  FROM public.banking_pay_workbench_jobs AS j
+  WHERE j.session_id = p_session_id
+    AND j.candidate_id = p_candidate_id
+    AND j.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
+    AND j.status IN ('QUEUED', 'RUNNING');
 
   IF v_claimed_job_session_version < v_session_row.version
      OR v_claimed_job_session_version < v_max_inflight_session_version THEN
@@ -16941,21 +17770,61 @@ BEGIN
   IF v_snapshot_candidate_row.id IS NULL
      OR v_snapshot_candidate_row.status <> 'READY'
      OR COALESCE(v_snapshot_candidate_row.source_change_seq, 0) < v_live_change_seq THEN
-    v_snapshot_refresh_json := public.pay_workbench_enqueue_candidate_refresh(
-      p_snapshot_run_id => v_session_row.source_snapshot_run_id,
-      p_candidate_id => p_candidate_id,
-      p_reason => 'SESSION_RECOMPUTE_WAITING_FOR_SNAPSHOT',
-      p_actor_user_id => NULL::uuid,
-      p_payload_json => jsonb_build_object(
-        'session_id', p_session_id::text,
-        'candidate_id', p_candidate_id::text,
-        'session_version', v_session_row.version,
-        'trigger_job_id', CASE WHEN v_claimed_job_row.id IS NULL THEN NULL ELSE v_claimed_job_row.id::text END
-      )
-    );
+    SELECT j.id,
+           COALESCE(
+             CASE
+               WHEN COALESCE(j.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+                 THEN (j.payload_json->>'source_change_seq')::bigint
+               ELSE 0::bigint
+             END,
+             0::bigint
+           )
+    INTO v_existing_snapshot_job_id, v_existing_snapshot_job_source_change_seq
+    FROM public.banking_pay_workbench_jobs AS j
+    WHERE j.snapshot_run_id = v_session_row.source_snapshot_run_id
+      AND j.candidate_id = p_candidate_id
+      AND j.job_type = 'SNAPSHOT_CANDIDATE_REFRESH'
+      AND j.status IN ('QUEUED', 'RUNNING')
+    ORDER BY COALESCE(
+               CASE
+                 WHEN COALESCE(j.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+                   THEN (j.payload_json->>'source_change_seq')::bigint
+                 ELSE 0::bigint
+               END,
+               0::bigint
+             ) DESC,
+             j.updated_at_utc DESC NULLS LAST,
+             j.created_at_utc DESC NULLS LAST,
+             j.id DESC
+    LIMIT 1;
 
-    IF BTRIM(COALESCE(v_snapshot_refresh_json->>'job_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-      v_snapshot_refresh_job_id := (v_snapshot_refresh_json->>'job_id')::uuid;
+    IF v_existing_snapshot_job_id IS NOT NULL
+       AND (
+         v_existing_snapshot_job_source_change_seq >= v_live_change_seq
+         OR (
+           v_snapshot_candidate_row.id IS NOT NULL
+           AND UPPER(COALESCE(v_snapshot_candidate_row.status, '')) = 'PENDING'
+           AND COALESCE(v_snapshot_candidate_row.source_change_seq, 0) >= v_live_change_seq
+         )
+       ) THEN
+      v_snapshot_refresh_job_id := v_existing_snapshot_job_id;
+    ELSE
+      v_snapshot_refresh_json := public.pay_workbench_enqueue_candidate_refresh(
+        p_snapshot_run_id => v_session_row.source_snapshot_run_id,
+        p_candidate_id => p_candidate_id,
+        p_reason => 'SESSION_RECOMPUTE_WAITING_FOR_SNAPSHOT',
+        p_actor_user_id => NULL::uuid,
+        p_payload_json => jsonb_build_object(
+          'session_id', p_session_id::text,
+          'candidate_id', p_candidate_id::text,
+          'session_version', v_session_row.version,
+          'trigger_job_id', CASE WHEN v_claimed_job_row.id IS NULL THEN NULL ELSE v_claimed_job_row.id::text END
+        )
+      );
+
+      IF BTRIM(COALESCE(v_snapshot_refresh_json->>'job_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        v_snapshot_refresh_job_id := (v_snapshot_refresh_json->>'job_id')::uuid;
+      END IF;
     END IF;
 
     INSERT INTO public.banking_pay_workbench_session_candidate_state (
@@ -16988,7 +17857,7 @@ BEGIN
       '[]'::jsonb,
       '[]'::jsonb,
       '[]'::jsonb,
-      v_live_change_seq,
+      GREATEST(v_live_change_seq, COALESCE(v_snapshot_candidate_row.source_change_seq, 0), COALESCE(v_existing_snapshot_job_source_change_seq, 0)),
       v_session_row.version,
       v_snapshot_refresh_job_id,
       v_now,
@@ -16999,7 +17868,7 @@ BEGIN
     ON CONFLICT (session_id, candidate_id)
     DO UPDATE
     SET status = 'PENDING',
-        source_change_seq = GREATEST(public.banking_pay_workbench_session_candidate_state.source_change_seq, v_live_change_seq),
+        source_change_seq = GREATEST(public.banking_pay_workbench_session_candidate_state.source_change_seq, GREATEST(v_live_change_seq, COALESCE(v_snapshot_candidate_row.source_change_seq, 0), COALESCE(v_existing_snapshot_job_source_change_seq, 0))),
         session_version = GREATEST(public.banking_pay_workbench_session_candidate_state.session_version, v_session_row.version),
         pending_job_id = COALESCE(v_snapshot_refresh_job_id, public.banking_pay_workbench_session_candidate_state.pending_job_id),
         updated_at_utc = v_now,
@@ -17036,27 +17905,24 @@ BEGIN
   );
 
   SELECT COALESCE(
-           jsonb_object_agg(
-             public.banking_pay_workbench_session_case_resolutions.resolution_identity_key,
-             public.banking_pay_workbench_session_case_resolutions.payload_json
-           ),
+           jsonb_object_agg(scr.resolution_identity_key, scr.payload_json),
            '{}'::jsonb
          )
   INTO v_case_resolutions_json
-  FROM public.banking_pay_workbench_session_case_resolutions
-  WHERE public.banking_pay_workbench_session_case_resolutions.session_id = p_session_id
-    AND public.banking_pay_workbench_session_case_resolutions.candidate_id = p_candidate_id;
+  FROM public.banking_pay_workbench_session_case_resolutions AS scr
+  WHERE scr.session_id = p_session_id
+    AND scr.candidate_id = p_candidate_id;
 
   SELECT COALESCE(
-           jsonb_agg(public.banking_pay_workbench_session_overrides.timesheet_id::text ORDER BY public.banking_pay_workbench_session_overrides.timesheet_id::text),
+           jsonb_agg(sov.timesheet_id::text ORDER BY sov.timesheet_id::text),
            '[]'::jsonb
          )
   INTO v_exclude_timesheet_ids_jsonb
-  FROM public.banking_pay_workbench_session_overrides
-  WHERE public.banking_pay_workbench_session_overrides.session_id = p_session_id
-    AND public.banking_pay_workbench_session_overrides.candidate_id = p_candidate_id
-    AND public.banking_pay_workbench_session_overrides.override_type = 'TIMESHEET_EXCLUSION'
-    AND public.banking_pay_workbench_session_overrides.timesheet_id IS NOT NULL;
+  FROM public.banking_pay_workbench_session_overrides AS sov
+  WHERE sov.session_id = p_session_id
+    AND sov.candidate_id = p_candidate_id
+    AND sov.override_type = 'TIMESHEET_EXCLUSION'
+    AND sov.timesheet_id IS NOT NULL;
 
   v_overrides_json := jsonb_build_object(
     'exclude_timesheet_ids', COALESCE(v_exclude_timesheet_ids_jsonb, '[]'::jsonb)
@@ -17269,6 +18135,9 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_discard(
