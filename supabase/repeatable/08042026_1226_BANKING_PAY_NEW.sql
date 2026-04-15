@@ -12,6 +12,7 @@ AS $function$
 DECLARE
   v_now timestamptz := now();
   v_today_uk date := (now() AT TIME ZONE 'Europe/London')::date;
+  v_effective_week_ending_cutoff date := DATE '9999-12-31';
   v_pay_eligibility_months_back integer := 6;
   v_pay_eligibility_weeks_ahead integer := 2;
   v_pay_week_start date;
@@ -30,10 +31,6 @@ BEGIN
     RAISE EXCEPTION 'pay_date is required';
   END IF;
 
-  IF p_week_ending_cutoff IS NULL THEN
-    RAISE EXCEPTION 'week_ending_cutoff is required';
-  END IF;
-
   v_pay_week_start := public._pay_week_start_monday(p_pay_date);
 
   BEGIN
@@ -43,7 +40,7 @@ BEGIN
     INTO
       v_pay_eligibility_months_back,
       v_pay_eligibility_weeks_ahead
-    FROM public.settings_defaults sd
+    FROM public.settings_defaults AS sd
     ORDER BY sd.id ASC
     LIMIT 1;
   EXCEPTION
@@ -66,9 +63,9 @@ BEGIN
     v_snapshot_run_id,
     v_status,
     v_is_active
-  FROM public.banking_pay_snapshot_runs sr
+  FROM public.banking_pay_snapshot_runs AS sr
   WHERE sr.pay_date = p_pay_date
-    AND sr.week_ending_cutoff = p_week_ending_cutoff
+    AND sr.week_ending_cutoff = v_effective_week_ending_cutoff
     AND sr.is_active = true
   ORDER BY sr.created_at_utc DESC, sr.id DESC
   LIMIT 1;
@@ -93,7 +90,7 @@ BEGIN
       )
       VALUES (
         p_pay_date,
-        p_week_ending_cutoff,
+        v_effective_week_ending_cutoff,
         v_pay_week_start,
         v_eligibility_from_date,
         v_eligibility_to_date,
@@ -127,9 +124,9 @@ BEGIN
           v_snapshot_run_id,
           v_status,
           v_is_active
-        FROM public.banking_pay_snapshot_runs sr
+        FROM public.banking_pay_snapshot_runs AS sr
         WHERE sr.pay_date = p_pay_date
-          AND sr.week_ending_cutoff = p_week_ending_cutoff
+          AND sr.week_ending_cutoff = v_effective_week_ending_cutoff
           AND sr.is_active = true
         ORDER BY sr.created_at_utc DESC, sr.id DESC
         LIMIT 1;
@@ -144,9 +141,9 @@ BEGIN
           v_snapshot_run_id,
           v_status,
           v_is_active
-        FROM public.banking_pay_snapshot_runs sr
+        FROM public.banking_pay_snapshot_runs AS sr
         WHERE sr.pay_date = p_pay_date
-          AND sr.week_ending_cutoff = p_week_ending_cutoff
+          AND sr.week_ending_cutoff = v_effective_week_ending_cutoff
           AND sr.is_active = true
         ORDER BY sr.created_at_utc DESC, sr.id DESC
         LIMIT 1;
@@ -156,13 +153,13 @@ BEGIN
   END IF;
 
   IF v_snapshot_run_id IS NULL THEN
-    RAISE EXCEPTION 'Unable to create or reuse active banking pay snapshot run for pay_date % and cutoff %', p_pay_date, p_week_ending_cutoff;
+    RAISE EXCEPTION 'Unable to create or reuse active banking pay snapshot run for pay_date % and cutoff %', p_pay_date, v_effective_week_ending_cutoff;
   END IF;
 
   v_audit_after_json := jsonb_build_object(
     'id', v_snapshot_run_id::text,
     'pay_date', p_pay_date::text,
-    'week_ending_cutoff', p_week_ending_cutoff::text,
+    'week_ending_cutoff', v_effective_week_ending_cutoff::text,
     'pay_week_start', v_pay_week_start::text,
     'eligibility_from_date', v_eligibility_from_date::text,
     'eligibility_to_date', v_eligibility_to_date::text,
@@ -176,7 +173,7 @@ BEGIN
     CASE WHEN v_was_created THEN 'CREATED' ELSE 'REUSED' END,
     NULL,
     v_audit_after_json,
-    CASE WHEN v_was_created THEN 'SNAPSHOT_RUN_CREATED_OR_REUSED' ELSE 'SNAPSHOT_RUN_CREATED_OR_REUSED' END,
+    'SNAPSHOT_RUN_CREATED_OR_REUSED',
     p_actor_user_id
   );
 
@@ -184,7 +181,7 @@ BEGIN
     'ok', true,
     'snapshot_run_id', v_snapshot_run_id::text,
     'pay_date', p_pay_date::text,
-    'week_ending_cutoff', p_week_ending_cutoff::text,
+    'week_ending_cutoff', v_effective_week_ending_cutoff::text,
     'pay_week_start', v_pay_week_start::text,
     'eligibility_from_date', v_eligibility_from_date::text,
     'eligibility_to_date', v_eligibility_to_date::text,
@@ -206,7 +203,7 @@ EXCEPTION
         'failed_at_utc', v_now
       );
 
-      UPDATE public.banking_pay_snapshot_runs sr
+      UPDATE public.banking_pay_snapshot_runs AS sr
       SET updated_at_utc = v_now,
           failed_at_utc = v_now,
           last_error_json = v_error_json
@@ -220,7 +217,7 @@ EXCEPTION
         jsonb_build_object(
           'id', v_snapshot_run_id::text,
           'pay_date', p_pay_date::text,
-          'week_ending_cutoff', p_week_ending_cutoff::text,
+          'week_ending_cutoff', v_effective_week_ending_cutoff::text,
           'pay_week_start', v_pay_week_start::text,
           'eligibility_from_date', v_eligibility_from_date::text,
           'eligibility_to_date', v_eligibility_to_date::text,
@@ -236,6 +233,7 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(
   p_snapshot_run_id uuid,
@@ -3050,7 +3048,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_build_context(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -3066,6 +3063,7 @@ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_today_uk date := (now() AT TIME ZONE 'Europe/London')::date;
+  v_effective_week_ending_cutoff date := DATE '9999-12-31';
   v_pay_week_start date;
   v_pay_eligibility_months_back integer := 6;
   v_pay_eligibility_weeks_ahead integer := 2;
@@ -3088,13 +3086,12 @@ DECLARE
   v_scope_candidate_count integer := 0;
   v_preview_decisions_root jsonb := '{}'::jsonb;
   v_preview_case_resolutions jsonb := '{}'::jsonb;
+  v_refresh_scope_kind text := NULL;
+  v_targeted_timesheet_ids jsonb := '[]'::jsonb;
+  v_linked_timesheet_ids jsonb := '[]'::jsonb;
 BEGIN
   IF p_pay_date IS NULL THEN
     RAISE EXCEPTION 'pay_date is required';
-  END IF;
-
-  IF p_week_ending_cutoff IS NULL THEN
-    RAISE EXCEPTION 'week_ending_cutoff is required';
   END IF;
 
   IF to_regclass('public.settings_finance_windows') IS NULL THEN
@@ -3171,123 +3168,183 @@ BEGIN
     ELSE '{}'::jsonb
   END;
 
+  v_refresh_scope_kind := NULLIF(UPPER(BTRIM(COALESCE(v_preview_decisions_root->>'refresh_scope_kind', ''))), '');
+  IF v_refresh_scope_kind NOT IN ('TARGETED_TIMESHEETS', 'CANDIDATE_FULL_LIVE') THEN
+    v_refresh_scope_kind := NULL;
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(targeted_scope_ids.targeted_timesheet_id ORDER BY targeted_scope_ids.targeted_timesheet_id), '[]'::jsonb)
+  INTO v_targeted_timesheet_ids
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(targeted_scope_values.targeted_timesheet_id_raw), '') AS targeted_timesheet_id
+    FROM (
+      SELECT targeted_scope_array.value AS targeted_timesheet_id_raw
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_preview_decisions_root->'targeted_timesheet_ids') = 'array' THEN v_preview_decisions_root->'targeted_timesheet_ids'
+          WHEN jsonb_typeof(v_preview_decisions_root->'targeted_timesheet_ids') = 'string' THEN jsonb_build_array(v_preview_decisions_root->>'targeted_timesheet_ids')
+          ELSE '[]'::jsonb
+        END
+      ) AS targeted_scope_array(value)
+    ) AS targeted_scope_values
+    WHERE NULLIF(BTRIM(targeted_scope_values.targeted_timesheet_id_raw), '') IS NOT NULL
+  ) AS targeted_scope_ids;
+
+  SELECT COALESCE(jsonb_agg(linked_scope_ids.linked_timesheet_id ORDER BY linked_scope_ids.linked_timesheet_id), '[]'::jsonb)
+  INTO v_linked_timesheet_ids
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(linked_scope_values.linked_timesheet_id_raw), '') AS linked_timesheet_id
+    FROM (
+      SELECT linked_scope_array.value AS linked_timesheet_id_raw
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_preview_decisions_root->'linked_timesheet_ids') = 'array' THEN v_preview_decisions_root->'linked_timesheet_ids'
+          WHEN jsonb_typeof(v_preview_decisions_root->'linked_timesheet_ids') = 'string' THEN jsonb_build_array(v_preview_decisions_root->>'linked_timesheet_ids')
+          ELSE '[]'::jsonb
+        END
+      ) AS linked_scope_array(value)
+    ) AS linked_scope_values
+    WHERE NULLIF(BTRIM(linked_scope_values.linked_timesheet_id_raw), '') IS NOT NULL
+  ) AS linked_scope_ids;
+
   v_paye_guardrails := public.pay_paye_guardrails(
     p_pay_date => p_pay_date,
     p_ignore_pay_batch_id => NULL::uuid,
     p_actor_user_id => p_actor_user_id
   );
 
-  WITH force_include AS (
-    SELECT DISTINCT
-      public.timesheet_payment_overrides.timesheet_id
-    FROM public.timesheet_payment_overrides
-    WHERE public.timesheet_payment_overrides.cleared_at_utc IS NULL
-      AND public.timesheet_payment_overrides.consumed_at_utc IS NULL
-      AND public.timesheet_payment_overrides.consumed_by_pay_batch_id IS NULL
-      AND UPPER(COALESCE(public.timesheet_payment_overrides.override_type, '')) = 'ADVANCE_THIS_PAYMENT'
-      AND public.timesheet_payment_overrides.timesheet_id IS NOT NULL
-  ),
-  timesheet_scope AS (
-    SELECT DISTINCT
-      public.timesheets_financials.candidate_id
-    FROM public.timesheets_financials
-    JOIN public.timesheets
-      ON public.timesheets.timesheet_id = public.timesheets_financials.timesheet_id
-    JOIN public.candidates
-      ON public.candidates.id = public.timesheets_financials.candidate_id
-    LEFT JOIN public.timesheet_pay_state
-      ON public.timesheet_pay_state.timesheet_id = public.timesheets_financials.timesheet_id
-    LEFT JOIN force_include
-      ON force_include.timesheet_id = public.timesheets_financials.timesheet_id
-    WHERE public.timesheets_financials.is_current = true
-      AND COALESCE(public.timesheets_financials.pay_on_hold, false) = false
-      AND COALESCE(public.timesheets_financials.has_rate_issue, false) = false
-      AND COALESCE(public.timesheets_financials.has_pay_channel_issue, false) = false
-      AND UPPER(COALESCE(public.timesheets_financials.processing_status::text, '')) NOT IN ('UNASSIGNED', 'CLIENT_UNRESOLVED', 'RATE_MISSING', 'PAY_CHANNEL_MISSING')
-      AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
-      AND (
-        (
-          public.timesheets.authorised_at_server IS NOT NULL
-          AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
-          AND public.timesheets.week_ending_date::date <= v_eligibility_to_date
-          AND public.timesheets.week_ending_date::date <= p_week_ending_cutoff
-        )
-        OR force_include.timesheet_id IS NOT NULL
-        OR (
-          public.timesheet_pay_state.last_settled_snapshot_json IS NOT NULL
-          AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
-          AND public.timesheets.week_ending_date::date <= p_week_ending_cutoff
-        )
-      )
-      AND (p_candidate_id IS NULL OR public.timesheets_financials.candidate_id = p_candidate_id)
-      AND (p_client_id IS NULL OR public.timesheets_financials.client_id = p_client_id)
-  ),
-  finance_scope AS (
-    SELECT DISTINCT
-      public.v_finance_cases_register.candidate_id
-    FROM public.v_finance_cases_register
-    JOIN public.candidates
-      ON public.candidates.id = public.v_finance_cases_register.candidate_id
-    WHERE public.v_finance_cases_register.case_type IN (
-        'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
-        'OVERPAYMENT'::public.pay_finance_case_type_enum,
-        'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
-        'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
-      )
-      AND UPPER(COALESCE(public.v_finance_cases_register.status::text, '')) = 'ACTIVE'
-      AND COALESCE(public.v_finance_cases_register.outstanding_amount, 0) > 0
-      AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
-      AND NOT (
-        public.v_finance_cases_register.active_snooze_id IS NOT NULL
-        AND public.v_finance_cases_register.active_snooze_until_date IS NULL
-      )
-      AND (
-        (
-          public.v_finance_cases_register.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
-          AND (
-            UPPER(COALESCE(public.v_finance_cases_register.payout_status::text, '')) <> 'PAID'
-            OR public.v_finance_cases_register.next_due_week_start IS NULL
-            OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+  IF p_candidate_id IS NOT NULL THEN
+    SELECT
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.candidates AS c
+          WHERE c.id = p_candidate_id
+        ) THEN jsonb_build_array(p_candidate_id::text)
+        ELSE '[]'::jsonb
+      END,
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.candidates AS c
+          WHERE c.id = p_candidate_id
+        ) THEN 1
+        ELSE 0
+      END
+    INTO
+      v_scope_candidate_ids,
+      v_scope_candidate_count;
+  ELSE
+    WITH force_include AS (
+      SELECT DISTINCT
+        public.timesheet_payment_overrides.timesheet_id
+      FROM public.timesheet_payment_overrides
+      WHERE public.timesheet_payment_overrides.cleared_at_utc IS NULL
+        AND public.timesheet_payment_overrides.consumed_at_utc IS NULL
+        AND public.timesheet_payment_overrides.consumed_by_pay_batch_id IS NULL
+        AND UPPER(COALESCE(public.timesheet_payment_overrides.override_type, '')) = 'ADVANCE_THIS_PAYMENT'
+        AND public.timesheet_payment_overrides.timesheet_id IS NOT NULL
+    ),
+    timesheet_scope AS (
+      SELECT DISTINCT
+        public.timesheets_financials.candidate_id
+      FROM public.timesheets_financials
+      JOIN public.timesheets
+        ON public.timesheets.timesheet_id = public.timesheets_financials.timesheet_id
+      JOIN public.candidates
+        ON public.candidates.id = public.timesheets_financials.candidate_id
+      LEFT JOIN public.timesheet_pay_state
+        ON public.timesheet_pay_state.timesheet_id = public.timesheets_financials.timesheet_id
+      LEFT JOIN force_include
+        ON force_include.timesheet_id = public.timesheets_financials.timesheet_id
+      WHERE public.timesheets_financials.is_current = true
+        AND COALESCE(public.timesheets_financials.pay_on_hold, false) = false
+        AND COALESCE(public.timesheets_financials.has_rate_issue, false) = false
+        AND COALESCE(public.timesheets_financials.has_pay_channel_issue, false) = false
+        AND UPPER(COALESCE(public.timesheets_financials.processing_status::text, '')) NOT IN ('UNASSIGNED', 'CLIENT_UNRESOLVED', 'RATE_MISSING', 'PAY_CHANNEL_MISSING')
+        AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
+        AND (
+          (
+            public.timesheets.authorised_at_server IS NOT NULL
+            AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
+            AND public.timesheets.week_ending_date::date <= v_eligibility_to_date
+            AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
+          )
+          OR force_include.timesheet_id IS NOT NULL
+          OR (
+            public.timesheet_pay_state.last_settled_snapshot_json IS NOT NULL
+            AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
+            AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
           )
         )
-        OR (
-          public.v_finance_cases_register.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-          AND (
-            public.v_finance_cases_register.next_due_week_start IS NULL
-            OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
-          )
+        AND (p_client_id IS NULL OR public.timesheets_financials.client_id = p_client_id)
+    ),
+    finance_scope AS (
+      SELECT DISTINCT
+        public.v_finance_cases_register.candidate_id
+      FROM public.v_finance_cases_register
+      JOIN public.candidates
+        ON public.candidates.id = public.v_finance_cases_register.candidate_id
+      WHERE public.v_finance_cases_register.case_type IN (
+          'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+          'OVERPAYMENT'::public.pay_finance_case_type_enum,
+          'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+          'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
         )
-        OR (
-          public.v_finance_cases_register.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
-          AND (
-            public.v_finance_cases_register.next_due_week_start IS NULL
-            OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
-          )
+        AND UPPER(COALESCE(public.v_finance_cases_register.status::text, '')) = 'ACTIVE'
+        AND COALESCE(public.v_finance_cases_register.outstanding_amount, 0) > 0
+        AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
+        AND NOT (
+          public.v_finance_cases_register.active_snooze_id IS NOT NULL
+          AND public.v_finance_cases_register.active_snooze_until_date IS NULL
         )
-        OR public.v_finance_cases_register.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
-      )
-      AND (p_candidate_id IS NULL OR public.v_finance_cases_register.candidate_id = p_candidate_id)
-      AND (p_client_id IS NULL OR public.v_finance_cases_register.client_id = p_client_id)
-  ),
-  scope_candidates AS (
-    SELECT timesheet_scope.candidate_id
-    FROM timesheet_scope
-    UNION
-    SELECT finance_scope.candidate_id
-    FROM finance_scope
-  )
-  SELECT
-    COALESCE(jsonb_agg(to_jsonb(scope_candidates.candidate_id::text) ORDER BY scope_candidates.candidate_id), '[]'::jsonb),
-    COUNT(*)::integer
-  INTO
-    v_scope_candidate_ids,
-    v_scope_candidate_count
-  FROM scope_candidates;
+        AND (
+          (
+            public.v_finance_cases_register.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
+            AND (
+              UPPER(COALESCE(public.v_finance_cases_register.payout_status::text, '')) <> 'PAID'
+              OR public.v_finance_cases_register.next_due_week_start IS NULL
+              OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+            )
+          )
+          OR (
+            public.v_finance_cases_register.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+            AND (
+              public.v_finance_cases_register.next_due_week_start IS NULL
+              OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+            )
+          )
+          OR (
+            public.v_finance_cases_register.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+            AND (
+              public.v_finance_cases_register.next_due_week_start IS NULL
+              OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+            )
+          )
+          OR public.v_finance_cases_register.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+        )
+        AND (p_client_id IS NULL OR public.v_finance_cases_register.client_id = p_client_id)
+    ),
+    scope_candidates AS (
+      SELECT timesheet_scope.candidate_id
+      FROM timesheet_scope
+      UNION
+      SELECT finance_scope.candidate_id
+      FROM finance_scope
+    )
+    SELECT
+      COALESCE(jsonb_agg(to_jsonb(scope_candidates.candidate_id::text) ORDER BY scope_candidates.candidate_id), '[]'::jsonb),
+      COUNT(*)::integer
+    INTO
+      v_scope_candidate_ids,
+      v_scope_candidate_count
+    FROM scope_candidates;
+  END IF;
 
   RETURN jsonb_build_object(
     'pay_date', p_pay_date::text,
     'pay_week_start', v_pay_week_start::text,
-    'week_ending_cutoff_date', p_week_ending_cutoff::text,
+    'week_ending_cutoff_date', v_effective_week_ending_cutoff::text,
     'eligibility', jsonb_build_object(
       'today_uk', v_today_uk::text,
       'from_date', v_eligibility_from_date::text,
@@ -3323,10 +3380,14 @@ BEGIN
     'scope_candidate_ids', COALESCE(v_scope_candidate_ids, '[]'::jsonb),
     'scope_candidate_count', v_scope_candidate_count,
     'preview_decisions_json', v_preview_decisions_root,
-    'preview_case_resolutions', v_preview_case_resolutions
+    'preview_case_resolutions', v_preview_case_resolutions,
+    'refresh_scope_kind', v_refresh_scope_kind,
+    'targeted_timesheet_ids', COALESCE(v_targeted_timesheet_ids, '[]'::jsonb),
+    'linked_timesheet_ids', COALESCE(v_linked_timesheet_ids, '[]'::jsonb)
   );
 END;
 $function$;
+
 
 
 
@@ -15654,7 +15715,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -15692,6 +15752,10 @@ declare
   v_need_name_check boolean := false;
   v_requires_payee_map boolean := false;
   v_paye_guardrails jsonb := '{}'::jsonb;
+  v_refresh_scope_kind text := NULL;
+  v_effective_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
+  v_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_linked_timesheet_ids_json jsonb := '[]'::jsonb;
 begin
   if jsonb_typeof(v_context_json) <> 'object' then
     raise exception 'p_context_json must be a JSON object';
@@ -15702,7 +15766,7 @@ begin
   end if;
 
   v_pay_date := nullif(btrim(coalesce(v_context_json->>'pay_date', '')), '')::date;
-  v_week_ending_cutoff := nullif(btrim(coalesce(v_context_json->>'week_ending_cutoff_date', '')), '')::date;
+  v_week_ending_cutoff := DATE '9999-12-31';
   v_client_id := nullif(btrim(coalesce(v_context_json #>> '{filters,client_id}', '')), '')::uuid;
   v_week_start := nullif(btrim(coalesce(v_context_json->>'pay_week_start', '')), '')::date;
   v_today_uk := coalesce(nullif(btrim(coalesce(v_context_json #>> '{eligibility,today_uk}', '')), '')::date, (now() at time zone 'Europe/London')::date);
@@ -15723,13 +15787,59 @@ begin
   v_need_name_check := coalesce((v_context_json #>> '{settings,rail,need_name_check}')::boolean, false);
   v_requires_payee_map := coalesce((v_context_json #>> '{settings,rail,requires_payee_map}')::boolean, false);
   v_paye_guardrails := case when jsonb_typeof(v_context_json->'paye_guardrails') = 'object' then coalesce(v_context_json->'paye_guardrails', '{}'::jsonb) else '{}'::jsonb end;
+  v_refresh_scope_kind := NULLIF(UPPER(BTRIM(COALESCE(v_context_json->>'refresh_scope_kind', v_context_json #>> '{preview_decisions_json,refresh_scope_kind}', ''))), '');
+  IF v_refresh_scope_kind NOT IN ('TARGETED_TIMESHEETS', 'CANDIDATE_FULL_LIVE') THEN
+    v_refresh_scope_kind := NULL;
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(targeted_scope_ids.targeted_timesheet_id ORDER BY targeted_scope_ids.targeted_timesheet_id), '[]'::jsonb)
+  INTO v_targeted_timesheet_ids_json
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(targeted_scope_values.targeted_timesheet_id_raw), '') AS targeted_timesheet_id
+    FROM (
+      SELECT targeted_scope_array.value AS targeted_timesheet_id_raw
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_context_json->'targeted_timesheet_ids') = 'array' THEN v_context_json->'targeted_timesheet_ids'
+          WHEN jsonb_typeof(v_context_json->'targeted_timesheet_ids') = 'string' THEN jsonb_build_array(v_context_json->>'targeted_timesheet_ids')
+          WHEN jsonb_typeof(v_context_json #> '{preview_decisions_json,targeted_timesheet_ids}') = 'array' THEN v_context_json #> '{preview_decisions_json,targeted_timesheet_ids}'
+          WHEN jsonb_typeof(v_context_json #> '{preview_decisions_json,targeted_timesheet_ids}') = 'string' THEN jsonb_build_array(v_context_json #>> '{preview_decisions_json,targeted_timesheet_ids}')
+          ELSE '[]'::jsonb
+        END
+      ) AS targeted_scope_array(value)
+    ) AS targeted_scope_values
+    WHERE NULLIF(BTRIM(targeted_scope_values.targeted_timesheet_id_raw), '') IS NOT NULL
+  ) AS targeted_scope_ids;
+
+  SELECT COALESCE(jsonb_agg(linked_scope_ids.linked_timesheet_id ORDER BY linked_scope_ids.linked_timesheet_id), '[]'::jsonb)
+  INTO v_linked_timesheet_ids_json
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(linked_scope_values.linked_timesheet_id_raw), '') AS linked_timesheet_id
+    FROM (
+      SELECT linked_scope_array.value AS linked_timesheet_id_raw
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_context_json->'linked_timesheet_ids') = 'array' THEN v_context_json->'linked_timesheet_ids'
+          WHEN jsonb_typeof(v_context_json->'linked_timesheet_ids') = 'string' THEN jsonb_build_array(v_context_json->>'linked_timesheet_ids')
+          WHEN jsonb_typeof(v_context_json #> '{preview_decisions_json,linked_timesheet_ids}') = 'array' THEN v_context_json #> '{preview_decisions_json,linked_timesheet_ids}'
+          WHEN jsonb_typeof(v_context_json #> '{preview_decisions_json,linked_timesheet_ids}') = 'string' THEN jsonb_build_array(v_context_json #>> '{preview_decisions_json,linked_timesheet_ids}')
+          ELSE '[]'::jsonb
+        END
+      ) AS linked_scope_array(value)
+    ) AS linked_scope_values
+    WHERE NULLIF(BTRIM(linked_scope_values.linked_timesheet_id_raw), '') IS NOT NULL
+  ) AS linked_scope_ids;
+
+  IF v_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+     AND jsonb_array_length(v_targeted_timesheet_ids_json) = 0
+     AND jsonb_array_length(v_linked_timesheet_ids_json) = 0 THEN
+    v_effective_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
+  ELSE
+    v_effective_refresh_scope_kind := COALESCE(v_refresh_scope_kind, 'CANDIDATE_FULL_LIVE');
+  END IF;
 
   if v_pay_date is null then
     raise exception 'pay_date missing from p_context_json';
-  end if;
-
-  if v_week_ending_cutoff is null then
-    raise exception 'week_ending_cutoff_date missing from p_context_json';
   end if;
 
   if v_week_start is null then
@@ -15748,7 +15858,7 @@ begin
     raise exception 'rail defaults missing from p_context_json';
   end if;
 
-  drop table if exists pg_temp.pay_preview_candidate_context, pg_temp.active_snoozes, pg_temp.active_timesheet_payment_snoozes, pg_temp.active_segment_snoozes, pg_temp.active_timesheet_payment_overrides, pg_temp.force_include, pg_temp.reserved_batch_items, pg_temp.reserved_by_source_ref, pg_temp.reserved_total_by_timesheet, pg_temp.reserved_segment_key_map, pg_temp.reserved_segment_sums, pg_temp.reserved_preview_segment_ords, pg_temp.reserved_additional_by_code, pg_temp.eligible_tsfin, pg_temp.debted_overpayment_cases, pg_temp.umb_map, pg_temp.adj, pg_temp.ts_current, pg_temp.ts_baseline, pg_temp.finance_case_baseline_scope, pg_temp.segment_status, pg_temp.blocked_items_all, pg_temp.blocked_items, pg_temp.blocked_items_snoozed, pg_temp.do_not_pay_all, pg_temp.do_not_pay_items, pg_temp.do_not_pay_items_snoozed, pg_temp.ts_deltas, pg_temp.ts_itemised, pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup, pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective, pg_temp.finance_case_repaid_wtd, pg_temp.finance_case_recovery_rows_base, pg_temp.manual_debt_recovery_rows, pg_temp.manual_debt_recovery_allocations, pg_temp.manual_debt_recovery_totals, pg_temp.overpayment_recovery_rows, pg_temp.overpayment_recovery_allocations, pg_temp.overpayment_recovery_totals, pg_temp.payment_advance_recovery_rows, pg_temp.payment_advance_recovery_allocations, pg_temp.finance_case_protected_allocations, pg_temp.finance_case_payee_readiness, pg_temp.finance_case_component_rows, pg_temp.finance_case_component_review_rows, pg_temp.finance_case_component_review_rows_effective, pg_temp.finance_case_due_source_amounts, pg_temp.finance_case_component_due_source_base, pg_temp.finance_case_component_due_source_shares, pg_temp.finance_case_component_due_source_allocations, pg_temp.finance_case_component_due_preview_base, pg_temp.finance_case_component_due_preview_allocations, pg_temp.finance_case_taxable_manual_debt_resolution, pg_temp.finance_case_resolution_rollup, pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup, pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
+  drop table if exists pg_temp.pay_preview_candidate_context, pg_temp.targeted_refresh_timesheet_ids, pg_temp.linked_refresh_timesheet_ids, pg_temp.targeted_refresh_all_timesheet_ids, pg_temp.active_snoozes, pg_temp.active_timesheet_payment_snoozes, pg_temp.active_segment_snoozes, pg_temp.active_timesheet_payment_overrides, pg_temp.force_include, pg_temp.reserved_batch_items, pg_temp.reserved_by_source_ref, pg_temp.reserved_total_by_timesheet, pg_temp.reserved_segment_key_map, pg_temp.reserved_segment_sums, pg_temp.reserved_preview_segment_ords, pg_temp.reserved_additional_by_code, pg_temp.eligible_tsfin, pg_temp.debted_overpayment_cases, pg_temp.umb_map, pg_temp.adj, pg_temp.ts_current, pg_temp.targeted_baseline_only_ts_current, pg_temp.ts_baseline, pg_temp.finance_case_baseline_scope, pg_temp.segment_status, pg_temp.blocked_items_all, pg_temp.blocked_items, pg_temp.blocked_items_snoozed, pg_temp.do_not_pay_all, pg_temp.do_not_pay_items, pg_temp.do_not_pay_items_snoozed, pg_temp.ts_deltas, pg_temp.ts_itemised, pg_temp.worked_time_current_segment_rows, pg_temp.worked_time_baseline_segment_rows, pg_temp.worked_time_current_ranked, pg_temp.worked_time_baseline_ranked, pg_temp.worked_time_bucket_ids, pg_temp.worked_time_bucket_agg, pg_temp.worked_time_bucket_calc, pg_temp.worked_time_bucket_alloc, pg_temp.worked_time_bucket_effective, pg_temp.worked_time_bucket_component_rows, pg_temp.worked_time_key_totals, pg_temp.worked_time_bucket_component_sums, pg_temp.worked_time_amount_fallback_rows, pg_temp.timesheet_component_rows, pg_temp.timesheet_component_match_rows, pg_temp.transient_timesheet_component_rows, pg_temp.transient_timesheet_component_review_rows, pg_temp.timesheet_case_actionable_basis, pg_temp.timesheet_live_scope, pg_temp.timesheet_linked_scope_counts, pg_temp.transient_timesheet_component_review_rows_effective, pg_temp.timesheet_case_rollup, pg_temp.finance_candidate_seed, pg_temp.candidate_base, pg_temp.timesheet_candidate_rollup, pg_temp.candidate_rollup, pg_temp.blocked_counts, pg_temp.do_not_pay_counts, pg_temp.loan_due, pg_temp.overpayment_balances, pg_temp.loan_due_this_week, pg_temp.loan_repaid_wtd, pg_temp.paid_wtd_before, pg_temp.cand_enriched, pg_temp.payee_baseline_rows, pg_temp.payees_src, pg_temp.payees, pg_temp.payees_enriched, pg_temp.payees_json, pg_temp.cand_payee0, pg_temp.cand_payee, pg_temp.timesheet_case_rollup_effective, pg_temp.finance_case_repaid_wtd, pg_temp.finance_case_recovery_rows_base, pg_temp.manual_debt_recovery_rows, pg_temp.manual_debt_recovery_allocations, pg_temp.manual_debt_recovery_totals, pg_temp.overpayment_recovery_rows, pg_temp.overpayment_recovery_allocations, pg_temp.overpayment_recovery_totals, pg_temp.payment_advance_recovery_rows, pg_temp.payment_advance_recovery_allocations, pg_temp.finance_case_protected_allocations, pg_temp.finance_case_payee_readiness, pg_temp.finance_case_component_rows, pg_temp.finance_case_component_review_rows, pg_temp.finance_case_component_review_rows_effective, pg_temp.finance_case_due_source_amounts, pg_temp.finance_case_component_due_source_base, pg_temp.finance_case_component_due_source_shares, pg_temp.finance_case_component_due_source_allocations, pg_temp.finance_case_component_due_preview_base, pg_temp.finance_case_component_due_preview_allocations, pg_temp.finance_case_taxable_manual_debt_resolution, pg_temp.finance_case_resolution_rollup, pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup, pg_temp.summary_json, pg_temp.timesheet_case_states_flat, pg_temp.finance_case_states_flat, pg_temp.candidate_case_states_flat, pg_temp.candidate_case_states, pg_temp.case_resolution_states_json, pg_temp.finance_candidate_totals, pg_temp.candidate_finance_itemisation, pg_temp.paye_summary_breakdown_json, pg_temp.timesheet_baseline_component_rows, pg_temp.finance_baseline_component_rows, pg_temp.baseline_component_rows_json;
 
   create temporary table pay_preview_candidate_context on commit drop as
     select
@@ -15776,7 +15886,36 @@ begin
       v_funds_warning_hours_json as funds_warning_hours_json,
       v_need_name_check as need_name_check,
       v_requires_payee_map as requires_payee_map,
-      v_paye_guardrails as paye_guardrails
+      v_paye_guardrails as paye_guardrails,
+      v_effective_refresh_scope_kind as refresh_scope_kind,
+      v_targeted_timesheet_ids_json as targeted_timesheet_ids_json,
+      v_linked_timesheet_ids_json as linked_timesheet_ids_json
+  ;
+
+  create temporary table targeted_refresh_timesheet_ids on commit drop as
+    select distinct
+      nullif(btrim(targeted_scope_array.value), '')::uuid as timesheet_id
+    from jsonb_array_elements_text(v_targeted_timesheet_ids_json) as targeted_scope_array(value)
+    where nullif(btrim(targeted_scope_array.value), '') is not null
+  ;
+
+  create temporary table linked_refresh_timesheet_ids on commit drop as
+    select distinct
+      nullif(btrim(linked_scope_array.value), '')::uuid as timesheet_id
+    from jsonb_array_elements_text(v_linked_timesheet_ids_json) as linked_scope_array(value)
+    where nullif(btrim(linked_scope_array.value), '') is not null
+  ;
+
+  create temporary table targeted_refresh_all_timesheet_ids on commit drop as
+    select distinct x.timesheet_id
+    from (
+      select trti.timesheet_id
+      from targeted_refresh_timesheet_ids trti
+      union
+      select lrti.timesheet_id
+      from linked_refresh_timesheet_ids lrti
+    ) as x
+    where x.timesheet_id is not null
   ;
   create temporary table active_snoozes on commit drop as
         select
@@ -15792,9 +15931,28 @@ begin
           s.note
         from public.pay_item_snoozes s
         where s.cleared_at_utc is null
+          and s.candidate_id = v_candidate_id
           and (
             s.snooze_until_date is null
             or s.snooze_until_date >= v_pay_date
+          )
+          and (
+            v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+            or s.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+            or s.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+            or (
+              s.booking_id is not null
+              and exists (
+                select 1
+                from public.timesheets ts_scope
+                where ts_scope.booking_id = s.booking_id
+                  and (
+                    ts_scope.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+                    or ts_scope.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+                  )
+              )
+            )
+            or (s.timesheet_id is null and s.booking_id is null)
           )
   
   ;
@@ -15845,6 +16003,12 @@ begin
           and tpo.consumed_at_utc is null
           and tpo.consumed_by_pay_batch_id is null
           and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
+          and tpo.candidate_id = v_candidate_id
+          and (
+            v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+            or tpo.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+            or tpo.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+          )
   
   ;
 
@@ -15857,6 +16021,12 @@ begin
           and tpo.consumed_by_pay_batch_id is null
           and upper(coalesce(tpo.override_type,'')) = 'ADVANCE_THIS_PAYMENT'
           and tpo.timesheet_id is not null
+          and tpo.candidate_id = v_candidate_id
+          and (
+            v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+            or tpo.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+            or tpo.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+          )
   
   ;
 
@@ -16116,19 +16286,24 @@ begin
           and upper(coalesce(tf.processing_status::text,'')) not in ('UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING')
           and upper(coalesce(c.pay_method,'')) in ('PAYE','UMBRELLA')
 
-          -- ✅ Eligibility: authorised within window + cutoff OR forced include OR baseline exists (recovery cases)
+          -- ✅ Eligibility: targeted rows only for TARGETED_TIMESHEETS; current live authorised rows / force include for CANDIDATE_FULL_LIVE
           and (
             (
-              ts.authorised_at_server is not null
-              and ts.week_ending_date::date >= v_eligibility_from_date
-              and ts.week_ending_date::date <= v_eligibility_to_date
-              and ts.week_ending_date::date <= v_week_ending_cutoff
+              v_effective_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+              and (
+                tf.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+                or tf.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+              )
             )
-            or fi.timesheet_id is not null
             or (
-              tps.last_settled_snapshot_json is not null
-              and ts.week_ending_date::date >= v_eligibility_from_date
-              and ts.week_ending_date::date <= v_week_ending_cutoff
+              v_effective_refresh_scope_kind = 'CANDIDATE_FULL_LIVE'
+              and (
+                (
+                  ts.authorised_at_server is not null
+                  and ts.revoked_at is null
+                )
+                or fi.timesheet_id is not null
+              )
             )
           )
 
@@ -16146,7 +16321,13 @@ begin
         from public.pay_advances pa
         where pa.advance_kind = 'OVERPAYMENT'::public.pay_advance_kind_enum
           and pa.status in ('ACTIVE'::public.pay_advance_status_enum, 'PAID_OFF'::public.pay_advance_status_enum)
+          and pa.candidate_id = v_candidate_id
           and pa.linked_timesheet_id is not null
+          and (
+            v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+            or pa.linked_timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+            or pa.linked_timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+          )
         group by
           pa.candidate_id,
           pa.linked_timesheet_id,
@@ -16174,6 +16355,12 @@ begin
         from public.ts_pay_adjustments a
         where a.as_advance = false
           and a.timesheet_id is not null
+          and a.candidate_id = v_candidate_id
+          and (
+            v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+            or a.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+            or a.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+          )
   
   ;
 
@@ -16360,6 +16547,137 @@ begin
   
   ;
 
+  create temporary table targeted_baseline_only_ts_current on commit drop as
+        select
+          coalesce(tf_any.candidate_id, v_candidate_id) as candidate_id,
+          tri.timesheet_id,
+          tf_any.id as tsfin_id,
+          tf_any.client_id as client_id,
+          ts.booking_id as ts_booking_id,
+          coalesce(tf_any.role, con.role, ts.job_title_norm) as ts_role,
+          coalesce(tf_any.band, con.band, ts.band) as ts_band,
+          ts.week_ending_date as ts_week_ending_date,
+          cl.name as ts_client_name,
+          upper(coalesce(tf_any.pay_method, cand.pay_method, '')) as ts_pay_method,
+          upper(coalesce(cand.pay_method, '')) as cand_pay_method,
+          cand.tms_ref as cand_tms_ref,
+          cand.display_name as cand_display_name,
+          cand.umbrella_id as cand_umbrella_id,
+          cand.bank_details_hash as cand_bank_hash,
+          ts.reference_number,
+          case when coalesce(con.overrideclientsettings,false) = true then coalesce(con.require_reference_to_pay,false) else coalesce(cs.pay_reference_required,false) end as require_reference_to_pay,
+          false as is_forced_advance,
+          coalesce(um.vat_chargeable,false) as umb_vat_chargeable,
+          coalesce(um.umb_enabled,false) as umb_enabled,
+          um.umb_bank_hash,
+          jsonb_build_array(
+            jsonb_build_object(
+              'segment_id', ('ts:' || tri.timesheet_id::text),
+              'pay_amount', 0,
+              'charge_amount', 0,
+              'units', 0,
+              'hours', 0,
+              'hours_day', 0,
+              'hours_night', 0,
+              'hours_sat', 0,
+              'hours_sun', 0,
+              'hours_bh', 0,
+              'exclude_from_pay', false,
+              'ref_num', nullif(btrim(coalesce(ts.reference_number,'')), ''),
+              'date', null,
+              'segment_key', ('ts:' || tri.timesheet_id::text),
+              'segment_stable_key', ('timesheet:' || coalesce(ts.booking_id, tri.timesheet_id::text)),
+              'start_utc', null,
+              'end_utc', null,
+              'start', null,
+              'end', null,
+              'break_start', null,
+              'break_end', null,
+              'break_mins', null,
+              'breaks', '[]'::jsonb,
+              'client_name', cl.name,
+              'role', coalesce(tf_any.role, con.role, ts.job_title_norm),
+              'band', coalesce(tf_any.band, con.band, ts.band)
+            )
+          ) as current_segments_json,
+          0::numeric as total_hours,
+          0::numeric as total_pay_ex_vat,
+          0::numeric as total_charge_ex_vat,
+          0::numeric as hours_day,
+          0::numeric as hours_night,
+          0::numeric as hours_sat,
+          0::numeric as hours_sun,
+          0::numeric as hours_bh,
+          null::numeric as pay_day,
+          null::numeric as pay_night,
+          null::numeric as pay_sat,
+          null::numeric as pay_sun,
+          null::numeric as pay_bh,
+          null::numeric as charge_day,
+          null::numeric as charge_night,
+          null::numeric as charge_sat,
+          null::numeric as charge_sun,
+          null::numeric as charge_bh,
+          '{}'::jsonb as current_additional_units_json,
+          0::numeric as current_additional_pay_ex_vat,
+          0::numeric as current_additional_charge_ex_vat,
+          0::numeric as current_expenses_pay_ex_vat,
+          0::numeric as current_expenses_charge_ex_vat,
+          0::numeric as current_travel_pay_ex_vat,
+          0::numeric as current_travel_charge_ex_vat,
+          0::numeric as current_accommodation_pay_ex_vat,
+          0::numeric as current_accommodation_charge_ex_vat,
+          0::numeric as current_other_pay_ex_vat,
+          0::numeric as current_other_charge_ex_vat,
+          0::numeric as current_mileage_pay_ex_vat,
+          0::numeric as current_mileage_charge_ex_vat,
+          '[]'::jsonb as current_adjustments_json,
+          tps.last_settled_snapshot_json,
+          coalesce(
+            tps.last_settled_signature,
+            md5(coalesce(tps.last_settled_snapshot_json::text, '{}'))
+          ) as baseline_signature,
+          (doc.timesheet_id is not null) as has_active_overpayment_case
+        from targeted_refresh_all_timesheet_ids tri
+        join public.timesheet_pay_state tps
+          on tps.timesheet_id = tri.timesheet_id
+        left join lateral (
+          select tf.*
+          from public.timesheets_financials tf
+          where tf.timesheet_id = tri.timesheet_id
+          order by tf.is_current desc, tf.computed_at_utc desc nulls last, tf.id desc
+          limit 1
+        ) tf_any on true
+        join public.candidates cand
+          on cand.id = coalesce(tf_any.candidate_id, v_candidate_id)
+        left join public.timesheets ts
+          on ts.timesheet_id = tri.timesheet_id
+        left join public.contracts con
+          on con.id = ts.contract_id
+        left join public.client_settings cs
+          on cs.client_id = tf_any.client_id
+        left join public.clients cl
+          on cl.id = tf_any.client_id
+        left join umb_map um
+          on um.umbrella_id = cand.umbrella_id
+        left join debted_overpayment_cases doc
+          on doc.candidate_id = coalesce(tf_any.candidate_id, v_candidate_id)
+         and doc.timesheet_id = tri.timesheet_id
+         and coalesce(doc.baseline_signature, '') = coalesce(tps.last_settled_signature, md5(coalesce(tps.last_settled_snapshot_json::text, '{}')))
+        where v_effective_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+          and (
+            tps.last_settled_snapshot_json is not null
+            or tps.last_settled_signature is not null
+            or tps.last_settled_pay_batch_id is not null
+            or tps.last_settled_at_utc is not null
+          )
+          and not exists (
+            select 1
+            from ts_current cur
+            where cur.timesheet_id = tri.timesheet_id
+          )
+  ;
+
   create temporary table ts_baseline on commit drop as
         select
           t.candidate_id,
@@ -16512,7 +16830,11 @@ begin
           t.current_other_charge_ex_vat,
           t.current_mileage_pay_ex_vat,
           t.current_mileage_charge_ex_vat
-        from ts_current t
+        from (
+          select * from ts_current
+          union all
+          select * from targeted_baseline_only_ts_current
+        ) t
   
   ;
 
@@ -16556,11 +16878,20 @@ begin
           )
           and (v_candidate_id is null or vfcr.candidate_id = v_candidate_id)
           and (v_client_id is null or vfcr.client_id = v_client_id)
+          and (
+            v_effective_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+            or vfcr.linked_timesheet_id is null
+            or vfcr.linked_timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+            or vfcr.linked_timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+          )
   
   ;
 
   return jsonb_build_object(
     'candidate_id', v_candidate_id::text,
+    'refresh_scope_kind', v_effective_refresh_scope_kind,
+    'targeted_timesheet_ids', v_targeted_timesheet_ids_json,
+    'linked_timesheet_ids', v_linked_timesheet_ids_json,
     'ts_baseline_count', (select count(*)::int from ts_baseline),
     'finance_case_scope_count', (select count(*)::int from finance_case_baseline_scope),
     'active_snooze_count', (select count(*)::int from active_snoozes)
