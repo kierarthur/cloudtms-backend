@@ -27922,3 +27922,207 @@ $function$
 
 
 
+CREATE OR REPLACE FUNCTION public._pay_workbench_merge_targeted_scope_payload(p_existing jsonb, p_incoming jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ IMMUTABLE
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_existing jsonb := CASE WHEN jsonb_typeof(COALESCE(p_existing, '{}'::jsonb)) = 'object' THEN COALESCE(p_existing, '{}'::jsonb) ELSE '{}'::jsonb END;
+  v_incoming jsonb := CASE WHEN jsonb_typeof(COALESCE(p_incoming, '{}'::jsonb)) = 'object' THEN COALESCE(p_incoming, '{}'::jsonb) ELSE '{}'::jsonb END;
+  v_result jsonb := '{}'::jsonb;
+  v_targeted_timesheet_ids jsonb := '[]'::jsonb;
+  v_linked_timesheet_ids jsonb := '[]'::jsonb;
+  v_reasons_json jsonb := '[]'::jsonb;
+  v_existing_scope_kind text := NULL;
+  v_incoming_scope_kind text := NULL;
+  v_effective_scope_kind text := NULL;
+  v_existing_candidate_id text := NULL;
+  v_incoming_candidate_id text := NULL;
+  v_effective_candidate_id text := NULL;
+  v_existing_reason text := NULL;
+  v_incoming_reason text := NULL;
+  v_effective_reason text := NULL;
+  v_existing_source_change_seq_text text := NULL;
+  v_incoming_source_change_seq_text text := NULL;
+  v_existing_source_change_seq bigint := NULL;
+  v_incoming_source_change_seq bigint := NULL;
+  v_effective_source_change_seq_text text := NULL;
+BEGIN
+  v_result := v_existing || v_incoming;
+
+  v_existing_scope_kind := NULLIF(UPPER(BTRIM(COALESCE(v_existing->>'refresh_scope_kind', ''))), '');
+  v_incoming_scope_kind := NULLIF(UPPER(BTRIM(COALESCE(v_incoming->>'refresh_scope_kind', ''))), '');
+
+  v_effective_scope_kind := CASE
+    WHEN v_existing_scope_kind = 'CANDIDATE_FULL_LIVE' OR v_incoming_scope_kind = 'CANDIDATE_FULL_LIVE' THEN 'CANDIDATE_FULL_LIVE'
+    WHEN v_existing_scope_kind = 'TARGETED_TIMESHEETS' OR v_incoming_scope_kind = 'TARGETED_TIMESHEETS' THEN 'TARGETED_TIMESHEETS'
+    WHEN v_incoming_scope_kind IS NOT NULL THEN v_incoming_scope_kind
+    ELSE v_existing_scope_kind
+  END;
+
+  v_existing_candidate_id := NULLIF(BTRIM(COALESCE(v_existing->>'candidate_id', '')), '');
+  v_incoming_candidate_id := NULLIF(BTRIM(COALESCE(v_incoming->>'candidate_id', '')), '');
+  v_effective_candidate_id := COALESCE(v_existing_candidate_id, v_incoming_candidate_id);
+
+  v_existing_reason := NULLIF(BTRIM(COALESCE(v_existing->>'reason', '')), '');
+  v_incoming_reason := NULLIF(BTRIM(COALESCE(v_incoming->>'reason', '')), '');
+  v_effective_reason := COALESCE(v_incoming_reason, v_existing_reason);
+
+  v_existing_source_change_seq_text := NULLIF(BTRIM(COALESCE(v_existing->>'source_change_seq', '')), '');
+  v_incoming_source_change_seq_text := NULLIF(BTRIM(COALESCE(v_incoming->>'source_change_seq', '')), '');
+
+  IF v_existing_source_change_seq_text ~ '^-?[0-9]+$' THEN
+    v_existing_source_change_seq := v_existing_source_change_seq_text::bigint;
+  END IF;
+
+  IF v_incoming_source_change_seq_text ~ '^-?[0-9]+$' THEN
+    v_incoming_source_change_seq := v_incoming_source_change_seq_text::bigint;
+  END IF;
+
+  v_effective_source_change_seq_text := CASE
+    WHEN v_existing_source_change_seq IS NOT NULL AND v_incoming_source_change_seq IS NOT NULL THEN GREATEST(v_existing_source_change_seq, v_incoming_source_change_seq)::text
+    WHEN v_incoming_source_change_seq IS NOT NULL THEN v_incoming_source_change_seq::text
+    WHEN v_existing_source_change_seq IS NOT NULL THEN v_existing_source_change_seq::text
+    WHEN v_incoming_source_change_seq_text IS NOT NULL THEN v_incoming_source_change_seq_text
+    ELSE v_existing_source_change_seq_text
+  END;
+
+  SELECT COALESCE(jsonb_agg(targeted_scope_ids.targeted_timesheet_id ORDER BY targeted_scope_ids.targeted_timesheet_id), '[]'::jsonb)
+  INTO v_targeted_timesheet_ids
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(targeted_scope_values.targeted_timesheet_id_raw), '') AS targeted_timesheet_id
+    FROM (
+      SELECT targeted_scope_existing_array.value AS targeted_timesheet_id_raw
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_existing->'targeted_timesheet_ids') = 'array' THEN v_existing->'targeted_timesheet_ids'
+          WHEN jsonb_typeof(v_existing->'targeted_timesheet_ids') = 'string' THEN jsonb_build_array(v_existing->>'targeted_timesheet_ids')
+          ELSE '[]'::jsonb
+        END
+      ) AS targeted_scope_existing_array(value)
+
+      UNION ALL
+
+      SELECT targeted_scope_incoming_array.value AS targeted_timesheet_id_raw
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_incoming->'targeted_timesheet_ids') = 'array' THEN v_incoming->'targeted_timesheet_ids'
+          WHEN jsonb_typeof(v_incoming->'targeted_timesheet_ids') = 'string' THEN jsonb_build_array(v_incoming->>'targeted_timesheet_ids')
+          ELSE '[]'::jsonb
+        END
+      ) AS targeted_scope_incoming_array(value)
+    ) AS targeted_scope_values
+    WHERE NULLIF(BTRIM(targeted_scope_values.targeted_timesheet_id_raw), '') IS NOT NULL
+  ) AS targeted_scope_ids;
+
+  SELECT COALESCE(jsonb_agg(linked_scope_ids.linked_timesheet_id ORDER BY linked_scope_ids.linked_timesheet_id), '[]'::jsonb)
+  INTO v_linked_timesheet_ids
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(linked_scope_values.linked_timesheet_id_raw), '') AS linked_timesheet_id
+    FROM (
+      SELECT linked_scope_existing_array.value AS linked_timesheet_id_raw
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_existing->'linked_timesheet_ids') = 'array' THEN v_existing->'linked_timesheet_ids'
+          WHEN jsonb_typeof(v_existing->'linked_timesheet_ids') = 'string' THEN jsonb_build_array(v_existing->>'linked_timesheet_ids')
+          ELSE '[]'::jsonb
+        END
+      ) AS linked_scope_existing_array(value)
+
+      UNION ALL
+
+      SELECT linked_scope_incoming_array.value AS linked_timesheet_id_raw
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_incoming->'linked_timesheet_ids') = 'array' THEN v_incoming->'linked_timesheet_ids'
+          WHEN jsonb_typeof(v_incoming->'linked_timesheet_ids') = 'string' THEN jsonb_build_array(v_incoming->>'linked_timesheet_ids')
+          ELSE '[]'::jsonb
+        END
+      ) AS linked_scope_incoming_array(value)
+    ) AS linked_scope_values
+    WHERE NULLIF(BTRIM(linked_scope_values.linked_timesheet_id_raw), '') IS NOT NULL
+  ) AS linked_scope_ids;
+
+  SELECT COALESCE(jsonb_agg(reason_values.reason_value ORDER BY reason_values.reason_ord), '[]'::jsonb)
+  INTO v_reasons_json
+  FROM (
+    SELECT deduped_reasons.reason_value, MIN(deduped_reasons.reason_ord) AS reason_ord
+    FROM (
+      SELECT NULLIF(BTRIM(COALESCE(v_existing->>'reason', '')), '') AS reason_value,
+             1::bigint AS reason_ord
+
+      UNION ALL
+
+      SELECT NULLIF(BTRIM(existing_reason_array.value), '') AS reason_value,
+             1000::bigint + existing_reason_array.ordinality AS reason_ord
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_existing->'reasons') = 'array' THEN v_existing->'reasons'
+          WHEN jsonb_typeof(v_existing->'reasons') = 'string' THEN jsonb_build_array(v_existing->>'reasons')
+          ELSE '[]'::jsonb
+        END
+      ) WITH ORDINALITY AS existing_reason_array(value, ordinality)
+
+      UNION ALL
+
+      SELECT NULLIF(BTRIM(COALESCE(v_incoming->>'reason', '')), '') AS reason_value,
+             1000000::bigint AS reason_ord
+
+      UNION ALL
+
+      SELECT NULLIF(BTRIM(incoming_reason_array.value), '') AS reason_value,
+             1001000::bigint + incoming_reason_array.ordinality AS reason_ord
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_incoming->'reasons') = 'array' THEN v_incoming->'reasons'
+          WHEN jsonb_typeof(v_incoming->'reasons') = 'string' THEN jsonb_build_array(v_incoming->>'reasons')
+          ELSE '[]'::jsonb
+        END
+      ) WITH ORDINALITY AS incoming_reason_array(value, ordinality)
+    ) AS deduped_reasons
+    WHERE deduped_reasons.reason_value IS NOT NULL
+    GROUP BY deduped_reasons.reason_value
+  ) AS reason_values;
+
+  IF v_effective_scope_kind IS NOT NULL THEN
+    v_result := v_result || jsonb_build_object('refresh_scope_kind', v_effective_scope_kind);
+  ELSE
+    v_result := v_result - 'refresh_scope_kind';
+  END IF;
+
+  v_result := v_result || jsonb_build_object('targeted_timesheet_ids', v_targeted_timesheet_ids);
+  v_result := v_result || jsonb_build_object('linked_timesheet_ids', v_linked_timesheet_ids);
+
+  IF v_effective_candidate_id IS NOT NULL THEN
+    v_result := v_result || jsonb_build_object('candidate_id', v_effective_candidate_id);
+  ELSE
+    v_result := v_result - 'candidate_id';
+  END IF;
+
+  IF v_effective_reason IS NOT NULL THEN
+    v_result := v_result || jsonb_build_object('reason', v_effective_reason);
+  ELSE
+    v_result := v_result - 'reason';
+  END IF;
+
+  IF jsonb_array_length(v_reasons_json) > 0 THEN
+    v_result := v_result || jsonb_build_object('reasons', v_reasons_json);
+  ELSE
+    v_result := v_result - 'reasons';
+  END IF;
+
+  IF v_effective_source_change_seq_text IS NOT NULL THEN
+    IF v_effective_source_change_seq_text ~ '^-?[0-9]+$' THEN
+      v_result := v_result || jsonb_build_object('source_change_seq', v_effective_source_change_seq_text::bigint);
+    ELSE
+      v_result := v_result || jsonb_build_object('source_change_seq', v_effective_source_change_seq_text);
+    END IF;
+  ELSE
+    v_result := v_result - 'source_change_seq';
+  END IF;
+
+  RETURN v_result;
+END;
+$function$
