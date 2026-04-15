@@ -27918,7 +27918,7 @@ BEGIN
     'supported_job_type', v_supported_job_type
   );
 END;
-$function$
+$function$;
 
 
 
@@ -28125,4 +28125,4 @@ BEGIN
 
   RETURN v_result;
 END;
-$function$
+$function$;
