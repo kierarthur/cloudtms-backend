@@ -235,17 +235,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(
-  p_snapshot_run_id uuid,
-  p_candidate_id uuid,
-  p_reason text DEFAULT NULL::text,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_payload_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -336,7 +330,10 @@ BEGIN
   DO UPDATE
   SET priority = LEAST(public.banking_pay_workbench_jobs.priority, EXCLUDED.priority),
       run_at_utc = LEAST(public.banking_pay_workbench_jobs.run_at_utc, EXCLUDED.run_at_utc),
-      payload_json = COALESCE(public.banking_pay_workbench_jobs.payload_json, '{}'::jsonb) || COALESCE(EXCLUDED.payload_json, '{}'::jsonb),
+      payload_json = public._pay_workbench_merge_targeted_scope_payload(
+        COALESCE(public.banking_pay_workbench_jobs.payload_json, '{}'::jsonb),
+        COALESCE(EXCLUDED.payload_json, '{}'::jsonb)
+      ),
       updated_at_utc = v_now
   RETURNING public.banking_pay_workbench_jobs.id, public.banking_pay_workbench_jobs.status, (xmax = 0)
   INTO v_job_id, v_job_status, v_job_was_inserted;
@@ -793,11 +790,12 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_refresh_candidate(p_snapshot_run_id uuid, p_candidate_id uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -876,6 +874,18 @@ BEGIN
   LIMIT 1;
 
   v_previous_payees_fingerprint := md5(COALESCE(v_existing_snapshot_candidate_row.payees_json, '[]'::jsonb)::text);
+
+  v_force_refresh := (
+    COALESCE(NULLIF(UPPER(BTRIM(COALESCE(v_payload_json->>'refresh_scope_kind', ''))), ''), '') IN ('TARGETED_TIMESHEETS', 'CANDIDATE_FULL_LIVE')
+    OR (
+      jsonb_typeof(COALESCE(v_payload_json->'targeted_timesheet_ids', '[]'::jsonb)) = 'array'
+      AND jsonb_array_length(COALESCE(v_payload_json->'targeted_timesheet_ids', '[]'::jsonb)) > 0
+    )
+    OR (
+      jsonb_typeof(COALESCE(v_payload_json->'linked_timesheet_ids', '[]'::jsonb)) = 'array'
+      AND jsonb_array_length(COALESCE(v_payload_json->'linked_timesheet_ids', '[]'::jsonb)) > 0
+    )
+  );
 
   IF NOT v_force_refresh
      AND v_existing_snapshot_candidate_row.id IS NOT NULL
@@ -1349,9 +1359,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
-
-
 
 
 
@@ -2815,17 +2822,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_enqueue_scope(
-  p_snapshot_run_id uuid,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_client_id uuid DEFAULT NULL::uuid,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_payload_json jsonb DEFAULT '{}'::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_enqueue_scope(p_snapshot_run_id uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_actor_user_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_run_pay_date date;
@@ -2840,6 +2841,7 @@ DECLARE
   v_candidate_ids jsonb := '[]'::jsonb;
   v_payload_json jsonb := CASE WHEN jsonb_typeof(COALESCE(p_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_payload_json, '{}'::jsonb) ELSE '{}'::jsonb END;
   v_scope_payload_json jsonb := '{}'::jsonb;
+  v_scope_context_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_snapshot_run_id IS NULL THEN
     RAISE EXCEPTION 'snapshot_run_id is required';
@@ -2926,17 +2928,25 @@ BEGIN
     );
   END IF;
 
+  v_scope_context_json := public.pay_preview_build_context(
+    p_pay_date => v_run_pay_date,
+    p_week_ending_cutoff => v_run_week_ending_cutoff,
+    p_actor_user_id => p_actor_user_id,
+    p_candidate_id => NULL::uuid,
+    p_client_id => p_client_id,
+    p_preview_decisions_json => v_scope_payload_json
+  );
+
   FOR v_candidate_id_value IN
-    SELECT DISTINCT scs.candidate_id
-    FROM public.banking_pay_snapshot_candidate_state AS scs
-    WHERE scs.snapshot_run_id = p_snapshot_run_id
-      AND (
-        POSITION(p_client_id::text IN COALESCE(scs.candidate_fragment_json, '{}'::jsonb)::text) > 0
-        OR POSITION(p_client_id::text IN COALESCE(scs.summary_fragment_json, '{}'::jsonb)::text) > 0
-        OR POSITION(p_client_id::text IN COALESCE(scs.case_resolution_states_json, '[]'::jsonb)::text) > 0
-        OR POSITION(p_client_id::text IN COALESCE(scs.canonical_preview_lines_json, '[]'::jsonb)::text) > 0
-      )
-    ORDER BY scs.candidate_id
+    SELECT DISTINCT NULLIF(BTRIM(scope_candidate_id.value), '')::uuid AS candidate_id
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(v_scope_context_json->'scope_candidate_ids') = 'array' THEN COALESCE(v_scope_context_json->'scope_candidate_ids', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS scope_candidate_id(value)
+    WHERE NULLIF(BTRIM(scope_candidate_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ORDER BY candidate_id
   LOOP
     PERFORM public.pay_workbench_enqueue_candidate_refresh(
       p_snapshot_run_id => p_snapshot_run_id,
@@ -2969,21 +2979,11 @@ END;
 $function$;
 
 
-
-
-
-CREATE OR REPLACE FUNCTION public.pay_preview_build_context(
-  p_pay_date date,
-  p_week_ending_cutoff date,
-  p_actor_user_id uuid DEFAULT NULL::uuid,
-  p_candidate_id uuid DEFAULT NULL::uuid,
-  p_client_id uuid DEFAULT NULL::uuid,
-  p_preview_decisions_json jsonb DEFAULT NULL::jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_preview_build_context(p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_preview_decisions_json jsonb DEFAULT NULL::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_today_uk date := (now() AT TIME ZONE 'Europe/London')::date;
@@ -3159,110 +3159,141 @@ BEGIN
       v_scope_candidate_ids,
       v_scope_candidate_count;
   ELSE
-    WITH force_include AS (
-      SELECT DISTINCT
-        public.timesheet_payment_overrides.timesheet_id
-      FROM public.timesheet_payment_overrides
-      WHERE public.timesheet_payment_overrides.cleared_at_utc IS NULL
-        AND public.timesheet_payment_overrides.consumed_at_utc IS NULL
-        AND public.timesheet_payment_overrides.consumed_by_pay_batch_id IS NULL
-        AND UPPER(COALESCE(public.timesheet_payment_overrides.override_type, '')) = 'ADVANCE_THIS_PAYMENT'
-        AND public.timesheet_payment_overrides.timesheet_id IS NOT NULL
-    ),
-    timesheet_scope AS (
-      SELECT DISTINCT
-        public.timesheets_financials.candidate_id
-      FROM public.timesheets_financials
-      JOIN public.timesheets
-        ON public.timesheets.timesheet_id = public.timesheets_financials.timesheet_id
-      JOIN public.candidates
-        ON public.candidates.id = public.timesheets_financials.candidate_id
-      LEFT JOIN public.timesheet_pay_state
-        ON public.timesheet_pay_state.timesheet_id = public.timesheets_financials.timesheet_id
-      LEFT JOIN force_include
-        ON force_include.timesheet_id = public.timesheets_financials.timesheet_id
-      WHERE public.timesheets_financials.is_current = true
-        AND COALESCE(public.timesheets_financials.pay_on_hold, false) = false
-        AND COALESCE(public.timesheets_financials.has_rate_issue, false) = false
-        AND COALESCE(public.timesheets_financials.has_pay_channel_issue, false) = false
-        AND UPPER(COALESCE(public.timesheets_financials.processing_status::text, '')) NOT IN ('UNASSIGNED', 'CLIENT_UNRESOLVED', 'RATE_MISSING', 'PAY_CHANNEL_MISSING')
-        AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
-        AND (
-          (
-            public.timesheets.authorised_at_server IS NOT NULL
-            AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
-            AND public.timesheets.week_ending_date::date <= v_eligibility_to_date
-            AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
-          )
-          OR force_include.timesheet_id IS NOT NULL
-          OR (
-            public.timesheet_pay_state.last_settled_snapshot_json IS NOT NULL
-            AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
-            AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
-          )
-        )
-        AND (p_client_id IS NULL OR public.timesheets_financials.client_id = p_client_id)
-    ),
-    finance_scope AS (
-      SELECT DISTINCT
-        public.v_finance_cases_register.candidate_id
-      FROM public.v_finance_cases_register
-      JOIN public.candidates
-        ON public.candidates.id = public.v_finance_cases_register.candidate_id
-      WHERE public.v_finance_cases_register.case_type IN (
-          'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
-          'OVERPAYMENT'::public.pay_finance_case_type_enum,
-          'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
-          'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
-        )
-        AND UPPER(COALESCE(public.v_finance_cases_register.status::text, '')) = 'ACTIVE'
-        AND COALESCE(public.v_finance_cases_register.outstanding_amount, 0) > 0
-        AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
-        AND NOT (
-          public.v_finance_cases_register.active_snooze_id IS NOT NULL
-          AND public.v_finance_cases_register.active_snooze_until_date IS NULL
-        )
-        AND (
-          (
-            public.v_finance_cases_register.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
-            AND (
-              UPPER(COALESCE(public.v_finance_cases_register.payout_status::text, '')) <> 'PAID'
-              OR public.v_finance_cases_register.next_due_week_start IS NULL
-              OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+    IF p_client_id IS NOT NULL THEN
+      WITH force_include AS (
+        SELECT DISTINCT
+          public.timesheet_payment_overrides.timesheet_id
+        FROM public.timesheet_payment_overrides
+        WHERE public.timesheet_payment_overrides.cleared_at_utc IS NULL
+          AND public.timesheet_payment_overrides.consumed_at_utc IS NULL
+          AND public.timesheet_payment_overrides.consumed_by_pay_batch_id IS NULL
+          AND UPPER(COALESCE(public.timesheet_payment_overrides.override_type, '')) = 'ADVANCE_THIS_PAYMENT'
+          AND public.timesheet_payment_overrides.timesheet_id IS NOT NULL
+      ),
+      timesheet_scope AS (
+        SELECT DISTINCT
+          public.timesheets_financials.candidate_id
+        FROM public.timesheets_financials
+        JOIN public.timesheets
+          ON public.timesheets.timesheet_id = public.timesheets_financials.timesheet_id
+        JOIN public.candidates
+          ON public.candidates.id = public.timesheets_financials.candidate_id
+        LEFT JOIN public.timesheet_pay_state
+          ON public.timesheet_pay_state.timesheet_id = public.timesheets_financials.timesheet_id
+        LEFT JOIN force_include
+          ON force_include.timesheet_id = public.timesheets_financials.timesheet_id
+        WHERE public.timesheets_financials.is_current = true
+          AND COALESCE(public.timesheets_financials.pay_on_hold, false) = false
+          AND COALESCE(public.timesheets_financials.has_rate_issue, false) = false
+          AND COALESCE(public.timesheets_financials.has_pay_channel_issue, false) = false
+          AND UPPER(COALESCE(public.timesheets_financials.processing_status::text, '')) NOT IN ('UNASSIGNED', 'CLIENT_UNRESOLVED', 'RATE_MISSING', 'PAY_CHANNEL_MISSING')
+          AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
+          AND (
+            (
+              public.timesheets.authorised_at_server IS NOT NULL
+              AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
+              AND public.timesheets.week_ending_date::date <= v_eligibility_to_date
+              AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
+            )
+            OR force_include.timesheet_id IS NOT NULL
+            OR (
+              public.timesheet_pay_state.last_settled_snapshot_json IS NOT NULL
+              AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
+              AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
             )
           )
-          OR (
-            public.v_finance_cases_register.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-            AND (
-              public.v_finance_cases_register.next_due_week_start IS NULL
-              OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
-            )
+          AND public.timesheets_financials.client_id = p_client_id
+      ),
+      finance_scope AS (
+        SELECT DISTINCT
+          public.v_finance_cases_register.candidate_id
+        FROM public.v_finance_cases_register
+        JOIN public.candidates
+          ON public.candidates.id = public.v_finance_cases_register.candidate_id
+        WHERE public.v_finance_cases_register.case_type IN (
+            'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+            'OVERPAYMENT'::public.pay_finance_case_type_enum,
+            'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+            'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
           )
-          OR (
-            public.v_finance_cases_register.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
-            AND (
-              public.v_finance_cases_register.next_due_week_start IS NULL
-              OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
-            )
+          AND UPPER(COALESCE(public.v_finance_cases_register.status::text, '')) = 'ACTIVE'
+          AND COALESCE(public.v_finance_cases_register.outstanding_amount, 0) > 0
+          AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
+          AND NOT (
+            public.v_finance_cases_register.active_snooze_id IS NOT NULL
+            AND public.v_finance_cases_register.active_snooze_until_date IS NULL
           )
-          OR public.v_finance_cases_register.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
-        )
-        AND (p_client_id IS NULL OR public.v_finance_cases_register.client_id = p_client_id)
-    ),
-    scope_candidates AS (
-      SELECT timesheet_scope.candidate_id
-      FROM timesheet_scope
-      UNION
-      SELECT finance_scope.candidate_id
-      FROM finance_scope
-    )
-    SELECT
-      COALESCE(jsonb_agg(to_jsonb(scope_candidates.candidate_id::text) ORDER BY scope_candidates.candidate_id), '[]'::jsonb),
-      COUNT(*)::integer
-    INTO
-      v_scope_candidate_ids,
-      v_scope_candidate_count
-    FROM scope_candidates;
+          AND (
+            (
+              public.v_finance_cases_register.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
+              AND (
+                UPPER(COALESCE(public.v_finance_cases_register.payout_status::text, '')) <> 'PAID'
+                OR public.v_finance_cases_register.next_due_week_start IS NULL
+                OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+              )
+            )
+            OR (
+              public.v_finance_cases_register.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+              AND (
+                public.v_finance_cases_register.next_due_week_start IS NULL
+                OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+              )
+            )
+            OR (
+              public.v_finance_cases_register.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+              AND (
+                public.v_finance_cases_register.next_due_week_start IS NULL
+                OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+              )
+            )
+            OR public.v_finance_cases_register.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+          )
+          AND public.v_finance_cases_register.client_id = p_client_id
+      ),
+      scope_candidates AS (
+        SELECT timesheet_scope.candidate_id
+        FROM timesheet_scope
+        UNION
+        SELECT finance_scope.candidate_id
+        FROM finance_scope
+      )
+      SELECT
+        COALESCE(jsonb_agg(to_jsonb(scope_candidates.candidate_id::text) ORDER BY scope_candidates.candidate_id), '[]'::jsonb),
+        COUNT(*)::integer
+      INTO
+        v_scope_candidate_ids,
+        v_scope_candidate_count
+      FROM scope_candidates;
+    ELSE
+      WITH targeted_scope_timesheet_ids AS (
+        SELECT DISTINCT NULLIF(BTRIM(scope_timesheet_ids.scope_timesheet_id_raw), '')::uuid AS timesheet_id
+        FROM (
+          SELECT jsonb_array_elements_text(COALESCE(v_targeted_timesheet_ids, '[]'::jsonb)) AS scope_timesheet_id_raw
+          UNION ALL
+          SELECT jsonb_array_elements_text(COALESCE(v_linked_timesheet_ids, '[]'::jsonb)) AS scope_timesheet_id_raw
+        ) AS scope_timesheet_ids
+        WHERE NULLIF(BTRIM(scope_timesheet_ids.scope_timesheet_id_raw), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      ),
+      scope_candidates AS (
+        SELECT DISTINCT COALESCE(public.timesheets_financials.candidate_id, public.contracts.candidate_id) AS candidate_id
+        FROM targeted_scope_timesheet_ids
+        JOIN public.timesheets
+          ON public.timesheets.timesheet_id = targeted_scope_timesheet_ids.timesheet_id
+        LEFT JOIN public.timesheets_financials
+          ON public.timesheets_financials.timesheet_id = public.timesheets.timesheet_id
+         AND public.timesheets_financials.is_current = true
+        LEFT JOIN public.contracts
+          ON public.contracts.id = public.timesheets.contract_id
+        WHERE COALESCE(public.timesheets_financials.candidate_id, public.contracts.candidate_id) IS NOT NULL
+      )
+      SELECT
+        COALESCE(jsonb_agg(to_jsonb(scope_candidates.candidate_id::text) ORDER BY scope_candidates.candidate_id), '[]'::jsonb),
+        COUNT(*)::integer
+      INTO
+        v_scope_candidate_ids,
+        v_scope_candidate_count
+      FROM scope_candidates;
+    END IF;
   END IF;
 
   RETURN jsonb_build_object(
@@ -3311,6 +3342,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
@@ -16823,18 +16855,11 @@ begin
 end;
 $function$;
 
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(
-  p_actor_user_id uuid,
-  p_pay_date date,
-  p_week_ending_cutoff date,
-  p_filters_json jsonb,
-  p_session_signature text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -16844,6 +16869,7 @@ DECLARE
   v_snapshot_run_id uuid := NULL::uuid;
   v_effective_week_ending_cutoff date := DATE '9999-12-31';
   v_context_json jsonb := '{}'::jsonb;
+  v_scope_resolution_context_json jsonb := '{}'::jsonb;
   v_scope_candidate_ids_jsonb jsonb := '[]'::jsonb;
   v_scope_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_existing_session_row public.banking_pay_workbench_sessions%ROWTYPE;
@@ -16915,18 +16941,26 @@ BEGIN
       END
     INTO v_scope_candidate_ids;
   ELSIF v_filter_client_id IS NOT NULL THEN
+    v_scope_resolution_context_json := public.pay_preview_build_context(
+      p_pay_date => p_pay_date,
+      p_week_ending_cutoff => v_effective_week_ending_cutoff,
+      p_actor_user_id => p_actor_user_id,
+      p_candidate_id => NULL::uuid,
+      p_client_id => v_filter_client_id,
+      p_preview_decisions_json => NULL::jsonb
+    );
+
     SELECT COALESCE(array_agg(scope_rows.candidate_id ORDER BY scope_rows.candidate_id), ARRAY[]::uuid[])
     INTO v_scope_candidate_ids
     FROM (
-      SELECT DISTINCT scs.candidate_id
-      FROM public.banking_pay_snapshot_candidate_state AS scs
-      WHERE scs.snapshot_run_id = v_snapshot_run_id
-        AND (
-          POSITION(v_filter_client_id::text IN COALESCE(scs.candidate_fragment_json, '{}'::jsonb)::text) > 0
-          OR POSITION(v_filter_client_id::text IN COALESCE(scs.summary_fragment_json, '{}'::jsonb)::text) > 0
-          OR POSITION(v_filter_client_id::text IN COALESCE(scs.case_resolution_states_json, '[]'::jsonb)::text) > 0
-          OR POSITION(v_filter_client_id::text IN COALESCE(scs.canonical_preview_lines_json, '[]'::jsonb)::text) > 0
-        )
+      SELECT DISTINCT NULLIF(BTRIM(scope_candidate_id.value), '')::uuid AS candidate_id
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_scope_resolution_context_json->'scope_candidate_ids') = 'array' THEN COALESCE(v_scope_resolution_context_json->'scope_candidate_ids', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS scope_candidate_id(value)
+      WHERE NULLIF(BTRIM(scope_candidate_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     ) AS scope_rows;
   ELSE
     SELECT COALESCE(array_agg(scope_rows.candidate_id ORDER BY scope_rows.candidate_id), ARRAY[]::uuid[])
@@ -16935,10 +16969,22 @@ BEGIN
       SELECT DISTINCT scs.candidate_id
       FROM public.banking_pay_snapshot_candidate_state AS scs
       WHERE scs.snapshot_run_id = v_snapshot_run_id
+      UNION
+      SELECT DISTINCT j.candidate_id
+      FROM public.banking_pay_workbench_jobs AS j
+      WHERE j.snapshot_run_id = v_snapshot_run_id
+        AND j.job_type = 'SNAPSHOT_CANDIDATE_REFRESH'
+        AND j.candidate_id IS NOT NULL
+        AND j.status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED')
+      UNION
+      SELECT DISTINCT scs2.candidate_id
+      FROM public.banking_pay_workbench_session_candidate_state AS scs2
+      JOIN public.banking_pay_workbench_sessions AS ws2
+        ON ws2.id = scs2.session_id
+      WHERE ws2.status = 'OPEN'
+        AND ws2.source_snapshot_run_id = v_snapshot_run_id
     ) AS scope_rows;
   END IF;
-
-  v_scope_candidate_ids_jsonb := to_jsonb(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[]));
 
   SELECT ws.*
   INTO v_existing_session_row
@@ -16947,6 +16993,16 @@ BEGIN
     AND ws.session_signature = v_session_signature
     AND ws.status = 'OPEN'
   LIMIT 1;
+
+  IF v_existing_session_row.id IS NOT NULL
+     AND v_filter_candidate_id IS NULL
+     AND v_filter_client_id IS NULL
+     AND COALESCE(array_length(v_scope_candidate_ids, 1), 0) = 0
+     AND v_existing_session_row.source_snapshot_run_id = v_snapshot_run_id THEN
+    v_scope_candidate_ids := COALESCE(v_existing_session_row.scope_candidate_ids, ARRAY[]::uuid[]);
+  END IF;
+
+  v_scope_candidate_ids_jsonb := to_jsonb(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[]));
 
   IF v_existing_session_row.id IS NULL THEN
     INSERT INTO public.banking_pay_workbench_sessions (
