@@ -6494,3 +6494,411 @@ begin
   return;
 end
 $function$;
+CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(
+  p_week_id uuid,
+  p_expected_timesheet_id uuid DEFAULT NULL,
+  p_timesheet_create_json jsonb DEFAULT NULL,
+  p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb,
+  p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb,
+  p_tsfin_snapshot_json jsonb DEFAULT NULL,
+  p_now_utc timestamptz DEFAULT now()
+)
+RETURNS TABLE(
+  contract_week_id uuid,
+  contract_id uuid,
+  timesheet_id uuid,
+  current_timesheet_id uuid,
+  current_timesheet_version integer,
+  was_stale boolean,
+  created_now boolean,
+  processing_status public.ts_fin_processing_status_enum,
+  contract_week_json jsonb,
+  timesheet_json jsonb,
+  timesheet_financials_json jsonb
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := COALESCE(p_now_utc, now());
+  v_week public.contract_weeks%ROWTYPE;
+  v_contract public.contracts%ROWTYPE;
+  v_pointer_ts public.timesheets%ROWTYPE;
+  v_current_ts public.timesheets%ROWTYPE;
+  v_current_tsfin public.timesheets_financials%ROWTYPE;
+  v_create_json jsonb := CASE
+    WHEN p_timesheet_create_json IS NULL THEN NULL
+    WHEN jsonb_typeof(p_timesheet_create_json) = 'object' THEN p_timesheet_create_json
+    ELSE NULL
+  END;
+  v_patch_json jsonb := CASE
+    WHEN p_timesheet_patch_json IS NULL THEN '{}'::jsonb
+    WHEN jsonb_typeof(p_timesheet_patch_json) = 'object' THEN p_timesheet_patch_json
+    ELSE NULL
+  END;
+  v_week_patch_json jsonb := CASE
+    WHEN p_contract_week_patch_json IS NULL THEN '{}'::jsonb
+    WHEN jsonb_typeof(p_contract_week_patch_json) = 'object' THEN p_contract_week_patch_json
+    ELSE NULL
+  END;
+  v_tsfin_snapshot_json jsonb := CASE
+    WHEN p_tsfin_snapshot_json IS NULL THEN NULL
+    WHEN jsonb_typeof(p_tsfin_snapshot_json) = 'object' THEN p_tsfin_snapshot_json
+    ELSE NULL
+  END;
+  v_create_rec public.timesheets%ROWTYPE;
+  v_patch_rec public.timesheets%ROWTYPE;
+  v_week_patch_rec public.contract_weeks%ROWTYPE;
+  v_created_now boolean := false;
+  v_was_stale boolean := false;
+  v_outbox public.ts_financials_outbox%ROWTYPE;
+  v_write_result record;
+BEGIN
+  IF p_week_id IS NULL THEN
+    RAISE EXCEPTION 'p_week_id is required';
+  END IF;
+
+  IF p_timesheet_patch_json IS NOT NULL AND v_patch_json IS NULL THEN
+    RAISE EXCEPTION 'p_timesheet_patch_json must be a JSON object';
+  END IF;
+
+  IF p_contract_week_patch_json IS NOT NULL AND v_week_patch_json IS NULL THEN
+    RAISE EXCEPTION 'p_contract_week_patch_json must be a JSON object';
+  END IF;
+
+  IF p_timesheet_create_json IS NOT NULL AND v_create_json IS NULL THEN
+    RAISE EXCEPTION 'p_timesheet_create_json must be a JSON object';
+  END IF;
+
+  IF p_tsfin_snapshot_json IS NOT NULL AND v_tsfin_snapshot_json IS NULL THEN
+    RAISE EXCEPTION 'p_tsfin_snapshot_json must be a JSON object';
+  END IF;
+
+  SELECT *
+  INTO v_week
+  FROM public.contract_weeks AS cw
+  WHERE cw.id = p_week_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CONTRACT_WEEK_NOT_FOUND';
+  END IF;
+
+  SELECT *
+  INTO v_contract
+  FROM public.contracts AS ct
+  WHERE ct.id = v_week.contract_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CONTRACT_NOT_FOUND';
+  END IF;
+
+  IF v_week.timesheet_id IS NOT NULL THEN
+    SELECT *
+    INTO v_pointer_ts
+    FROM public.timesheets AS ts
+    WHERE ts.timesheet_id = v_week.timesheet_id
+    LIMIT 1
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'TIMESHEET_NOT_FOUND';
+    END IF;
+
+    IF COALESCE(v_pointer_ts.is_current, false) THEN
+      v_current_ts := v_pointer_ts;
+    ELSE
+      SELECT *
+      INTO v_current_ts
+      FROM public.timesheets AS ts
+      WHERE ts.booking_id = v_pointer_ts.booking_id
+        AND ts.is_current = true
+      ORDER BY ts.version DESC, ts.timesheet_id DESC
+      LIMIT 1
+      FOR UPDATE;
+
+      IF NOT FOUND THEN
+        SELECT *
+        INTO v_current_ts
+        FROM public.timesheets AS ts
+        WHERE ts.booking_id = v_pointer_ts.booking_id
+        ORDER BY ts.version DESC, ts.timesheet_id DESC
+        LIMIT 1
+        FOR UPDATE;
+
+        IF NOT FOUND THEN
+          v_current_ts := v_pointer_ts;
+        END IF;
+      END IF;
+    END IF;
+
+    IF v_current_ts.timesheet_id IS DISTINCT FROM v_week.timesheet_id THEN
+      v_was_stale := true;
+    END IF;
+
+    IF p_expected_timesheet_id IS NULL THEN
+      RAISE EXCEPTION 'expected_timesheet_id is required';
+    END IF;
+
+    IF p_expected_timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id THEN
+      RAISE EXCEPTION USING
+        MESSAGE = 'TIMESHEET_MOVED',
+        DETAIL = jsonb_build_object(
+          'current_timesheet_id', v_current_ts.timesheet_id::text
+        )::text;
+    END IF;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NULL THEN
+    IF v_create_json IS NULL THEN
+      RAISE EXCEPTION 'p_timesheet_create_json is required when no current timesheet exists';
+    END IF;
+
+    v_create_rec := jsonb_populate_record(NULL::public.timesheets, v_create_json);
+
+    IF NULLIF(BTRIM(COALESCE(v_create_rec.booking_id, '')), '') IS NULL THEN
+      RAISE EXCEPTION 'booking_id is required for create';
+    END IF;
+
+    IF COALESCE(v_create_rec.week_ending_date, v_week.week_ending_date) IS DISTINCT FROM v_week.week_ending_date THEN
+      RAISE EXCEPTION 'week_ending_date must match contract_weeks.week_ending_date';
+    END IF;
+
+    IF COALESCE(v_create_rec.contract_id, v_week.contract_id) IS DISTINCT FROM v_week.contract_id THEN
+      RAISE EXCEPTION 'contract_id must match contract_weeks.contract_id';
+    END IF;
+
+    INSERT INTO public.timesheets (
+      timesheet_id,
+      booking_id,
+      occupant_key_norm,
+      hospital_norm,
+      ward_norm,
+      job_title_norm,
+      shift_label_norm,
+      week_ending_date,
+      authorised_at_server,
+      status,
+      created_at,
+      updated_at,
+      version,
+      is_current,
+      contract_id,
+      submission_mode,
+      manual_pdf_r2_key,
+      line_type,
+      sheet_scope,
+      actual_schedule_json,
+      additional_units_week,
+      additional_units_per_day,
+      qr_token,
+      qr_status,
+      qr_payload_json,
+      qr_generated_at,
+      qr_scanned_at,
+      qr_scan_info_json,
+      qr_r2_key,
+      day_references_json,
+      manual_pdf_rotation_degrees,
+      qr_last_sent_hash,
+      qr_last_sent_at_utc,
+      qr_signed_hash,
+      qr_signed_at_utc
+    )
+    VALUES (
+      COALESCE(v_create_rec.timesheet_id, gen_random_uuid()),
+      v_create_rec.booking_id,
+      v_create_rec.occupant_key_norm,
+      v_create_rec.hospital_norm,
+      v_create_rec.ward_norm,
+      v_create_rec.job_title_norm,
+      COALESCE(v_create_rec.shift_label_norm, 'weekly'),
+      v_week.week_ending_date,
+      v_create_rec.authorised_at_server,
+      COALESCE(v_create_rec.status, 'RECEIVED'::public.timesheet_status_enum),
+      COALESCE(v_create_rec.created_at, v_now),
+      COALESCE(v_create_rec.updated_at, v_now),
+      COALESCE(v_create_rec.version, 1),
+      true,
+      v_week.contract_id,
+      COALESCE(v_create_rec.submission_mode, 'MANUAL'::public.submission_mode_enum),
+      v_create_rec.manual_pdf_r2_key,
+      COALESCE(v_create_rec.line_type, 'HOURS'::public.timesheet_line_type_enum),
+      COALESCE(v_create_rec.sheet_scope, 'WEEKLY'::public.timesheet_scope_enum),
+      COALESCE(v_create_rec.actual_schedule_json, '[]'::jsonb),
+      COALESCE(v_create_rec.additional_units_week, '{}'::jsonb),
+      COALESCE(v_create_rec.additional_units_per_day, '{}'::jsonb),
+      v_create_rec.qr_token,
+      v_create_rec.qr_status,
+      COALESCE(v_create_rec.qr_payload_json, '{}'::jsonb),
+      v_create_rec.qr_generated_at,
+      v_create_rec.qr_scanned_at,
+      v_create_rec.qr_scan_info_json,
+      v_create_rec.qr_r2_key,
+      v_create_rec.day_references_json,
+      COALESCE(v_create_rec.manual_pdf_rotation_degrees, 0),
+      v_create_rec.qr_last_sent_hash,
+      v_create_rec.qr_last_sent_at_utc,
+      v_create_rec.qr_signed_hash,
+      v_create_rec.qr_signed_at_utc
+    )
+    RETURNING * INTO v_current_ts;
+
+    v_created_now := true;
+  ELSE
+    v_patch_rec := jsonb_populate_record(v_current_ts, v_patch_json);
+
+    UPDATE public.timesheets AS ts
+    SET occupant_key_norm = v_patch_rec.occupant_key_norm,
+        hospital_norm = v_patch_rec.hospital_norm,
+        ward_norm = v_patch_rec.ward_norm,
+        job_title_norm = v_patch_rec.job_title_norm,
+        shift_label_norm = v_patch_rec.shift_label_norm,
+        authorised_at_server = v_patch_rec.authorised_at_server,
+        status = v_patch_rec.status,
+        updated_at = CASE
+          WHEN v_patch_json ? 'updated_at' THEN COALESCE(v_patch_rec.updated_at, v_now)
+          ELSE v_now
+        END,
+        submission_mode = v_patch_rec.submission_mode,
+        manual_pdf_r2_key = v_patch_rec.manual_pdf_r2_key,
+        line_type = v_patch_rec.line_type,
+        sheet_scope = v_patch_rec.sheet_scope,
+        actual_schedule_json = v_patch_rec.actual_schedule_json,
+        additional_units_week = COALESCE(v_patch_rec.additional_units_week, '{}'::jsonb),
+        additional_units_per_day = COALESCE(v_patch_rec.additional_units_per_day, '{}'::jsonb),
+        qr_token = v_patch_rec.qr_token,
+        qr_status = v_patch_rec.qr_status,
+        qr_payload_json = COALESCE(v_patch_rec.qr_payload_json, '{}'::jsonb),
+        qr_generated_at = v_patch_rec.qr_generated_at,
+        qr_scanned_at = v_patch_rec.qr_scanned_at,
+        qr_scan_info_json = v_patch_rec.qr_scan_info_json,
+        qr_r2_key = v_patch_rec.qr_r2_key,
+        day_references_json = v_patch_rec.day_references_json,
+        manual_pdf_rotation_degrees = COALESCE(v_patch_rec.manual_pdf_rotation_degrees, 0),
+        qr_last_sent_hash = v_patch_rec.qr_last_sent_hash,
+        qr_last_sent_at_utc = v_patch_rec.qr_last_sent_at_utc,
+        qr_signed_hash = v_patch_rec.qr_signed_hash,
+        qr_signed_at_utc = v_patch_rec.qr_signed_at_utc
+    WHERE ts.timesheet_id = v_current_ts.timesheet_id
+      AND ts.is_current = true
+    RETURNING * INTO v_current_ts;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'TIMESHEET_UPDATE_FAILED';
+    END IF;
+  END IF;
+
+  v_week_patch_rec := jsonb_populate_record(v_week, v_week_patch_json);
+
+  UPDATE public.contract_weeks AS cw
+  SET status = COALESCE(v_week_patch_rec.status, cw.status),
+      submission_mode_snapshot = COALESCE(v_week_patch_rec.submission_mode_snapshot, cw.submission_mode_snapshot),
+      timesheet_id = v_current_ts.timesheet_id,
+      uploaded_pdf_r2_key = COALESCE(v_week_patch_rec.uploaded_pdf_r2_key, cw.uploaded_pdf_r2_key),
+      day_entries_json = COALESCE(v_week_patch_rec.day_entries_json, cw.day_entries_json),
+      totals_json = COALESCE(v_week_patch_rec.totals_json, cw.totals_json),
+      updated_at = CASE
+        WHEN v_week_patch_json ? 'updated_at' THEN COALESCE(v_week_patch_rec.updated_at, v_now)
+        ELSE v_now
+      END,
+      planned_schedule_json = COALESCE(v_week_patch_rec.planned_schedule_json, cw.planned_schedule_json),
+      is_adjustment = COALESCE(v_week_patch_rec.is_adjustment, cw.is_adjustment),
+      enforce_day_partition = COALESCE(v_week_patch_rec.enforce_day_partition, cw.enforce_day_partition),
+      allowed_days_mask = COALESCE(v_week_patch_rec.allowed_days_mask, cw.allowed_days_mask),
+      split_boundary_date = COALESCE(v_week_patch_rec.split_boundary_date, cw.split_boundary_date),
+      worker_note = COALESCE(v_week_patch_rec.worker_note, cw.worker_note),
+      split_group_key = COALESCE(v_week_patch_rec.split_group_key, cw.split_group_key)
+  WHERE cw.id = v_week.id
+  RETURNING * INTO v_week;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CONTRACT_WEEK_UPDATE_FAILED';
+  END IF;
+
+  IF v_tsfin_snapshot_json IS NULL THEN
+    RAISE EXCEPTION 'p_tsfin_snapshot_json is required';
+  END IF;
+
+  v_tsfin_snapshot_json :=
+    v_tsfin_snapshot_json
+    || jsonb_build_object(
+      'timesheet_id', v_current_ts.timesheet_id::text,
+      'timesheet_version', v_current_ts.version
+    );
+
+  PERFORM public.enqueue_ts_financials_priority(
+    ARRAY[v_current_ts.timesheet_id]::uuid[],
+    'CONTEXT_CHANGED'::public.ts_fin_reason_enum
+  );
+
+  SELECT *
+  INTO v_outbox
+  FROM public.tsfin_dequeue_specific(
+    ARRAY[v_current_ts.timesheet_id]::uuid[],
+    1
+  )
+  LIMIT 1;
+
+  IF v_outbox.id IS NULL THEN
+    RAISE EXCEPTION 'TSFIN_OUTBOX_DEQUEUE_FAILED';
+  END IF;
+
+  SELECT wr.ok_count, wr.fail_count, wr.errors
+  INTO v_write_result
+  FROM public.tsfin_write_snapshots_and_complete(
+    jsonb_build_array(
+      jsonb_build_object(
+        'outbox_id', v_outbox.id::text,
+        'timesheet_id', v_current_ts.timesheet_id::text,
+        'snapshot', v_tsfin_snapshot_json
+      )
+    )
+  ) AS wr;
+
+  IF COALESCE(v_write_result.fail_count, 0) > 0 OR COALESCE(v_write_result.ok_count, 0) <> 1 THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'TSFIN_WRITE_FAILED',
+      DETAIL = COALESCE(v_write_result.errors, '[]'::jsonb)::text;
+  END IF;
+
+  SELECT *
+  INTO v_current_ts
+  FROM public.timesheets AS ts
+  WHERE ts.timesheet_id = v_current_ts.timesheet_id
+    AND ts.is_current = true
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CURRENT_TIMESHEET_NOT_FOUND_AFTER_WRITE';
+  END IF;
+
+  SELECT *
+  INTO v_current_tsfin
+  FROM public.timesheets_financials AS tf
+  WHERE tf.timesheet_id = v_current_ts.timesheet_id
+    AND tf.is_current = true
+  ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.id DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TIMESHEET_FINANCIALS_CURRENT_NOT_FOUND';
+  END IF;
+
+  contract_week_id := v_week.id;
+  contract_id := v_week.contract_id;
+  timesheet_id := v_current_ts.timesheet_id;
+  current_timesheet_id := v_current_ts.timesheet_id;
+  current_timesheet_version := v_current_ts.version;
+  was_stale := v_was_stale;
+  created_now := v_created_now;
+  processing_status := v_current_tsfin.processing_status;
+  contract_week_json := to_jsonb(v_week);
+  timesheet_json := to_jsonb(v_current_ts);
+  timesheet_financials_json := to_jsonb(v_current_tsfin);
+
+  RETURN NEXT;
+END;
+$function$;
