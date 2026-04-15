@@ -14580,6 +14580,7 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
+
 async function handleBankingPayPreview(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -14681,11 +14682,6 @@ async function handleBankingPayPreview(env, req, user) {
   if (clientId && !uuidRe.test(clientId)) {
     return withCORS(env, req, badRequest('client_id must be a UUID (or empty)'));
   }
-
-  const allowLegacyFallback = parseBooleanLike(
-    env?.BANKING_PAY_PREVIEW_LEGACY_FALLBACK,
-    false
-  ) === true;
 
   const baseFiltersSrc =
     (isPlainObject(body.filters_json) ? body.filters_json : null) ||
@@ -14874,70 +14870,15 @@ async function handleBankingPayPreview(env, req, user) {
       }
     }));
   } catch (e) {
-    if (allowLegacyFallback !== true) {
-      return buildPreviewErrorResponse(
-        500,
-        'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
-        'Banking preview could not be loaded from the workbench session path.',
-        { ...previewSafeDetails, reason: String(e?.message || e || 'Unknown error'), legacy_fallback_enabled: false },
-        true
-      );
-    }
-
-    try {
-      const legacyPreviewDecisionsJson = isPlainObject(normalizedDecisions.value)
-        ? cloneJson(normalizedDecisions.value) || {}
-        : {};
-
-      const legacyRpc = await sbRpc(env, 'pay_preview', {
-        p_pay_date: payDate,
-        p_week_ending_cutoff: cutoffIso,
-        p_actor_user_id: actorUserId,
-        p_candidate_id: candidateId,
-        p_client_id: clientId,
-        p_preview_decisions_json: legacyPreviewDecisionsJson
-      });
-
-      const legacyPreviewPayload = unwrapRpc(legacyRpc, 'pay_preview');
-      const payeesProcessed = Array.isArray(legacyPreviewPayload.payees) ? legacyPreviewPayload.payees.length : 0;
-
-      return withCORS(env, req, ok({
-        ok: true,
-        preview: legacyPreviewPayload,
-        readiness: {
-          performed: false,
-          attempted_count: 0,
-          success_count: 0,
-          failed_count: 0,
-          payees_processed: payeesProcessed,
-          did_work: false,
-          diagnostics: []
-        },
-        warning: {
-          code: 'BANKING_PAY_PREVIEW_LEGACY_FALLBACK_USED',
-          message: 'Banking preview loaded using the legacy fallback path.',
-          details: {
-            reason: String(e?.message || e || 'Unknown error')
-          }
-        }
-      }));
-    } catch (fallbackErr) {
-      return buildPreviewErrorResponse(
-        500,
-        'BANKING_PAY_PREVIEW_FAILED',
-        'Banking preview could not be loaded.',
-        {
-          ...previewSafeDetails,
-          session_backed_reason: String(e?.message || e || 'Unknown error'),
-          legacy_fallback_reason: String(fallbackErr?.message || fallbackErr || 'Unknown error'),
-          legacy_fallback_enabled: true
-        },
-        true
-      );
-    }
+    return buildPreviewErrorResponse(
+      500,
+      'BANKING_PAY_PREVIEW_SESSION_BACKED_FAILED',
+      'Banking preview could not be loaded from the workbench session path.',
+      { ...previewSafeDetails, reason: String(e?.message || e || 'Unknown error'), legacy_fallback_enabled: false },
+      true
+    );
   }
 }
-
 
 async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUserId) {
   const envRaw = (railEnv !== undefined && railEnv !== null) ? String(railEnv).trim() : '';
@@ -16240,6 +16181,7 @@ async function handleTimesheetCreateManualDaily(env, req) {
   }));
 }
 
+
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -16893,6 +16835,29 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return args;
   };
 
+  const buildCreateDraftSessionErrorResponse = (status, code, message, details, canRetry) => {
+    const payload = {
+      ok: false,
+      create_draft_unavailable: true,
+      can_retry: !!canRetry,
+      error: {
+        code: String(code || 'BANKING_PAY_CREATE_DRAFT_FAILED'),
+        message: String(message || 'Unable to create Banking draft')
+      }
+    };
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+      payload.error.details = details;
+    }
+    return withCORS(
+      env,
+      req,
+      new Response(JSON.stringify(payload), {
+        status,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+  };
+
   const sessionIdText = trimStr(body.session_id || body.sessionId || '');
   const payChannelScopeRaw = trimStr(body.pay_channel_scope || body.payChannelScope || body.scope || '');
   const payChannelScope = (() => {
@@ -16906,6 +16871,23 @@ async function handleBankingPayCreateDraft(env, req, user) {
   }
   if (payChannelScopeRaw && !payChannelScope) {
     return withCORS(env, req, badRequest('pay_channel_scope must be ALL, PAYE, or UMBRELLA when supplied'));
+  }
+
+  if (!sessionIdText) {
+    return buildCreateDraftSessionErrorResponse(
+      409,
+      'BANKING_PAY_CREATE_DRAFT_SESSION_REQUIRED',
+      'Banking draft creation requires an open workbench session. Refresh Banking preview and try again.',
+      {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        has_candidate_id: !!candidateId,
+        has_client_id: !!clientId,
+        pay_channel_scope: payChannelScope || 'ALL'
+      },
+      true
+    );
   }
 
   if (sessionIdText) {
@@ -17086,7 +17068,20 @@ async function handleBankingPayCreateDraft(env, req, user) {
         pay_channel_scope: payChannelScope || 'ALL',
         error: String(e?.message || e || '')
       });
-      return withCORS(env, req, serverError(String(e?.message || e)));
+      return buildCreateDraftSessionErrorResponse(
+        409,
+        'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
+        'Banking draft could not be prepared from the workbench session. Refresh Banking preview and try again.',
+        {
+          pay_date: payDate,
+          week_ending_cutoff: cutoffIso,
+          provided_week_ending_cutoff: providedCutoffIso,
+          session_id: sessionIdText,
+          pay_channel_scope: payChannelScope || 'ALL',
+          reason: String(e?.message || e || 'Unknown error')
+        },
+        true
+      );
     }
   }
 
@@ -17903,8 +17898,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
@@ -33848,10 +33841,29 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=timesheet_id,manual_pdf_r2_key` +
+      `&select=timesheet_id,manual_pdf_r2_key,authorised_at_server,revoked_at` +
       `&limit=1`
   );
   if (!tsBefore) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const isCurrentAuthorised =
+    tsBefore.authorised_at_server != null &&
+    String(tsBefore.authorised_at_server).trim() !== '' &&
+    (tsBefore.revoked_at == null || String(tsBefore.revoked_at).trim() === '');
+
+  if (isCurrentAuthorised) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before replacing the manual PDF.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
   const oldKey = tsBefore?.manual_pdf_r2_key ? normalize(tsBefore.manual_pdf_r2_key) : null;
 
@@ -34030,6 +34042,8 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
     manual_pdf_r2_key: row?.manual_pdf_r2_key || null
   }));
 }
+
+
 
 async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   // ⚠️ RETIRED (Jan 2026): Do NOT call this in loops/bulk operations. Use tsfinTargetedDrainNow(env, { timesheetIds: [...], reason, chunkSize }) so TSFIN recompute stays SQL-first + batched.
@@ -44049,8 +44063,6 @@ async function submitSendMailshotWizard() {
 
   return state.submit_result;
 }
-
-
 async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -44091,6 +44103,24 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
       `&limit=1`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  if (
+    ts.authorised_at_server != null &&
+    String(ts.authorised_at_server).trim() !== '' &&
+    (ts.revoked_at == null || String(ts.revoked_at).trim() === '')
+  ) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before converting QR to manual.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
   const bookingId = ts.booking_id || resolved.booking_id || null;
   if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
@@ -44212,6 +44242,11 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     is_current: true,
     submission_mode: 'MANUAL',
 
+    authorised_at_server: null,
+    revoked_at: null,
+    revoked_reason: null,
+    revoked_by: null,
+
     qr_status: null,
     qr_token: null,
     qr_generated_at: null,
@@ -44272,6 +44307,8 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
         timesheet_id: newTimesheetId,
         timesheet_version: inserted?.version ?? nextVersion,
         processing_status: 'AWAITING_MANUAL_SIGNATURE',
+        authorised_by_user_id: null,
+        authorised_at_utc: null,
         updated_at: now
       })
     }
@@ -44319,6 +44356,8 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
+
+
 
 async function handleUsersList(env, req) {
   const actor = await requireUser(env, req, ['admin']);
@@ -45274,6 +45313,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
 }
 
 
+
 async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -45311,6 +45351,24 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       `&select=*`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  if (
+    ts.authorised_at_server != null &&
+    String(ts.authorised_at_server).trim() !== '' &&
+    (ts.revoked_at == null || String(ts.revoked_at).trim() === '')
+  ) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before switching to manual.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
   const bookingId = ts.booking_id || resolved.booking_id || null;
   if (!bookingId) return withCORS(env, req, badRequest('Timesheet booking_id is missing; cannot version'));
@@ -45426,6 +45484,11 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
     is_current: true,
     submission_mode: 'MANUAL',
 
+    authorised_at_server: null,
+    revoked_at: null,
+    revoked_reason: null,
+    revoked_by: null,
+
     r2_nurse_key: null,
     r2_auth_key: null,
 
@@ -45480,6 +45543,8 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
       body: JSON.stringify({
         timesheet_id: newTimesheetId,
         timesheet_version: inserted?.version ?? nextVersion,
+        authorised_by_user_id: null,
+        authorised_at_utc: null,
         updated_at: now
       })
     }
@@ -45535,8 +45600,9 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
 
 
 
-
 // ✅ NEW/UPDATED HANDLER: guarded DAILY switch-to-manual
+
+
 async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -45577,6 +45643,24 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
       `&limit=1`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  if (
+    ts.authorised_at_server != null &&
+    String(ts.authorised_at_server).trim() !== '' &&
+    (ts.revoked_at == null || String(ts.revoked_at).trim() === '')
+  ) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before switching to manual.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
   const bookingId = ts.booking_id || resolved.booking_id || null;
   const badBooking =
@@ -45680,6 +45764,11 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     is_current: true,
     submission_mode: 'MANUAL',
 
+    authorised_at_server: null,
+    revoked_at: null,
+    revoked_reason: null,
+    revoked_by: null,
+
     r2_nurse_key: null,
     r2_auth_key: null,
 
@@ -45720,6 +45809,8 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
       body: JSON.stringify({
         timesheet_id: newTimesheetId,
         timesheet_version: inserted?.version ?? nextVersion,
+        authorised_by_user_id: null,
+        authorised_at_utc: null,
         updated_at: now
       })
     }
@@ -45770,6 +45861,9 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
     was_stale: !!resolved.was_stale
   }));
 }
+
+
+
 export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -46243,6 +46337,7 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
   return withCORS(env, req, ok({ ok:true, safe_end: safeEnd, clamped }));
 }
 
+
 async function handleTimesheetDelete(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -46293,10 +46388,30 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&select=timesheet_id,booking_id,sheet_scope,is_adjustment,adjustment_origin,correction_id,correction_kind` +
+      `&select=timesheet_id,booking_id,sheet_scope,is_adjustment,adjustment_origin,correction_id,correction_kind,is_current,authorised_at_server,revoked_at` +
       `&limit=1`
   );
   if (!ts) return withCORS(env, req, notFound('Timesheet not found'));
+
+  const isCurrentAuthorised =
+    ts.is_current === true &&
+    ts.authorised_at_server != null &&
+    String(ts.authorised_at_server).trim() !== '' &&
+    (ts.revoked_at == null || String(ts.revoked_at).trim() === '');
+
+  if (isCurrentAuthorised) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_DELETE_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before deleting.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
   const scopeUpper = String(ts.sheet_scope || '').trim().toUpperCase();
   const isWeekly = scopeUpper === 'WEEKLY';
@@ -46849,6 +46964,8 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     snooze_clear_failed_ids: snoozeClearResult.failedIds
   }));
 }
+
+
 // ----------------------------------------------------------------------------
 // E) Funnel & Prechecks (read-only views)
 // ----------------------------------------------------------------------------
@@ -58744,7 +58861,6 @@ async function handleHrAutoprocessClients(env, req) {
   }
 }
 
-
 async function handleTsfinUpdateSegments(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -58765,6 +58881,41 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
 
   const enc = encodeURIComponent;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  const { rows: currentTsRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,is_current,authorised_at_server,revoked_at` +
+      `&limit=1`
+  );
+  const currentTs = currentTsRows?.[0] || null;
+  if (!currentTs) {
+    return withCORS(env, req, notFound('Timesheet not found'));
+  }
+
+  const isCurrentRow = currentTs.is_current === true;
+  const hasAuthorisedAtServer =
+    currentTs.authorised_at_server != null &&
+    String(currentTs.authorised_at_server).trim() !== '';
+  const hasRevokedAt =
+    currentTs.revoked_at != null &&
+    String(currentTs.revoked_at).trim() !== '';
+
+  if (isCurrentRow && hasAuthorisedAtServer && !hasRevokedAt) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+          message: 'This timesheet is authorised. Unauthorise it before editing Banking-relevant segment settings.'
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+  }
 
   const computeWeekStartFromWeekEnding = (weYmd) => {
     if (!weYmd) return null;
@@ -59111,8 +59262,6 @@ async function handleTsfinUpdateSegments(env, req, timesheetId) {
     was_stale: !!guard.resolved.was_stale
   }));
 }
-
-
 async function handleNhspInvoiceCandidates(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -78567,6 +78716,29 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     });
   }
 
+  const currentTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,is_current,authorised_at_server,revoked_at`
+  );
+  if (!currentTs) return notFound('Timesheet not found');
+
+  const isCurrentRow = currentTs.is_current === true;
+  const hasAuthorisedAtServer = currentTs.authorised_at_server != null && String(currentTs.authorised_at_server).trim() !== '';
+  const hasRevokedAt = currentTs.revoked_at != null && String(currentTs.revoked_at).trim() !== '';
+
+  if (isCurrentRow && hasAuthorisedAtServer && !hasRevokedAt) {
+    return new Response(
+      JSON.stringify({
+        error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
+        message: 'This timesheet is authorised. Unauthorise it before editing Banking-relevant financials.'
+      }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
   // From here on: ALWAYS use currentTimesheetId
   const toNum = (v) => (v === null || v === undefined ? null : Number(v));
   const nonneg = (n) => (n === null || n === undefined ? true : Number(n) >= 0);
@@ -78995,7 +79167,6 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     was_stale: !!resolved.was_stale
   });
 }
-
 // ============================================================
 // UPDATED: handleTimesheetEvidenceAdd / handleTimesheetEvidenceUpdateKind
 // - Normalizes kind to canonical set where applicable:
