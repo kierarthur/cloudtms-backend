@@ -28812,7 +28812,7 @@ BEGIN
       OR (NULLIF(BTRIM(COALESCE(v_new_row->>'last_settled_pay_batch_id', '')), '') IS NOT NULL)
       OR (NULLIF(BTRIM(COALESCE(v_new_row->>'last_settled_at_utc', '')), '') IS NOT NULL);
 
-    IF v_old_has_settled IS DISTINCT FROM v_new_has_settled THEN
+    IF v_old_has_settled AND NOT v_new_has_settled THEN
       v_should_dirty := true;
       v_refresh_scope_kind := 'TARGETED_TIMESHEETS';
       v_targeted_timesheet_uuid_ids := array_cat(
@@ -29192,4 +29192,3 @@ BEGIN
   END IF;
 END;
 $function$;
-
