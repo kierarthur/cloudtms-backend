@@ -10003,17 +10003,8 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
     return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
   }
 
-  const cutoffRaw = String(
-    body.week_ending_cutoff_date
-    || body.weekEndingCutoffDate
-    || body.week_ending_cutoff
-    || body.weekEndingCutoff
-    || ''
-  ).trim();
-  const weekEndingCutoff = parseIsoOrUkDateToIso(cutoffRaw);
-  if (!weekEndingCutoff) {
-    return withCORS(env, req, badRequest('week_ending_cutoff_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
-  }
+  const ordinaryWeekEndingCutoff = '9999-12-31';
+  const weekEndingCutoff = ordinaryWeekEndingCutoff;
 
   const sessionSignature = String(body.session_signature || body.sessionSignature || '').trim();
   if (!sessionSignature) {
@@ -14589,7 +14580,6 @@ async function handleBankingPayReconcileExternal(env, req) {
   }
 }
 
-
 async function handleBankingPayPreview(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -14672,17 +14662,8 @@ async function handleBankingPayPreview(env, req, user) {
     return withCORS(env, req, badRequest('pay_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
   }
 
-  const cutoffRaw = trimStr(
-    body.week_ending_cutoff_date ||
-    body.weekEndingCutoffDate ||
-    body.week_ending_cutoff ||
-    body.weekEndingCutoff ||
-    ''
-  );
-  const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
-  if (!cutoffIso) {
-    return withCORS(env, req, badRequest('week_ending_cutoff_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
-  }
+  const ordinaryWeekEndingCutoff = '9999-12-31';
+  const cutoffIso = ordinaryWeekEndingCutoff;
 
   const candidateRaw = trimStr(
     body.candidate_id || body.candidateId || body.candidate_filter_id || body.candidateFilterId || body.candidate_filter || ''
@@ -14788,7 +14769,6 @@ async function handleBankingPayPreview(env, req, user) {
   const sessionSignature = trimStr(body.session_signature || body.sessionSignature || '') || stableStringify({
     kind: 'BANKING_PAY_WORKBENCH',
     pay_date: payDate,
-    week_ending_cutoff: cutoffIso,
     filters_json: filtersJson
   });
 
@@ -16260,7 +16240,6 @@ async function handleTimesheetCreateManualDaily(env, req) {
   }));
 }
 
-
 async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -16272,7 +16251,6 @@ async function handleBankingPayCreateDraft(env, req, user) {
   const cutoffRaw = String(
     body.week_ending_cutoff_date || body.weekEndingCutoffDate || body.week_ending_cutoff || body.weekEndingCutoff || ''
   ).trim();
-  if (!cutoffRaw) return withCORS(env, req, badRequest('week_ending_cutoff_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
 
   const parseIsoOrUkDateToIso = (raw) => {
     const s = String(raw || '').trim();
@@ -16298,8 +16276,9 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return dflt;
   };
 
-  const cutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
-  if (!cutoffIso) return withCORS(env, req, badRequest('week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY'));
+  const providedCutoffIso = parseIsoOrUkDateToIso(cutoffRaw);
+  const ordinaryWeekEndingCutoff = '9999-12-31';
+  const cutoffIso = ordinaryWeekEndingCutoff;
 
   const actorUserId = String(user?.id || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -17086,6 +17065,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       logRouteDebug('info', 'PAY_CREATE_DRAFT_SESSION_PREPARE_SUCCESS', {
         pay_date: payDate,
         week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
         session_id: sessionIdText,
         pay_channel_scope: payChannelScope || 'ALL',
         umbrella_status: String(outPayload?.umbrella_status || '').trim() || null,
@@ -17101,6 +17081,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       logRouteDebug('error', 'PAY_CREATE_DRAFT_SESSION_PREPARE_FAILED', {
         pay_date: payDate,
         week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
         session_id: sessionIdText,
         pay_channel_scope: payChannelScope || 'ALL',
         error: String(e?.message || e || '')
@@ -17153,6 +17134,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
         logRouteDebug('warn', 'PAY_PREVIEW_FILTER_REJECTED_FALLBACK_UNFILTERED', {
           pay_date: payDate,
           week_ending_cutoff: cutoffIso,
+          provided_week_ending_cutoff: providedCutoffIso,
           effective_candidate_id: effectiveCandidateId,
           effective_client_id: effectiveClientId,
           filter_source: routeFilterSource,
@@ -17619,6 +17601,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     logRouteDebug('info', 'PAY_PREVIEW_PREFLIGHT_SCOPE', {
       pay_date: payDate,
       week_ending_cutoff: cutoffIso,
+      provided_week_ending_cutoff: providedCutoffIso,
       explicit_candidate_id: candidateId,
       explicit_client_id: clientId,
       effective_candidate_id: effectiveCandidateId,
@@ -17643,6 +17626,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       logRouteDebug('error', 'PAY_PREVIEW_PREFLIGHT_FAILED', {
         pay_date: payDate,
         week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
         effective_candidate_id: effectiveCandidateId,
         effective_client_id: effectiveClientId,
         filter_source: routeFilterSource,
@@ -17784,6 +17768,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     logRouteDebug('info', 'PAY_CREATE_DRAFT_SPLIT_START', {
       pay_date: payDate,
       week_ending_cutoff: cutoffIso,
+      provided_week_ending_cutoff: providedCutoffIso,
       effective_candidate_id: effectiveCandidateId,
       effective_client_id: effectiveClientId,
       filter_source: routeFilterSource,
@@ -17809,6 +17794,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
         logRouteDebug('warn', 'PAY_CREATE_DRAFT_SPLIT_FILTER_REJECTED_FALLBACK_UNFILTERED', {
           pay_date: payDate,
           week_ending_cutoff: cutoffIso,
+          provided_week_ending_cutoff: providedCutoffIso,
           effective_candidate_id: effectiveCandidateId,
           effective_client_id: effectiveClientId,
           filter_source: routeFilterSource,
@@ -17882,6 +17868,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     logRouteDebug('info', 'PAY_CREATE_DRAFT_SPLIT_SUCCESS', {
       pay_date: payDate,
       week_ending_cutoff: cutoffIso,
+      provided_week_ending_cutoff: providedCutoffIso,
       effective_candidate_id: effectiveCandidateId,
       effective_client_id: effectiveClientId,
       filter_source: routeFilterSource,
@@ -17906,6 +17893,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     logRouteDebug('error', 'HANDLE_ROUTE_FAILED', {
       pay_date: payDate,
       week_ending_cutoff: cutoffIso,
+      provided_week_ending_cutoff: providedCutoffIso,
       effective_candidate_id: effectiveCandidateId,
       effective_client_id: effectiveClientId,
       filter_source: routeFilterSource,
@@ -17915,6 +17903,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 
 
@@ -28382,15 +28371,6 @@ async function handleTimesheetPdf(env, req, timesheetId) {
 
 
 
-
-
-
-
-
-
-
-
-
 async function handleTimesheetUpdateReference(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -28401,22 +28381,40 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
   try { body = await parseJSONBody(req); }
   catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
-  // NEW: guarded write (optimistic concurrency)
   const expectedTimesheetId = body?.expected_timesheet_id || null;
   const guard = await guardCurrentTimesheetWrite(env, req, timesheetId, expectedTimesheetId);
   if (!guard.ok) return guard.res;
 
   const currentTimesheetId = guard.resolved.current_timesheet_id;
 
-  const reference_number = (body?.reference_number || '').trim();
+  const currentTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,reference_number,reference_set_at`
+  );
+  if (!currentTs) return withCORS(env, req, notFound('Timesheet not found'));
 
-  // NEW: patch only the CURRENT timesheet row
+  const nextReferenceNumberRaw = String(body?.reference_number ?? '').trim();
+  const nextReferenceNumber = nextReferenceNumberRaw || null;
+  const currentReferenceNumber = String(currentTs.reference_number ?? '').trim() || null;
+  const now = nowIso();
+
+  const nextReferenceSetAt = nextReferenceNumber
+    ? ((nextReferenceNumber !== currentReferenceNumber) ? now : (currentTs.reference_set_at || now))
+    : null;
+
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
     {
       method: 'PATCH',
       headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify({ reference_number, updated_at: nowIso() })
+      body: JSON.stringify({
+        reference_number: nextReferenceNumber,
+        reference_set_at: nextReferenceSetAt,
+        updated_at: now
+      })
     }
   );
 
@@ -28432,6 +28430,12 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
     was_stale: !!guard.resolved.was_stale
   }));
 }
+
+
+
+
+
+
 
 async function handleContractWeekManualDraftDetails(env, req, weekId) {
   const enc = encodeURIComponent;
@@ -30121,8 +30125,16 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=id,processing_status,hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_hours`
+      `&select=*`
   ).catch(() => null);
+
+  const finalTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  ).catch(() => savePayload?.timesheet || null);
 
   try {
     await writeAudit(
@@ -30153,15 +30165,47 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
     processed: true,
     processing_status: finFinal?.processing_status ?? desiredStatus,
     previous_status: prevStatus,
+    status_transition: {
+      from: prevStatus,
+      to: finFinal?.processing_status ?? desiredStatus,
+      processed_at_utc: now,
+      processed_by_user_id: user?.id || null
+    },
     booking_id: savePayload?.booking_id || guard.resolved.booking_id || null,
     requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
     timesheet_id: currentTimesheetId,
     current_timesheet_id: currentTimesheetId,
-    current_version: savePayload?.current_version ?? guard.resolved.current_version ?? null,
-    was_stale: !!guard.resolved.was_stale
+    current_version: finalTs?.version ?? savePayload?.current_version ?? guard.resolved.current_version ?? null,
+    was_stale: !!guard.resolved.was_stale,
+
+    worked_start_iso: finalTs?.worked_start_iso ?? null,
+    worked_end_iso: finalTs?.worked_end_iso ?? null,
+    break_start_iso: finalTs?.break_start_iso ?? null,
+    break_end_iso: finalTs?.break_end_iso ?? null,
+    break_minutes: finalTs?.break_minutes ?? null,
+    worked_minutes: finalTs?.worked_minutes ?? null,
+    actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+    reference_number: finalTs?.reference_number ?? null,
+    reference_set_at: finalTs?.reference_set_at ?? null,
+
+    timesheet: finalTs || null,
+    tsfin: finFinal || null,
+    summary_row_hint: {
+      timesheet_id: currentTimesheetId,
+      booking_id: savePayload?.booking_id || guard.resolved.booking_id || null,
+      processing_status: finFinal?.processing_status ?? desiredStatus,
+      reference_number: finalTs?.reference_number ?? null,
+      worked_start_iso: finalTs?.worked_start_iso ?? null,
+      worked_end_iso: finalTs?.worked_end_iso ?? null,
+      break_start_iso: finalTs?.break_start_iso ?? null,
+      break_end_iso: finalTs?.break_end_iso ?? null,
+      break_minutes: finalTs?.break_minutes ?? null,
+      worked_minutes: finalTs?.worked_minutes ?? null,
+      actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+      total_hours: finFinal?.total_hours ?? null
+    }
   }));
 }
-
 
 
 async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
@@ -30303,8 +30347,6 @@ async function handleTimesheetDailyManualUnprocess(env, req, timesheetId) {
   }));
 }
 
-
-
 async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const enc = encodeURIComponent;
 
@@ -30346,6 +30388,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
   // NEW: schedule_json payload (preferred FE shape for daily upsert)
   const schedule_json_in    = has('schedule_json')    ? body.schedule_json    : undefined;
+  const reference_number_in = has('reference_number') ? body.reference_number : undefined;
 
   // QR action hints from FE decision modal (legacy booleans still supported)
   const rawIssueQr        = body?.issue_qr === true;
@@ -30376,14 +30419,31 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   const pdfKey     = null;
 
   // Helpers
+  const trimStr = (v) => String(v == null ? '' : v).trim();
+
   const normIso = (v) => {
     if (v === undefined) return undefined;
     if (v === null) return null;
-    const s = String(v).trim();
+    const s = trimStr(v);
     return s ? s : null; // treat '' as null (clear)
   };
 
-  const hasIso = (v) => (v != null && String(v).trim() !== '');
+  const normTextOrNull = (v) => {
+    if (v === undefined) return undefined;
+    const s = trimStr(v);
+    return s ? s : null;
+  };
+
+  const parseOptionalBreakMinutesInput = (v) => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    const s = trimStr(v);
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const hasIso = (v) => (v != null && trimStr(v) !== '');
 
   const isoToMs = (iso) => {
     if (!hasIso(iso)) return null;
@@ -30518,7 +30578,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       const nonNull = scheduleJson.filter(x => x && typeof x === 'object');
       if (!nonNull.length) return { error: 'schedule_json must contain at least one day entry.' };
       if (nonNull.length > 1) {
-        const dates = new Set(nonNull.map(x => String(x.date || x.work_date || x.ymd || '').trim()).filter(Boolean));
+        const dates = new Set(nonNull.map(x => trimStr(x.date || x.work_date || x.ymd || '')).filter(Boolean));
         if (dates.size > 1) return { error: 'DAILY schedule_json must contain exactly one date entry.' };
       }
       seg = nonNull[0];
@@ -30528,7 +30588,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       return { error: 'schedule_json must be an object or array.' };
     }
 
-    const ymdStrRaw = String(seg.date || seg.work_date || seg.ymd || '').trim();
+    const ymdStrRaw = trimStr(seg.date || seg.work_date || seg.ymd || '');
     const ymdStr = ymdStrRaw || null;
     if (!ymdStr || !parseYmd(ymdStr)) return { error: 'schedule_json.date must be a valid YYYY-MM-DD.' };
 
@@ -30544,6 +30604,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     let worked_end_iso   = null;
     let workedStartMs    = null;
     let workedEndMs      = null;
+    let worked_minutes   = null;
 
     let shiftStartMin0 = null;
     let shiftEndMin0   = null;
@@ -30563,25 +30624,34 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       const endYmd = addDaysYmd(ymdStr, endDayAdd);
       if (!endYmd) return { error: 'Failed to compute overnight end date.' };
 
-      const workedResolved = resolveLocalWindowToIso(ymdStr, startHHMM, endYmd, normaliseHHMM(`${Math.floor((shiftEndAdj % 1440) / 60)}:${String((shiftEndAdj % 1440) % 60).padStart(2,'0')}`), ymdStr);
+      const workedResolved = resolveLocalWindowToIso(
+        ymdStr,
+        startHHMM,
+        endYmd,
+        normaliseHHMM(`${Math.floor((shiftEndAdj % 1440) / 60)}:${String((shiftEndAdj % 1440) % 60).padStart(2, '0')}`),
+        ymdStr
+      );
       if (workedResolved?.error) return { error: workedResolved.error };
 
       worked_start_iso = workedResolved.start_iso;
       worked_end_iso   = workedResolved.end_iso;
       workedStartMs    = workedResolved.start_ms;
       workedEndMs      = workedResolved.end_ms;
+      worked_minutes   = Math.round((workedResolved.end_ms - workedResolved.start_ms) / 60000);
 
       if (!worked_start_iso || !worked_end_iso || !(workedEndMs > workedStartMs)) {
         return { error: 'Failed to convert schedule_json.start/end to ISO.' };
       }
+      if (!(worked_minutes > 0)) {
+        return { error: 'Worked shift duration must be at least 1 minute.' };
+      }
     }
 
-    // Break source: prefer explicit fields; else breaks[0]
     let brStartHHMM = normaliseHHMM(seg.break_start || '');
     let brEndHHMM   = normaliseHHMM(seg.break_end   || '');
 
     const breaksArr = Array.isArray(seg.breaks) ? seg.breaks : [];
-    const meaningfulBreaks = breaksArr.filter(b => b && typeof b === 'object' && (String(b.start || '').trim() || String(b.end || '').trim()));
+    const meaningfulBreaks = breaksArr.filter(b => b && typeof b === 'object' && (trimStr(b.start || '') || trimStr(b.end || '')));
 
     if ((!brStartHHMM && !brEndHHMM) && meaningfulBreaks.length) {
       brStartHHMM = normaliseHHMM(meaningfulBreaks[0].start || '');
@@ -30601,16 +30671,21 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     let break_end_iso   = null;
     let break_minutes   = null;
 
-    // If break times are provided: compute ISO + minutes (overnight-aware using shift timeline)
-    if (hasBrStart && hasBrEnd) {
-      if (!(hasStart && hasEnd)) return { error: 'Cannot set a break window without a worked start/end.' };
+    const rawBreakMinutes =
+      seg.break_minutes === '' || seg.break_minutes == null
+        ? null
+        : Number(seg.break_minutes);
 
+    if ((hasBrStart || hasBrEnd || rawBreakMinutes != null) && !(hasStart && hasEnd)) {
+      return { error: 'You cannot set break times/minutes without worked start and end times.' };
+    }
+
+    if (hasBrStart && hasBrEnd) {
       const bs0 = hhmmToMinutes(brStartHHMM);
       const be0 = hhmmToMinutes(brEndHHMM);
       if (bs0 == null || be0 == null) return { error: 'schedule_json.break_start/end must be valid HH:MM.' };
       if (bs0 === be0) return { error: 'schedule_json.break_start cannot equal schedule_json.break_end.' };
 
-      // Place break on the same adjusted timeline as the shift
       let bsAdj = bs0;
       if (bsAdj < shiftStartAdj) bsAdj += 1440;
 
@@ -30657,25 +30732,17 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
       break_minutes = Math.round((breakResolved.end_ms - breakResolved.start_ms) / 60000);
       if (!(break_minutes > 0)) return { error: 'Break duration must be > 0 minutes.' };
-    } else {
-      // No break window: accept numeric break minutes if present
-      let bm =
-        (seg.break_minutes != null) ? Number(seg.break_minutes) :
-        (seg.break_mins    != null) ? Number(seg.break_mins) :
-        null;
+      if (worked_minutes != null && break_minutes > worked_minutes) {
+        return { error: 'Break duration cannot exceed the worked shift duration.' };
+      }
+    } else if (rawBreakMinutes != null) {
+      if (!Number.isFinite(rawBreakMinutes) || rawBreakMinutes < 0) {
+        return { error: 'schedule_json.break_minutes must be a non-negative number.' };
+      }
 
-      if (bm != null && !Number.isFinite(bm)) bm = null;
-
-      if (bm != null) {
-        if (!(hasStart && hasEnd)) return { error: 'Cannot set break_minutes without a worked start/end.' };
-        bm = Math.round(bm);
-        if (bm < 0) return { error: 'break_minutes must be a non-negative number.' };
-
-        const actualShiftMinutes = Math.round((workedEndMs - workedStartMs) / 60000);
-        if (!(actualShiftMinutes > 0)) return { error: 'Worked shift duration must be > 0 minutes.' };
-        if (bm > actualShiftMinutes) return { error: 'break_minutes cannot exceed the worked shift duration.' };
-
-        break_minutes = bm;
+      break_minutes = Math.round(rawBreakMinutes);
+      if (worked_minutes != null && break_minutes > worked_minutes) {
+        return { error: 'schedule_json.break_minutes cannot exceed the worked shift duration.' };
       }
     }
 
@@ -30685,7 +30752,45 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       worked_end_iso,
       break_start_iso,
       break_end_iso,
-      break_minutes
+      break_minutes,
+      worked_minutes,
+      normalized_schedule_json: {
+        date: ymdStr,
+        start: startHHMM || '',
+        end: endHHMM || '',
+        break_start: brStartHHMM || '',
+        break_end: brEndHHMM || '',
+        break_minutes: break_minutes == null ? '' : break_minutes
+      }
+    };
+  };
+
+  const buildNormalizedDailyScheduleFromFinalState = ({ workedStartIso, workedEndIso, breakStartIso, breakEndIso, breakMinutes, ymdHint } = {}) => {
+    if (!(hasIso(workedStartIso) && hasIso(workedEndIso))) return null;
+
+    const startParts = toLocalParts(workedStartIso, 'Europe/London');
+    const endParts = toLocalParts(workedEndIso, 'Europe/London');
+    if (!startParts?.ymd || !startParts?.hhmm || !endParts?.hhmm) return null;
+
+    let breakStartHHMM = '';
+    let breakEndHHMM = '';
+
+    if (hasIso(breakStartIso) && hasIso(breakEndIso)) {
+      const brStartParts = toLocalParts(breakStartIso, 'Europe/London');
+      const brEndParts = toLocalParts(breakEndIso, 'Europe/London');
+      breakStartHHMM = brStartParts?.hhmm || '';
+      breakEndHHMM = brEndParts?.hhmm || '';
+    }
+
+    const effectiveYmd = (ymdHint && parseYmd(ymdHint)) ? ymdHint : startParts.ymd;
+
+    return {
+      date: effectiveYmd,
+      start: startParts.hhmm || '',
+      end: endParts.hhmm || '',
+      break_start: breakStartHHMM,
+      break_end: breakEndHHMM,
+      break_minutes: (breakMinutes == null || !Number.isFinite(Number(breakMinutes))) ? '' : Math.round(Number(breakMinutes))
     };
   };
 
@@ -30876,12 +30981,14 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   let mappedBreakStartIso  = break_start_iso_in;
   let mappedBreakEndIso    = break_end_iso_in;
   let mappedBreakMinutesIn = break_minutes_in;
+  let mappedScheduleYmd    = null;
 
   if (scheduleProvided) {
     if (schedule_json_in == null) return bad('schedule_json must not be null.');
     const mapped = mapScheduleJsonToIso(schedule_json_in);
     if (mapped && mapped.error) return bad(mapped.error);
 
+    mappedScheduleYmd = mapped.ymd || null;
     worked_date_ymd = mapped.ymd || worked_date_ymd;
 
     mappedWorkedStartIso = mapped.worked_start_iso;
@@ -30894,19 +31001,25 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   // ─────────────────────────────────────────────────────────────
   // ✅ Pre-validate worked/break ordering + partials BEFORE rotate/patch/rebuild
   // ─────────────────────────────────────────────────────────────
-  const nextWorkedStartIso = (mappedWorkedStartIso !== undefined) ? normIso(mappedWorkedStartIso) : normIso(ts.worked_start_iso);
-  const nextWorkedEndIso   = (mappedWorkedEndIso   !== undefined) ? normIso(mappedWorkedEndIso)   : normIso(ts.worked_end_iso);
+  const shouldPatchWorked = scheduleProvided || worked_start_iso_in !== undefined || worked_end_iso_in !== undefined;
+  const shouldPatchBreakTimes = scheduleProvided || break_start_iso_in !== undefined || break_end_iso_in !== undefined;
+  const shouldPatchBreakMinutes = scheduleProvided || break_minutes_in !== undefined;
+  const shouldPatchActualSchedule = shouldPatchWorked || shouldPatchBreakTimes || shouldPatchBreakMinutes;
+  const referenceProvided = (reference_number_in !== undefined);
 
-  const nextBreakStartIso  = (mappedBreakStartIso  !== undefined) ? normIso(mappedBreakStartIso)  : normIso(ts.break_start_iso);
-  const nextBreakEndIso    = (mappedBreakEndIso    !== undefined) ? normIso(mappedBreakEndIso)    : normIso(ts.break_end_iso);
+  let nextWorkedStartIso = (mappedWorkedStartIso !== undefined) ? normIso(mappedWorkedStartIso) : normIso(ts.worked_start_iso);
+  let nextWorkedEndIso   = (mappedWorkedEndIso   !== undefined) ? normIso(mappedWorkedEndIso)   : normIso(ts.worked_end_iso);
+
+  let nextBreakStartIso  = (mappedBreakStartIso  !== undefined) ? normIso(mappedBreakStartIso)  : normIso(ts.break_start_iso);
+  let nextBreakEndIso    = (mappedBreakEndIso    !== undefined) ? normIso(mappedBreakEndIso)    : normIso(ts.break_end_iso);
 
   let nextBreakMinutesNum =
     (mappedBreakMinutesIn !== undefined)
-      ? Number(mappedBreakMinutesIn == null ? NaN : mappedBreakMinutesIn)
+      ? parseOptionalBreakMinutesInput(mappedBreakMinutesIn)
       : (ts.break_minutes != null ? Number(ts.break_minutes) : null);
 
-  const hasShiftStart = hasIso(nextWorkedStartIso);
-  const hasShiftEnd   = hasIso(nextWorkedEndIso);
+  let hasShiftStart = hasIso(nextWorkedStartIso);
+  let hasShiftEnd   = hasIso(nextWorkedEndIso);
 
   if (hasShiftStart !== hasShiftEnd) {
     return bad('worked_start_iso and worked_end_iso must both be provided (or both cleared).');
@@ -30944,6 +31057,13 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     }
   }
 
+  const shiftClearedExplicitly = shouldPatchWorked && !hasShiftStart && !hasShiftEnd;
+  if (shiftClearedExplicitly) {
+    nextBreakStartIso = null;
+    nextBreakEndIso = null;
+    nextBreakMinutesNum = null;
+  }
+
   const hasBrStart = hasIso(nextBreakStartIso);
   const hasBrEnd   = hasIso(nextBreakEndIso);
 
@@ -30953,7 +31073,8 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
   const anyBreakInfo =
     (hasBrStart && hasBrEnd) ||
-    (mappedBreakMinutesIn !== undefined && Number.isFinite(nextBreakMinutesNum));
+    (mappedBreakMinutesIn !== undefined && nextBreakMinutesNum != null) ||
+    (!shiftClearedExplicitly && mappedBreakMinutesIn === undefined && Number.isFinite(nextBreakMinutesNum));
 
   if (anyBreakInfo && !(hasShiftStart && hasShiftEnd)) {
     return bad('You cannot set break times/minutes without worked_start_iso and worked_end_iso.');
@@ -30994,19 +31115,41 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     nextBreakMinutesNum = computedBreakMinutes;
   } else {
     if (mappedBreakMinutesIn !== undefined) {
-      if (!Number.isFinite(nextBreakMinutesNum) || nextBreakMinutesNum < 0) {
-        return bad('break_minutes must be a non-negative number.');
+      if (nextBreakMinutesNum != null) {
+        if (!Number.isFinite(nextBreakMinutesNum) || nextBreakMinutesNum < 0) {
+          return bad('break_minutes must be a non-negative number.');
+        }
+        nextBreakMinutesNum = Math.round(nextBreakMinutesNum);
+        if (shiftMinutes != null && nextBreakMinutesNum > shiftMinutes) {
+          return bad('break_minutes cannot exceed the worked shift duration.');
+        }
       }
-      nextBreakMinutesNum = Math.round(nextBreakMinutesNum);
-      if (shiftMinutes != null && nextBreakMinutesNum > shiftMinutes) {
-        return bad('break_minutes cannot exceed the worked shift duration.');
-      }
-    } else {
-      if (Number.isFinite(nextBreakMinutesNum) && shiftMinutes != null && nextBreakMinutesNum > shiftMinutes) {
-        return bad('Existing break_minutes exceeds the worked shift duration. Please reduce break_minutes or set break_start_iso/break_end_iso.');
-      }
+    } else if (Number.isFinite(nextBreakMinutesNum) && shiftMinutes != null && nextBreakMinutesNum > shiftMinutes) {
+      return bad('Existing break_minutes exceeds the worked shift duration. Please reduce break_minutes or set break_start_iso/break_end_iso.');
     }
   }
+
+  const nextWorkedMinutes = (hasShiftStart && hasShiftEnd && Number.isFinite(shiftMinutes)) ? shiftMinutes : null;
+
+  const currentReferenceNumber = normTextOrNull(ts.reference_number);
+  const nextReferenceNumber = referenceProvided ? normTextOrNull(reference_number_in) : currentReferenceNumber;
+  const nextReferenceSetAt = referenceProvided
+    ? (nextReferenceNumber ? ((nextReferenceNumber !== currentReferenceNumber) ? now : (ts.reference_set_at || now)) : null)
+    : (ts.reference_set_at ?? null);
+
+  const nextActualScheduleJson = shouldPatchActualSchedule
+    ? buildNormalizedDailyScheduleFromFinalState({
+        workedStartIso: nextWorkedStartIso,
+        workedEndIso: nextWorkedEndIso,
+        breakStartIso: nextBreakStartIso,
+        breakEndIso: nextBreakEndIso,
+        breakMinutes: nextBreakMinutesNum,
+        ymdHint: mappedScheduleYmd || worked_date_ymd || null
+      })
+    : (ts.actual_schedule_json != null ? ts.actual_schedule_json : null);
+
+  const shouldPatchBreakTimesResolved = shouldPatchBreakTimes || shiftClearedExplicitly;
+  const shouldPatchBreakMinutesResolved = shouldPatchBreakMinutes || shiftClearedExplicitly || (hasBrStart && hasBrEnd);
 
   // ─────────────────────────────────────────────────────────────
   // MINIMAL TIMESHEET AUDIT: capture BEFORE for diffing
@@ -31054,28 +31197,34 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     currentTimesheetId = ts?.timesheet_id || currentTimesheetId;
   }
 
-  // 5) Patch worked/break fields (on CURRENT timesheet id)
+  // 5) Patch worked/break/reference fields (on CURRENT timesheet id)
   const patchBody = { updated_at: now };
-
-  const shouldPatchWorked = scheduleProvided || worked_start_iso_in !== undefined || worked_end_iso_in !== undefined;
-  const shouldPatchBreakTimes = scheduleProvided || break_start_iso_in !== undefined || break_end_iso_in !== undefined;
-  const shouldPatchBreakMinutes = scheduleProvided || break_minutes_in !== undefined || (hasBrStart && hasBrEnd);
 
   if (shouldPatchWorked) {
     patchBody.worked_start_iso = normIso(nextWorkedStartIso);
     patchBody.worked_end_iso   = normIso(nextWorkedEndIso);
+    patchBody.worked_minutes   = nextWorkedMinutes;
   }
 
-  if (shouldPatchBreakTimes) {
+  if (shouldPatchBreakTimesResolved) {
     patchBody.break_start_iso = normIso(nextBreakStartIso);
     patchBody.break_end_iso   = normIso(nextBreakEndIso);
   }
 
-  if (shouldPatchBreakMinutes) {
-    patchBody.break_minutes = (Number.isFinite(nextBreakMinutesNum) ? nextBreakMinutesNum : null);
+  if (shouldPatchBreakMinutesResolved) {
+    patchBody.break_minutes = (Number.isFinite(nextBreakMinutesNum) ? Math.round(nextBreakMinutesNum) : null);
   }
 
-  await fetch(
+  if (shouldPatchActualSchedule) {
+    patchBody.actual_schedule_json = nextActualScheduleJson;
+  }
+
+  if (referenceProvided) {
+    patchBody.reference_number = nextReferenceNumber;
+    patchBody.reference_set_at = nextReferenceSetAt;
+  }
+
+  const patchRes = await fetch(
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true`,
@@ -31084,7 +31233,14 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
       body: JSON.stringify(patchBody)
     }
-  ).catch(() => {});
+  ).catch((e) => ({ ok: false, __err: e }));
+
+  if (!patchRes || !patchRes.ok) {
+    const patchErrText = patchRes?.__err
+      ? String(patchRes.__err?.message || patchRes.__err)
+      : await patchRes.text().catch(() => '');
+    return withCORS(env, req, serverError(`Failed to save daily manual timesheet: ${patchErrText || 'Unknown patch failure'}`));
+  }
 
   // 6) Reload updated TS for snapshot + QR (CURRENT timesheet id)
   const updatedTs = await sbGetOne(
@@ -31362,13 +31518,50 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
   }
 
 
+
+  const finalTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=*`
+  ).catch(() => updatedTs || ts || null);
+
   return withCORS(env, req, ok({
     timesheet_id: currentTimesheetId,
     booking_id: guard.resolved.booking_id || null,
     requested_timesheet_id: guard.resolved.requested_timesheet_id || timesheetId,
     current_timesheet_id: currentTimesheetId,
-    current_version: ts?.version ?? guard.resolved.current_version ?? null,
+    current_version: finalTs?.version ?? ts?.version ?? guard.resolved.current_version ?? null,
     was_stale: !!guard.resolved.was_stale,
+
+    worked_start_iso: finalTs?.worked_start_iso ?? null,
+    worked_end_iso: finalTs?.worked_end_iso ?? null,
+    break_start_iso: finalTs?.break_start_iso ?? null,
+    break_end_iso: finalTs?.break_end_iso ?? null,
+    break_minutes: finalTs?.break_minutes ?? null,
+    worked_minutes: finalTs?.worked_minutes ?? null,
+    actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+    reference_number: finalTs?.reference_number ?? null,
+    reference_set_at: finalTs?.reference_set_at ?? null,
+    processing_status: finAfter?.processing_status ?? null,
+
+    timesheet: finalTs || null,
+    tsfin: finAfter || null,
+    summary_row_hint: {
+      timesheet_id: currentTimesheetId,
+      booking_id: guard.resolved.booking_id || null,
+      processing_status: finAfter?.processing_status ?? null,
+      reference_number: finalTs?.reference_number ?? null,
+      worked_start_iso: finalTs?.worked_start_iso ?? null,
+      worked_end_iso: finalTs?.worked_end_iso ?? null,
+      break_start_iso: finalTs?.break_start_iso ?? null,
+      break_end_iso: finalTs?.break_end_iso ?? null,
+      break_minutes: finalTs?.break_minutes ?? null,
+      worked_minutes: finalTs?.worked_minutes ?? null,
+      actual_schedule_json: finalTs?.actual_schedule_json ?? null,
+      total_hours: finAfter?.total_hours ?? null
+    },
 
     qr_action: qrAction,
     qr_issued: qrIssued,
@@ -31378,6 +31571,8 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     qr_token: qrToken || null
   }));
 }
+
+
 async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -31386,6 +31581,84 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
   const enc = encodeURIComponent;
   const trimStr = (v) => String(v || '').trim();
   const now = nowIso();
+  const round2 = (v) => {
+    const n = Number(v || 0);
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  };
+  const parseMaybeJsonObj = (src) => {
+    if (src == null) return null;
+    if (typeof src === 'object') return src;
+    const s = String(src).trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      return (parsed && typeof parsed === 'object') ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+  const normaliseUnitsWeekMap = (src) => {
+    const obj = parseMaybeJsonObj(src) || {};
+    const out = {};
+    for (const [keyRaw, valueRaw] of Object.entries(obj)) {
+      const code = String(keyRaw || '').toUpperCase().trim();
+      if (!code) continue;
+      const n = Number(valueRaw || 0);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      out[code] = n;
+    }
+    return out;
+  };
+  const normaliseUnitsPerDay = (src) => {
+    const obj = parseMaybeJsonObj(src) || {};
+    const out = {};
+    for (const [codeRaw, dayMap] of Object.entries(obj)) {
+      const code = String(codeRaw || '').toUpperCase().trim();
+      if (!code || !dayMap || typeof dayMap !== 'object') continue;
+      const outDays = {};
+      for (const [dateRaw, valueRaw] of Object.entries(dayMap)) {
+        const ymd = String(dateRaw || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
+        const n = Number(valueRaw || 0);
+        if (!Number.isFinite(n) || n <= 0) continue;
+        outDays[ymd] = n;
+      }
+      if (Object.keys(outDays).length) out[code] = outDays;
+    }
+    return out;
+  };
+  const extractExpenseNote = (desc) => {
+    if (desc == null) return '';
+    if (typeof desc === 'object') {
+      const noteA = typeof desc.note === 'string' ? desc.note.trim() : '';
+      const noteB = (!noteA && typeof desc.notes === 'string') ? desc.notes.trim() : '';
+      return noteA || noteB || '';
+    }
+    const s = String(desc).trim();
+    if (!s) return '';
+    try {
+      const parsed = JSON.parse(s);
+      if (parsed && typeof parsed === 'object') {
+        const noteA = typeof parsed.note === 'string' ? parsed.note.trim() : '';
+        const noteB = (!noteA && typeof parsed.notes === 'string') ? parsed.notes.trim() : '';
+        return noteA || noteB || '';
+      }
+    } catch {}
+    return s;
+  };
+  const buildExpenseDraftFromTsfin = (tsfinRow, existingDraft) => {
+    const existing = parseMaybeJsonObj(existingDraft) || {};
+    return {
+      mileage_units: round2(Number(tsfinRow?.mileage_units ?? 0)),
+      travel_pay: round2(Number(tsfinRow?.travel_pay_ex_vat ?? 0)),
+      travel_charge: round2(Number(tsfinRow?.travel_charge_ex_vat ?? 0)),
+      accommodation_pay: round2(Number(tsfinRow?.accommodation_pay_ex_vat ?? 0)),
+      accommodation_charge: round2(Number(tsfinRow?.accommodation_charge_ex_vat ?? 0)),
+      other_pay: round2(Number(tsfinRow?.other_pay_ex_vat ?? 0)),
+      other_charge: round2(Number(tsfinRow?.other_charge_ex_vat ?? 0)),
+      note: extractExpenseNote(tsfinRow?.expenses_description ?? existing.note ?? existing.notes ?? '')
+    };
+  };
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -31426,6 +31699,28 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to resolve booking_id for contract week timesheet'));
   }
   const bookingId = String(resolved.booking_id);
+
+  const currentWeeklyTs = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,submission_mode,actual_schedule_json,additional_units_week,additional_units_per_day,day_references_json,manual_pdf_r2_key,week_ending_date`
+  );
+  if (!currentWeeklyTs) {
+    return withCORS(env, req, serverError('Failed to load current weekly timesheet for contract week reopen'));
+  }
+
+  const currentWeeklyTsfin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_hours,mileage_units,travel_pay_ex_vat,travel_charge_ex_vat,accommodation_pay_ex_vat,accommodation_charge_ex_vat,other_pay_ex_vat,other_charge_ex_vat,expenses_description`
+  );
+  if (!currentWeeklyTsfin) {
+    return withCORS(env, req, serverError('Failed to load current weekly TSFIN for contract week reopen'));
+  }
 
   const dematerialiseTimesheetEvidenceToContractWeekStage = async (contractWeekRow, bookingIdArg, seriesIdsArg, currentTsIdArg) => {
     const ids = Array.isArray(seriesIdsArg)
@@ -31826,7 +32121,29 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     return withCORS(env, req, serverError(await delTs.text()));
   }
 
-  await fetch(
+  const existingTotalsJson = parseMaybeJsonObj(cw.totals_json) || {};
+  const reopenedTotalsJson = {
+    ...existingTotalsJson,
+    hours: {
+      day: Number(currentWeeklyTsfin.hours_day ?? 0),
+      night: Number(currentWeeklyTsfin.hours_night ?? 0),
+      sat: Number(currentWeeklyTsfin.hours_sat ?? 0),
+      sun: Number(currentWeeklyTsfin.hours_sun ?? 0),
+      bh: Number(currentWeeklyTsfin.hours_bh ?? 0)
+    },
+    additional_units_week: normaliseUnitsWeekMap(currentWeeklyTs.additional_units_week),
+    additional_units_per_day: normaliseUnitsPerDay(currentWeeklyTs.additional_units_per_day),
+    expenses_draft: buildExpenseDraftFromTsfin(currentWeeklyTsfin, existingTotalsJson.expenses_draft)
+  };
+
+  const reopenedDayEntriesJson = parseMaybeJsonObj(currentWeeklyTs.day_references_json) || {};
+  const reopenedPlannedScheduleJson = (() => {
+    const parsed = parseMaybeJsonObj(currentWeeklyTs.actual_schedule_json);
+    if (Array.isArray(parsed)) return parsed;
+    return null;
+  })();
+
+  const contractWeekPatchRes = await fetch(
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}`,
     {
       method: 'PATCH',
@@ -31836,10 +32153,16 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
         status: 'OPEN',
         submission_mode_snapshot: reopenSnapshot,
         uploaded_pdf_r2_key: dematerialised.primary_timesheet_storage_key || null,
+        planned_schedule_json: reopenedPlannedScheduleJson,
+        totals_json: reopenedTotalsJson,
+        day_entries_json: reopenedDayEntriesJson,
         updated_at: now
       })
     }
-  ).catch(() => {});
+  );
+  if (!contractWeekPatchRes.ok) {
+    return withCORS(env, req, serverError(await contractWeekPatchRes.text().catch(() => 'Failed to reopen contract week')));
+  }
 
   const snoozeClearResult = await clearCollectedSnoozes(
     snoozesToClear,
@@ -31851,7 +32174,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     reopenedContractWeek = await sbGetOne(
       env,
       `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}` +
-        `&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,additional_seq,is_adjustment,planned_schedule_json,totals_json,updated_at`
+        `&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,additional_seq,is_adjustment,planned_schedule_json,totals_json,day_entries_json,updated_at`
     );
   } catch {
     reopenedContractWeek = null;
@@ -31868,8 +32191,9 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
       uploaded_pdf_r2_key: dematerialised.primary_timesheet_storage_key || null,
       additional_seq: Number(cw.additional_seq ?? 0) || 0,
       is_adjustment: cw.is_adjustment === true,
-      planned_schedule_json: (cw.planned_schedule_json ?? null),
-      totals_json: (cw.totals_json ?? null),
+      planned_schedule_json: reopenedPlannedScheduleJson,
+      totals_json: reopenedTotalsJson,
+      day_entries_json: reopenedDayEntriesJson,
       updated_at: now
     };
   }
@@ -31939,7 +32263,6 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
     snooze_clear_failed_ids: snoozeClearResult.failedIds
   }));
 }
-
 
 
 
@@ -110196,11 +110519,14 @@ async function bankingCronTick(env, opts = {}) {
     return (res && Array.isArray(res.rows)) ? res.rows : [];
   };
 
+  const ORDINARY_BANKING_WEEK_ENDING_CUTOFF = '9999-12-31';
+
   const _findActiveSnapshotRun = async (payDate, weekEndingCutoff) => {
+    const effectiveWeekEndingCutoff = String(weekEndingCutoff || ORDINARY_BANKING_WEEK_ENDING_CUTOFF).trim() || ORDINARY_BANKING_WEEK_ENDING_CUTOFF;
     const q = new URLSearchParams();
     q.set('select', 'id,status,is_active,ready_at_utc,failed_at_utc,created_at_utc,updated_at_utc');
     q.set('pay_date', `eq.${payDate}`);
-    q.set('week_ending_cutoff', `eq.${weekEndingCutoff}`);
+    q.set('week_ending_cutoff', `eq.${effectiveWeekEndingCutoff}`);
     q.set('is_active', 'eq.true');
     q.set('order', 'created_at_utc.desc,id.desc');
     q.set('limit', '1');
@@ -110253,7 +110579,7 @@ async function bankingCronTick(env, opts = {}) {
     return false;
   };
 
-  const _cleanupWorkbenchActiveRuns = async (preserveRunIds) => {
+   const _cleanupWorkbenchActiveRuns = async (preserveRunIds) => {
     const preserved = new Set((preserveRunIds || []).map((id) => String(id || '').trim()).filter(Boolean));
 
     const openSessionQuery = new URLSearchParams();
@@ -110303,6 +110629,55 @@ async function bankingCronTick(env, opts = {}) {
     }
 
     return toDeactivate;
+  };
+
+  const _loadWorkbenchDirtyFanoutRuns = async ({ ensuredRuns, scopeCandidateId, scopeClientId }) => {
+    const runMap = new Map();
+
+    for (const run of (ensuredRuns || [])) {
+      const snapshotRunId = String(run?.snapshotRunId || '').trim();
+      if (!snapshotRunId) continue;
+      runMap.set(snapshotRunId, {
+        snapshotRunId,
+        cycle: run?.cycle || null,
+        source: 'ENSURED_RUN',
+        sessionId: null
+      });
+    }
+
+    const openSessionQuery = new URLSearchParams();
+    openSessionQuery.set('select', 'id,source_snapshot_run_id,scope_candidate_ids,filters_json,status');
+    openSessionQuery.set('status', 'eq.OPEN');
+    const openSessions = await _fetchRows('banking_pay_workbench_sessions', openSessionQuery);
+
+    for (const row of openSessions) {
+      const snapshotRunId = String(row?.source_snapshot_run_id || '').trim();
+      if (!snapshotRunId) continue;
+
+      const scopeCandidateIds = Array.isArray(row?.scope_candidate_ids)
+        ? row.scope_candidate_ids.map((id) => String(id || '').trim()).filter(Boolean)
+        : [];
+      const filtersJson = (row?.filters_json && typeof row.filters_json === 'object' && !Array.isArray(row.filters_json))
+        ? row.filters_json
+        : {};
+      const sessionClientId = String(filtersJson.client_id || filtersJson.clientId || '').trim();
+
+      const matchesCandidate = !!scopeCandidateId && scopeCandidateIds.includes(scopeCandidateId);
+      const matchesClient = !!scopeClientId && sessionClientId === scopeClientId;
+
+      if (!matchesCandidate && !matchesClient) continue;
+
+      if (!runMap.has(snapshotRunId)) {
+        runMap.set(snapshotRunId, {
+          snapshotRunId,
+          cycle: null,
+          source: 'OPEN_SESSION_RUN',
+          sessionId: String(row?.id || '').trim() || null
+        });
+      }
+    }
+
+    return [...runMap.values()];
   };
 
   const _revertBatchesToScheduled = async (payBatchIds, provider, errorMsg, phase) => {
@@ -110372,9 +110747,9 @@ async function bankingCronTick(env, opts = {}) {
     if (!workbenchEnabled) return;
 
     const currentPayDate = String((opts && opts.currentPayDate) || _londonYmd(nowUtc)).trim();
-    const currentWeekEndingCutoff = String((opts && opts.currentWeekEndingCutoff) || currentPayDate).trim();
+    const currentWeekEndingCutoff = ORDINARY_BANKING_WEEK_ENDING_CUTOFF;
     const nextPayDate = String((opts && opts.nextPayDate) || _addDaysYmd(currentPayDate, 7) || currentPayDate).trim();
-    const nextWeekEndingCutoff = String((opts && opts.nextWeekEndingCutoff) || nextPayDate).trim();
+    const nextWeekEndingCutoff = ORDINARY_BANKING_WEEK_ENDING_CUTOFF;
 
     const ensuredRuns = [];
     const rebuiltRunIds = new Set();
@@ -110439,47 +110814,17 @@ async function bankingCronTick(env, opts = {}) {
       for (const run of ensuredRuns) {
         try {
           const runSignals = await _loadSnapshotRunSignals(run.snapshotRunId);
-          const shouldSeed = !!(
-            workbenchForceSeed ||
-            run.wasCreated ||
-            runSignals.isEmpty ||
-            runSignals.isDirty
-          );
-
-          if (!shouldSeed) {
-            summary.workbench.seeded_runs.push({
-              cycle: run.cycle,
-              snapshot_run_id: run.snapshotRunId,
-              skipped: true,
-              reason: 'RUN_ALREADY_WARM_AND_UNCHANGED',
-              run_status: runSignals.status,
-              has_any_state: runSignals.hasAnyState,
-              has_pending_state: runSignals.hasPending,
-              has_failed_state: runSignals.hasFailed,
-              was_created: run.wasCreated,
-              force_seed: workbenchForceSeed
-            });
-            continue;
-          }
-
-          const seedRes = await sbRpc(env, 'pay_workbench_snapshot_enqueue_scope', {
-            p_snapshot_run_id: run.snapshotRunId,
-            p_candidate_id: null,
-            p_client_id: null,
-            p_actor_user_id: actorUserId
-          });
-          const seedPayload = _unwrapRpcPayload(seedRes, 'pay_workbench_snapshot_enqueue_scope');
           summary.workbench.seeded_runs.push({
             cycle: run.cycle,
             snapshot_run_id: run.snapshotRunId,
-            result: seedPayload,
-            seeded: true,
-            was_created: run.wasCreated,
-            force_seed: workbenchForceSeed,
+            skipped: true,
+            reason: 'ORDINARY_FULL_SCOPE_SEED_FORBIDDEN',
             run_status: runSignals.status,
             has_any_state: runSignals.hasAnyState,
             has_pending_state: runSignals.hasPending,
-            has_failed_state: runSignals.hasFailed
+            has_failed_state: runSignals.hasFailed,
+            was_created: run.wasCreated,
+            force_seed: workbenchForceSeed
           });
         } catch (e) {
           summary.workbench.errors.push({
@@ -110582,7 +110927,8 @@ async function bankingCronTick(env, opts = {}) {
           }
           const refreshRes = await sbRpc(env, 'pay_workbench_snapshot_refresh_candidate', {
             p_snapshot_run_id: snapshotRunId,
-            p_candidate_id: candidateId
+            p_candidate_id: candidateId,
+            p_payload_json: payloadJson
           });
           const refreshPayload = _unwrapRpcPayload(refreshRes, 'pay_workbench_snapshot_refresh_candidate');
           await completeJob(refreshPayload);
@@ -110678,29 +111024,40 @@ async function bankingCronTick(env, opts = {}) {
             status: 'SUCCEEDED',
             result: readinessDiag
           });
-        } else if (jobType === 'CONTRACT_CLIENT_DIRTY_FANOUT') {
+           } else if (jobType === 'CONTRACT_CLIENT_DIRTY_FANOUT') {
           const scopeKind = String(payloadJson.scope_kind || '').trim().toUpperCase();
           const scopeCandidateId = String(payloadJson.candidate_id || '').trim() || null;
           const scopeClientId = String(payloadJson.client_id || '').trim() || null;
           const fanoutResults = [];
-          for (const run of ensuredRuns) {
+          const fanoutRuns = await _loadWorkbenchDirtyFanoutRuns({
+            ensuredRuns,
+            scopeCandidateId,
+            scopeClientId
+          });
+
+          for (const run of fanoutRuns) {
             try {
               const fanoutRes = await sbRpc(env, 'pay_workbench_snapshot_enqueue_scope', {
                 p_snapshot_run_id: run.snapshotRunId,
                 p_candidate_id: scopeCandidateId,
                 p_client_id: scopeCandidateId ? null : scopeClientId,
-                p_actor_user_id: actorUserId
+                p_actor_user_id: actorUserId,
+                p_payload_json: payloadJson
               });
               const fanoutPayload = _unwrapRpcPayload(fanoutRes, 'pay_workbench_snapshot_enqueue_scope');
               fanoutResults.push({
                 snapshot_run_id: run.snapshotRunId,
                 scope_kind: scopeKind || null,
+                source: run.source || null,
+                session_id: run.sessionId || null,
                 result: fanoutPayload
               });
             } catch (fanoutErr) {
               fanoutResults.push({
                 snapshot_run_id: run.snapshotRunId,
                 scope_kind: scopeKind || null,
+                source: run.source || null,
+                session_id: run.sessionId || null,
                 error: _errMsg(fanoutErr)
               });
             }
@@ -110980,6 +111337,7 @@ async function bankingCronTick(env, opts = {}) {
 
   return summary;
 }
+
 
 
 
