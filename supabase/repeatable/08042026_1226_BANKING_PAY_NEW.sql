@@ -1,4 +1,3 @@
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_ensure_run(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -167,15 +166,17 @@ BEGIN
     'is_active', v_is_active
   );
 
-  PERFORM public._audit_insert(
-    'banking_pay_snapshot_run',
-    v_snapshot_run_id::text,
-    CASE WHEN v_was_created THEN 'CREATED' ELSE 'REUSED' END,
-    NULL,
-    v_audit_after_json,
-    'SNAPSHOT_RUN_CREATED_OR_REUSED',
-    p_actor_user_id
-  );
+  IF v_was_created THEN
+    PERFORM public._audit_insert(
+      'banking_pay_snapshot_run',
+      v_snapshot_run_id::text,
+      'CREATED',
+      NULL,
+      v_audit_after_json,
+      'SNAPSHOT_RUN_CREATED_OR_REUSED',
+      p_actor_user_id
+    );
+  END IF;
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -233,6 +234,7 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
@@ -16887,6 +16889,13 @@ DECLARE
   v_scope_live_change_seq bigint := 0;
   v_existing_snapshot_job_id uuid := NULL::uuid;
   v_existing_snapshot_job_source_change_seq bigint := 0;
+  v_current_workbench_signature_version integer := 2;
+  v_current_workbench_signature_kind text := 'BANKING_PAY_WORKBENCH';
+  v_legacy_redesign_boundary_utc timestamptz := TIMESTAMPTZ '2026-04-15T00:00:00.000Z';
+  v_legacy_session_row record;
+  v_legacy_signature_json jsonb := NULL;
+  v_legacy_signature_version integer := NULL;
+  v_legacy_signature_kind text := NULL;
 BEGIN
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'actor_user_id is required';
@@ -16908,6 +16917,48 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'tms_users row % not found', p_actor_user_id;
   END IF;
+
+  FOR v_legacy_session_row IN
+    SELECT ws.id,
+           ws.session_signature,
+           ws.week_ending_cutoff,
+           ws.created_at_utc
+    FROM public.banking_pay_workbench_sessions AS ws
+    WHERE ws.actor_user_id = p_actor_user_id
+      AND ws.status = 'OPEN'
+      AND ws.discarded_at_utc IS NULL
+  LOOP
+    v_legacy_signature_json := NULL;
+    v_legacy_signature_version := NULL;
+    v_legacy_signature_kind := NULL;
+
+    BEGIN
+      IF BTRIM(COALESCE(v_legacy_session_row.session_signature, '')) <> '' THEN
+        v_legacy_signature_json := v_legacy_session_row.session_signature::jsonb;
+      END IF;
+    EXCEPTION
+      WHEN OTHERS THEN
+        v_legacy_signature_json := NULL;
+    END;
+
+    IF v_legacy_signature_json IS NOT NULL
+       AND jsonb_typeof(v_legacy_signature_json) = 'object' THEN
+      IF COALESCE(v_legacy_signature_json->>'signature_version', '') ~ '^[0-9]+$' THEN
+        v_legacy_signature_version := (v_legacy_signature_json->>'signature_version')::integer;
+      END IF;
+      v_legacy_signature_kind := UPPER(BTRIM(COALESCE(v_legacy_signature_json->>'kind', '')));
+    END IF;
+
+    IF COALESCE(v_legacy_session_row.week_ending_cutoff, DATE '1900-01-01') <> v_effective_week_ending_cutoff
+       OR COALESCE(v_legacy_signature_version, -1) <> v_current_workbench_signature_version
+       OR COALESCE(v_legacy_signature_kind, '') <> v_current_workbench_signature_kind
+       OR COALESCE(v_legacy_session_row.created_at_utc, TIMESTAMPTZ '1900-01-01 00:00:00+00') < v_legacy_redesign_boundary_utc THEN
+      PERFORM public.pay_workbench_session_discard(
+        p_session_id => v_legacy_session_row.id,
+        p_actor_user_id => p_actor_user_id
+      );
+    END IF;
+  END LOOP;
 
   v_snapshot_info_json := public.pay_workbench_snapshot_ensure_run(
     p_pay_date => p_pay_date,
@@ -17318,6 +17369,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 
