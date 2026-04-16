@@ -29498,3 +29498,221 @@ BEGIN
   END IF;
 END;
 $function$;
+
+
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_clear_all_decisions(p_session_id uuid, p_actor_user_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_now timestamptz := now();
+  v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
+  v_scope_candidate_id uuid := NULL::uuid;
+  v_deleted_case_resolution_count integer := 0;
+  v_deleted_override_count integer := 0;
+  v_selected_preview_row_count integer := 0;
+  v_cleared_session_candidate_state_count integer := 0;
+  v_new_session_version bigint := 0;
+  v_job_json jsonb := '{}'::jsonb;
+  v_job_id uuid := NULL::uuid;
+  v_requeue_candidate_count integer := 0;
+  v_requeue_job_count integer := 0;
+  v_deleted_case_resolution_ids jsonb := '[]'::jsonb;
+  v_deleted_override_ids jsonb := '[]'::jsonb;
+  v_requeue_candidate_ids jsonb := '[]'::jsonb;
+  v_requeue_job_ids jsonb := '[]'::jsonb;
+  v_audit_before_json jsonb := NULL;
+  v_audit_after_json jsonb := '{}'::jsonb;
+BEGIN
+  IF p_session_id IS NULL THEN
+    RAISE EXCEPTION 'session_id is required';
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'actor_user_id is required';
+  END IF;
+
+  PERFORM 1
+  FROM public.tms_users AS tu
+  WHERE tu.id = p_actor_user_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tms_users row % not found', p_actor_user_id;
+  END IF;
+
+  SELECT ws.*
+  INTO v_session_row
+  FROM public.banking_pay_workbench_sessions AS ws
+  WHERE ws.id = p_session_id
+  FOR UPDATE;
+
+  IF v_session_row.id IS NULL THEN
+    RAISE EXCEPTION 'banking_pay_workbench_sessions row % not found', p_session_id;
+  END IF;
+
+  IF v_session_row.status <> 'OPEN' THEN
+    RAISE EXCEPTION 'banking_pay_workbench_session % is not OPEN', p_session_id;
+  END IF;
+
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(case_resolution_row.id::text ORDER BY case_resolution_row.id::text), '[]'::jsonb)
+  INTO v_deleted_case_resolution_count,
+       v_deleted_case_resolution_ids
+  FROM public.banking_pay_workbench_session_case_resolutions AS case_resolution_row
+  WHERE case_resolution_row.session_id = p_session_id;
+
+  SELECT COUNT(*)::integer,
+         COALESCE(jsonb_agg(override_row.id::text ORDER BY override_row.id::text), '[]'::jsonb)
+  INTO v_deleted_override_count,
+       v_deleted_override_ids
+  FROM public.banking_pay_workbench_session_overrides AS override_row
+  WHERE override_row.session_id = p_session_id;
+
+  v_selected_preview_row_count := CASE
+    WHEN jsonb_typeof(COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)) = 'array'
+      THEN jsonb_array_length(COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb))
+    ELSE 0
+  END;
+
+  v_audit_before_json := jsonb_build_object(
+    'id', v_session_row.id::text,
+    'actor_user_id', v_session_row.actor_user_id::text,
+    'pay_date', v_session_row.pay_date::text,
+    'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
+    'filters_json', v_session_row.filters_json,
+    'scope_candidate_ids', to_jsonb(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])),
+    'session_signature', v_session_row.session_signature,
+    'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+    'status', v_session_row.status,
+    'version', v_session_row.version,
+    'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+    'case_resolution_count', v_deleted_case_resolution_count,
+    'case_resolution_ids', v_deleted_case_resolution_ids,
+    'override_count', v_deleted_override_count,
+    'override_ids', v_deleted_override_ids,
+    'selected_preview_row_count', v_selected_preview_row_count
+  );
+
+  DELETE FROM public.banking_pay_workbench_session_case_resolutions AS case_resolution_delete
+  WHERE case_resolution_delete.session_id = p_session_id;
+
+  DELETE FROM public.banking_pay_workbench_session_overrides AS override_delete
+  WHERE override_delete.session_id = p_session_id;
+
+  UPDATE public.banking_pay_workbench_sessions AS ws
+  SET actor_user_id = p_actor_user_id,
+      server_selected_preview_row_ids = '[]'::jsonb,
+      version = ws.version + 1,
+      updated_at_utc = v_now
+  WHERE ws.id = p_session_id
+  RETURNING ws.version
+  INTO v_new_session_version;
+
+  UPDATE public.banking_pay_workbench_session_candidate_state AS scs
+  SET status = 'PENDING',
+      effective_candidate_fragment_json = '{}'::jsonb,
+      effective_summary_fragment_json = '{}'::jsonb,
+      effective_paye_candidate_json = NULL,
+      effective_non_paye_payee_json = NULL,
+      effective_payees_json = '[]'::jsonb,
+      effective_case_resolution_states_json = '[]'::jsonb,
+      effective_canonical_preview_lines_json = '[]'::jsonb,
+      session_version = GREATEST(COALESCE(scs.session_version, 0), v_new_session_version),
+      pending_job_id = NULL::uuid,
+      updated_at_utc = v_now,
+      last_recomputed_at_utc = NULL,
+      last_error_json = NULL
+  WHERE scs.session_id = p_session_id
+    AND scs.candidate_id = ANY(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]));
+
+  GET DIAGNOSTICS v_cleared_session_candidate_state_count = ROW_COUNT;
+
+  FOR v_scope_candidate_id IN
+    SELECT DISTINCT session_scope_candidate_ids.candidate_id
+    FROM unnest(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) AS session_scope_candidate_ids(candidate_id)
+    WHERE session_scope_candidate_ids.candidate_id IS NOT NULL
+    ORDER BY session_scope_candidate_ids.candidate_id
+  LOOP
+    v_job_json := public.pay_workbench_enqueue_session_candidate_refresh(
+      p_session_id => p_session_id,
+      p_candidate_id => v_scope_candidate_id,
+      p_reason => 'SESSION_DECISIONS_CLEARED',
+      p_actor_user_id => p_actor_user_id,
+      p_payload_json => jsonb_build_object(
+        'clear_all_decisions', true,
+        'cleared_case_resolution_count', v_deleted_case_resolution_count,
+        'cleared_override_count', v_deleted_override_count,
+        'cleared_selected_preview_row_count', v_selected_preview_row_count
+      )
+    );
+
+    v_requeue_candidate_ids := v_requeue_candidate_ids || jsonb_build_array(v_scope_candidate_id::text);
+    v_requeue_candidate_count := v_requeue_candidate_count + 1;
+
+    v_job_id := NULL::uuid;
+    IF BTRIM(COALESCE(v_job_json->>'job_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_job_id := (v_job_json->>'job_id')::uuid;
+      v_requeue_job_ids := v_requeue_job_ids || jsonb_build_array(v_job_id::text);
+      v_requeue_job_count := v_requeue_job_count + 1;
+    END IF;
+  END LOOP;
+
+  v_audit_after_json := jsonb_build_object(
+    'id', v_session_row.id::text,
+    'actor_user_id', p_actor_user_id::text,
+    'pay_date', v_session_row.pay_date::text,
+    'week_ending_cutoff', v_session_row.week_ending_cutoff::text,
+    'filters_json', v_session_row.filters_json,
+    'scope_candidate_ids', to_jsonb(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])),
+    'session_signature', v_session_row.session_signature,
+    'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+    'status', v_session_row.status,
+    'version', v_new_session_version,
+    'server_selected_preview_row_ids', '[]'::jsonb,
+    'cleared_case_resolution_count', v_deleted_case_resolution_count,
+    'cleared_case_resolution_ids', v_deleted_case_resolution_ids,
+    'cleared_override_count', v_deleted_override_count,
+    'cleared_override_ids', v_deleted_override_ids,
+    'cleared_selected_preview_row_count', v_selected_preview_row_count,
+    'cleared_session_candidate_state_count', v_cleared_session_candidate_state_count,
+    'requeue_candidate_count', v_requeue_candidate_count,
+    'requeue_candidate_ids', v_requeue_candidate_ids,
+    'requeue_job_count', v_requeue_job_count,
+    'requeue_job_ids', v_requeue_job_ids,
+    'shared_snapshot_truth_touched', false,
+    'snapshot_run_deactivated', false,
+    'session_deleted', false,
+    'decisions_cleared_at_utc', v_now
+  );
+
+  PERFORM public._audit_insert(
+    'banking_pay_workbench_session',
+    p_session_id::text,
+    'WORKBENCH_SESSION_DECISIONS_CLEARED',
+    v_audit_before_json,
+    v_audit_after_json,
+    'SESSION_DECISIONS_CLEARED',
+    p_actor_user_id
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'session_id', p_session_id::text,
+    'source_snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
+    'status', v_session_row.status,
+    'session_version', v_new_session_version,
+    'server_selected_preview_row_ids', '[]'::jsonb,
+    'cleared_case_resolution_count', v_deleted_case_resolution_count,
+    'cleared_override_count', v_deleted_override_count,
+    'cleared_selected_preview_row_count', v_selected_preview_row_count,
+    'cleared_session_candidate_state_count', v_cleared_session_candidate_state_count,
+    'requeue_candidate_count', v_requeue_candidate_count,
+    'requeue_candidate_ids', v_requeue_candidate_ids,
+    'requeue_job_count', v_requeue_job_count,
+    'requeue_job_ids', v_requeue_job_ids,
+    'state_changed', true
+  );
+END;
+$function$
