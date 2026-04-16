@@ -16856,6 +16856,8 @@ begin
   );
 end;
 $function$;
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -16888,13 +16890,28 @@ DECLARE
   v_scope_live_change_seq bigint := 0;
   v_existing_snapshot_job_id uuid := NULL::uuid;
   v_existing_snapshot_job_source_change_seq bigint := 0;
-  v_current_workbench_signature_version integer := 2;
+  v_current_workbench_signature_version integer := 3;
   v_current_workbench_signature_kind text := 'BANKING_PAY_WORKBENCH';
   v_legacy_redesign_boundary_utc timestamptz := TIMESTAMPTZ '2026-04-15T00:00:00.000Z';
   v_legacy_session_row record;
   v_legacy_signature_json jsonb := NULL;
   v_legacy_signature_version integer := NULL;
   v_legacy_signature_kind text := NULL;
+  v_requested_pay_date date := p_pay_date;
+  v_effective_pay_date date := p_pay_date;
+  v_current_london_pay_date date := timezone('Europe/London', v_now)::date;
+  v_is_unfiltered boolean := false;
+  v_requested_snapshot_run_row public.banking_pay_snapshot_runs%ROWTYPE;
+  v_current_ready_run_row public.banking_pay_snapshot_runs%ROWTYPE;
+  v_next_ready_run_row public.banking_pay_snapshot_runs%ROWTYPE;
+  v_nearest_ready_run_row public.banking_pay_snapshot_runs%ROWTYPE;
+  v_requested_run_has_ready boolean := false;
+  v_signature_source_json jsonb := '{}'::jsonb;
+  v_signature_candidate_ids_jsonb jsonb := '[]'::jsonb;
+  v_signature_filters_json jsonb := '{}'::jsonb;
+  v_signature_filter_entry record;
+  v_candidate_filter_id_text text := '';
+  v_client_filter_id_text text := '';
 BEGIN
   IF p_actor_user_id IS NULL THEN
     RAISE EXCEPTION 'actor_user_id is required';
@@ -16903,7 +16920,6 @@ BEGIN
   IF p_pay_date IS NULL THEN
     RAISE EXCEPTION 'pay_date is required';
   END IF;
-
 
   IF v_session_signature = '' THEN
     RAISE EXCEPTION 'session_signature is required';
@@ -16917,14 +16933,23 @@ BEGIN
     RAISE EXCEPTION 'tms_users row % not found', p_actor_user_id;
   END IF;
 
+  IF BTRIM(COALESCE(v_filters_json->>'candidate_id', v_filters_json->>'candidateId', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_filter_candidate_id := COALESCE(v_filters_json->>'candidate_id', v_filters_json->>'candidateId')::uuid;
+  END IF;
+
+  IF BTRIM(COALESCE(v_filters_json->>'client_id', v_filters_json->>'clientId', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_filter_client_id := COALESCE(v_filters_json->>'client_id', v_filters_json->>'clientId')::uuid;
+  END IF;
+
+  v_is_unfiltered := v_filter_candidate_id IS NULL AND v_filter_client_id IS NULL;
+
   FOR v_legacy_session_row IN
     SELECT ws.id,
            ws.session_signature,
            ws.week_ending_cutoff,
            ws.created_at_utc
     FROM public.banking_pay_workbench_sessions AS ws
-    WHERE ws.actor_user_id = p_actor_user_id
-      AND ws.status = 'OPEN'
+    WHERE ws.status = 'OPEN'
       AND ws.discarded_at_utc IS NULL
   LOOP
     v_legacy_signature_json := NULL;
@@ -16959,25 +16984,275 @@ BEGIN
     END IF;
   END LOOP;
 
-  v_snapshot_info_json := public.pay_workbench_snapshot_ensure_run(
-    p_pay_date => p_pay_date,
-    p_week_ending_cutoff => v_effective_week_ending_cutoff,
-    p_actor_user_id => p_actor_user_id
+  IF v_is_unfiltered THEN
+    SELECT sr.*
+    INTO v_requested_snapshot_run_row
+    FROM public.banking_pay_snapshot_runs AS sr
+    WHERE sr.pay_date = v_requested_pay_date
+      AND sr.week_ending_cutoff = v_effective_week_ending_cutoff
+      AND COALESCE(sr.is_active, false) = true
+      AND UPPER(COALESCE(sr.status, '')) = 'READY'
+      AND EXISTS (
+        SELECT 1
+        FROM public.banking_pay_snapshot_candidate_state AS scs
+        WHERE scs.snapshot_run_id = sr.id
+          AND scs.candidate_id IS NOT NULL
+          AND UPPER(COALESCE(scs.status, '')) = 'READY'
+      )
+    ORDER BY sr.created_at_utc DESC, sr.id DESC
+    LIMIT 1;
+
+    v_requested_run_has_ready := v_requested_snapshot_run_row.id IS NOT NULL;
+
+    IF v_requested_run_has_ready THEN
+      v_snapshot_run_id := v_requested_snapshot_run_row.id;
+      v_effective_pay_date := v_requested_snapshot_run_row.pay_date;
+      v_snapshot_info_json := jsonb_build_object(
+        'ok', true,
+        'snapshot_run_id', v_snapshot_run_id::text,
+        'pay_date', v_effective_pay_date::text,
+        'week_ending_cutoff', v_effective_week_ending_cutoff::text,
+        'status', v_requested_snapshot_run_row.status,
+        'is_active', v_requested_snapshot_run_row.is_active,
+        'actor_user_id', p_actor_user_id::text,
+        'created_or_reused_at_utc', v_now
+      );
+    ELSE
+      SELECT sr.*
+      INTO v_current_ready_run_row
+      FROM public.banking_pay_snapshot_runs AS sr
+      WHERE sr.week_ending_cutoff = v_effective_week_ending_cutoff
+        AND COALESCE(sr.is_active, false) = true
+        AND UPPER(COALESCE(sr.status, '')) = 'READY'
+        AND sr.pay_date <= v_current_london_pay_date
+        AND EXISTS (
+          SELECT 1
+          FROM public.banking_pay_snapshot_candidate_state AS scs
+          WHERE scs.snapshot_run_id = sr.id
+            AND scs.candidate_id IS NOT NULL
+            AND UPPER(COALESCE(scs.status, '')) = 'READY'
+        )
+      ORDER BY sr.pay_date DESC, sr.created_at_utc DESC, sr.id DESC
+      LIMIT 1;
+
+      SELECT sr.*
+      INTO v_next_ready_run_row
+      FROM public.banking_pay_snapshot_runs AS sr
+      WHERE sr.week_ending_cutoff = v_effective_week_ending_cutoff
+        AND COALESCE(sr.is_active, false) = true
+        AND UPPER(COALESCE(sr.status, '')) = 'READY'
+        AND sr.pay_date > v_current_london_pay_date
+        AND EXISTS (
+          SELECT 1
+          FROM public.banking_pay_snapshot_candidate_state AS scs
+          WHERE scs.snapshot_run_id = sr.id
+            AND scs.candidate_id IS NOT NULL
+            AND UPPER(COALESCE(scs.status, '')) = 'READY'
+        )
+      ORDER BY sr.pay_date ASC, sr.created_at_utc DESC, sr.id DESC
+      LIMIT 1;
+
+      IF v_current_ready_run_row.id IS NOT NULL THEN
+        v_snapshot_run_id := v_current_ready_run_row.id;
+        v_effective_pay_date := v_current_ready_run_row.pay_date;
+        v_snapshot_info_json := jsonb_build_object(
+          'ok', true,
+          'snapshot_run_id', v_snapshot_run_id::text,
+          'pay_date', v_effective_pay_date::text,
+          'week_ending_cutoff', v_effective_week_ending_cutoff::text,
+          'status', v_current_ready_run_row.status,
+          'is_active', v_current_ready_run_row.is_active,
+          'actor_user_id', p_actor_user_id::text,
+          'created_or_reused_at_utc', v_now
+        );
+      ELSIF v_next_ready_run_row.id IS NOT NULL THEN
+        v_snapshot_run_id := v_next_ready_run_row.id;
+        v_effective_pay_date := v_next_ready_run_row.pay_date;
+        v_snapshot_info_json := jsonb_build_object(
+          'ok', true,
+          'snapshot_run_id', v_snapshot_run_id::text,
+          'pay_date', v_effective_pay_date::text,
+          'week_ending_cutoff', v_effective_week_ending_cutoff::text,
+          'status', v_next_ready_run_row.status,
+          'is_active', v_next_ready_run_row.is_active,
+          'actor_user_id', p_actor_user_id::text,
+          'created_or_reused_at_utc', v_now
+        );
+      ELSE
+        SELECT sr.*
+        INTO v_nearest_ready_run_row
+        FROM public.banking_pay_snapshot_runs AS sr
+        WHERE sr.week_ending_cutoff = v_effective_week_ending_cutoff
+          AND COALESCE(sr.is_active, false) = true
+          AND UPPER(COALESCE(sr.status, '')) = 'READY'
+          AND EXISTS (
+            SELECT 1
+            FROM public.banking_pay_snapshot_candidate_state AS scs
+            WHERE scs.snapshot_run_id = sr.id
+              AND scs.candidate_id IS NOT NULL
+              AND UPPER(COALESCE(scs.status, '')) = 'READY'
+          )
+        ORDER BY ABS(sr.pay_date - v_requested_pay_date) ASC, sr.pay_date ASC, sr.created_at_utc DESC, sr.id DESC
+        LIMIT 1;
+
+        IF v_nearest_ready_run_row.id IS NOT NULL THEN
+          v_snapshot_run_id := v_nearest_ready_run_row.id;
+          v_effective_pay_date := v_nearest_ready_run_row.pay_date;
+          v_snapshot_info_json := jsonb_build_object(
+            'ok', true,
+            'snapshot_run_id', v_snapshot_run_id::text,
+            'pay_date', v_effective_pay_date::text,
+            'week_ending_cutoff', v_effective_week_ending_cutoff::text,
+            'status', v_nearest_ready_run_row.status,
+            'is_active', v_nearest_ready_run_row.is_active,
+            'actor_user_id', p_actor_user_id::text,
+            'created_or_reused_at_utc', v_now
+          );
+        END IF;
+      END IF;
+    END IF;
+  END IF;
+
+  IF v_snapshot_run_id IS NULL THEN
+    v_snapshot_info_json := public.pay_workbench_snapshot_ensure_run(
+      p_pay_date => v_requested_pay_date,
+      p_week_ending_cutoff => v_effective_week_ending_cutoff,
+      p_actor_user_id => p_actor_user_id
+    );
+
+    IF BTRIM(COALESCE(v_snapshot_info_json->>'snapshot_run_id', '')) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'pay_workbench_snapshot_ensure_run did not return a valid snapshot_run_id';
+    END IF;
+
+    v_snapshot_run_id := (v_snapshot_info_json->>'snapshot_run_id')::uuid;
+    v_effective_pay_date := COALESCE(NULLIF(v_snapshot_info_json->>'pay_date', '')::date, v_requested_pay_date);
+  END IF;
+
+  BEGIN
+    IF BTRIM(COALESCE(p_session_signature, '')) <> '' THEN
+      v_signature_source_json := p_session_signature::jsonb;
+    END IF;
+  EXCEPTION
+    WHEN OTHERS THEN
+      v_signature_source_json := '{}'::jsonb;
+  END;
+
+  IF jsonb_typeof(COALESCE(v_signature_source_json, '{}'::jsonb)) <> 'object' THEN
+    v_signature_source_json := '{}'::jsonb;
+  END IF;
+
+  SELECT COALESCE(
+           jsonb_agg(to_jsonb(candidate_id_rows.candidate_id_value) ORDER BY candidate_id_rows.candidate_id_value),
+           '[]'::jsonb
+         )
+  INTO v_signature_candidate_ids_jsonb
+  FROM (
+    SELECT DISTINCT NULLIF(BTRIM(candidate_id_element.value), '') AS candidate_id_value
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(v_signature_source_json->'candidate_ids') = 'array' THEN COALESCE(v_signature_source_json->'candidate_ids', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ) AS candidate_id_element(value)
+    WHERE NULLIF(BTRIM(candidate_id_element.value), '') IS NOT NULL
+  ) AS candidate_id_rows;
+
+  v_signature_filters_json := '{}'::jsonb;
+
+  FOR v_signature_filter_entry IN
+    SELECT filter_entries.key AS key_name,
+           filter_entries.value AS key_value
+    FROM jsonb_each(v_filters_json) AS filter_entries(key, value)
+  LOOP
+    IF v_signature_filter_entry.key_name NOT IN (
+      'pay_date',
+      'payDate',
+      'selectedPayDate',
+      'week_ending_cutoff_date',
+      'weekEndingCutoffDate',
+      'week_ending_cutoff',
+      'weekEndingCutoff',
+      'week_ending_cutoff_raw',
+      'weekEndingCutoffRaw',
+      'candidate_filter_id',
+      'candidateFilterId',
+      'candidate_id',
+      'candidateId',
+      'client_filter_id',
+      'clientFilterId',
+      'client_id',
+      'clientId',
+      'selected_preview_row_ids',
+      'selectedPreviewRowIds',
+      'case_resolutions',
+      'caseResolutions',
+      'component_resolutions',
+      'componentResolutions',
+      'exclude_timesheet_ids',
+      'excludeTimesheetIds',
+      'case_resolution_states',
+      'blocked_case_states',
+      'safe_case_states',
+      'reusable_component_resolutions',
+      'stale_component_resolutions',
+      'draftable_now',
+      'blocked_now',
+      'ready_to_pay_now',
+      'blocked_for_pay_now',
+      'hidden_indefinite_snoozes',
+      'preview_request_seq',
+      'preview_epoch',
+      'tab_epoch',
+      'modal_epoch',
+      'dirty_reason',
+      'pay_context_dirty',
+      'modal_valid',
+      'active_modal_epoch',
+      'same_week_paye_override_reason',
+      'sameWeekPayeOverrideReason',
+      'same_week_paye_override_continue',
+      'sameWeekPayeOverrideContinue',
+      'same_week_paye_override_verified',
+      'sameWeekPayeOverrideVerified',
+      'same_week_paye_override_verified_by_user_id',
+      'sameWeekPayeOverrideVerifiedByUserId',
+      'same_week_paye_override_verified_at_utc',
+      'sameWeekPayeOverrideVerifiedAtUtc',
+      'session_signature',
+      'sessionSignature',
+      'session_id',
+      'sessionId'
+    ) THEN
+      v_signature_filters_json := v_signature_filters_json || jsonb_build_object(v_signature_filter_entry.key_name, v_signature_filter_entry.key_value);
+    END IF;
+  END LOOP;
+
+  v_candidate_filter_id_text := CASE
+    WHEN v_filter_candidate_id IS NOT NULL THEN v_filter_candidate_id::text
+    ELSE ''
+  END;
+
+  v_client_filter_id_text := CASE
+    WHEN v_filter_client_id IS NOT NULL THEN v_filter_client_id::text
+    ELSE ''
+  END;
+
+  v_signature_candidate_ids_jsonb := '[]'::jsonb;
+
+  v_signature_source_json := jsonb_build_object(
+    'candidate_filter_id', v_candidate_filter_id_text,
+    'candidate_ids', v_signature_candidate_ids_jsonb,
+    'client_filter_id', v_client_filter_id_text,
+    'kind', v_current_workbench_signature_kind,
+    'pay_date', v_effective_pay_date::text,
+    'signature_version', v_current_workbench_signature_version
   );
 
-  IF BTRIM(COALESCE(v_snapshot_info_json->>'snapshot_run_id', '')) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    RAISE EXCEPTION 'pay_workbench_snapshot_ensure_run did not return a valid snapshot_run_id';
+  IF v_signature_filters_json <> '{}'::jsonb THEN
+    v_signature_source_json := v_signature_source_json || jsonb_build_object('filters_json', v_signature_filters_json);
   END IF;
 
-  v_snapshot_run_id := (v_snapshot_info_json->>'snapshot_run_id')::uuid;
-
-  IF BTRIM(COALESCE(v_filters_json->>'candidate_id', v_filters_json->>'candidateId', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    v_filter_candidate_id := COALESCE(v_filters_json->>'candidate_id', v_filters_json->>'candidateId')::uuid;
-  END IF;
-
-  IF BTRIM(COALESCE(v_filters_json->>'client_id', v_filters_json->>'clientId', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    v_filter_client_id := COALESCE(v_filters_json->>'client_id', v_filters_json->>'clientId')::uuid;
-  END IF;
+  v_session_signature := v_signature_source_json::text;
 
   IF v_filter_candidate_id IS NOT NULL THEN
     SELECT
@@ -16992,7 +17267,7 @@ BEGIN
     INTO v_scope_candidate_ids;
   ELSIF v_filter_client_id IS NOT NULL THEN
     v_scope_resolution_context_json := public.pay_preview_build_context(
-      p_pay_date => p_pay_date,
+      p_pay_date => v_effective_pay_date,
       p_week_ending_cutoff => v_effective_week_ending_cutoff,
       p_actor_user_id => p_actor_user_id,
       p_candidate_id => NULL::uuid,
@@ -17027,8 +17302,7 @@ BEGIN
   SELECT ws.*
   INTO v_existing_session_row
   FROM public.banking_pay_workbench_sessions AS ws
-  WHERE ws.actor_user_id = p_actor_user_id
-    AND ws.session_signature = v_session_signature
+  WHERE ws.session_signature = v_session_signature
     AND ws.status = 'OPEN'
   LIMIT 1;
 
@@ -17052,7 +17326,7 @@ BEGIN
     )
     VALUES (
       p_actor_user_id,
-      p_pay_date,
+      v_effective_pay_date,
       v_effective_week_ending_cutoff,
       v_filters_json,
       v_scope_candidate_ids,
@@ -17065,15 +17339,17 @@ BEGIN
       v_now,
       NULL
     )
-    ON CONFLICT (actor_user_id, session_signature) WHERE status = 'OPEN'
+    ON CONFLICT (session_signature) WHERE status = 'OPEN'
     DO UPDATE
-    SET pay_date = EXCLUDED.pay_date,
+    SET actor_user_id = EXCLUDED.actor_user_id,
+        pay_date = EXCLUDED.pay_date,
         week_ending_cutoff = EXCLUDED.week_ending_cutoff,
         filters_json = EXCLUDED.filters_json,
         scope_candidate_ids = EXCLUDED.scope_candidate_ids,
         source_snapshot_run_id = EXCLUDED.source_snapshot_run_id,
         version = CASE
-          WHEN public.banking_pay_workbench_sessions.week_ending_cutoff IS DISTINCT FROM EXCLUDED.week_ending_cutoff
+          WHEN public.banking_pay_workbench_sessions.pay_date IS DISTINCT FROM EXCLUDED.pay_date
+            OR public.banking_pay_workbench_sessions.week_ending_cutoff IS DISTINCT FROM EXCLUDED.week_ending_cutoff
             OR public.banking_pay_workbench_sessions.filters_json IS DISTINCT FROM EXCLUDED.filters_json
             OR public.banking_pay_workbench_sessions.scope_candidate_ids IS DISTINCT FROM EXCLUDED.scope_candidate_ids
             OR public.banking_pay_workbench_sessions.source_snapshot_run_id IS DISTINCT FROM EXCLUDED.source_snapshot_run_id
@@ -17087,13 +17363,15 @@ BEGIN
     v_action := 'WORKBENCH_SESSION_CREATED';
   ELSE
     UPDATE public.banking_pay_workbench_sessions AS ws
-    SET pay_date = p_pay_date,
+    SET actor_user_id = p_actor_user_id,
+        pay_date = v_effective_pay_date,
         week_ending_cutoff = v_effective_week_ending_cutoff,
         filters_json = v_filters_json,
         scope_candidate_ids = v_scope_candidate_ids,
         source_snapshot_run_id = v_snapshot_run_id,
         version = CASE
-          WHEN ws.week_ending_cutoff IS DISTINCT FROM v_effective_week_ending_cutoff
+          WHEN ws.pay_date IS DISTINCT FROM v_effective_pay_date
+            OR ws.week_ending_cutoff IS DISTINCT FROM v_effective_week_ending_cutoff
             OR ws.filters_json IS DISTINCT FROM v_filters_json
             OR ws.scope_candidate_ids IS DISTINCT FROM v_scope_candidate_ids
             OR ws.source_snapshot_run_id IS DISTINCT FROM v_snapshot_run_id
@@ -17245,7 +17523,7 @@ BEGIN
           p_payload_json => jsonb_build_object(
             'session_id', v_session_id::text,
             'session_signature', v_session_signature,
-            'pay_date', p_pay_date::text,
+            'pay_date', v_effective_pay_date::text,
             'week_ending_cutoff', v_effective_week_ending_cutoff::text
           )
         );
@@ -17315,7 +17593,7 @@ BEGIN
   v_audit_after_json := jsonb_build_object(
     'id', v_session_id::text,
     'actor_user_id', p_actor_user_id::text,
-    'pay_date', p_pay_date::text,
+    'pay_date', v_effective_pay_date::text,
     'week_ending_cutoff', v_effective_week_ending_cutoff::text,
     'filters_json', v_filters_json,
     'scope_candidate_ids', to_jsonb(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[])),
@@ -17341,6 +17619,7 @@ BEGIN
     'session_id', v_session_id::text,
     'snapshot_run_id', v_snapshot_run_id::text,
     'session_signature', v_session_signature,
+    'pay_date', v_effective_pay_date::text,
     'scope_candidate_ids', to_jsonb(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[])),
     'scope_candidate_count', COALESCE(array_length(v_scope_candidate_ids, 1), 0),
     'action', v_action,
@@ -17348,6 +17627,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview(
