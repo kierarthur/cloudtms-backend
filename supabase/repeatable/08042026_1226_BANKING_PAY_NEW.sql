@@ -17350,7 +17350,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview(
   p_session_id uuid
 )
@@ -17412,7 +17411,7 @@ BEGIN
   v_context_json := public.pay_preview_build_context(
     p_pay_date => v_session_row.pay_date,
     p_week_ending_cutoff => v_session_row.week_ending_cutoff,
-    p_actor_user_id => v_session_row.actor_user_id,
+    p_actor_user_id => NULL::uuid,
     p_candidate_id => v_filter_candidate_id,
     p_client_id => v_filter_client_id,
     p_preview_decisions_json => NULL::jsonb
@@ -17806,6 +17805,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_candidate_preview(
   p_session_id uuid,
@@ -18739,7 +18739,6 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid, uuid);
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_candidate(
   p_session_id uuid,
   p_candidate_id uuid,
@@ -19083,7 +19082,7 @@ BEGIN
   v_context_json := public.pay_preview_build_context(
     p_pay_date => v_session_row.pay_date,
     p_week_ending_cutoff => v_session_row.week_ending_cutoff,
-    p_actor_user_id => v_session_row.actor_user_id,
+    p_actor_user_id => NULL::uuid,
     p_candidate_id => p_candidate_id,
     p_client_id => v_filter_client_id,
     p_preview_decisions_json => NULL::jsonb
@@ -19320,7 +19319,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
 
 
 
