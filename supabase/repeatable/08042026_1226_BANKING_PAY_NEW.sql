@@ -16856,7 +16856,6 @@ begin
   );
 end;
 $function$;
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -17020,20 +17019,8 @@ BEGIN
       SELECT DISTINCT scs.candidate_id
       FROM public.banking_pay_snapshot_candidate_state AS scs
       WHERE scs.snapshot_run_id = v_snapshot_run_id
-      UNION
-      SELECT DISTINCT j.candidate_id
-      FROM public.banking_pay_workbench_jobs AS j
-      WHERE j.snapshot_run_id = v_snapshot_run_id
-        AND j.job_type = 'SNAPSHOT_CANDIDATE_REFRESH'
-        AND j.candidate_id IS NOT NULL
-        AND j.status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED')
-      UNION
-      SELECT DISTINCT scs2.candidate_id
-      FROM public.banking_pay_workbench_session_candidate_state AS scs2
-      JOIN public.banking_pay_workbench_sessions AS ws2
-        ON ws2.id = scs2.session_id
-      WHERE ws2.status = 'OPEN'
-        AND ws2.source_snapshot_run_id = v_snapshot_run_id
+        AND scs.candidate_id IS NOT NULL
+        AND UPPER(COALESCE(scs.status, '')) = 'READY'
     ) AS scope_rows;
   END IF;
 
@@ -17044,14 +17031,6 @@ BEGIN
     AND ws.session_signature = v_session_signature
     AND ws.status = 'OPEN'
   LIMIT 1;
-
-  IF v_existing_session_row.id IS NOT NULL
-     AND v_filter_candidate_id IS NULL
-     AND v_filter_client_id IS NULL
-     AND COALESCE(array_length(v_scope_candidate_ids, 1), 0) = 0
-     AND v_existing_session_row.source_snapshot_run_id = v_snapshot_run_id THEN
-    v_scope_candidate_ids := COALESCE(v_existing_session_row.scope_candidate_ids, ARRAY[]::uuid[]);
-  END IF;
 
   v_scope_candidate_ids_jsonb := to_jsonb(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[]));
 
@@ -17369,11 +17348,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
-
-
 
 
 
