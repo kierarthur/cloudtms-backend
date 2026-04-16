@@ -6494,6 +6494,8 @@ begin
   return;
 end
 $function$;
+
+
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(
   p_week_id uuid,
   p_expected_timesheet_id uuid DEFAULT NULL,
@@ -6501,6 +6503,9 @@ CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(
   p_timesheet_patch_json jsonb DEFAULT '{}'::jsonb,
   p_contract_week_patch_json jsonb DEFAULT '{}'::jsonb,
   p_tsfin_snapshot_json jsonb DEFAULT NULL,
+  p_rotation_json jsonb DEFAULT NULL,
+  p_actor_user_id uuid DEFAULT NULL,
+  p_materialise_staged_evidence boolean DEFAULT true,
   p_now_utc timestamptz DEFAULT now()
 )
 RETURNS TABLE(
@@ -6518,15 +6523,17 @@ RETURNS TABLE(
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path TO 'public'
+SET search_path TO public
 AS $function$
 DECLARE
   v_now timestamptz := COALESCE(p_now_utc, now());
+
   v_week public.contract_weeks%ROWTYPE;
   v_contract public.contracts%ROWTYPE;
   v_pointer_ts public.timesheets%ROWTYPE;
   v_current_ts public.timesheets%ROWTYPE;
   v_current_tsfin public.timesheets_financials%ROWTYPE;
+
   v_create_json jsonb := CASE
     WHEN p_timesheet_create_json IS NULL THEN NULL
     WHEN jsonb_typeof(p_timesheet_create_json) = 'object' THEN p_timesheet_create_json
@@ -6547,11 +6554,36 @@ DECLARE
     WHEN jsonb_typeof(p_tsfin_snapshot_json) = 'object' THEN p_tsfin_snapshot_json
     ELSE NULL
   END;
+  v_rotation_json jsonb := CASE
+    WHEN p_rotation_json IS NULL THEN NULL
+    WHEN jsonb_typeof(p_rotation_json) = 'object' THEN p_rotation_json
+    ELSE NULL
+  END;
+
   v_create_rec public.timesheets%ROWTYPE;
   v_patch_rec public.timesheets%ROWTYPE;
   v_week_patch_rec public.contract_weeks%ROWTYPE;
+
   v_created_now boolean := false;
   v_was_stale boolean := false;
+
+  v_rotation_action text := NULL;
+  v_rotation_revoke_reason text := NULL;
+  v_rotation_new_timesheet_id uuid := NULL;
+  v_rotation_pending_qr boolean := false;
+  v_next_version integer := NULL;
+  v_rotated_ts public.timesheets%ROWTYPE;
+
+  v_queue_item public.manual_timesheet_queue%ROWTYPE;
+  v_queue_kind text := NULL;
+  v_primary_timesheet_storage_key text := NULL;
+  v_primary_timesheet_rotation_raw integer := 0;
+  v_primary_timesheet_rotation_deg integer := 0;
+  v_timesheet_kind_count integer := 0;
+
+  v_missing jsonb := '[]'::jsonb;
+  v_has_evidence boolean := false;
+
   v_outbox public.ts_financials_outbox%ROWTYPE;
   v_write_result record;
 BEGIN
@@ -6573,6 +6605,10 @@ BEGIN
 
   IF p_tsfin_snapshot_json IS NOT NULL AND v_tsfin_snapshot_json IS NULL THEN
     RAISE EXCEPTION 'p_tsfin_snapshot_json must be a JSON object';
+  END IF;
+
+  IF p_rotation_json IS NOT NULL AND v_rotation_json IS NULL THEN
+    RAISE EXCEPTION 'p_rotation_json must be a JSON object';
   END IF;
 
   SELECT *
@@ -6748,6 +6784,94 @@ BEGIN
 
     v_created_now := true;
   ELSE
+    IF v_rotation_json IS NOT NULL THEN
+      IF p_actor_user_id IS NULL THEN
+        RAISE EXCEPTION 'p_actor_user_id is required when p_rotation_json is supplied';
+      END IF;
+
+      v_rotation_action := upper(NULLIF(BTRIM(COALESCE(v_rotation_json->>'qr_action', '')), ''));
+      IF v_rotation_action NOT IN ('INVALIDATE', 'REISSUE', 'REVOKE_TO_MANUAL') THEN
+        RAISE EXCEPTION 'p_rotation_json.qr_action must be INVALIDATE, REISSUE, or REVOKE_TO_MANUAL';
+      END IF;
+
+      v_rotation_new_timesheet_id := NULLIF(BTRIM(COALESCE(v_rotation_json->>'new_timesheet_id', '')), '')::uuid;
+      IF v_rotation_new_timesheet_id IS NULL THEN
+        RAISE EXCEPTION 'p_rotation_json.new_timesheet_id is required';
+      END IF;
+
+      IF v_current_ts.timesheet_id IS NULL THEN
+        RAISE EXCEPTION 'p_rotation_json requires an existing current timesheet';
+      END IF;
+
+      IF NULLIF(BTRIM(COALESCE(v_current_ts.booking_id, '')), '') IS NULL THEN
+        RAISE EXCEPTION 'Cannot rotate: booking_id missing on current timesheet';
+      END IF;
+
+      v_rotation_revoke_reason := NULLIF(BTRIM(COALESCE(v_rotation_json->>'revoke_reason', '')), '');
+      v_rotation_pending_qr := v_rotation_action IN ('INVALIDATE', 'REISSUE');
+
+      PERFORM pg_advisory_xact_lock(hashtext(v_current_ts.booking_id));
+
+      SELECT ts.version
+      INTO v_next_version
+      FROM public.timesheets AS ts
+      WHERE ts.booking_id = v_current_ts.booking_id
+      ORDER BY ts.version DESC, ts.timesheet_id DESC
+      LIMIT 1
+      FOR UPDATE;
+
+      v_next_version := COALESCE(v_next_version, COALESCE(v_current_ts.version, 1)) + 1;
+
+      UPDATE public.timesheets AS ts
+      SET is_current = false,
+          status = 'REVOKED'::public.timesheet_status_enum,
+          revoked_reason = v_rotation_revoke_reason,
+          revoked_by = p_actor_user_id::text,
+          updated_at = v_now
+      WHERE ts.timesheet_id = v_current_ts.timesheet_id
+        AND ts.is_current = true;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'TIMESHEET_ROTATE_REVOKE_FAILED';
+      END IF;
+
+      v_rotated_ts := v_current_ts;
+      v_rotated_ts.timesheet_id := v_rotation_new_timesheet_id;
+      v_rotated_ts.version := v_next_version;
+      v_rotated_ts.is_current := true;
+      v_rotated_ts.status := 'RECEIVED'::public.timesheet_status_enum;
+      v_rotated_ts.revoked_reason := NULL;
+      v_rotated_ts.revoked_by := NULL;
+      v_rotated_ts.authorised_at_server := NULL;
+      v_rotated_ts.qr_token := NULL;
+      v_rotated_ts.qr_status := CASE
+        WHEN v_rotation_pending_qr THEN 'PENDING'::public.timesheet_qr_status_enum
+        ELSE NULL
+      END;
+      v_rotated_ts.qr_payload_json := '{}'::jsonb;
+      v_rotated_ts.qr_generated_at := NULL;
+      v_rotated_ts.qr_scanned_at := NULL;
+      v_rotated_ts.qr_scan_info_json := NULL;
+      v_rotated_ts.qr_r2_key := NULL;
+      v_rotated_ts.qr_last_sent_hash := NULL;
+      v_rotated_ts.qr_last_sent_at_utc := NULL;
+      v_rotated_ts.qr_signed_hash := NULL;
+      v_rotated_ts.qr_signed_at_utc := NULL;
+      v_rotated_ts.manual_pdf_r2_key := NULL;
+      v_rotated_ts.created_at := v_now;
+      v_rotated_ts.updated_at := v_now;
+
+      INSERT INTO public.timesheets
+      SELECT (v_rotated_ts).*
+      RETURNING * INTO v_current_ts;
+    END IF;
+  END IF;
+
+  IF v_current_ts.timesheet_id IS NULL THEN
+    RAISE EXCEPTION 'CURRENT_TIMESHEET_NOT_READY';
+  END IF;
+
+  IF v_patch_json <> '{}'::jsonb THEN
     v_patch_rec := jsonb_populate_record(v_current_ts, v_patch_json);
 
     UPDATE public.timesheets AS ts
@@ -6818,8 +6942,167 @@ BEGIN
     RAISE EXCEPTION 'CONTRACT_WEEK_UPDATE_FAILED';
   END IF;
 
+  IF v_created_now AND COALESCE(p_materialise_staged_evidence, true) THEN
+    FOR v_queue_item IN
+      SELECT *
+      FROM public.manual_timesheet_queue AS mq
+      WHERE mq.status = 'STAGED'
+        AND mq.meta_json->>'contract_week_id' = v_week.id::text
+      ORDER BY mq.uploaded_at_utc ASC, mq.id ASC
+      FOR UPDATE
+    LOOP
+      v_queue_kind := upper(
+        COALESCE(
+          NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'staged_kind', '')), ''),
+          NULLIF(BTRIM(COALESCE(v_queue_item.meta_json->>'kind', '')), ''),
+          'TIMESHEET'
+        )
+      );
+
+      IF v_queue_kind NOT IN ('TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER') THEN
+        v_queue_kind := 'OTHER';
+      END IF;
+
+      IF v_queue_kind = 'TIMESHEET' THEN
+        v_timesheet_kind_count := v_timesheet_kind_count + 1;
+        IF v_timesheet_kind_count > 1 THEN
+          RAISE EXCEPTION 'Only one staged TIMESHEET file may be materialised to a weekly manual timesheet';
+        END IF;
+
+        v_primary_timesheet_storage_key := v_queue_item.r2_key;
+        v_primary_timesheet_rotation_raw := COALESCE(v_queue_item.last_rotation_deg, 0);
+        v_primary_timesheet_rotation_raw := ((v_primary_timesheet_rotation_raw % 360) + 360) % 360;
+        v_primary_timesheet_rotation_deg :=
+          CASE
+            WHEN v_primary_timesheet_rotation_raw >= 315 OR v_primary_timesheet_rotation_raw < 45 THEN 0
+            WHEN v_primary_timesheet_rotation_raw >= 45 AND v_primary_timesheet_rotation_raw < 135 THEN 90
+            WHEN v_primary_timesheet_rotation_raw >= 135 AND v_primary_timesheet_rotation_raw < 225 THEN 180
+            ELSE 270
+          END;
+      END IF;
+
+      INSERT INTO public.timesheet_evidence (
+        timesheet_id,
+        kind,
+        display_name,
+        storage_key,
+        created_at,
+        created_by
+      )
+      VALUES (
+        v_current_ts.timesheet_id,
+        v_queue_kind,
+        v_queue_item.original_filename,
+        v_queue_item.r2_key,
+        COALESCE(v_queue_item.uploaded_at_utc, v_now),
+        COALESCE(v_queue_item.uploaded_by_user_id, p_actor_user_id)
+      );
+
+      UPDATE public.manual_timesheet_queue AS mq
+      SET status = 'ATTACHED',
+          timesheet_id = v_current_ts.timesheet_id,
+          meta_json = COALESCE(v_queue_item.meta_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'contract_week_id', v_week.id::text,
+              'staged_kind', v_queue_kind,
+              'materialised_to_timesheet_id', v_current_ts.timesheet_id::text,
+              'materialised_at_utc', to_jsonb(v_now)
+            )
+      WHERE mq.id = v_queue_item.id;
+    END LOOP;
+  END IF;
+
+  IF v_primary_timesheet_storage_key IS NOT NULL THEN
+    UPDATE public.timesheets AS ts
+    SET manual_pdf_r2_key = v_primary_timesheet_storage_key,
+        manual_pdf_rotation_degrees = v_primary_timesheet_rotation_deg,
+        updated_at = v_now
+    WHERE ts.timesheet_id = v_current_ts.timesheet_id
+      AND ts.is_current = true
+    RETURNING * INTO v_current_ts;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'TIMESHEET_MANUAL_PDF_UPDATE_FAILED';
+    END IF;
+  END IF;
+
   IF v_tsfin_snapshot_json IS NULL THEN
     RAISE EXCEPTION 'p_tsfin_snapshot_json is required';
+  END IF;
+
+  IF COALESCE(NULLIF(v_tsfin_snapshot_json->>'mileage_units', '')::numeric, 0) > 0
+     OR COALESCE(NULLIF(v_tsfin_snapshot_json->>'mileage_pay_ex_vat', '')::numeric, 0) > 0
+     OR COALESCE(NULLIF(v_tsfin_snapshot_json->>'mileage_charge_ex_vat', '')::numeric, 0) > 0 THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.timesheet_evidence AS te
+      WHERE te.timesheet_id = v_current_ts.timesheet_id
+        AND te.kind = 'MILEAGE'
+      LIMIT 1
+    ) INTO v_has_evidence;
+
+    IF NOT COALESCE(v_has_evidence, false) THEN
+      v_missing := v_missing || jsonb_build_array(
+        jsonb_build_object('category', 'mileage', 'required_kind', 'MILEAGE')
+      );
+    END IF;
+  END IF;
+
+  IF COALESCE(NULLIF(v_tsfin_snapshot_json->>'travel_pay_ex_vat', '')::numeric, 0) > 0
+     OR COALESCE(NULLIF(v_tsfin_snapshot_json->>'travel_charge_ex_vat', '')::numeric, 0) > 0 THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.timesheet_evidence AS te
+      WHERE te.timesheet_id = v_current_ts.timesheet_id
+        AND te.kind = 'TRAVEL'
+      LIMIT 1
+    ) INTO v_has_evidence;
+
+    IF NOT COALESCE(v_has_evidence, false) THEN
+      v_missing := v_missing || jsonb_build_array(
+        jsonb_build_object('category', 'travel', 'required_kind', 'TRAVEL')
+      );
+    END IF;
+  END IF;
+
+  IF COALESCE(NULLIF(v_tsfin_snapshot_json->>'accommodation_pay_ex_vat', '')::numeric, 0) > 0
+     OR COALESCE(NULLIF(v_tsfin_snapshot_json->>'accommodation_charge_ex_vat', '')::numeric, 0) > 0 THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.timesheet_evidence AS te
+      WHERE te.timesheet_id = v_current_ts.timesheet_id
+        AND te.kind = 'ACCOMMODATION'
+      LIMIT 1
+    ) INTO v_has_evidence;
+
+    IF NOT COALESCE(v_has_evidence, false) THEN
+      v_missing := v_missing || jsonb_build_array(
+        jsonb_build_object('category', 'accommodation', 'required_kind', 'ACCOMMODATION')
+      );
+    END IF;
+  END IF;
+
+  IF COALESCE(NULLIF(v_tsfin_snapshot_json->>'other_pay_ex_vat', '')::numeric, 0) > 0
+     OR COALESCE(NULLIF(v_tsfin_snapshot_json->>'other_charge_ex_vat', '')::numeric, 0) > 0 THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.timesheet_evidence AS te
+      WHERE te.timesheet_id = v_current_ts.timesheet_id
+        AND te.kind = 'OTHER'
+      LIMIT 1
+    ) INTO v_has_evidence;
+
+    IF NOT COALESCE(v_has_evidence, false) THEN
+      v_missing := v_missing || jsonb_build_array(
+        jsonb_build_object('category', 'other', 'required_kind', 'OTHER')
+      );
+    END IF;
+  END IF;
+
+  IF jsonb_array_length(v_missing) > 0 THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'EVIDENCE_REQUIRED',
+      DETAIL = jsonb_build_object('missing', v_missing)::text;
   END IF;
 
   v_tsfin_snapshot_json :=
@@ -6902,3 +7185,459 @@ BEGIN
   RETURN NEXT;
 END;
 $function$;
+CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(
+  p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
+  p_now_utc timestamptz DEFAULT now()
+)
+RETURNS TABLE(
+  booking_id text,
+  requested_timesheet_id uuid,
+  current_timesheet_id uuid,
+  current_version integer,
+  was_stale boolean,
+  processing_status_before public.ts_fin_processing_status_enum,
+  processing_status_after public.ts_fin_processing_status_enum,
+  timesheet_json jsonb,
+  timesheet_financials_json jsonb
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO public
+AS $function$
+DECLARE
+  v_now timestamptz := COALESCE(p_now_utc, now());
+  v_requested_ts public.timesheets%ROWTYPE;
+  v_current_ts public.timesheets%ROWTYPE;
+  v_current_tsfin public.timesheets_financials%ROWTYPE;
+  v_contract_week public.contract_weeks%ROWTYPE;
+  v_prev_status public.ts_fin_processing_status_enum;
+  v_new_status public.ts_fin_processing_status_enum := 'PENDING_AUTH'::public.ts_fin_processing_status_enum;
+BEGIN
+  IF p_timesheet_id IS NULL THEN
+    RAISE EXCEPTION 'p_timesheet_id is required';
+  END IF;
+
+  IF p_expected_timesheet_id IS NULL THEN
+    RAISE EXCEPTION 'expected_timesheet_id is required';
+  END IF;
+
+  SELECT *
+  INTO v_requested_ts
+  FROM public.timesheets AS ts
+  WHERE ts.timesheet_id = p_timesheet_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TIMESHEET_NOT_FOUND';
+  END IF;
+
+  IF COALESCE(v_requested_ts.is_current, false) THEN
+    v_current_ts := v_requested_ts;
+  ELSE
+    SELECT *
+    INTO v_current_ts
+    FROM public.timesheets AS ts
+    WHERE ts.booking_id = v_requested_ts.booking_id
+      AND ts.is_current = true
+    ORDER BY ts.version DESC, ts.timesheet_id DESC
+    LIMIT 1
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      SELECT *
+      INTO v_current_ts
+      FROM public.timesheets AS ts
+      WHERE ts.booking_id = v_requested_ts.booking_id
+      ORDER BY ts.version DESC, ts.timesheet_id DESC
+      LIMIT 1
+      FOR UPDATE;
+
+      IF NOT FOUND THEN
+        v_current_ts := v_requested_ts;
+      END IF;
+    END IF;
+  END IF;
+
+  IF p_expected_timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'TIMESHEET_MOVED',
+      DETAIL = jsonb_build_object(
+        'current_timesheet_id', v_current_ts.timesheet_id::text
+      )::text;
+  END IF;
+
+  SELECT *
+  INTO v_current_tsfin
+  FROM public.timesheets_financials AS tf
+  WHERE tf.timesheet_id = v_current_ts.timesheet_id
+    AND tf.is_current = true
+  ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.id DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'NO_TSFIN';
+  END IF;
+
+  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL
+     OR v_current_tsfin.paid_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION 'TIMESHEET_LOCKED_OR_PAID';
+  END IF;
+
+  v_prev_status := v_current_tsfin.processing_status;
+
+  UPDATE public.timesheets AS ts
+  SET authorised_at_server = NULL,
+      updated_at = v_now
+  WHERE ts.timesheet_id = v_current_ts.timesheet_id
+    AND ts.is_current = true
+  RETURNING * INTO v_current_ts;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TIMESHEET_UPDATE_FAILED';
+  END IF;
+
+  UPDATE public.timesheets_financials AS tf
+  SET processing_status = v_new_status,
+      authorised_by_user_id = NULL,
+      authorised_at_utc = NULL,
+      updated_at = v_now
+  WHERE tf.id = v_current_tsfin.id
+  RETURNING * INTO v_current_tsfin;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TSFIN_UPDATE_FAILED';
+  END IF;
+
+  IF v_current_ts.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum THEN
+    SELECT *
+    INTO v_contract_week
+    FROM public.contract_weeks AS cw
+    WHERE cw.timesheet_id = v_current_ts.timesheet_id
+    LIMIT 1
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      SELECT cw.*
+      INTO v_contract_week
+      FROM public.contract_weeks AS cw
+      JOIN public.timesheets AS tw
+        ON tw.timesheet_id = cw.timesheet_id
+      WHERE tw.booking_id = v_current_ts.booking_id
+      ORDER BY cw.updated_at DESC NULLS LAST, cw.id DESC
+      LIMIT 1
+      FOR UPDATE OF cw;
+    END IF;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'CONTRACT_WEEK_NOT_FOUND_FOR_WEEKLY_TIMESHEET';
+    END IF;
+
+    UPDATE public.contract_weeks AS cw
+    SET timesheet_id = v_current_ts.timesheet_id,
+        status = 'SUBMITTED'::public.contract_week_status_enum,
+        updated_at = v_now
+    WHERE cw.id = v_contract_week.id
+    RETURNING * INTO v_contract_week;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'CONTRACT_WEEK_STATUS_UPDATE_FAILED';
+    END IF;
+  END IF;
+
+  SELECT *
+  INTO v_current_ts
+  FROM public.timesheets AS ts
+  WHERE ts.timesheet_id = v_current_ts.timesheet_id
+    AND ts.is_current = true
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CURRENT_TIMESHEET_NOT_FOUND_AFTER_WRITE';
+  END IF;
+
+  SELECT *
+  INTO v_current_tsfin
+  FROM public.timesheets_financials AS tf
+  WHERE tf.timesheet_id = v_current_ts.timesheet_id
+    AND tf.is_current = true
+  ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.id DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TIMESHEET_FINANCIALS_CURRENT_NOT_FOUND';
+  END IF;
+
+  booking_id := v_current_ts.booking_id;
+  requested_timesheet_id := v_requested_ts.timesheet_id;
+  current_timesheet_id := v_current_ts.timesheet_id;
+  current_version := v_current_ts.version;
+  was_stale := v_requested_ts.timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id;
+  processing_status_before := v_prev_status;
+  processing_status_after := v_current_tsfin.processing_status;
+  timesheet_json := to_jsonb(v_current_ts);
+  timesheet_financials_json := to_jsonb(v_current_tsfin);
+
+  RETURN NEXT;
+END;
+$function$;
+CREATE OR REPLACE FUNCTION public.timesheet_authorise_generic_atomic(
+  p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
+  p_actor_user_id uuid,
+  p_now_utc timestamptz DEFAULT now()
+)
+RETURNS TABLE(
+  booking_id text,
+  requested_timesheet_id uuid,
+  current_timesheet_id uuid,
+  current_version integer,
+  was_stale boolean,
+  processing_status_before public.ts_fin_processing_status_enum,
+  processing_status_after public.ts_fin_processing_status_enum,
+  validation_status text,
+  validation_pre_validated boolean,
+  hr_validation_required_for_invoice boolean,
+  timesheet_authorised_before timestamptz,
+  timesheet_json jsonb,
+  timesheet_financials_json jsonb
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO public
+AS $function$
+DECLARE
+  v_now timestamptz := COALESCE(p_now_utc, now());
+  v_requested_ts public.timesheets%ROWTYPE;
+  v_current_ts public.timesheets%ROWTYPE;
+  v_current_tsfin public.timesheets_financials%ROWTYPE;
+  v_prev_status public.ts_fin_processing_status_enum;
+  v_new_status public.ts_fin_processing_status_enum;
+  v_force_ready_for_invoice boolean := false;
+  v_client_requires_hr boolean := false;
+  v_hr_validation_required_for_invoice boolean := false;
+  v_validation_status text := NULL;
+  v_validation_pre_validated boolean := false;
+  v_validation_ok boolean := false;
+  v_must_hold_for_hr_validation boolean := false;
+  v_prevalidated_fast_track boolean := false;
+  v_has_segment_invoice_lock boolean := false;
+  v_timesheet_authorised_before timestamptz := NULL;
+BEGIN
+  IF p_timesheet_id IS NULL THEN
+    RAISE EXCEPTION 'p_timesheet_id is required';
+  END IF;
+
+  IF p_expected_timesheet_id IS NULL THEN
+    RAISE EXCEPTION 'expected_timesheet_id is required';
+  END IF;
+
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'p_actor_user_id is required';
+  END IF;
+
+  SELECT *
+  INTO v_requested_ts
+  FROM public.timesheets AS ts
+  WHERE ts.timesheet_id = p_timesheet_id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TIMESHEET_NOT_FOUND';
+  END IF;
+
+  IF COALESCE(v_requested_ts.is_current, false) THEN
+    v_current_ts := v_requested_ts;
+  ELSE
+    SELECT *
+    INTO v_current_ts
+    FROM public.timesheets AS ts
+    WHERE ts.booking_id = v_requested_ts.booking_id
+      AND ts.is_current = true
+    ORDER BY ts.version DESC, ts.timesheet_id DESC
+    LIMIT 1
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      SELECT *
+      INTO v_current_ts
+      FROM public.timesheets AS ts
+      WHERE ts.booking_id = v_requested_ts.booking_id
+      ORDER BY ts.version DESC, ts.timesheet_id DESC
+      LIMIT 1
+      FOR UPDATE;
+
+      IF NOT FOUND THEN
+        v_current_ts := v_requested_ts;
+      END IF;
+    END IF;
+  END IF;
+
+  IF p_expected_timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id THEN
+    RAISE EXCEPTION USING
+      MESSAGE = 'TIMESHEET_MOVED',
+      DETAIL = jsonb_build_object(
+        'current_timesheet_id', v_current_ts.timesheet_id::text
+      )::text;
+  END IF;
+
+  SELECT *
+  INTO v_current_tsfin
+  FROM public.timesheets_financials AS tf
+  WHERE tf.timesheet_id = v_current_ts.timesheet_id
+    AND tf.is_current = true
+  ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.id DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'NO_TSFIN';
+  END IF;
+
+  v_prev_status := v_current_tsfin.processing_status;
+  v_timesheet_authorised_before := v_current_ts.authorised_at_server;
+
+  v_has_segment_invoice_lock := EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(
+      CASE
+        WHEN v_current_tsfin.invoice_breakdown_json IS NOT NULL
+         AND jsonb_typeof(v_current_tsfin.invoice_breakdown_json) = 'object'
+         AND jsonb_typeof(v_current_tsfin.invoice_breakdown_json->'segments') = 'array'
+         AND upper(COALESCE(v_current_tsfin.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+        THEN v_current_tsfin.invoice_breakdown_json->'segments'
+        ELSE '[]'::jsonb
+      END
+    ) AS seg(value)
+    WHERE NULLIF(BTRIM(COALESCE(seg.value->>'invoice_locked_invoice_id', '')), '') IS NOT NULL
+  );
+
+  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL
+     OR v_current_tsfin.paid_at_utc IS NOT NULL
+     OR v_has_segment_invoice_lock THEN
+    RAISE EXCEPTION 'TIMESHEET_LOCKED_OR_PAID';
+  END IF;
+
+  SELECT
+    COALESCE(vts.client_requires_hr, false),
+    COALESCE(vts.hr_validation_required_for_invoice, false),
+    CASE
+      WHEN vts.validation_status IS NULL THEN NULL
+      ELSE upper(vts.validation_status::text)
+    END
+  INTO
+    v_client_requires_hr,
+    v_hr_validation_required_for_invoice,
+    v_validation_status
+  FROM public.v_timesheets_summary_base AS vts
+  WHERE vts.timesheet_id = v_current_ts.timesheet_id
+  LIMIT 1;
+
+  SELECT COALESCE(tv.pre_validated, false)
+  INTO v_validation_pre_validated
+  FROM public.timesheet_validations AS tv
+  WHERE tv.timesheet_id = v_current_ts.timesheet_id
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    v_validation_pre_validated := false;
+  END IF;
+
+  v_force_ready_for_invoice :=
+    v_current_tsfin.basis IN (
+      'NHSP'::public.timesheet_fin_basis_enum,
+      'NHSP_ADJUSTMENT'::public.timesheet_fin_basis_enum,
+      'HEALTHROSTER_SELF_BILL'::public.timesheet_fin_basis_enum,
+      'HEALTHROSTER_ADJUSTMENT'::public.timesheet_fin_basis_enum
+    );
+
+  v_validation_ok := COALESCE(v_validation_status, '') IN ('VALIDATION_OK', 'OVERRIDDEN');
+  v_must_hold_for_hr_validation := v_hr_validation_required_for_invoice AND NOT v_validation_ok;
+  v_prevalidated_fast_track := v_validation_pre_validated AND v_validation_ok;
+
+  v_new_status := v_current_tsfin.processing_status;
+
+  IF v_prev_status IN (
+    'PENDING_AUTH'::public.ts_fin_processing_status_enum,
+    'READY_FOR_HR'::public.ts_fin_processing_status_enum
+  ) THEN
+    IF v_must_hold_for_hr_validation THEN
+      v_new_status := 'READY_FOR_HR'::public.ts_fin_processing_status_enum;
+    ELSE
+      v_new_status :=
+        CASE
+          WHEN v_force_ready_for_invoice THEN 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+          WHEN v_prevalidated_fast_track THEN 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+          WHEN v_client_requires_hr THEN 'READY_FOR_HR'::public.ts_fin_processing_status_enum
+          ELSE 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
+        END;
+    END IF;
+  END IF;
+
+  UPDATE public.timesheets AS ts
+  SET authorised_at_server = v_now,
+      updated_at = v_now
+  WHERE ts.timesheet_id = v_current_ts.timesheet_id
+    AND ts.is_current = true
+  RETURNING * INTO v_current_ts;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TIMESHEET_UPDATE_FAILED';
+  END IF;
+
+  UPDATE public.timesheets_financials AS tf
+  SET processing_status = v_new_status,
+      authorised_by_user_id = p_actor_user_id,
+      authorised_at_utc = v_now,
+      updated_at = v_now
+  WHERE tf.id = v_current_tsfin.id
+  RETURNING * INTO v_current_tsfin;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TSFIN_UPDATE_FAILED';
+  END IF;
+
+  SELECT *
+  INTO v_current_ts
+  FROM public.timesheets AS ts
+  WHERE ts.timesheet_id = v_current_ts.timesheet_id
+    AND ts.is_current = true
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CURRENT_TIMESHEET_NOT_FOUND_AFTER_WRITE';
+  END IF;
+
+  SELECT *
+  INTO v_current_tsfin
+  FROM public.timesheets_financials AS tf
+  WHERE tf.timesheet_id = v_current_ts.timesheet_id
+    AND tf.is_current = true
+  ORDER BY tf.computed_at_utc DESC NULLS LAST, tf.id DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'TIMESHEET_FINANCIALS_CURRENT_NOT_FOUND';
+  END IF;
+
+  booking_id := v_current_ts.booking_id;
+  requested_timesheet_id := v_requested_ts.timesheet_id;
+  current_timesheet_id := v_current_ts.timesheet_id;
+  current_version := v_current_ts.version;
+  was_stale := v_requested_ts.timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id;
+  processing_status_before := v_prev_status;
+  processing_status_after := v_current_tsfin.processing_status;
+  validation_status := v_validation_status;
+  validation_pre_validated := v_validation_pre_validated;
+  hr_validation_required_for_invoice := v_hr_validation_required_for_invoice;
+  timesheet_authorised_before := v_timesheet_authorised_before;
+  timesheet_json := to_jsonb(v_current_ts);
+  timesheet_financials_json := to_jsonb(v_current_tsfin);
+
+  RETURN NEXT;
+END;
+$function$;
+
