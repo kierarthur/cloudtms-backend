@@ -9490,9 +9490,6 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     if (!sessionRow) {
       return withCORS(env, req, notFound('Workbench session not found'));
     }
-    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-      return withCORS(env, req, forbidden('Forbidden'));
-    }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
       return withCORS(env, req, badRequest('Workbench session is not open'));
     }
@@ -9548,6 +9545,8 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
 
 async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId) {
   const id = String(sessionId || '').trim();
@@ -9631,9 +9630,6 @@ async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, use
     const sessionRow = (rows && rows[0]) ? rows[0] : null;
     if (!sessionRow) {
       return withCORS(env, req, notFound('Workbench session not found'));
-    }
-    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-      return withCORS(env, req, forbidden('Forbidden'));
     }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
       return withCORS(env, req, badRequest('Workbench session is not open'));
@@ -9764,9 +9760,6 @@ async function handleBankingPayWorkbenchSessionSetTimesheetExclusion(env, req, u
     if (!sessionRow) {
       return withCORS(env, req, notFound('Workbench session not found'));
     }
-    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-      return withCORS(env, req, forbidden('Forbidden'));
-    }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
       return withCORS(env, req, badRequest('Workbench session is not open'));
     }
@@ -9884,9 +9877,6 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
     if (!sessionRow) {
       return withCORS(env, req, notFound('Workbench session not found'));
     }
-    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-      return withCORS(env, req, forbidden('Forbidden'));
-    }
     if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
       return withCORS(env, req, badRequest('Workbench session is not open'));
     }
@@ -9903,6 +9893,8 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
+
 
 async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId) {
   const id = String(sessionId || '').trim();
@@ -10042,6 +10034,11 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
 
     if (!out.session_id) out.session_id = sessionId;
     if (!out.snapshot_run_id && openPayload.snapshot_run_id) out.snapshot_run_id = openPayload.snapshot_run_id;
+    if (!out.snapshot_run_id && openPayload.source_snapshot_run_id) out.snapshot_run_id = openPayload.source_snapshot_run_id;
+    if (!out.source_snapshot_run_id && openPayload.source_snapshot_run_id) out.source_snapshot_run_id = openPayload.source_snapshot_run_id;
+    if (!out.source_snapshot_run_id && openPayload.snapshot_run_id) out.source_snapshot_run_id = openPayload.snapshot_run_id;
+    if (!out.pay_date && openPayload.pay_date) out.pay_date = openPayload.pay_date;
+    if (!out.session_signature && openPayload.session_signature) out.session_signature = openPayload.session_signature;
     if ((out.session_version === undefined || out.session_version === null) && openPayload.session_version !== undefined) {
       out.session_version = openPayload.session_version;
     }
@@ -10051,6 +10048,7 @@ async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
   const id = String(sessionId || '').trim();
@@ -10093,9 +10091,6 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
       return withCORS(env, req, notFound('Workbench session not found'));
     }
 
-    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-      return withCORS(env, req, forbidden('Forbidden'));
-    }
 
     const previewRpc = await sbRpc(env, 'pay_workbench_session_get_preview', {
       p_session_id: id
@@ -10107,6 +10102,7 @@ async function handleBankingPayWorkbenchSessionGet(env, req, user, sessionId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
+
 
 async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sessionId, candidateId) {
   const sessionIdText = String(sessionId || '').trim();
@@ -10153,9 +10149,6 @@ async function handleBankingPayWorkbenchSessionGetCandidate(env, req, user, sess
       return withCORS(env, req, notFound('Workbench session not found'));
     }
 
-    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-      return withCORS(env, req, forbidden('Forbidden'));
-    }
 
     const candidateRpc = await sbRpc(env, 'pay_workbench_session_get_candidate_preview', {
       p_session_id: sessionIdText,
@@ -10210,9 +10203,6 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
       return withCORS(env, req, notFound('Workbench session not found'));
     }
 
-    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-      return withCORS(env, req, forbidden('Forbidden'));
-    }
 
     const progressRpc = await sbRpc(env, 'pay_workbench_session_get_progress', {
       p_session_id: id
@@ -28451,11 +28441,6 @@ async function handleTimesheetUpdateReference(env, req, timesheetId) {
 }
 
 
-
-
-
-
-
 async function handleContractWeekManualDraftDetails(env, req, weekId) {
   const enc = encodeURIComponent;
   const WLOG = true;
@@ -28673,6 +28658,7 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
 
     const resolvedRouteType = String(resolvedImportAuthoritative?.route_type || '').trim().toUpperCase();
     const resolvedImportAuthoritativeFlag = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.is_import_authoritative === true);
+    const resolvedManualAdjustmentEditable = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.manual_adjustment_editable === true);
 
     let routeType = '';
     if (resolvedRouteType === 'WEEKLY_NHSP' || resolvedRouteType === 'WEEKLY_NHSP_ADJUSTMENT') {
@@ -28687,11 +28673,24 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       routeType = isElectronic ? 'WEEKLY_ELECTRONIC' : 'WEEKLY_MANUAL';
     }
 
-    const isImportAuthoritative =
-      resolvedImportAuthoritativeFlag ||
+    const isManualNhspAdditionalDraft =
+      resolvedManualAdjustmentEditable ||
+      (
+        routeType === 'WEEKLY_NHSP_ADJUSTMENT' &&
+        isAdjustment &&
+        submissionModeSnapshot === 'MANUAL'
+      );
+
+    const fallbackImportAuthoritative =
       routeType === 'WEEKLY_NHSP' ||
       routeType === 'WEEKLY_NHSP_ADJUSTMENT' ||
       (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired === true);
+
+    const isImportAuthoritative = isManualNhspAdditionalDraft
+      ? false
+      : (resolvedImportAuthoritative && resolvedImportAuthoritative.ok)
+        ? resolvedImportAuthoritativeFlag
+        : fallbackImportAuthoritative;
 
     const compareBlockRequired =
       (routeType === 'WEEKLY_HEALTHROSTER') &&
@@ -28699,7 +28698,7 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
 
     const underlyingChannelFamily = isImportAuthoritative
       ? null
-      : (isElectronic ? 'ELECTRONIC' : 'MANUAL_NON_QR');
+      : (isManualNhspAdditionalDraft ? 'MANUAL_NON_QR' : (isElectronic ? 'ELECTRONIC' : 'MANUAL_NON_QR'));
 
     const routeFamily = isImportAuthoritative ? 'IMPORT_AUTHORITATIVE' : underlyingChannelFamily;
 
@@ -28887,6 +28886,7 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
     return withCORS(env, req, serverError('Failed to load contract week manual draft details'));
   }
 }
+
 
 
 async function handleTimesheetDetails(env, req, timesheetId) {
@@ -29268,6 +29268,17 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       ready_to_pay: effective.ready_to_pay
     });
 
+    let resolvedImportAuthoritative = null;
+    try {
+      resolvedImportAuthoritative = await resolveImportAuthoritative(env, {
+        timesheet_id: currentTimesheetId,
+        contract_week_id: contractWeekId,
+        contract_id: effective.contract_id || contractWeek?.contract_id || ts.contract_id || null
+      });
+    } catch {
+      resolvedImportAuthoritative = null;
+    }
+
     // Validation rows (most recent first)
     const { rows: valRows } = await sbFetch(
       env,
@@ -29329,6 +29340,8 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const routeTypeUpper = String(effective.route_type || '').toUpperCase();
     const clientNoTimesheetRequired = boolish(effective.client_no_timesheet_required);
     const clientIsNhsp = boolish(effective.client_is_nhsp);
+    const resolvedImportAuthoritativeFlag = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.is_import_authoritative === true);
+    const resolvedManualAdjustmentEditable = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.manual_adjustment_editable === true);
 
     const subMode = String(ts.submission_mode || '').toUpperCase();
     const qrStatus = String(ts.qr_status || '').toUpperCase() || null;
@@ -29346,11 +29359,17 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       hasQrLastSentHash
     );
 
-    const isImportAuthoritative =
+    const fallbackImportAuthoritative =
       (routeTypeUpper === 'WEEKLY_NHSP') ||
       (routeTypeUpper === 'WEEKLY_NHSP_ADJUSTMENT') ||
       (routeTypeUpper === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired === true) ||
       (clientIsNhsp === true && routeTypeUpper === 'WEEKLY_MANUAL' && subMode !== 'MANUAL');
+
+    const isImportAuthoritative = resolvedManualAdjustmentEditable
+      ? false
+      : (resolvedImportAuthoritative && resolvedImportAuthoritative.ok)
+        ? resolvedImportAuthoritativeFlag
+        : fallbackImportAuthoritative;
 
     const compareBlockRequired =
       (routeTypeUpper === 'WEEKLY_HEALTHROSTER') &&
@@ -36127,6 +36146,10 @@ async function handleBulkProcessDataset(env, req) {
       if (!Object.prototype.hasOwnProperty.call(o, 'pay_paid_at_utc')) o.pay_paid_at_utc = null;
       if (!Object.prototype.hasOwnProperty.call(o, 'net_delta_ex_vat')) o.net_delta_ex_vat = 0;
       if (!Object.prototype.hasOwnProperty.call(o, 'summary_stage')) o.summary_stage = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'submission_mode')) o.submission_mode = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'submission_mode_snapshot')) o.submission_mode_snapshot = null;
+      if (!Object.prototype.hasOwnProperty.call(o, 'additional_seq')) o.additional_seq = 0;
+      if (!Object.prototype.hasOwnProperty.call(o, 'is_adjustment')) o.is_adjustment = null;
 
       const timesheetId = (o.timesheet_id != null && String(o.timesheet_id).trim()) ? String(o.timesheet_id).trim() : null;
       const contractWeekId = (o.contract_week_id != null && String(o.contract_week_id).trim()) ? String(o.contract_week_id).trim() : null;
@@ -36179,13 +36202,22 @@ async function handleBulkProcessDataset(env, req) {
   const classifyRouteFamily = (row) => {
     const routeType = String(row?.route_type || '').trim().toUpperCase();
     const submissionMode = String(row?.submission_mode || '').trim().toUpperCase();
+    const submissionModeSnapshot = String(row?.submission_mode_snapshot || '').trim().toUpperCase();
+    const effectiveSubmissionMode = submissionMode || submissionModeSnapshot;
     const clientNoTimesheetRequired = toBool(row?.client_no_timesheet_required);
     const qrStatus = String(row?.qr_status || '').trim().toUpperCase();
     const isQr = toBool(row?.is_qr) || !!qrStatus;
+    const isAdjustment = !!(toBool(row?.is_adjustment) || Number(row?.additional_seq || 0) > 0);
+
+    const isManualNhspAdditional = (
+      routeType === 'WEEKLY_NHSP_ADJUSTMENT' &&
+      isAdjustment &&
+      effectiveSubmissionMode === 'MANUAL'
+    );
 
     if (
       routeType === 'WEEKLY_NHSP' ||
-      routeType === 'WEEKLY_NHSP_ADJUSTMENT' ||
+      (routeType === 'WEEKLY_NHSP_ADJUSTMENT' && !isManualNhspAdditional) ||
       (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired)
     ) {
       return {
@@ -36199,7 +36231,7 @@ async function handleBulkProcessDataset(env, req) {
 
     const underlyingChannelFamily = isQr
       ? 'QR'
-      : (submissionMode === 'ELECTRONIC' ? 'ELECTRONIC' : 'MANUAL_NON_QR');
+      : (effectiveSubmissionMode === 'ELECTRONIC' ? 'ELECTRONIC' : 'MANUAL_NON_QR');
 
     return {
       route_family: underlyingChannelFamily,
@@ -36458,6 +36490,8 @@ async function handleBulkProcessDataset(env, req) {
     processed_rows
   }));
 }
+
+
 
 async function handleBulkAuthoriseDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -46182,12 +46216,13 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
 //   2) contracts override booleans (is_nhsp/autoprocess_hr/no_timesheet_required)
 // Fallback is fail-open (returns is_import_authoritative:false) if it can’t resolve.
 // ────────────────────────────────────────────────────────────────
+
 async function resolveImportAuthoritative(env, input = {}) {
   const enc = encodeURIComponent;
 
-  const timesheet_id     = input.timesheet_id ? String(input.timesheet_id) : null;
-  const contract_week_id = input.contract_week_id ? String(input.contract_week_id) : null;
-  const contract_id      = input.contract_id ? String(input.contract_id) : null;
+  const timesheet_id     = input.timesheet_id ? String(input.timesheet_id).trim() : null;
+  const contract_week_id = input.contract_week_id ? String(input.contract_week_id).trim() : null;
+  let contract_id        = input.contract_id ? String(input.contract_id).trim() : null;
 
   const toBool = (v) => {
     if (v === true) return true;
@@ -46197,8 +46232,10 @@ async function resolveImportAuthoritative(env, input = {}) {
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
 
+  const toUpper = (v) => String(v == null ? '' : v).trim().toUpperCase();
+
   const isImportAuthoritativeFromSummary = (routeType, clientNoTsRequired) => {
-    const rt = String(routeType || '').toUpperCase();
+    const rt = toUpper(routeType);
     const noTs = toBool(clientNoTsRequired);
     return (
       rt === 'WEEKLY_NHSP' ||
@@ -46206,6 +46243,106 @@ async function resolveImportAuthoritative(env, input = {}) {
       (rt === 'WEEKLY_HEALTHROSTER' && noTs === true)
     );
   };
+
+  const isImportDerivedAdjustmentOrigin = (origin) => {
+    const originUpper = toUpper(origin);
+    return (
+      originUpper === 'IMPORT_CORRECTION' ||
+      originUpper === 'IMPORT_CANCELLATION'
+    );
+  };
+
+  const loadContractWeekFacts = async (id) => {
+    const weekId = String(id || '').trim();
+    if (!weekId) return null;
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?id=eq.${enc(weekId)}` +
+          `&select=id,contract_id,additional_seq,is_adjustment,submission_mode_snapshot,timesheet_id` +
+          `&limit=1`
+      );
+      return (rows && rows[0]) || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const loadTimesheetFacts = async (id) => {
+    const tsId = String(id || '').trim();
+    if (!tsId) return null;
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=eq.${enc(tsId)}` +
+          `&select=timesheet_id,contract_id,submission_mode,is_adjustment,parent_timesheet_id,adjustment_origin` +
+          `&limit=1`
+      );
+      return (rows && rows[0]) || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const isManualNhspAdjustmentFromFacts = ({ route_type, timesheet_row, contract_week_row }) => {
+    if (toUpper(route_type) !== 'WEEKLY_NHSP_ADJUSTMENT') return false;
+
+    const tsRow = (timesheet_row && typeof timesheet_row === 'object') ? timesheet_row : null;
+    const cwRow = (contract_week_row && typeof contract_week_row === 'object') ? contract_week_row : null;
+
+    const tsIsAdjustment = toBool(tsRow?.is_adjustment);
+    const tsSubmissionMode = toUpper(tsRow?.submission_mode);
+    const tsAdjustmentOrigin = toUpper(tsRow?.adjustment_origin);
+    const tsParentTimesheetId = String(tsRow?.parent_timesheet_id || '').trim();
+
+    const cwIsAdjustment = !!(
+      toBool(cwRow?.is_adjustment) ||
+      Number(cwRow?.additional_seq || 0) > 0
+    );
+    const cwSubmissionMode = toUpper(cwRow?.submission_mode_snapshot);
+    const cwTimesheetId = String(cwRow?.timesheet_id || '').trim();
+    const cwIsContractWeekOnly = !cwTimesheetId;
+
+    if (
+      tsRow &&
+      tsIsAdjustment &&
+      tsSubmissionMode === 'MANUAL' &&
+      !isImportDerivedAdjustmentOrigin(tsAdjustmentOrigin) &&
+      (
+        tsAdjustmentOrigin === 'MANUAL_ADJUSTMENT' ||
+        !!tsParentTimesheetId ||
+        cwIsAdjustment
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      cwRow &&
+      cwIsAdjustment &&
+      cwSubmissionMode === 'MANUAL' &&
+      cwIsContractWeekOnly
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
+  let contractWeekFacts = null;
+  let timesheetFacts = null;
+
+  if (contract_week_id) {
+    contractWeekFacts = await loadContractWeekFacts(contract_week_id);
+    if (!contract_id && contractWeekFacts?.contract_id) contract_id = String(contractWeekFacts.contract_id).trim();
+  }
+
+  if (timesheet_id) {
+    timesheetFacts = await loadTimesheetFacts(timesheet_id);
+    if (!contract_id && timesheetFacts?.contract_id) contract_id = String(timesheetFacts.contract_id).trim();
+  }
 
   // 1) Best source: v_timesheets_summary (authoritative derived route fields)
   // Prefer timesheet_id (for timesheet endpoints), otherwise contract_week_id (for planned week endpoints).
@@ -46231,18 +46368,37 @@ async function resolveImportAuthoritative(env, input = {}) {
       const r = (rows && rows[0]) || null;
 
       if (r) {
-        const route_type = String(r.route_type || '').toUpperCase();
+        const route_type = toUpper(r.route_type);
         const client_no_timesheet_required = toBool(r.client_no_timesheet_required);
+        const resolvedContractWeekId = r.contract_week_id || contract_week_id || null;
+        const resolvedTimesheetId = r.timesheet_id || timesheet_id || null;
+        const resolvedContractId = r.contract_id || contract_id || null;
+
+        if (!contractWeekFacts && resolvedContractWeekId) {
+          contractWeekFacts = await loadContractWeekFacts(resolvedContractWeekId);
+        }
+        if (!timesheetFacts && resolvedTimesheetId) {
+          timesheetFacts = await loadTimesheetFacts(resolvedTimesheetId);
+        }
+
+        const manual_adjustment_editable = isManualNhspAdjustmentFromFacts({
+          route_type,
+          timesheet_row: timesheetFacts,
+          contract_week_row: contractWeekFacts
+        });
 
         return {
           ok: true,
           source: 'v_timesheets_summary',
           route_type,
           client_no_timesheet_required,
-          contract_id: r.contract_id || contract_id || null,
-          contract_week_id: r.contract_week_id || contract_week_id || null,
-          timesheet_id: r.timesheet_id || timesheet_id || null,
-          is_import_authoritative: isImportAuthoritativeFromSummary(route_type, client_no_timesheet_required)
+          contract_id: resolvedContractId,
+          contract_week_id: resolvedContractWeekId,
+          timesheet_id: resolvedTimesheetId,
+          manual_adjustment_editable,
+          is_import_authoritative: manual_adjustment_editable
+            ? false
+            : isImportAuthoritativeFromSummary(route_type, client_no_timesheet_required)
         };
       }
     }
@@ -46266,10 +46422,19 @@ async function resolveImportAuthoritative(env, input = {}) {
         const is_nhsp = toBool(c.is_nhsp);
         const autoprocess_hr = toBool(c.autoprocess_hr);
         const no_timesheet_required = toBool(c.no_timesheet_required);
+        const fallbackRouteType = is_nhsp ? 'WEEKLY_NHSP_ADJUSTMENT' : null;
+        const manual_adjustment_editable = isManualNhspAdjustmentFromFacts({
+          route_type: fallbackRouteType,
+          timesheet_row: timesheetFacts,
+          contract_week_row: contractWeekFacts
+        });
 
-        const is_import_authoritative =
-          (is_nhsp === true) ||
-          (autoprocess_hr === true && no_timesheet_required === true);
+        const is_import_authoritative = manual_adjustment_editable
+          ? false
+          : (
+              (is_nhsp === true) ||
+              (autoprocess_hr === true && no_timesheet_required === true)
+            );
 
         return {
           ok: true,
@@ -46277,8 +46442,9 @@ async function resolveImportAuthoritative(env, input = {}) {
           route_type: null,
           client_no_timesheet_required: null,
           contract_id: c.id,
-          contract_week_id: contract_week_id || null,
-          timesheet_id: timesheet_id || null,
+          contract_week_id: contract_week_id || contractWeekFacts?.id || null,
+          timesheet_id: timesheet_id || timesheetFacts?.timesheet_id || null,
+          manual_adjustment_editable,
           is_import_authoritative
         };
       }
@@ -46293,13 +46459,12 @@ async function resolveImportAuthoritative(env, input = {}) {
     route_type: null,
     client_no_timesheet_required: null,
     contract_id: contract_id || null,
-    contract_week_id: contract_week_id || null,
-    timesheet_id: timesheet_id || null,
+    contract_week_id: contract_week_id || contractWeekFacts?.id || null,
+    timesheet_id: timesheet_id || timesheetFacts?.timesheet_id || null,
+    manual_adjustment_editable: false,
     is_import_authoritative: false
   };
 }
-
-
 
 
 // POST /api/contracts/:id/truncate-tail
@@ -55697,6 +55862,181 @@ async function apiUpdateAssignmentBandMapping(id, patch) {
   try { json = txt ? JSON.parse(txt) : null; } catch { json = null; }
 
   return __unwrapSingle(json);
+}
+async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user, sessionId) {
+  const id = String(sessionId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!uuidRe.test(id)) {
+    return withCORS(env, req, badRequest('session_id must be a UUID'));
+  }
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (body !== null && (!body || typeof body !== 'object' || Array.isArray(body))) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const enc = encodeURIComponent;
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const cloneJson = (value) => {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  };
+  const normalizeStringArray = (value) => Array.isArray(value)
+    ? Array.from(new Set(value.map((item) => trimStr(item)).filter(Boolean)))
+    : [];
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
+        payload = payload[key];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  try {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(id)}` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) {
+      return withCORS(env, req, notFound('Workbench session not found'));
+    }
+    if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
+      return withCORS(env, req, badRequest('Workbench session is not open'));
+    }
+
+    const clearRpc = await sbRpc(env, 'pay_workbench_session_clear_all_decisions', {
+      p_session_id: id,
+      p_actor_user_id: actorUserId
+    });
+
+    const clearPayload = unwrapRpc(clearRpc, 'pay_workbench_session_clear_all_decisions');
+    const clearObj = isPlainObject(clearPayload) ? clearPayload : {};
+
+    const previewRpc = await sbRpc(env, 'pay_workbench_session_get_preview', {
+      p_session_id: id
+    });
+
+    const previewPayload = unwrapRpc(previewRpc, 'pay_workbench_session_get_preview');
+    const previewObj = isPlainObject(previewPayload) ? previewPayload : {};
+    const previewSessionObj = isPlainObject(previewObj.session) ? previewObj.session : {};
+
+    const canonicalSessionId = trimStr(
+      previewObj.session_id ||
+      previewSessionObj.session_id ||
+      clearObj.session_id ||
+      id
+    ) || id;
+
+    const canonicalPayDate = trimStr(
+      previewObj.pay_date ||
+      previewSessionObj.pay_date ||
+      clearObj.pay_date ||
+      ''
+    ) || null;
+
+    const canonicalSnapshotRunId = trimStr(
+      previewObj.snapshot_run_id ||
+      previewObj.source_snapshot_run_id ||
+      previewSessionObj.snapshot_run_id ||
+      previewSessionObj.source_snapshot_run_id ||
+      clearObj.snapshot_run_id ||
+      clearObj.source_snapshot_run_id ||
+      sessionRow.source_snapshot_run_id ||
+      ''
+    ) || null;
+
+    const canonicalSessionVersion = (
+      previewObj.session_version ??
+      previewSessionObj.session_version ??
+      clearObj.session_version ??
+      null
+    );
+
+    const canonicalSessionSignature = trimStr(
+      previewObj.session_signature ||
+      previewSessionObj.session_signature ||
+      clearObj.session_signature ||
+      ''
+    ) || null;
+
+    const canonicalSelectedPreviewRowIds = normalizeStringArray(
+      previewObj.server_selected_preview_row_ids ??
+      previewObj.selected_preview_row_ids ??
+      previewSessionObj.server_selected_preview_row_ids ??
+      previewSessionObj.selected_preview_row_ids ??
+      clearObj.server_selected_preview_row_ids ??
+      []
+    );
+
+    const pendingCandidateIds = normalizeStringArray(
+      previewObj.pending_candidate_ids ??
+      previewSessionObj.pending_candidate_ids ??
+      clearObj.pending_candidate_ids ??
+      clearObj.requeue_candidate_ids ??
+      []
+    );
+
+    const failedCandidateIds = normalizeStringArray(
+      previewObj.failed_candidate_ids ??
+      previewSessionObj.failed_candidate_ids ??
+      clearObj.failed_candidate_ids ??
+      []
+    );
+
+    const out = {
+      ...clearObj,
+      ok: true,
+      session_id: canonicalSessionId,
+      pay_date: canonicalPayDate,
+      snapshot_run_id: canonicalSnapshotRunId,
+      source_snapshot_run_id: canonicalSnapshotRunId,
+      session_version: canonicalSessionVersion,
+      session_signature: canonicalSessionSignature,
+      status: trimStr(clearObj.status || sessionRow.status || '') || null,
+      server_selected_preview_row_ids: cloneJson(canonicalSelectedPreviewRowIds) || [],
+      pending_candidate_ids: cloneJson(pendingCandidateIds) || [],
+      failed_candidate_ids: cloneJson(failedCandidateIds) || [],
+      preview: cloneJson(previewObj) || previewObj,
+      session: {
+        ...previewSessionObj,
+        session_id: canonicalSessionId,
+        pay_date: canonicalPayDate,
+        snapshot_run_id: canonicalSnapshotRunId,
+        source_snapshot_run_id: canonicalSnapshotRunId,
+        session_version: canonicalSessionVersion,
+        session_signature: canonicalSessionSignature,
+        server_selected_preview_row_ids: cloneJson(canonicalSelectedPreviewRowIds) || [],
+        pending_candidate_ids: cloneJson(pendingCandidateIds) || [],
+        failed_candidate_ids: cloneJson(failedCandidateIds) || [],
+        status: trimStr(clearObj.status || sessionRow.status || previewSessionObj.status || '') || null
+      }
+    };
+
+    return withCORS(env, req, ok(out));
+  } catch (e) {
+    return withCORS(env, req, serverError(String(e?.message || e)));
+  }
 }
 
 function openAssignmentBandMappingsModal(opts) {
@@ -117373,6 +117713,15 @@ if (req.method === 'POST' && p === '/api/banking/pay/auth-token/action') {
     return handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, m[1]);
   }
 }
+{
+  const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/clear-all-decisions$/i);
+  if (m && req.method === 'POST') {
+    return handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user, m[1]);
+  }
+}
+
+
+
 
 {
   const m = p.match(/^\/api\/banking\/pay\/workbench\/session\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/case-resolution$/i);
