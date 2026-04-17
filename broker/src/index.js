@@ -35564,7 +35564,6 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId) {
   }));
 }
 
-
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -36019,7 +36018,7 @@ async function handleTimesheetsSummary(env, req) {
     limitValue: effLimit,
     offsetValue: effOffset,
     withPaging: true,
-    withOrder: true
+    withOrder: !hasIdFilter
   });
 
   try {
@@ -36105,6 +36104,8 @@ async function handleTimesheetsSummary(env, req) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
   }
 }
+
+
 async function handleBulkProcessDataset(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -74927,6 +74928,8 @@ function buildTimesheetSummaryFilterSpec(input = {}) {
   if (idExpr && /^in\.\(.+\)$/.test(idExpr)) {
     const inner = idExpr.slice(4, -1);
     ids = normalizeIdArray(inner.split(','));
+  } else if (idExpr) {
+    ids = normalizeIdArray([idExpr]);
   } else if (idsCsv) {
     ids = normalizeIdArray(idsCsv.split(','));
   } else {
@@ -74990,7 +74993,6 @@ function buildTimesheetSummaryFilterSpec(input = {}) {
 
   return clonePlain(out);
 }
-
 function buildInvoiceSummaryFilterSpec(input = {}) {
   const trimStr = (v) => String(v == null ? '' : v).trim();
 
@@ -110928,8 +110930,6 @@ async function csvAdapter_confirmManual(env, batchId, bankConfirmRef, actorUserI
   });
 }
 
-
-
 async function bankingCronTick(env, opts = {}) {
   const nowUtc = (() => {
     const v = opts && opts.nowUtc ? new Date(opts.nowUtc) : new Date();
@@ -111099,7 +111099,7 @@ async function bankingCronTick(env, opts = {}) {
   };
 
   const ORDINARY_BANKING_WEEK_ENDING_CUTOFF = '9999-12-31';
-  const CURRENT_WORKBENCH_SIGNATURE_VERSION = 2;
+  const CURRENT_WORKBENCH_SIGNATURE_VERSION = 3;
   const CURRENT_WORKBENCH_SIGNATURE_KIND = 'BANKING_PAY_WORKBENCH';
   const DEFAULT_WORKBENCH_LEGACY_REDESIGN_BOUNDARY_UTC = '2026-04-15T00:00:00.000Z';
 
@@ -111206,7 +111206,7 @@ async function bankingCronTick(env, opts = {}) {
     if (row?.discarded_at_utc) reasons.push('SESSION_ALREADY_DISCARDED');
     if (!snapshotRunId) reasons.push('MISSING_SOURCE_SNAPSHOT_RUN_ID');
     if (weekEndingCutoff !== ORDINARY_BANKING_WEEK_ENDING_CUTOFF) reasons.push('NON_ORDINARY_WEEK_ENDING_CUTOFF');
-    if (!Number.isFinite(signatureVersion) || signatureVersion !== CURRENT_WORKBENCH_SIGNATURE_VERSION) reasons.push('PRE_V2_SESSION_SIGNATURE');
+    if (!Number.isFinite(signatureVersion) || signatureVersion !== CURRENT_WORKBENCH_SIGNATURE_VERSION) reasons.push('PRE_V3_SESSION_SIGNATURE');
     if (signatureKind !== CURRENT_WORKBENCH_SIGNATURE_KIND) reasons.push('LEGACY_SESSION_KIND');
     if (Number.isFinite(redesignBoundaryMs) && Number.isFinite(createdMs) && createdMs < redesignBoundaryMs) reasons.push('PRE_REDESIGN_BOUNDARY_SESSION');
 
@@ -112047,9 +112047,6 @@ async function bankingCronTick(env, opts = {}) {
 
   return summary;
 }
-
-
-
 
 
 
