@@ -2981,6 +2981,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_build_context(p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_preview_decisions_json jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3267,34 +3268,141 @@ BEGIN
         v_scope_candidate_count
       FROM scope_candidates;
     ELSE
-      WITH targeted_scope_timesheet_ids AS (
-        SELECT DISTINCT NULLIF(BTRIM(scope_timesheet_ids.scope_timesheet_id_raw), '')::uuid AS timesheet_id
-        FROM (
-          SELECT jsonb_array_elements_text(COALESCE(v_targeted_timesheet_ids, '[]'::jsonb)) AS scope_timesheet_id_raw
-          UNION ALL
-          SELECT jsonb_array_elements_text(COALESCE(v_linked_timesheet_ids, '[]'::jsonb)) AS scope_timesheet_id_raw
-        ) AS scope_timesheet_ids
-        WHERE NULLIF(BTRIM(scope_timesheet_ids.scope_timesheet_id_raw), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      ),
-      scope_candidates AS (
-        SELECT DISTINCT COALESCE(public.timesheets_financials.candidate_id, public.contracts.candidate_id) AS candidate_id
-        FROM targeted_scope_timesheet_ids
-        JOIN public.timesheets
-          ON public.timesheets.timesheet_id = targeted_scope_timesheet_ids.timesheet_id
-        LEFT JOIN public.timesheets_financials
-          ON public.timesheets_financials.timesheet_id = public.timesheets.timesheet_id
-         AND public.timesheets_financials.is_current = true
-        LEFT JOIN public.contracts
-          ON public.contracts.id = public.timesheets.contract_id
-        WHERE COALESCE(public.timesheets_financials.candidate_id, public.contracts.candidate_id) IS NOT NULL
-      )
-      SELECT
-        COALESCE(jsonb_agg(to_jsonb(scope_candidates.candidate_id::text) ORDER BY scope_candidates.candidate_id), '[]'::jsonb),
-        COUNT(*)::integer
-      INTO
-        v_scope_candidate_ids,
-        v_scope_candidate_count
-      FROM scope_candidates;
+      IF v_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+         OR jsonb_array_length(COALESCE(v_targeted_timesheet_ids, '[]'::jsonb)) > 0
+         OR jsonb_array_length(COALESCE(v_linked_timesheet_ids, '[]'::jsonb)) > 0 THEN
+        WITH targeted_scope_timesheet_ids AS (
+          SELECT DISTINCT NULLIF(BTRIM(scope_timesheet_ids.scope_timesheet_id_raw), '')::uuid AS timesheet_id
+          FROM (
+            SELECT jsonb_array_elements_text(COALESCE(v_targeted_timesheet_ids, '[]'::jsonb)) AS scope_timesheet_id_raw
+            UNION ALL
+            SELECT jsonb_array_elements_text(COALESCE(v_linked_timesheet_ids, '[]'::jsonb)) AS scope_timesheet_id_raw
+          ) AS scope_timesheet_ids
+          WHERE NULLIF(BTRIM(scope_timesheet_ids.scope_timesheet_id_raw), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ),
+        scope_candidates AS (
+          SELECT DISTINCT COALESCE(public.timesheets_financials.candidate_id, public.contracts.candidate_id) AS candidate_id
+          FROM targeted_scope_timesheet_ids
+          JOIN public.timesheets
+            ON public.timesheets.timesheet_id = targeted_scope_timesheet_ids.timesheet_id
+          LEFT JOIN public.timesheets_financials
+            ON public.timesheets_financials.timesheet_id = public.timesheets.timesheet_id
+           AND public.timesheets_financials.is_current = true
+          LEFT JOIN public.contracts
+            ON public.contracts.id = public.timesheets.contract_id
+          WHERE COALESCE(public.timesheets_financials.candidate_id, public.contracts.candidate_id) IS NOT NULL
+        )
+        SELECT
+          COALESCE(jsonb_agg(to_jsonb(scope_candidates.candidate_id::text) ORDER BY scope_candidates.candidate_id), '[]'::jsonb),
+          COUNT(*)::integer
+        INTO
+          v_scope_candidate_ids,
+          v_scope_candidate_count
+        FROM scope_candidates;
+      ELSE
+        WITH force_include AS (
+          SELECT DISTINCT
+            public.timesheet_payment_overrides.timesheet_id
+          FROM public.timesheet_payment_overrides
+          WHERE public.timesheet_payment_overrides.cleared_at_utc IS NULL
+            AND public.timesheet_payment_overrides.consumed_at_utc IS NULL
+            AND public.timesheet_payment_overrides.consumed_by_pay_batch_id IS NULL
+            AND UPPER(COALESCE(public.timesheet_payment_overrides.override_type, '')) = 'ADVANCE_THIS_PAYMENT'
+            AND public.timesheet_payment_overrides.timesheet_id IS NOT NULL
+        ),
+        timesheet_scope AS (
+          SELECT DISTINCT
+            public.timesheets_financials.candidate_id
+          FROM public.timesheets_financials
+          JOIN public.timesheets
+            ON public.timesheets.timesheet_id = public.timesheets_financials.timesheet_id
+          JOIN public.candidates
+            ON public.candidates.id = public.timesheets_financials.candidate_id
+          LEFT JOIN public.timesheet_pay_state
+            ON public.timesheet_pay_state.timesheet_id = public.timesheets_financials.timesheet_id
+          LEFT JOIN force_include
+            ON force_include.timesheet_id = public.timesheets_financials.timesheet_id
+          WHERE public.timesheets_financials.is_current = true
+            AND COALESCE(public.timesheets_financials.pay_on_hold, false) = false
+            AND COALESCE(public.timesheets_financials.has_rate_issue, false) = false
+            AND COALESCE(public.timesheets_financials.has_pay_channel_issue, false) = false
+            AND UPPER(COALESCE(public.timesheets_financials.processing_status::text, '')) NOT IN ('UNASSIGNED', 'CLIENT_UNRESOLVED', 'RATE_MISSING', 'PAY_CHANNEL_MISSING')
+            AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
+            AND (
+              (
+                public.timesheets.authorised_at_server IS NOT NULL
+                AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
+                AND public.timesheets.week_ending_date::date <= v_eligibility_to_date
+                AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
+              )
+              OR force_include.timesheet_id IS NOT NULL
+              OR (
+                public.timesheet_pay_state.last_settled_snapshot_json IS NOT NULL
+                AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
+                AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
+              )
+            )
+        ),
+        finance_scope AS (
+          SELECT DISTINCT
+            public.v_finance_cases_register.candidate_id
+          FROM public.v_finance_cases_register
+          JOIN public.candidates
+            ON public.candidates.id = public.v_finance_cases_register.candidate_id
+          WHERE public.v_finance_cases_register.case_type IN (
+              'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+              'OVERPAYMENT'::public.pay_finance_case_type_enum,
+              'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+              'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+            )
+            AND UPPER(COALESCE(public.v_finance_cases_register.status::text, '')) = 'ACTIVE'
+            AND COALESCE(public.v_finance_cases_register.outstanding_amount, 0) > 0
+            AND UPPER(COALESCE(public.candidates.pay_method, '')) IN ('PAYE', 'UMBRELLA')
+            AND NOT (
+              public.v_finance_cases_register.active_snooze_id IS NOT NULL
+              AND public.v_finance_cases_register.active_snooze_until_date IS NULL
+            )
+            AND (
+              (
+                public.v_finance_cases_register.case_type = 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
+                AND (
+                  UPPER(COALESCE(public.v_finance_cases_register.payout_status::text, '')) <> 'PAID'
+                  OR public.v_finance_cases_register.next_due_week_start IS NULL
+                  OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+                )
+              )
+              OR (
+                public.v_finance_cases_register.case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+                AND (
+                  public.v_finance_cases_register.next_due_week_start IS NULL
+                  OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+                )
+              )
+              OR (
+                public.v_finance_cases_register.case_type = 'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+                AND (
+                  public.v_finance_cases_register.next_due_week_start IS NULL
+                  OR public.v_finance_cases_register.next_due_week_start <= v_pay_week_start
+                )
+              )
+              OR public.v_finance_cases_register.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+            )
+        ),
+        scope_candidates AS (
+          SELECT timesheet_scope.candidate_id
+          FROM timesheet_scope
+          UNION
+          SELECT finance_scope.candidate_id
+          FROM finance_scope
+        )
+        SELECT
+          COALESCE(jsonb_agg(to_jsonb(scope_candidates.candidate_id::text) ORDER BY scope_candidates.candidate_id), '[]'::jsonb),
+          COUNT(*)::integer
+        INTO
+          v_scope_candidate_ids,
+          v_scope_candidate_count
+        FROM scope_candidates;
+      END IF;
     END IF;
   END IF;
 
@@ -3344,8 +3452,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 
