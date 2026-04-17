@@ -27215,14 +27215,11 @@ END;
 $function$;
 
 
-
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress(
-  p_session_id uuid
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress(p_session_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_session_row public.banking_pay_workbench_sessions%ROWTYPE;
@@ -27255,22 +27252,65 @@ BEGIN
   candidate_status_rows AS (
     SELECT
       scoped_candidates.candidate_id,
-      COALESCE(public.banking_pay_workbench_session_candidate_state.status, 'PENDING') AS status,
+      CASE
+        WHEN active_pending_job.id IS NOT NULL THEN 'PENDING'
+        WHEN UPPER(COALESCE(public.banking_pay_workbench_session_candidate_state.status, '')) = 'FAILED' THEN 'FAILED'
+        WHEN UPPER(COALESCE(public.banking_pay_workbench_session_candidate_state.status, '')) = 'READY' THEN 'READY'
+        WHEN UPPER(COALESCE(latest_recompute_job.status, '')) = 'FAILED'
+             AND COALESCE(public.banking_pay_workbench_session_candidate_state.last_error_json, latest_recompute_job.last_error_json) IS NOT NULL THEN 'FAILED'
+        WHEN UPPER(COALESCE(latest_recompute_job.status, '')) = 'SUCCEEDED'
+             AND public.banking_pay_workbench_session_candidate_state.last_recomputed_at_utc IS NOT NULL THEN 'READY'
+        ELSE COALESCE(public.banking_pay_workbench_session_candidate_state.status, 'PENDING')
+      END AS status,
       COALESCE(public.banking_pay_workbench_session_candidate_state.source_change_seq, 0) AS source_change_seq,
       COALESCE(public.banking_pay_workbench_session_candidate_state.session_version, v_session_row.version) AS session_version,
-      public.banking_pay_workbench_session_candidate_state.pending_job_id,
+      active_pending_job.id AS pending_job_id,
       public.banking_pay_workbench_session_candidate_state.last_recomputed_at_utc,
-      public.banking_pay_workbench_session_candidate_state.last_error_json,
-      latest_job.id AS latest_job_id,
-      latest_job.job_type AS latest_job_type,
-      latest_job.status AS latest_job_status,
-      latest_job.attempt_count AS latest_job_attempt_count,
-      latest_job.max_attempts AS latest_job_max_attempts,
-      latest_job.last_error_json AS latest_job_last_error_json
+      COALESCE(public.banking_pay_workbench_session_candidate_state.last_error_json, active_pending_job.last_error_json, latest_recompute_job.last_error_json) AS last_error_json,
+      COALESCE(active_pending_job.id, latest_recompute_job.id) AS latest_job_id,
+      COALESCE(active_pending_job.job_type, latest_recompute_job.job_type) AS latest_job_type,
+      COALESCE(active_pending_job.status, latest_recompute_job.status) AS latest_job_status,
+      COALESCE(active_pending_job.attempt_count, latest_recompute_job.attempt_count) AS latest_job_attempt_count,
+      COALESCE(active_pending_job.max_attempts, latest_recompute_job.max_attempts) AS latest_job_max_attempts,
+      COALESCE(active_pending_job.last_error_json, latest_recompute_job.last_error_json) AS latest_job_last_error_json
     FROM scoped_candidates
     LEFT JOIN public.banking_pay_workbench_session_candidate_state
       ON public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
      AND public.banking_pay_workbench_session_candidate_state.candidate_id = scoped_candidates.candidate_id
+    LEFT JOIN LATERAL (
+      SELECT
+        public.banking_pay_workbench_jobs.id,
+        public.banking_pay_workbench_jobs.status,
+        public.banking_pay_workbench_jobs.attempt_count,
+        public.banking_pay_workbench_jobs.max_attempts,
+        public.banking_pay_workbench_jobs.last_error_json,
+        public.banking_pay_workbench_jobs.job_type
+      FROM public.banking_pay_workbench_jobs
+      WHERE public.banking_pay_workbench_jobs.session_id = p_session_id
+        AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id
+        AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
+        AND public.banking_pay_workbench_jobs.status IN ('QUEUED', 'RUNNING')
+      ORDER BY
+        COALESCE(
+          CASE
+            WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'session_version', '') ~ '^[0-9]+$'
+              THEN (public.banking_pay_workbench_jobs.payload_json->>'session_version')::bigint
+            ELSE 0::bigint
+          END,
+          0::bigint
+        ) DESC,
+        COALESCE(
+          CASE
+            WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+              THEN (public.banking_pay_workbench_jobs.payload_json->>'source_change_seq')::bigint
+            ELSE 0::bigint
+          END,
+          0::bigint
+        ) DESC,
+        public.banking_pay_workbench_jobs.updated_at_utc DESC,
+        public.banking_pay_workbench_jobs.id DESC
+      LIMIT 1
+    ) AS active_pending_job ON true
     LEFT JOIN LATERAL (
       SELECT
         public.banking_pay_workbench_jobs.id,
@@ -27282,9 +27322,10 @@ BEGIN
       FROM public.banking_pay_workbench_jobs
       WHERE public.banking_pay_workbench_jobs.session_id = p_session_id
         AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id
+        AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
       ORDER BY public.banking_pay_workbench_jobs.updated_at_utc DESC, public.banking_pay_workbench_jobs.id DESC
       LIMIT 1
-    ) AS latest_job ON true
+    ) AS latest_recompute_job ON true
   )
   SELECT
     COALESCE(
@@ -27382,6 +27423,12 @@ BEGIN
   );
 END;
 $function$;
+
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_rebuild_summary(
@@ -29835,4 +29882,4 @@ BEGIN
     'state_changed', true
   );
 END;
-$function$
+$function$;
