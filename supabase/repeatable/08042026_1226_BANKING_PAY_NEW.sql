@@ -16857,7 +16857,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -17288,14 +17287,26 @@ BEGIN
       WHERE NULLIF(BTRIM(scope_candidate_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     ) AS scope_rows;
   ELSE
+    v_context_json := public.pay_preview_build_context(
+      p_pay_date => v_effective_pay_date,
+      p_week_ending_cutoff => v_effective_week_ending_cutoff,
+      p_actor_user_id => p_actor_user_id,
+      p_candidate_id => NULL::uuid,
+      p_client_id => NULL::uuid,
+      p_preview_decisions_json => NULL::jsonb
+    );
+
     SELECT COALESCE(array_agg(scope_rows.candidate_id ORDER BY scope_rows.candidate_id), ARRAY[]::uuid[])
     INTO v_scope_candidate_ids
     FROM (
-      SELECT DISTINCT scs.candidate_id
-      FROM public.banking_pay_snapshot_candidate_state AS scs
-      WHERE scs.snapshot_run_id = v_snapshot_run_id
-        AND scs.candidate_id IS NOT NULL
-        AND UPPER(COALESCE(scs.status, '')) = 'READY'
+      SELECT DISTINCT NULLIF(BTRIM(scope_candidate_id.value), '')::uuid AS candidate_id
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_context_json->'scope_candidate_ids') = 'array' THEN COALESCE(v_context_json->'scope_candidate_ids', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS scope_candidate_id(value)
+      WHERE NULLIF(BTRIM(scope_candidate_id.value), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     ) AS scope_rows;
   END IF;
 
@@ -17394,6 +17405,10 @@ BEGIN
       'version', v_existing_session_row.version
     );
   END IF;
+
+  DELETE FROM public.banking_pay_workbench_session_candidate_state AS ws_candidate
+  WHERE ws_candidate.session_id = v_session_id
+    AND NOT (ws_candidate.candidate_id = ANY(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[])));
 
   SELECT ws.version
   INTO v_session_version
@@ -17627,7 +17642,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 
 
