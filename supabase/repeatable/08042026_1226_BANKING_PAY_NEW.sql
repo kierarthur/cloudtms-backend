@@ -16355,8 +16355,17 @@ begin
             (
               v_effective_refresh_scope_kind = 'TARGETED_TIMESHEETS'
               and (
-                tf.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
-                or tf.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+                (
+                  tf.timesheet_id in (select trti.timesheet_id from targeted_refresh_timesheet_ids trti)
+                  or tf.timesheet_id in (select lrti.timesheet_id from linked_refresh_timesheet_ids lrti)
+                )
+                and (
+                  (
+                    ts.authorised_at_server is not null
+                    and ts.revoked_at is null
+                  )
+                  or fi.timesheet_id is not null
+                )
               )
             )
             or (
@@ -16962,6 +16971,8 @@ begin
   );
 end;
 $function$;
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
@@ -17822,14 +17833,14 @@ BEGIN
   CREATE TEMPORARY TABLE selected_workbench_candidate_state ON COMMIT DROP AS
   SELECT
     scope_candidate.scope_candidate_id_value AS candidate_id,
-    COALESCE(session_ready.effective_candidate_fragment_json, snapshot_ready.candidate_fragment_json, '{}'::jsonb) AS candidate_fragment_json,
-    COALESCE(session_ready.effective_summary_fragment_json, snapshot_ready.summary_fragment_json, '{}'::jsonb) AS summary_fragment_json,
+    COALESCE(session_ready.effective_candidate_fragment_json, '{}'::jsonb) AS candidate_fragment_json,
+    COALESCE(session_ready.effective_summary_fragment_json, '{}'::jsonb) AS summary_fragment_json,
     session_ready.status AS session_status,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_paye_candidate_json, snapshot_ready.paye_candidate_json, NULL)) = 'object' THEN COALESCE(session_ready.effective_paye_candidate_json, snapshot_ready.paye_candidate_json) ELSE NULL END AS paye_candidate_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_non_paye_payee_json, snapshot_ready.non_paye_payee_json, NULL)) = 'object' THEN COALESCE(session_ready.effective_non_paye_payee_json, snapshot_ready.non_paye_payee_json) ELSE NULL END AS non_paye_payee_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_payees_json, snapshot_ready.payees_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_payees_json, snapshot_ready.payees_json, '[]'::jsonb) ELSE '[]'::jsonb END AS payees_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_case_resolution_states_json, snapshot_ready.case_resolution_states_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_case_resolution_states_json, snapshot_ready.case_resolution_states_json, '[]'::jsonb) ELSE '[]'::jsonb END AS case_resolution_states_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_canonical_preview_lines_json, snapshot_ready.canonical_preview_lines_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_canonical_preview_lines_json, snapshot_ready.canonical_preview_lines_json, '[]'::jsonb) ELSE '[]'::jsonb END AS canonical_preview_lines_json
+    CASE WHEN jsonb_typeof(session_ready.effective_paye_candidate_json) = 'object' THEN session_ready.effective_paye_candidate_json ELSE NULL END AS paye_candidate_json,
+    CASE WHEN jsonb_typeof(session_ready.effective_non_paye_payee_json) = 'object' THEN session_ready.effective_non_paye_payee_json ELSE NULL END AS non_paye_payee_json,
+    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_payees_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_payees_json, '[]'::jsonb) ELSE '[]'::jsonb END AS payees_json,
+    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_case_resolution_states_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_case_resolution_states_json, '[]'::jsonb) ELSE '[]'::jsonb END AS case_resolution_states_json,
+    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_canonical_preview_lines_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_canonical_preview_lines_json, '[]'::jsonb) ELSE '[]'::jsonb END AS canonical_preview_lines_json
   FROM unnest(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) AS scope_candidate(scope_candidate_id_value)
   LEFT JOIN LATERAL (
     SELECT public.banking_pay_workbench_session_candidate_state.*
@@ -17840,16 +17851,7 @@ BEGIN
     ORDER BY public.banking_pay_workbench_session_candidate_state.updated_at_utc DESC, public.banking_pay_workbench_session_candidate_state.id DESC
     LIMIT 1
   ) AS session_ready ON true
-  LEFT JOIN LATERAL (
-    SELECT public.banking_pay_snapshot_candidate_state.*
-    FROM public.banking_pay_snapshot_candidate_state
-    WHERE public.banking_pay_snapshot_candidate_state.snapshot_run_id = v_session_row.source_snapshot_run_id
-      AND public.banking_pay_snapshot_candidate_state.candidate_id = scope_candidate.scope_candidate_id_value
-      AND public.banking_pay_snapshot_candidate_state.status = 'READY'
-    ORDER BY public.banking_pay_snapshot_candidate_state.updated_at_utc DESC, public.banking_pay_snapshot_candidate_state.id DESC
-    LIMIT 1
-  ) AS snapshot_ready ON true
-  WHERE session_ready.id IS NOT NULL OR snapshot_ready.id IS NOT NULL;
+  WHERE session_ready.id IS NOT NULL;
 
   SELECT COALESCE(
            jsonb_agg(selected_workbench_candidate_state.paye_candidate_json ORDER BY BTRIM(COALESCE(selected_workbench_candidate_state.paye_candidate_json->>'display_name', selected_workbench_candidate_state.paye_candidate_json->>'candidate_name', '')), BTRIM(COALESCE(selected_workbench_candidate_state.paye_candidate_json->>'tms_ref', '')), BTRIM(COALESCE(selected_workbench_candidate_state.paye_candidate_json->>'candidate_id', ''))),
@@ -18165,17 +18167,44 @@ BEGIN
   CROSS JOIN readiness_totals
   CROSS JOIN paye_breakdown_totals;
 
-  SELECT COALESCE(jsonb_agg(public.banking_pay_workbench_session_candidate_state.candidate_id::text ORDER BY public.banking_pay_workbench_session_candidate_state.candidate_id), '[]'::jsonb)
-  INTO v_pending_candidate_ids_jsonb
-  FROM public.banking_pay_workbench_session_candidate_state
-  WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
-    AND public.banking_pay_workbench_session_candidate_state.status = 'PENDING';
-
-  SELECT COALESCE(jsonb_agg(public.banking_pay_workbench_session_candidate_state.candidate_id::text ORDER BY public.banking_pay_workbench_session_candidate_state.candidate_id), '[]'::jsonb)
-  INTO v_failed_candidate_ids_jsonb
-  FROM public.banking_pay_workbench_session_candidate_state
-  WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
-    AND public.banking_pay_workbench_session_candidate_state.status = 'FAILED';
+  WITH scoped_candidates AS (
+    SELECT scope_candidate.scope_candidate_id_value AS candidate_id
+    FROM unnest(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) AS scope_candidate(scope_candidate_id_value)
+  ),
+  latest_session_candidate_state AS (
+    SELECT
+      scoped_candidates.candidate_id,
+      CASE
+        WHEN latest_state.id IS NULL THEN 'PENDING'
+        WHEN UPPER(COALESCE(latest_state.status, '')) = 'FAILED' THEN 'FAILED'
+        WHEN UPPER(COALESCE(latest_state.status, '')) = 'READY' THEN 'READY'
+        ELSE 'PENDING'
+      END AS effective_status
+    FROM scoped_candidates
+    LEFT JOIN LATERAL (
+      SELECT public.banking_pay_workbench_session_candidate_state.*
+      FROM public.banking_pay_workbench_session_candidate_state
+      WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
+        AND public.banking_pay_workbench_session_candidate_state.candidate_id = scoped_candidates.candidate_id
+      ORDER BY public.banking_pay_workbench_session_candidate_state.updated_at_utc DESC, public.banking_pay_workbench_session_candidate_state.id DESC
+      LIMIT 1
+    ) AS latest_state ON true
+  )
+  SELECT
+    COALESCE(
+      jsonb_agg(latest_session_candidate_state.candidate_id::text ORDER BY latest_session_candidate_state.candidate_id)
+        FILTER (WHERE latest_session_candidate_state.effective_status = 'PENDING'),
+      '[]'::jsonb
+    ),
+    COALESCE(
+      jsonb_agg(latest_session_candidate_state.candidate_id::text ORDER BY latest_session_candidate_state.candidate_id)
+        FILTER (WHERE latest_session_candidate_state.effective_status = 'FAILED'),
+      '[]'::jsonb
+    )
+  INTO
+    v_pending_candidate_ids_jsonb,
+    v_failed_candidate_ids_jsonb
+  FROM latest_session_candidate_state;
 
   RETURN jsonb_build_object(
     'pay_date', v_context_json->'pay_date',
@@ -18206,7 +18235,6 @@ BEGIN
   );
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_candidate_preview(
   p_session_id uuid,
@@ -18271,13 +18299,13 @@ BEGIN
   CREATE TEMPORARY TABLE selected_workbench_candidate_state ON COMMIT DROP AS
   SELECT
     scope_candidate.scope_candidate_id_value AS candidate_id,
-    COALESCE(session_ready.effective_candidate_fragment_json, snapshot_ready.candidate_fragment_json, '{}'::jsonb) AS candidate_fragment_json,
-    COALESCE(session_ready.effective_summary_fragment_json, snapshot_ready.summary_fragment_json, '{}'::jsonb) AS summary_fragment_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_paye_candidate_json, snapshot_ready.paye_candidate_json, NULL)) = 'object' THEN COALESCE(session_ready.effective_paye_candidate_json, snapshot_ready.paye_candidate_json) ELSE NULL END AS paye_candidate_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_non_paye_payee_json, snapshot_ready.non_paye_payee_json, NULL)) = 'object' THEN COALESCE(session_ready.effective_non_paye_payee_json, snapshot_ready.non_paye_payee_json) ELSE NULL END AS non_paye_payee_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_payees_json, snapshot_ready.payees_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_payees_json, snapshot_ready.payees_json, '[]'::jsonb) ELSE '[]'::jsonb END AS payees_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_case_resolution_states_json, snapshot_ready.case_resolution_states_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_case_resolution_states_json, snapshot_ready.case_resolution_states_json, '[]'::jsonb) ELSE '[]'::jsonb END AS case_resolution_states_json,
-    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_canonical_preview_lines_json, snapshot_ready.canonical_preview_lines_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_canonical_preview_lines_json, snapshot_ready.canonical_preview_lines_json, '[]'::jsonb) ELSE '[]'::jsonb END AS canonical_preview_lines_json
+    COALESCE(session_ready.effective_candidate_fragment_json, '{}'::jsonb) AS candidate_fragment_json,
+    COALESCE(session_ready.effective_summary_fragment_json, '{}'::jsonb) AS summary_fragment_json,
+    CASE WHEN jsonb_typeof(session_ready.effective_paye_candidate_json) = 'object' THEN session_ready.effective_paye_candidate_json ELSE NULL END AS paye_candidate_json,
+    CASE WHEN jsonb_typeof(session_ready.effective_non_paye_payee_json) = 'object' THEN session_ready.effective_non_paye_payee_json ELSE NULL END AS non_paye_payee_json,
+    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_payees_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_payees_json, '[]'::jsonb) ELSE '[]'::jsonb END AS payees_json,
+    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_case_resolution_states_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_case_resolution_states_json, '[]'::jsonb) ELSE '[]'::jsonb END AS case_resolution_states_json,
+    CASE WHEN jsonb_typeof(COALESCE(session_ready.effective_canonical_preview_lines_json, '[]'::jsonb)) = 'array' THEN COALESCE(session_ready.effective_canonical_preview_lines_json, '[]'::jsonb) ELSE '[]'::jsonb END AS canonical_preview_lines_json
   FROM unnest(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) AS scope_candidate(scope_candidate_id_value)
   LEFT JOIN LATERAL (
     SELECT public.banking_pay_workbench_session_candidate_state.*
@@ -18288,16 +18316,7 @@ BEGIN
     ORDER BY public.banking_pay_workbench_session_candidate_state.updated_at_utc DESC, public.banking_pay_workbench_session_candidate_state.id DESC
     LIMIT 1
   ) AS session_ready ON true
-  LEFT JOIN LATERAL (
-    SELECT public.banking_pay_snapshot_candidate_state.*
-    FROM public.banking_pay_snapshot_candidate_state
-    WHERE public.banking_pay_snapshot_candidate_state.snapshot_run_id = v_session_row.source_snapshot_run_id
-      AND public.banking_pay_snapshot_candidate_state.candidate_id = scope_candidate.scope_candidate_id_value
-      AND public.banking_pay_snapshot_candidate_state.status = 'READY'
-    ORDER BY public.banking_pay_snapshot_candidate_state.updated_at_utc DESC, public.banking_pay_snapshot_candidate_state.id DESC
-    LIMIT 1
-  ) AS snapshot_ready ON true
-  WHERE session_ready.id IS NOT NULL OR snapshot_ready.id IS NOT NULL;
+  WHERE session_ready.id IS NOT NULL;
 
   SELECT
     selected_workbench_candidate_state.candidate_fragment_json,
@@ -18399,17 +18418,44 @@ BEGIN
   INTO v_summary_json
   FROM summary_totals;
 
-  SELECT COALESCE(jsonb_agg(public.banking_pay_workbench_session_candidate_state.candidate_id::text ORDER BY public.banking_pay_workbench_session_candidate_state.candidate_id), '[]'::jsonb)
-  INTO v_pending_candidate_ids_jsonb
-  FROM public.banking_pay_workbench_session_candidate_state
-  WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
-    AND public.banking_pay_workbench_session_candidate_state.status = 'PENDING';
-
-  SELECT COALESCE(jsonb_agg(public.banking_pay_workbench_session_candidate_state.candidate_id::text ORDER BY public.banking_pay_workbench_session_candidate_state.candidate_id), '[]'::jsonb)
-  INTO v_failed_candidate_ids_jsonb
-  FROM public.banking_pay_workbench_session_candidate_state
-  WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
-    AND public.banking_pay_workbench_session_candidate_state.status = 'FAILED';
+  WITH scoped_candidates AS (
+    SELECT scope_candidate.scope_candidate_id_value AS candidate_id
+    FROM unnest(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) AS scope_candidate(scope_candidate_id_value)
+  ),
+  latest_session_candidate_state AS (
+    SELECT
+      scoped_candidates.candidate_id,
+      CASE
+        WHEN latest_state.id IS NULL THEN 'PENDING'
+        WHEN UPPER(COALESCE(latest_state.status, '')) = 'FAILED' THEN 'FAILED'
+        WHEN UPPER(COALESCE(latest_state.status, '')) = 'READY' THEN 'READY'
+        ELSE 'PENDING'
+      END AS effective_status
+    FROM scoped_candidates
+    LEFT JOIN LATERAL (
+      SELECT public.banking_pay_workbench_session_candidate_state.*
+      FROM public.banking_pay_workbench_session_candidate_state
+      WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
+        AND public.banking_pay_workbench_session_candidate_state.candidate_id = scoped_candidates.candidate_id
+      ORDER BY public.banking_pay_workbench_session_candidate_state.updated_at_utc DESC, public.banking_pay_workbench_session_candidate_state.id DESC
+      LIMIT 1
+    ) AS latest_state ON true
+  )
+  SELECT
+    COALESCE(
+      jsonb_agg(latest_session_candidate_state.candidate_id::text ORDER BY latest_session_candidate_state.candidate_id)
+        FILTER (WHERE latest_session_candidate_state.effective_status = 'PENDING'),
+      '[]'::jsonb
+    ),
+    COALESCE(
+      jsonb_agg(latest_session_candidate_state.candidate_id::text ORDER BY latest_session_candidate_state.candidate_id)
+        FILTER (WHERE latest_session_candidate_state.effective_status = 'FAILED'),
+      '[]'::jsonb
+    )
+  INTO
+    v_pending_candidate_ids_jsonb,
+    v_failed_candidate_ids_jsonb
+  FROM latest_session_candidate_state;
 
   RETURN jsonb_build_object(
     'ok', true,
@@ -18437,6 +18483,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clear_case_resolution(
   p_session_id uuid,
@@ -27253,30 +27302,43 @@ BEGIN
     SELECT
       scoped_candidates.candidate_id,
       CASE
-        WHEN active_pending_job.id IS NOT NULL THEN 'PENDING'
-        WHEN UPPER(COALESCE(public.banking_pay_workbench_session_candidate_state.status, '')) = 'FAILED' THEN 'FAILED'
-        WHEN UPPER(COALESCE(public.banking_pay_workbench_session_candidate_state.status, '')) = 'READY' THEN 'READY'
-        WHEN UPPER(COALESCE(latest_recompute_job.status, '')) = 'FAILED'
-             AND COALESCE(public.banking_pay_workbench_session_candidate_state.last_error_json, latest_recompute_job.last_error_json) IS NOT NULL THEN 'FAILED'
-        WHEN UPPER(COALESCE(latest_recompute_job.status, '')) = 'SUCCEEDED'
-             AND public.banking_pay_workbench_session_candidate_state.last_recomputed_at_utc IS NOT NULL THEN 'READY'
-        ELSE COALESCE(public.banking_pay_workbench_session_candidate_state.status, 'PENDING')
+        WHEN latest_session_state.id IS NOT NULL
+             AND UPPER(COALESCE(latest_session_state.status, '')) = 'READY'
+             AND COALESCE(latest_session_state.session_version, 0) >= v_session_row.version
+             AND COALESCE(latest_session_state.source_change_seq, 0) >= COALESCE(live_change_counter.seq, 0)
+          THEN 'READY'
+        WHEN latest_session_state.id IS NOT NULL
+             AND UPPER(COALESCE(latest_session_state.status, '')) = 'FAILED'
+             AND COALESCE(latest_session_state.session_version, 0) >= v_session_row.version
+             AND COALESCE(latest_session_state.source_change_seq, 0) >= COALESCE(live_change_counter.seq, 0)
+             AND blocking_pending_job.id IS NULL
+          THEN 'FAILED'
+        ELSE 'PENDING'
       END AS status,
-      COALESCE(public.banking_pay_workbench_session_candidate_state.source_change_seq, 0) AS source_change_seq,
-      COALESCE(public.banking_pay_workbench_session_candidate_state.session_version, v_session_row.version) AS session_version,
-      active_pending_job.id AS pending_job_id,
-      public.banking_pay_workbench_session_candidate_state.last_recomputed_at_utc,
-      COALESCE(public.banking_pay_workbench_session_candidate_state.last_error_json, active_pending_job.last_error_json, latest_recompute_job.last_error_json) AS last_error_json,
-      COALESCE(active_pending_job.id, latest_recompute_job.id) AS latest_job_id,
-      COALESCE(active_pending_job.job_type, latest_recompute_job.job_type) AS latest_job_type,
-      COALESCE(active_pending_job.status, latest_recompute_job.status) AS latest_job_status,
-      COALESCE(active_pending_job.attempt_count, latest_recompute_job.attempt_count) AS latest_job_attempt_count,
-      COALESCE(active_pending_job.max_attempts, latest_recompute_job.max_attempts) AS latest_job_max_attempts,
-      COALESCE(active_pending_job.last_error_json, latest_recompute_job.last_error_json) AS latest_job_last_error_json
+      COALESCE(latest_session_state.source_change_seq, COALESCE(live_change_counter.seq, 0)) AS source_change_seq,
+      COALESCE(latest_session_state.session_version, v_session_row.version) AS session_version,
+      COALESCE(live_change_counter.seq, 0) AS required_source_change_seq,
+      v_session_row.version AS required_session_version,
+      blocking_pending_job.id AS pending_job_id,
+      latest_session_state.last_recomputed_at_utc,
+      COALESCE(latest_session_state.last_error_json, latest_recompute_job.last_error_json) AS last_error_json,
+      latest_recompute_job.id AS latest_job_id,
+      latest_recompute_job.job_type AS latest_job_type,
+      latest_recompute_job.status AS latest_job_status,
+      latest_recompute_job.attempt_count AS latest_job_attempt_count,
+      latest_recompute_job.max_attempts AS latest_job_max_attempts,
+      latest_recompute_job.last_error_json AS latest_job_last_error_json
     FROM scoped_candidates
-    LEFT JOIN public.banking_pay_workbench_session_candidate_state
-      ON public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
-     AND public.banking_pay_workbench_session_candidate_state.candidate_id = scoped_candidates.candidate_id
+    LEFT JOIN public.app_change_counters AS live_change_counter
+      ON live_change_counter.entity_key = 'pay_candidate:' || scoped_candidates.candidate_id::text
+    LEFT JOIN LATERAL (
+      SELECT public.banking_pay_workbench_session_candidate_state.*
+      FROM public.banking_pay_workbench_session_candidate_state
+      WHERE public.banking_pay_workbench_session_candidate_state.session_id = p_session_id
+        AND public.banking_pay_workbench_session_candidate_state.candidate_id = scoped_candidates.candidate_id
+      ORDER BY public.banking_pay_workbench_session_candidate_state.updated_at_utc DESC, public.banking_pay_workbench_session_candidate_state.id DESC
+      LIMIT 1
+    ) AS latest_session_state ON true
     LEFT JOIN LATERAL (
       SELECT
         public.banking_pay_workbench_jobs.id,
@@ -27290,6 +27352,22 @@ BEGIN
         AND public.banking_pay_workbench_jobs.candidate_id = scoped_candidates.candidate_id
         AND public.banking_pay_workbench_jobs.job_type = 'SESSION_CANDIDATE_RECOMPUTE'
         AND public.banking_pay_workbench_jobs.status IN ('QUEUED', 'RUNNING')
+        AND COALESCE(
+              CASE
+                WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'session_version', '') ~ '^[0-9]+$'
+                  THEN (public.banking_pay_workbench_jobs.payload_json->>'session_version')::bigint
+                ELSE 0::bigint
+              END,
+              0::bigint
+            ) >= v_session_row.version
+        AND COALESCE(
+              CASE
+                WHEN COALESCE(public.banking_pay_workbench_jobs.payload_json->>'source_change_seq', '') ~ '^[0-9]+$'
+                  THEN (public.banking_pay_workbench_jobs.payload_json->>'source_change_seq')::bigint
+                ELSE 0::bigint
+              END,
+              0::bigint
+            ) >= COALESCE(live_change_counter.seq, 0)
       ORDER BY
         COALESCE(
           CASE
@@ -27310,7 +27388,7 @@ BEGIN
         public.banking_pay_workbench_jobs.updated_at_utc DESC,
         public.banking_pay_workbench_jobs.id DESC
       LIMIT 1
-    ) AS active_pending_job ON true
+    ) AS blocking_pending_job ON true
     LEFT JOIN LATERAL (
       SELECT
         public.banking_pay_workbench_jobs.id,
@@ -27345,6 +27423,8 @@ BEGIN
           'status', candidate_status_rows.status,
           'source_change_seq', candidate_status_rows.source_change_seq,
           'session_version', candidate_status_rows.session_version,
+          'required_source_change_seq', candidate_status_rows.required_source_change_seq,
+          'required_session_version', candidate_status_rows.required_session_version,
           'pending_job_id', CASE WHEN candidate_status_rows.pending_job_id IS NULL THEN NULL ELSE candidate_status_rows.pending_job_id::text END,
           'latest_job_id', CASE WHEN candidate_status_rows.latest_job_id IS NULL THEN NULL ELSE candidate_status_rows.latest_job_id::text END,
           'latest_job_type', candidate_status_rows.latest_job_type,
@@ -27423,13 +27503,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
-
-
-
-
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_snapshot_rebuild_summary(
   p_snapshot_run_id uuid
@@ -28948,7 +29021,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_candidate_dirty()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -29164,7 +29236,15 @@ BEGIN
     END IF;
 
     IF v_should_dirty THEN
-      v_refresh_scope_kind := 'TARGETED_TIMESHEETS';
+      IF TG_OP <> 'DELETE'
+         AND (
+           (v_old_authorised IS DISTINCT FROM v_new_authorised)
+           OR ((NULLIF(BTRIM(COALESCE(v_old_row->>'revoked_at', '')), '') IS NULL) IS DISTINCT FROM (NULLIF(BTRIM(COALESCE(v_new_row->>'revoked_at', '')), '') IS NULL))
+         ) THEN
+        v_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
+      ELSE
+        v_refresh_scope_kind := 'TARGETED_TIMESHEETS';
+      END IF;
       v_targeted_timesheet_uuid_ids := array_cat(v_targeted_timesheet_uuid_ids, ARRAY[v_old_timesheet_id, v_new_timesheet_id]::uuid[]);
     END IF;
 
@@ -29222,7 +29302,7 @@ BEGIN
     v_should_dirty := v_should_dirty AND v_tsfin_gate_changed;
 
     IF v_should_dirty THEN
-      v_refresh_scope_kind := 'TARGETED_TIMESHEETS';
+      v_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
       v_targeted_timesheet_uuid_ids := array_cat(v_targeted_timesheet_uuid_ids, ARRAY[v_old_timesheet_id, v_new_timesheet_id]::uuid[]);
     END IF;
 
@@ -29646,8 +29726,17 @@ BEGIN
 
     UPDATE public.banking_pay_workbench_session_candidate_state AS scs
     SET status = 'PENDING',
+        effective_candidate_fragment_json = '{}'::jsonb,
+        effective_summary_fragment_json = '{}'::jsonb,
+        effective_paye_candidate_json = NULL,
+        effective_non_paye_payee_json = NULL,
+        effective_payees_json = '[]'::jsonb,
+        effective_case_resolution_states_json = '[]'::jsonb,
+        effective_canonical_preview_lines_json = '[]'::jsonb,
         source_change_seq = GREATEST(COALESCE(scs.source_change_seq, 0), v_live_change_seq),
+        pending_job_id = NULL,
         updated_at_utc = v_now,
+        last_recomputed_at_utc = NULL,
         last_error_json = NULL
     FROM public.banking_pay_workbench_sessions AS ws
     WHERE ws.id = scs.session_id
@@ -29665,7 +29754,6 @@ BEGIN
   END IF;
 END;
 $function$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clear_all_decisions(p_session_id uuid, p_actor_user_id uuid)
  RETURNS jsonb
