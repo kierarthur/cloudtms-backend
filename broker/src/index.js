@@ -30157,6 +30157,7 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
   if (finAfterSave.locked_by_invoice_id || finAfterSave.paid_at_utc) {
     return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot process'));
   }
+  const processingStatusAfterSave = String(finAfterSave.processing_status || '').trim().toUpperCase();
 
   if (!finAfterSave.candidate_id) {
     return withCORS(env, req, badRequest('Cannot process: candidate is missing from TSFIN context'));
@@ -30167,6 +30168,9 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
   if (finAfterSave.has_rate_issue) {
     return withCORS(env, req, badRequest('Cannot process: TSFIN has a rate issue'));
   }
+  if (processingStatusAfterSave === 'RATE_MISSING') {
+    return withCORS(env, req, badRequest('Cannot process: TSFIN status is RATE_MISSING'));
+  }
   if (finAfterSave.has_pay_channel_issue) {
     return withCORS(env, req, badRequest('Cannot process: TSFIN has a pay channel issue'));
   }
@@ -30174,6 +30178,9 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
   const payMethodAfterSave = String(finAfterSave.pay_method || '').trim();
   if (!payMethodAfterSave) {
     return withCORS(env, req, badRequest('Cannot process: pay method is missing from TSFIN context'));
+  }
+  if (processingStatusAfterSave === 'PAY_CHANNEL_MISSING') {
+    return withCORS(env, req, badRequest('Cannot process: TSFIN status is PAY_CHANNEL_MISSING'));
   }
 
   const candidateAssignmentAfterSave = String(finAfterSave.candidate_assignment || '').trim().toUpperCase();
