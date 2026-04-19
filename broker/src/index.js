@@ -30148,7 +30148,7 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=id,locked_by_invoice_id,paid_at_utc,processing_status,hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_hours`
+      `&select=id,locked_by_invoice_id,paid_at_utc,processing_status,candidate_id,client_id,pay_method,candidate_assignment,has_rate_issue,has_pay_channel_issue,hours_day,hours_night,hours_sat,hours_sun,hours_bh,total_hours`
   );
   if (!finAfterSave) {
     return withCORS(env, req, serverError('Failed to reload TSFIN after daily save'));
@@ -30156,6 +30156,29 @@ async function handleTimesheetDailyManualProcess(env, req, timesheetId) {
 
   if (finAfterSave.locked_by_invoice_id || finAfterSave.paid_at_utc) {
     return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot process'));
+  }
+
+  if (!finAfterSave.candidate_id) {
+    return withCORS(env, req, badRequest('Cannot process: candidate is missing from TSFIN context'));
+  }
+  if (!finAfterSave.client_id) {
+    return withCORS(env, req, badRequest('Cannot process: client is missing from TSFIN context'));
+  }
+  if (finAfterSave.has_rate_issue) {
+    return withCORS(env, req, badRequest('Cannot process: TSFIN has a rate issue'));
+  }
+  if (finAfterSave.has_pay_channel_issue) {
+    return withCORS(env, req, badRequest('Cannot process: TSFIN has a pay channel issue'));
+  }
+
+  const payMethodAfterSave = String(finAfterSave.pay_method || '').trim();
+  if (!payMethodAfterSave) {
+    return withCORS(env, req, badRequest('Cannot process: pay method is missing from TSFIN context'));
+  }
+
+  const candidateAssignmentAfterSave = String(finAfterSave.candidate_assignment || '').trim().toUpperCase();
+  if (!candidateAssignmentAfterSave || candidateAssignmentAfterSave === 'UNASSIGNED') {
+    return withCORS(env, req, badRequest('Cannot process: candidate assignment is unresolved in TSFIN context'));
   }
 
   const desiredStatus = 'PENDING_AUTH';
@@ -30639,11 +30662,18 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
     if (Array.isArray(scheduleJson)) {
       const nonNull = scheduleJson.filter(x => x && typeof x === 'object');
       if (!nonNull.length) return { error: 'schedule_json must contain at least one day entry.' };
-      if (nonNull.length > 1) {
-        const dates = new Set(nonNull.map(x => trimStr(x.date || x.work_date || x.ymd || '')).filter(Boolean));
+
+      const usableDays = nonNull.filter((x) => {
+        const rawYmd = trimStr(x?.date || x?.work_date || x?.ymd || '');
+        return !!(rawYmd && parseYmd(rawYmd));
+      });
+
+      if (!usableDays.length) return { error: 'schedule_json must contain at least one usable day entry with a valid date.' };
+      if (usableDays.length > 1) {
+        const dates = new Set(usableDays.map(x => trimStr(x.date || x.work_date || x.ymd || '')).filter(Boolean));
         if (dates.size > 1) return { error: 'DAILY schedule_json must contain exactly one date entry.' };
       }
-      seg = nonNull[0];
+      seg = usableDays[0];
     } else if (scheduleJson && typeof scheduleJson === 'object') {
       seg = scheduleJson;
     } else {
@@ -30820,9 +30850,9 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
         date: ymdStr,
         start: startHHMM || '',
         end: endHHMM || '',
-        break_start: brStartHHMM || '',
-        break_end: brEndHHMM || '',
-        break_minutes: break_minutes == null ? '' : break_minutes
+        break_start: (hasBrStart && hasBrEnd) ? (brStartHHMM || '') : '',
+        break_end: (hasBrStart && hasBrEnd) ? (brEndHHMM || '') : '',
+        break_minutes: (hasBrStart && hasBrEnd) ? '' : (break_minutes == null ? '' : break_minutes)
       }
     };
   };
@@ -30836,8 +30866,9 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
 
     let breakStartHHMM = '';
     let breakEndHHMM = '';
+    const hasBreakWindow = hasIso(breakStartIso) && hasIso(breakEndIso);
 
-    if (hasIso(breakStartIso) && hasIso(breakEndIso)) {
+    if (hasBreakWindow) {
       const brStartParts = toLocalParts(breakStartIso, 'Europe/London');
       const brEndParts = toLocalParts(breakEndIso, 'Europe/London');
       breakStartHHMM = brStartParts?.hhmm || '';
@@ -30852,7 +30883,9 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       end: endParts.hhmm || '',
       break_start: breakStartHHMM,
       break_end: breakEndHHMM,
-      break_minutes: (breakMinutes == null || !Number.isFinite(Number(breakMinutes))) ? '' : Math.round(Number(breakMinutes))
+      break_minutes: hasBreakWindow
+        ? ''
+        : ((breakMinutes == null || !Number.isFinite(Number(breakMinutes))) ? '' : Math.round(Number(breakMinutes)))
     };
   };
 
