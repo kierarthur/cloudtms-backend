@@ -566,7 +566,7 @@ function toBase64(u8) {
 
 // --- HTML builder ----------------------------------------------------------
 // ====== PDF + TS RENDER HELPERS ======
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 
 // MM→points for A4 placement
 const MM_TO_PT = 72 / 25.4;
@@ -27996,8 +27996,10 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     return String(k || '');
   };
 
-  const attachQueueItemAsTimesheetEvidence = async (item, currentTsId, requestedKind) => {
-    const cleanStorageKey = String(item?.r2_key || '').trim().replace(/^\/+/, '');
+  const attachQueueItemAsTimesheetEvidence = async (item, currentTsId, requestedKind, storageKeyOverride = null) => {
+    const cleanStorageKey = storageKeyOverride
+      ? String(storageKeyOverride).trim().replace(/^\/+/, '')
+      : String(item?.r2_key || '').trim().replace(/^\/+/, '');
     if (!cleanStorageKey) {
       throw new Error('Queue item is missing r2_key');
     }
@@ -28139,7 +28141,20 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       }
     }
 
-    const evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind);
+    let manualMaterialized = null;
+    let evidenceStorageKey = String(item?.r2_key || '').trim().replace(/^\/+/, '');
+    if (String(requestedKind).toUpperCase() === 'TIMESHEET') {
+      manualMaterialized = await ensureTimesheetEvidencePdfArtifact(env, {
+        sourceKey: evidenceStorageKey,
+        displayName: item?.original_filename || 'Timesheet',
+        rotationDegrees: item?.last_rotation_deg,
+        timesheetId: currentTimesheetId,
+        sourceLabel: 'Queue timesheet evidence'
+      });
+      evidenceStorageKey = String(manualMaterialized.pdfKey || '').trim().replace(/^\/+/, '');
+    }
+
+    const evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind, evidenceStorageKey);
 
     const currentMeta = (item.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json))
       ? item.meta_json
@@ -28165,14 +28180,14 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       return withCORS(env, req, serverError(`Failed to attach queue item: ${txt}`));
     }
 
-    if (item.r2_key && String(requestedKind).toUpperCase() === 'TIMESHEET') {
+    if (evidenceStorageKey && String(requestedKind).toUpperCase() === 'TIMESHEET') {
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
           body: JSON.stringify({
-            manual_pdf_r2_key: item.r2_key,
+            manual_pdf_r2_key: evidenceStorageKey,
             manual_pdf_rotation_degrees: (item.last_rotation_deg != null ? Number(item.last_rotation_deg) : 0)
           })
         }
@@ -28190,6 +28205,9 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
           current_timesheet_id: currentTimesheetId,
           content_hash: item.content_hash || null,
           r2_key: item.r2_key || null,
+          source_r2_key: evidenceStorageKey !== String(item?.r2_key || '').trim().replace(/^\/+/, '') ? (item.r2_key || null) : null,
+          materialized_pdf_r2_key: evidenceStorageKey || null,
+          materialized_was_converted: manualMaterialized ? !!manualMaterialized.wasConverted : false,
           evidence_id: evidenceRow?.id || null,
           kind: requestedKind
         },
@@ -79716,7 +79734,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       `${env.SUPABASE_URL}/rest/v1/timesheets` +
         `?timesheet_id=eq.${enc(currentTsId)}` +
         `&is_current=eq.true` +
-        `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key` +
+        `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,manual_pdf_r2_key,manual_pdf_rotation_degrees` +
         `&limit=1`
     );
     const ts = tsRows?.[0] || null;
@@ -79735,6 +79753,19 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       });
     }
 
+    let finalStorageKey = storageKey;
+    let manualMaterialized = null;
+    if (kind === 'TIMESHEET') {
+      manualMaterialized = await ensureTimesheetEvidencePdfArtifact(env, {
+        sourceKey: storageKey,
+        displayName: (displayNameIn && displayNameIn.length ? displayNameIn : prettyKind(kind) || kind),
+        rotationDegrees: ts?.manual_pdf_rotation_degrees ?? 0,
+        timesheetId: currentTsId,
+        sourceLabel: 'Timesheet evidence upload'
+      });
+      finalStorageKey = String(manualMaterialized.pdfKey || '').trim().replace(/^\/+/, '');
+    }
+
     const { rows: existingRows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
@@ -79744,7 +79775,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
     const existingEvidence = Array.isArray(existingRows) ? existingRows : [];
 
     const sameStorageExisting = existingEvidence.find(row =>
-      String(row?.storage_key || '').trim().replace(/^\/+/, '') === storageKey
+      String(row?.storage_key || '').trim().replace(/^\/+/, '') === finalStorageKey
     ) || null;
 
     if (sameStorageExisting && String(sameStorageExisting.kind || '').trim().toUpperCase() === kind) {
@@ -79773,7 +79804,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
       timesheet_id: currentTsId,
       kind,
       display_name: (displayNameIn && displayNameIn.length ? displayNameIn : prettyKind(kind) || kind),
-      storage_key: storageKey,
+      storage_key: finalStorageKey,
       created_at: nowIso,
       created_by: user.id || null
     }];
@@ -79805,14 +79836,14 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
           {
             method: 'PATCH',
             headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-            body: JSON.stringify({ manual_pdf_r2_key: storageKey })
+            body: JSON.stringify({ manual_pdf_r2_key: finalStorageKey })
           }
         );
         if (!updRes.ok) {
           const t2 = await updRes.text().catch(() => '');
           console.warn('[handleTimesheetEvidenceAdd] manual_pdf_r2_key update failed (non-fatal)', {
             timesheet_id: currentTsId,
-            storage_key: storageKey,
+            storage_key: finalStorageKey,
             err: t2
           });
         }
@@ -79834,7 +79865,10 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
           evidence_id: row?.id || null,
           kind,
           display_name: (displayNameIn && displayNameIn.length ? displayNameIn : prettyKind(kind) || kind),
-          storage_key: storageKey,
+          storage_key: finalStorageKey,
+          source_storage_key: manualMaterialized ? storageKey : null,
+          materialized_pdf_r2_key: manualMaterialized ? finalStorageKey : null,
+          materialized_was_converted: manualMaterialized ? !!manualMaterialized.wasConverted : false,
           contract_id: ts.contract_id || null,
           week_ending_date: ts.week_ending_date || null,
           sheet_scope: ts.sheet_scope || null,
@@ -91121,8 +91155,17 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
         missing.push({ kind: 'TIMESHEET_EVIDENCE_PDF', timesheet_id: ev?.timesheet_id || null, storage_key: norm });
         continue;
       }
+      let safeBytes = bytes;
+      try {
+        safeBytes = await ensureManualTimesheetBytesArePdf(bytes, {
+          sourceLabel: 'Timesheet evidence',
+          storageKey: norm
+        });
+      } catch (e) {
+        return { ok: false, error: `Unsupported manual timesheet evidence document type: ${e?.message || e}` };
+      }
       dedupeKeys.add(norm);
-      timesheetEvidenceBytesList.push(bytes);
+      timesheetEvidenceBytesList.push(safeBytes);
       if (ev?.timesheet_id) tsEvidenceFetchedSet.add(String(ev.timesheet_id));
     }
 
@@ -91162,8 +91205,17 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
         missing.push({ kind: 'MANUAL_TIMESHEET_PDF', timesheet_id: tsId, storage_key: norm });
         continue;
       }
+      let safeBytes = bytes;
+      try {
+        safeBytes = await ensureManualTimesheetBytesArePdf(bytes, {
+          sourceLabel: 'Manual timesheet document',
+          storageKey: norm
+        });
+      } catch (e) {
+        return { ok: false, error: `Unsupported manual timesheet document type: ${e?.message || e}` };
+      }
       dedupeKeys.add(norm);
-      manualTsBytesList.push(bytes);
+      manualTsBytesList.push(safeBytes);
     }
 
     step = 'FETCH_OTHER_EVIDENCE';
@@ -96312,6 +96364,131 @@ async function handleFileUpload(env, req, url) {
   return withCORS(env, req, ok({ ok: true, key, etag: putRes?.etag, size: actualLen || undefined }));
 }
 
+function detectPdfOrImageContentKind(bytesLike) {
+  const bytes = bytesLike instanceof Uint8Array ? bytesLike : new Uint8Array(bytesLike || []);
+  if (!bytes.length) return 'unknown';
+
+  // PDF: %PDF-
+  if (
+    bytes.length >= 5 &&
+    bytes[0] === 0x25 && // %
+    bytes[1] === 0x50 && // P
+    bytes[2] === 0x44 && // D
+    bytes[3] === 0x46 && // F
+    bytes[4] === 0x2d    // -
+  ) return 'application/pdf';
+
+  // PNG
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) return 'image/png';
+
+  // JPEG
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+
+  // GIF
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 &&
+    bytes[3] === 0x38 && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61
+  ) return 'image/gif';
+
+  // WEBP
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) return 'image/webp';
+
+  return 'unknown';
+}
+
+function normalizeRightAngleRotation(rawDeg) {
+  let n = Number(rawDeg);
+  if (!Number.isFinite(n)) return 0;
+  n = ((n % 360) + 360) % 360;
+  if (n >= 315 || n < 45) return 0;
+  if (n >= 45 && n < 135) return 90;
+  if (n >= 135 && n < 225) return 180;
+  return 270;
+}
+
+async function buildSingleImagePdfBytes(imageBytes, contentKind, rotationDegrees = 0) {
+  const pdfDoc = await PDFDocument.create();
+  const normalizedRotation = normalizeRightAngleRotation(rotationDegrees);
+
+  let img = null;
+  if (contentKind === 'image/png') {
+    img = await pdfDoc.embedPng(imageBytes);
+  } else if (contentKind === 'image/jpeg') {
+    img = await pdfDoc.embedJpg(imageBytes);
+  } else {
+    throw new Error(`Unsupported manual timesheet image format: ${contentKind}`);
+  }
+
+  const page = pdfDoc.addPage([img.width, img.height]);
+  if (normalizedRotation) page.setRotation(degrees(normalizedRotation));
+  page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+
+  return await pdfDoc.save();
+}
+
+async function ensureTimesheetEvidencePdfArtifact(env, { sourceKey, displayName, rotationDegrees, timesheetId, sourceLabel }) {
+  const src = normalizeKey(sourceKey);
+  if (!src) throw new Error('Manual timesheet evidence source key is required');
+
+  const sourceBytes = await r2GetBytes(env, src);
+  if (!sourceBytes?.length) throw new Error('Manual timesheet evidence source file is missing or empty');
+
+  const contentKind = detectPdfOrImageContentKind(sourceBytes);
+  if (contentKind === 'application/pdf') {
+    return {
+      pdfKey: src,
+      wasConverted: false,
+      sourceKey: src,
+      contentKind
+    };
+  }
+
+  if (contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
+    throw new Error(
+      `${sourceLabel || 'Manual timesheet evidence'} must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`
+    );
+  }
+
+  const tsId = String(timesheetId || '').trim();
+  if (!tsId) throw new Error('timesheetId is required for manual timesheet evidence conversion');
+
+  const normalizedRotation = normalizeRightAngleRotation(rotationDegrees);
+  const materializedId = await sha256Hex(`${src}|rot=${normalizedRotation}|name=${String(displayName || '')}`);
+  const pdfKey = normalizeKey(`docs-pdf/timesheets/manual-evidence/ts_${tsId}/${materializedId}.pdf`);
+
+  const pdfBytes = await buildSingleImagePdfBytes(sourceBytes, contentKind, normalizedRotation);
+  await r2Put(env, pdfKey, pdfBytes, { httpMetadata: { contentType: 'application/pdf' } });
+
+  return {
+    pdfKey,
+    wasConverted: true,
+    sourceKey: src,
+    contentKind
+  };
+}
+
+async function ensureManualTimesheetBytesArePdf(bytes, context = {}) {
+  const contentKind = detectPdfOrImageContentKind(bytes);
+  if (contentKind === 'application/pdf') return bytes;
+  if (contentKind === 'image/png' || contentKind === 'image/jpeg') {
+    return await buildSingleImagePdfBytes(bytes, contentKind, context?.rotationDegrees || 0);
+  }
+  const label = context?.sourceLabel || 'Manual timesheet evidence/document';
+  const key = context?.storageKey ? ` (${context.storageKey})` : '';
+  throw new Error(`${label}${key} is not a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
+}
+
 async function ensureTimesheetPdf(env, timesheetId, opts) {
   const enc = encodeURIComponent;
 
@@ -96324,7 +96501,7 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
     `${env.SUPABASE_URL}/rest/v1/timesheets` +
       `?timesheet_id=eq.${enc(timesheetId)}` +
       `&is_current=eq.true` +
-      `&select=manual_pdf_r2_key,qr_token,qr_status,qr_payload_json,qr_scanned_at,qr_signed_hash,qr_signed_at_utc` +
+      `&select=manual_pdf_r2_key,manual_pdf_rotation_degrees,qr_token,qr_status,qr_payload_json,qr_scanned_at,qr_signed_hash,qr_signed_at_utc` +
       `&limit=1`
   );
 
@@ -96391,7 +96568,26 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
   // Prefer a manual uploaded PDF when present (scanned evidence path)
   if (ts?.manual_pdf_r2_key) {
     const mk = normalizeKey(ts.manual_pdf_r2_key);
-    if (await r2Exists(env, mk)) return mk;
+    if (await r2Exists(env, mk)) {
+      const manualArtifact = await ensureTimesheetEvidencePdfArtifact(env, {
+        sourceKey: mk,
+        displayName: 'Manual Timesheet',
+        rotationDegrees: ts?.manual_pdf_rotation_degrees ?? 0,
+        timesheetId,
+        sourceLabel: 'timesheets.manual_pdf_r2_key'
+      });
+      if (manualArtifact?.wasConverted && manualArtifact?.pdfKey && manualArtifact.pdfKey !== mk) {
+        await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+            body: JSON.stringify({ manual_pdf_r2_key: manualArtifact.pdfKey })
+          }
+        ).catch(() => {});
+      }
+      return manualArtifact?.pdfKey || mk;
+    }
   }
 
   // ✅ CRITICAL FIX: Never short-circuit on R2 existence here.
