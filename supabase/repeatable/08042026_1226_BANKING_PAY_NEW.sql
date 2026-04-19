@@ -2981,7 +2981,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_build_context(p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid DEFAULT NULL::uuid, p_candidate_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid, p_preview_decisions_json jsonb DEFAULT NULL::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3194,15 +3193,55 @@ BEGIN
           AND (
             (
               public.timesheets.authorised_at_server IS NOT NULL
-              AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
-              AND public.timesheets.week_ending_date::date <= v_eligibility_to_date
-              AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
+              AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) >= v_eligibility_from_date
+              AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) <= v_eligibility_to_date
+              AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) <= v_effective_week_ending_cutoff
             )
             OR force_include.timesheet_id IS NOT NULL
             OR (
               public.timesheet_pay_state.last_settled_snapshot_json IS NOT NULL
-              AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
-              AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
+              AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) >= v_eligibility_from_date
+              AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) <= v_effective_week_ending_cutoff
             )
           )
           AND public.timesheets_financials.client_id = p_client_id
@@ -3331,15 +3370,55 @@ BEGIN
             AND (
               (
                 public.timesheets.authorised_at_server IS NOT NULL
-                AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
-                AND public.timesheets.week_ending_date::date <= v_eligibility_to_date
-                AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
+                AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) >= v_eligibility_from_date
+                AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) <= v_eligibility_to_date
+                AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) <= v_effective_week_ending_cutoff
               )
               OR force_include.timesheet_id IS NOT NULL
               OR (
                 public.timesheet_pay_state.last_settled_snapshot_json IS NOT NULL
-                AND public.timesheets.week_ending_date::date >= v_eligibility_from_date
-                AND public.timesheets.week_ending_date::date <= v_effective_week_ending_cutoff
+                AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) >= v_eligibility_from_date
+                AND COALESCE(
+                CASE
+                  WHEN UPPER(COALESCE(public.timesheets.sheet_scope::text, '')) = 'DAILY'
+                   AND public.timesheets.worked_start_iso IS NOT NULL
+                    THEN (public.timesheets.worked_start_iso AT TIME ZONE 'Europe/London')::date
+                  ELSE NULL::date
+                END,
+                public.timesheets.week_ending_date::date
+              ) <= v_effective_week_ending_cutoff
               )
             )
         ),
@@ -3452,6 +3531,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 
