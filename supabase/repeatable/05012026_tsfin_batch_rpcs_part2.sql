@@ -193,25 +193,78 @@ base as (
    and tf.is_current = true
 
   left join lateral (
-    select c1.*
-    from public.candidates c1
-    where
-      (
+    with candidate_resolution as (
+      select
+        case
+          when upper(coalesce(te.sheet_scope::text, '')) = 'DAILY'
+           and upper(coalesce(te.submission_mode::text, '')) = 'MANUAL'
+           and coalesce(te.candidate_hint_text->>'candidate_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            then (te.candidate_hint_text->>'candidate_id')::uuid
+          else null::uuid
+        end as manual_candidate_hint_id,
+        case
+          when upper(coalesce(te.sheet_scope::text, '')) = 'DAILY'
+           and upper(coalesce(te.submission_mode::text, '')) = 'MANUAL'
+            then tf.candidate_id
+          else null::uuid
+        end as manual_current_candidate_id
+    ),
+    candidate_matches as (
+      select
+        c1.id as candidate_id,
+        0 as match_priority,
+        c1.updated_at as match_updated_at,
+        c1.created_at as match_created_at
+      from public.candidates c1
+      cross join candidate_resolution cr
+      where cr.manual_candidate_hint_id is not null
+        and c1.id = cr.manual_candidate_hint_id
+
+      union all
+
+      select
+        c1.id as candidate_id,
+        1 as match_priority,
+        c1.updated_at as match_updated_at,
+        c1.created_at as match_created_at
+      from public.candidates c1
+      cross join candidate_resolution cr
+      where cr.manual_current_candidate_id is not null
+        and c1.id = cr.manual_current_candidate_id
+        and (
+          cr.manual_candidate_hint_id is null
+          or c1.id <> cr.manual_candidate_hint_id
+        )
+
+      union all
+
+      select
+        c1.id as candidate_id,
+        case
+          when c1.key_norm = te.occupant_key_norm then 2
+          else 3
+        end as match_priority,
+        c1.updated_at as match_updated_at,
+        c1.created_at as match_created_at
+      from public.candidates c1
+      where
         c1.key_norm = te.occupant_key_norm
         or (
           te.occupant_key_norm is not null
           and c1.nhsp_hr_name_aliases @> to_jsonb(array[te.occupant_key_norm]::text[])
         )
-      )
+    )
+    select candidate_matches.candidate_id
+    from candidate_matches
     order by
-      case
-        when c1.key_norm = te.occupant_key_norm then 0
-        else 1
-      end,
-      c1.updated_at desc nulls last,
-      c1.created_at desc nulls last
+      candidate_matches.match_priority,
+      candidate_matches.match_updated_at desc nulls last,
+      candidate_matches.match_created_at desc nulls last
     limit 1
-  ) c on true
+  ) candidate_pick on true
+
+  left join public.candidates c
+    on c.id = candidate_pick.candidate_id
 
   left join public.umbrellas u
     on (c.umbrella_id is not null and u.id = c.umbrella_id)
@@ -399,6 +452,10 @@ select
   out_policy
 from ctx;
 $$;
+
+
+
+
 
 grant execute on function public.tsfin_load_context_batch(uuid[]) to service_role;
 grant execute on function public.tsfin_load_context_batch(uuid[]) to authenticated;
