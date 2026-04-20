@@ -25564,6 +25564,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_build_batch_artifacts_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -25891,16 +25892,15 @@ BEGIN
   )
   WITH preview_candidate_rows AS (
     SELECT
-      nullif(btrim(coalesce(cand->>'candidate_id','')), '')::uuid AS candidate_id,
-      nullif(btrim(coalesce(cand->>'tms_ref','')), '') AS preview_tms_ref,
-      nullif(btrim(coalesce(cand->>'display_name','')), '') AS preview_display_name,
-      upper(nullif(btrim(coalesce(cand->>'current_pay_method','')), '')) AS preview_pay_method,
-      nullif(btrim(coalesce(cand->>'umbrella_id','')), '')::uuid AS preview_umbrella_id,
-      coalesce(nullif(cand->>'umbrella_vat_chargeable','')::boolean, false) AS preview_umbrella_vat_chargeable,
-      nullif(btrim(coalesce(cand->>'candidate_bank_hash','')), '') AS preview_candidate_bank_hash,
-      nullif(btrim(coalesce(cand->>'umbrella_bank_hash','')), '') AS preview_umbrella_bank_hash
-    FROM pg_temp.tmp_pay_build_preview_candidates pc
-    CROSS JOIN LATERAL (SELECT pc.cand) AS t(cand)
+      nullif(btrim(coalesce(pc.cand->>'candidate_id','')), '')::uuid AS preview_candidate_id,
+      nullif(btrim(coalesce(pc.cand->>'tms_ref','')), '') AS preview_tms_ref,
+      nullif(btrim(coalesce(pc.cand->>'display_name','')), '') AS preview_display_name,
+      upper(nullif(btrim(coalesce(pc.cand->>'current_pay_method','')), '')) AS preview_pay_method,
+      nullif(btrim(coalesce(pc.cand->>'umbrella_id','')), '')::uuid AS preview_umbrella_id,
+      coalesce(nullif(pc.cand->>'umbrella_vat_chargeable','')::boolean, false) AS preview_umbrella_vat_chargeable,
+      nullif(btrim(coalesce(pc.cand->>'candidate_bank_hash','')), '') AS preview_candidate_bank_hash,
+      nullif(btrim(coalesce(pc.cand->>'umbrella_bank_hash','')), '') AS preview_umbrella_bank_hash
+    FROM pg_temp.tmp_pay_build_preview_candidates AS pc
     WHERE nullif(btrim(coalesce(pc.cand->>'candidate_id','')), '') IS NOT NULL
   )
   SELECT
@@ -25925,7 +25925,7 @@ BEGIN
   JOIN public.candidates c
     ON c.id = sc.candidate_id
   LEFT JOIN preview_candidate_rows pcr
-    ON pcr.candidate_id = c.id
+    ON pcr.preview_candidate_id = c.id
   LEFT JOIN public.umbrellas u
     ON u.id = coalesce(pcr.preview_umbrella_id, c.umbrella_id)
   LEFT JOIN public.bank_payee_map bpm_candidate
