@@ -17054,7 +17054,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -17082,6 +17081,8 @@ DECLARE
   v_filter_candidate_id uuid := NULL::uuid;
   v_filter_client_id uuid := NULL::uuid;
   v_session_version bigint := 0;
+  v_server_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_server_selected_preview_row_ids_provided boolean := false;
   v_enqueue_candidate_refresh_json jsonb := '{}'::jsonb;
   v_pending_job_id uuid := NULL::uuid;
   v_scope_live_change_seq bigint := 0;
@@ -17529,6 +17530,7 @@ BEGIN
       status,
       version,
       server_selected_preview_row_ids,
+      server_selected_preview_row_ids_provided,
       created_at_utc,
       updated_at_utc,
       discarded_at_utc
@@ -17544,6 +17546,7 @@ BEGIN
       'OPEN',
       1,
       '[]'::jsonb,
+      false,
       v_now,
       v_now,
       NULL
@@ -17600,7 +17603,9 @@ BEGIN
       'session_signature', v_existing_session_row.session_signature,
       'source_snapshot_run_id', CASE WHEN v_existing_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_existing_session_row.source_snapshot_run_id::text END,
       'status', v_existing_session_row.status,
-      'version', v_existing_session_row.version
+      'version', v_existing_session_row.version,
+      'server_selected_preview_row_ids', COALESCE(v_existing_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+      'server_selected_preview_row_ids_provided', COALESCE(v_existing_session_row.server_selected_preview_row_ids_provided, false)
     );
   END IF;
 
@@ -17608,8 +17613,12 @@ BEGIN
   WHERE ws_candidate.session_id = v_session_id
     AND NOT (ws_candidate.candidate_id = ANY(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[])));
 
-  SELECT ws.version
-  INTO v_session_version
+  SELECT ws.version,
+         COALESCE(ws.server_selected_preview_row_ids, '[]'::jsonb),
+         COALESCE(ws.server_selected_preview_row_ids_provided, false)
+  INTO v_session_version,
+       v_server_selected_preview_row_ids,
+       v_server_selected_preview_row_ids_provided
   FROM public.banking_pay_workbench_sessions AS ws
   WHERE ws.id = v_session_id;
 
@@ -17814,7 +17823,8 @@ BEGIN
     'source_snapshot_run_id', v_snapshot_run_id::text,
     'status', 'OPEN',
     'version', v_session_version,
-    'server_selected_preview_row_ids', '[]'::jsonb
+    'server_selected_preview_row_ids', v_server_selected_preview_row_ids,
+    'server_selected_preview_row_ids_provided', v_server_selected_preview_row_ids_provided
   );
 
   PERFORM public._audit_insert(
@@ -17836,10 +17846,14 @@ BEGIN
     'scope_candidate_ids', to_jsonb(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[])),
     'scope_candidate_count', COALESCE(array_length(v_scope_candidate_ids, 1), 0),
     'action', v_action,
+    'server_selected_preview_row_ids', v_server_selected_preview_row_ids,
+    'server_selected_preview_row_ids_provided', v_server_selected_preview_row_ids_provided,
     'opened_at_utc', v_now
   );
 END;
 $function$;
+
+
 
 
 
@@ -18311,11 +18325,15 @@ BEGIN
     'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
     'session_version', v_session_row.version,
     'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+    'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false),
     'pending_candidate_ids', v_pending_candidate_ids_jsonb,
     'failed_candidate_ids', v_failed_candidate_ids_jsonb
   );
 END;
 $function$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_candidate_preview(
   p_session_id uuid,
@@ -18559,11 +18577,13 @@ BEGIN
     'snoozed_items', COALESCE(v_snoozed_items_json, '[]'::jsonb),
     'baseline_component_rows', COALESCE(v_baseline_component_rows_json, '[]'::jsonb),
     'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+    'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false),
     'pending_candidate_ids', v_pending_candidate_ids_jsonb,
     'failed_candidate_ids', v_failed_candidate_ids_jsonb
   );
 END;
 $function$;
+
 
 
 
@@ -19232,17 +19252,20 @@ BEGIN
   v_audit_before_json := jsonb_build_object(
     'id', v_session_row.id::text,
     'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+    'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false),
     'version', v_session_row.version
   );
 
   UPDATE public.banking_pay_workbench_sessions
   SET server_selected_preview_row_ids = v_selected_preview_row_ids_normalized,
+      server_selected_preview_row_ids_provided = true,
       updated_at_utc = v_now
   WHERE public.banking_pay_workbench_sessions.id = p_session_id;
 
   v_audit_after_json := jsonb_build_object(
     'id', v_session_row.id::text,
     'server_selected_preview_row_ids', v_selected_preview_row_ids_normalized,
+    'server_selected_preview_row_ids_provided', true,
     'version', v_session_row.version,
     'updated_at_utc', v_now
   );
@@ -19262,10 +19285,13 @@ BEGIN
     'session_id', p_session_id::text,
     'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
     'session_version', v_session_row.version,
-    'server_selected_preview_row_ids', v_selected_preview_row_ids_normalized
+    'server_selected_preview_row_ids', v_selected_preview_row_ids_normalized,
+    'server_selected_preview_row_ids_provided', true
   );
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
@@ -27926,11 +27952,14 @@ BEGIN
 
     UPDATE public.banking_pay_workbench_sessions
     SET server_selected_preview_row_ids = v_selected_preview_row_ids,
+        server_selected_preview_row_ids_provided = true,
         updated_at_utc = v_now
     WHERE public.banking_pay_workbench_sessions.id = p_session_id;
   ELSE
     v_selected_preview_row_ids_input := CASE
-      WHEN jsonb_typeof(COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)) = 'array' THEN COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)
+      WHEN COALESCE(v_session_row.server_selected_preview_row_ids_provided, false)
+           AND jsonb_typeof(COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)) = 'array'
+        THEN COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)
       ELSE '[]'::jsonb
     END;
 
@@ -28435,6 +28464,10 @@ BEGIN
   );
 END;
 $$;
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_claim_job_now(p_job_id uuid, p_now_utc timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS jsonb
@@ -29924,6 +29957,7 @@ BEGIN
     'status', v_session_row.status,
     'version', v_session_row.version,
     'server_selected_preview_row_ids', COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb),
+    'server_selected_preview_row_ids_provided', COALESCE(v_session_row.server_selected_preview_row_ids_provided, false),
     'case_resolution_count', v_deleted_case_resolution_count,
     'case_resolution_ids', v_deleted_case_resolution_ids,
     'override_count', v_deleted_override_count,
@@ -29940,6 +29974,7 @@ BEGIN
   UPDATE public.banking_pay_workbench_sessions AS ws
   SET actor_user_id = p_actor_user_id,
       server_selected_preview_row_ids = '[]'::jsonb,
+      server_selected_preview_row_ids_provided = false,
       version = ws.version + 1,
       updated_at_utc = v_now
   WHERE ws.id = p_session_id
@@ -30007,6 +30042,7 @@ BEGIN
     'status', v_session_row.status,
     'version', v_new_session_version,
     'server_selected_preview_row_ids', '[]'::jsonb,
+    'server_selected_preview_row_ids_provided', false,
     'cleared_case_resolution_count', v_deleted_case_resolution_count,
     'cleared_case_resolution_ids', v_deleted_case_resolution_ids,
     'cleared_override_count', v_deleted_override_count,
@@ -30040,6 +30076,7 @@ BEGIN
     'status', v_session_row.status,
     'session_version', v_new_session_version,
     'server_selected_preview_row_ids', '[]'::jsonb,
+    'server_selected_preview_row_ids_provided', false,
     'cleared_case_resolution_count', v_deleted_case_resolution_count,
     'cleared_override_count', v_deleted_override_count,
     'cleared_selected_preview_row_count', v_selected_preview_row_count,
@@ -30052,3 +30089,4 @@ BEGIN
   );
 END;
 $function$;
+
