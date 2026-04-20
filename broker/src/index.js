@@ -56049,6 +56049,12 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
       clearObj.server_selected_preview_row_ids ??
       []
     );
+    const canonicalSelectedPreviewRowIdsProvided = (
+      previewObj.server_selected_preview_row_ids_provided ??
+      previewSessionObj.server_selected_preview_row_ids_provided ??
+      clearObj.server_selected_preview_row_ids_provided ??
+      false
+    ) === true;
 
     const pendingCandidateIds = normalizeStringArray(
       previewObj.pending_candidate_ids ??
@@ -56076,6 +56082,7 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
       session_signature: canonicalSessionSignature,
       status: trimStr(clearObj.status || sessionRow.status || '') || null,
       server_selected_preview_row_ids: cloneJson(canonicalSelectedPreviewRowIds) || [],
+      server_selected_preview_row_ids_provided: canonicalSelectedPreviewRowIdsProvided,
       pending_candidate_ids: cloneJson(pendingCandidateIds) || [],
       failed_candidate_ids: cloneJson(failedCandidateIds) || [],
       preview: cloneJson(previewObj) || previewObj,
@@ -56088,11 +56095,15 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
         session_version: canonicalSessionVersion,
         session_signature: canonicalSessionSignature,
         server_selected_preview_row_ids: cloneJson(canonicalSelectedPreviewRowIds) || [],
+        server_selected_preview_row_ids_provided: canonicalSelectedPreviewRowIdsProvided,
         pending_candidate_ids: cloneJson(pendingCandidateIds) || [],
         failed_candidate_ids: cloneJson(failedCandidateIds) || [],
         status: trimStr(clearObj.status || sessionRow.status || previewSessionObj.status || '') || null
       }
     };
+    if (isPlainObject(out.preview) && !Object.prototype.hasOwnProperty.call(out.preview, 'server_selected_preview_row_ids_provided')) {
+      out.preview.server_selected_preview_row_ids_provided = canonicalSelectedPreviewRowIdsProvided;
+    }
 
     return withCORS(env, req, ok(out));
   } catch (e) {
@@ -113105,7 +113116,7 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     env,
     `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
       `?id=eq.${enc(sessionIdText)}` +
-      `&select=id,actor_user_id,status,source_snapshot_run_id,server_selected_preview_row_ids,version` +
+      `&select=id,actor_user_id,status,source_snapshot_run_id,server_selected_preview_row_ids,server_selected_preview_row_ids_provided,version` +
       `&limit=1`,
     false
   );
@@ -113225,11 +113236,13 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
     const existingSelectedRows = Array.isArray(sessionRow.server_selected_preview_row_ids)
       ? sessionRow.server_selected_preview_row_ids.map((value) => trimStr(value)).filter(Boolean)
       : [];
+    const existingSelectedRowsProvided = sessionRow.server_selected_preview_row_ids_provided === true;
     const desiredSelectedRows = cloneJson(normalized.value.selected_preview_row_ids || []);
     const existingKey = stableStringify(existingSelectedRows);
     const desiredKey = stableStringify(desiredSelectedRows);
+    const selectedRowsAlreadySynced = existingKey === desiredKey && existingSelectedRowsProvided === true;
 
-    if (existingKey !== desiredKey) {
+    if (!selectedRowsAlreadySynced) {
       const selectedRowsRpc = await sbRpc(env, 'pay_workbench_session_set_selected_rows', {
         p_session_id: sessionIdText,
         p_selected_preview_row_ids: desiredSelectedRows,
@@ -113247,6 +113260,7 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
         session_id: sessionIdText,
         session_version: result.session_version,
         selected_preview_row_ids: desiredSelectedRows,
+        server_selected_preview_row_ids_provided: true,
         unchanged: true
       };
     }
