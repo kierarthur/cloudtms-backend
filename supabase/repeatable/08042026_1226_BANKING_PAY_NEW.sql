@@ -17856,6 +17856,8 @@ BEGIN
         filters_json = EXCLUDED.filters_json,
         scope_candidate_ids = EXCLUDED.scope_candidate_ids,
         source_snapshot_run_id = EXCLUDED.source_snapshot_run_id,
+        server_selected_preview_row_ids = '[]'::jsonb,
+        server_selected_preview_row_ids_provided = false,
         version = CASE
           WHEN public.banking_pay_workbench_sessions.pay_date IS DISTINCT FROM EXCLUDED.pay_date
             OR public.banking_pay_workbench_sessions.week_ending_cutoff IS DISTINCT FROM EXCLUDED.week_ending_cutoff
@@ -17878,6 +17880,8 @@ BEGIN
         filters_json = v_filters_json,
         scope_candidate_ids = v_scope_candidate_ids,
         source_snapshot_run_id = v_snapshot_run_id,
+        server_selected_preview_row_ids = '[]'::jsonb,
+        server_selected_preview_row_ids_provided = false,
         version = CASE
           WHEN ws.pay_date IS DISTINCT FROM v_effective_pay_date
             OR ws.week_ending_cutoff IS DISTINCT FROM v_effective_week_ending_cutoff
@@ -18149,6 +18153,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 
