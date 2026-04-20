@@ -24320,6 +24320,7 @@ async function handleAuditEventsList(env, req) {
 // - Returns the updated contract_week row (representation)
 // ============================================================================
 
+
 async function handleContractWeekManualUpsert(env, req, weekId) {
   const enc = encodeURIComponent;
   const WLOG = true;
@@ -24625,7 +24626,7 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     const primary = timesheetKindItems[0] || null;
     if (!primary) return null;
 
-    const sourceKey = String(primary.r2_key || '').trim();
+    const sourceKey = String(primary.r2_key || '').trim().replace(/^\/+/, '');
     if (!sourceKey) {
       throw buildStagedTimesheetEvidenceError(
         'INVALID_TIMESHEET_EVIDENCE',
@@ -24635,15 +24636,23 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
 
     const rotationDeg = normaliseRotation(primary.last_rotation_deg);
 
-    let manualArtifact = null;
     try {
-      manualArtifact = await ensureTimesheetEvidencePdfArtifact(env, {
-        sourceKey,
-        displayName: primary.original_filename || 'Manual Timesheet',
-        rotationDegrees: rotationDeg,
-        timesheetId: targetTimesheetId,
-        sourceLabel: 'manual_timesheet_queue.r2_key'
-      });
+      if (typeof r2Exists === 'function') {
+        const exists = await r2Exists(env, sourceKey);
+        if (!exists) {
+          throw new Error('Staged TIMESHEET evidence storage_key does not exist in R2');
+        }
+      }
+
+      const sourceBytes = await r2GetBytes(env, sourceKey);
+      if (!sourceBytes?.length) {
+        throw new Error('Staged TIMESHEET evidence source file is missing or empty');
+      }
+
+      const contentKind = detectPdfOrImageContentKind(sourceBytes);
+      if (contentKind !== 'application/pdf' && contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
+        throw new Error(`Staged TIMESHEET evidence must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
+      }
     } catch (e) {
       throw buildStagedTimesheetEvidenceError(
         'INVALID_TIMESHEET_EVIDENCE',
@@ -24651,18 +24660,10 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
       );
     }
 
-    const pdfKey = String(manualArtifact?.pdfKey || '').trim();
-    if (!pdfKey) {
-      throw buildStagedTimesheetEvidenceError(
-        'INVALID_TIMESHEET_EVIDENCE',
-        'Staged TIMESHEET evidence could not be materialised to a PDF-safe artifact'
-      );
-    }
-
     return {
       queue_item_id: primary.id,
       display_name: primary.original_filename || null,
-      storage_key: pdfKey,
+      storage_key: sourceKey,
       created_at: primary.uploaded_at_utc || nowIso(),
       created_by: primary.uploaded_by_user_id || user?.id || null,
       rotation_deg: rotationDeg,
@@ -26336,7 +26337,6 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     created_now: !!createdNow
   }));
 }
-
 
 
 
@@ -28275,6 +28275,7 @@ async function handleContractWeekStagedEvidenceDelete(env, req, weekId, queueId)
   }));
 }
 // BE FIX: require expected_timesheet_id + resolve to CURRENT; strict 409 payload; patch queue + timesheet using CURRENT id only
+
 async function handleManualTimesheetQueueAttach(env, req, queueId) {
   const enc = encodeURIComponent;
 
@@ -28317,6 +28318,24 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     if (u === 'OTHER') return 'Other';
     if (u === 'TIMESHEET') return 'Timesheet';
     return String(k || '');
+  };
+
+  const validateTimesheetStorageKey = async (rawKey, sourceLabel) => {
+    const cleanStorageKey = String(rawKey || '').trim().replace(/^\/+/, '');
+    if (!cleanStorageKey) throw new Error(`${sourceLabel || 'Timesheet evidence'} is missing its storage key`);
+
+    const sourceBytes = await r2GetBytes(env, cleanStorageKey);
+    if (!sourceBytes?.length) throw new Error(`${sourceLabel || 'Timesheet evidence'} source file is missing or empty`);
+
+    const contentKind = detectPdfOrImageContentKind(sourceBytes);
+    if (contentKind !== 'application/pdf' && contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
+      throw new Error(`${sourceLabel || 'Timesheet evidence'} must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
+    }
+
+    return {
+      storageKey: cleanStorageKey,
+      contentKind
+    };
   };
 
   const attachQueueItemAsTimesheetEvidence = async (item, currentTsId, requestedKind, storageKeyOverride = null) => {
@@ -28467,14 +28486,14 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     let manualMaterialized = null;
     let evidenceStorageKey = String(item?.r2_key || '').trim().replace(/^\/+/, '');
     if (String(requestedKind).toUpperCase() === 'TIMESHEET') {
-      manualMaterialized = await ensureTimesheetEvidencePdfArtifact(env, {
+      const validatedTimesheetStorage = await validateTimesheetStorageKey(evidenceStorageKey, 'Queue timesheet evidence');
+      evidenceStorageKey = String(validatedTimesheetStorage.storageKey || '').trim().replace(/^\/+/, '');
+      manualMaterialized = {
+        pdfKey: evidenceStorageKey,
+        wasConverted: false,
         sourceKey: evidenceStorageKey,
-        displayName: item?.original_filename || 'Timesheet',
-        rotationDegrees: item?.last_rotation_deg,
-        timesheetId: currentTimesheetId,
-        sourceLabel: 'Queue timesheet evidence'
-      });
-      evidenceStorageKey = String(manualMaterialized.pdfKey || '').trim().replace(/^\/+/, '');
+        contentKind: validatedTimesheetStorage.contentKind
+      };
     }
 
     const evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind, evidenceStorageKey);
@@ -28550,7 +28569,6 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     return withCORS(env, req, serverError(e?.message || 'Failed to attach manual timesheet queue item'));
   }
 }
-
 
 
 
@@ -80021,6 +80039,24 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
     return String(k || '');
   };
 
+  const validateTimesheetStorageKey = async (rawKey, sourceLabel) => {
+    const cleanStorageKey = String(rawKey || '').trim().replace(/^\/+/, '');
+    if (!cleanStorageKey) throw new Error('storage_key is required');
+
+    const sourceBytes = await r2GetBytes(env, cleanStorageKey);
+    if (!sourceBytes?.length) throw new Error(`${sourceLabel || 'Timesheet evidence'} source file is missing or empty`);
+
+    const contentKind = detectPdfOrImageContentKind(sourceBytes);
+    if (contentKind !== 'application/pdf' && contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
+      throw new Error(`${sourceLabel || 'Timesheet evidence'} must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
+    }
+
+    return {
+      storageKey: cleanStorageKey,
+      contentKind
+    };
+  };
+
   const kind = normalizeKind(rawKind);
   const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
 
@@ -80090,14 +80126,17 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
     let finalStorageKey = storageKey;
     let manualMaterialized = null;
     if (kind === 'TIMESHEET') {
-      manualMaterialized = await ensureTimesheetEvidencePdfArtifact(env, {
-        sourceKey: storageKey,
-        displayName: (displayNameIn && displayNameIn.length ? displayNameIn : prettyKind(kind) || kind),
-        rotationDegrees: ts?.manual_pdf_rotation_degrees ?? 0,
-        timesheetId: currentTsId,
-        sourceLabel: 'Timesheet evidence upload'
-      });
-      finalStorageKey = String(manualMaterialized.pdfKey || '').trim().replace(/^\/+/, '');
+      const validatedTimesheetStorage = await validateTimesheetStorageKey(
+        storageKey,
+        'Timesheet evidence upload'
+      );
+      finalStorageKey = String(validatedTimesheetStorage.storageKey || '').trim().replace(/^\/+/, '');
+      manualMaterialized = {
+        pdfKey: finalStorageKey,
+        wasConverted: false,
+        sourceKey: finalStorageKey,
+        contentKind: validatedTimesheetStorage.contentKind
+      };
     }
 
     const { rows: existingRows } = await sbFetch(
@@ -80224,6 +80263,7 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
   }
 }
 
+
 async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
 
@@ -80282,6 +80322,24 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
   const newKindRaw = body && body.kind != null ? String(body.kind).trim() : '';
   const newKind = normalizeKind(newKindRaw);
   const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
+
+  const validateTimesheetStorageKey = async (rawKey, sourceLabel) => {
+    const cleanStorageKey = String(rawKey || '').trim().replace(/^\/+/, '');
+    if (!cleanStorageKey) throw new Error('Unsupported TIMESHEET evidence');
+
+    const sourceBytes = await r2GetBytes(env, cleanStorageKey);
+    if (!sourceBytes?.length) throw new Error(`${sourceLabel || 'TIMESHEET evidence'} source file is missing or empty`);
+
+    const contentKind = detectPdfOrImageContentKind(sourceBytes);
+    if (contentKind !== 'application/pdf' && contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
+      throw new Error(`${sourceLabel || 'TIMESHEET evidence'} must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
+    }
+
+    return {
+      storageKey: cleanStorageKey,
+      contentKind
+    };
+  };
 
   if (!newKind) return withCORS(env, req, badRequest('kind is required'));
   if (!allowedKinds.has(newKind)) return withCORS(env, req, badRequest('Invalid evidence kind'));
@@ -80363,14 +80421,11 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       }
 
       try {
-        const manualArtifact = await ensureTimesheetEvidencePdfArtifact(env, {
-          sourceKey: originalStorageKey,
-          displayName: ev.display_name || 'Manual Timesheet',
-          rotationDegrees: 0,
-          timesheetId: currentTsId,
-          sourceLabel: 'timesheet_evidence.storage_key'
-        });
-        updatedStorageKey = (manualArtifact?.pdfKey != null) ? String(manualArtifact.pdfKey).trim().replace(/^\/+/, '') : '';
+        const validatedTimesheetStorage = await validateTimesheetStorageKey(
+          originalStorageKey,
+          'timesheet_evidence.storage_key'
+        );
+        updatedStorageKey = String(validatedTimesheetStorage.storageKey || '').trim().replace(/^\/+/, '');
       } catch (e) {
         return withCORS(env, req, badRequest(e?.message || 'Unsupported TIMESHEET evidence'));
       }
