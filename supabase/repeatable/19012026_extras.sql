@@ -6496,6 +6496,7 @@ end
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.contract_week_manual_upsert_atomic(
   p_week_id uuid,
   p_expected_timesheet_id uuid DEFAULT NULL,
@@ -6969,7 +6970,6 @@ BEGIN
           RAISE EXCEPTION 'Only one staged TIMESHEET file may be materialised to a weekly manual timesheet';
         END IF;
 
-        v_primary_timesheet_storage_key := v_queue_item.r2_key;
         v_primary_timesheet_rotation_raw := COALESCE(v_queue_item.last_rotation_deg, 0);
         v_primary_timesheet_rotation_raw := ((v_primary_timesheet_rotation_raw % 360) + 360) % 360;
         v_primary_timesheet_rotation_deg :=
@@ -6979,36 +6979,48 @@ BEGIN
             WHEN v_primary_timesheet_rotation_raw >= 135 AND v_primary_timesheet_rotation_raw < 225 THEN 180
             ELSE 270
           END;
+
+        UPDATE public.manual_timesheet_queue AS mq
+        SET meta_json = COALESCE(v_queue_item.meta_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'contract_week_id', v_week.id::text,
+            'staged_kind', v_queue_kind,
+            'materialisation_deferred_to_backend', true,
+            'materialisation_deferred_at_utc', to_jsonb(v_now),
+            'deferred_target_timesheet_id', v_current_ts.timesheet_id::text,
+            'deferred_rotation_degrees', v_primary_timesheet_rotation_deg
+          )
+        WHERE mq.id = v_queue_item.id;
+      ELSE
+        INSERT INTO public.timesheet_evidence (
+          timesheet_id,
+          kind,
+          display_name,
+          storage_key,
+          created_at,
+          created_by
+        )
+        VALUES (
+          v_current_ts.timesheet_id,
+          v_queue_kind,
+          v_queue_item.original_filename,
+          v_queue_item.r2_key,
+          COALESCE(v_queue_item.uploaded_at_utc, v_now),
+          COALESCE(v_queue_item.uploaded_by_user_id, p_actor_user_id)
+        );
+
+        UPDATE public.manual_timesheet_queue AS mq
+        SET status = 'ATTACHED',
+            timesheet_id = v_current_ts.timesheet_id,
+            meta_json = COALESCE(v_queue_item.meta_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'contract_week_id', v_week.id::text,
+                'staged_kind', v_queue_kind,
+                'materialised_to_timesheet_id', v_current_ts.timesheet_id::text,
+                'materialised_at_utc', to_jsonb(v_now)
+              )
+        WHERE mq.id = v_queue_item.id;
       END IF;
-
-      INSERT INTO public.timesheet_evidence (
-        timesheet_id,
-        kind,
-        display_name,
-        storage_key,
-        created_at,
-        created_by
-      )
-      VALUES (
-        v_current_ts.timesheet_id,
-        v_queue_kind,
-        v_queue_item.original_filename,
-        v_queue_item.r2_key,
-        COALESCE(v_queue_item.uploaded_at_utc, v_now),
-        COALESCE(v_queue_item.uploaded_by_user_id, p_actor_user_id)
-      );
-
-      UPDATE public.manual_timesheet_queue AS mq
-      SET status = 'ATTACHED',
-          timesheet_id = v_current_ts.timesheet_id,
-          meta_json = COALESCE(v_queue_item.meta_json, '{}'::jsonb)
-            || jsonb_build_object(
-              'contract_week_id', v_week.id::text,
-              'staged_kind', v_queue_kind,
-              'materialised_to_timesheet_id', v_current_ts.timesheet_id::text,
-              'materialised_at_utc', to_jsonb(v_now)
-            )
-      WHERE mq.id = v_queue_item.id;
     END LOOP;
   END IF;
 
@@ -7185,6 +7197,8 @@ BEGIN
   RETURN NEXT;
 END;
 $function$;
+
+
 CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(
   p_timesheet_id uuid,
   p_expected_timesheet_id uuid,
