@@ -16340,7 +16340,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
       })
     );
   };
-const CREATE_DRAFT_CHECKPOINT = 'SESSION_ROW_FETCHED';
+const CREATE_DRAFT_CHECKPOINT = 'NONE';
   const createDraftCheckpoint = String(CREATE_DRAFT_CHECKPOINT || '').trim().toUpperCase();
 
   const maybeCreateDraftCheckpointResponse = (checkpointCode, payload = {}) => {
