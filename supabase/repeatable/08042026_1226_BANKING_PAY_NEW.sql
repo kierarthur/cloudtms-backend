@@ -25862,6 +25862,7 @@ END;
 $function$;
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_build_batch_artifacts_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -26153,8 +26154,8 @@ BEGIN
     sort_code text,
     account_number text,
     bank_details_hash text,
-    payee_id uuid,
-    payee_account_id uuid,
+    payee_id text,
+    payee_account_id text,
     umbrella_vat_chargeable boolean
   ) ON COMMIT DROP;
   TRUNCATE TABLE pg_temp.tmp_pay_build_candidates_ctx;
@@ -26166,8 +26167,8 @@ BEGIN
     sort_code text,
     account_number text,
     bank_details_hash text,
-    payee_id uuid,
-    payee_account_id uuid
+    payee_id text,
+    payee_account_id text
   ) ON COMMIT DROP;
   TRUNCATE TABLE pg_temp.tmp_pay_build_umbrellas_ctx;
 
@@ -26529,8 +26530,6 @@ BEGIN
   );
 END;
 $function$;
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_create_draft_batch(
