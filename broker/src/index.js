@@ -16173,19 +16173,8 @@ async function handleTimesheetCreateManualDaily(env, req) {
   }));
 }
 
-async function handleBankingPayCreateDraft(env, req, user) {
-  return withCORS(
-    env,
-    req,
-    new Response(
-      JSON.stringify({ ok: false, marker: 'CREATE_DRAFT_ROUTE_MARKER_1' }),
-      {
-        status: 418,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    )
-  );
 
+async function handleBankingPayCreateDraft(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
@@ -16348,6 +16337,25 @@ async function handleBankingPayCreateDraft(env, req, user) {
         headers: { ...JSON_HEADERS, ...headers }
       })
     );
+  };
+
+  const createDraftCheckpoint = String(
+    body?.__create_draft_checkpoint ??
+    body?.create_draft_checkpoint ??
+    body?.createDraftCheckpoint ??
+    env?.BANKING_PAY_CREATE_DRAFT_CHECKPOINT ??
+    ''
+  ).trim().toUpperCase();
+
+  const maybeCreateDraftCheckpointResponse = (checkpointCode, payload = {}) => {
+    if (!createDraftCheckpoint || createDraftCheckpoint === 'NONE') return null;
+    if (String(checkpointCode || '').trim().toUpperCase() !== createDraftCheckpoint) return null;
+    return buildJsonResponseWithCors(418, {
+      ok: false,
+      marker: `CREATE_DRAFT_ROUTE_${String(checkpointCode || '').trim().toUpperCase()}`,
+      checkpoint: String(checkpointCode || '').trim().toUpperCase(),
+      payload: (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {}
+    });
   };
 
   const normalizeStringArray = (raw) => {
@@ -17020,6 +17028,18 @@ async function handleBankingPayCreateDraft(env, req, user) {
         return withCORS(env, req, badRequest('Workbench session is not open'));
       }
 
+      const checkpointSessionRowFetched = maybeCreateDraftCheckpointResponse('SESSION_ROW_FETCHED', {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        session_id: sessionIdText,
+        session_status: String(sessionRow.status || '').trim().toUpperCase(),
+        source_snapshot_run_id: String(sessionRow.source_snapshot_run_id || '').trim() || null,
+        session_version: sessionRow.version ?? null,
+        pay_channel_scope: payChannelScope || 'ALL'
+      });
+      if (checkpointSessionRowFetched) return checkpointSessionRowFetched;
+
       const explicitDecisionInputPresent = !!(
         normalizedSessionDecisions.explicit.case_resolutions ||
         normalizedSessionDecisions.explicit.selected_preview_row_ids ||
@@ -17053,6 +17073,19 @@ async function handleBankingPayCreateDraft(env, req, user) {
         );
       }
 
+      const checkpointBeforePrepareRpc = maybeCreateDraftCheckpointResponse('BEFORE_PREPARE_RPC', {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        session_id: sessionIdText,
+        snapshot_run_id: syncResult.snapshot_run_id || (String(sessionRow.source_snapshot_run_id || '').trim() || null),
+        session_version: syncResult.session_version ?? sessionRow.version ?? null,
+        explicit_decision_input_present: explicitDecisionInputPresent,
+        sync_state_changed: !!syncResult.state_changed,
+        pay_channel_scope: payChannelScope || 'ALL'
+      });
+      if (checkpointBeforePrepareRpc) return checkpointBeforePrepareRpc;
+
       const prepareRpc = await sbRpc(env, 'pay_workbench_prepare_draft', {
         p_session_id: sessionIdText,
         p_actor_user_id: actorUserId,
@@ -17064,6 +17097,16 @@ async function handleBankingPayCreateDraft(env, req, user) {
         p_override_verified_by_user_id: overrideVerifiedByUserId,
         p_override_verified_at_utc: overrideVerifiedAtUtc
       });
+
+      const checkpointAfterPrepareRpc = maybeCreateDraftCheckpointResponse('AFTER_PREPARE_RPC', {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        session_id: sessionIdText,
+        pay_channel_scope: payChannelScope || 'ALL',
+        prepare_rpc: prepareRpc
+      });
+      if (checkpointAfterPrepareRpc) return checkpointAfterPrepareRpc;
 
       let preparePayload = prepareRpc;
       try {
@@ -17110,6 +17153,16 @@ async function handleBankingPayCreateDraft(env, req, user) {
         source_snapshot_run_id: outPayload?.source_snapshot_run_id || syncResult.snapshot_run_id || null,
         source_session_version: outPayload?.source_session_version ?? syncResult.session_version ?? null
       });
+
+      const checkpointBeforeSuccessResponse = maybeCreateDraftCheckpointResponse('BEFORE_SUCCESS_RESPONSE', {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        session_id: sessionIdText,
+        pay_channel_scope: payChannelScope || 'ALL',
+        out_payload: outPayload
+      });
+      if (checkpointBeforeSuccessResponse) return checkpointBeforeSuccessResponse;
 
       return buildJsonResponseWithCors(200, outPayload);
     } catch (e) {
@@ -17954,6 +18007,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     });
   }
 }
+
 
 
 async function handleTimesheetAdvancePayment(env, req, timesheetId) {
