@@ -16173,8 +16173,19 @@ async function handleTimesheetCreateManualDaily(env, req) {
   }));
 }
 
-
 async function handleBankingPayCreateDraft(env, req, user) {
+  return withCORS(
+    env,
+    req,
+    new Response(
+      JSON.stringify({ ok: false, marker: 'CREATE_DRAFT_ROUTE_MARKER_1' }),
+      {
+        status: 418,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    )
+  );
+
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
   if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
