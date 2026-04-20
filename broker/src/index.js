@@ -15671,6 +15671,8 @@ async function handleTimesheetCreateManualDaily(env, req) {
       }
     }
 
+    const hasBreakWindow = hasBrStart && hasBrEnd;
+
     return {
       ymd: ymdStr,
       worked_start_iso,
@@ -15683,9 +15685,9 @@ async function handleTimesheetCreateManualDaily(env, req) {
         date: ymdStr,
         start: startHHMM || '',
         end: endHHMM || '',
-        break_start: breakStartHHMM || '',
-        break_end: breakEndHHMM || '',
-        break_minutes: break_minutes == null ? '' : break_minutes
+        break_start: hasBreakWindow ? breakStartHHMM : '',
+        break_end: hasBreakWindow ? breakEndHHMM : '',
+        break_minutes: hasBreakWindow ? '' : (break_minutes == null ? '' : break_minutes)
       }
     };
   };
