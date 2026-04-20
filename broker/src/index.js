@@ -16282,6 +16282,63 @@ async function handleBankingPayCreateDraft(env, req, user) {
     }
   };
 
+  const safeJsonStringify = (value) => {
+    const seen = new WeakSet();
+    return JSON.stringify(value, (_key, raw) => {
+      if (typeof raw === 'bigint') return raw.toString();
+      if (raw instanceof Error) {
+        return {
+          name: String(raw.name || 'Error'),
+          message: String(raw.message || ''),
+          stack: String(raw.stack || '') || null
+        };
+      }
+      if (raw instanceof Map) {
+        return Object.fromEntries(Array.from(raw.entries()));
+      }
+      if (raw instanceof Set) {
+        return Array.from(raw.values());
+      }
+      if (raw && typeof raw === 'object') {
+        if (seen.has(raw)) return '[Circular]';
+        seen.add(raw);
+      }
+      return raw;
+    });
+  };
+
+  const buildJsonResponseWithCors = (status, payload, headers = {}) => {
+    let responseStatus = Number.isFinite(Number(status)) ? Math.trunc(Number(status)) : 500;
+    let responsePayload = payload;
+    let bodyText = '';
+
+    try {
+      bodyText = safeJsonStringify(responsePayload);
+    } catch (serializationError) {
+      responseStatus = 500;
+      responsePayload = {
+        ok: false,
+        error: {
+          code: 'BANKING_PAY_CREATE_DRAFT_RESPONSE_SERIALIZATION_FAILED',
+          message: 'Unable to serialize Banking draft response.',
+          details: {
+            reason: String(serializationError?.message || serializationError || 'Unknown serialization error')
+          }
+        }
+      };
+      bodyText = JSON.stringify(responsePayload);
+    }
+
+    return withCORS(
+      env,
+      req,
+      new Response(bodyText, {
+        status: responseStatus,
+        headers: { ...JSON_HEADERS, ...headers }
+      })
+    );
+  };
+
   const normalizeStringArray = (raw) => {
     if (!Array.isArray(raw)) return [];
     const out = [];
@@ -16840,14 +16897,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
     if (details && typeof details === 'object' && !Array.isArray(details)) {
       payload.error.details = details;
     }
-    return withCORS(
-      env,
-      req,
-      new Response(JSON.stringify(payload), {
-        status,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    );
+    return buildJsonResponseWithCors(status, payload);
   };
 
   const sessionIdText = trimStr(body.session_id || body.sessionId || '');
@@ -17050,7 +17100,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
         source_session_version: outPayload?.source_session_version ?? syncResult.session_version ?? null
       });
 
-      return withCORS(env, req, ok(outPayload));
+      return buildJsonResponseWithCors(200, outPayload);
     } catch (e) {
       logRouteDebug('error', 'PAY_CREATE_DRAFT_SESSION_PREPARE_FAILED', {
         pay_date: payDate,
@@ -17722,18 +17772,15 @@ async function handleBankingPayCreateDraft(env, req, user) {
     const remainingInScope = uniqueInScopeIds.filter(tid => !excludedSet.has(String(tid)));
 
     if (uniqueInScopeIds.length > 0 && remainingInScope.length === 0 && excludedTimesheetIdsFromDrain.length > 0) {
-      return withCORS(env, req, new Response(
-        JSON.stringify({
-          error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
-          message: 'No Ready to Pay timesheets were ready to draft because calculations are still processing. Please try again shortly.',
-          excluded_timesheets: excludedTimesheetIdsFromDrain.map((tid) => ({
-            timesheet_id: tid,
-            candidate_id: effectiveTimesheetToCandidateId.get(tid) || null,
-            reason_summary: 'CALCULATIONS_STILL_PROCESSING'
-          }))
-        }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      ));
+      return buildJsonResponseWithCors(409, {
+        error: 'NO_TIMESHEETS_READY_FOR_DRAFT',
+        message: 'No Ready to Pay timesheets were ready to draft because calculations are still processing. Please try again shortly.',
+        excluded_timesheets: excludedTimesheetIdsFromDrain.map((tid) => ({
+          timesheet_id: tid,
+          candidate_id: effectiveTimesheetToCandidateId.get(tid) || null,
+          reason_summary: 'CALCULATIONS_STILL_PROCESSING'
+        }))
+      });
     }
 
     if (excludedTimesheetIdsFromDrain.length > 0) {
@@ -17875,7 +17922,7 @@ async function handleBankingPayCreateDraft(env, req, user) {
         : 0
     });
 
-    return withCORS(env, req, ok(outPayload));
+    return buildJsonResponseWithCors(200, outPayload);
   } catch (e) {
     logRouteDebug('error', 'HANDLE_ROUTE_FAILED', {
       pay_date: payDate,
@@ -17887,7 +17934,13 @@ async function handleBankingPayCreateDraft(env, req, user) {
       filter_was_derived: routeFilterWasDerived,
       error: String(e?.message || e || '')
     });
-    return withCORS(env, req, serverError(String(e?.message || e)));
+    return buildJsonResponseWithCors(500, {
+      ok: false,
+      error: {
+        code: 'BANKING_PAY_CREATE_DRAFT_ROUTE_FAILED',
+        message: String(e?.message || e || 'Internal Server Error')
+      }
+    });
   }
 }
 
