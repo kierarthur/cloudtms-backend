@@ -16338,14 +16338,8 @@ async function handleBankingPayCreateDraft(env, req, user) {
       })
     );
   };
-
-  const createDraftCheckpoint = String(
-    body?.__create_draft_checkpoint ??
-    body?.create_draft_checkpoint ??
-    body?.createDraftCheckpoint ??
-    env?.BANKING_PAY_CREATE_DRAFT_CHECKPOINT ??
-    ''
-  ).trim().toUpperCase();
+const CREATE_DRAFT_CHECKPOINT = 'SESSION_ROW_FETCHED';
+  const createDraftCheckpoint = String(CREATE_DRAFT_CHECKPOINT || '').trim().toUpperCase();
 
   const maybeCreateDraftCheckpointResponse = (checkpointCode, payload = {}) => {
     if (!createDraftCheckpoint || createDraftCheckpoint === 'NONE') return null;
