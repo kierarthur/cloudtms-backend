@@ -20693,7 +20693,7 @@ begin
     raise exception 'pay_batch not found';
   end if;
 
-  v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed,'')));
+  v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed::text,'')));
 
   -- ✅ NEW: derive batch kind + channels from items (excludes DEBT_CREATED)
   select
@@ -20710,8 +20710,8 @@ begin
     v_pay_channels_present
   from (
     select
-      array_agg(distinct upper(coalesce(pbi.pay_channel,'')) order by upper(coalesce(pbi.pay_channel,'')))
-        filter (where upper(coalesce(pbi.pay_channel,'')) in ('PAYE','UMBRELLA')) as channels
+      array_agg(distinct upper(coalesce(pbi.pay_channel::text,'')) order by upper(coalesce(pbi.pay_channel::text,'')))
+        filter (where upper(coalesce(pbi.pay_channel::text,'')) in ('PAYE','UMBRELLA')) as channels
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
@@ -20881,9 +20881,9 @@ begin
   ) ni on true
   left join lateral (
     select
-      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
-      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
-      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat
     from public.pay_batch_items pbi
     where pbi.pay_batch_candidate_id = pbc.id
   ) fs on true
@@ -21026,8 +21026,8 @@ begin
   sums as (
     select
       pbc.id as pay_batch_candidate_id,
-      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,'')) = 'PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as paye_total_ex_vat,
-      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as umbrella_total_inc_vat
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as paye_total_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel::text,'')) = 'UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as umbrella_total_inc_vat
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
@@ -21037,9 +21037,9 @@ begin
   fs as (
     select
       pbc.id as pay_batch_candidate_id,
-      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
-      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
-      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
@@ -21056,22 +21056,22 @@ begin
       count(distinct pbi.pay_bank_transfer_id) filter (
         where pbi.item_type <> 'DEBT_CREATED'
           and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'BLOCKED'
+          and upper(coalesce(pbt.status::text,'')) = 'BLOCKED'
       )::int as blocked_transfers,
       count(distinct pbi.pay_bank_transfer_id) filter (
         where pbi.item_type <> 'DEBT_CREATED'
           and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'FAILED'
+          and upper(coalesce(pbt.status::text,'')) = 'FAILED'
       )::int as failed_transfers,
       count(distinct pbi.pay_bank_transfer_id) filter (
         where pbi.item_type <> 'DEBT_CREATED'
           and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'COMPLETED'
+          and upper(coalesce(pbt.status::text,'')) = 'COMPLETED'
       )::int as completed_transfers,
       count(distinct pbi.pay_bank_transfer_id) filter (
         where pbi.item_type <> 'DEBT_CREATED'
           and pbi.pay_bank_transfer_id is not null
-          and upper(coalesce(pbt.status,'')) = 'PENDING'
+          and upper(coalesce(pbt.status::text,'')) = 'PENDING'
       )::int as pending_transfers
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
@@ -21177,8 +21177,8 @@ begin
       pbc.id as pay_batch_candidate_id,
       pbc.candidate_id as candidate_id,
       pbi.timesheet_id as timesheet_id,
-      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,''))='PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as subtotal_paye_ex_vat,
-      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel,''))='UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as subtotal_umbrella_inc_vat
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel::text,''))='PAYE' then coalesce(pbi.amount_ex_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as subtotal_paye_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.pay_channel::text,''))='UMBRELLA' then coalesce(pbi.amount_inc_vat,0) else 0 end) filter (where pbi.item_type <> 'DEBT_CREATED'),0),2) as subtotal_umbrella_inc_vat
     from public.pay_batch_candidates pbc
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
@@ -21317,7 +21317,7 @@ begin
       pbi.repayment_week_start as repayment_week_start,
       pbi.finance_case_id as finance_case_id,
       pbi.description as description,
-      upper(coalesce(pbi.pay_channel,'')) as pay_channel_txt,
+      upper(coalesce(pbi.pay_channel::text,'')) as pay_channel_txt,
       case when pbi.umbrella_id is null then null else pbi.umbrella_id::text end as umbrella_id_txt,
       coalesce(
         nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'taxability','')), ''),
@@ -21332,7 +21332,7 @@ begin
         case
           when case when vfcr.routing_kind is null then null else vfcr.routing_kind::text end = 'UMBRELLA_COMPANY' then 'umbrella company'
           when case when vfcr.routing_kind is null then null else vfcr.routing_kind::text end = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'one-off specified bank account'
-          when upper(coalesce(pbi.pay_channel,'')) = 'PAYE' then 'normal PAYE route'
+          when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then 'normal PAYE route'
           else null
         end
       ) as destination_label,
@@ -21627,27 +21627,27 @@ begin
           when pbi.item_type = 'DEBT_CREATED' then null
           when pbi.timesheet_id is not null then
             case
-              when upper(coalesce(pbi.pay_channel,'')) = 'PAYE' then 'NORMAL_PAYE_ROUTE'
-              when upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA' then 'UMBRELLA_COMPANY|' || coalesce(pbi.umbrella_id::text,'NO_UMBRELLA')
-              else 'ROUTE|' || coalesce(upper(coalesce(pbi.pay_channel,'')), 'NO_CHANNEL') || '|' || coalesce(pbi.umbrella_id::text,'NO_UMBRELLA')
+              when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then 'NORMAL_PAYE_ROUTE'
+              when upper(coalesce(pbi.pay_channel::text,'')) = 'UMBRELLA' then 'UMBRELLA_COMPANY|' || coalesce(pbi.umbrella_id::text,'NO_UMBRELLA')
+              else 'ROUTE|' || coalesce(upper(coalesce(pbi.pay_channel::text,'')), 'NO_CHANNEL') || '|' || coalesce(pbi.umbrella_id::text,'NO_UMBRELLA')
             end
           else
             case
               when coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '') = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then
                 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
                 || '|' || coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_hash','')), ''), 'NO_HASH')
-                || '|' || coalesce(upper(coalesce(pbi.pay_channel,'')), 'NO_CHANNEL')
+                || '|' || coalesce(upper(coalesce(pbi.pay_channel::text,'')), 'NO_CHANNEL')
                 || '|' || coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'beneficiary_name','')), ''), 'NO_BENEFICIARY')
               when coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '') = 'UMBRELLA_COMPANY' then
                 'UMBRELLA_COMPANY|' || coalesce(pbi.umbrella_id::text,'NO_UMBRELLA')
-              when upper(coalesce(pbi.pay_channel,'')) = 'PAYE' then
+              when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then
                 'NORMAL_PAYE_ROUTE'
-              when upper(coalesce(pbi.pay_channel,'')) = 'UMBRELLA' and coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '') = '' then
+              when upper(coalesce(pbi.pay_channel::text,'')) = 'UMBRELLA' and coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '') = '' then
                 'UMBRELLA_COMPANY|' || coalesce(pbi.umbrella_id::text,'NO_UMBRELLA')
               else
                 coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), 'NO_ROUTING')
                 || '|' || coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_hash','')), ''), 'NO_HASH')
-                || '|' || coalesce(upper(coalesce(pbi.pay_channel,'')), 'NO_CHANNEL')
+                || '|' || coalesce(upper(coalesce(pbi.pay_channel::text,'')), 'NO_CHANNEL')
                 || '|' || coalesce(pbi.umbrella_id::text,'NO_UMBRELLA')
             end
         end
@@ -21899,7 +21899,7 @@ begin
     'trigger_statuses', coalesce(
       to_jsonb(
         array_agg(distinct pbc.remittance_trigger_status order by pbc.remittance_trigger_status)
-        filter (where pbc.remittance_trigger_status is not null and btrim(coalesce(pbc.remittance_trigger_status,'')) <> '')
+        filter (where pbc.remittance_trigger_status is not null and btrim(coalesce(pbc.remittance_trigger_status::text,'')) <> '')
       ),
       '[]'::jsonb
     )
@@ -21959,13 +21959,13 @@ begin
   outbox_union as (
     select
       'MAIL'::text as outbox_channel,
-      upper(coalesce(mo.status,'')) as outbox_status,
+      upper(coalesce(mo.status::text,'')) as outbox_status,
       mo.created_at_utc as created_at_utc,
       mo.sent_at as sent_at_utc,
       mo.delivered_at as delivered_at_utc,
       mo.read_at as read_at_utc,
       mo.failed_at as failed_at_utc,
-      upper(coalesce(mo.recipient_kind,'')) as recipient_kind
+      upper(coalesce(mo.recipient_kind::text,'')) as recipient_kind
     from public.mail_outbox mo
     where lower(coalesce(mo.context_kind,'')) = 'pay_batches'
       and mo.context_id = p_pay_batch_id
@@ -21973,14 +21973,14 @@ begin
     union all
 
     select
-      upper(coalesce(co.channel,'')) as outbox_channel,
-      upper(coalesce(co.status,'')) as outbox_status,
+      upper(coalesce(co.channel::text,'')) as outbox_channel,
+      upper(coalesce(co.status::text,'')) as outbox_status,
       co.created_at_utc as created_at_utc,
       co.sent_at as sent_at_utc,
       co.delivered_at as delivered_at_utc,
       co.read_at as read_at_utc,
       co.failed_at as failed_at_utc,
-      upper(coalesce(co.recipient_kind,'')) as recipient_kind
+      upper(coalesce(co.recipient_kind::text,'')) as recipient_kind
     from public.comms_outbox co
     where lower(coalesce(co.context_kind,'')) = 'pay_batches'
       and co.context_id = p_pay_batch_id
@@ -22070,7 +22070,7 @@ begin
       'trigger_statuses', coalesce((
         select to_jsonb(
           array_agg(distinct pbc.remittance_trigger_status order by pbc.remittance_trigger_status)
-          filter (where pbc.remittance_trigger_status is not null and btrim(coalesce(pbc.remittance_trigger_status,'')) <> '')
+          filter (where pbc.remittance_trigger_status is not null and btrim(coalesce(pbc.remittance_trigger_status::text,'')) <> '')
         )
         from public.pay_batch_candidates pbc
         where pbc.pay_batch_id = p_pay_batch_id
@@ -22158,9 +22158,9 @@ begin
   into v_communications_summary;
 
   select jsonb_build_object(
-    'gross_additions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2),
-    'gross_deductions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2),
-    'net_deductions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2),
+    'gross_additions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2),
+    'gross_deductions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2),
+    'net_deductions_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2),
     'payout_amount_inc_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and pbi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT') then coalesce(pbi.amount_inc_vat,0) else 0 end),0),2),
     'recovery_amount_ex_vat', round(coalesce(sum(case when pbi.finance_case_id is not null and pbi.item_type in ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY') then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2),
     'finance_case_count', count(distinct pbi.finance_case_id)
@@ -22175,18 +22175,18 @@ begin
   with finance_items as (
     select
       pbi.finance_case_id,
-      max(pbc.candidate_id) as candidate_id,
+      max(pbc.candidate_id::text) as candidate_id,
       max(pbc.candidate_display_name) as candidate_display_name,
       max(pbc.candidate_tms_ref) as candidate_tms_ref,
       round(coalesce(sum(coalesce(pbi.amount_ex_vat,0)),0),2) as batch_amount_ex_vat,
       round(coalesce(sum(coalesce(pbi.amount_inc_vat,0)),0),2) as batch_amount_inc_vat,
-      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
-      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
-      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
+      round(coalesce(sum(case when upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat,
       coalesce(
         to_jsonb(
           array_agg(distinct pbi.item_type order by pbi.item_type)
-          filter (where pbi.item_type is not null and btrim(coalesce(pbi.item_type,'')) <> '')
+          filter (where pbi.item_type is not null and btrim(coalesce(pbi.item_type::text,'')) <> '')
         ),
         '[]'::jsonb
       ) as item_types
@@ -22201,17 +22201,17 @@ begin
     select
       par.finance_case_id,
       case
-        when bool_or(upper(coalesce(par.status,'')) = 'SETTLED') then 'SETTLED'
-        when bool_or(upper(coalesce(par.status,'')) = 'COMMITTED') then 'COMMITTED'
-        when bool_or(upper(coalesce(par.status,'')) = 'RESERVED') then 'RESERVED'
-        when bool_or(upper(coalesce(par.status,'')) = 'RELEASED') then 'RELEASED'
+        when bool_or(upper(coalesce(par.status::text,'')) = 'SETTLED') then 'SETTLED'
+        when bool_or(upper(coalesce(par.status::text,'')) = 'COMMITTED') then 'COMMITTED'
+        when bool_or(upper(coalesce(par.status::text,'')) = 'RESERVED') then 'RESERVED'
+        when bool_or(upper(coalesce(par.status::text,'')) = 'RELEASED') then 'RELEASED'
         else null
       end as lifecycle_state,
       round(coalesce(sum(coalesce(par.reserved_amount,0)),0),2) as reservation_amount,
       coalesce(
         to_jsonb(
           array_agg(distinct par.status order by par.status)
-          filter (where par.status is not null and btrim(coalesce(par.status,'')) <> '')
+          filter (where par.status is not null and btrim(coalesce(par.status::text,'')) <> '')
         ),
         '[]'::jsonb
       ) as reservation_statuses
@@ -22224,13 +22224,13 @@ begin
       jsonb_build_object(
         'finance_case_id', vf.finance_case_id::text,
         'case_type', vf.case_type,
-        'candidate_id', case when fi.candidate_id is null then null else fi.candidate_id::text end,
+        'candidate_id', fi.candidate_id,
         'candidate_display_name', fi.candidate_display_name,
         'candidate_tms_ref', fi.candidate_tms_ref,
-        'lifecycle_state', coalesce(rr.lifecycle_state, upper(coalesce(vf.status,''))),
-        'finance_case_status', vf.status,
-        'payout_status', vf.payout_status,
-        'payout_or_recovery_status', case when vf.case_type in ('PAYMENT_ADVANCE','MANUAL_CREDIT_ADJUSTMENT') and upper(coalesce(v_batch_kind_fixed,'')) = 'LOANS' then coalesce(vf.payout_status, vf.status) else vf.status end,
+        'lifecycle_state', coalesce(rr.lifecycle_state, upper(coalesce(vf.status::text,''))),
+        'finance_case_status', case when vf.status is null then null else vf.status::text end,
+        'payout_status', case when vf.payout_status is null then null else vf.payout_status::text end,
+        'payout_or_recovery_status', case when vf.case_type in ('PAYMENT_ADVANCE','MANUAL_CREDIT_ADJUSTMENT') and upper(coalesce(v_batch_kind_fixed,'')) = 'LOANS' then coalesce(vf.payout_status::text, vf.status::text) else vf.status::text end,
         'remaining_amount', vf.outstanding_amount,
         'batch_amount_ex_vat', fi.batch_amount_ex_vat,
         'batch_amount_inc_vat', fi.batch_amount_inc_vat,
@@ -22354,6 +22354,7 @@ begin
   );
 end;
 $$;
+
 
 
 
