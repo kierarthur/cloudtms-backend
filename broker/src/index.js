@@ -24463,7 +24463,13 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     return hasAnyUnits && !hasAnyExpenseClaims;
   };
 
-  const materialiseContractWeekStagedEvidenceToTimesheet = async (contractWeekId, targetTimesheetId) => {
+  const buildStagedTimesheetEvidenceError = (code, message) => {
+    const err = new Error(message);
+    err.code = code;
+    return err;
+  };
+
+  const loadContractWeekStagedTimesheetQueueItems = async (contractWeekId) => {
     const { rows } = await sbFetch(
       env,
       `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
@@ -24474,17 +24480,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     );
 
     const items = Array.isArray(rows) ? rows : [];
-    if (!items.length) {
-      return {
-        attached_count: 0,
-        primary_timesheet_storage_key: null,
-        primary_timesheet_rotation_deg: 0
-      };
-    }
+    if (!items.length) return [];
 
     const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
 
-    const normalisedItems = items.map((item) => {
+    return items.map((item) => {
       const meta = (item?.meta_json && typeof item.meta_json === 'object') ? item.meta_json : {};
       const kindRaw = String(meta?.staged_kind || meta?.kind || 'TIMESHEET').trim().toUpperCase();
       const kind = allowedKinds.has(kindRaw) ? kindRaw : 'OTHER';
@@ -24494,63 +24494,205 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
         staged_kind: kind
       };
     });
+  };
 
-    const timesheetKindItems = normalisedItems.filter(item => item.staged_kind === 'TIMESHEET');
+  const prepareContractWeekStagedTimesheetEvidence = async (contractWeekId, targetTimesheetId) => {
+    const items = await loadContractWeekStagedTimesheetQueueItems(contractWeekId);
+    if (!items.length) return null;
+
+    const timesheetKindItems = items.filter(item => item.staged_kind === 'TIMESHEET');
     if (timesheetKindItems.length > 1) {
-      throw new Error('Only one staged TIMESHEET file may be materialised to a weekly manual timesheet');
+      throw buildStagedTimesheetEvidenceError(
+        'INVALID_TIMESHEET_EVIDENCE',
+        'Only one staged TIMESHEET file may be materialised to a weekly manual timesheet'
+      );
     }
 
-    for (const item of normalisedItems) {
-      const ins = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify([{
-          timesheet_id: targetTimesheetId,
-          kind: item.staged_kind,
-          display_name: item.original_filename || null,
-          storage_key: item.r2_key || null,
-          created_at: item.uploaded_at_utc || nowIso(),
-          created_by: item.uploaded_by_user_id || user?.id || null
-        }])
+    const primary = timesheetKindItems[0] || null;
+    if (!primary) return null;
+
+    const sourceKey = String(primary.r2_key || '').trim();
+    if (!sourceKey) {
+      throw buildStagedTimesheetEvidenceError(
+        'INVALID_TIMESHEET_EVIDENCE',
+        'Staged TIMESHEET evidence is missing storage_key'
+      );
+    }
+
+    const rotationDeg = normaliseRotation(primary.last_rotation_deg);
+
+    let manualArtifact = null;
+    try {
+      manualArtifact = await ensureTimesheetEvidencePdfArtifact(env, {
+        sourceKey,
+        displayName: primary.original_filename || 'Manual Timesheet',
+        rotationDegrees: rotationDeg,
+        timesheetId: targetTimesheetId,
+        sourceLabel: 'manual_timesheet_queue.r2_key'
       });
+    } catch (e) {
+      throw buildStagedTimesheetEvidenceError(
+        'INVALID_TIMESHEET_EVIDENCE',
+        e?.message || 'Unsupported staged TIMESHEET evidence'
+      );
+    }
 
-      if (!ins.ok) {
-        const txt = await ins.text().catch(() => '');
-        throw new Error(`Failed to materialise staged evidence: ${txt || 'insert failed'}`);
-      }
+    const pdfKey = String(manualArtifact?.pdfKey || '').trim();
+    if (!pdfKey) {
+      throw buildStagedTimesheetEvidenceError(
+        'INVALID_TIMESHEET_EVIDENCE',
+        'Staged TIMESHEET evidence could not be materialised to a PDF-safe artifact'
+      );
+    }
 
-      const nextMeta = {
-        ...item.meta_json,
-        contract_week_id: String(contractWeekId),
-        staged_kind: item.staged_kind,
-        materialised_to_timesheet_id: String(targetTimesheetId),
-        materialised_at_utc: nowIso()
+    return {
+      queue_item_id: primary.id,
+      display_name: primary.original_filename || null,
+      storage_key: pdfKey,
+      created_at: primary.uploaded_at_utc || nowIso(),
+      created_by: primary.uploaded_by_user_id || user?.id || null,
+      rotation_deg: rotationDeg,
+      meta_json: primary.meta_json,
+      source_r2_key: sourceKey
+    };
+  };
+
+  const materialiseContractWeekStagedEvidenceToTimesheet = async (contractWeekId, targetTimesheetId, preparedTimesheetEvidence = null) => {
+    const prepared = preparedTimesheetEvidence || await prepareContractWeekStagedTimesheetEvidence(contractWeekId, targetTimesheetId);
+    if (!prepared) {
+      return {
+        attached_count: 0,
+        primary_timesheet_storage_key: null,
+        primary_timesheet_rotation_deg: 0
       };
+    }
 
-      const qPatch = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(item.id)}`,
+    const existingTimesheetEvidenceRows = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+        `?timesheet_id=eq.${enc(targetTimesheetId)}` +
+        `&kind=eq.${enc('TIMESHEET')}` +
+        `&select=id,storage_key,display_name,created_at,created_by` +
+        `&order=created_at.asc,id.asc` +
+        `&limit=1`
+    ).catch(() => ({ rows: [] }));
+
+    const existingTimesheetEvidence = Array.isArray(existingTimesheetEvidenceRows?.rows)
+      ? (existingTimesheetEvidenceRows.rows[0] || null)
+      : null;
+
+    if (existingTimesheetEvidence?.id) {
+      const evidencePatch = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(existingTimesheetEvidence.id)}`,
         {
           method: 'PATCH',
           headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
           body: JSON.stringify({
-            status: 'ATTACHED',
-            timesheet_id: targetTimesheetId,
-            meta_json: nextMeta
+            display_name: prepared.display_name,
+            storage_key: prepared.storage_key,
+            created_at: prepared.created_at,
+            created_by: prepared.created_by
           })
         }
       );
 
-      if (!qPatch.ok) {
-        const txt = await qPatch.text().catch(() => '');
-        throw new Error(`Failed to update staged queue provenance: ${txt || 'queue patch failed'}`);
+      if (!evidencePatch.ok) {
+        const txt = await evidencePatch.text().catch(() => '');
+        throw buildStagedTimesheetEvidenceError(
+          'STAGED_EVIDENCE_WRITE_FAILED',
+          `Failed to update staged TIMESHEET evidence: ${txt || 'patch failed'}`
+        );
+      }
+    } else {
+      const evidenceInsert = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify([{
+          timesheet_id: targetTimesheetId,
+          kind: 'TIMESHEET',
+          display_name: prepared.display_name,
+          storage_key: prepared.storage_key,
+          created_at: prepared.created_at,
+          created_by: prepared.created_by
+        }])
+      });
+
+      if (!evidenceInsert.ok) {
+        const txt = await evidenceInsert.text().catch(() => '');
+        throw buildStagedTimesheetEvidenceError(
+          'STAGED_EVIDENCE_WRITE_FAILED',
+          `Failed to materialise staged TIMESHEET evidence: ${txt || 'insert failed'}`
+        );
       }
     }
 
-    const primary = timesheetKindItems[0] || null;
+    const timesheetPatch = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(targetTimesheetId)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          manual_pdf_r2_key: prepared.storage_key,
+          manual_pdf_rotation_degrees: prepared.rotation_deg,
+          updated_at: nowIso()
+        })
+      }
+    );
+
+    if (!timesheetPatch.ok) {
+      const txt = await timesheetPatch.text().catch(() => '');
+      throw buildStagedTimesheetEvidenceError(
+        'STAGED_EVIDENCE_WRITE_FAILED',
+        `Failed to update timesheet manual PDF pointer: ${txt || 'timesheet patch failed'}`
+      );
+    }
+
+    const currentQueueRow = await sbGetOne(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(prepared.queue_item_id)}&select=id,meta_json`
+    ).catch(() => null);
+
+    const currentQueueMeta = (currentQueueRow?.meta_json && typeof currentQueueRow.meta_json === 'object')
+      ? currentQueueRow.meta_json
+      : prepared.meta_json;
+
+    const nextMeta = {
+      ...currentQueueMeta,
+      contract_week_id: String(contractWeekId),
+      staged_kind: 'TIMESHEET',
+      materialisation_deferred_to_backend: false,
+      deferred_target_timesheet_id: String(targetTimesheetId),
+      deferred_rotation_degrees: prepared.rotation_deg,
+      materialised_to_timesheet_id: String(targetTimesheetId),
+      materialised_at_utc: nowIso(),
+      materialised_storage_key: prepared.storage_key
+    };
+
+    const queuePatch = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(prepared.queue_item_id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          status: 'ATTACHED',
+          timesheet_id: targetTimesheetId,
+          meta_json: nextMeta
+        })
+      }
+    );
+
+    if (!queuePatch.ok) {
+      const txt = await queuePatch.text().catch(() => '');
+      throw buildStagedTimesheetEvidenceError(
+        'STAGED_EVIDENCE_WRITE_FAILED',
+        `Failed to update staged queue provenance: ${txt || 'queue patch failed'}`
+      );
+    }
+
     return {
-      attached_count: normalisedItems.length,
-      primary_timesheet_storage_key: primary?.r2_key || null,
-      primary_timesheet_rotation_deg: primary?.last_rotation_deg != null ? Number(primary.last_rotation_deg) : 0
+      attached_count: 1,
+      primary_timesheet_storage_key: prepared.storage_key,
+      primary_timesheet_rotation_deg: prepared.rotation_deg
     };
   };
 
@@ -25829,6 +25971,32 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
   };
   if (willCreateNow) rpcWeekPatch.status = 'SUBMITTED';
 
+  let preparedStagedTimesheetEvidence = null;
+  if (targetTimesheetIdForWrite) {
+    try {
+      preparedStagedTimesheetEvidence = await prepareContractWeekStagedTimesheetEvidence(cw.id, targetTimesheetIdForWrite);
+      if (preparedStagedTimesheetEvidence?.storage_key) {
+        wlog('prepared_staged_timesheet_evidence', {
+          contract_week_id: cw.id,
+          target_timesheet_id: targetTimesheetIdForWrite,
+          queue_item_id: preparedStagedTimesheetEvidence.queue_item_id || null,
+          storage_key: preparedStagedTimesheetEvidence.storage_key
+        });
+      }
+    } catch (e) {
+      wlog('prepare_staged_timesheet_evidence_failed', {
+        contract_week_id: cw.id,
+        target_timesheet_id: targetTimesheetIdForWrite,
+        code: e?.code || null,
+        err: e?.message || String(e)
+      });
+      if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
+        return withCORS(env, req, badRequest(e?.message || 'Invalid staged TIMESHEET evidence'));
+      }
+      return withCORS(env, req, serverError(e?.message || 'Failed to prepare staged TIMESHEET evidence'));
+    }
+  }
+
   let rpcRes;
   try {
     rpcRes = await sbRpc(env, 'contract_week_manual_upsert_atomic', {
@@ -25950,6 +26118,43 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     processing_status: processingStatus
   });
 
+  if (ts?.timesheet_id && preparedStagedTimesheetEvidence) {
+    try {
+      const stagedMaterialisation = await materialiseContractWeekStagedEvidenceToTimesheet(
+        cw.id,
+        ts.timesheet_id,
+        preparedStagedTimesheetEvidence
+      );
+
+      if (stagedMaterialisation?.primary_timesheet_storage_key) {
+        ts = {
+          ...ts,
+          manual_pdf_r2_key: stagedMaterialisation.primary_timesheet_storage_key,
+          manual_pdf_rotation_degrees: stagedMaterialisation.primary_timesheet_rotation_deg
+        };
+      }
+
+      wlog('materialised_staged_timesheet_evidence', {
+        contract_week_id: cw.id,
+        timesheet_id: ts.timesheet_id,
+        attached_count: stagedMaterialisation?.attached_count || 0,
+        primary_timesheet_storage_key: stagedMaterialisation?.primary_timesheet_storage_key || null,
+        primary_timesheet_rotation_deg: stagedMaterialisation?.primary_timesheet_rotation_deg || 0
+      });
+    } catch (e) {
+      wlog('materialise_staged_timesheet_evidence_failed', {
+        contract_week_id: cw.id,
+        timesheet_id: ts?.timesheet_id || null,
+        code: e?.code || null,
+        err: e?.message || String(e)
+      });
+      if (e?.code === 'INVALID_TIMESHEET_EVIDENCE') {
+        return withCORS(env, req, badRequest(e?.message || 'Invalid staged TIMESHEET evidence'));
+      }
+      return withCORS(env, req, serverError(e?.message || 'Failed to materialise staged TIMESHEET evidence'));
+    }
+  }
+
   if (createdNow) {
     wlog('created_new_timesheet', {
       timesheet_id: ts?.timesheet_id || null,
@@ -26017,6 +26222,8 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
     created_now: !!createdNow
   }));
 }
+
+
 
 
 async function handleTimesheetManualDailyCreateOptions(env, req) {
@@ -80024,6 +80231,9 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       }));
     }
 
+    const originalStorageKey = (ev.storage_key != null) ? String(ev.storage_key).trim().replace(/^\/+/, '') : '';
+    let updatedStorageKey = originalStorageKey;
+
     if (newKindU === 'TIMESHEET') {
       const { rows: siblingRows } = await sbFetch(
         env,
@@ -80037,15 +80247,35 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       if (duplicateTimesheet) {
         return withCORS(env, req, badRequest('Only one TIMESHEET evidence file may be attached to a timesheet at a time'));
       }
+
+      try {
+        const manualArtifact = await ensureTimesheetEvidencePdfArtifact(env, {
+          sourceKey: originalStorageKey,
+          displayName: ev.display_name || 'Manual Timesheet',
+          rotationDegrees: 0,
+          timesheetId: currentTsId,
+          sourceLabel: 'timesheet_evidence.storage_key'
+        });
+        updatedStorageKey = (manualArtifact?.pdfKey != null) ? String(manualArtifact.pdfKey).trim().replace(/^\/+/, '') : '';
+      } catch (e) {
+        return withCORS(env, req, badRequest(e?.message || 'Unsupported TIMESHEET evidence'));
+      }
+
+      if (!updatedStorageKey) {
+        return withCORS(env, req, badRequest('Unsupported TIMESHEET evidence'));
+      }
     }
 
     // Patch evidence kind
+    const patchPayload = { kind: newKind };
+    if (newKindU === 'TIMESHEET') patchPayload.storage_key = updatedStorageKey;
+
     const patchRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
       {
         method: 'PATCH',
         headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-        body: JSON.stringify({ kind: newKind })
+        body: JSON.stringify(patchPayload)
       }
     );
 
@@ -80062,67 +80292,87 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
       updated = null;
     }
 
+    const effectiveUpdatedStorageKey = (updated?.storage_key != null)
+      ? String(updated.storage_key).trim().replace(/^\/+/, '')
+      : updatedStorageKey;
+
     // ✅ Maintain timesheets.manual_pdf_r2_key based on TIMESHEET kind transitions
-    // - If changing TO TIMESHEET: set manual_pdf_r2_key to this evidence's storage_key
+    // - If changing TO TIMESHEET: set manual_pdf_r2_key to this evidence's PDF-safe storage_key
     // - If changing FROM TIMESHEET: clear manual_pdf_r2_key only if it matches this evidence's storage_key
     try {
-      const storageKey = (ev.storage_key != null) ? String(ev.storage_key).trim().replace(/^\/+/, '') : '';
-      if (storageKey) {
-        let tsRow = null;
-        try {
-          const { rows: tsRows } = await sbFetch(
-            env,
-            `${env.SUPABASE_URL}/rest/v1/timesheets` +
-              `?timesheet_id=eq.${enc(currentTsId)}` +
-              `&is_current=eq.true` +
-              `&select=manual_pdf_r2_key` +
-              `&limit=1`
-          );
-          tsRow = tsRows?.[0] || null;
-        } catch {
-          tsRow = null;
+      let tsRow = null;
+      try {
+        const { rows: tsRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?timesheet_id=eq.${enc(currentTsId)}` +
+            `&is_current=eq.true` +
+            `&select=manual_pdf_r2_key` +
+            `&limit=1`
+        );
+        tsRow = tsRows?.[0] || null;
+      } catch {
+        tsRow = null;
+      }
+
+      const curMk = (tsRow?.manual_pdf_r2_key != null) ? String(tsRow.manual_pdf_r2_key).trim().replace(/^\/+/, '') : '';
+
+      if (newKindU === 'TIMESHEET') {
+        const updRes = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+          {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({ manual_pdf_r2_key: effectiveUpdatedStorageKey })
+          }
+        );
+        if (!updRes.ok) {
+          const t2 = await updRes.text().catch(() => '');
+          try {
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+                body: JSON.stringify({ kind: oldKind, storage_key: originalStorageKey })
+              }
+            ).catch(() => {});
+          } catch {}
+          return withCORS(env, req, serverError(`Failed to update timesheet manual PDF pointer: ${t2}`));
         }
-
-        const curMk = (tsRow?.manual_pdf_r2_key != null) ? String(tsRow.manual_pdf_r2_key).trim().replace(/^\/+/, '') : '';
-
-        if (newKindU === 'TIMESHEET') {
+      } else if (oldKindU === 'TIMESHEET') {
+        if (curMk && curMk === originalStorageKey) {
           const updRes = await fetch(
             `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
             {
               method: 'PATCH',
               headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-              body: JSON.stringify({ manual_pdf_r2_key: storageKey })
+              body: JSON.stringify({ manual_pdf_r2_key: null })
             }
           );
           if (!updRes.ok) {
             const t2 = await updRes.text().catch(() => '');
-            console.warn('[handleTimesheetEvidenceUpdateKind] set manual_pdf_r2_key failed (non-fatal)', {
+            console.warn('[handleTimesheetEvidenceUpdateKind] clear manual_pdf_r2_key failed (non-fatal)', {
               timesheet_id: currentTsId,
-              storage_key: storageKey,
               err: t2
             });
-          }
-        } else if (oldKindU === 'TIMESHEET') {
-          if (curMk && curMk === storageKey) {
-            const updRes = await fetch(
-              `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-                body: JSON.stringify({ manual_pdf_r2_key: null })
-              }
-            );
-            if (!updRes.ok) {
-              const t2 = await updRes.text().catch(() => '');
-              console.warn('[handleTimesheetEvidenceUpdateKind] clear manual_pdf_r2_key failed (non-fatal)', {
-                timesheet_id: currentTsId,
-                err: t2
-              });
-            }
           }
         }
       }
     } catch (e) {
+      if (newKindU === 'TIMESHEET') {
+        try {
+          await fetch(
+            `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
+            {
+              method: 'PATCH',
+              headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+              body: JSON.stringify({ kind: oldKind, storage_key: originalStorageKey })
+            }
+          ).catch(() => {});
+        } catch {}
+        return withCORS(env, req, serverError(`Failed to update timesheet manual PDF pointer: ${e?.message || e}`));
+      }
       console.warn('[handleTimesheetEvidenceUpdateKind] manual_pdf_r2_key transition handling failed (non-fatal)', {
         timesheet_id: currentTsId,
         evidence_id: evidenceId,
@@ -80140,7 +80390,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
           evidence_id: evidenceId,
           old_kind: oldKind || null,
           new_kind: newKind,
-          storage_key: ev.storage_key || null,
+          storage_key: effectiveUpdatedStorageKey || ev.storage_key || null,
           display_name: ev.display_name || null
         },
         { entity: 'timesheets', subject_id: currentTsId, req }
@@ -80158,6 +80408,7 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
     return withCORS(env, req, serverError(`Failed to update evidence kind: ${e?.message || e}`));
   }
 }
+
 
 async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   const enc = encodeURIComponent;
@@ -96531,14 +96782,37 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
     !!signedHash;
 
   if (hasSignedMarkers) {
-    // Prefer the stored manual key if present (typically points to the canonical key for QR scans)
+    const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
+
+    // Prefer the stored manual key if present, but only if it is already PDF-safe
+    // or can be materialized into a PDF-safe artifact without regenerating the signed PDF.
     if (ts?.manual_pdf_r2_key) {
       const mk = normalizeKey(ts.manual_pdf_r2_key);
-      if (await r2Exists(env, mk)) return mk;
+      if (await r2Exists(env, mk)) {
+        try {
+          const manualArtifact = await ensureTimesheetEvidencePdfArtifact(env, {
+            sourceKey: mk,
+            displayName: 'Manual Timesheet',
+            rotationDegrees: ts?.manual_pdf_rotation_degrees ?? 0,
+            timesheetId,
+            sourceLabel: 'timesheets.manual_pdf_r2_key'
+          });
+          if (manualArtifact?.wasConverted && manualArtifact?.pdfKey && manualArtifact.pdfKey !== mk) {
+            await fetch(
+              `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
+              {
+                method: 'PATCH',
+                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+                body: JSON.stringify({ manual_pdf_r2_key: manualArtifact.pdfKey })
+              }
+            ).catch(() => {});
+          }
+          if (manualArtifact?.pdfKey) return manualArtifact.pdfKey;
+        } catch {}
+      }
     }
 
     // Fall back to the canonical key if it exists
-    const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
     if (await r2Exists(env, outKey)) return outKey;
 
     // Never regenerate signed evidence
@@ -96607,6 +96881,7 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
   // Always route through dirty-aware logic (it will REUSE if clean, RENDER if dirty/missing).
   return await renderTimesheetPDFAndSave(env, timesheetId, { force_regen: false });
 }
+
 
 
 async function renderTimesheetPDFAndSave(env, timesheetId, opts) {
