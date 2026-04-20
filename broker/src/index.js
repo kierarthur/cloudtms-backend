@@ -16307,6 +16307,8 @@ async function handleBankingPayCreateDraft(env, req, user) {
     });
   };
 
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+
   const buildJsonResponseWithCors = (status, payload, headers = {}) => {
     let responseStatus = Number.isFinite(Number(status)) ? Math.trunc(Number(status)) : 500;
     let responsePayload = payload;
