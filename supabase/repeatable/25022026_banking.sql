@@ -684,26 +684,13 @@ where rc.key_type is not null
   and rc.key_value is not null
   and btrim(rc.key_value) <> '';
 $$;
+
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
-RETURNS TABLE (
-  timesheet_id uuid,
-  key_type text,
-  key_value text,
-  truth_ex_vat numeric,
-  baseline_ex_vat numeric,
-  reserved_ex_vat numeric,
-  outstanding_ex_vat numeric,
-  truth_inc_vat numeric,
-  baseline_inc_vat numeric,
-  reserved_inc_vat numeric,
-  outstanding_inc_vat numeric,
-  reservation_overrun_detected boolean
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
+ RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 with
 inp as (
   select coalesce(
@@ -725,38 +712,198 @@ tf as (
     tfin.travel_pay_ex_vat,
     tfin.accommodation_pay_ex_vat,
     tfin.other_pay_ex_vat,
-    tfin.mileage_pay_ex_vat
+    tfin.mileage_pay_ex_vat,
+    ts.booking_id,
+    upper(coalesce(ts.sheet_scope::text,'')) as sheet_scope,
+    ts.reference_number,
+    ts.worked_start_iso as ts_worked_start_iso,
+    ts.worked_end_iso as ts_worked_end_iso,
+    ts.break_start_iso as ts_break_start_iso,
+    ts.break_end_iso as ts_break_end_iso,
+    ts.break_minutes as ts_break_minutes,
+    ts.actual_schedule_json as ts_actual_schedule_json,
+    tfin.worked_start_iso as tf_worked_start_iso,
+    tfin.worked_end_iso as tf_worked_end_iso,
+    tfin.break_start_iso as tf_break_start_iso,
+    tfin.break_end_iso as tf_break_end_iso,
+    tfin.break_minutes as tf_break_minutes,
+    tfin.actual_schedule_json as tf_actual_schedule_json
   from inp i
   left join public.timesheets_financials tfin
     on tfin.is_current = true
    and tfin.timesheet_id = any(i.ts_ids)
+  left join public.timesheets ts
+    on ts.timesheet_id = tfin.timesheet_id
+   and ts.is_current = true
+),
+truth_enriched as (
+  select
+    tf0.timesheet_id,
+    tf0.total_pay_ex_vat,
+    tf0.invoice_breakdown_json,
+    tf0.additional_units_json,
+    tf0.expenses_pay_ex_vat,
+    tf0.travel_pay_ex_vat,
+    tf0.accommodation_pay_ex_vat,
+    tf0.other_pay_ex_vat,
+    tf0.mileage_pay_ex_vat,
+    tf0.booking_id,
+    tf0.sheet_scope,
+    tf0.reference_number,
+    coalesce(tf0.tf_worked_start_iso, tf0.ts_worked_start_iso) as effective_worked_start_iso,
+    coalesce(tf0.tf_worked_end_iso, tf0.ts_worked_end_iso) as effective_worked_end_iso,
+    coalesce(tf0.tf_break_start_iso, tf0.ts_break_start_iso) as effective_break_start_iso,
+    coalesce(tf0.tf_break_end_iso, tf0.ts_break_end_iso) as effective_break_end_iso,
+    coalesce(tf0.tf_break_minutes, tf0.ts_break_minutes) as effective_break_minutes,
+    case
+      when jsonb_typeof(tf0.tf_actual_schedule_json) = 'object' then tf0.tf_actual_schedule_json
+      when jsonb_typeof(tf0.tf_actual_schedule_json) = 'array' then (
+        select tf_sched_item.value
+        from jsonb_array_elements(tf0.tf_actual_schedule_json) as tf_sched_item(value)
+        where tf_sched_item.value is not null
+          and jsonb_typeof(tf_sched_item.value) = 'object'
+        limit 1
+      )
+      when jsonb_typeof(tf0.ts_actual_schedule_json) = 'object' then tf0.ts_actual_schedule_json
+      when jsonb_typeof(tf0.ts_actual_schedule_json) = 'array' then (
+        select ts_sched_item.value
+        from jsonb_array_elements(tf0.ts_actual_schedule_json) as ts_sched_item(value)
+        where ts_sched_item.value is not null
+          and jsonb_typeof(ts_sched_item.value) = 'object'
+        limit 1
+      )
+      else null::jsonb
+    end as effective_daily_schedule_json
+  from tf tf0
 ),
 truth_segments as (
   select
-    tf0.timesheet_id,
+    te.timesheet_id,
     case
-      when tf0.invoice_breakdown_json is not null
-       and jsonb_typeof(tf0.invoice_breakdown_json) = 'object'
-       and upper(coalesce(tf0.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
-       and jsonb_typeof(tf0.invoice_breakdown_json->'segments') = 'array'
+      when te.invoice_breakdown_json is not null
+       and jsonb_typeof(te.invoice_breakdown_json) = 'object'
+       and upper(coalesce(te.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+       and jsonb_typeof(te.invoice_breakdown_json->'segments') = 'array'
       then (
         select coalesce(
           jsonb_agg(seg.value),
           '[]'::jsonb
         )
-        from jsonb_array_elements(tf0.invoice_breakdown_json->'segments') as seg(value)
+        from jsonb_array_elements(te.invoice_breakdown_json->'segments') as seg(value)
         where seg.value is not null
           and jsonb_typeof(seg.value) = 'object'
       )
+      when te.sheet_scope = 'DAILY'
+      then jsonb_build_array(
+        jsonb_build_object(
+          'segment_id', ('ts:' || te.timesheet_id::text),
+          'pay_amount', round(coalesce(te.total_pay_ex_vat,0),2),
+          'exclude_from_pay', false,
+          'date', case
+            when te.effective_worked_start_iso is not null then ((te.effective_worked_start_iso at time zone 'Europe/London')::date)::text
+            else coalesce(
+              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'date','')), ''),
+              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'work_date','')), ''),
+              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'ymd','')), ''),
+              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'date_ymd','')), '')
+            )
+          end,
+          'segment_key', ('ts:' || te.timesheet_id::text),
+          'segment_stable_key', ('timesheet:' || coalesce(te.booking_id, te.timesheet_id::text)),
+          'ref_num', nullif(btrim(coalesce(te.reference_number,'')), ''),
+          'start_utc', case
+            when te.effective_worked_start_iso is not null then te.effective_worked_start_iso::text
+            else null
+          end,
+          'end_utc', case
+            when te.effective_worked_end_iso is not null then te.effective_worked_end_iso::text
+            else null
+          end,
+          'start', case
+            when te.effective_worked_start_iso is not null then to_char((te.effective_worked_start_iso at time zone 'Europe/London'), 'HH24:MI')
+            else coalesce(
+              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'start','')), ''),
+              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'worked_start','')), '')
+            )
+          end,
+          'end', case
+            when te.effective_worked_end_iso is not null then to_char((te.effective_worked_end_iso at time zone 'Europe/London'), 'HH24:MI')
+            else coalesce(
+              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'end','')), ''),
+              nullif(btrim(coalesce(te.effective_daily_schedule_json->>'worked_end','')), '')
+            )
+          end,
+          'break_start', case
+            when te.effective_break_start_iso is not null then to_char((te.effective_break_start_iso at time zone 'Europe/London'), 'HH24:MI')
+            else nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_start','')), '')
+          end,
+          'break_end', case
+            when te.effective_break_end_iso is not null then to_char((te.effective_break_end_iso at time zone 'Europe/London'), 'HH24:MI')
+            else nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_end','')), '')
+          end,
+          'break_mins', coalesce(
+            te.effective_break_minutes::numeric,
+            nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_minutes','')), '')::numeric,
+            nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_mins','')), '')::numeric,
+            nullif(btrim(coalesce(te.effective_daily_schedule_json->>'breakMinutes','')), '')::numeric,
+            nullif(btrim(coalesce(te.effective_daily_schedule_json->>'breakMin','')), '')::numeric,
+            case
+              when te.effective_break_start_iso is not null and te.effective_break_end_iso is not null
+                then greatest(
+                  0::numeric,
+                  round((extract(epoch from (te.effective_break_end_iso - te.effective_break_start_iso)) / 60.0)::numeric, 0)
+                )
+              else null::numeric
+            end
+          ),
+          'breaks', case
+            when jsonb_typeof(te.effective_daily_schedule_json->'breaks') = 'array' then te.effective_daily_schedule_json->'breaks'
+            when te.effective_break_start_iso is not null and te.effective_break_end_iso is not null
+              then jsonb_build_array(
+                jsonb_build_object(
+                  'start', to_char((te.effective_break_start_iso at time zone 'Europe/London'), 'HH24:MI'),
+                  'end', to_char((te.effective_break_end_iso at time zone 'Europe/London'), 'HH24:MI'),
+                  'break_mins', coalesce(
+                    te.effective_break_minutes::numeric,
+                    case
+                      when te.effective_break_start_iso is not null and te.effective_break_end_iso is not null
+                        then greatest(
+                          0::numeric,
+                          round((extract(epoch from (te.effective_break_end_iso - te.effective_break_start_iso)) / 60.0)::numeric, 0)
+                        )
+                      else null::numeric
+                    end
+                  )
+                )
+              )
+            when nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_start','')), '') is not null
+             and nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_end','')), '') is not null
+              then jsonb_build_array(
+                jsonb_build_object(
+                  'start', nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_start','')), ''),
+                  'end', nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_end','')), ''),
+                  'break_mins', coalesce(
+                    te.effective_break_minutes::numeric,
+                    nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_minutes','')), '')::numeric,
+                    nullif(btrim(coalesce(te.effective_daily_schedule_json->>'break_mins','')), '')::numeric,
+                    nullif(btrim(coalesce(te.effective_daily_schedule_json->>'breakMinutes','')), '')::numeric,
+                    nullif(btrim(coalesce(te.effective_daily_schedule_json->>'breakMin','')), '')::numeric
+                  )
+                )
+              )
+            else '[]'::jsonb
+          end
+        )
+      )
       else jsonb_build_array(
         jsonb_build_object(
-          'segment_id', ('ts:' || tf0.timesheet_id::text),
-          'pay_amount', round(coalesce(tf0.total_pay_ex_vat,0),2),
+          'segment_id', ('ts:' || te.timesheet_id::text),
+          'pay_amount', round(coalesce(te.total_pay_ex_vat,0),2),
           'exclude_from_pay', false
         )
       )
     end as segments_json
-  from tf tf0
+  from truth_enriched te
 ),
 truth_snapshot_like as (
   select
@@ -1059,11 +1206,7 @@ from final_rows fr
 where fr.timesheet_id is not null
   and fr.key_type is not null
   and fr.key_value is not null;
-$$;
-
-
-
-
+$function$
 
 
 
