@@ -1775,6 +1775,13 @@ declare
   v_ins_loan int := 0;
   v_ins_overpay_bd int := 0;
   v_ins_loan_bd int := 0;
+  v_deleted_ded_reservations int := 0;
+  v_deleted_manual_debt_breakdowns int := 0;
+  v_released_manual_debt_reservations int := 0;
+  v_voided_manual_debt_items int := 0;
+  v_ins_manual_debt int := 0;
+  v_ins_manual_debt_bd int := 0;
+  v_ins_finance_reservations int := 0;
   v_upd_candidates int := 0;
   v_candidate_summaries jsonb := '[]'::jsonb;
 begin
@@ -2101,6 +2108,99 @@ begin
   where pbc3.pay_batch_id = p_pay_batch_id
     and pbc3.paye_state is not null;
 
+  create temp table if not exists _tmp_manual_debt_templates (
+    pay_batch_candidate_id uuid,
+    candidate_id uuid,
+    finance_case_id uuid,
+    source_ref text,
+    pay_channel text,
+    umbrella_id uuid,
+    is_mismatch boolean,
+    paye_treatment text,
+    finance_component_id uuid,
+    frozen_component_snapshot_json jsonb,
+    frozen_component_key_type text,
+    frozen_component_key_value text,
+    frozen_component_classification public.pay_finance_component_classification_enum,
+    frozen_source_basis_json jsonb,
+    frozen_source_pay_method text,
+    frozen_target_pay_method text,
+    frozen_resolution_mode public.pay_finance_component_resolution_mode_enum,
+    frozen_resolution_payload_json jsonb,
+    frozen_resolution_result_json jsonb,
+    template_sort_at timestamptz
+  ) on commit drop;
+
+  truncate table _tmp_manual_debt_templates;
+
+  insert into _tmp_manual_debt_templates(
+    pay_batch_candidate_id,
+    candidate_id,
+    finance_case_id,
+    source_ref,
+    pay_channel,
+    umbrella_id,
+    is_mismatch,
+    paye_treatment,
+    finance_component_id,
+    frozen_component_snapshot_json,
+    frozen_component_key_type,
+    frozen_component_key_value,
+    frozen_component_classification,
+    frozen_source_basis_json,
+    frozen_source_pay_method,
+    frozen_target_pay_method,
+    frozen_resolution_mode,
+    frozen_resolution_payload_json,
+    frozen_resolution_result_json,
+    template_sort_at
+  )
+  select distinct on (pbi_md.pay_batch_candidate_id, pbi_md.finance_case_id)
+    pbi_md.pay_batch_candidate_id,
+    pbc_md.candidate_id,
+    pbi_md.finance_case_id,
+    pbi_md.source_ref,
+    pbi_md.pay_channel,
+    pbi_md.umbrella_id,
+    pbi_md.is_mismatch,
+    pbi_md.paye_treatment,
+    pbi_md.finance_component_id,
+    pbi_md.frozen_component_snapshot_json,
+    pbi_md.frozen_component_key_type,
+    pbi_md.frozen_component_key_value,
+    pbi_md.frozen_component_classification,
+    pbi_md.frozen_source_basis_json,
+    pbi_md.frozen_source_pay_method,
+    pbi_md.frozen_target_pay_method,
+    pbi_md.frozen_resolution_mode,
+    pbi_md.frozen_resolution_payload_json,
+    pbi_md.frozen_resolution_result_json,
+    coalesce(pbi_md.created_at, pbi_md.updated_at, now()) as template_sort_at
+  from public.pay_batch_items pbi_md
+  join public.pay_batch_candidates pbc_md
+    on pbc_md.id = pbi_md.pay_batch_candidate_id
+  where pbc_md.pay_batch_id = p_pay_batch_id
+    and pbi_md.item_type = 'MANUAL_DEBT_RECOVERY'
+    and pbi_md.finance_case_id is not null
+  order by
+    pbi_md.pay_batch_candidate_id,
+    pbi_md.finance_case_id,
+    coalesce(pbi_md.updated_at, pbi_md.created_at) desc,
+    pbi_md.id desc;
+
+  create temp table if not exists _tmp_manual_debt_item_ids (
+    id uuid primary key
+  ) on commit drop;
+
+  truncate table _tmp_manual_debt_item_ids;
+
+  insert into _tmp_manual_debt_item_ids(id)
+  select
+    pbi_md_del.id
+  from public.pay_batch_items pbi_md_del
+  where pbi_md_del.pay_batch_candidate_id in (select sc_md_del.pay_batch_candidate_id from _tmp_paye_scope sc_md_del)
+    and pbi_md_del.item_type = 'MANUAL_DEBT_RECOVERY';
+
   create temp table if not exists _tmp_ded_item_ids (
     id uuid primary key
   ) on commit drop;
@@ -2120,11 +2220,44 @@ begin
 
   get diagnostics v_deleted_ded_breakdowns = row_count;
 
+  delete from public.pay_batch_item_breakdowns pbib_md_del
+  using _tmp_manual_debt_item_ids mdi_del
+  where pbib_md_del.pay_batch_item_id = mdi_del.id;
+
+  get diagnostics v_deleted_manual_debt_breakdowns = row_count;
+
+  delete from public.pay_advance_reservations par_del
+  using _tmp_ded_item_ids di_res
+  where par_del.pay_batch_item_id = di_res.id;
+
+  get diagnostics v_deleted_ded_reservations = row_count;
+
+  update public.pay_advance_reservations par_md
+  set
+    status = 'RELEASED',
+    released_at_utc = now(),
+    released_reason = 'PAYE_NET_REPROJECTION',
+    updated_by_user_id = p_actor_user_id
+  where par_md.pay_batch_item_id in (select mdi_res.id from _tmp_manual_debt_item_ids mdi_res)
+    and par_md.status = 'RESERVED';
+
+  get diagnostics v_released_manual_debt_reservations = row_count;
+
   delete from public.pay_batch_items pbi_del2
   using _tmp_ded_item_ids di2
   where pbi_del2.id = di2.id;
 
   get diagnostics v_deleted_ded_items = row_count;
+
+  update public.pay_batch_items pbi_md_void
+  set
+    is_voided = true,
+    reservation_id = null,
+    updated_at = now()
+  where pbi_md_void.id in (select mdi_void.id from _tmp_manual_debt_item_ids mdi_void)
+    and pbi_md_void.is_voided = false;
+
+  get diagnostics v_voided_manual_debt_items = row_count;
 
   update public.pay_batch_candidates pbc_aw
   set
@@ -2582,6 +2715,359 @@ begin
     and pbi_ct2.is_voided = false
     and pbi_ct2.repayment_week_start = v_week_start;
 
+  with manual_debt_scope as (
+    select
+      pbc_md.id as pay_batch_candidate_id,
+      pbc_md.candidate_id,
+      round(greatest(coalesce(pbc_md.gross_preview, 0), 0), 2)::numeric(12,2) as run_earnings_headroom_ex,
+      round(greatest(coalesce(pni_md.net_amount, 0), 0), 2)::numeric(12,2) as run_take_home_before_ex,
+      case
+        when c_md.min_take_home_wtd is null then null::numeric(12,2)
+        else round(greatest(c_md.min_take_home_wtd, 0), 2)::numeric(12,2)
+      end as default_take_home_floor
+    from public.pay_batch_candidates pbc_md
+    join _tmp_paye_scope sc_md
+      on sc_md.pay_batch_candidate_id = pbc_md.id
+    join public.candidates c_md
+      on c_md.id = pbc_md.candidate_id
+    left join lateral (
+      select pni_md_inner.net_amount
+      from public.pay_batch_paye_net_inputs pni_md_inner
+      where pni_md_inner.pay_batch_candidate_id = pbc_md.id
+      order by pni_md_inner.imported_at_utc desc
+      limit 1
+    ) pni_md on true
+    where pbc_md.awaiting_net_amount = false
+  ),
+  manual_debt_template_values as (
+    select
+      mds.pay_batch_candidate_id,
+      mds.candidate_id,
+      mdt.finance_case_id,
+      mdt.template_sort_at,
+      mds.run_earnings_headroom_ex,
+      mds.run_take_home_before_ex,
+      mds.default_take_home_floor,
+      case
+        when nullif(btrim(mdt.frozen_source_basis_json->>'case_type'), '') is null then null::text
+        else upper(btrim(mdt.frozen_source_basis_json->>'case_type'))
+      end as frozen_case_type,
+      case
+        when nullif(btrim(mdt.frozen_source_basis_json->>'next_due_week_start'), '') is null then null::date
+        else (mdt.frozen_source_basis_json->>'next_due_week_start')::date
+      end as frozen_next_due_week_start,
+      case
+        when nullif(btrim(mdt.frozen_source_basis_json->>'minimum_earnings_threshold'), '') is null then null::numeric(12,2)
+        else round(greatest((mdt.frozen_source_basis_json->>'minimum_earnings_threshold')::numeric, 0), 2)::numeric(12,2)
+      end as minimum_earnings_threshold,
+      case
+        when nullif(btrim(mdt.frozen_source_basis_json->>'take_home_floor_override'), '') is null then null::numeric(12,2)
+        else round(greatest((mdt.frozen_source_basis_json->>'take_home_floor_override')::numeric, 0), 2)::numeric(12,2)
+      end as take_home_floor_override,
+      case
+        when nullif(btrim(mdt.frozen_source_basis_json->>'weekly_due'), '') is null then 0::numeric(12,2)
+        else round(greatest(abs((mdt.frozen_source_basis_json->>'weekly_due')::numeric), 0), 2)::numeric(12,2)
+      end as frozen_weekly_due_amount,
+      case
+        when nullif(btrim(mdt.frozen_component_snapshot_json->>'remaining_source_amount'), '') is not null then round(greatest((mdt.frozen_component_snapshot_json->>'remaining_source_amount')::numeric, 0), 2)::numeric(12,2)
+        when nullif(btrim(mdt.frozen_source_basis_json->>'amount'), '') is not null then round(greatest((mdt.frozen_source_basis_json->>'amount')::numeric, 0), 2)::numeric(12,2)
+        else 0::numeric(12,2)
+      end as frozen_remaining_source_amount,
+      sched_md.scheduled_due_amount
+    from manual_debt_scope mds
+    join _tmp_manual_debt_templates mdt
+      on mdt.pay_batch_candidate_id = mds.pay_batch_candidate_id
+    left join lateral (
+      select
+        round(greatest(abs((sched_item.value->>'amount')::numeric), 0), 2)::numeric(12,2) as scheduled_due_amount
+      from jsonb_array_elements(
+        case
+          when jsonb_typeof(coalesce(mdt.frozen_source_basis_json->'schedule_json', '[]'::jsonb)) = 'array'
+            then coalesce(mdt.frozen_source_basis_json->'schedule_json', '[]'::jsonb)
+          else '[]'::jsonb
+        end
+      ) as sched_item(value)
+      where nullif(btrim(sched_item.value->>'week_start'), '') is not null
+        and (sched_item.value->>'week_start')::date = v_week_start
+      limit 1
+    ) sched_md on true
+  ),
+  manual_debt_seed as (
+    select
+      mdtv.pay_batch_candidate_id,
+      mdtv.candidate_id,
+      mdtv.finance_case_id,
+      mdtv.template_sort_at,
+      row_number() over (
+        partition by mdtv.candidate_id
+        order by coalesce(mdtv.template_sort_at, 'epoch'::timestamptz), mdtv.finance_case_id
+      )::integer as sort_order,
+      round(
+        greatest(
+          least(
+            coalesce(mdtv.scheduled_due_amount, mdtv.frozen_weekly_due_amount, 0::numeric(12,2)),
+            mdtv.frozen_remaining_source_amount
+          ),
+          0
+        ),
+        2
+      )::numeric(12,2) as nominal_due_amount,
+      mdtv.minimum_earnings_threshold,
+      mdtv.take_home_floor_override,
+      mdtv.run_earnings_headroom_ex,
+      mdtv.run_take_home_before_ex,
+      mdtv.default_take_home_floor
+    from manual_debt_template_values mdtv
+    where mdtv.frozen_case_type = 'MANUAL_DEBT_ADJUSTMENT'
+      and mdtv.frozen_remaining_source_amount > 0
+      and (mdtv.frozen_next_due_week_start is null or mdtv.frozen_next_due_week_start <= v_week_start)
+      and round(
+        greatest(
+          least(
+            coalesce(mdtv.scheduled_due_amount, mdtv.frozen_weekly_due_amount, 0::numeric(12,2)),
+            mdtv.frozen_remaining_source_amount
+          ),
+          0
+        ),
+        2
+      ) > 0
+  ),
+  manual_debt_inputs as (
+    select
+      mds.candidate_id,
+      mds.pay_batch_candidate_id,
+      coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'sort_order', mds.sort_order,
+            'finance_case_id', mds.finance_case_id::text,
+            'case_type', 'MANUAL_DEBT_ADJUSTMENT',
+            'payout_status', null,
+            'nominal_due_amount', mds.nominal_due_amount,
+            'minimum_earnings_threshold', mds.minimum_earnings_threshold,
+            'take_home_floor_override', mds.take_home_floor_override
+          )
+          order by mds.sort_order, mds.template_sort_at, mds.finance_case_id
+        ),
+        '[]'::jsonb
+      ) as recovery_rows_json,
+      max(mds.run_earnings_headroom_ex)::numeric(12,2) as run_earnings_headroom_ex,
+      max(mds.run_take_home_before_ex)::numeric(12,2) as run_take_home_before_ex,
+      max(mds.default_take_home_floor)::numeric(12,2) as default_take_home_floor
+    from manual_debt_seed mds
+    group by
+      mds.candidate_id,
+      mds.pay_batch_candidate_id
+  ),
+  manual_debt_alloc as (
+    select
+      mdi.pay_batch_candidate_id,
+      mdi.candidate_id,
+      mdra.finance_case_id,
+      round(coalesce(mdra.protected_recoverable_amount, 0), 2)::numeric(12,2) as take_ex
+    from manual_debt_inputs mdi
+    cross join lateral public._pay_finance_protected_recovery_allocate(
+      mdi.recovery_rows_json,
+      mdi.run_earnings_headroom_ex,
+      mdi.run_take_home_before_ex,
+      mdi.default_take_home_floor
+    ) mdra
+  ),
+  ins_manual_debt as (
+    insert into public.pay_batch_items (
+      id,
+      pay_batch_candidate_id,
+      item_type,
+      timesheet_id,
+      segment_key,
+      source_ref,
+      amount_ex_vat,
+      amount_vat,
+      amount_inc_vat,
+      repayment_week_start,
+      pay_channel,
+      umbrella_id,
+      is_mismatch,
+      is_voided,
+      created_at,
+      updated_at,
+      finance_case_id,
+      reservation_id,
+      paye_treatment,
+      finance_component_id,
+      frozen_component_snapshot_json,
+      frozen_component_key_type,
+      frozen_component_key_value,
+      frozen_component_classification,
+      frozen_source_basis_json,
+      frozen_source_pay_method,
+      frozen_target_pay_method,
+      frozen_resolution_mode,
+      frozen_resolution_payload_json,
+      frozen_resolution_result_json,
+      frozen_source_amount,
+      frozen_target_amount_ex_vat,
+      frozen_target_amount_vat,
+      frozen_target_amount_inc_vat
+    )
+    select
+      gen_random_uuid() as id,
+      mdt.pay_batch_candidate_id,
+      'MANUAL_DEBT_RECOVERY' as item_type,
+      null::uuid as timesheet_id,
+      null::text as segment_key,
+      coalesce(mdt.source_ref, 'advance:' || mda.finance_case_id::text) as source_ref,
+      (-mda.take_ex)::numeric(12,2) as amount_ex_vat,
+      (0)::numeric(12,2) as amount_vat,
+      (-mda.take_ex)::numeric(12,2) as amount_inc_vat,
+      v_week_start as repayment_week_start,
+      coalesce(mdt.pay_channel, 'PAYE') as pay_channel,
+      mdt.umbrella_id,
+      coalesce(mdt.is_mismatch, false) as is_mismatch,
+      false as is_voided,
+      now() as created_at,
+      now() as updated_at,
+      mda.finance_case_id,
+      null::uuid as reservation_id,
+      coalesce(mdt.paye_treatment, 'NET_DEDUCT') as paye_treatment,
+      mdt.finance_component_id,
+      jsonb_strip_nulls(
+        coalesce(mdt.frozen_component_snapshot_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'frozen_source_amount', round(mda.take_ex, 2),
+          'allocated_source_due_amount_ex_vat', round(mda.take_ex, 2),
+          'preview_due_amount_ex_vat', round(mda.take_ex, 2),
+          'selected_preview_due_amount_ex_vat', round(mda.take_ex, 2),
+          'component_preview_due_amount_ex_vat', round(mda.take_ex, 2),
+          'frozen_target_amount_ex_vat', round(mda.take_ex, 2),
+          'frozen_target_amount_vat', 0,
+          'frozen_target_amount_inc_vat', round(mda.take_ex, 2)
+        )
+      ) as frozen_component_snapshot_json,
+      mdt.frozen_component_key_type,
+      mdt.frozen_component_key_value,
+      mdt.frozen_component_classification,
+      mdt.frozen_source_basis_json,
+      mdt.frozen_source_pay_method,
+      coalesce(mdt.frozen_target_pay_method, coalesce(mdt.pay_channel, 'PAYE')) as frozen_target_pay_method,
+      mdt.frozen_resolution_mode,
+      mdt.frozen_resolution_payload_json,
+      jsonb_strip_nulls(
+        coalesce(mdt.frozen_resolution_result_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'target_amount_ex_vat', round(mda.take_ex, 2),
+          'target_amount_vat', 0,
+          'target_amount_inc_vat', round(mda.take_ex, 2)
+        )
+      ) as frozen_resolution_result_json,
+      round(mda.take_ex, 2) as frozen_source_amount,
+      round(-mda.take_ex, 2) as frozen_target_amount_ex_vat,
+      (0)::numeric(12,2) as frozen_target_amount_vat,
+      round(-mda.take_ex, 2) as frozen_target_amount_inc_vat
+    from manual_debt_alloc mda
+    join _tmp_manual_debt_templates mdt
+      on mdt.pay_batch_candidate_id = mda.pay_batch_candidate_id
+     and mdt.finance_case_id = mda.finance_case_id
+    where round(coalesce(mda.take_ex, 0), 2) > 0
+    returning
+      id,
+      pay_batch_candidate_id,
+      finance_case_id,
+      repayment_week_start,
+      amount_ex_vat,
+      amount_vat,
+      amount_inc_vat
+  )
+  insert into public.pay_batch_item_breakdowns(
+    pay_batch_item_id,
+    line_kind,
+    bucket_code,
+    unit_name,
+    units,
+    rate,
+    amount_ex_vat,
+    amount_vat,
+    amount_inc_vat,
+    meta_json
+  )
+  select
+    imd.id,
+    'MANUAL_DEBT_RECOVERY',
+    null,
+    'Manual debt recovery',
+    null::numeric,
+    null::numeric,
+    imd.amount_ex_vat,
+    imd.amount_vat,
+    imd.amount_inc_vat,
+    '{}'::jsonb
+  from ins_manual_debt imd;
+
+  get diagnostics v_ins_manual_debt_bd = row_count;
+
+  select count(*)::int
+  into v_ins_manual_debt
+  from public.pay_batch_items pbi_ct3
+  where pbi_ct3.pay_batch_candidate_id in (select s.pay_batch_candidate_id from _tmp_paye_scope s)
+    and pbi_ct3.item_type = 'MANUAL_DEBT_RECOVERY'
+    and pbi_ct3.is_voided = false
+    and pbi_ct3.repayment_week_start = v_week_start;
+
+  with ins_finance_reservations as (
+    insert into public.pay_advance_reservations (
+      id,
+      finance_case_id,
+      pay_batch_id,
+      pay_batch_candidate_id,
+      pay_batch_item_id,
+      reserved_amount,
+      repayment_week_start,
+      status,
+      created_at_utc,
+      committed_at_utc,
+      settled_at_utc,
+      released_at_utc,
+      released_reason,
+      created_by_user_id,
+      updated_by_user_id
+    )
+    select
+      gen_random_uuid() as id,
+      pbi_fin.finance_case_id,
+      p_pay_batch_id as pay_batch_id,
+      pbi_fin.pay_batch_candidate_id,
+      pbi_fin.id as pay_batch_item_id,
+      round(abs(coalesce(pbi_fin.amount_ex_vat, 0)), 2)::numeric(12,2) as reserved_amount,
+      pbi_fin.repayment_week_start,
+      'RESERVED' as status,
+      now() as created_at_utc,
+      null::timestamptz as committed_at_utc,
+      null::timestamptz as settled_at_utc,
+      null::timestamptz as released_at_utc,
+      null::text as released_reason,
+      p_actor_user_id as created_by_user_id,
+      p_actor_user_id as updated_by_user_id
+    from public.pay_batch_items pbi_fin
+    where pbi_fin.pay_batch_candidate_id in (select s.pay_batch_candidate_id from _tmp_paye_scope s)
+      and pbi_fin.is_voided = false
+      and pbi_fin.finance_case_id is not null
+      and pbi_fin.reservation_id is null
+      and pbi_fin.item_type in ('MANUAL_DEBT_RECOVERY')
+    returning id, pay_batch_item_id
+  ),
+  upd_finance_items as (
+    update public.pay_batch_items pbi_upd
+    set
+      reservation_id = ifr.id,
+      updated_at = now()
+    from ins_finance_reservations ifr
+    where pbi_upd.id = ifr.pay_batch_item_id
+    returning pbi_upd.id
+  )
+  select count(*)::int
+  into v_ins_finance_reservations
+  from upd_finance_items;
+
   update public.pay_batch_candidates pbc_sum
   set
     awaiting_net_amount = not exists (
@@ -2766,10 +3252,17 @@ begin
     'recompute', jsonb_build_object(
       'deleted_deduction_items', v_deleted_ded_items,
       'deleted_deduction_breakdowns', v_deleted_ded_breakdowns,
+      'deleted_manual_debt_breakdowns', v_deleted_manual_debt_breakdowns,
+      'deleted_net_deduct_reservations', v_deleted_ded_reservations,
+      'released_manual_debt_reservations', v_released_manual_debt_reservations,
+      'voided_manual_debt_items', v_voided_manual_debt_items,
       'inserted_overpayment_items', v_ins_overpay,
       'inserted_overpayment_breakdowns', v_ins_overpay_bd,
       'inserted_loan_items', v_ins_loan,
       'inserted_loan_breakdowns', v_ins_loan_bd,
+      'inserted_manual_debt_items', v_ins_manual_debt,
+      'inserted_manual_debt_breakdowns', v_ins_manual_debt_bd,
+      'inserted_finance_reservations', v_ins_finance_reservations,
       'updated_candidates', v_upd_candidates
     )
   );
