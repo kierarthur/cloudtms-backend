@@ -17136,6 +17136,168 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         job_ids: Array.isArray(syncResult.job_ids) ? syncResult.job_ids : []
       };
 
+      const createdPayBatchIds = Array.from(new Set(
+        [
+          trimStr(outPayload?.umbrella_pay_batch_id || ''),
+          trimStr(outPayload?.paye_pay_batch_id || '')
+        ].filter((payBatchId) => uuidRe.test(payBatchId))
+      ));
+
+      const touchedCandidateIdsForRefresh = Array.from(new Set(
+        (
+          Array.isArray(outPayload?.touched_candidate_ids)
+            ? outPayload.touched_candidate_ids
+            : (Array.isArray(syncResult?.touched_candidate_ids) ? syncResult.touched_candidate_ids : [])
+        )
+          .map((candidateIdValue) => String(candidateIdValue || '').trim())
+          .filter((candidateIdValue) => uuidRe.test(candidateIdValue))
+      ));
+
+      const sourceSnapshotRunIdForRefresh = trimStr(
+        outPayload?.source_snapshot_run_id ||
+        syncResult?.snapshot_run_id ||
+        sessionRow?.source_snapshot_run_id ||
+        ''
+      ) || null;
+
+      const postCreateRefresh = {
+        any_batch_created: createdPayBatchIds.length > 0,
+        created_pay_batch_ids: createdPayBatchIds,
+        source_session_id: sessionIdText,
+        source_snapshot_run_id: sourceSnapshotRunIdForRefresh,
+        source_session_consumed: false,
+        source_session_discard_result: null,
+        preview_reopen_required: createdPayBatchIds.length > 0,
+        dirty_candidate_ids: [],
+        dirty_refresh_results: [],
+        dirty_refresh_job_ids: [],
+        warnings: []
+      };
+
+      if (createdPayBatchIds.length > 0) {
+        try {
+          const discardRpc = await sbRpc(env, 'pay_workbench_session_discard', {
+            p_session_id: sessionIdText,
+            p_actor_user_id: actorUserId
+          });
+
+          let discardPayload = discardRpc;
+          try {
+            if (Array.isArray(discardRpc) && discardRpc.length === 1 && discardRpc[0] && typeof discardRpc[0] === 'object') {
+              discardPayload = discardRpc[0];
+            }
+            if (discardPayload && typeof discardPayload === 'object' && Object.prototype.hasOwnProperty.call(discardPayload, 'pay_workbench_session_discard')) {
+              discardPayload = discardPayload.pay_workbench_session_discard;
+            }
+          } catch {}
+
+          postCreateRefresh.source_session_discard_result = (discardPayload && typeof discardPayload === 'object')
+            ? { ...discardPayload }
+            : discardPayload;
+          postCreateRefresh.source_session_consumed = !!(
+            discardPayload && typeof discardPayload === 'object' && discardPayload.ok === true
+          );
+        } catch (discardError) {
+          const discardErrorMessage = String(discardError?.message || discardError || 'Unknown session discard error');
+          postCreateRefresh.warnings.push({
+            code: 'SESSION_DISCARD_FAILED',
+            message: discardErrorMessage
+          });
+          logRouteDebug('warn', 'PAY_CREATE_DRAFT_POST_CREATE_SESSION_DISCARD_FAILED', {
+            pay_date: payDate,
+            week_ending_cutoff: cutoffIso,
+            provided_week_ending_cutoff: providedCutoffIso,
+            session_id: sessionIdText,
+            pay_channel_scope: payChannelScope || 'ALL',
+            created_pay_batch_ids: createdPayBatchIds,
+            error: discardErrorMessage
+          });
+        }
+
+        postCreateRefresh.dirty_candidate_ids = touchedCandidateIdsForRefresh;
+
+        if (!sourceSnapshotRunIdForRefresh) {
+          postCreateRefresh.warnings.push({
+            code: 'DIRTY_REFRESH_SKIPPED_NO_SNAPSHOT_RUN',
+            message: 'No source_snapshot_run_id was available for targeted candidate refresh.'
+          });
+        } else if (touchedCandidateIdsForRefresh.length <= 0) {
+          postCreateRefresh.warnings.push({
+            code: 'DIRTY_REFRESH_SKIPPED_NO_TOUCHED_CANDIDATES',
+            message: 'No touched_candidate_ids were returned for the created draft batch scope(s).'
+          });
+        } else {
+          for (const touchedCandidateId of touchedCandidateIdsForRefresh) {
+            try {
+              const enqueueRpc = await sbRpc(env, 'pay_workbench_enqueue_candidate_refresh', {
+                p_snapshot_run_id: sourceSnapshotRunIdForRefresh,
+                p_candidate_id: touchedCandidateId,
+                p_reason: 'DRAFT_CREATED',
+                p_actor_user_id: actorUserId,
+                p_payload_json: {
+                  source_session_id: sessionIdText,
+                  created_pay_batch_ids: createdPayBatchIds,
+                  pay_date: payDate,
+                  week_ending_cutoff: cutoffIso,
+                  pay_channel_scope: payChannelScope || 'ALL'
+                }
+              });
+
+              let enqueuePayload = enqueueRpc;
+              try {
+                if (Array.isArray(enqueueRpc) && enqueueRpc.length === 1 && enqueueRpc[0] && typeof enqueueRpc[0] === 'object') {
+                  enqueuePayload = enqueueRpc[0];
+                }
+                if (enqueuePayload && typeof enqueuePayload === 'object' && Object.prototype.hasOwnProperty.call(enqueuePayload, 'pay_workbench_enqueue_candidate_refresh')) {
+                  enqueuePayload = enqueuePayload.pay_workbench_enqueue_candidate_refresh;
+                }
+              } catch {}
+
+              const enqueueResult = (enqueuePayload && typeof enqueuePayload === 'object')
+                ? { ...enqueuePayload }
+                : { ok: false, candidate_id: touchedCandidateId };
+
+              postCreateRefresh.dirty_refresh_results.push(enqueueResult);
+              if (enqueueResult && typeof enqueueResult === 'object') {
+                const jobId = trimStr(enqueueResult.job_id || '');
+                if (uuidRe.test(jobId)) {
+                  postCreateRefresh.dirty_refresh_job_ids.push(jobId);
+                }
+              }
+            } catch (enqueueError) {
+              const enqueueErrorMessage = String(enqueueError?.message || enqueueError || 'Unknown candidate refresh error');
+              postCreateRefresh.dirty_refresh_results.push({
+                ok: false,
+                candidate_id: touchedCandidateId,
+                error: enqueueErrorMessage
+              });
+              postCreateRefresh.warnings.push({
+                code: 'DIRTY_REFRESH_ENQUEUE_FAILED',
+                candidate_id: touchedCandidateId,
+                message: enqueueErrorMessage
+              });
+              logRouteDebug('warn', 'PAY_CREATE_DRAFT_POST_CREATE_DIRTY_ENQUEUE_FAILED', {
+                pay_date: payDate,
+                week_ending_cutoff: cutoffIso,
+                provided_week_ending_cutoff: providedCutoffIso,
+                session_id: sessionIdText,
+                candidate_id: touchedCandidateId,
+                source_snapshot_run_id: sourceSnapshotRunIdForRefresh,
+                created_pay_batch_ids: createdPayBatchIds,
+                error: enqueueErrorMessage
+              });
+            }
+          }
+        }
+      }
+
+      outPayload.session = {
+        ...outPayload.session,
+        consumed: postCreateRefresh.source_session_consumed,
+        preview_reopen_required: postCreateRefresh.preview_reopen_required
+      };
+      outPayload.post_create_refresh = postCreateRefresh;
+
       logRouteDebug('info', 'PAY_CREATE_DRAFT_SESSION_PREPARE_SUCCESS', {
         pay_date: payDate,
         week_ending_cutoff: cutoffIso,
@@ -17147,7 +17309,18 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         paye_status: String(outPayload?.paye_status || '').trim() || null,
         paye_pay_batch_id: String(outPayload?.paye_pay_batch_id || '').trim() || null,
         source_snapshot_run_id: outPayload?.source_snapshot_run_id || syncResult.snapshot_run_id || null,
-        source_session_version: outPayload?.source_session_version ?? syncResult.session_version ?? null
+        source_session_version: outPayload?.source_session_version ?? syncResult.session_version ?? null,
+        source_session_consumed: !!outPayload?.post_create_refresh?.source_session_consumed,
+        preview_reopen_required: !!outPayload?.post_create_refresh?.preview_reopen_required,
+        dirty_candidate_count: Array.isArray(outPayload?.post_create_refresh?.dirty_candidate_ids)
+          ? outPayload.post_create_refresh.dirty_candidate_ids.length
+          : 0,
+        dirty_refresh_job_count: Array.isArray(outPayload?.post_create_refresh?.dirty_refresh_job_ids)
+          ? outPayload.post_create_refresh.dirty_refresh_job_ids.length
+          : 0,
+        post_create_warning_count: Array.isArray(outPayload?.post_create_refresh?.warnings)
+          ? outPayload.post_create_refresh.warnings.length
+          : 0
       });
 
       const checkpointBeforeSuccessResponse = maybeCreateDraftCheckpointResponse('BEFORE_SUCCESS_RESPONSE', {
@@ -18003,6 +18176,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
     });
   }
 }
+
 
 
 
@@ -34369,20 +34543,73 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
     try { await bucket.delete(kk); return true; } catch { return false; }
   };
 
+  const detectStoredObjectKind = async (keyToInspect) => {
+    if (!canGetPut) throw new Error('Storage not configured for read (need env.R2 or env.R2_BUCKET with get/put)');
+    const src = cleanKey(keyToInspect);
+    const obj = await bucket.get(src);
+    if (!obj) throw new Error(`Source not found in R2: ${src}`);
+
+    const contentType = String(obj?.httpMetadata?.contentType || '').trim().toLowerCase();
+    if (contentType === 'application/pdf') return 'PDF';
+    if (contentType === 'image/png') return 'PNG';
+    if (contentType === 'image/jpeg' || contentType === 'image/jpg') return 'JPEG';
+
+    const ab = await obj.arrayBuffer();
+    const bytes = new Uint8Array(ab || new ArrayBuffer(0));
+
+    if (
+      bytes.length >= 5 &&
+      bytes[0] === 0x25 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x44 &&
+      bytes[3] === 0x46 &&
+      bytes[4] === 0x2D
+    ) return 'PDF';
+
+    if (
+      bytes.length >= 8 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4E &&
+      bytes[3] === 0x47 &&
+      bytes[4] === 0x0D &&
+      bytes[5] === 0x0A &&
+      bytes[6] === 0x1A &&
+      bytes[7] === 0x0A
+    ) return 'PNG';
+
+    if (
+      bytes.length >= 3 &&
+      bytes[0] === 0xFF &&
+      bytes[1] === 0xD8 &&
+      bytes[2] === 0xFF
+    ) return 'JPEG';
+
+    return '';
+  };
+
   // Compute target key we will store on the timesheet:
-  // - If setting a new manual PDF: copy it into canonical key and point manual_pdf_r2_key to canonical.
+  // - If setting a new manual PDF: keep PDFs on canonical key; keep JPEG/PNG on uploaded image key.
   // - If clearing: set manual_pdf_r2_key null.
   let targetKey = null;
 
   try {
     if (newKey) {
-      // Copy uploaded scan to canonical key (overwrite canonical)
-      await r2CopyOverwriteLocal(newKey, canonicalPdfKey);
+      const sourceKind = await detectStoredObjectKind(newKey);
+      if (sourceKind === 'PDF') {
+        await r2CopyOverwriteLocal(newKey, canonicalPdfKey);
 
-      // Delete the uploaded scan key after copy (best-effort)
-      await r2DeleteBestEffort(newKey);
+        // Delete the uploaded PDF key after copy (best-effort)
+        if (cleanKey(newKey) !== canonicalPdfKey) {
+          await r2DeleteBestEffort(newKey);
+        }
 
-      targetKey = canonicalPdfKey;
+        targetKey = canonicalPdfKey;
+      } else if (sourceKind === 'PNG' || sourceKind === 'JPEG') {
+        targetKey = cleanKey(newKey);
+      } else {
+        return withCORS(env, req, badRequest('manual_pdf_r2_key must point to a PDF, PNG, or JPEG object in R2'));
+      }
     } else {
       targetKey = null;
     }
@@ -34447,14 +34674,13 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
     });
   }
 
-  // ✅ Delete the old manual_pdf_r2_key object if it was a non-canonical blob
+  // ✅ Delete the old manual_pdf_r2_key object if it was superseded and was a non-canonical blob
   // (canonical should never be deleted here).
   try {
     if (oldKey) {
       const oldClean = cleanKey(oldKey);
-      if (oldClean && oldClean !== canonicalPdfKey) {
-        // If we set a new targetKey, old is superseded
-        // If we cleared, old is also superseded
+      const nextClean = targetKey ? cleanKey(targetKey) : '';
+      if (oldClean && oldClean !== canonicalPdfKey && (!nextClean || oldClean !== nextClean)) {
         await r2DeleteBestEffort(oldClean);
       }
     }
@@ -34462,7 +34688,7 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
     // non-fatal
   }
 
-  // Insert a single MANUAL_PDF evidence row when a new manual PDF is set
+  // Insert a single MANUAL_PDF evidence row when a new manual PDF/image is set
   if (targetKey) {
     try {
       const payload = [{
@@ -96922,6 +97148,7 @@ async function ensureManualTimesheetBytesArePdf(bytes, context = {}) {
   throw new Error(`${label}${key} is not a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
 }
 
+
 async function ensureTimesheetPdf(env, timesheetId, opts) {
   const enc = encodeURIComponent;
 
@@ -96953,8 +97180,8 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
   if (hasSignedMarkers) {
     const outKey = normalizeKey(`docs-pdf/timesheets/ts_${timesheetId}.pdf`);
 
-    // Prefer the stored manual key if present, but only if it is already PDF-safe
-    // or can be materialized into a PDF-safe artifact without regenerating the signed PDF.
+    // Prefer the stored manual key if present, but NEVER rewrite the canonical
+    // manual pointer when an uploaded image needs PDF materialization.
     if (ts?.manual_pdf_r2_key) {
       const mk = normalizeKey(ts.manual_pdf_r2_key);
       if (await r2Exists(env, mk)) {
@@ -96966,16 +97193,6 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
             timesheetId,
             sourceLabel: 'timesheets.manual_pdf_r2_key'
           });
-          if (manualArtifact?.wasConverted && manualArtifact?.pdfKey && manualArtifact.pdfKey !== mk) {
-            await fetch(
-              `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
-              {
-                method: 'PATCH',
-                headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-                body: JSON.stringify({ manual_pdf_r2_key: manualArtifact.pdfKey })
-              }
-            ).catch(() => {});
-          }
           if (manualArtifact?.pdfKey) return manualArtifact.pdfKey;
         } catch {}
       }
@@ -97032,16 +97249,6 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
         timesheetId,
         sourceLabel: 'timesheets.manual_pdf_r2_key'
       });
-      if (manualArtifact?.wasConverted && manualArtifact?.pdfKey && manualArtifact.pdfKey !== mk) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(timesheetId)}&is_current=eq.true`,
-          {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-            body: JSON.stringify({ manual_pdf_r2_key: manualArtifact.pdfKey })
-          }
-        ).catch(() => {});
-      }
       return manualArtifact?.pdfKey || mk;
     }
   }
@@ -97050,7 +97257,6 @@ async function ensureTimesheetPdf(env, timesheetId, opts) {
   // Always route through dirty-aware logic (it will REUSE if clean, RENDER if dirty/missing).
   return await renderTimesheetPDFAndSave(env, timesheetId, { force_regen: false });
 }
-
 
 
 async function renderTimesheetPDFAndSave(env, timesheetId, opts) {
@@ -101909,6 +102115,65 @@ async function handleTimesheetQrScan(env, req) {
     return withCORS(env, req, badRequest('image_r2_key is required'));
   }
 
+  const bucket = env.R2_BUCKET || env.R2;
+  const canGet = !!(bucket && typeof bucket.get === 'function');
+  const canDelete = !!(bucket && typeof bucket.delete === 'function');
+
+  const detectStoredObjectKind = async (keyToInspect) => {
+    if (!canGet) throw new Error('Storage not configured for read (need env.R2 or env.R2_BUCKET with get)');
+    const src = cleanKey(keyToInspect);
+    const obj = await bucket.get(src);
+    if (!obj) throw new Error(`Source not found in R2: ${src}`);
+
+    const contentType = String(obj?.httpMetadata?.contentType || '').trim().toLowerCase();
+    if (contentType === 'application/pdf') return 'PDF';
+    if (contentType === 'image/png') return 'PNG';
+    if (contentType === 'image/jpeg' || contentType === 'image/jpg') return 'JPEG';
+
+    const ab = await obj.arrayBuffer();
+    const bytes = new Uint8Array(ab || new ArrayBuffer(0));
+
+    if (
+      bytes.length >= 5 &&
+      bytes[0] === 0x25 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x44 &&
+      bytes[3] === 0x46 &&
+      bytes[4] === 0x2D
+    ) return 'PDF';
+
+    if (
+      bytes.length >= 8 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4E &&
+      bytes[3] === 0x47 &&
+      bytes[4] === 0x0D &&
+      bytes[5] === 0x0A &&
+      bytes[6] === 0x1A &&
+      bytes[7] === 0x0A
+    ) return 'PNG';
+
+    if (
+      bytes.length >= 3 &&
+      bytes[0] === 0xFF &&
+      bytes[1] === 0xD8 &&
+      bytes[2] === 0xFF
+    ) return 'JPEG';
+
+    return '';
+  };
+
+  let scanSourceKind = '';
+  try {
+    scanSourceKind = await detectStoredObjectKind(image_r2_key);
+  } catch (e) {
+    return withCORS(env, req, serverError(`Failed to validate signed scan upload: ${e?.message || e}`));
+  }
+  if (!(scanSourceKind === 'PDF' || scanSourceKind === 'PNG' || scanSourceKind === 'JPEG')) {
+    return withCORS(env, req, badRequest('image_r2_key must point to a PDF, PNG, or JPEG object in R2'));
+  }
+
   try {
     console.log('[QR][SCAN] incoming', {
       preview: qrText.slice(0, 64) + (qrText.length > 64 ? '…' : '')
@@ -102006,19 +102271,22 @@ async function handleTimesheetQrScan(env, req) {
 
   // ✅ Canonical deterministic PDF key (the “one PDF only” rule)
   const canonicalPdfKey = cleanKey(`docs-pdf/timesheets/ts_${ts.timesheet_id}.pdf`);
+  const manualStoredKey = (scanSourceKind === 'PDF') ? canonicalPdfKey : image_r2_key;
 
-  // ✅ Step A: Copy the uploaded signed scan OVER the canonical key (overwrite).
+  // ✅ Step A: Copy the uploaded signed scan OVER the canonical key only for true PDFs.
   // Do NOT patch DB if this fails.
-  try {
-    await r2CopyOverwrite(env, image_r2_key, canonicalPdfKey);
-  } catch (e) {
-    console.warn('[QR][SCAN] failed to copy signed scan to canonical key', {
-      timesheet_id: ts.timesheet_id,
-      from: image_r2_key,
-      to: canonicalPdfKey,
-      err: e?.message || String(e)
-    });
-    return withCORS(env, req, serverError(`Failed to store signed scan: ${e?.message || e}`));
+  if (scanSourceKind === 'PDF') {
+    try {
+      await r2CopyOverwrite(env, image_r2_key, canonicalPdfKey);
+    } catch (e) {
+      console.warn('[QR][SCAN] failed to copy signed scan to canonical key', {
+        timesheet_id: ts.timesheet_id,
+        from: image_r2_key,
+        to: canonicalPdfKey,
+        err: e?.message || String(e)
+      });
+      return withCORS(env, req, serverError(`Failed to store signed scan: ${e?.message || e}`));
+    }
   }
 
   // Helper to resolve next TSFIN status when scan completes
@@ -102110,18 +102378,20 @@ async function handleTimesheetQrScan(env, req) {
       return withCORS(env, req, serverError(`Failed to compute signed hash: ${e?.message || e}`));
     }
 
-    // ✅ Patch timesheet: point manual_pdf_r2_key to the CANONICAL key (not image_r2_key)
+    // ✅ Patch timesheet: keep image-backed manual key for JPEG/PNG; use canonical key for PDF.
     const tsPatch = {
       qr_status: 'USED',
       qr_scanned_at: now,
       qr_signed_hash: signedHash,
       qr_signed_at_utc: now,
-      manual_pdf_r2_key: canonicalPdfKey,
+      manual_pdf_r2_key: manualStoredKey,
       qr_scan_info_json: {
         kind: 'WEEKLY_QR_TIMESHEET',
         payload: p,
         original_image_r2_key: image_r2_key,
-        canonical_pdf_r2_key: canonicalPdfKey
+        canonical_pdf_r2_key: scanSourceKind === 'PDF' ? canonicalPdfKey : null,
+        manual_pdf_r2_key: manualStoredKey,
+        stored_source_kind: scanSourceKind
       },
       updated_at: now
     };
@@ -102156,10 +102426,9 @@ async function handleTimesheetQrScan(env, req) {
       return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
     }
 
-    // ✅ Best-effort delete original uploaded key (only if it differs from canonical)
+    // ✅ Best-effort delete original uploaded key only for true-PDF inputs copied to canonical.
     try {
-      const bucket = env.R2_BUCKET || env.R2;
-      if (bucket && typeof bucket.delete === 'function' && image_r2_key !== canonicalPdfKey) {
+      if (scanSourceKind === 'PDF' && canDelete && image_r2_key !== canonicalPdfKey) {
         await bucket.delete(image_r2_key);
       }
     } catch (e) {
@@ -102184,7 +102453,8 @@ async function handleTimesheetQrScan(env, req) {
 
           // record both keys explicitly
           original_image_r2_key: image_r2_key,
-          canonical_pdf_r2_key: canonicalPdfKey,
+          canonical_pdf_r2_key: scanSourceKind === 'PDF' ? canonicalPdfKey : null,
+          manual_pdf_r2_key: manualStoredKey,
 
           processing_status_from: fin.processing_status,
           processing_status_to: nextStatus,
@@ -102210,8 +102480,9 @@ async function handleTimesheetQrScan(env, req) {
       // keep old field for caller compatibility
       image_r2_key,
 
-      // new: explicit canonical key
-      canonical_pdf_r2_key: canonicalPdfKey
+      // explicit storage pointers
+      canonical_pdf_r2_key: scanSourceKind === 'PDF' ? canonicalPdfKey : null,
+      manual_pdf_r2_key: manualStoredKey
     }));
   }
 
@@ -102249,19 +102520,21 @@ async function handleTimesheetQrScan(env, req) {
       return withCORS(env, req, serverError(`Failed to compute signed hash: ${e?.message || e}`));
     }
 
-    // ✅ Patch timesheet: point manual_pdf_r2_key to the CANONICAL key (not image_r2_key)
+    // ✅ Patch timesheet: keep image-backed manual key for JPEG/PNG; use canonical key for PDF.
     const tsPatch = {
       qr_status: 'USED',
       qr_scanned_at: now,
       updated_at: now,
       qr_signed_hash: signedHash,
       qr_signed_at_utc: now,
-      manual_pdf_r2_key: canonicalPdfKey,
+      manual_pdf_r2_key: manualStoredKey,
       qr_scan_info_json: {
         kind: 'DAILY_QR_TIMESHEET',
         payload: p,
         original_image_r2_key: image_r2_key,
-        canonical_pdf_r2_key: canonicalPdfKey
+        canonical_pdf_r2_key: scanSourceKind === 'PDF' ? canonicalPdfKey : null,
+        manual_pdf_r2_key: manualStoredKey,
+        stored_source_kind: scanSourceKind
       }
     };
 
@@ -102295,10 +102568,9 @@ async function handleTimesheetQrScan(env, req) {
       return withCORS(env, req, serverError(`Failed to update TSFIN after QR scan: ${t}`));
     }
 
-    // ✅ Best-effort delete original uploaded key (only if it differs from canonical)
+    // ✅ Best-effort delete original uploaded key only for true-PDF inputs copied to canonical.
     try {
-      const bucket = env.R2_BUCKET || env.R2;
-      if (bucket && typeof bucket.delete === 'function' && image_r2_key !== canonicalPdfKey) {
+      if (scanSourceKind === 'PDF' && canDelete && image_r2_key !== canonicalPdfKey) {
         await bucket.delete(image_r2_key);
       }
     } catch (e) {
@@ -102331,7 +102603,8 @@ async function handleTimesheetQrScan(env, req) {
 
           // record both keys explicitly
           original_image_r2_key: image_r2_key,
-          canonical_pdf_r2_key: canonicalPdfKey,
+          canonical_pdf_r2_key: scanSourceKind === 'PDF' ? canonicalPdfKey : null,
+          manual_pdf_r2_key: manualStoredKey,
 
           processing_status_from: fin.processing_status,
           processing_status_to: nextStatus,
@@ -102355,13 +102628,17 @@ async function handleTimesheetQrScan(env, req) {
       // keep old field for caller compatibility
       image_r2_key,
 
-      // new: explicit canonical key
-      canonical_pdf_r2_key: canonicalPdfKey
+      // explicit storage pointers
+      canonical_pdf_r2_key: scanSourceKind === 'PDF' ? canonicalPdfKey : null,
+      manual_pdf_r2_key: manualStoredKey
     }));
   }
 
   return withCORS(env, req, badRequest('QR mismatch: unsupported sheet_scope for QR'));
 }
+
+
+
 async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options = {}) {
   const pc = payChargeFromContract(contract);
   const pay = pc?.pay || null;
