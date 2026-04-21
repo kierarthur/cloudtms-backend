@@ -14324,114 +14324,19 @@ begin
   end if;
 
   ---------------------------------------------------------------------------
-  -- PAYE_NET_CHANGED: diff[] must include candidate net deltas (and net/awaiting drift)
-  -- PAYE net-side effects now include:
-  --   * LOAN_PAYOUT (NET_ADD)
-  --   * MANUAL_CREDIT_PAYOUT when non-taxable (NET_ADD)
-  --   * MANUAL_DEBT_RECOVERY / LOAN_REPAYMENT when non-taxable (NET_DEDUCT)
-  -- Taxable manual adjustments remain gross-side and must not be counted here.
+  -- PAYE_NET_CHANGED:
+  -- PAYE net entry and PAYE net edits are draft-owned mutable batch data,
+  -- not live-truth freshness drift. Users must be able to enter, save,
+  -- revisit, and amend PAYE net values on an existing draft without making
+  -- the batch stale.
+  --
+  -- Real live-truth drift for the batch remains covered by the economic-key,
+  -- reservation, deduction, snooze, override, restructuring, writeoff, and
+  -- guardrail checks above. PAYE_NET is therefore intentionally excluded from
+  -- stale detection here.
   ---------------------------------------------------------------------------
   if v_scope = 'PAYE' and coalesce(v_batch_kind_fixed,'') <> 'LOANS' then
-    insert into pg_temp.tmp_fresh_paye_net_diffs (
-      candidate_id,
-      key_type,
-      key_value,
-      expected_ex,
-      actual_ex,
-      ord
-    )
-    with
-    cand as (
-      select
-        pbc.id as pay_batch_candidate_id,
-        pbc.candidate_id,
-        coalesce(pbc.awaiting_net_amount,false) as awaiting_net_amount,
-        round(coalesce(pbc.net_bank_amount,0),2)::numeric(12,2) as net_bank_amount_ex
-      from public.pay_batch_candidates pbc
-      where pbc.pay_batch_id = p_pay_batch_id
-    ),
-    net_inp as (
-      select
-        c.pay_batch_candidate_id,
-        pni.net_amount::numeric(12,2) as net_amount
-      from cand c
-      left join public.pay_batch_paye_net_inputs pni
-        on pni.pay_batch_candidate_id = c.pay_batch_candidate_id
-    ),
-    net_side_effects as (
-      select
-        c.pay_batch_candidate_id,
-        round(
-          coalesce(sum(
-            case
-              when pbi.is_voided = false
-               and upper(coalesce(pbi.paye_treatment,'')) = 'NET_ADD'
-                then coalesce(pbi.amount_ex_vat, 0)
-              else 0
-            end
-          ), 0),
-          2
-        )::numeric(12,2) as net_additions_ex,
-        round(
-          coalesce(sum(
-            case
-              when pbi.is_voided = false
-               and upper(coalesce(pbi.paye_treatment,'')) = 'NET_DEDUCT'
-                then abs(coalesce(pbi.amount_ex_vat, 0))
-              else 0
-            end
-          ), 0),
-          2
-        )::numeric(12,2) as net_deductions_ex,
-        exists(
-          select 1
-          from public.pay_batch_items pbi_chk
-          where pbi_chk.pay_batch_candidate_id = c.pay_batch_candidate_id
-            and pbi_chk.is_voided = false
-            and upper(coalesce(pbi_chk.paye_treatment,'')) in ('NET_ADD','NET_DEDUCT')
-        ) as has_net_side_items
-      from cand c
-      left join public.pay_batch_items pbi
-        on pbi.pay_batch_candidate_id = c.pay_batch_candidate_id
-      group by c.pay_batch_candidate_id
-    )
-    select
-      c.candidate_id,
-      'PAYE_NET' as key_type,
-      ('candidate:' || c.candidate_id::text) as key_value,
-      ni.net_amount::numeric(12,2) as expected_ex,
-      round(
-        c.net_bank_amount_ex
-        - coalesce(nse.net_additions_ex, 0)
-        + coalesce(nse.net_deductions_ex, 0),
-        2
-      )::numeric(12,2) as actual_ex,
-      4 as ord
-    from cand c
-    left join net_inp ni
-      on ni.pay_batch_candidate_id = c.pay_batch_candidate_id
-    join net_side_effects nse
-      on nse.pay_batch_candidate_id = c.pay_batch_candidate_id
-    where c.awaiting_net_amount <> (ni.net_amount is null)
-       or ((ni.net_amount is null) and nse.has_net_side_items = true)
-       or (
-            ni.net_amount is not null
-        and round(ni.net_amount,2) <> round(
-              c.net_bank_amount_ex
-              - coalesce(nse.net_additions_ex, 0)
-              + coalesce(nse.net_deductions_ex, 0),
-              2
-            )
-       );
-
-    select count(*)::int
-    into v_paye_net_diff_ct
-    from pg_temp.tmp_fresh_paye_net_diffs;
-
-    if v_paye_net_diff_ct > 0 then
-      v_is_stale := true;
-      v_reasons := array_append(v_reasons, 'PAYE_NET_CHANGED');
-    end if;
+    v_paye_net_diff_ct := 0;
   end if;
 
   ---------------------------------------------------------------------------
