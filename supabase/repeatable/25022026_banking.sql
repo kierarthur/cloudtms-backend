@@ -15114,7 +15114,6 @@ begin
 end;
 $$;
 
-
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
   p_actor_user_id uuid DEFAULT NULL
@@ -15140,7 +15139,21 @@ BEGIN
       tf.candidate_id,
       ts.booking_id,
       tf.pay_on_hold,
-      tf.invoice_breakdown_json
+      tf.invoice_breakdown_json,
+      ts.sheet_scope,
+      ts.reference_number,
+      ts.worked_start_iso AS ts_worked_start_iso,
+      ts.worked_end_iso AS ts_worked_end_iso,
+      ts.break_start_iso AS ts_break_start_iso,
+      ts.break_end_iso AS ts_break_end_iso,
+      ts.break_minutes AS ts_break_minutes,
+      ts.actual_schedule_json AS ts_actual_schedule_json,
+      tf.worked_start_iso AS tf_worked_start_iso,
+      tf.worked_end_iso AS tf_worked_end_iso,
+      tf.break_start_iso AS tf_break_start_iso,
+      tf.break_end_iso AS tf_break_end_iso,
+      tf.break_minutes AS tf_break_minutes,
+      tf.actual_schedule_json AS tf_actual_schedule_json
     FROM public.timesheets_financials tf
     LEFT JOIN public.timesheets ts
       ON ts.timesheet_id = tf.timesheet_id
@@ -15159,14 +15172,122 @@ BEGIN
         WHEN t.invoice_breakdown_json IS NOT NULL AND jsonb_typeof(t.invoice_breakdown_json) = 'object'
           THEN t.invoice_breakdown_json
         ELSE NULL
-      END AS invoice_breakdown_json
+      END AS invoice_breakdown_json,
+      upper(coalesce(t.sheet_scope::text, '')) AS sheet_scope,
+      nullif(btrim(coalesce(t.reference_number, '')), '') AS reference_number,
+      coalesce(t.tf_worked_start_iso, t.ts_worked_start_iso) AS effective_worked_start_iso,
+      coalesce(t.tf_worked_end_iso, t.ts_worked_end_iso) AS effective_worked_end_iso,
+      coalesce(t.tf_break_start_iso, t.ts_break_start_iso) AS effective_break_start_iso,
+      coalesce(t.tf_break_end_iso, t.ts_break_end_iso) AS effective_break_end_iso,
+      coalesce(t.tf_break_minutes, t.ts_break_minutes) AS effective_break_minutes,
+      CASE
+        WHEN jsonb_typeof(t.tf_actual_schedule_json) = 'object' THEN t.tf_actual_schedule_json
+        WHEN jsonb_typeof(t.tf_actual_schedule_json) = 'array' THEN (
+          SELECT tf_sched_item.value
+          FROM jsonb_array_elements(t.tf_actual_schedule_json) AS tf_sched_item(value)
+          WHERE tf_sched_item.value IS NOT NULL
+            AND jsonb_typeof(tf_sched_item.value) = 'object'
+          LIMIT 1
+        )
+        WHEN jsonb_typeof(t.ts_actual_schedule_json) = 'object' THEN t.ts_actual_schedule_json
+        WHEN jsonb_typeof(t.ts_actual_schedule_json) = 'array' THEN (
+          SELECT ts_sched_item.value
+          FROM jsonb_array_elements(t.ts_actual_schedule_json) AS ts_sched_item(value)
+          WHERE ts_sched_item.value IS NOT NULL
+            AND jsonb_typeof(ts_sched_item.value) = 'object'
+          LIMIT 1
+        )
+        ELSE NULL::jsonb
+      END AS effective_daily_schedule_json
     FROM tf t
   ),
-  is_seg AS (
+  mode_flags AS (
     SELECT
-      (tn.invoice_breakdown_json IS NOT NULL)
-      AND (upper(COALESCE(tn.invoice_breakdown_json->>'mode','')) = 'SEGMENTS')
-      AND (jsonb_typeof(tn.invoice_breakdown_json->'segments') = 'array') AS is_segments_mode
+      tn.timesheet_id,
+      tn.candidate_id,
+      tn.booking_id,
+      tn.pay_on_hold,
+      tn.invoice_breakdown_json,
+      tn.sheet_scope,
+      tn.reference_number,
+      tn.effective_worked_start_iso,
+      tn.effective_worked_end_iso,
+      tn.effective_break_start_iso,
+      tn.effective_break_end_iso,
+      tn.effective_break_minutes,
+      tn.effective_daily_schedule_json,
+      CASE
+        WHEN tn.invoice_breakdown_json IS NOT NULL
+         AND upper(coalesce(tn.invoice_breakdown_json->>'mode','')) = 'SEGMENTS'
+         AND jsonb_typeof(tn.invoice_breakdown_json->'segments') = 'array'
+          THEN true
+        ELSE false
+      END AS actual_segments_mode,
+      CASE
+        WHEN tn.sheet_scope = 'DAILY'
+         AND coalesce(
+           CASE
+             WHEN tn.effective_worked_start_iso IS NOT NULL THEN ((tn.effective_worked_start_iso AT TIME ZONE 'Europe/London')::date)::text
+             ELSE coalesce(
+               nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'date','')), ''),
+               nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'work_date','')), ''),
+               nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'ymd','')), ''),
+               nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'date_ymd','')), '')
+             )
+           END,
+           ''
+         ) <> ''
+          THEN true
+        ELSE false
+      END AS synthetic_daily_mode,
+      CASE
+        WHEN tn.effective_worked_start_iso IS NOT NULL THEN ((tn.effective_worked_start_iso AT TIME ZONE 'Europe/London')::date)::text
+        ELSE coalesce(
+          nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'date','')), ''),
+          nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'work_date','')), ''),
+          nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'ymd','')), ''),
+          nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'date_ymd','')), '')
+        )
+      END AS synthetic_component_date,
+      jsonb_strip_nulls(
+        case
+          when jsonb_typeof(tn.effective_daily_schedule_json->'breaks') = 'array' then tn.effective_daily_schedule_json->'breaks'
+          when tn.effective_break_start_iso is not null and tn.effective_break_end_iso is not null then
+            jsonb_build_array(
+              jsonb_build_object(
+                'start', to_char((tn.effective_break_start_iso AT TIME ZONE 'Europe/London'), 'HH24:MI'),
+                'end', to_char((tn.effective_break_end_iso AT TIME ZONE 'Europe/London'), 'HH24:MI'),
+                'break_mins', coalesce(
+                  tn.effective_break_minutes::numeric,
+                  case
+                    when tn.effective_break_start_iso is not null and tn.effective_break_end_iso is not null
+                      then greatest(
+                        0::numeric,
+                        round((extract(epoch from (tn.effective_break_end_iso - tn.effective_break_start_iso)) / 60.0)::numeric, 0)
+                      )
+                    else null::numeric
+                  end
+                )
+              )
+            )
+          when nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'break_start','')), '') is not null
+           and nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'break_end','')), '') is not null then
+            jsonb_build_array(
+              jsonb_build_object(
+                'start', nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'break_start','')), ''),
+                'end', nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'break_end','')), ''),
+                'break_mins', coalesce(
+                  tn.effective_break_minutes::numeric,
+                  nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'break_minutes','')), '')::numeric,
+                  nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'break_mins','')), '')::numeric,
+                  nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'breakMinutes','')), '')::numeric,
+                  nullif(btrim(coalesce(tn.effective_daily_schedule_json->>'breakMin','')), '')::numeric
+                )
+              )
+            )
+          else '[]'::jsonb
+        end
+      ) AS synthetic_component_breaks
     FROM tf_norm tn
   ),
   segment_components AS (
@@ -15181,16 +15302,97 @@ BEGIN
         nullif(btrim(COALESCE(seg.value->>'date','')), '')
       ) AS component_stable_key,
       nullif(btrim(COALESCE(seg.value->>'ref_num','')), '') AS component_ref_num,
-      COALESCE(NULLIF(seg.value->>'exclude_from_pay','')::boolean, false) AS is_on_hold
-    FROM tf_norm tn
-    JOIN is_seg isg
+      COALESCE(NULLIF(seg.value->>'exclude_from_pay','')::boolean, false) AS is_on_hold,
+      nullif(btrim(COALESCE(seg.value->>'start_utc','')), '') AS component_start_utc,
+      nullif(btrim(COALESCE(seg.value->>'end_utc','')), '') AS component_end_utc,
+      case
+        when nullif(btrim(COALESCE(seg.value->>'start','')), '') is not null then nullif(btrim(COALESCE(seg.value->>'start','')), '')
+        when nullif(btrim(COALESCE(seg.value->>'start_utc','')), '') is not null then to_char(((seg.value->>'start_utc')::timestamptz AT TIME ZONE 'Europe/London'), 'HH24:MI')
+        else null
+      end AS component_start,
+      case
+        when nullif(btrim(COALESCE(seg.value->>'end','')), '') is not null then nullif(btrim(COALESCE(seg.value->>'end','')), '')
+        when nullif(btrim(COALESCE(seg.value->>'end_utc','')), '') is not null then to_char(((seg.value->>'end_utc')::timestamptz AT TIME ZONE 'Europe/London'), 'HH24:MI')
+        else null
+      end AS component_end,
+      nullif(btrim(COALESCE(seg.value->>'break_start','')), '') AS component_break_start,
+      nullif(btrim(COALESCE(seg.value->>'break_end','')), '') AS component_break_end,
+      coalesce(
+        nullif(seg.value->>'break_mins','')::numeric,
+        nullif(seg.value->>'break_minutes','')::numeric
+      ) AS component_break_mins,
+      case
+        when jsonb_typeof(seg.value->'breaks') = 'array' then seg.value->'breaks'
+        else '[]'::jsonb
+      end AS component_breaks
+    FROM mode_flags mf
+    JOIN LATERAL jsonb_array_elements(COALESCE(mf.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg(value)
       ON true
-    JOIN LATERAL jsonb_array_elements(COALESCE(tn.invoice_breakdown_json->'segments','[]'::jsonb)) AS seg(value)
-      ON true
-    WHERE isg.is_segments_mode = true
+    WHERE mf.actual_segments_mode = true
       AND seg.value IS NOT NULL
       AND jsonb_typeof(seg.value) = 'object'
       AND nullif(btrim(COALESCE(seg.value->>'segment_id','')), '') IS NOT NULL
+
+    UNION ALL
+
+    SELECT
+      ('ts:' || mf.timesheet_id::text) AS component_id,
+      mf.synthetic_component_date AS component_date,
+      ('timesheet:' || COALESCE(mf.booking_id, mf.timesheet_id::text)) AS component_stable_key,
+      coalesce(
+        mf.reference_number,
+        nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'ref_num','')), '')
+      ) AS component_ref_num,
+      mf.pay_on_hold AS is_on_hold,
+      CASE
+        WHEN mf.effective_worked_start_iso IS NULL THEN NULL
+        ELSE mf.effective_worked_start_iso::text
+      END AS component_start_utc,
+      CASE
+        WHEN mf.effective_worked_end_iso IS NULL THEN NULL
+        ELSE mf.effective_worked_end_iso::text
+      END AS component_end_utc,
+      case
+        when mf.effective_worked_start_iso is not null then to_char((mf.effective_worked_start_iso AT TIME ZONE 'Europe/London'), 'HH24:MI')
+        else coalesce(
+          nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'start','')), ''),
+          nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'worked_start','')), '')
+        )
+      end AS component_start,
+      case
+        when mf.effective_worked_end_iso is not null then to_char((mf.effective_worked_end_iso AT TIME ZONE 'Europe/London'), 'HH24:MI')
+        else coalesce(
+          nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'end','')), ''),
+          nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'worked_end','')), '')
+        )
+      end AS component_end,
+      case
+        when mf.effective_break_start_iso is not null then to_char((mf.effective_break_start_iso AT TIME ZONE 'Europe/London'), 'HH24:MI')
+        else nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'break_start','')), '')
+      end AS component_break_start,
+      case
+        when mf.effective_break_end_iso is not null then to_char((mf.effective_break_end_iso AT TIME ZONE 'Europe/London'), 'HH24:MI')
+        else nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'break_end','')), '')
+      end AS component_break_end,
+      coalesce(
+        mf.effective_break_minutes::numeric,
+        nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'break_minutes','')), '')::numeric,
+        nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'break_mins','')), '')::numeric,
+        nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'breakMinutes','')), '')::numeric,
+        nullif(btrim(coalesce(mf.effective_daily_schedule_json->>'breakMin','')), '')::numeric,
+        case
+          when mf.effective_break_start_iso is not null and mf.effective_break_end_iso is not null
+            then greatest(
+              0::numeric,
+              round((extract(epoch from (mf.effective_break_end_iso - mf.effective_break_start_iso)) / 60.0)::numeric, 0)
+            )
+          else null::numeric
+        end
+      ) AS component_break_mins,
+      coalesce(mf.synthetic_component_breaks, '[]'::jsonb) AS component_breaks
+    FROM mode_flags mf
+    WHERE mf.actual_segments_mode = false
+      AND mf.synthetic_daily_mode = true
   ),
   components AS (
     SELECT
@@ -15198,7 +15400,15 @@ BEGIN
       sc.component_date,
       sc.component_stable_key,
       sc.component_ref_num,
-      sc.is_on_hold
+      sc.is_on_hold,
+      sc.component_start_utc,
+      sc.component_end_utc,
+      sc.component_start,
+      sc.component_end,
+      sc.component_break_start,
+      sc.component_break_end,
+      sc.component_break_mins,
+      sc.component_breaks
     FROM segment_components sc
 
     UNION ALL
@@ -15206,13 +15416,20 @@ BEGIN
     SELECT
       'TOTAL'::text AS component_id,
       NULL::text AS component_date,
-      ('timesheet:' || COALESCE(tn.booking_id, tn.timesheet_id::text))::text AS component_stable_key,
+      ('timesheet:' || COALESCE(mf.booking_id, mf.timesheet_id::text))::text AS component_stable_key,
       NULL::text AS component_ref_num,
-      tn.pay_on_hold AS is_on_hold
-    FROM tf_norm tn
-    JOIN is_seg isg
-      ON true
-    WHERE isg.is_segments_mode = false
+      mf.pay_on_hold AS is_on_hold,
+      NULL::text AS component_start_utc,
+      NULL::text AS component_end_utc,
+      NULL::text AS component_start,
+      NULL::text AS component_end,
+      NULL::text AS component_break_start,
+      NULL::text AS component_break_end,
+      NULL::numeric AS component_break_mins,
+      '[]'::jsonb AS component_breaks
+    FROM mode_flags mf
+    WHERE mf.actual_segments_mode = false
+      AND mf.synthetic_daily_mode = false
   ),
   active_override AS (
     SELECT
@@ -15305,6 +15522,14 @@ BEGIN
       sc.component_date,
       sc.component_stable_key,
       sc.component_ref_num,
+      sc.component_start_utc,
+      sc.component_end_utc,
+      sc.component_start,
+      sc.component_end,
+      sc.component_break_start,
+      sc.component_break_end,
+      sc.component_break_mins,
+      sc.component_breaks,
       ass.snooze_id,
       ass.candidate_id,
       ass.timesheet_id,
@@ -15347,6 +15572,14 @@ BEGIN
       asm.component_date,
       asm.component_stable_key,
       asm.component_ref_num,
+      asm.component_start_utc,
+      asm.component_end_utc,
+      asm.component_start,
+      asm.component_end,
+      asm.component_break_start,
+      asm.component_break_end,
+      asm.component_break_mins,
+      asm.component_breaks,
       asm.snooze_id,
       asm.candidate_id,
       asm.timesheet_id,
@@ -15404,6 +15637,14 @@ BEGIN
       c.component_stable_key,
       c.component_ref_num,
       c.is_on_hold,
+      c.component_start_utc,
+      c.component_end_utc,
+      c.component_start,
+      c.component_end,
+      c.component_break_start,
+      c.component_break_end,
+      c.component_break_mins,
+      c.component_breaks,
       CASE
         WHEN c.is_on_hold = true THEN 'ON_HOLD'
         WHEN COALESCE(a.has_settled_norm,0) = 1 THEN 'PAID'
@@ -15471,7 +15712,7 @@ BEGIN
   ),
   mode AS (
     SELECT
-      COALESCE((SELECT is_seg.is_segments_mode FROM is_seg LIMIT 1), false) AS is_segments_mode
+      COALESCE((SELECT (mf.actual_segments_mode OR mf.synthetic_daily_mode) FROM mode_flags mf LIMIT 1), false) AS is_segments_mode
   ),
   comp_json AS (
     SELECT
@@ -15495,7 +15736,15 @@ BEGIN
             'snooze_until_date', CASE WHEN cs.snooze_until_date IS NULL THEN NULL ELSE cs.snooze_until_date::text END,
             'snooze_note', cs.snooze_note,
             'snooze_segment_id', cs.snooze_segment_id,
-            'snooze_segment_stable_key', cs.snooze_segment_stable_key
+            'snooze_segment_stable_key', cs.snooze_segment_stable_key,
+            'start_utc', cs.component_start_utc,
+            'end_utc', cs.component_end_utc,
+            'start', cs.component_start,
+            'end', cs.component_end,
+            'break_start', cs.component_break_start,
+            'break_end', cs.component_break_end,
+            'break_mins', cs.component_break_mins,
+            'breaks', coalesce(cs.component_breaks, '[]'::jsonb)
           )
           ORDER BY
             CASE WHEN cs.component_id = 'TOTAL' THEN 0 ELSE 1 END,
@@ -15524,6 +15773,14 @@ BEGIN
             'date', ass.component_date,
             'work_date', ass.component_date,
             'ref_num', ass.component_ref_num,
+            'start_utc', ass.component_start_utc,
+            'end_utc', ass.component_end_utc,
+            'start', ass.component_start,
+            'end', ass.component_end,
+            'break_start', ass.component_break_start,
+            'break_end', ass.component_break_end,
+            'break_mins', ass.component_break_mins,
+            'breaks', coalesce(ass.component_breaks, '[]'::jsonb),
             'snooze_state',
               CASE
                 WHEN ass.snooze_until_date IS NULL THEN 'INDEFINITE_SNOOZED'
@@ -15695,6 +15952,7 @@ BEGIN
   RETURN v_out;
 END;
 $$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_candidate_advances_report(
