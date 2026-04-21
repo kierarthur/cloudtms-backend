@@ -20785,8 +20785,6 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
       coalesce(itm->'components', '[]'::jsonb) as case_components_json
     from candidate_rows cr
     cross join lateral jsonb_array_elements(coalesce(cr.itemisation, '[]'::jsonb)) as itm
-    where cr.is_ready_for_draft = true
-      and jsonb_array_length(cr.blockers) = 0
   ),
   positive_rows as (
     select
@@ -20795,8 +20793,10 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
     join pg_temp.tmp_pay_build_selected_preview_rows spr
       on spr.candidate_id = ir.candidate_id
      and spr.draftable = true
+     and upper(btrim(coalesce(spr.line_type, ''))) = 'TIMESHEET_PAYMENT'
      and spr.finance_case_id is null
      and spr.timesheet_id = ir.timesheet_id
+     and upper(btrim(coalesce(spr.pay_channel, ''))) = v_scope
      and spr.preview_row_id = coalesce(
        nullif(btrim(coalesce(ir.item_json->>'preview_row_id','')), ''),
        nullif(btrim(coalesce(ir.item_json->>'line_id','')), ''),
@@ -21460,6 +21460,7 @@ v_stage := 'STAGE_12_INSERT_PAY_BATCH_ITEMS';
   );
 END;
 $function$;
+
 
 
 
