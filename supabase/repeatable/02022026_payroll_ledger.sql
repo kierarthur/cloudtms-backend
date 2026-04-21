@@ -169,7 +169,6 @@ begin
   return nullif(btrim(coalesce(p_field,'')), '');
 end;
 $$;
-
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -197,6 +196,23 @@ declare
   v_external_unwind_confirmed_count int := 0;
   v_transfer_state_sample jsonb := '[]'::jsonb;
   v_cancellation_outcome text := 'PRE_SUBMISSION_CANCEL';
+  v_source_session_discard_json jsonb := NULL;
+  v_source_session_discard_attempted boolean := false;
+  v_source_session_discarded boolean := false;
+  v_source_session_discard_state_changed boolean := false;
+  v_source_session_discarded_at_utc text := NULL;
+  v_dirty_candidate_count int := 0;
+  v_dirty_candidate_ids jsonb := '[]'::jsonb;
+  v_snapshot_refresh_job_count int := 0;
+  v_snapshot_refresh_job_ids jsonb := '[]'::jsonb;
+  v_dirty_candidate_id uuid := NULL::uuid;
+  v_refresh_target record;
+  v_enqueue_candidate_refresh_json jsonb := '{}'::jsonb;
+  v_snapshot_rebuild_count int := 0;
+  v_snapshot_rebuild_ids jsonb := '[]'::jsonb;
+  v_snapshot_rebuild_result_json jsonb := '[]'::jsonb;
+  v_rebuild_snapshot_run_id uuid := NULL::uuid;
+  v_rebuild_snapshot_result jsonb := '{}'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_cancel: pay_batch_id is required';
@@ -370,6 +386,27 @@ begin
   ) then
     raise exception 'pay_batch_cancel: batch status must be DRAFT, DRAFT_CREATED, READY, WAITING_BANK_CONFIRM, PARTIAL, SCHEDULED, AWAITING_AUTHORISATION or AUTHORISED_FOR_PAYMENT (current=%)', v_batch.status;
   end if;
+
+  create temp table if not exists _tmp_cancel_batch_candidates (
+    candidate_id uuid not null primary key
+  ) on commit drop;
+
+  truncate table _tmp_cancel_batch_candidates;
+
+  insert into _tmp_cancel_batch_candidates(candidate_id)
+  select distinct
+    pbc_batch.candidate_id
+  from public.pay_batch_candidates pbc_batch
+  where pbc_batch.pay_batch_id = p_pay_batch_id
+    and pbc_batch.candidate_id is not null;
+
+  select
+    count(*)::int,
+    coalesce(jsonb_agg(cancel_candidate_rows.candidate_id::text order by cancel_candidate_rows.candidate_id::text), '[]'::jsonb)
+  into
+    v_dirty_candidate_count,
+    v_dirty_candidate_ids
+  from _tmp_cancel_batch_candidates cancel_candidate_rows;
 
   update public.pay_batch_items pbi
   set pay_bank_transfer_id = null
@@ -696,6 +733,109 @@ begin
     end
   where pb.id = p_pay_batch_id;
 
+  if v_batch.source_workbench_session_id is not null then
+    v_source_session_discard_attempted := true;
+    v_source_session_discard_json := public.pay_workbench_session_discard(
+      p_session_id => v_batch.source_workbench_session_id,
+      p_actor_user_id => p_actor_user_id
+    );
+    v_source_session_discarded := coalesce((v_source_session_discard_json->>'ok')::boolean, false);
+    v_source_session_discard_state_changed := coalesce((v_source_session_discard_json->>'state_changed')::boolean, false);
+    v_source_session_discarded_at_utc := nullif(btrim(coalesce(v_source_session_discard_json->>'discarded_at_utc', '')), '');
+  end if;
+
+  for v_dirty_candidate_id in
+    select cancel_candidate_rows.candidate_id
+    from _tmp_cancel_batch_candidates cancel_candidate_rows
+    order by cancel_candidate_rows.candidate_id
+  loop
+    perform public._change_bump('pay_candidate:' || v_dirty_candidate_id::text);
+  end loop;
+
+  create temp table if not exists _tmp_cancel_refresh_targets (
+    snapshot_run_id uuid not null,
+    candidate_id uuid not null,
+    primary key (snapshot_run_id, candidate_id)
+  ) on commit drop;
+
+  truncate table _tmp_cancel_refresh_targets;
+
+  insert into _tmp_cancel_refresh_targets(snapshot_run_id, candidate_id)
+  select distinct
+    refresh_target_rows.snapshot_run_id,
+    refresh_target_rows.candidate_id
+  from (
+    select
+      scs.snapshot_run_id,
+      scs.candidate_id
+    from public.banking_pay_snapshot_candidate_state scs
+    join public.banking_pay_snapshot_runs sr
+      on sr.id = scs.snapshot_run_id
+    join _tmp_cancel_batch_candidates cancel_batch_candidate_rows
+      on cancel_batch_candidate_rows.candidate_id = scs.candidate_id
+    where coalesce(sr.is_active, false) = true
+
+    union
+
+    select
+      ws.source_snapshot_run_id as snapshot_run_id,
+      scoped_candidate_rows.candidate_id
+    from public.banking_pay_workbench_sessions ws
+    join lateral unnest(coalesce(ws.scope_candidate_ids, ARRAY[]::uuid[])) as scoped_candidate_rows(candidate_id)
+      on true
+    join public.banking_pay_snapshot_runs sr_ws
+      on sr_ws.id = ws.source_snapshot_run_id
+    join _tmp_cancel_batch_candidates cancel_batch_candidate_scope_rows
+      on cancel_batch_candidate_scope_rows.candidate_id = scoped_candidate_rows.candidate_id
+    where ws.status = 'OPEN'
+      and ws.source_snapshot_run_id is not null
+      and coalesce(sr_ws.is_active, false) = true
+  ) refresh_target_rows;
+
+  for v_refresh_target in
+    select
+      cancel_refresh_target_rows.snapshot_run_id,
+      cancel_refresh_target_rows.candidate_id
+    from _tmp_cancel_refresh_targets cancel_refresh_target_rows
+    order by cancel_refresh_target_rows.snapshot_run_id, cancel_refresh_target_rows.candidate_id
+  loop
+    v_enqueue_candidate_refresh_json := public.pay_workbench_enqueue_candidate_refresh(
+      p_snapshot_run_id => v_refresh_target.snapshot_run_id,
+      p_candidate_id => v_refresh_target.candidate_id,
+      p_reason => 'BATCH_CANCELLED',
+      p_actor_user_id => p_actor_user_id,
+      p_payload_json => jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'cancelled_at_utc', v_cancelled_at_utc::text,
+        'cancellation_outcome', v_cancellation_outcome,
+        'source_workbench_session_id', case when v_batch.source_workbench_session_id is null then null else v_batch.source_workbench_session_id::text end,
+        'source_snapshot_run_id', case when v_batch.source_snapshot_run_id is null then null else v_batch.source_snapshot_run_id::text end,
+        'source_session_discarded', v_source_session_discarded
+      )
+    );
+
+    if nullif(btrim(coalesce(v_enqueue_candidate_refresh_json->>'job_id', '')), '') is not null then
+      v_snapshot_refresh_job_ids := v_snapshot_refresh_job_ids || jsonb_build_array(v_enqueue_candidate_refresh_json->>'job_id');
+      v_snapshot_refresh_job_count := v_snapshot_refresh_job_count + 1;
+    end if;
+  end loop;
+
+  for v_rebuild_snapshot_run_id in
+    select distinct
+      cancel_refresh_target_rows.snapshot_run_id
+    from _tmp_cancel_refresh_targets cancel_refresh_target_rows
+    where cancel_refresh_target_rows.snapshot_run_id is not null
+    order by cancel_refresh_target_rows.snapshot_run_id
+  loop
+    v_rebuild_snapshot_result := public.pay_workbench_snapshot_rebuild_summary(
+      p_snapshot_run_id => v_rebuild_snapshot_run_id
+    );
+
+    v_snapshot_rebuild_ids := v_snapshot_rebuild_ids || jsonb_build_array(v_rebuild_snapshot_run_id::text);
+    v_snapshot_rebuild_result_json := v_snapshot_rebuild_result_json || jsonb_build_array(v_rebuild_snapshot_result);
+    v_snapshot_rebuild_count := v_snapshot_rebuild_count + 1;
+  end loop;
+
   insert into public.audit_events(
     actor_user_id,
     object_type,
@@ -730,7 +870,19 @@ begin
       'execution_commit_ref', v_batch.execution_commit_ref,
       'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
       'cancellation_outcome', v_cancellation_outcome,
-      'source_session_preserved', true
+      'source_session_preserved', false,
+      'source_session_discard_attempted', v_source_session_discard_attempted,
+      'source_session_discarded', v_source_session_discarded,
+      'source_session_discard_state_changed', v_source_session_discard_state_changed,
+      'source_session_discarded_at_utc', v_source_session_discarded_at_utc,
+      'source_session_discard_result', v_source_session_discard_json,
+      'dirtied_candidate_count', v_dirty_candidate_count,
+      'dirtied_candidate_ids', v_dirty_candidate_ids,
+      'snapshot_refresh_job_count', v_snapshot_refresh_job_count,
+      'snapshot_refresh_job_ids', v_snapshot_refresh_job_ids,
+      'snapshot_rebuild_count', v_snapshot_rebuild_count,
+      'snapshot_rebuild_ids', v_snapshot_rebuild_ids,
+      'snapshot_rebuild_result', v_snapshot_rebuild_result_json
     ),
     p_reason
   );
@@ -749,7 +901,25 @@ begin
     'execution_commit_ref', (select pb2.execution_commit_ref from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
     'execution_committed_at_utc', (select case when pb2.execution_committed_at_utc is null then null else pb2.execution_committed_at_utc::text end from public.pay_batches pb2 where pb2.id = p_pay_batch_id),
     'cancellation_outcome', v_cancellation_outcome,
-    'source_session_preserved', true,
+    'source_session_preserved', false,
+    'source_session_discard_attempted', v_source_session_discard_attempted,
+    'source_session_discarded', v_source_session_discarded,
+    'source_session_discard_state_changed', v_source_session_discard_state_changed,
+    'source_session_discarded_at_utc', v_source_session_discarded_at_utc,
+    'source_session_discard_result', v_source_session_discard_json,
+    'dirtied_candidates', jsonb_build_object(
+      'count', v_dirty_candidate_count,
+      'candidate_ids', v_dirty_candidate_ids
+    ),
+    'snapshot_refresh', jsonb_build_object(
+      'job_count', v_snapshot_refresh_job_count,
+      'job_ids', v_snapshot_refresh_job_ids
+    ),
+    'snapshot_rebuild', jsonb_build_object(
+      'count', v_snapshot_rebuild_count,
+      'snapshot_run_ids', v_snapshot_rebuild_ids,
+      'results', v_snapshot_rebuild_result_json
+    ),
     'released_reservations', jsonb_build_object(
       'count', v_released_reservation_count,
       'amount', v_released_reservation_amount,
