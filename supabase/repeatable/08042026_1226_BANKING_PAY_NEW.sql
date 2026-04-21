@@ -20324,7 +20324,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_timesheet_snapshots(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -20442,6 +20441,10 @@ begin
                 'date', nullif(btrim(coalesce(seg.seg_json->>'date', '')), ''),
                 'start_utc', nullif(btrim(coalesce(seg.seg_json->>'start_utc', '')), ''),
                 'end_utc', nullif(btrim(coalesce(seg.seg_json->>'end_utc', '')), ''),
+                'start', nullif(btrim(coalesce(seg.seg_json->>'start', '')), ''),
+                'end', nullif(btrim(coalesce(seg.seg_json->>'end', '')), ''),
+                'break_start', nullif(btrim(coalesce(seg.seg_json->>'break_start', '')), ''),
+                'break_end', nullif(btrim(coalesce(seg.seg_json->>'break_end', '')), ''),
                 'break_mins', coalesce(
                   nullif(seg.seg_json->>'break_mins', '')::numeric,
                   nullif(seg.seg_json->>'break_minutes', '')::numeric,
@@ -20552,6 +20555,7 @@ begin
   );
 end;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_batch_insert_candidates_from_preview(
