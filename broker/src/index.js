@@ -23300,7 +23300,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   const reason = String(body.reason || '').trim();
   if (!reason) return withCORS(env, req, badRequest('reason is required'));
 
-  const discardSession = (() => {
+  const discardSessionRequested = (() => {
     const raw = body.discard_session ?? body.discardSession;
     if (typeof raw === 'boolean') return raw;
     if (raw == null) return false;
@@ -23311,7 +23311,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     return false;
   })();
 
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const discardSessionForced = true;
 
   const _safeJsonParse = (s) => {
     try { return JSON.parse(String(s || '')); } catch { return null; }
@@ -23435,10 +23435,15 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       error: p,
       cancel_flow: cancelFlow,
       session_discard: {
-        requested: discardSession,
+        requested: discardSessionRequested,
+        forced: discardSessionForced,
         attempted: false,
         ok: false,
-        skipped_reason: 'BATCH_CANCEL_NOT_FINALIZED'
+        discarded_session_id: null,
+        state_changed: false,
+        skipped_reason: 'BATCH_CANCEL_NOT_FINALIZED',
+        result: null,
+        error: null
       }
     };
     return withCORS(
@@ -23449,6 +23454,29 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
         headers: JSON_HEADERS
       })
     );
+  };
+
+  const _buildSessionDiscardResult = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const sourceSessionId = String(p.source_workbench_session_id || '').trim();
+    const discardResult = (p.source_session_discard_result && typeof p.source_session_discard_result === 'object' && !Array.isArray(p.source_session_discard_result))
+      ? p.source_session_discard_result
+      : null;
+    const attempted = (p.source_session_discard_attempted === true) || !!sourceSessionId;
+    const ok = attempted ? (p.source_session_discarded === true) : true;
+    const stateChanged = p.source_session_discard_state_changed === true;
+
+    return {
+      requested: discardSessionRequested,
+      forced: discardSessionForced,
+      attempted,
+      ok,
+      discarded_session_id: sourceSessionId || null,
+      state_changed: stateChanged,
+      skipped_reason: attempted ? null : 'NO_SOURCE_SESSION',
+      result: discardResult,
+      error: null
+    };
   };
 
   try {
@@ -23475,41 +23503,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       return _buildConflictResponse(payload);
     }
 
-    const sourceSessionId = String(payload.source_workbench_session_id || '').trim();
-
-    const sessionDiscardResult = {
-      requested: discardSession,
-      attempted: false,
-      ok: false,
-      discarded_session_id: null,
-      skipped_reason: null,
-      result: null,
-      error: null
-    };
-
-    if (discardSession === true) {
-      if (uuidRe.test(sourceSessionId)) {
-        sessionDiscardResult.attempted = true;
-        try {
-          const discardRpc = await sbRpc(env, 'pay_workbench_session_discard', {
-            p_session_id: sourceSessionId,
-            p_actor_user_id: user.id
-          });
-          const discardPayload = _unwrapRpcPayload(discardRpc, 'pay_workbench_session_discard');
-          sessionDiscardResult.ok = true;
-          sessionDiscardResult.discarded_session_id = sourceSessionId;
-          sessionDiscardResult.result = discardPayload;
-        } catch (discardErr) {
-          sessionDiscardResult.ok = false;
-          sessionDiscardResult.discarded_session_id = sourceSessionId;
-          sessionDiscardResult.error = String(discardErr?.message || discardErr);
-        }
-      } else {
-        sessionDiscardResult.skipped_reason = 'NO_SOURCE_SESSION';
-      }
-    } else {
-      sessionDiscardResult.skipped_reason = 'SESSION_PRESERVED_BY_DEFAULT';
-    }
+    const sessionDiscardResult = _buildSessionDiscardResult(payload);
 
     const responsePayload = {
       ...(payload && typeof payload === 'object' ? payload : {}),
