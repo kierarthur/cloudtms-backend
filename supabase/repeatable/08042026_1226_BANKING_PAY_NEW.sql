@@ -21597,7 +21597,6 @@ END;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_batch_apply_finance_adjustments(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -22932,6 +22931,7 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
       spr.finance_case_id,
       upper(coalesce(nullif(spr.pay_channel,''), v_scope)) as pay_channel,
       upper(coalesce(nullif(spr.paye_treatment,''), 'NONE')) as paye_treatment,
+      coalesce(pbc.awaiting_net_amount, false) as awaiting_net_amount,
       case when upper(coalesce(nullif(spr.pay_channel,''), v_scope)) = 'UMBRELLA' then c.umbrella_id else null::uuid end as umbrella_id,
       round(abs(coalesce(spr.preview_amount_ex_vat, 0)), 2)::numeric(12,2) as due_amount_ex_vat,
       coalesce(spr.case_components_json, '[]'::jsonb) as case_components_json
@@ -22957,6 +22957,7 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
       scr.finance_case_id,
       scr.pay_channel,
       scr.paye_treatment,
+      scr.awaiting_net_amount,
       scr.umbrella_id,
       scr.due_amount_ex_vat,
       comp.comp_json,
@@ -23110,6 +23111,7 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
       n.finance_case_id,
       n.pay_channel,
       n.paye_treatment,
+      n.awaiting_net_amount,
       n.umbrella_id,
       n.finance_component_id,
       n.component_key_type,
@@ -23294,7 +23296,12 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
     round(-fa.take_target_vat, 2),
     round(-fa.take_target_inc, 2)
   from final_alloc fa
-  where fa.take_target_ex > 0;
+  where fa.take_target_ex > 0
+    and not (
+      upper(coalesce(fa.pay_channel, '')) = 'PAYE'
+      and coalesce(fa.awaiting_net_amount, false) = true
+      and upper(coalesce(fa.paye_treatment, 'NONE')) = 'NET_DEDUCT'
+    );
 
   get diagnostics v_rows_ins_debt_items = row_count;
 
