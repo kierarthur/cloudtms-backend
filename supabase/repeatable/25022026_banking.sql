@@ -12572,6 +12572,9 @@ $function$;
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -13707,7 +13710,16 @@ begin
     order by
       pbi_rt.item_type,
       pbi_rt.pay_batch_candidate_id,
-      coalesce(pbi_rt.finance_case_id::text, ''),
+      coalesce(
+        coalesce(
+          pbi_rt.finance_case_id,
+          case
+            when pbi_rt.source_ref ~ '^advance:[0-9a-fA-F-]{36}$' then replace(pbi_rt.source_ref, 'advance:', '')::uuid
+            else null::uuid
+          end
+        )::text,
+        ''
+      ),
       coalesce(pbi_rt.finance_component_id::text, ''),
       coalesce(pbi_rt.source_ref, ''),
       pbi_rt.is_voided desc,
@@ -14521,10 +14533,6 @@ begin
   );
 end;
 $function$;
-
-
-
-
 
 
 
