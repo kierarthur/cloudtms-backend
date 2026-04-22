@@ -17350,7 +17350,6 @@ end;
 $function$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -17369,6 +17368,7 @@ DECLARE
   v_scope_candidate_ids_jsonb jsonb := '[]'::jsonb;
   v_scope_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_existing_session_row public.banking_pay_workbench_sessions%ROWTYPE;
+  v_open_session_row public.banking_pay_workbench_sessions%ROWTYPE;
   v_session_id uuid := NULL::uuid;
   v_scope_candidate_id uuid := NULL::uuid;
   v_snapshot_candidate_row public.banking_pay_snapshot_candidate_state%ROWTYPE;
@@ -17428,6 +17428,10 @@ BEGIN
     RAISE EXCEPTION 'tms_users row % not found', p_actor_user_id;
   END IF;
 
+  PERFORM pg_advisory_xact_lock(hashtext('public.pay_workbench_session_open.single_open'));
+
+  v_effective_week_ending_cutoff := COALESCE(p_week_ending_cutoff, DATE '9999-12-31');
+
   IF BTRIM(COALESCE(v_filters_json->>'candidate_id', v_filters_json->>'candidateId', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     v_filter_candidate_id := COALESCE(v_filters_json->>'candidate_id', v_filters_json->>'candidateId')::uuid;
   END IF;
@@ -17438,46 +17442,6 @@ BEGIN
 
   v_is_unfiltered := v_filter_candidate_id IS NULL AND v_filter_client_id IS NULL;
 
-  FOR v_legacy_session_row IN
-    SELECT ws.id,
-           ws.session_signature,
-           ws.week_ending_cutoff,
-           ws.created_at_utc
-    FROM public.banking_pay_workbench_sessions AS ws
-    WHERE ws.status = 'OPEN'
-      AND ws.discarded_at_utc IS NULL
-  LOOP
-    v_legacy_signature_json := NULL;
-    v_legacy_signature_version := NULL;
-    v_legacy_signature_kind := NULL;
-
-    BEGIN
-      IF BTRIM(COALESCE(v_legacy_session_row.session_signature, '')) <> '' THEN
-        v_legacy_signature_json := v_legacy_session_row.session_signature::jsonb;
-      END IF;
-    EXCEPTION
-      WHEN OTHERS THEN
-        v_legacy_signature_json := NULL;
-    END;
-
-    IF v_legacy_signature_json IS NOT NULL
-       AND jsonb_typeof(v_legacy_signature_json) = 'object' THEN
-      IF COALESCE(v_legacy_signature_json->>'signature_version', '') ~ '^[0-9]+$' THEN
-        v_legacy_signature_version := (v_legacy_signature_json->>'signature_version')::integer;
-      END IF;
-      v_legacy_signature_kind := UPPER(BTRIM(COALESCE(v_legacy_signature_json->>'kind', '')));
-    END IF;
-
-    IF COALESCE(v_legacy_session_row.week_ending_cutoff, DATE '1900-01-01') <> v_effective_week_ending_cutoff
-       OR COALESCE(v_legacy_signature_version, -1) <> v_current_workbench_signature_version
-       OR COALESCE(v_legacy_signature_kind, '') <> v_current_workbench_signature_kind
-       OR COALESCE(v_legacy_session_row.created_at_utc, TIMESTAMPTZ '1900-01-01 00:00:00+00') < v_legacy_redesign_boundary_utc THEN
-      PERFORM public.pay_workbench_session_discard(
-        p_session_id => v_legacy_session_row.id,
-        p_actor_user_id => p_actor_user_id
-      );
-    END IF;
-  END LOOP;
 
   IF v_is_unfiltered THEN
     SELECT sr.*
@@ -17806,14 +17770,30 @@ BEGIN
     ) AS scope_rows;
   END IF;
 
-  SELECT ws.*
-  INTO v_existing_session_row
-  FROM public.banking_pay_workbench_sessions AS ws
-  WHERE ws.session_signature = v_session_signature
-    AND ws.status = 'OPEN'
-  LIMIT 1;
-
   v_scope_candidate_ids_jsonb := to_jsonb(COALESCE(v_scope_candidate_ids, ARRAY[]::uuid[]));
+
+  FOR v_open_session_row IN
+    SELECT ws.*
+    FROM public.banking_pay_workbench_sessions AS ws
+    WHERE ws.status = 'OPEN'
+      AND ws.discarded_at_utc IS NULL
+    ORDER BY ws.updated_at_utc DESC NULLS LAST,
+             ws.created_at_utc DESC NULLS LAST,
+             ws.id DESC
+    FOR UPDATE OF ws
+  LOOP
+    IF v_existing_session_row.id IS NULL
+       AND v_open_session_row.session_signature = v_session_signature
+       AND v_open_session_row.week_ending_cutoff IS NOT DISTINCT FROM v_effective_week_ending_cutoff
+       AND v_open_session_row.pay_date IS NOT DISTINCT FROM v_effective_pay_date THEN
+      v_existing_session_row := v_open_session_row;
+    ELSE
+      PERFORM public.pay_workbench_session_discard(
+        p_session_id => v_open_session_row.id,
+        p_actor_user_id => p_actor_user_id
+      );
+    END IF;
+  END LOOP;
 
   IF v_existing_session_row.id IS NULL THEN
     INSERT INTO public.banking_pay_workbench_sessions (
@@ -17848,26 +17828,6 @@ BEGIN
       v_now,
       NULL
     )
-    ON CONFLICT (session_signature) WHERE status = 'OPEN'
-    DO UPDATE
-    SET actor_user_id = EXCLUDED.actor_user_id,
-        pay_date = EXCLUDED.pay_date,
-        week_ending_cutoff = EXCLUDED.week_ending_cutoff,
-        filters_json = EXCLUDED.filters_json,
-        scope_candidate_ids = EXCLUDED.scope_candidate_ids,
-        source_snapshot_run_id = EXCLUDED.source_snapshot_run_id,
-        server_selected_preview_row_ids = '[]'::jsonb,
-        server_selected_preview_row_ids_provided = false,
-        version = CASE
-          WHEN public.banking_pay_workbench_sessions.pay_date IS DISTINCT FROM EXCLUDED.pay_date
-            OR public.banking_pay_workbench_sessions.week_ending_cutoff IS DISTINCT FROM EXCLUDED.week_ending_cutoff
-            OR public.banking_pay_workbench_sessions.filters_json IS DISTINCT FROM EXCLUDED.filters_json
-            OR public.banking_pay_workbench_sessions.scope_candidate_ids IS DISTINCT FROM EXCLUDED.scope_candidate_ids
-            OR public.banking_pay_workbench_sessions.source_snapshot_run_id IS DISTINCT FROM EXCLUDED.source_snapshot_run_id
-          THEN public.banking_pay_workbench_sessions.version + 1
-          ELSE public.banking_pay_workbench_sessions.version
-        END,
-        updated_at_utc = v_now
     RETURNING public.banking_pay_workbench_sessions.id
     INTO v_session_id;
 
@@ -18153,9 +18113,6 @@ BEGIN
   );
 END;
 $function$;
-
-
-
 
 
 
