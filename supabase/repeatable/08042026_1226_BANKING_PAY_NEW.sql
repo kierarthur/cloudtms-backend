@@ -6501,9 +6501,6 @@ begin
 end;
 $function$;
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -6628,7 +6625,7 @@ begin
   from pg_temp.pay_preview_candidate_context ctx
   limit 1;
 
-  drop table if exists pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup;
+  drop table if exists pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.hidden_recovery_template_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup;
 
   create temporary table canonical_timesheet_lines on commit drop as
         select
@@ -7880,6 +7877,173 @@ begin
         from finance_case_resolution_rollup fcrr
         where round(coalesce(fcrr.due_amount_ex_vat,0),2) > 0
   
+
+  ;
+
+  create temporary table hidden_recovery_template_lines on commit drop as
+        select
+          fcrrb.candidate_id,
+          fcrrb.finance_case_id,
+          case
+            when fcrrb.case_type = 'PAYMENT_ADVANCE' then 'LOAN_REPAYMENT'
+            when fcrrb.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
+            when fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+            else fcrrb.case_type::text
+          end as recovery_family,
+          ('advance:' || fcrrb.finance_case_id::text) as source_ref,
+          row_number() over (
+            partition by fcrrb.candidate_id,
+                         case
+                           when fcrrb.case_type = 'PAYMENT_ADVANCE' then 'LOAN_REPAYMENT'
+                           when fcrrb.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
+                           when fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+                           else fcrrb.case_type::text
+                         end
+            order by coalesce(fcbs.created_at, fcrrb.created_at), fcrrb.finance_case_id
+          )::integer as sort_order,
+          jsonb_strip_nulls(
+            jsonb_build_object(
+              'template_state', 'HIDDEN_ZERO_TAKE',
+              'candidate_id', fcrrb.candidate_id::text,
+              'finance_case_id', fcrrb.finance_case_id::text,
+              'recovery_family', case
+                when fcrrb.case_type = 'PAYMENT_ADVANCE' then 'LOAN_REPAYMENT'
+                when fcrrb.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
+                when fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+                else fcrrb.case_type::text
+              end,
+              'case_type', fcrrb.case_type::text,
+              'source_ref', ('advance:' || fcrrb.finance_case_id::text),
+              'pay_channel', upper(coalesce(fcrrb.candidate_pay_method, '')),
+              'umbrella_id', case when c.umbrella_id is null then null else c.umbrella_id::text end,
+              'paye_treatment', case
+                when upper(coalesce(fcrrb.candidate_pay_method, '')) = 'PAYE'
+                 and fcrrb.case_type = 'PAYMENT_ADVANCE'
+                then 'NET_DEDUCT'
+                when upper(coalesce(fcrrb.candidate_pay_method, '')) = 'PAYE'
+                 and fcrrb.case_type = 'OVERPAYMENT'
+                 and fcbs.taxability = 'TAXABLE'::public.pay_finance_taxability_enum
+                then 'GROSS_DEDUCT'
+                when upper(coalesce(fcrrb.candidate_pay_method, '')) = 'PAYE'
+                 and fcrrb.case_type = 'OVERPAYMENT'
+                 and fcbs.taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum
+                then 'NET_DEDUCT'
+                when upper(coalesce(fcrrb.candidate_pay_method, '')) = 'PAYE'
+                 and fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+                 and fcbs.taxability = 'TAXABLE'::public.pay_finance_taxability_enum
+                then 'GROSS_DEDUCT'
+                when upper(coalesce(fcrrb.candidate_pay_method, '')) = 'PAYE'
+                 and fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT'
+                 and fcbs.taxability = 'NON_TAXABLE'::public.pay_finance_taxability_enum
+                then 'NET_DEDUCT'
+                else 'NONE'
+              end,
+              'finance_component_id', null,
+              'frozen_component_key_type', 'CASE_TOTAL',
+              'frozen_component_key_value', 'TOTAL',
+              'frozen_component_classification', null,
+              'frozen_component_snapshot_json', null,
+              'frozen_source_basis_json', jsonb_strip_nulls(
+                jsonb_build_object(
+                  'case_type', fcrrb.case_type::text,
+                  'recovery_family', case
+                    when fcrrb.case_type = 'PAYMENT_ADVANCE' then 'LOAN_REPAYMENT'
+                    when fcrrb.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
+                    when fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+                    else fcrrb.case_type::text
+                  end,
+                  'pay_channel', upper(coalesce(fcrrb.candidate_pay_method, '')),
+                  'frozen_source_pay_method', upper(coalesce(fcrrb.candidate_pay_method, '')),
+                  'frozen_target_pay_method', upper(coalesce(fcrrb.candidate_pay_method, '')),
+                  'taxability', case when fcbs.taxability is null then null else fcbs.taxability::text end,
+                  'routing_kind', case when fcbs.routing_kind is null then null else fcbs.routing_kind::text end,
+                  'nominal_due_amount_ex_vat', round(coalesce(fcrrb.nominal_due_amount, 0), 2),
+                  'current_due_amount_ex_vat', round(coalesce(fcrr.due_amount_ex_vat, 0), 2),
+                  'outstanding_amount', round(coalesce(fcbs.outstanding_amount, 0), 2),
+                  'weekly_due', round(coalesce(fcbs.weekly_due, 0), 2),
+                  'active_reserved_amount', round(coalesce(fcbs.active_reserved_amount, 0), 2),
+                  'minimum_earnings_threshold', fcrrb.minimum_earnings_threshold,
+                  'take_home_floor_override', fcrrb.take_home_floor_override,
+                  'default_take_home_floor', fcrrb.default_take_home_floor,
+                  'run_earnings_headroom_ex', round(coalesce(fcrrb.run_earnings_headroom_ex, 0), 2),
+                  'run_take_home_before', round(coalesce(fcrrb.run_take_home_before, 0), 2),
+                  'payout_status', case when fcrrb.payout_status is null then null else fcrrb.payout_status::text end,
+                  'next_due_week_start', case when fcbs.next_due_week_start is null then null else fcbs.next_due_week_start::text end,
+                  'sort_order', row_number() over (
+                    partition by fcrrb.candidate_id,
+                                 case
+                                   when fcrrb.case_type = 'PAYMENT_ADVANCE' then 'LOAN_REPAYMENT'
+                                   when fcrrb.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
+                                   when fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+                                   else fcrrb.case_type::text
+                                 end
+                    order by coalesce(fcbs.created_at, fcrrb.created_at), fcrrb.finance_case_id
+                  )
+                )
+              ),
+              'frozen_source_pay_method', upper(coalesce(fcrrb.candidate_pay_method, '')),
+              'frozen_target_pay_method', upper(coalesce(fcrrb.candidate_pay_method, '')),
+              'frozen_source_amount', round(coalesce(fcbs.outstanding_amount, fcrrb.nominal_due_amount, 0), 2),
+              'frozen_outstanding_amount', round(coalesce(fcbs.outstanding_amount, 0), 2),
+              'weekly_due', round(coalesce(fcbs.weekly_due, 0), 2),
+              'minimum_earnings_threshold', fcrrb.minimum_earnings_threshold,
+              'take_home_floor_override', fcrrb.take_home_floor_override,
+              'default_take_home_floor', fcrrb.default_take_home_floor,
+              'payout_status', case when fcrrb.payout_status is null then null else fcrrb.payout_status::text end,
+              'next_due_week_start', case when fcbs.next_due_week_start is null then null else fcbs.next_due_week_start::text end,
+              'sort_order', row_number() over (
+                partition by fcrrb.candidate_id,
+                             case
+                               when fcrrb.case_type = 'PAYMENT_ADVANCE' then 'LOAN_REPAYMENT'
+                               when fcrrb.case_type = 'OVERPAYMENT' then 'OVERPAYMENT_RECOVERY'
+                               when fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT' then 'MANUAL_DEBT_RECOVERY'
+                               else fcrrb.case_type::text
+                             end
+                order by coalesce(fcbs.created_at, fcrrb.created_at), fcrrb.finance_case_id
+              ),
+              'frozen_resolution_mode', coalesce(
+                nullif(btrim(coalesce(fcrr.taxable_manual_debt_resolution_json->>'resolution_mode', '')), ''),
+                nullif(btrim(coalesce(fcrr.taxable_manual_debt_resolution_json->>'mode', '')), ''),
+                nullif(btrim(coalesce(fcrr.case_resolution_summary_json->'non_bucket_resolution'->>'resolution_mode', '')), ''),
+                nullif(btrim(coalesce(fcrr.case_resolution_summary_json->'non_bucket_resolution'->>'mode', '')), '')
+              ),
+              'frozen_resolution_payload_json', case
+                when fcrr.taxable_manual_debt_resolution_json is not null then fcrr.taxable_manual_debt_resolution_json
+                when jsonb_typeof(fcrr.case_resolution_summary_json->'non_bucket_resolution') = 'object' then fcrr.case_resolution_summary_json->'non_bucket_resolution'
+                else null
+              end,
+              'frozen_resolution_result_json', fcrr.case_resolution_summary_json,
+              'case_components_json', coalesce(fcrr.case_components_json, '[]'::jsonb),
+              'case_resolution_summary_json', coalesce(fcrr.case_resolution_summary_json, '{}'::jsonb),
+              'taxable_manual_debt_resolution_json', fcrr.taxable_manual_debt_resolution_json,
+              'eligibility_state', jsonb_build_object(
+                'candidate_ready_for_draft', coalesce(fcrr.candidate_ready_for_draft, false),
+                'case_is_blocked', coalesce(fcrr.is_blocked, false),
+                'has_active_dated_snooze', (fcrr.active_snooze_id is not null and fcrr.active_snooze_until_date is not null)
+              )
+            )
+          ) as template_json
+        from finance_case_recovery_rows_base fcrrb
+        join finance_case_baseline_scope fcbs
+          on fcbs.finance_case_id = fcrrb.finance_case_id
+        join finance_case_resolution_rollup fcrr
+          on fcrr.finance_case_id = fcrrb.finance_case_id
+        left join public.candidates c
+          on c.id = fcrrb.candidate_id
+        where fcrrb.case_type in (
+            'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum,
+            'OVERPAYMENT'::public.pay_finance_case_type_enum,
+            'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum
+          )
+          and round(coalesce(fcrrb.nominal_due_amount, 0), 2) > 0
+          and round(coalesce(fcrr.due_amount_ex_vat, 0), 2) = 0
+          and coalesce(fcrr.candidate_ready_for_draft, false) = true
+          and coalesce(fcrr.is_blocked, false) = false
+          and not (fcrr.active_snooze_id is not null and fcrr.active_snooze_until_date is not null)
+          and (
+            fcrrb.case_type <> 'PAYMENT_ADVANCE'::public.pay_finance_case_type_enum
+            or upper(coalesce(fcrr.lifecycle_status_display, '')) = 'PAID'
+          )
   ;
 
   create temporary table timesheet_canonical_preview_lines on commit drop as
@@ -8142,11 +8306,21 @@ begin
     'candidate_id', v_candidate_id::text,
     'canonical_preview_line_count', (select count(*)::int from canonical_preview_lines),
     'ready_preview_line_count', coalesce((select sum(case when coalesce(nullif(cpl.line_json->>'draftable','')::boolean, false) = true then 1 else 0 end)::int from canonical_preview_lines cpl), 0),
-    'blocked_preview_line_count', coalesce((select sum(case when upper(coalesce(cpl.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY' then 1 else 0 end)::int from canonical_preview_lines cpl), 0)
+    'blocked_preview_line_count', coalesce((select sum(case when upper(coalesce(cpl.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY' then 1 else 0 end)::int from canonical_preview_lines cpl), 0),
+    'hidden_recovery_template_line_count', (select count(*)::int from hidden_recovery_template_lines),
+    'hidden_recovery_template_lines', coalesce(
+      (
+        select jsonb_agg(
+                 hrtl.template_json
+                 order by hrtl.candidate_id, hrtl.recovery_family, hrtl.sort_order, hrtl.finance_case_id
+               )
+        from hidden_recovery_template_lines hrtl
+      ),
+      '[]'::jsonb
+    )
   );
 end;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_case_component_rows(
