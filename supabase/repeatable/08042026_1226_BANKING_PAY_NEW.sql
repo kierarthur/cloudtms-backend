@@ -4971,6 +4971,9 @@ declare
   v_snoozed_items jsonb := '[]'::jsonb;
   v_baseline_component_rows jsonb := '[]'::jsonb;
   v_timesheet_snapshots_json jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_lines_input jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_lines jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_line_count integer := 0;
   v_case_resolutions jsonb := '{}'::jsonb;
   v_exclude_timesheet_ids jsonb := '[]'::jsonb;
   v_linked_timesheet_map jsonb := '{}'::jsonb;
@@ -5152,6 +5155,18 @@ begin
   v_snoozed_items := case when jsonb_typeof(v_candidate_baseline_root->'snoozed_items') = 'array' then coalesce(v_candidate_baseline_root->'snoozed_items', '[]'::jsonb) else '[]'::jsonb end;
   v_baseline_component_rows := case when jsonb_typeof(v_candidate_baseline_root->'baseline_component_rows') = 'array' then coalesce(v_candidate_baseline_root->'baseline_component_rows', '[]'::jsonb) else '[]'::jsonb end;
   v_timesheet_snapshots_json := case when jsonb_typeof(v_candidate_baseline_root->'timesheet_snapshots_json') = 'array' then coalesce(v_candidate_baseline_root->'timesheet_snapshots_json', '[]'::jsonb) else '[]'::jsonb end;
+  v_hidden_recovery_template_lines_input := case
+    when jsonb_typeof(v_candidate_baseline_root->'hidden_recovery_template_lines') = 'array' then coalesce(v_candidate_baseline_root->'hidden_recovery_template_lines', '[]'::jsonb)
+    when jsonb_typeof(v_candidate_row->'hidden_recovery_template_lines') = 'array' then coalesce(v_candidate_row->'hidden_recovery_template_lines', '[]'::jsonb)
+    else '[]'::jsonb
+  end;
+
+  select coalesce(jsonb_agg(elem.value order by elem.ord), '[]'::jsonb)
+  into v_hidden_recovery_template_lines
+  from jsonb_array_elements(v_hidden_recovery_template_lines_input) with ordinality as elem(value, ord)
+  where jsonb_typeof(elem.value) = 'object';
+
+  v_hidden_recovery_template_line_count := jsonb_array_length(v_hidden_recovery_template_lines);
 
   v_case_resolutions := case
     when jsonb_typeof(v_case_resolutions_input->'case_resolutions') = 'object' then coalesce(v_case_resolutions_input->'case_resolutions', '{}'::jsonb)
@@ -6458,14 +6473,18 @@ begin
     - 'itemisation'
     - 'blocked_items'
     - 'do_not_pay_items'
-    - 'snoozed_items')
+    - 'snoozed_items'
+    - 'hidden_recovery_template_lines'
+    - 'hidden_recovery_template_line_count')
     || jsonb_build_object(
       'candidate_id', v_candidate_id,
       'case_resolution_states', coalesce(v_updated_case_states, '[]'::jsonb),
       'itemisation', coalesce(v_updated_itemisation, '[]'::jsonb),
       'blocked_items', coalesce(v_blocked_items, '[]'::jsonb),
       'do_not_pay_items', coalesce(v_do_not_pay_items, '[]'::jsonb),
-      'snoozed_items', coalesce(v_snoozed_items, '[]'::jsonb)
+      'snoozed_items', coalesce(v_snoozed_items, '[]'::jsonb),
+      'hidden_recovery_template_lines', coalesce(v_hidden_recovery_template_lines, '[]'::jsonb),
+      'hidden_recovery_template_line_count', v_hidden_recovery_template_line_count
     );
 
   return jsonb_build_object(
@@ -6474,6 +6493,8 @@ begin
     'summary_fragment', coalesce(v_summary_fragment, '{}'::jsonb),
     'case_resolution_states', coalesce(v_updated_case_states, '[]'::jsonb),
     'canonical_preview_lines', coalesce(v_updated_lines, '[]'::jsonb),
+    'hidden_recovery_template_lines', coalesce(v_hidden_recovery_template_lines, '[]'::jsonb),
+    'hidden_recovery_template_line_count', v_hidden_recovery_template_line_count,
     'payees', coalesce(v_payees, '[]'::jsonb),
     'itemisation', coalesce(v_updated_itemisation, '[]'::jsonb),
     'blocked_items', coalesce(v_blocked_items, '[]'::jsonb),
@@ -6484,6 +6505,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 
