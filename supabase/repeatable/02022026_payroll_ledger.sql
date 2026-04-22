@@ -21486,7 +21486,6 @@ $$;
 -- =========================================================
 
 
-
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -21565,6 +21564,7 @@ begin
       on pbc.id = pbi.pay_batch_candidate_id
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.item_type <> 'DEBT_CREATED'
+      and coalesce(pbi.is_voided, false) = false
   ) ch;
 
   -- ✅ C: load schedule defaults for UI preselect (do not change batch state)
@@ -21698,8 +21698,12 @@ begin
         -- ✅ NEW: explicit deductions summary for child modal / UI
         'deductions_summary', jsonb_build_object(
           'gross_positive', pbc.gross_preview,
-          'overpayment_recovery', pbc.overpayment_recovery_taken,
-          'loan_repayment', pbc.loan_repayment_taken,
+          'manual_debt_recovery', coalesce(fs.manual_debt_recovery,0),
+          'manual_debt_net_deductions', coalesce(fs.manual_debt_net_deductions,0),
+          'payment_advance_repayment', coalesce(fs.payment_advance_repayment,0),
+          'loan_repayment', coalesce(fs.payment_advance_repayment,0),
+          'repayment', coalesce(fs.repayment,0),
+          'overpayment_recovery', coalesce(fs.overpayment_recovery,0),
           'final_payable', pbc.net_bank_amount,
           'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(pbc.awaiting_net_amount,false) end,
           'paye_net_amount', ni.net_amount
@@ -21731,9 +21735,15 @@ begin
     select
       round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
       round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
-      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat,
+      round(coalesce(sum(case when pbi.item_type = 'MANUAL_DEBT_RECOVERY' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as manual_debt_recovery,
+      round(coalesce(sum(case when pbi.item_type = 'MANUAL_DEBT_RECOVERY' and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as manual_debt_net_deductions,
+      round(coalesce(sum(case when pbi.item_type = 'LOAN_REPAYMENT' and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as payment_advance_repayment,
+      round(coalesce(sum(case when pbi.item_type = 'OVERPAYMENT_RECOVERY' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as overpayment_recovery,
+      round(coalesce(sum(case when (pbi.item_type = 'MANUAL_DEBT_RECOVERY' and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT') or (pbi.item_type = 'LOAN_REPAYMENT' and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT') then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as repayment
     from public.pay_batch_items pbi
     where pbi.pay_batch_candidate_id = pbc.id
+      and coalesce(pbi.is_voided, false) = false
   ) fs on true
   where pbc.pay_batch_id = p_pay_batch_id;
 
@@ -21812,6 +21822,7 @@ begin
         'frozen_target_amount_inc_vat', pbi.frozen_target_amount_inc_vat,
         'payout_instruction_snapshot_json', pbi.payout_instruction_snapshot_json,
         'paye_treatment', pbi.paye_treatment,
+        'is_voided', coalesce(pbi.is_voided, false),
         'amount_ex_vat', pbi.amount_ex_vat,
         'amount_vat', pbi.amount_vat,
         'amount_inc_vat', pbi.amount_inc_vat,
@@ -21879,6 +21890,7 @@ begin
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
+     and coalesce(pbi.is_voided, false) = false
     where pbc.pay_batch_id = p_pay_batch_id
     group by pbc.id
   ),
@@ -21887,10 +21899,16 @@ begin
       pbc.id as pay_batch_candidate_id,
       round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_ADD' then coalesce(pbi.amount_ex_vat,0) else 0 end),0),2) as gross_additions_ex_vat,
       round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'GROSS_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as gross_deductions_ex_vat,
-      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat
+      round(coalesce(sum(case when pbi.finance_case_id is not null and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as net_deductions_ex_vat,
+      round(coalesce(sum(case when pbi.item_type = 'MANUAL_DEBT_RECOVERY' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as manual_debt_recovery,
+      round(coalesce(sum(case when pbi.item_type = 'MANUAL_DEBT_RECOVERY' and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as manual_debt_net_deductions,
+      round(coalesce(sum(case when pbi.item_type = 'LOAN_REPAYMENT' and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as payment_advance_repayment,
+      round(coalesce(sum(case when pbi.item_type = 'OVERPAYMENT_RECOVERY' then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as overpayment_recovery,
+      round(coalesce(sum(case when (pbi.item_type = 'MANUAL_DEBT_RECOVERY' and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT') or (pbi.item_type = 'LOAN_REPAYMENT' and upper(coalesce(pbi.paye_treatment::text,'')) = 'NET_DEDUCT') then abs(coalesce(pbi.amount_ex_vat,0)) else 0 end),0),2) as repayment
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
+     and coalesce(pbi.is_voided, false) = false
     where pbc.pay_batch_id = p_pay_batch_id
     group by pbc.id
   ),
@@ -21924,6 +21942,7 @@ begin
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
+     and coalesce(pbi.is_voided, false) = false
     left join public.pay_bank_transfers pbt
       on pbt.id = pbi.pay_bank_transfer_id
      and pbt.pay_batch_id = p_pay_batch_id
@@ -21959,8 +21978,12 @@ begin
         'final_net_paid', c.net_bank_amount,
         'deductions_summary', jsonb_build_object(
           'gross_positive', c.gross_preview,
-          'overpayment_recovery', c.overpayment_recovery_taken,
-          'loan_repayment', c.loan_repayment_taken,
+          'manual_debt_recovery', coalesce(fs.manual_debt_recovery,0),
+          'manual_debt_net_deductions', coalesce(fs.manual_debt_net_deductions,0),
+          'payment_advance_repayment', coalesce(fs.payment_advance_repayment,0),
+          'loan_repayment', coalesce(fs.payment_advance_repayment,0),
+          'repayment', coalesce(fs.repayment,0),
+          'overpayment_recovery', coalesce(fs.overpayment_recovery,0),
           'final_payable', c.net_bank_amount,
           'awaiting_net_amount', case when v_batch_kind_fixed = 'LOANS' then false else coalesce(c.awaiting_net_amount, false) end,
           'paye_net_amount', n.net_amount
@@ -22030,6 +22053,7 @@ begin
     from public.pay_batch_candidates pbc
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
+     and coalesce(pbi.is_voided, false) = false
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.timesheet_id is not null
     group by pbc.id, pbc.candidate_id, pbi.timesheet_id
@@ -22073,6 +22097,7 @@ begin
     from public.pay_batch_candidates pbc
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
+     and coalesce(pbi.is_voided, false) = false
     join public.pay_batch_item_breakdowns pbib
       on pbib.pay_batch_item_id = pbi.id
     where pbc.pay_batch_id = p_pay_batch_id
@@ -22164,6 +22189,8 @@ begin
       pbi.source_ref as source_ref,
       pbi.repayment_week_start as repayment_week_start,
       pbi.finance_case_id as finance_case_id,
+      pbi.paye_treatment as paye_treatment,
+      coalesce(pbi.is_voided, false) as is_voided,
       pbi.description as description,
       upper(coalesce(pbi.pay_channel::text,'')) as pay_channel_txt,
       case when pbi.umbrella_id is null then null else pbi.umbrella_id::text end as umbrella_id_txt,
@@ -22231,6 +22258,7 @@ begin
     from public.pay_batch_candidates pbc
     join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
+     and coalesce(pbi.is_voided, false) = false
     left join public.v_finance_cases_register vfcr
       on vfcr.finance_case_id = pbi.finance_case_id
     left join public.tms_users tuc
@@ -22247,6 +22275,7 @@ begin
       end
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.timesheet_id is null
+      and coalesce(pbi.is_voided, false) = false
   ),
   non_ts_groups as (
     select
@@ -22256,6 +22285,8 @@ begin
       ntd.source_ref as source_ref,
       ntd.repayment_week_start as repayment_week_start,
       ntd.finance_case_id as finance_case_id,
+      max(case when ntd.paye_treatment is null then null else ntd.paye_treatment::text end) as paye_treatment,
+      bool_or(coalesce(ntd.is_voided, false)) as is_voided,
       max(ntd.description) as description,
       max(ntd.pay_channel_txt) as pay_channel_txt,
       max(ntd.umbrella_id_txt) as umbrella_id_txt,
@@ -22503,6 +22534,7 @@ begin
     from public.pay_batch_candidates pbc
     left join public.pay_batch_items pbi
       on pbi.pay_batch_candidate_id = pbc.id
+     and coalesce(pbi.is_voided, false) = false
     where pbc.pay_batch_id = p_pay_batch_id
     group by pbc.id
   ),
@@ -22514,6 +22546,8 @@ begin
         'item_type', ng.item_type,
         'source_ref', ng.source_ref,
         'finance_case_id', case when ng.finance_case_id is null then null else ng.finance_case_id::text end,
+        'paye_treatment', ng.paye_treatment,
+        'is_voided', ng.is_voided,
         'finance_case_reference', coalesce(ng.source_ref, case when ng.finance_case_id is null then null else ng.finance_case_id::text end),
         'repayment_week_start', case when ng.repayment_week_start is null then null else ng.repayment_week_start::text end,
         'week_ending_date', case when ng.repayment_week_start is null then null else (ng.repayment_week_start + 6)::text end,
@@ -22728,6 +22762,7 @@ begin
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.finance_case_id is not null
       and pbi.item_type <> 'DEBT_CREATED'
+      and coalesce(pbi.is_voided, false) = false
   ),
   rem_targets as (
     select distinct
@@ -22788,6 +22823,7 @@ begin
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.finance_case_id is not null
       and pbi.item_type <> 'DEBT_CREATED'
+      and coalesce(pbi.is_voided, false) = false
   ),
   rem_targets as (
     select distinct
@@ -23018,7 +23054,8 @@ begin
   join public.pay_batch_candidates pbc
     on pbc.id = pbi.pay_batch_candidate_id
   where pbc.pay_batch_id = p_pay_batch_id
-    and pbi.finance_case_id is not null;
+    and pbi.finance_case_id is not null
+    and coalesce(pbi.is_voided, false) = false;
 
   with finance_items as (
     select
@@ -23043,6 +23080,7 @@ begin
       on pbc.id = pbi.pay_batch_candidate_id
     where pbc.pay_batch_id = p_pay_batch_id
       and pbi.finance_case_id is not null
+      and coalesce(pbi.is_voided, false) = false
     group by pbi.finance_case_id
   ),
   reservation_rollup as (
