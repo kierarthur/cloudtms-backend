@@ -4256,7 +4256,6 @@ $function$;
 
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_preview_assemble_payload(p_context_json jsonb,
   p_candidate_rollups_json jsonb
 )
@@ -4279,6 +4278,7 @@ DECLARE
   v_do_not_pay_items_raw jsonb := '[]'::jsonb;
   v_snoozed_items_raw jsonb := '[]'::jsonb;
   v_baseline_component_rows_raw jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_lines_raw jsonb := '[]'::jsonb;
   v_timesheet_snapshots_raw jsonb := '[]'::jsonb;
   v_paye_candidates jsonb := '[]'::jsonb;
   v_non_paye_payees jsonb := '[]'::jsonb;
@@ -4290,6 +4290,8 @@ DECLARE
   v_do_not_pay_items jsonb := '[]'::jsonb;
   v_snoozed_items jsonb := '[]'::jsonb;
   v_baseline_component_rows jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_lines jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_line_count integer := 0;
   v_timesheet_snapshots_json jsonb := '[]'::jsonb;
   v_paye_summary_breakdown jsonb := '{}'::jsonb;
   v_summary jsonb := '{}'::jsonb;
@@ -4375,6 +4377,10 @@ BEGIN
 
     IF jsonb_typeof(v_rollup->'timesheet_snapshots_json') = 'array' THEN
       v_timesheet_snapshots_raw := v_timesheet_snapshots_raw || COALESCE(v_rollup->'timesheet_snapshots_json', '[]'::jsonb);
+    END IF;
+
+    IF jsonb_typeof(v_rollup->'hidden_recovery_template_lines') = 'array' THEN
+      v_hidden_recovery_template_lines_raw := v_hidden_recovery_template_lines_raw || COALESCE(v_rollup->'hidden_recovery_template_lines', '[]'::jsonb);
     END IF;
   END LOOP;
 
@@ -4502,6 +4508,26 @@ BEGIN
   INTO v_baseline_component_rows
   FROM jsonb_array_elements(v_baseline_component_rows_raw) AS elem(value)
   WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        elem.value
+        ORDER BY
+          BTRIM(COALESCE(elem.value->>'candidate_id', '')),
+          BTRIM(COALESCE(elem.value->>'finance_case_id', '')),
+          BTRIM(COALESCE(elem.value->>'recovery_family', '')),
+          BTRIM(COALESCE(elem.value->>'finance_component_id', '')),
+          BTRIM(COALESCE(elem.value->>'source_ref', '')),
+          BTRIM(COALESCE(elem.value->>'sort_order', ''))
+      ),
+      '[]'::jsonb
+    )
+  INTO v_hidden_recovery_template_lines
+  FROM jsonb_array_elements(v_hidden_recovery_template_lines_raw) AS elem(value)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  v_hidden_recovery_template_line_count := jsonb_array_length(v_hidden_recovery_template_lines);
 
   WITH timesheet_snapshot_elements AS (
     SELECT
@@ -4837,14 +4863,12 @@ BEGIN
     'do_not_pay_items', v_do_not_pay_items,
     'snoozed_items', v_snoozed_items,
     'baseline_component_rows', v_baseline_component_rows,
+    'hidden_recovery_template_lines', v_hidden_recovery_template_lines,
+    'hidden_recovery_template_line_count', v_hidden_recovery_template_line_count,
     'timesheet_snapshots_json', v_timesheet_snapshots_json
   );
 END;
 $function$;
-
-
-
-
 
 
 
@@ -6462,44 +6486,760 @@ begin
 end;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.pay_preview_build_candidate_baseline(
+
+CREATE OR REPLACE FUNCTION public.pay_preview_build_candidate_rollup(
   p_context_json jsonb,
-  p_candidate_id uuid
+  p_candidate_effective_json jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
-declare
-  v_payload jsonb := '{}'::jsonb;
-  v_timesheet_snapshot_payload jsonb := '{}'::jsonb;
-begin
-  perform public.pay_preview_candidate_collect_scope(p_context_json, p_candidate_id);
-  perform public.pay_preview_candidate_build_entitlement_rows(p_context_json, p_candidate_id);
-  perform public.pay_preview_candidate_build_case_component_rows(p_context_json, p_candidate_id);
-  perform public.pay_preview_candidate_build_payee_baseline(p_context_json, p_candidate_id);
-  perform public.pay_preview_candidate_build_finance_case_baseline(p_context_json, p_candidate_id);
-  perform public.pay_preview_candidate_build_canonical_lines(p_context_json, p_candidate_id);
-  v_timesheet_snapshot_payload := public.pay_preview_candidate_build_timesheet_snapshots(p_context_json, p_candidate_id);
-  v_payload := public.pay_preview_candidate_build_summary_fragment(p_context_json, p_candidate_id);
+DECLARE
+  v_context_json jsonb := COALESCE(p_context_json, '{}'::jsonb);
+  v_candidate_effective_root jsonb := COALESCE(p_candidate_effective_json, '{}'::jsonb);
+  v_candidate_row_source jsonb := '{}'::jsonb;
+  v_candidate_id text := '';
+  v_display_name text := '';
+  v_tms_ref text := '';
+  v_current_pay_method text := '';
+  v_case_states_input jsonb := '[]'::jsonb;
+  v_lines_input jsonb := '[]'::jsonb;
+  v_payees_input jsonb := '[]'::jsonb;
+  v_itemisation_input jsonb := '[]'::jsonb;
+  v_baseline_component_rows jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_lines_input jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_lines jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_line_count integer := 0;
+  v_timesheet_snapshots_input jsonb := '[]'::jsonb;
+  v_explicit_blocked_input jsonb := '[]'::jsonb;
+  v_explicit_do_not_pay_input jsonb := '[]'::jsonb;
+  v_explicit_snoozed_input jsonb := '[]'::jsonb;
+  v_normalized_case_states jsonb := '[]'::jsonb;
+  v_normalized_lines jsonb := '[]'::jsonb;
+  v_normalized_payees jsonb := '[]'::jsonb;
+  v_normalized_itemisation jsonb := '[]'::jsonb;
+  v_timesheet_snapshots_json jsonb := '[]'::jsonb;
+  v_blocked_items jsonb := '[]'::jsonb;
+  v_do_not_pay_items jsonb := '[]'::jsonb;
+  v_snoozed_items jsonb := '[]'::jsonb;
+  v_primary_payee_json jsonb := NULL;
+  v_primary_line_json jsonb := NULL;
+  v_primary_payee_entity_kind text := '';
+  v_primary_payee_entity_id text := '';
+  v_primary_bank_details_hash text := '';
+  v_primary_payee_bank_hash text := '';
+  v_primary_bank_details_hash_snapshot text := '';
+  v_primary_snapshot_bank_details_hash text := '';
+  v_primary_name_check_status text := '';
+  v_primary_name_check_has_override boolean := false;
+  v_primary_payee_map_present boolean := false;
+  v_need_name_check boolean := false;
+  v_requires_payee_map boolean := false;
+  v_candidate_blockers jsonb := '[]'::jsonb;
+  v_has_blocked_case boolean := false;
+  v_case_resolution_state_count integer := 0;
+  v_blocked_case_state_count integer := 0;
+  v_canonical_preview_line_count integer := 0;
+  v_ready_preview_line_count integer := 0;
+  v_blocked_preview_line_count integer := 0;
+  v_do_not_pay_line_count integer := 0;
+  v_snoozed_line_count integer := 0;
+  v_payees_count integer := 0;
+  v_total_amount_ex_vat numeric := 0;
+  v_total_amount_vat numeric := 0;
+  v_total_amount_inc_vat numeric := 0;
+  v_draftable_amount_ex_vat numeric := 0;
+  v_draftable_amount_vat numeric := 0;
+  v_draftable_amount_inc_vat numeric := 0;
+  v_has_any_delta boolean := false;
+  v_has_review_required_blocker boolean := false;
+  v_is_ready_for_draft boolean := false;
+  v_is_review_required boolean := false;
+  v_summary_fragment jsonb := '{}'::jsonb;
+  v_candidate_row_base jsonb := '{}'::jsonb;
+  v_candidate_row jsonb := '{}'::jsonb;
+BEGIN
+  IF jsonb_typeof(v_context_json) <> 'object' THEN
+    RAISE EXCEPTION 'p_context_json must be a JSON object';
+  END IF;
 
-  return jsonb_build_object(
-    'candidate_id', coalesce(v_payload->>'candidate_id', p_candidate_id::text),
-    'candidate_row', coalesce(v_payload->'candidate_row', '{}'::jsonb),
-    'summary_fragment', coalesce(v_payload->'summary_fragment', '{}'::jsonb),
-    'case_resolution_states', coalesce(v_payload->'case_resolution_states', '[]'::jsonb),
-    'canonical_preview_lines', coalesce(v_payload->'canonical_preview_lines', '[]'::jsonb),
-    'payees', coalesce(v_payload->'payees', '[]'::jsonb),
-    'itemisation', coalesce(v_payload->'itemisation', '[]'::jsonb),
-    'blocked_items', coalesce(v_payload->'blocked_items', '[]'::jsonb),
-    'do_not_pay_items', coalesce(v_payload->'do_not_pay_items', '[]'::jsonb),
-    'snoozed_items', coalesce(v_payload->'snoozed_items', '[]'::jsonb),
-    'baseline_component_rows', coalesce(v_payload->'baseline_component_rows', '[]'::jsonb),
-    'timesheet_snapshots_json', coalesce(v_timesheet_snapshot_payload->'timesheet_snapshots_json', '[]'::jsonb)
+  IF jsonb_typeof(v_candidate_effective_root) <> 'object' THEN
+    RAISE EXCEPTION 'p_candidate_effective_json must be a JSON object';
+  END IF;
+
+  v_candidate_row_source := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'candidate_row') = 'object'
+      THEN COALESCE(v_candidate_effective_root->'candidate_row', '{}'::jsonb)
+    ELSE v_candidate_effective_root
+  END;
+
+  v_candidate_id := BTRIM(COALESCE(
+    v_candidate_row_source->>'candidate_id',
+    v_candidate_effective_root->>'candidate_id',
+    ''
+  ));
+
+  IF v_candidate_id = '' THEN
+    RAISE EXCEPTION 'candidate_id is required on p_candidate_effective_json';
+  END IF;
+
+  v_display_name := BTRIM(COALESCE(
+    v_candidate_row_source->>'display_name',
+    v_candidate_row_source->>'candidate_name',
+    v_candidate_row_source->>'candidate_display_name',
+    v_candidate_effective_root->>'display_name',
+    v_candidate_effective_root->>'candidate_name',
+    v_candidate_effective_root->>'candidate_display_name',
+    ''
+  ));
+
+  v_tms_ref := BTRIM(COALESCE(
+    v_candidate_row_source->>'tms_ref',
+    v_candidate_row_source->>'candidate_tms_ref',
+    v_candidate_effective_root->>'tms_ref',
+    v_candidate_effective_root->>'candidate_tms_ref',
+    ''
+  ));
+
+  v_case_states_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'case_resolution_states') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'case_resolution_states', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'case_resolution_states') = 'array'
+      THEN COALESCE(v_candidate_row_source->'case_resolution_states', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_lines_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'canonical_preview_lines') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'canonical_preview_lines', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'canonical_preview_lines') = 'array'
+      THEN COALESCE(v_candidate_row_source->'canonical_preview_lines', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_payees_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'payees') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'payees', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'payees') = 'array'
+      THEN COALESCE(v_candidate_row_source->'payees', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_itemisation_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'itemisation') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'itemisation', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'itemisation') = 'array'
+      THEN COALESCE(v_candidate_row_source->'itemisation', '[]'::jsonb)
+    ELSE v_lines_input
+  END;
+
+  v_explicit_blocked_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'blocked_items') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'blocked_items', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'blocked_items') = 'array'
+      THEN COALESCE(v_candidate_row_source->'blocked_items', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_explicit_do_not_pay_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'do_not_pay_items') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'do_not_pay_items', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'do_not_pay_items') = 'array'
+      THEN COALESCE(v_candidate_row_source->'do_not_pay_items', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_explicit_snoozed_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'snoozed_items') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'snoozed_items', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'snoozed_items') = 'array'
+      THEN COALESCE(v_candidate_row_source->'snoozed_items', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_baseline_component_rows := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'baseline_component_rows') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'baseline_component_rows', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_timesheet_snapshots_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'timesheet_snapshots_json') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'timesheet_snapshots_json', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'timesheet_snapshots_json') = 'array'
+      THEN COALESCE(v_candidate_row_source->'timesheet_snapshots_json', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  v_hidden_recovery_template_lines_input := CASE
+    WHEN jsonb_typeof(v_candidate_effective_root->'hidden_recovery_template_lines') = 'array'
+      THEN COALESCE(v_candidate_effective_root->'hidden_recovery_template_lines', '[]'::jsonb)
+    WHEN jsonb_typeof(v_candidate_row_source->'hidden_recovery_template_lines') = 'array'
+      THEN COALESCE(v_candidate_row_source->'hidden_recovery_template_lines', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        CASE
+          WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+            THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+          ELSE elem.value
+        END
+        ORDER BY elem.ord
+      ),
+      '[]'::jsonb
+    )
+  INTO v_normalized_case_states
+  FROM jsonb_array_elements(v_case_states_input) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        CASE
+          WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+            THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+          ELSE elem.value
+        END
+        ORDER BY elem.ord
+      ),
+      '[]'::jsonb
+    )
+  INTO v_normalized_lines
+  FROM jsonb_array_elements(v_lines_input) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        CASE
+          WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+            THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+          ELSE elem.value
+        END
+        ORDER BY elem.ord
+      ),
+      '[]'::jsonb
+    )
+  INTO v_normalized_payees
+  FROM jsonb_array_elements(v_payees_input) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        CASE
+          WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+            THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+          ELSE elem.value
+        END
+        ORDER BY elem.ord
+      ),
+      '[]'::jsonb
+    )
+  INTO v_normalized_itemisation
+  FROM jsonb_array_elements(v_itemisation_input) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        CASE
+          WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+            THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+          ELSE elem.value
+        END
+        ORDER BY elem.ord
+      ),
+      '[]'::jsonb
+    )
+  INTO v_timesheet_snapshots_json
+  FROM jsonb_array_elements(v_timesheet_snapshots_input) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        CASE
+          WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+            THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+          ELSE elem.value
+        END
+        ORDER BY elem.ord
+      ),
+      '[]'::jsonb
+    )
+  INTO v_hidden_recovery_template_lines
+  FROM jsonb_array_elements(v_hidden_recovery_template_lines_input) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object';
+
+  v_hidden_recovery_template_line_count := jsonb_array_length(v_hidden_recovery_template_lines);
+
+  IF jsonb_typeof(v_explicit_blocked_input) = 'array' AND jsonb_array_length(v_explicit_blocked_input) > 0 THEN
+    SELECT
+      COALESCE(
+        jsonb_agg(
+          CASE
+            WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+              THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+            ELSE elem.value
+          END
+          ORDER BY elem.ord
+        ),
+        '[]'::jsonb
+      )
+    INTO v_blocked_items
+    FROM jsonb_array_elements(v_explicit_blocked_input) WITH ORDINALITY AS elem(value, ord)
+    WHERE jsonb_typeof(elem.value) = 'object';
+  ELSE
+    SELECT
+      COALESCE(
+        jsonb_agg(elem.value ORDER BY elem.ord),
+        '[]'::jsonb
+      )
+    INTO v_blocked_items
+    FROM jsonb_array_elements(v_normalized_lines) WITH ORDINALITY AS elem(value, ord)
+    WHERE (
+      COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_blocked', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY')
+    );
+  END IF;
+
+  IF jsonb_typeof(v_explicit_do_not_pay_input) = 'array' AND jsonb_array_length(v_explicit_do_not_pay_input) > 0 THEN
+    SELECT
+      COALESCE(
+        jsonb_agg(
+          CASE
+            WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+              THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+            ELSE elem.value
+          END
+          ORDER BY elem.ord
+        ),
+        '[]'::jsonb
+      )
+    INTO v_do_not_pay_items
+    FROM jsonb_array_elements(v_explicit_do_not_pay_input) WITH ORDINALITY AS elem(value, ord)
+    WHERE jsonb_typeof(elem.value) = 'object';
+  ELSE
+    SELECT
+      COALESCE(
+        jsonb_agg(elem.value ORDER BY elem.ord),
+        '[]'::jsonb
+      )
+    INTO v_do_not_pay_items
+    FROM jsonb_array_elements(v_normalized_lines) WITH ORDINALITY AS elem(value, ord)
+    WHERE (
+      COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_do_not_pay', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
+    );
+  END IF;
+
+  IF jsonb_typeof(v_explicit_snoozed_input) = 'array' AND jsonb_array_length(v_explicit_snoozed_input) > 0 THEN
+    SELECT
+      COALESCE(
+        jsonb_agg(
+          CASE
+            WHEN jsonb_typeof(elem.value) = 'object' AND COALESCE(NULLIF(BTRIM(COALESCE(elem.value->>'candidate_id', '')), ''), '') = ''
+              THEN elem.value || jsonb_build_object('candidate_id', v_candidate_id)
+            ELSE elem.value
+          END
+          ORDER BY elem.ord
+        ),
+        '[]'::jsonb
+      )
+    INTO v_snoozed_items
+    FROM jsonb_array_elements(v_explicit_snoozed_input) WITH ORDINALITY AS elem(value, ord)
+    WHERE jsonb_typeof(elem.value) = 'object';
+  ELSE
+    SELECT
+      COALESCE(
+        jsonb_agg(elem.value ORDER BY elem.ord),
+        '[]'::jsonb
+      )
+    INTO v_snoozed_items
+    FROM jsonb_array_elements(v_normalized_lines) WITH ORDINALITY AS elem(value, ord)
+    WHERE (
+      COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_snoozed', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
+    );
+  END IF;
+
+  SELECT elem.value
+  INTO v_primary_payee_json
+  FROM jsonb_array_elements(v_normalized_payees) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object'
+  ORDER BY elem.ord ASC
+  LIMIT 1;
+
+  SELECT elem.value
+  INTO v_primary_line_json
+  FROM jsonb_array_elements(v_normalized_lines) WITH ORDINALITY AS elem(value, ord)
+  WHERE jsonb_typeof(elem.value) = 'object'
+  ORDER BY elem.ord ASC
+  LIMIT 1;
+
+  v_current_pay_method := UPPER(BTRIM(COALESCE(
+    v_candidate_row_source->>'current_pay_method',
+    v_candidate_row_source->>'pay_method',
+    v_candidate_row_source->>'pay_channel',
+    v_candidate_effective_root->>'current_pay_method',
+    v_candidate_effective_root->>'pay_method',
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'pay_channel' END,
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'current_pay_method' END,
+    ''
+  )));
+
+  IF v_display_name = '' THEN
+    v_display_name := BTRIM(COALESCE(
+      CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'display_name' END,
+      CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'candidate_name' END,
+      CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'display_name' END,
+      CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'candidate_name' END,
+      ''
+    ));
+  END IF;
+
+  IF v_tms_ref = '' THEN
+    v_tms_ref := BTRIM(COALESCE(
+      CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'tms_ref' END,
+      CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'candidate_tms_ref' END,
+      CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'tms_ref' END,
+      CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'candidate_tms_ref' END,
+      ''
+    ));
+  END IF;
+
+  v_primary_payee_entity_kind := UPPER(BTRIM(COALESCE(
+    v_candidate_row_source->>'payee_entity_kind',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_entity_kind' END,
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'entity_kind' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'payee_entity_kind' END,
+    ''
+  )));
+
+  v_primary_payee_entity_id := BTRIM(COALESCE(
+    v_candidate_row_source->>'payee_entity_id',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_entity_id' END,
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'entity_id' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'payee_entity_id' END,
+    ''
+  ));
+
+  v_primary_bank_details_hash := BTRIM(COALESCE(
+    v_candidate_row_source->>'bank_details_hash',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'bank_details_hash' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'bank_details_hash' END,
+    ''
+  ));
+
+  v_primary_payee_bank_hash := BTRIM(COALESCE(
+    v_candidate_row_source->>'payee_bank_hash',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_bank_hash' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'payee_bank_hash' END,
+    v_primary_bank_details_hash,
+    ''
+  ));
+
+  v_primary_bank_details_hash_snapshot := BTRIM(COALESCE(
+    v_candidate_row_source->>'bank_details_hash_snapshot',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'bank_details_hash_snapshot' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'bank_details_hash_snapshot' END,
+    ''
+  ));
+
+  v_primary_snapshot_bank_details_hash := BTRIM(COALESCE(
+    v_candidate_row_source->>'snapshot_bank_details_hash',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'snapshot_bank_details_hash' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'snapshot_bank_details_hash' END,
+    v_primary_bank_details_hash_snapshot,
+    ''
+  ));
+
+  v_primary_name_check_status := UPPER(BTRIM(COALESCE(
+    v_candidate_row_source->>'name_check_status',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'name_check_status' END,
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json #>> '{name_check,status}' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'name_check_status' END,
+    ''
+  )));
+
+  v_primary_name_check_has_override := COALESCE(LOWER(BTRIM(COALESCE(
+    v_candidate_row_source->>'name_check_has_override',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'name_check_has_override' END,
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json #>> '{name_check,has_override}' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'name_check_has_override' END,
+    'false'
+  ))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  v_primary_payee_map_present := COALESCE(LOWER(BTRIM(COALESCE(
+    v_candidate_row_source->>'payee_map_present',
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json->>'payee_map_present' END,
+    CASE WHEN v_primary_payee_json IS NULL THEN NULL ELSE v_primary_payee_json #>> '{payee_map,present}' END,
+    CASE WHEN v_primary_line_json IS NULL THEN NULL ELSE v_primary_line_json->>'payee_map_present' END,
+    'false'
+  ))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  v_need_name_check := COALESCE(LOWER(BTRIM(COALESCE(v_context_json #>> '{settings,rail,need_name_check}', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_requires_payee_map := COALESCE(LOWER(BTRIM(COALESCE(v_context_json #>> '{settings,rail,requires_payee_map}', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_normalized_case_states) AS elem(value)
+    WHERE COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_blocked', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+  )
+  INTO v_has_blocked_case;
+
+  SELECT
+    COALESCE(jsonb_agg(to_jsonb(blocker_distinct.code) ORDER BY blocker_distinct.code), '[]'::jsonb)
+  INTO v_candidate_blockers
+  FROM (
+    SELECT DISTINCT blocker_codes.code
+    FROM (
+      SELECT UPPER(BTRIM(explicit_code.value)) AS code
+      FROM jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(v_candidate_row_source->'blockers') = 'array' THEN COALESCE(v_candidate_row_source->'blockers', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS explicit_code(value)
+
+      UNION ALL
+
+      SELECT UPPER(BTRIM(line_code.value)) AS code
+      FROM jsonb_array_elements(v_normalized_lines) AS line_elem(value)
+      CROSS JOIN LATERAL jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(line_elem.value->'blockers') = 'array' THEN COALESCE(line_elem.value->'blockers', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS line_code(value)
+
+      UNION ALL
+
+      SELECT UPPER(BTRIM(payee_code.value)) AS code
+      FROM jsonb_array_elements(v_normalized_payees) AS payee_elem(value)
+      CROSS JOIN LATERAL jsonb_array_elements_text(
+        CASE
+          WHEN jsonb_typeof(payee_elem.value->'blockers') = 'array' THEN COALESCE(payee_elem.value->'blockers', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS payee_code(value)
+
+      UNION ALL
+
+      SELECT 'BLOCKED_FINANCE_CASE' AS code
+      WHERE v_has_blocked_case = true
+
+      UNION ALL
+
+      SELECT 'BLOCKED_BANK_DETAILS' AS code
+      WHERE v_current_pay_method <> ''
+        AND COALESCE(v_primary_bank_details_hash, '') = ''
+        AND (COALESCE(v_primary_payee_entity_kind, '') <> '' OR COALESCE(v_primary_payee_entity_id, '') <> '')
+
+      UNION ALL
+
+      SELECT 'BLOCKED_NO_PAYEE_MAP' AS code
+      WHERE v_requires_payee_map = true
+        AND v_current_pay_method <> ''
+        AND COALESCE(v_primary_bank_details_hash, '') <> ''
+        AND v_primary_payee_map_present = false
+
+      UNION ALL
+
+      SELECT 'BLOCKED_NAME_CHECK' AS code
+      WHERE v_need_name_check = true
+        AND v_current_pay_method <> ''
+        AND COALESCE(v_primary_bank_details_hash, '') <> ''
+        AND v_primary_name_check_has_override = false
+        AND COALESCE(v_primary_name_check_status, '') <> 'PASS'
+    ) AS blocker_codes
+    WHERE COALESCE(blocker_codes.code, '') <> ''
+  ) AS blocker_distinct;
+
+  SELECT COUNT(*)::integer
+  INTO v_case_resolution_state_count
+  FROM jsonb_array_elements(v_normalized_case_states) AS elem(value);
+
+  SELECT COUNT(*)::integer
+  INTO v_blocked_case_state_count
+  FROM jsonb_array_elements(v_normalized_case_states) AS elem(value)
+  WHERE COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_blocked', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  SELECT COUNT(*)::integer
+  INTO v_canonical_preview_line_count
+  FROM jsonb_array_elements(v_normalized_lines) AS elem(value);
+
+  SELECT COUNT(*)::integer
+  INTO v_ready_preview_line_count
+  FROM jsonb_array_elements(v_normalized_lines) AS elem(value)
+  WHERE NOT (
+      COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_blocked', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY')
+      OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_do_not_pay', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'CASES_RESOLUTIONS'
+      OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_snoozed', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
+    );
+
+  v_blocked_preview_line_count := jsonb_array_length(v_blocked_items);
+  v_do_not_pay_line_count := jsonb_array_length(v_do_not_pay_items);
+  v_snoozed_line_count := jsonb_array_length(v_snoozed_items);
+
+  SELECT COUNT(*)::integer
+  INTO v_payees_count
+  FROM jsonb_array_elements(v_normalized_payees) AS elem(value);
+
+  SELECT
+    COALESCE(SUM(CASE WHEN BTRIM(COALESCE(elem.value->>'amount_ex_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (elem.value->>'amount_ex_vat')::numeric ELSE 0 END), 0),
+    COALESCE(SUM(CASE WHEN BTRIM(COALESCE(elem.value->>'amount_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (elem.value->>'amount_vat')::numeric ELSE 0 END), 0),
+    COALESCE(SUM(CASE WHEN BTRIM(COALESCE(elem.value->>'amount_inc_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (elem.value->>'amount_inc_vat')::numeric ELSE 0 END), 0)
+  INTO
+    v_total_amount_ex_vat,
+    v_total_amount_vat,
+    v_total_amount_inc_vat
+  FROM jsonb_array_elements(v_normalized_lines) AS elem(value);
+
+  SELECT
+    COALESCE(SUM(CASE WHEN BTRIM(COALESCE(elem.value->>'amount_ex_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (elem.value->>'amount_ex_vat')::numeric ELSE 0 END), 0),
+    COALESCE(SUM(CASE WHEN BTRIM(COALESCE(elem.value->>'amount_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (elem.value->>'amount_vat')::numeric ELSE 0 END), 0),
+    COALESCE(SUM(CASE WHEN BTRIM(COALESCE(elem.value->>'amount_inc_vat', '')) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN (elem.value->>'amount_inc_vat')::numeric ELSE 0 END), 0)
+  INTO
+    v_draftable_amount_ex_vat,
+    v_draftable_amount_vat,
+    v_draftable_amount_inc_vat
+  FROM jsonb_array_elements(v_normalized_lines) AS elem(value)
+  WHERE NOT (
+      COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_blocked', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) IN ('BLOCKED', 'BLOCKED_FOR_PAY')
+      OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_do_not_pay', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'DO_NOT_PAY'
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'CASES_RESOLUTIONS'
+      OR COALESCE(LOWER(BTRIM(COALESCE(elem.value->>'is_snoozed', 'false'))), 'false') IN ('true', 't', '1', 'yes', 'y', 'on')
+      OR UPPER(BTRIM(COALESCE(elem.value->>'presentation_section', ''))) = 'SNOOZED'
+    );
+
+  v_has_any_delta := (v_canonical_preview_line_count > 0) OR (v_case_resolution_state_count > 0) OR (jsonb_array_length(v_normalized_itemisation) > 0);
+  v_has_review_required_blocker := (jsonb_array_length(v_candidate_blockers) > 0)
+                                   OR (v_blocked_case_state_count > 0)
+                                   OR (v_blocked_preview_line_count > 0)
+                                   OR (v_do_not_pay_line_count > 0);
+  v_is_ready_for_draft := v_has_any_delta AND (v_ready_preview_line_count > 0) AND NOT v_has_review_required_blocker;
+  v_is_review_required := v_has_any_delta AND v_has_review_required_blocker;
+
+  v_summary_fragment := COALESCE(
+    CASE
+      WHEN jsonb_typeof(v_candidate_effective_root->'summary_fragment') = 'object' THEN v_candidate_effective_root->'summary_fragment'
+      WHEN jsonb_typeof(v_candidate_row_source->'summary_fragment') = 'object' THEN v_candidate_row_source->'summary_fragment'
+      ELSE '{}'::jsonb
+    END,
+    '{}'::jsonb
+  ) || jsonb_build_object(
+    'candidate_count', 1,
+    'paye_candidates_count', CASE WHEN v_current_pay_method = 'PAYE' THEN 1 ELSE 0 END,
+    'non_paye_payees_count', CASE WHEN v_current_pay_method = 'PAYE' THEN 0 ELSE 1 END,
+    'ready_candidates_count', CASE WHEN v_is_ready_for_draft THEN 1 ELSE 0 END,
+    'blocked_candidates_count', CASE WHEN v_is_review_required THEN 1 ELSE 0 END,
+    'case_resolution_state_count', v_case_resolution_state_count,
+    'blocked_case_state_count', v_blocked_case_state_count,
+    'canonical_preview_line_count', v_canonical_preview_line_count,
+    'ready_preview_line_count', v_ready_preview_line_count,
+    'blocked_preview_line_count', v_blocked_preview_line_count,
+    'do_not_pay_line_count', v_do_not_pay_line_count,
+    'snoozed_line_count', v_snoozed_line_count,
+    'hidden_recovery_template_line_count', v_hidden_recovery_template_line_count,
+    'payees_count', v_payees_count,
+    'total_amount_ex_vat', v_total_amount_ex_vat,
+    'total_amount_vat', v_total_amount_vat,
+    'total_amount_inc_vat', v_total_amount_inc_vat,
+    'draftable_amount_ex_vat', v_draftable_amount_ex_vat,
+    'draftable_amount_vat', v_draftable_amount_vat,
+    'draftable_amount_inc_vat', v_draftable_amount_inc_vat,
+    'has_any_delta', v_has_any_delta,
+    'has_review_required_blocker', v_has_review_required_blocker,
+    'is_ready_for_draft', v_is_ready_for_draft,
+    'is_review_required', v_is_review_required
   );
-end;
+
+  v_candidate_row_base := (v_candidate_row_source
+    - 'case_resolution_states'
+    - 'canonical_preview_lines'
+    - 'payees'
+    - 'itemisation'
+    - 'blocked_items'
+    - 'do_not_pay_items'
+    - 'snoozed_items'
+    - 'hidden_recovery_template_lines'
+    - 'hidden_recovery_template_line_count'
+    - 'summary_fragment'
+    - 'paye_candidate'
+    - 'non_paye_payee');
+
+  v_candidate_row := v_candidate_row_base || jsonb_build_object(
+    'candidate_id', v_candidate_id,
+    'display_name', v_display_name,
+    'candidate_name', v_display_name,
+    'tms_ref', v_tms_ref,
+    'current_pay_method', v_current_pay_method,
+    'is_ready_for_draft', v_is_ready_for_draft,
+    'is_review_required', v_is_review_required,
+    'ready_to_pay', v_is_ready_for_draft,
+    'blockers', v_candidate_blockers,
+    'payee_entity_kind', NULLIF(v_primary_payee_entity_kind, ''),
+    'payee_entity_id', NULLIF(v_primary_payee_entity_id, ''),
+    'bank_details_hash', NULLIF(v_primary_bank_details_hash, ''),
+    'payee_bank_hash', NULLIF(v_primary_payee_bank_hash, ''),
+    'bank_details_hash_snapshot', NULLIF(v_primary_bank_details_hash_snapshot, ''),
+    'snapshot_bank_details_hash', NULLIF(v_primary_snapshot_bank_details_hash, ''),
+    'name_check_status', NULLIF(v_primary_name_check_status, ''),
+    'name_check_has_override', v_primary_name_check_has_override,
+    'payee_map_present', v_primary_payee_map_present,
+    'case_resolution_states', v_normalized_case_states,
+    'case_resolution_state_count', v_case_resolution_state_count,
+    'blocked_case_state_count', v_blocked_case_state_count,
+    'canonical_preview_line_count', v_canonical_preview_line_count,
+    'ready_preview_line_count', v_ready_preview_line_count,
+    'blocked_preview_line_count', v_blocked_preview_line_count,
+    'do_not_pay_line_count', v_do_not_pay_line_count,
+    'snoozed_line_count', v_snoozed_line_count,
+    'hidden_recovery_template_line_count', v_hidden_recovery_template_line_count,
+    'payees_count', v_payees_count,
+    'total_amount_ex_vat', v_total_amount_ex_vat,
+    'total_amount_vat', v_total_amount_vat,
+    'total_amount_inc_vat', v_total_amount_inc_vat,
+    'draftable_amount_ex_vat', v_draftable_amount_ex_vat,
+    'draftable_amount_vat', v_draftable_amount_vat,
+    'draftable_amount_inc_vat', v_draftable_amount_inc_vat,
+    'itemisation', v_normalized_itemisation
+  );
+
+  RETURN jsonb_build_object(
+    'candidate_id', v_candidate_id,
+    'current_pay_method', v_current_pay_method,
+    'summary_fragment', v_summary_fragment,
+    'case_resolution_states', v_normalized_case_states,
+    'canonical_preview_lines', v_normalized_lines,
+    'payees', v_normalized_payees,
+    'itemisation', v_normalized_itemisation,
+    'timesheet_snapshots_json', v_timesheet_snapshots_json,
+    'hidden_recovery_template_lines', v_hidden_recovery_template_lines,
+    'hidden_recovery_template_line_count', v_hidden_recovery_template_line_count,
+    'blocked_items', v_blocked_items,
+    'do_not_pay_items', v_do_not_pay_items,
+    'snoozed_items', v_snoozed_items,
+    'baseline_component_rows', v_baseline_component_rows,
+    'paye_candidate', CASE WHEN v_current_pay_method = 'PAYE' THEN v_candidate_row ELSE NULL END,
+    'non_paye_payee', CASE WHEN v_current_pay_method = 'PAYE' THEN NULL ELSE v_candidate_row END
+  );
+END;
 $function$;
+
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(
   p_context_json jsonb,
