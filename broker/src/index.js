@@ -9895,7 +9895,6 @@ async function handleBankingPayWorkbenchSessionSetSelectedRows(env, req, user, s
 }
 
 
-
 async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId) {
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
@@ -9936,10 +9935,6 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
     if (!sessionRow) {
       return withCORS(env, req, notFound('Workbench session not found'));
     }
-    if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-      return withCORS(env, req, forbidden('Forbidden'));
-    }
-
     const rpcRes = await sbRpc(env, 'pay_workbench_session_discard', {
       p_session_id: id,
       p_actor_user_id: actorUserId
@@ -9951,7 +9946,6 @@ async function handleBankingPayWorkbenchSessionDiscard(env, req, user, sessionId
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleBankingPayWorkbenchSessionOpen(env, req, user) {
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
@@ -17008,7 +17002,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         env,
         `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
         `?id=eq.${enc(sessionIdText)}` +
-        `&select=id,actor_user_id,status,source_snapshot_run_id,version` +
+        `&select=id,actor_user_id,status,source_snapshot_run_id,version,filters_json,pay_date,week_ending_cutoff,session_signature` +
         `&limit=1`,
         false
       );
@@ -17017,12 +17011,16 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
       if (!sessionRow) {
         return withCORS(env, req, notFound('Workbench session not found'));
       }
-      if (String(sessionRow.actor_user_id || '').trim() !== actorUserId) {
-        return withCORS(env, req, forbidden('Forbidden'));
-      }
       if (String(sessionRow.status || '').trim().toUpperCase() !== 'OPEN') {
         return withCORS(env, req, badRequest('Workbench session is not open'));
       }
+
+      const sourceSessionFiltersJson = (sessionRow && sessionRow.filters_json && typeof sessionRow.filters_json === 'object' && !Array.isArray(sessionRow.filters_json))
+        ? (cloneJson(sessionRow.filters_json) || {})
+        : {};
+      const sourceSessionPayDate = trimStr(sessionRow?.pay_date || payDate) || payDate;
+      const sourceSessionWeekEndingCutoff = trimStr(sessionRow?.week_ending_cutoff || cutoffIso) || cutoffIso;
+      const sourceSessionSignature = trimStr(sessionRow?.session_signature || '');
 
       const checkpointSessionRowFetched = maybeCreateDraftCheckpointResponse('SESSION_ROW_FETCHED', {
         pay_date: payDate,
@@ -17032,6 +17030,9 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         session_status: String(sessionRow.status || '').trim().toUpperCase(),
         source_snapshot_run_id: String(sessionRow.source_snapshot_run_id || '').trim() || null,
         session_version: sessionRow.version ?? null,
+        source_session_pay_date: sourceSessionPayDate,
+        source_session_week_ending_cutoff: sourceSessionWeekEndingCutoff,
+        source_session_signature_present: !!sourceSessionSignature,
         pay_channel_scope: payChannelScope || 'ALL'
       });
       if (checkpointSessionRowFetched) return checkpointSessionRowFetched;
@@ -17167,6 +17168,10 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         source_snapshot_run_id: sourceSnapshotRunIdForRefresh,
         source_session_consumed: false,
         source_session_discard_result: null,
+        replacement_session_id: null,
+        replacement_session_signature: null,
+        replacement_snapshot_run_id: null,
+        replacement_session_version: null,
         preview_reopen_required: createdPayBatchIds.length > 0,
         dirty_candidate_ids: [],
         dirty_refresh_results: [],
@@ -17214,12 +17219,122 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
           });
         }
 
+        if (!postCreateRefresh.source_session_consumed) {
+          postCreateRefresh.warnings.push({
+            code: 'REPLACEMENT_SESSION_OPEN_SKIPPED_SOURCE_SESSION_NOT_CONSUMED',
+            message: 'Replacement workbench session was not opened because the source session was not successfully consumed.'
+          });
+        } else {
+          try {
+            const sessionOpenRpc = await sbRpc(env, 'pay_workbench_session_open', {
+              p_actor_user_id: actorUserId,
+              p_pay_date: sourceSessionPayDate,
+              p_week_ending_cutoff: sourceSessionWeekEndingCutoff,
+              p_filters_json: sourceSessionFiltersJson,
+              p_session_signature: sourceSessionSignature || null
+            });
+
+            let sessionOpenPayload = sessionOpenRpc;
+            try {
+              if (Array.isArray(sessionOpenRpc) && sessionOpenRpc.length === 1 && sessionOpenRpc[0] && typeof sessionOpenRpc[0] === 'object') {
+                sessionOpenPayload = sessionOpenRpc[0];
+              }
+              if (sessionOpenPayload && typeof sessionOpenPayload === 'object' && Object.prototype.hasOwnProperty.call(sessionOpenPayload, 'pay_workbench_session_open')) {
+                sessionOpenPayload = sessionOpenPayload.pay_workbench_session_open;
+              }
+            } catch {}
+
+            const replacementSessionId = trimStr(
+              (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.session_id : '') || ''
+            );
+
+            if (uuidRe.test(replacementSessionId)) {
+              postCreateRefresh.replacement_session_id = replacementSessionId;
+              postCreateRefresh.replacement_session_signature = trimStr(
+                (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.session_signature : '') || ''
+              ) || null;
+              postCreateRefresh.replacement_snapshot_run_id = trimStr(
+                (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.snapshot_run_id : '') || ''
+              ) || null;
+
+              try {
+                const { rows: replacementRows } = await sbFetch(
+                  env,
+                  `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+                  `?id=eq.${enc(replacementSessionId)}` +
+                  `&select=id,version,source_snapshot_run_id,session_signature` +
+                  `&limit=1`,
+                  false
+                );
+
+                const replacementRow = (replacementRows && replacementRows[0]) ? replacementRows[0] : null;
+                if (replacementRow) {
+                  postCreateRefresh.replacement_session_version = replacementRow.version ?? null;
+                  postCreateRefresh.replacement_snapshot_run_id = trimStr(replacementRow.source_snapshot_run_id || '') || postCreateRefresh.replacement_snapshot_run_id || null;
+                  postCreateRefresh.replacement_session_signature = trimStr(replacementRow.session_signature || '') || postCreateRefresh.replacement_session_signature || null;
+                }
+              } catch (replacementFetchError) {
+                const replacementFetchErrorMessage = String(replacementFetchError?.message || replacementFetchError || 'Unknown replacement session fetch error');
+                postCreateRefresh.warnings.push({
+                  code: 'REPLACEMENT_SESSION_FETCH_FAILED',
+                  message: replacementFetchErrorMessage
+                });
+                logRouteDebug('warn', 'PAY_CREATE_DRAFT_POST_CREATE_REPLACEMENT_SESSION_FETCH_FAILED', {
+                  pay_date: payDate,
+                  week_ending_cutoff: cutoffIso,
+                  provided_week_ending_cutoff: providedCutoffIso,
+                  session_id: sessionIdText,
+                  replacement_session_id: replacementSessionId,
+                  pay_channel_scope: payChannelScope || 'ALL',
+                  error: replacementFetchErrorMessage
+                });
+              }
+            } else {
+              postCreateRefresh.warnings.push({
+                code: 'REPLACEMENT_SESSION_OPEN_FAILED',
+                message: 'Replacement workbench session open did not return a valid session_id.'
+              });
+              logRouteDebug('warn', 'PAY_CREATE_DRAFT_POST_CREATE_REPLACEMENT_SESSION_INVALID', {
+                pay_date: payDate,
+                week_ending_cutoff: cutoffIso,
+                provided_week_ending_cutoff: providedCutoffIso,
+                session_id: sessionIdText,
+                pay_channel_scope: payChannelScope || 'ALL',
+                session_open_payload: cloneJson(sessionOpenPayload) ?? sessionOpenPayload
+              });
+            }
+          } catch (sessionOpenError) {
+            const sessionOpenErrorMessage = String(sessionOpenError?.message || sessionOpenError || 'Unknown replacement session open error');
+            postCreateRefresh.warnings.push({
+              code: 'REPLACEMENT_SESSION_OPEN_FAILED',
+              message: sessionOpenErrorMessage
+            });
+            logRouteDebug('warn', 'PAY_CREATE_DRAFT_POST_CREATE_REPLACEMENT_SESSION_OPEN_FAILED', {
+              pay_date: payDate,
+              week_ending_cutoff: cutoffIso,
+              provided_week_ending_cutoff: providedCutoffIso,
+              session_id: sessionIdText,
+              pay_channel_scope: payChannelScope || 'ALL',
+              error: sessionOpenErrorMessage
+            });
+          }
+        }
+
         postCreateRefresh.dirty_candidate_ids = touchedCandidateIdsForRefresh;
 
-        if (!sourceSnapshotRunIdForRefresh) {
+        const snapshotRunIdForDirtyRefresh = trimStr(
+          postCreateRefresh.replacement_snapshot_run_id || ''
+        ) || null;
+
+        if (!postCreateRefresh.replacement_session_id) {
+          postCreateRefresh.warnings.push({
+            code: 'DIRTY_REFRESH_SKIPPED_NO_REPLACEMENT_SESSION',
+            message: 'Targeted candidate refresh was skipped because no replacement workbench session was opened.'
+          });
+        } else if (!snapshotRunIdForDirtyRefresh) {
           postCreateRefresh.warnings.push({
             code: 'DIRTY_REFRESH_SKIPPED_NO_SNAPSHOT_RUN',
-            message: 'No source_snapshot_run_id was available for targeted candidate refresh.'
+            message: 'No replacement snapshot_run_id was available for targeted candidate refresh.'
           });
         } else if (touchedCandidateIdsForRefresh.length <= 0) {
           postCreateRefresh.warnings.push({
@@ -17230,12 +17345,13 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
           for (const touchedCandidateId of touchedCandidateIdsForRefresh) {
             try {
               const enqueueRpc = await sbRpc(env, 'pay_workbench_enqueue_candidate_refresh', {
-                p_snapshot_run_id: sourceSnapshotRunIdForRefresh,
+                p_snapshot_run_id: snapshotRunIdForDirtyRefresh,
                 p_candidate_id: touchedCandidateId,
                 p_reason: 'DRAFT_CREATED',
                 p_actor_user_id: actorUserId,
                 p_payload_json: {
                   source_session_id: sessionIdText,
+                  replacement_session_id: postCreateRefresh.replacement_session_id,
                   created_pay_batch_ids: createdPayBatchIds,
                   pay_date: payDate,
                   week_ending_cutoff: cutoffIso,
@@ -17281,8 +17397,9 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
                 week_ending_cutoff: cutoffIso,
                 provided_week_ending_cutoff: providedCutoffIso,
                 session_id: sessionIdText,
+                replacement_session_id: postCreateRefresh.replacement_session_id,
                 candidate_id: touchedCandidateId,
-                source_snapshot_run_id: sourceSnapshotRunIdForRefresh,
+                snapshot_run_id: snapshotRunIdForDirtyRefresh,
                 created_pay_batch_ids: createdPayBatchIds,
                 error: enqueueErrorMessage
               });
@@ -17290,11 +17407,13 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
           }
         }
       }
-
       outPayload.session = {
         ...outPayload.session,
         consumed: postCreateRefresh.source_session_consumed,
-        preview_reopen_required: postCreateRefresh.preview_reopen_required
+        preview_reopen_required: postCreateRefresh.preview_reopen_required,
+        replacement_session_id: postCreateRefresh.replacement_session_id,
+        replacement_snapshot_run_id: postCreateRefresh.replacement_snapshot_run_id,
+        replacement_session_version: postCreateRefresh.replacement_session_version
       };
       outPayload.post_create_refresh = postCreateRefresh;
 
@@ -17311,6 +17430,9 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         source_snapshot_run_id: outPayload?.source_snapshot_run_id || syncResult.snapshot_run_id || null,
         source_session_version: outPayload?.source_session_version ?? syncResult.session_version ?? null,
         source_session_consumed: !!outPayload?.post_create_refresh?.source_session_consumed,
+        replacement_session_id: trimStr(outPayload?.post_create_refresh?.replacement_session_id || '') || null,
+        replacement_snapshot_run_id: trimStr(outPayload?.post_create_refresh?.replacement_snapshot_run_id || '') || null,
+        replacement_session_version: outPayload?.post_create_refresh?.replacement_session_version ?? null,
         preview_reopen_required: !!outPayload?.post_create_refresh?.preview_reopen_required,
         dirty_candidate_count: Array.isArray(outPayload?.post_create_refresh?.dirty_candidate_ids)
           ? outPayload.post_create_refresh.dirty_candidate_ids.length
@@ -23286,6 +23408,8 @@ async function handleBankingPayBatchNotifyScheduled(env, req, user, payBatchId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'NOTIFY_FAILED')));
   }
 }
+
+
 async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -23300,6 +23424,27 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   const reason = String(body.reason || '').trim();
   if (!reason) return withCORS(env, req, badRequest('reason is required'));
 
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
+
+  const parseIsoOrUkDateToIso = (raw) => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) {
+      const dd = m[1], mm = m[2], yyyy = m[3];
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return null;
+  };
+
+  const cloneJson = (value) => {
+    try { return JSON.parse(JSON.stringify(value)); } catch { return null; }
+  };
+
   const discardSessionRequested = (() => {
     const raw = body.discard_session ?? body.discardSession;
     if (typeof raw === 'boolean') return raw;
@@ -23312,6 +23457,69 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   })();
 
   const discardSessionForced = true;
+
+  const currentSessionId = trimStr(
+    body.current_session_id ??
+    body.currentSessionId ??
+    body.session_id ??
+    body.sessionId ??
+    ''
+  );
+  if (currentSessionId && !uuidRe.test(currentSessionId)) {
+    return withCORS(env, req, badRequest('current_session_id must be a UUID when supplied'));
+  }
+
+  const currentPayDateRaw = trimStr(
+    body.current_pay_date ??
+    body.currentPayDate ??
+    body.pay_date ??
+    ''
+  );
+  const currentPayDateIso = currentPayDateRaw ? parseIsoOrUkDateToIso(currentPayDateRaw) : null;
+  if (currentPayDateRaw && !currentPayDateIso) {
+    return withCORS(env, req, badRequest('current_pay_date must be YYYY-MM-DD or DD/MM/YYYY when supplied'));
+  }
+
+  const currentCutoffRaw = trimStr(
+    body.current_week_ending_cutoff_date ??
+    body.currentWeekEndingCutoffDate ??
+    body.current_week_ending_cutoff ??
+    body.currentWeekEndingCutoff ??
+    body.week_ending_cutoff_date ??
+    body.weekEndingCutoffDate ??
+    body.week_ending_cutoff ??
+    body.weekEndingCutoff ??
+    ''
+  );
+  const currentCutoffIso = currentCutoffRaw ? parseIsoOrUkDateToIso(currentCutoffRaw) : null;
+  if (currentCutoffRaw && !currentCutoffIso) {
+    return withCORS(env, req, badRequest('current_week_ending_cutoff_date must be YYYY-MM-DD or DD/MM/YYYY when supplied'));
+  }
+
+  const currentFiltersRaw =
+    body.current_filters_json ??
+    body.currentFiltersJson ??
+    body.workbench_filters_json ??
+    body.workbenchFiltersJson ??
+    body.filters_json ??
+    body.filtersJson ??
+    null;
+
+  let currentFiltersJson = null;
+  if (currentFiltersRaw !== null && currentFiltersRaw !== undefined) {
+    if (!isPlainObject(currentFiltersRaw)) {
+      return withCORS(env, req, badRequest('current_filters_json must be an object when supplied'));
+    }
+    currentFiltersJson = cloneJson(currentFiltersRaw) || {};
+  }
+
+  const currentSessionSignature = trimStr(
+    body.current_session_signature ??
+    body.currentSessionSignature ??
+    body.session_signature ??
+    body.sessionSignature ??
+    ''
+  ) || null;
 
   const _safeJsonParse = (s) => {
     try { return JSON.parse(String(s || '')); } catch { return null; }
@@ -23366,6 +23574,31 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       }
     } catch {}
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const _extractUuidArray = (...values) => {
+    const out = [];
+    const seen = new Set();
+
+    const pushValue = (raw) => {
+      const s = trimStr(raw);
+      if (!uuidRe.test(s) || seen.has(s)) return;
+      seen.add(s);
+      out.push(s);
+    };
+
+    const visit = (value) => {
+      if (value == null) return;
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+      if (typeof value === 'object') return;
+      pushValue(value);
+    };
+
+    for (const value of values) visit(value);
+    return out;
   };
 
   const _analyzeCancelPayload = (payload) => {
@@ -23458,7 +23691,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
   const _buildSessionDiscardResult = (payload) => {
     const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-    const sourceSessionId = String(p.source_workbench_session_id || '').trim();
+    const sourceSessionId = trimStr(p.source_workbench_session_id || '');
     const discardResult = (p.source_session_discard_result && typeof p.source_session_discard_result === 'object' && !Array.isArray(p.source_session_discard_result))
       ? p.source_session_discard_result
       : null;
@@ -23476,6 +23709,35 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
       skipped_reason: attempted ? null : 'NO_SOURCE_SESSION',
       result: discardResult,
       error: null
+    };
+  };
+
+  const _loadSessionContext = async (sessionIdValue) => {
+    const sessionIdText = trimStr(sessionIdValue);
+    if (!uuidRe.test(sessionIdText)) return null;
+
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+      `?id=eq.${enc(sessionIdText)}` +
+      `&select=id,filters_json,pay_date,week_ending_cutoff,session_signature,source_snapshot_run_id,version` +
+      `&limit=1`,
+      false
+    );
+
+    const sessionRow = (rows && rows[0]) ? rows[0] : null;
+    if (!sessionRow) return null;
+
+    return {
+      session_id: sessionIdText,
+      filters_json: (sessionRow.filters_json && typeof sessionRow.filters_json === 'object' && !Array.isArray(sessionRow.filters_json))
+        ? (cloneJson(sessionRow.filters_json) || {})
+        : null,
+      pay_date: trimStr(sessionRow.pay_date || '') || null,
+      week_ending_cutoff: trimStr(sessionRow.week_ending_cutoff || '') || null,
+      session_signature: trimStr(sessionRow.session_signature || '') || null,
+      snapshot_run_id: trimStr(sessionRow.source_snapshot_run_id || '') || null,
+      session_version: sessionRow.version ?? null
     };
   };
 
@@ -23504,11 +23766,155 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     }
 
     const sessionDiscardResult = _buildSessionDiscardResult(payload);
+    const sourceSessionId = trimStr(sessionDiscardResult.discarded_session_id || trimStr(payload?.source_workbench_session_id || ''));
+    const dirtyCandidateIds = _extractUuidArray(
+      payload?.dirty_candidate_ids,
+      payload?.dirtied_candidate_ids,
+      payload?.touched_candidate_ids,
+      payload?.affected_candidate_ids
+    );
+    const refreshJobIds = _extractUuidArray(
+      payload?.refresh_job_ids,
+      payload?.job_ids
+    );
+
+    const postCancelRefresh = {
+      source_session_id: sourceSessionId || null,
+      source_session_discard_result: sessionDiscardResult.result,
+      source_session_consumed: sessionDiscardResult.ok === true,
+      replacement_session_id: null,
+      replacement_session_signature: null,
+      replacement_snapshot_run_id: null,
+      replacement_session_version: null,
+      dirty_candidate_ids: dirtyCandidateIds,
+      refresh_job_ids: refreshJobIds,
+      warnings: []
+    };
+
+    let currentSessionContext = null;
+    let sourceSessionContext = null;
+
+    if (currentSessionId) {
+      try {
+        currentSessionContext = await _loadSessionContext(currentSessionId);
+      } catch (contextError) {
+        postCancelRefresh.warnings.push({
+          code: 'CURRENT_SESSION_CONTEXT_FETCH_FAILED',
+          message: String(contextError?.message || contextError || 'Unknown current session context error')
+        });
+      }
+    }
+
+    if (sourceSessionId && sourceSessionId !== currentSessionId) {
+      try {
+        sourceSessionContext = await _loadSessionContext(sourceSessionId);
+      } catch (contextError) {
+        postCancelRefresh.warnings.push({
+          code: 'SOURCE_SESSION_CONTEXT_FETCH_FAILED',
+          message: String(contextError?.message || contextError || 'Unknown source session context error')
+        });
+      }
+    }
+
+    const replacementPayDate = currentPayDateIso ||
+      trimStr(currentSessionContext?.pay_date || '') ||
+      trimStr(sourceSessionContext?.pay_date || '') ||
+      null;
+
+    const replacementCutoff = currentCutoffIso ||
+      trimStr(currentSessionContext?.week_ending_cutoff || '') ||
+      trimStr(sourceSessionContext?.week_ending_cutoff || '') ||
+      null;
+
+    const replacementFiltersJson = currentFiltersJson !== null
+      ? currentFiltersJson
+      : (
+          (currentSessionContext && isPlainObject(currentSessionContext.filters_json)) ? currentSessionContext.filters_json
+          : ((sourceSessionContext && isPlainObject(sourceSessionContext.filters_json)) ? sourceSessionContext.filters_json : null)
+        );
+
+    const replacementSessionSignature = currentSessionSignature ||
+      trimStr(currentSessionContext?.session_signature || '') ||
+      trimStr(sourceSessionContext?.session_signature || '') ||
+      null;
+
+    const sourceSessionMustBeConsumed = sessionDiscardResult.attempted === true && !!sourceSessionId;
+
+    if (sourceSessionMustBeConsumed && sessionDiscardResult.ok !== true) {
+      postCancelRefresh.warnings.push({
+        code: 'REPLACEMENT_SESSION_OPEN_SKIPPED_SOURCE_SESSION_NOT_CONSUMED',
+        message: 'Replacement workbench session was not opened because the source session was not successfully consumed.'
+      });
+    } else if (!replacementPayDate || !replacementCutoff || !isPlainObject(replacementFiltersJson)) {
+      postCancelRefresh.warnings.push({
+        code: 'REPLACEMENT_SESSION_OPEN_SKIPPED_INSUFFICIENT_CONTEXT',
+        message: 'Replacement workbench session could not be opened because the effective workbench context was incomplete.'
+      });
+    } else {
+      try {
+        const sessionOpenRpc = await sbRpc(env, 'pay_workbench_session_open', {
+          p_actor_user_id: String(user.id || '').trim(),
+          p_pay_date: replacementPayDate,
+          p_week_ending_cutoff: replacementCutoff,
+          p_filters_json: replacementFiltersJson,
+          p_session_signature: replacementSessionSignature || null
+        });
+
+        let sessionOpenPayload = sessionOpenRpc;
+        try {
+          if (Array.isArray(sessionOpenRpc) && sessionOpenRpc.length === 1 && sessionOpenRpc[0] && typeof sessionOpenRpc[0] === 'object') {
+            sessionOpenPayload = sessionOpenRpc[0];
+          }
+          if (sessionOpenPayload && typeof sessionOpenPayload === 'object' && Object.prototype.hasOwnProperty.call(sessionOpenPayload, 'pay_workbench_session_open')) {
+            sessionOpenPayload = sessionOpenPayload.pay_workbench_session_open;
+          }
+        } catch {}
+
+        const replacementSessionId = trimStr(
+          (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.session_id : '') || ''
+        );
+
+        if (uuidRe.test(replacementSessionId)) {
+          postCancelRefresh.replacement_session_id = replacementSessionId;
+          postCancelRefresh.replacement_session_signature = trimStr(
+            (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.session_signature : '') || ''
+          ) || null;
+          postCancelRefresh.replacement_snapshot_run_id = trimStr(
+            (sessionOpenPayload && typeof sessionOpenPayload === 'object' ? sessionOpenPayload.snapshot_run_id : '') || ''
+          ) || null;
+
+          try {
+            const replacementSessionContext = await _loadSessionContext(replacementSessionId);
+            if (replacementSessionContext) {
+              postCancelRefresh.replacement_session_version = replacementSessionContext.session_version ?? null;
+              postCancelRefresh.replacement_snapshot_run_id = trimStr(replacementSessionContext.snapshot_run_id || '') || postCancelRefresh.replacement_snapshot_run_id || null;
+              postCancelRefresh.replacement_session_signature = trimStr(replacementSessionContext.session_signature || '') || postCancelRefresh.replacement_session_signature || null;
+            }
+          } catch (replacementFetchError) {
+            postCancelRefresh.warnings.push({
+              code: 'REPLACEMENT_SESSION_FETCH_FAILED',
+              message: String(replacementFetchError?.message || replacementFetchError || 'Unknown replacement session fetch error')
+            });
+          }
+        } else {
+          postCancelRefresh.warnings.push({
+            code: 'REPLACEMENT_SESSION_OPEN_FAILED',
+            message: 'Replacement workbench session open did not return a valid session_id.'
+          });
+        }
+      } catch (sessionOpenError) {
+        postCancelRefresh.warnings.push({
+          code: 'REPLACEMENT_SESSION_OPEN_FAILED',
+          message: String(sessionOpenError?.message || sessionOpenError || 'Unknown replacement session open error')
+        });
+      }
+    }
 
     const responsePayload = {
       ...(payload && typeof payload === 'object' ? payload : {}),
       cancel_flow: _buildCancelFlow(payload),
-      session_discard: sessionDiscardResult
+      session_discard: sessionDiscardResult,
+      post_cancel_refresh: postCancelRefresh
     };
 
     return withCORS(env, req, ok(responsePayload));
@@ -41279,8 +41685,6 @@ async function handleBankingFinanceLoansSnoozesList(env, req, user) {
   }
 }
 
-
-
 async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidateId, actorUserId, existingSessionJobId = null, originLabel = '') {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -41693,9 +42097,6 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
       : null;
     if (!sessionRow) {
       return { ok: false, reason: 'SESSION_NOT_FOUND', session: null };
-    }
-    if (trimStr(sessionRow.actor_user_id) !== result.actor_user_id) {
-      return { ok: false, reason: 'SESSION_NOT_OWNED_BY_ACTOR', session: sessionRow };
     }
     if (trimStr(sessionRow.status).toUpperCase() !== 'OPEN') {
       return { ok: false, reason: 'SESSION_NOT_OPEN', session: sessionRow };
@@ -42447,8 +42848,6 @@ async function runInteractiveWorkbenchCandidateFastLane(env, sessionId, candidat
     return result;
   }
 }
-
-
 
 async function handleBankingPaymentAdvanceCreate(env, req, user) {
   let body = null;
@@ -113839,9 +114238,6 @@ async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, session
   const sessionRow = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   if (!sessionRow) {
     throw new Error('Workbench session not found');
-  }
-  if (trimStr(sessionRow.actor_user_id) !== actorIdText) {
-    throw new Error('Forbidden');
   }
   if (upperTrim(sessionRow.status) !== 'OPEN') {
     throw new Error('Workbench session is not open');
