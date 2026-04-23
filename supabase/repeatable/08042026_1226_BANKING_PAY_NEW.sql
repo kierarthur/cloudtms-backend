@@ -31839,3 +31839,21 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_projection_contract()
+RETURNS jsonb
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_projection_version integer := 2;
+  v_hidden_recovery_template_projection_version integer := 1;
+  v_requires_hidden_recovery_templates boolean := true;
+BEGIN
+  RETURN jsonb_build_object(
+    'projection_version', v_projection_version,
+    'hidden_recovery_template_projection_version', v_hidden_recovery_template_projection_version,
+    'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates
+  );
+END;
+$function$;
