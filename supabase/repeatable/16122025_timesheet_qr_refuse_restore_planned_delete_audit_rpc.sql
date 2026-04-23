@@ -733,6 +733,7 @@ as $$
 $$;
 
 commit;
+
 CREATE OR REPLACE FUNCTION public.timesheet_route_version_rotate(
   p_current_timesheet_id uuid,
   p_expected_timesheet_id uuid,
@@ -742,6 +743,8 @@ CREATE OR REPLACE FUNCTION public.timesheet_route_version_rotate(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
 AS $function$
 DECLARE
   v_action text := upper(btrim(coalesce(p_target_action, '')));
@@ -837,6 +840,8 @@ BEGIN
   IF v_booking_id IS NULL OR btrim(v_booking_id) = '' THEN
     RAISE EXCEPTION 'Timesheet booking_id is missing; cannot version';
   END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext(v_booking_id));
 
   PERFORM 1
   FROM public.timesheets AS t_lock
@@ -1238,7 +1243,8 @@ BEGIN
     WHERE t_elec.booking_id = v_booking_id
       AND upper(coalesce(t_elec.submission_mode::text, '')) = 'ELECTRONIC'
     ORDER BY t_elec.version DESC, t_elec.updated_at DESC, t_elec.created_at DESC
-    LIMIT 1;
+    LIMIT 1
+    FOR UPDATE;
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'No electronic version exists for this timesheet';
@@ -1329,180 +1335,50 @@ BEGIN
     WHERE t_demote.booking_id = v_booking_id
       AND t_demote.is_current = true;
 
-    INSERT INTO public.timesheets (
-      booking_id,
-      occupant_key_norm,
-      hospital_norm,
-      ward_norm,
-      job_title_norm,
-      shift_label_norm,
-      scheduled_start_iso,
-      scheduled_end_iso,
-      worked_start_iso,
-      worked_end_iso,
-      break_start_iso,
-      break_end_iso,
-      break_minutes,
-      worked_minutes,
-      week_ending_date,
-      auth_name,
-      auth_job_title,
-      authorised_at_server,
-      r2_nurse_key,
-      r2_auth_key,
-      img_sha256_nurse,
-      img_sha256_auth,
-      reference_number,
-      reference_set_at,
-      status,
-      idempotency_key,
-      client_hash,
-      client_ua,
-      created_at,
-      updated_at,
-      version,
-      is_current,
-      revoked_at,
-      revoked_reason,
-      revoked_by,
-      contract_id,
-      submission_mode,
-      manual_pdf_r2_key,
-      line_type,
-      sheet_scope,
-      actual_schedule_json,
-      additional_units_week,
-      additional_units_per_day,
-      qr_token,
-      qr_status,
-      qr_payload_json,
-      qr_generated_at,
-      qr_scanned_at,
-      qr_scan_info_json,
-      qr_r2_key,
-      day_references_json,
-      manual_pdf_rotation_degrees,
-      qr_last_sent_hash,
-      qr_last_sent_at_utc,
-      qr_signed_hash,
-      qr_signed_at_utc,
-      candidate_hint_text,
-      band,
-      generated_pdf_at_utc,
-      is_adjustment,
-      parent_timesheet_id,
-      generated_pdf_refs_sig,
-      generated_pdf_refs_snapshot_json,
-      generated_pdf_refs_captured_at_utc,
-      qr_sent_refs_sig,
-      qr_sent_refs_snapshot_json,
-      qr_sent_refs_captured_at_utc,
-      correction_id,
-      correction_kind,
-      adjustment_origin
-    )
-    VALUES (
-      v_booking_id,
-      v_current_row.occupant_key_norm,
-      v_current_row.hospital_norm,
-      v_current_row.ward_norm,
-      v_current_row.job_title_norm,
-      v_current_row.shift_label_norm,
-      v_current_row.scheduled_start_iso,
-      v_current_row.scheduled_end_iso,
-      v_current_row.worked_start_iso,
-      v_current_row.worked_end_iso,
-      v_current_row.break_start_iso,
-      v_current_row.break_end_iso,
-      v_current_row.break_minutes,
-      v_current_row.worked_minutes,
-      v_current_row.week_ending_date,
-      v_current_row.auth_name,
-      v_current_row.auth_job_title,
-      CASE
-        WHEN v_action = 'ALLOW_QR_AGAIN' THEN v_current_row.authorised_at_server
-        ELSE NULL
-      END,
-      CASE
-        WHEN v_action = 'ALLOW_QR_AGAIN' THEN NULL
-        ELSE NULL
-      END,
-      CASE
-        WHEN v_action = 'ALLOW_QR_AGAIN' THEN NULL
-        ELSE NULL
-      END,
-      v_current_row.img_sha256_nurse,
-      v_current_row.img_sha256_auth,
-      v_current_row.reference_number,
-      v_current_row.reference_set_at,
-      CASE
-        WHEN v_action IN ('ALLOW_ELECTRONIC_AGAIN', 'ALLOW_QR_AGAIN') THEN 'RECEIVED'::public.timesheet_status_enum
-        ELSE v_current_row.status
-      END,
-      v_current_row.idempotency_key,
-      v_current_row.client_hash,
-      v_current_row.client_ua,
-      v_now,
-      v_now,
-      v_next_version,
-      true,
-      NULL,
-      NULL,
-      NULL,
-      v_current_row.contract_id,
-      CASE
-        WHEN v_action = 'ALLOW_ELECTRONIC_AGAIN' THEN 'ELECTRONIC'::public.submission_mode_enum
-        ELSE 'MANUAL'::public.submission_mode_enum
-      END,
-      NULL,
-      v_current_row.line_type,
-      v_current_row.sheet_scope,
-      v_current_row.actual_schedule_json,
-      v_current_row.additional_units_week,
-      v_current_row.additional_units_per_day,
-      NULL,
-      CASE
-        WHEN v_action = 'ALLOW_QR_AGAIN' THEN 'PENDING'::public.timesheet_qr_status_enum
-        ELSE NULL
-      END,
-      '{}'::jsonb,
-      NULL,
-      NULL,
-      NULL,
-      NULL,
-      v_current_row.day_references_json,
-      v_current_row.manual_pdf_rotation_degrees,
-      CASE
-        WHEN v_action = 'ALLOW_QR_AGAIN' THEN NULL
-        ELSE v_current_row.qr_last_sent_hash
-      END,
-      CASE
-        WHEN v_action = 'ALLOW_QR_AGAIN' THEN NULL
-        ELSE v_current_row.qr_last_sent_at_utc
-      END,
-      CASE
-        WHEN v_action = 'ALLOW_QR_AGAIN' THEN NULL
-        ELSE v_current_row.qr_signed_hash
-      END,
-      CASE
-        WHEN v_action = 'ALLOW_QR_AGAIN' THEN NULL
-        ELSE v_current_row.qr_signed_at_utc
-      END,
-      v_current_row.candidate_hint_text,
-      v_current_row.band,
-      v_current_row.generated_pdf_at_utc,
-      v_current_row.is_adjustment,
-      v_current_row.parent_timesheet_id,
-      v_current_row.generated_pdf_refs_sig,
-      v_current_row.generated_pdf_refs_snapshot_json,
-      v_current_row.generated_pdf_refs_captured_at_utc,
-      v_current_row.qr_sent_refs_sig,
-      v_current_row.qr_sent_refs_snapshot_json,
-      v_current_row.qr_sent_refs_captured_at_utc,
-      v_current_row.correction_id,
-      v_current_row.correction_kind,
-      v_current_row.adjustment_origin
-    )
+    v_new_row := v_current_row;
+    v_new_row.timesheet_id := gen_random_uuid();
+    v_new_row.booking_id := v_booking_id;
+    v_new_row.version := v_next_version;
+    v_new_row.is_current := true;
+    v_new_row.created_at := v_now;
+    v_new_row.updated_at := v_now;
+    v_new_row.revoked_at := NULL;
+    v_new_row.revoked_reason := NULL;
+    v_new_row.revoked_by := NULL;
+    v_new_row.authorised_at_server := NULL;
+    IF v_action IN ('ALLOW_ELECTRONIC_AGAIN', 'ALLOW_QR_AGAIN', 'SWITCH_TO_MANUAL', 'SWITCH_DAILY_TO_MANUAL') THEN
+      v_new_row.r2_nurse_key := NULL;
+      v_new_row.r2_auth_key := NULL;
+    END IF;
+    v_new_row.submission_mode := CASE
+      WHEN v_action = 'ALLOW_ELECTRONIC_AGAIN' THEN 'ELECTRONIC'::public.submission_mode_enum
+      ELSE 'MANUAL'::public.submission_mode_enum
+    END;
+    v_new_row.manual_pdf_r2_key := NULL;
+    v_new_row.qr_token := NULL;
+    v_new_row.qr_status := CASE
+      WHEN v_action = 'ALLOW_QR_AGAIN' THEN 'PENDING'::public.timesheet_qr_status_enum
+      ELSE NULL
+    END;
+    v_new_row.qr_payload_json := '{}'::jsonb;
+    v_new_row.qr_generated_at := NULL;
+    v_new_row.qr_scanned_at := NULL;
+    v_new_row.qr_scan_info_json := NULL;
+    v_new_row.qr_r2_key := NULL;
+    v_new_row.status := CASE
+      WHEN v_action IN ('ALLOW_ELECTRONIC_AGAIN', 'ALLOW_QR_AGAIN') THEN 'RECEIVED'::public.timesheet_status_enum
+      ELSE v_current_row.status
+    END;
+
+    IF v_action = 'ALLOW_QR_AGAIN' THEN
+      v_new_row.qr_last_sent_hash := NULL;
+      v_new_row.qr_last_sent_at_utc := NULL;
+      v_new_row.qr_signed_hash := NULL;
+      v_new_row.qr_signed_at_utc := NULL;
+    END IF;
+
+    INSERT INTO public.timesheets
+    SELECT (v_new_row).*
     RETURNING * INTO v_new_row;
 
     v_new_timesheet_id := v_new_row.timesheet_id;
@@ -1659,3 +1535,5 @@ BEGIN
   END IF;
 END;
 $function$;
+
+
