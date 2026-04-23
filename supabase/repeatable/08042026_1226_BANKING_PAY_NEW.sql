@@ -237,6 +237,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -250,6 +252,10 @@ DECLARE
   v_job_id uuid;
   v_job_status text;
   v_job_was_inserted boolean := false;
+  v_projection_contract_json jsonb := '{}'::jsonb;
+  v_required_projection_version integer := 0;
+  v_required_hidden_recovery_template_projection_version integer := 0;
+  v_requires_hidden_recovery_templates boolean := false;
 BEGIN
   IF p_snapshot_run_id IS NULL THEN
     RAISE EXCEPTION 'snapshot_run_id is required';
@@ -275,12 +281,38 @@ BEGIN
     RAISE EXCEPTION 'candidates row % not found', p_candidate_id;
   END IF;
 
+  v_projection_contract_json := public._pay_workbench_candidate_projection_contract();
+  v_required_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_projection_contract_json->>'projection_version', '') ~ '^[0-9]+$'
+        THEN (v_projection_contract_json->>'projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_required_hidden_recovery_template_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_projection_contract_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+        THEN (v_projection_contract_json->>'hidden_recovery_template_projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_requires_hidden_recovery_templates := COALESCE(
+    CASE
+      WHEN lower(COALESCE(v_projection_contract_json->>'requires_hidden_recovery_templates', '')) IN ('true', 'false')
+        THEN (v_projection_contract_json->>'requires_hidden_recovery_templates')::boolean
+      ELSE NULL::boolean
+    END,
+    false
+  );
+
   SELECT COALESCE(acc.seq, 0)
   INTO v_live_change_seq
   FROM public.app_change_counters acc
   WHERE acc.entity_key = 'pay_candidate:' || p_candidate_id::text;
 
-  v_dedupe_key := 'SNAPSHOT_CANDIDATE_REFRESH:' || p_snapshot_run_id::text || ':' || p_candidate_id::text || ':s' || v_live_change_seq::text;
+  v_dedupe_key := 'SNAPSHOT_CANDIDATE_REFRESH:' || p_snapshot_run_id::text || ':' || p_candidate_id::text || ':s' || v_live_change_seq::text || ':pv' || v_required_projection_version::text || ':ht' || v_required_hidden_recovery_template_projection_version::text;
 
   INSERT INTO public.banking_pay_workbench_jobs (
     job_type,
@@ -319,6 +351,10 @@ BEGIN
         'snapshot_run_id', p_snapshot_run_id::text,
         'candidate_id', p_candidate_id::text,
         'source_change_seq', v_live_change_seq,
+        'projection_version', v_required_projection_version,
+        'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+        'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
+        'refresh_reason', COALESCE(NULLIF(BTRIM(COALESCE(p_payload_json->>'refresh_reason', '')), ''), p_reason),
         'job_type', 'SNAPSHOT_CANDIDATE_REFRESH'
       ),
     v_now,
@@ -383,9 +419,17 @@ BEGIN
 
   UPDATE public.banking_pay_workbench_session_candidate_state scs
   SET status = 'PENDING',
+      effective_candidate_fragment_json = '{}'::jsonb,
+      effective_summary_fragment_json = '{}'::jsonb,
+      effective_paye_candidate_json = NULL,
+      effective_non_paye_payee_json = NULL,
+      effective_payees_json = '[]'::jsonb,
+      effective_case_resolution_states_json = '[]'::jsonb,
+      effective_canonical_preview_lines_json = '[]'::jsonb,
       source_change_seq = GREATEST(scs.source_change_seq, v_live_change_seq),
       pending_job_id = v_job_id,
       updated_at_utc = v_now,
+      last_recomputed_at_utc = NULL,
       last_error_json = NULL
   FROM public.banking_pay_workbench_sessions ws
   WHERE ws.id = scs.session_id
@@ -406,7 +450,9 @@ BEGIN
       'snapshot_run_id', p_snapshot_run_id::text,
       'candidate_id', p_candidate_id::text,
       'dedupe_key', v_dedupe_key,
-      'source_change_seq', v_live_change_seq
+      'source_change_seq', v_live_change_seq,
+      'projection_version', v_required_projection_version,
+      'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version
     ),
     'WORKBENCH_JOB_ENQUEUE',
     p_actor_user_id
@@ -419,12 +465,13 @@ BEGIN
     'snapshot_run_id', p_snapshot_run_id::text,
     'candidate_id', p_candidate_id::text,
     'source_change_seq', v_live_change_seq,
+    'projection_version', v_required_projection_version,
+    'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
     'dedupe_key', v_dedupe_key,
     'reason', p_reason
   );
 END;
 $function$;
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_session_candidate_refresh(
@@ -457,6 +504,23 @@ DECLARE
   v_existing_job_status text := NULL;
   v_existing_job_source_change_seq bigint := 0;
   v_existing_job_session_version bigint := 0;
+  v_existing_job_projection_version integer := 0;
+  v_existing_job_hidden_recovery_template_projection_version integer := 0;
+  v_projection_contract_json jsonb := '{}'::jsonb;
+  v_required_projection_version integer := 0;
+  v_required_hidden_recovery_template_projection_version integer := 0;
+  v_requires_hidden_recovery_templates boolean := false;
+  v_snapshot_candidate_status text := NULL;
+  v_snapshot_candidate_source_change_seq bigint := 0;
+  v_snapshot_candidate_projection_version integer := 0;
+  v_snapshot_candidate_hidden_recovery_template_projection_version integer := 0;
+  v_snapshot_candidate_last_refreshed_at_utc timestamptz := NULL;
+  v_snapshot_has_hidden_recovery_templates boolean := false;
+  v_existing_session_candidate_projection_version integer := 0;
+  v_existing_session_candidate_hidden_recovery_template_projection_version integer := 0;
+  v_existing_session_candidate_last_recomputed_at_utc timestamptz := NULL;
+  v_session_has_hidden_recovery_templates boolean := false;
+  v_session_missing_snapshot_hidden_manual_debt_template boolean := false;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -488,11 +552,72 @@ BEGIN
     RAISE EXCEPTION 'candidate % is not in workbench session scope %', p_candidate_id, p_session_id;
   END IF;
 
-  SELECT COALESCE(snap.source_change_seq, 0)
-  INTO v_source_change_seq
+  v_projection_contract_json := public._pay_workbench_candidate_projection_contract();
+  v_required_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_projection_contract_json->>'projection_version', '') ~ '^[0-9]+$'
+        THEN (v_projection_contract_json->>'projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_required_hidden_recovery_template_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_projection_contract_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+        THEN (v_projection_contract_json->>'hidden_recovery_template_projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_requires_hidden_recovery_templates := COALESCE(
+    CASE
+      WHEN lower(COALESCE(v_projection_contract_json->>'requires_hidden_recovery_templates', '')) IN ('true', 'false')
+        THEN (v_projection_contract_json->>'requires_hidden_recovery_templates')::boolean
+      ELSE NULL::boolean
+    END,
+    false
+  );
+
+  SELECT
+    COALESCE(snap.status, NULL),
+    COALESCE(snap.source_change_seq, 0),
+    COALESCE(
+      CASE
+        WHEN COALESCE(snap.candidate_fragment_json->>'projection_version', '') ~ '^[0-9]+$'
+          THEN (snap.candidate_fragment_json->>'projection_version')::integer
+        ELSE NULL::integer
+      END,
+      0
+    ),
+    COALESCE(
+      CASE
+        WHEN COALESCE(snap.candidate_fragment_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+          THEN (snap.candidate_fragment_json->>'hidden_recovery_template_projection_version')::integer
+        ELSE NULL::integer
+      END,
+      0
+    ),
+    snap.last_refreshed_at_utc,
+    COALESCE(
+      jsonb_array_length(
+        CASE
+          WHEN jsonb_typeof(snap.candidate_fragment_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(snap.candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ),
+      0
+    ) > 0
+  INTO v_snapshot_candidate_status,
+       v_snapshot_candidate_source_change_seq,
+       v_snapshot_candidate_projection_version,
+       v_snapshot_candidate_hidden_recovery_template_projection_version,
+       v_snapshot_candidate_last_refreshed_at_utc,
+       v_snapshot_has_hidden_recovery_templates
   FROM public.banking_pay_snapshot_candidate_state AS snap
   WHERE snap.snapshot_run_id = v_source_snapshot_run_id
     AND snap.candidate_id = p_candidate_id;
+
+  v_source_change_seq := v_snapshot_candidate_source_change_seq;
 
   IF v_source_change_seq = 0 THEN
     SELECT COALESCE(acc.seq, 0)
@@ -504,11 +629,41 @@ BEGIN
   SELECT COALESCE(scs.status, NULL),
          COALESCE(scs.source_change_seq, 0),
          COALESCE(scs.session_version, 0),
-         scs.pending_job_id
+         scs.pending_job_id,
+         COALESCE(
+           CASE
+             WHEN COALESCE(scs.effective_candidate_fragment_json->>'projection_version', '') ~ '^[0-9]+$'
+               THEN (scs.effective_candidate_fragment_json->>'projection_version')::integer
+             ELSE NULL::integer
+           END,
+           0
+         ),
+         COALESCE(
+           CASE
+             WHEN COALESCE(scs.effective_candidate_fragment_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+               THEN (scs.effective_candidate_fragment_json->>'hidden_recovery_template_projection_version')::integer
+             ELSE NULL::integer
+           END,
+           0
+         ),
+         scs.last_recomputed_at_utc,
+         COALESCE(
+           jsonb_array_length(
+             CASE
+               WHEN jsonb_typeof(scs.effective_candidate_fragment_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(scs.effective_candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END
+           ),
+           0
+         ) > 0
   INTO v_existing_session_candidate_status,
        v_existing_session_candidate_source_change_seq,
        v_existing_session_candidate_session_version,
-       v_existing_session_candidate_pending_job_id
+       v_existing_session_candidate_pending_job_id,
+       v_existing_session_candidate_projection_version,
+       v_existing_session_candidate_hidden_recovery_template_projection_version,
+       v_existing_session_candidate_last_recomputed_at_utc,
+       v_session_has_hidden_recovery_templates
   FROM public.banking_pay_workbench_session_candidate_state AS scs
   WHERE scs.session_id = p_session_id
     AND scs.candidate_id = p_candidate_id
@@ -531,11 +686,29 @@ BEGIN
              ELSE 0::bigint
            END,
            0::bigint
+         ),
+         COALESCE(
+           CASE
+             WHEN COALESCE(j.payload_json->>'projection_version', '') ~ '^[0-9]+$'
+               THEN (j.payload_json->>'projection_version')::integer
+             ELSE 0::integer
+           END,
+           0::integer
+         ),
+         COALESCE(
+           CASE
+             WHEN COALESCE(j.payload_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+               THEN (j.payload_json->>'hidden_recovery_template_projection_version')::integer
+             ELSE 0::integer
+           END,
+           0::integer
          )
   INTO v_existing_job_id,
        v_existing_job_status,
        v_existing_job_source_change_seq,
-       v_existing_job_session_version
+       v_existing_job_session_version,
+       v_existing_job_projection_version,
+       v_existing_job_hidden_recovery_template_projection_version
   FROM public.banking_pay_workbench_jobs AS j
   WHERE j.session_id = p_session_id
     AND j.candidate_id = p_candidate_id
@@ -562,9 +735,57 @@ BEGIN
            j.id DESC
   LIMIT 1;
 
+  SELECT EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements(
+             CASE
+               WHEN jsonb_typeof(snap.candidate_fragment_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(snap.candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END
+           ) AS snap_tpl(value)
+           WHERE jsonb_typeof(snap_tpl.value) = 'object'
+             AND UPPER(COALESCE(snap_tpl.value->>'recovery_family', '')) = 'MANUAL_DEBT_RECOVERY'
+             AND UPPER(COALESCE(NULLIF(BTRIM(COALESCE(snap_tpl.value->>'pay_channel', '')), ''), 'PAYE')) = 'PAYE'
+             AND NOT EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(
+                 CASE
+                   WHEN jsonb_typeof(scs.effective_candidate_fragment_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(scs.effective_candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
+                   ELSE '[]'::jsonb
+                 END
+               ) AS eff_tpl(value)
+               WHERE jsonb_typeof(eff_tpl.value) = 'object'
+                 AND UPPER(COALESCE(eff_tpl.value->>'recovery_family', '')) = 'MANUAL_DEBT_RECOVERY'
+                 AND COALESCE(NULLIF(BTRIM(COALESCE(eff_tpl.value->>'finance_case_id', '')), ''), '') = COALESCE(NULLIF(BTRIM(COALESCE(snap_tpl.value->>'finance_case_id', '')), ''), '')
+             )
+         )
+  INTO v_session_missing_snapshot_hidden_manual_debt_template
+  FROM public.banking_pay_snapshot_candidate_state AS snap
+  LEFT JOIN public.banking_pay_workbench_session_candidate_state AS scs
+    ON scs.session_id = p_session_id
+   AND scs.candidate_id = p_candidate_id
+  WHERE snap.snapshot_run_id = v_source_snapshot_run_id
+    AND snap.candidate_id = p_candidate_id
+  LIMIT 1;
+
   IF UPPER(COALESCE(v_existing_session_candidate_status, '')) = 'READY'
      AND v_existing_session_candidate_session_version >= v_session_version
-     AND v_existing_session_candidate_source_change_seq >= v_source_change_seq THEN
+     AND v_existing_session_candidate_source_change_seq >= v_source_change_seq
+     AND UPPER(COALESCE(v_snapshot_candidate_status, '')) = 'READY'
+     AND v_snapshot_candidate_source_change_seq >= v_source_change_seq
+     AND v_snapshot_candidate_projection_version >= v_required_projection_version
+     AND (
+       v_requires_hidden_recovery_templates = false
+       OR v_snapshot_candidate_hidden_recovery_template_projection_version >= v_required_hidden_recovery_template_projection_version
+     )
+     AND v_existing_session_candidate_projection_version >= v_required_projection_version
+     AND (
+       v_requires_hidden_recovery_templates = false
+       OR v_existing_session_candidate_hidden_recovery_template_projection_version >= v_required_hidden_recovery_template_projection_version
+     )
+     AND COALESCE(v_existing_session_candidate_last_recomputed_at_utc, '-infinity'::timestamptz) >= COALESCE(v_snapshot_candidate_last_refreshed_at_utc, '-infinity'::timestamptz)
+     AND (v_snapshot_has_hidden_recovery_templates = false OR v_session_has_hidden_recovery_templates = true)
+     AND v_session_missing_snapshot_hidden_manual_debt_template = false THEN
     PERFORM public._audit_insert(
       'banking_pay_workbench_job',
       NULL,
@@ -577,6 +798,9 @@ BEGIN
         'session_version', v_session_version,
         'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
         'source_change_seq', v_source_change_seq,
+        'projection_version', v_required_projection_version,
+        'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+        'snapshot_last_refreshed_at_utc', v_snapshot_candidate_last_refreshed_at_utc,
         'reason', p_reason
       ),
       'WORKBENCH_JOB_ENQUEUE',
@@ -602,13 +826,26 @@ BEGIN
   IF UPPER(COALESCE(v_existing_session_candidate_status, '')) = 'PENDING'
      AND v_existing_job_id IS NOT NULL
      AND v_existing_job_session_version >= v_session_version
-     AND v_existing_job_source_change_seq >= v_source_change_seq THEN
+     AND v_existing_job_source_change_seq >= v_source_change_seq
+     AND v_existing_job_projection_version >= v_required_projection_version
+     AND (
+       v_requires_hidden_recovery_templates = false
+       OR v_existing_job_hidden_recovery_template_projection_version >= v_required_hidden_recovery_template_projection_version
+     ) THEN
     UPDATE public.banking_pay_workbench_session_candidate_state AS scs
     SET status = 'PENDING',
+        effective_candidate_fragment_json = '{}'::jsonb,
+        effective_summary_fragment_json = '{}'::jsonb,
+        effective_paye_candidate_json = NULL,
+        effective_non_paye_payee_json = NULL,
+        effective_payees_json = '[]'::jsonb,
+        effective_case_resolution_states_json = '[]'::jsonb,
+        effective_canonical_preview_lines_json = '[]'::jsonb,
         source_change_seq = GREATEST(COALESCE(scs.source_change_seq, 0), v_source_change_seq),
         session_version = GREATEST(COALESCE(scs.session_version, 0), v_session_version),
         pending_job_id = COALESCE(v_existing_job_id, scs.pending_job_id),
         updated_at_utc = v_now,
+        last_recomputed_at_utc = NULL,
         last_error_json = NULL
     WHERE scs.session_id = p_session_id
       AND scs.candidate_id = p_candidate_id;
@@ -627,6 +864,9 @@ BEGIN
         'session_version', v_session_version,
         'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
         'source_change_seq', v_source_change_seq,
+        'projection_version', v_required_projection_version,
+        'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+        'snapshot_last_refreshed_at_utc', v_snapshot_candidate_last_refreshed_at_utc,
         'reason', p_reason
       ),
       'WORKBENCH_JOB_ENQUEUE',
@@ -649,7 +889,7 @@ BEGIN
     );
   END IF;
 
-  v_dedupe_key := 'SESSION_CANDIDATE_RECOMPUTE:' || p_session_id::text || ':' || p_candidate_id::text || ':v' || v_session_version::text || ':s' || v_source_change_seq::text;
+  v_dedupe_key := 'SESSION_CANDIDATE_RECOMPUTE:' || p_session_id::text || ':' || p_candidate_id::text || ':v' || v_session_version::text || ':s' || v_source_change_seq::text || ':pv' || v_required_projection_version::text || ':ht' || v_required_hidden_recovery_template_projection_version::text;
 
   INSERT INTO public.banking_pay_workbench_jobs (
     job_type,
@@ -690,6 +930,10 @@ BEGIN
         'session_version', v_session_version,
         'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
         'source_change_seq', v_source_change_seq,
+        'projection_version', v_required_projection_version,
+        'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+        'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
+        'snapshot_last_refreshed_at_utc', v_snapshot_candidate_last_refreshed_at_utc,
         'job_type', 'SESSION_CANDIDATE_RECOMPUTE'
       ),
     v_now,
@@ -749,10 +993,18 @@ BEGIN
   ON CONFLICT (session_id, candidate_id)
   DO UPDATE
   SET status = 'PENDING',
+      effective_candidate_fragment_json = '{}'::jsonb,
+      effective_summary_fragment_json = '{}'::jsonb,
+      effective_paye_candidate_json = NULL,
+      effective_non_paye_payee_json = NULL,
+      effective_payees_json = '[]'::jsonb,
+      effective_case_resolution_states_json = '[]'::jsonb,
+      effective_canonical_preview_lines_json = '[]'::jsonb,
       source_change_seq = GREATEST(public.banking_pay_workbench_session_candidate_state.source_change_seq, EXCLUDED.source_change_seq),
       session_version = GREATEST(public.banking_pay_workbench_session_candidate_state.session_version, EXCLUDED.session_version),
       pending_job_id = v_job_id,
       updated_at_utc = v_now,
+      last_recomputed_at_utc = NULL,
       last_error_json = NULL;
 
   PERFORM public._audit_insert(
@@ -769,6 +1021,8 @@ BEGIN
       'dedupe_key', v_dedupe_key,
       'session_version', v_session_version,
       'source_change_seq', v_source_change_seq,
+      'projection_version', v_required_projection_version,
+      'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
       'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END
     ),
     'WORKBENCH_JOB_ENQUEUE',
@@ -784,6 +1038,8 @@ BEGIN
     'session_version', v_session_version,
     'source_snapshot_run_id', CASE WHEN v_source_snapshot_run_id IS NULL THEN NULL ELSE v_source_snapshot_run_id::text END,
     'source_change_seq', v_source_change_seq,
+    'projection_version', v_required_projection_version,
+    'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
     'dedupe_key', v_dedupe_key,
     'reason', p_reason,
     'no_op', false,
@@ -828,6 +1084,12 @@ DECLARE
   v_session_refresh_count integer := 0;
   v_force_refresh boolean := false;
   v_payload_json jsonb := CASE WHEN jsonb_typeof(COALESCE(p_payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(p_payload_json, '{}'::jsonb) ELSE '{}'::jsonb END;
+  v_projection_contract_json jsonb := '{}'::jsonb;
+  v_required_projection_version integer := 0;
+  v_required_hidden_recovery_template_projection_version integer := 0;
+  v_requires_hidden_recovery_templates boolean := false;
+  v_existing_projection_version integer := 0;
+  v_existing_hidden_recovery_template_projection_version integer := 0;
 BEGIN
   IF p_snapshot_run_id IS NULL THEN
     RAISE EXCEPTION 'snapshot_run_id is required';
@@ -862,6 +1124,32 @@ BEGIN
     RAISE EXCEPTION 'candidates row % not found', p_candidate_id;
   END IF;
 
+  v_projection_contract_json := public._pay_workbench_candidate_projection_contract();
+  v_required_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_projection_contract_json->>'projection_version', '') ~ '^[0-9]+$'
+        THEN (v_projection_contract_json->>'projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_required_hidden_recovery_template_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_projection_contract_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+        THEN (v_projection_contract_json->>'hidden_recovery_template_projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_requires_hidden_recovery_templates := COALESCE(
+    CASE
+      WHEN lower(COALESCE(v_projection_contract_json->>'requires_hidden_recovery_templates', '')) IN ('true', 'false')
+        THEN (v_projection_contract_json->>'requires_hidden_recovery_templates')::boolean
+      ELSE NULL::boolean
+    END,
+    false
+  );
+
   SELECT COALESCE(acc.seq, 0)
   INTO v_source_change_seq
   FROM public.app_change_counters AS acc
@@ -876,6 +1164,22 @@ BEGIN
   LIMIT 1;
 
   v_previous_payees_fingerprint := md5(COALESCE(v_existing_snapshot_candidate_row.payees_json, '[]'::jsonb)::text);
+  v_existing_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_existing_snapshot_candidate_row.candidate_fragment_json->>'projection_version', '') ~ '^[0-9]+$'
+        THEN (v_existing_snapshot_candidate_row.candidate_fragment_json->>'projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_existing_hidden_recovery_template_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_existing_snapshot_candidate_row.candidate_fragment_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+        THEN (v_existing_snapshot_candidate_row.candidate_fragment_json->>'hidden_recovery_template_projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
 
   v_force_refresh := (
     COALESCE(NULLIF(UPPER(BTRIM(COALESCE(v_payload_json->>'refresh_scope_kind', ''))), ''), '') IN ('TARGETED_TIMESHEETS', 'CANDIDATE_FULL_LIVE')
@@ -892,7 +1196,12 @@ BEGIN
   IF NOT v_force_refresh
      AND v_existing_snapshot_candidate_row.id IS NOT NULL
      AND UPPER(COALESCE(v_existing_snapshot_candidate_row.status, '')) = 'READY'
-     AND COALESCE(v_existing_snapshot_candidate_row.source_change_seq, 0) >= v_source_change_seq THEN
+     AND COALESCE(v_existing_snapshot_candidate_row.source_change_seq, 0) >= v_source_change_seq
+     AND v_existing_projection_version >= v_required_projection_version
+     AND (
+       v_requires_hidden_recovery_templates = false
+       OR v_existing_hidden_recovery_template_projection_version >= v_required_hidden_recovery_template_projection_version
+     ) THEN
     PERFORM public._audit_insert(
       'banking_pay_snapshot_candidate_state',
       p_snapshot_run_id::text || ':' || p_candidate_id::text,
@@ -904,6 +1213,10 @@ BEGIN
         'source_change_seq', v_source_change_seq,
         'existing_status', v_existing_snapshot_candidate_row.status,
         'existing_source_change_seq', COALESCE(v_existing_snapshot_candidate_row.source_change_seq, 0),
+        'existing_projection_version', v_existing_projection_version,
+        'existing_hidden_recovery_template_projection_version', v_existing_hidden_recovery_template_projection_version,
+        'required_projection_version', v_required_projection_version,
+        'required_hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
         'no_op_reason', 'ALREADY_CURRENT'
       ),
       'SNAPSHOT_CANDIDATE_REFRESH',
@@ -953,6 +1266,15 @@ BEGIN
   v_baseline_json := public.pay_preview_build_candidate_baseline(
     p_context_json => v_context_json,
     p_candidate_id => p_candidate_id
+  );
+
+  v_baseline_json := jsonb_strip_nulls(
+    COALESCE(v_baseline_json, '{}'::jsonb)
+    || jsonb_build_object(
+      'projection_version', v_required_projection_version,
+      'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+      'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates
+    )
   );
 
   v_candidate_rollup_json := public.pay_preview_build_candidate_rollup(
@@ -1222,6 +1544,9 @@ BEGIN
         'snapshot_run_id', p_snapshot_run_id::text,
         'candidate_id', p_candidate_id::text,
         'source_change_seq', v_source_change_seq,
+        'projection_version', v_required_projection_version,
+        'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+        'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
         'readiness_fingerprint', v_current_payees_fingerprint
       )
     );
@@ -1236,22 +1561,18 @@ BEGIN
     p_payload_json => jsonb_build_object(
       'snapshot_run_id', p_snapshot_run_id::text,
       'candidate_id', p_candidate_id::text,
-      'source_change_seq', v_source_change_seq
+      'source_change_seq', v_source_change_seq,
+      'projection_version', v_required_projection_version,
+      'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+      'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
+      'snapshot_last_refreshed_at_utc', v_now,
+      'refresh_reason', CASE WHEN v_force_refresh THEN 'FORCED_SCOPE_REFRESH' ELSE 'SNAPSHOT_CANDIDATE_REFRESH' END
     )
   )
   FROM public.banking_pay_workbench_sessions AS ws
-  LEFT JOIN public.banking_pay_workbench_session_candidate_state AS scs
-    ON scs.session_id = ws.id
-   AND scs.candidate_id = p_candidate_id
   WHERE ws.status = 'OPEN'
     AND ws.source_snapshot_run_id = p_snapshot_run_id
-    AND ws.scope_candidate_ids @> ARRAY[p_candidate_id]::uuid[]
-    AND (
-      scs.id IS NULL
-      OR UPPER(COALESCE(scs.status, '')) <> 'READY'
-      OR COALESCE(scs.source_change_seq, 0) < v_source_change_seq
-      OR COALESCE(scs.session_version, 0) < COALESCE(ws.version, 0)
-    );
+    AND ws.scope_candidate_ids @> ARRAY[p_candidate_id]::uuid[];
 
   GET DIAGNOSTICS v_session_refresh_count = ROW_COUNT;
 
@@ -1268,6 +1589,9 @@ BEGIN
     'baseline_component_row_count', v_component_count,
     'session_refresh_enqueued_count', v_session_refresh_count,
     'payee_readiness_enqueued', v_payee_readiness_enqueued,
+    'projection_version', v_required_projection_version,
+    'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+    'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
     'last_refreshed_at_utc', v_now
   );
 
@@ -1292,6 +1616,9 @@ BEGIN
     'line_count', v_line_count,
     'component_count', v_component_count,
     'refreshed_at_utc', v_now,
+    'projection_version', v_required_projection_version,
+    'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+    'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
     'no_op', false
   );
 EXCEPTION
@@ -1361,9 +1688,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_payee_readiness_ensure(
@@ -19812,6 +20136,7 @@ $function$;
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid, uuid);
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_candidate(
   p_session_id uuid,
   p_candidate_id uuid,
@@ -19849,6 +20174,15 @@ DECLARE
   v_audit_before_json jsonb := NULL;
   v_audit_after_json jsonb := '{}'::jsonb;
   v_snapshot_refresh_payload_json jsonb := '{}'::jsonb;
+  v_projection_contract_json jsonb := '{}'::jsonb;
+  v_required_projection_version integer := 0;
+  v_required_hidden_recovery_template_projection_version integer := 0;
+  v_requires_hidden_recovery_templates boolean := false;
+  v_snapshot_projection_version integer := 0;
+  v_snapshot_hidden_recovery_template_projection_version integer := 0;
+  v_snapshot_has_hidden_recovery_templates boolean := false;
+  v_effective_has_hidden_recovery_templates boolean := false;
+  v_effective_missing_snapshot_hidden_manual_debt_template boolean := false;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -19905,6 +20239,58 @@ BEGIN
   INTO v_live_change_seq
   FROM public.app_change_counters AS acc
   WHERE acc.entity_key = 'pay_candidate:' || p_candidate_id::text;
+
+  v_projection_contract_json := public._pay_workbench_candidate_projection_contract();
+  v_required_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_projection_contract_json->>'projection_version', '') ~ '^[0-9]+$'
+        THEN (v_projection_contract_json->>'projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_required_hidden_recovery_template_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_projection_contract_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+        THEN (v_projection_contract_json->>'hidden_recovery_template_projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_requires_hidden_recovery_templates := COALESCE(
+    CASE
+      WHEN lower(COALESCE(v_projection_contract_json->>'requires_hidden_recovery_templates', '')) IN ('true', 'false')
+        THEN (v_projection_contract_json->>'requires_hidden_recovery_templates')::boolean
+      ELSE NULL::boolean
+    END,
+    false
+  );
+
+  v_snapshot_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_snapshot_candidate_row.candidate_fragment_json->>'projection_version', '') ~ '^[0-9]+$'
+        THEN (v_snapshot_candidate_row.candidate_fragment_json->>'projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_snapshot_hidden_recovery_template_projection_version := COALESCE(
+    CASE
+      WHEN COALESCE(v_snapshot_candidate_row.candidate_fragment_json->>'hidden_recovery_template_projection_version', '') ~ '^[0-9]+$'
+        THEN (v_snapshot_candidate_row.candidate_fragment_json->>'hidden_recovery_template_projection_version')::integer
+      ELSE NULL::integer
+    END,
+    0
+  );
+  v_snapshot_has_hidden_recovery_templates := COALESCE(
+    jsonb_array_length(
+      CASE
+        WHEN jsonb_typeof(v_snapshot_candidate_row.candidate_fragment_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_snapshot_candidate_row.candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ),
+    0
+  ) > 0;
 
   IF p_job_id IS NOT NULL THEN
     SELECT j.*
@@ -20018,7 +20404,12 @@ BEGIN
 
   IF v_snapshot_candidate_row.id IS NULL
      OR v_snapshot_candidate_row.status <> 'READY'
-     OR COALESCE(v_snapshot_candidate_row.source_change_seq, 0) < v_live_change_seq THEN
+     OR COALESCE(v_snapshot_candidate_row.source_change_seq, 0) < v_live_change_seq
+     OR v_snapshot_projection_version < v_required_projection_version
+     OR (
+       v_requires_hidden_recovery_templates = true
+       AND v_snapshot_hidden_recovery_template_projection_version < v_required_hidden_recovery_template_projection_version
+     ) THEN
     SELECT j.id,
            COALESCE(
              CASE
@@ -20063,7 +20454,11 @@ BEGIN
           'session_id', p_session_id::text,
           'candidate_id', p_candidate_id::text,
           'session_version', v_session_row.version,
-          'trigger_job_id', CASE WHEN v_claimed_job_row.id IS NULL THEN NULL ELSE v_claimed_job_row.id::text END
+          'trigger_job_id', CASE WHEN v_claimed_job_row.id IS NULL THEN NULL ELSE v_claimed_job_row.id::text END,
+          'projection_version', v_required_projection_version,
+          'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+          'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates,
+          'refresh_reason', 'PROJECTION_VERSION_STALE'
         ),
         CASE
           WHEN jsonb_typeof(COALESCE(v_claimed_job_row.payload_json, '{}'::jsonb)) = 'object' THEN COALESCE(v_claimed_job_row.payload_json, '{}'::jsonb)
@@ -20125,10 +20520,18 @@ BEGIN
     ON CONFLICT (session_id, candidate_id)
     DO UPDATE
     SET status = 'PENDING',
+        effective_candidate_fragment_json = '{}'::jsonb,
+        effective_summary_fragment_json = '{}'::jsonb,
+        effective_paye_candidate_json = NULL,
+        effective_non_paye_payee_json = NULL,
+        effective_payees_json = '[]'::jsonb,
+        effective_case_resolution_states_json = '[]'::jsonb,
+        effective_canonical_preview_lines_json = '[]'::jsonb,
         source_change_seq = GREATEST(public.banking_pay_workbench_session_candidate_state.source_change_seq, GREATEST(v_live_change_seq, COALESCE(v_snapshot_candidate_row.source_change_seq, 0), COALESCE(v_existing_snapshot_job_source_change_seq, 0))),
         session_version = GREATEST(public.banking_pay_workbench_session_candidate_state.session_version, v_session_row.version),
         pending_job_id = COALESCE(v_snapshot_refresh_job_id, public.banking_pay_workbench_session_candidate_state.pending_job_id),
         updated_at_utc = v_now,
+        last_recomputed_at_utc = NULL,
         last_error_json = NULL;
 
     RETURN jsonb_build_object(
@@ -20205,6 +20608,57 @@ BEGIN
     p_case_resolutions_json => v_case_resolutions_json,
     p_overrides_json => v_overrides_json
   );
+
+  v_effective_json := jsonb_strip_nulls(
+    COALESCE(v_effective_json, '{}'::jsonb)
+    || jsonb_build_object(
+      'projection_version', v_required_projection_version,
+      'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version,
+      'requires_hidden_recovery_templates', v_requires_hidden_recovery_templates
+    )
+  );
+
+  v_effective_has_hidden_recovery_templates := COALESCE(
+    jsonb_array_length(
+      CASE
+        WHEN jsonb_typeof(v_effective_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_effective_json->'hidden_recovery_template_lines', '[]'::jsonb)
+        ELSE '[]'::jsonb
+      END
+    ),
+    0
+  ) > 0;
+
+  SELECT EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements(
+             CASE
+               WHEN jsonb_typeof(v_snapshot_candidate_row.candidate_fragment_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_snapshot_candidate_row.candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END
+           ) AS snap_tpl(value)
+           WHERE jsonb_typeof(snap_tpl.value) = 'object'
+             AND UPPER(COALESCE(snap_tpl.value->>'recovery_family', '')) = 'MANUAL_DEBT_RECOVERY'
+             AND UPPER(COALESCE(NULLIF(BTRIM(COALESCE(snap_tpl.value->>'pay_channel', '')), ''), 'PAYE')) = 'PAYE'
+             AND NOT EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(
+                 CASE
+                   WHEN jsonb_typeof(v_effective_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_effective_json->'hidden_recovery_template_lines', '[]'::jsonb)
+                   ELSE '[]'::jsonb
+                 END
+               ) AS eff_tpl(value)
+               WHERE jsonb_typeof(eff_tpl.value) = 'object'
+                 AND UPPER(COALESCE(eff_tpl.value->>'recovery_family', '')) = 'MANUAL_DEBT_RECOVERY'
+                 AND COALESCE(NULLIF(BTRIM(COALESCE(eff_tpl.value->>'finance_case_id', '')), ''), '') = COALESCE(NULLIF(BTRIM(COALESCE(snap_tpl.value->>'finance_case_id', '')), ''), '')
+             )
+         )
+  INTO v_effective_missing_snapshot_hidden_manual_debt_template;
+
+  IF v_requires_hidden_recovery_templates
+     AND v_snapshot_has_hidden_recovery_templates
+     AND (v_effective_has_hidden_recovery_templates = false OR v_effective_missing_snapshot_hidden_manual_debt_template = true) THEN
+    RAISE EXCEPTION 'SESSION_EFFECTIVE_FRAGMENT_LOST_HIDDEN_RECOVERY_TEMPLATE';
+  END IF;
 
   v_candidate_rollup_json := public.pay_preview_build_candidate_rollup(
     p_context_json => v_context_json,
@@ -20284,7 +20738,9 @@ BEGIN
     'non_paye_payee_json', CASE WHEN jsonb_typeof(v_candidate_rollup_json->'non_paye_payee') = 'object' THEN v_candidate_rollup_json->'non_paye_payee' ELSE NULL END,
     'payees_count', CASE WHEN jsonb_typeof(v_candidate_rollup_json->'payees') = 'array' THEN jsonb_array_length(v_candidate_rollup_json->'payees') ELSE 0 END,
     'case_resolution_state_count', CASE WHEN jsonb_typeof(v_candidate_rollup_json->'case_resolution_states') = 'array' THEN jsonb_array_length(v_candidate_rollup_json->'case_resolution_states') ELSE 0 END,
-    'canonical_preview_line_count', CASE WHEN jsonb_typeof(v_candidate_rollup_json->'canonical_preview_lines') = 'array' THEN jsonb_array_length(v_candidate_rollup_json->'canonical_preview_lines') ELSE 0 END
+    'canonical_preview_line_count', CASE WHEN jsonb_typeof(v_candidate_rollup_json->'canonical_preview_lines') = 'array' THEN jsonb_array_length(v_candidate_rollup_json->'canonical_preview_lines') ELSE 0 END,
+    'projection_version', v_required_projection_version,
+    'hidden_recovery_template_projection_version', v_required_hidden_recovery_template_projection_version
   );
 
   PERFORM public._audit_insert(
@@ -20392,8 +20848,6 @@ EXCEPTION
     RAISE;
 END;
 $function$;
-
-
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_discard(
