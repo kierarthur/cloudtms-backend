@@ -4614,6 +4614,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_build_candidate_baseline(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -4627,6 +4628,13 @@ declare
   v_payload jsonb := '{}'::jsonb;
   v_canonical_payload jsonb := '{}'::jsonb;
   v_timesheet_snapshot_payload jsonb := '{}'::jsonb;
+  v_payload_canonical_preview_lines jsonb := '[]'::jsonb;
+  v_canonical_preview_lines jsonb := '[]'::jsonb;
+  v_selected_canonical_preview_lines jsonb := '[]'::jsonb;
+  v_payload_hidden_recovery_template_lines jsonb := '[]'::jsonb;
+  v_canonical_hidden_recovery_template_lines jsonb := '[]'::jsonb;
+  v_result_hidden_recovery_template_lines jsonb := '[]'::jsonb;
+  v_result_canonical_preview_lines jsonb := '[]'::jsonb;
 begin
   perform public.pay_preview_candidate_collect_scope(p_context_json, p_candidate_id);
   perform public.pay_preview_candidate_build_entitlement_rows(p_context_json, p_candidate_id);
@@ -4637,14 +4645,139 @@ begin
   v_timesheet_snapshot_payload := public.pay_preview_candidate_build_timesheet_snapshots(p_context_json, p_candidate_id);
   v_payload := public.pay_preview_candidate_build_summary_fragment(p_context_json, p_candidate_id);
 
+  v_payload_canonical_preview_lines := CASE
+    WHEN jsonb_typeof(v_payload->'canonical_preview_lines') = 'array' THEN COALESCE(v_payload->'canonical_preview_lines', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+  v_canonical_preview_lines := CASE
+    WHEN jsonb_typeof(v_canonical_payload->'canonical_preview_lines') = 'array' THEN COALESCE(v_canonical_payload->'canonical_preview_lines', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+  v_selected_canonical_preview_lines := CASE
+    WHEN jsonb_typeof(v_payload->'canonical_preview_lines') = 'array' THEN v_payload_canonical_preview_lines
+    WHEN jsonb_typeof(v_canonical_payload->'canonical_preview_lines') = 'array' THEN v_canonical_preview_lines
+    ELSE '[]'::jsonb
+  END;
+
+  v_payload_hidden_recovery_template_lines := CASE
+    WHEN jsonb_typeof(v_payload->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_payload->'hidden_recovery_template_lines', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+  v_canonical_hidden_recovery_template_lines := CASE
+    WHEN jsonb_typeof(v_canonical_payload->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_canonical_payload->'hidden_recovery_template_lines', '[]'::jsonb)
+    ELSE '[]'::jsonb
+  END;
+
+  with all_hidden_template_lines as (
+    select
+      0 as source_rank,
+      coalesce(nullif(btrim(coalesce(hidden_canonical.hidden_line->>'candidate_id', '')), ''), p_candidate_id::text) as candidate_id_text,
+      coalesce(nullif(btrim(coalesce(hidden_canonical.hidden_line->>'finance_case_id', '')), ''), '') as finance_case_id_text,
+      coalesce(nullif(btrim(coalesce(hidden_canonical.hidden_line->>'finance_component_id', '')), ''), '') as finance_component_id_text,
+      upper(coalesce(hidden_canonical.hidden_line->>'recovery_family', '')) as recovery_family_text,
+      coalesce(nullif(btrim(coalesce(hidden_canonical.hidden_line->>'source_ref', '')), ''), '') as source_ref_text,
+      upper(coalesce(nullif(btrim(coalesce(hidden_canonical.hidden_line->>'pay_channel', '')), ''), 'PAYE')) as pay_channel_text,
+      hidden_canonical.hidden_line as hidden_line
+    from jsonb_array_elements(v_canonical_hidden_recovery_template_lines) as hidden_canonical(hidden_line)
+    where jsonb_typeof(hidden_canonical.hidden_line) = 'object'
+
+    union all
+
+    select
+      1 as source_rank,
+      coalesce(nullif(btrim(coalesce(hidden_payload.hidden_line->>'candidate_id', '')), ''), p_candidate_id::text) as candidate_id_text,
+      coalesce(nullif(btrim(coalesce(hidden_payload.hidden_line->>'finance_case_id', '')), ''), '') as finance_case_id_text,
+      coalesce(nullif(btrim(coalesce(hidden_payload.hidden_line->>'finance_component_id', '')), ''), '') as finance_component_id_text,
+      upper(coalesce(hidden_payload.hidden_line->>'recovery_family', '')) as recovery_family_text,
+      coalesce(nullif(btrim(coalesce(hidden_payload.hidden_line->>'source_ref', '')), ''), '') as source_ref_text,
+      upper(coalesce(nullif(btrim(coalesce(hidden_payload.hidden_line->>'pay_channel', '')), ''), 'PAYE')) as pay_channel_text,
+      hidden_payload.hidden_line as hidden_line
+    from jsonb_array_elements(v_payload_hidden_recovery_template_lines) as hidden_payload(hidden_line)
+    where jsonb_typeof(hidden_payload.hidden_line) = 'object'
+  ),
+  dedup_hidden_template_lines as (
+    select distinct on (
+      all_hidden_template_lines.candidate_id_text,
+      all_hidden_template_lines.finance_case_id_text,
+      all_hidden_template_lines.finance_component_id_text,
+      all_hidden_template_lines.recovery_family_text,
+      all_hidden_template_lines.source_ref_text,
+      all_hidden_template_lines.pay_channel_text
+    )
+      all_hidden_template_lines.source_rank,
+      all_hidden_template_lines.candidate_id_text,
+      all_hidden_template_lines.finance_case_id_text,
+      all_hidden_template_lines.finance_component_id_text,
+      all_hidden_template_lines.recovery_family_text,
+      all_hidden_template_lines.source_ref_text,
+      all_hidden_template_lines.pay_channel_text,
+      all_hidden_template_lines.hidden_line
+    from all_hidden_template_lines
+    order by
+      all_hidden_template_lines.candidate_id_text,
+      all_hidden_template_lines.finance_case_id_text,
+      all_hidden_template_lines.finance_component_id_text,
+      all_hidden_template_lines.recovery_family_text,
+      all_hidden_template_lines.source_ref_text,
+      all_hidden_template_lines.pay_channel_text,
+      all_hidden_template_lines.source_rank
+  )
+  select coalesce(
+           jsonb_agg(
+             dedup_hidden_template_lines.hidden_line
+             order by
+               dedup_hidden_template_lines.source_rank,
+               dedup_hidden_template_lines.finance_case_id_text,
+               dedup_hidden_template_lines.finance_component_id_text,
+               dedup_hidden_template_lines.source_ref_text
+           ),
+           '[]'::jsonb
+         )
+  into v_result_hidden_recovery_template_lines
+  from dedup_hidden_template_lines;
+
+  with raw_selected_canonical_lines as (
+    select
+      row_number() over () as line_sort_key,
+      raw_line.line_value as line_value
+    from jsonb_array_elements(v_selected_canonical_preview_lines) as raw_line(line_value)
+    where jsonb_typeof(raw_line.line_value) = 'object'
+  )
+  select coalesce(
+           jsonb_agg(filtered_selected_canonical_lines.line_value order by filtered_selected_canonical_lines.line_sort_key),
+           '[]'::jsonb
+         )
+  into v_result_canonical_preview_lines
+  from (
+    select
+      raw_selected_canonical_lines.line_sort_key,
+      raw_selected_canonical_lines.line_value
+    from raw_selected_canonical_lines
+    where (
+      upper(coalesce(raw_selected_canonical_lines.line_value->>'line_type', '')) <> 'MANUAL_DEBT_RECOVERY'
+      or upper(coalesce(raw_selected_canonical_lines.line_value->>'pay_channel', '')) <> 'PAYE'
+      or upper(coalesce(raw_selected_canonical_lines.line_value->>'paye_treatment', '')) <> 'NET_DEDUCT'
+      or coalesce(nullif(btrim(coalesce(raw_selected_canonical_lines.line_value->>'finance_case_id', '')), ''), '') = ''
+      or exists (
+        select 1
+        from jsonb_array_elements(v_result_hidden_recovery_template_lines) as hidden_template_line(hidden_value)
+        where jsonb_typeof(hidden_template_line.hidden_value) = 'object'
+          and upper(coalesce(hidden_template_line.hidden_value->>'recovery_family', '')) = 'MANUAL_DEBT_RECOVERY'
+          and upper(coalesce(nullif(btrim(coalesce(hidden_template_line.hidden_value->>'pay_channel', '')), ''), 'PAYE')) = 'PAYE'
+          and coalesce(nullif(btrim(coalesce(hidden_template_line.hidden_value->>'finance_case_id', '')), ''), '') =
+              coalesce(nullif(btrim(coalesce(raw_selected_canonical_lines.line_value->>'finance_case_id', '')), ''), '')
+      )
+    )
+  ) as filtered_selected_canonical_lines;
+
   return jsonb_build_object(
     'candidate_id', coalesce(v_payload->>'candidate_id', p_candidate_id::text),
     'candidate_row', coalesce(v_payload->'candidate_row', '{}'::jsonb),
     'summary_fragment', coalesce(v_payload->'summary_fragment', '{}'::jsonb),
     'case_resolution_states', coalesce(v_payload->'case_resolution_states', '[]'::jsonb),
-    'canonical_preview_lines', coalesce(v_payload->'canonical_preview_lines', v_canonical_payload->'canonical_preview_lines', '[]'::jsonb),
-    'hidden_recovery_template_lines', coalesce(v_canonical_payload->'hidden_recovery_template_lines', v_payload->'hidden_recovery_template_lines', '[]'::jsonb),
-    'hidden_recovery_template_line_count', jsonb_array_length(coalesce(v_canonical_payload->'hidden_recovery_template_lines', v_payload->'hidden_recovery_template_lines', '[]'::jsonb)),
+    'canonical_preview_lines', v_result_canonical_preview_lines,
+    'hidden_recovery_template_lines', v_result_hidden_recovery_template_lines,
+    'hidden_recovery_template_line_count', jsonb_array_length(v_result_hidden_recovery_template_lines),
     'payees', coalesce(v_payload->'payees', '[]'::jsonb),
     'itemisation', coalesce(v_payload->'itemisation', '[]'::jsonb),
     'blocked_items', coalesce(v_payload->'blocked_items', '[]'::jsonb),
@@ -4655,6 +4788,9 @@ begin
   );
 end;
 $function$;
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview_assemble_payload(p_context_json jsonb,
   p_candidate_rollups_json jsonb
 )
@@ -15281,6 +15417,8 @@ $function$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_summary_fragment(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -15331,6 +15469,8 @@ declare
   v_candidate_row jsonb := '{}'::jsonb;
   v_itemisation jsonb := '[]'::jsonb;
   v_baseline_component_rows jsonb := '[]'::jsonb;
+  v_hidden_recovery_template_lines jsonb := '[]'::jsonb;
+  v_filtered_canonical_preview_lines jsonb := '[]'::jsonb;
 begin
   if jsonb_typeof(v_context_json) <> 'object' then
     raise exception 'p_context_json must be a JSON object';
@@ -16386,7 +16526,209 @@ begin
     coalesce((select bcrj.payload from baseline_component_rows_json bcrj), '[]'::jsonb)
   into v_paye, v_nonpaye, v_blocked, v_do_not_pay, v_snoozed, v_payees, v_summary, v_canonical_preview_lines, v_paye_summary_breakdown, v_case_resolution_states, v_baseline_component_rows;
 
-  if jsonb_typeof(v_paye) = 'array' and jsonb_array_length(v_paye) > 0 then
+  with raw_visible_manual_debt_lines as (
+    select
+      row_number() over () as line_sort_key,
+      visible_line.value as line_value
+    from jsonb_array_elements(coalesce(v_canonical_preview_lines, '[]'::jsonb)) as visible_line(value)
+    where jsonb_typeof(visible_line.value) = 'object'
+      and upper(coalesce(visible_line.value->>'line_type', '')) = 'MANUAL_DEBT_RECOVERY'
+      and upper(coalesce(visible_line.value->>'pay_channel', '')) = 'PAYE'
+      and upper(coalesce(visible_line.value->>'paye_treatment', '')) = 'NET_DEDUCT'
+      and coalesce(nullif(btrim(coalesce(visible_line.value->>'finance_case_id', '')), ''), '') <> ''
+  ),
+  visible_manual_debt_components as (
+    select
+      raw_visible_manual_debt_lines.line_sort_key,
+      raw_visible_manual_debt_lines.line_value,
+      case
+        when jsonb_typeof(raw_visible_manual_debt_lines.line_value->'case_components') = 'array'
+             and jsonb_array_length(coalesce(raw_visible_manual_debt_lines.line_value->'case_components', '[]'::jsonb)) > 0
+          then raw_visible_manual_debt_lines.line_value->'case_components'->0
+        else '{}'::jsonb
+      end as component_value
+    from raw_visible_manual_debt_lines
+  ),
+  built_hidden_template_lines as (
+    select
+      visible_manual_debt_components.line_sort_key,
+      coalesce(nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'candidate_id', '')), ''), v_candidate_id::text) as candidate_id_text,
+      coalesce(nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'finance_case_id', '')), ''), '') as finance_case_id_text,
+      coalesce(nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'finance_component_id', '')), ''), '') as finance_component_id_text,
+      coalesce(nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'source_ref', '')), ''), '') as source_ref_text,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'candidate_id', coalesce(nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'candidate_id', '')), ''), v_candidate_id::text),
+          'finance_case_id', nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'finance_case_id', '')), ''),
+          'finance_component_id', nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'finance_component_id', '')), ''),
+          'recovery_family', 'MANUAL_DEBT_RECOVERY',
+          'source_ref', coalesce(
+            nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'source_ref', '')), ''),
+            case
+              when coalesce(nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'finance_case_id', '')), ''), '') = '' then null
+              else 'advance:' || nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'finance_case_id', '')), '')
+            end
+          ),
+          'pay_channel', 'PAYE',
+          'paye_treatment', coalesce(nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'paye_treatment', '')), ''), 'NET_DEDUCT'),
+          'frozen_component_key_type', nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'component_key_type', '')), ''),
+          'frozen_component_key_value', nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'component_key_value', '')), ''),
+          'frozen_component_classification', nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'classification', '')), ''),
+          'frozen_component_snapshot_json', jsonb_strip_nulls(
+            jsonb_build_object(
+              'finance_case_id', nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'finance_case_id', '')), ''),
+              'case_components', case
+                when jsonb_typeof(visible_manual_debt_components.line_value->'case_components') = 'array' then coalesce(visible_manual_debt_components.line_value->'case_components', '[]'::jsonb)
+                else '[]'::jsonb
+              end,
+              'case_resolution_summary', case
+                when jsonb_typeof(visible_manual_debt_components.line_value->'case_resolution_summary') = 'object' then visible_manual_debt_components.line_value->'case_resolution_summary'
+                else null::jsonb
+              end
+            )
+          ),
+          'frozen_source_basis_json', jsonb_strip_nulls(
+            coalesce(
+              case
+                when jsonb_typeof(visible_manual_debt_components.component_value->'source_basis_json') = 'object' then visible_manual_debt_components.component_value->'source_basis_json'
+                else '{}'::jsonb
+              end,
+              '{}'::jsonb
+            )
+            || jsonb_build_object(
+              'recovery_family', 'MANUAL_DEBT_RECOVERY',
+              'pay_channel', 'PAYE',
+              'frozen_source_pay_method', coalesce(nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'source_pay_method', '')), ''), 'PAYE'),
+              'frozen_target_pay_method', coalesce(nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'current_target_pay_method', '')), ''), 'PAYE'),
+              'outstanding_amount', to_jsonb(coalesce(
+                case when coalesce(visible_manual_debt_components.component_value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->>'remaining_source_amount')::numeric else null::numeric end,
+                case when coalesce(visible_manual_debt_components.component_value->>'source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->>'source_amount')::numeric else null::numeric end
+              )),
+              'nominal_due_amount_ex_vat', to_jsonb(abs(coalesce(case when coalesce(visible_manual_debt_components.line_value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.line_value->>'amount_ex_vat')::numeric else 0::numeric end, 0::numeric))),
+              'current_due_amount_ex_vat', to_jsonb(abs(coalesce(case when coalesce(visible_manual_debt_components.line_value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.line_value->>'amount_ex_vat')::numeric else 0::numeric end, 0::numeric))),
+              'next_due_week_start', coalesce(
+                nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'next_due_week_start', '')), ''),
+                nullif(btrim(coalesce(visible_manual_debt_components.component_value->'source_basis_json'->>'next_due_week_start', '')), '')
+              ),
+              'sort_order', visible_manual_debt_components.line_sort_key
+            )
+          ),
+          'frozen_source_pay_method', coalesce(nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'source_pay_method', '')), ''), 'PAYE'),
+          'frozen_target_pay_method', coalesce(nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'current_target_pay_method', '')), ''), 'PAYE'),
+          'frozen_resolution_mode', coalesce(
+            nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'saved_resolution_mode', '')), ''),
+            nullif(btrim(coalesce(visible_manual_debt_components.component_value->>'resolution_mode', '')), '')
+          ),
+          'frozen_resolution_payload_json', case
+            when jsonb_typeof(visible_manual_debt_components.line_value->'case_resolution_summary') = 'object'
+                 and jsonb_typeof(visible_manual_debt_components.line_value->'case_resolution_summary'->'non_bucket_resolution') = 'object'
+              then visible_manual_debt_components.line_value->'case_resolution_summary'->'non_bucket_resolution'
+            when jsonb_typeof(visible_manual_debt_components.component_value->'saved_resolution_payload_json') = 'object'
+              then visible_manual_debt_components.component_value->'saved_resolution_payload_json'
+            when jsonb_typeof(visible_manual_debt_components.component_value->'suggested_resolution_payload_json') = 'object'
+              then visible_manual_debt_components.component_value->'suggested_resolution_payload_json'
+            else null::jsonb
+          end,
+          'frozen_resolution_result_json', case
+            when jsonb_typeof(visible_manual_debt_components.line_value->'case_resolution_summary') = 'object'
+              then visible_manual_debt_components.line_value->'case_resolution_summary'
+            when jsonb_typeof(visible_manual_debt_components.component_value->'saved_resolution_result_json') = 'object'
+              then visible_manual_debt_components.component_value->'saved_resolution_result_json'
+            when jsonb_typeof(visible_manual_debt_components.component_value->'suggested_resolution_result_json') = 'object'
+              then visible_manual_debt_components.component_value->'suggested_resolution_result_json'
+            else null::jsonb
+          end,
+          'frozen_source_amount', round(coalesce(
+            case when coalesce(visible_manual_debt_components.component_value->>'source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->>'source_amount')::numeric else null::numeric end,
+            0::numeric
+          ), 2),
+          'frozen_outstanding_amount', round(coalesce(
+            case when coalesce(visible_manual_debt_components.component_value->>'remaining_source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->>'remaining_source_amount')::numeric else null::numeric end,
+            case when coalesce(visible_manual_debt_components.component_value->>'source_amount', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->>'source_amount')::numeric else null::numeric end,
+            0::numeric
+          ), 2),
+          'weekly_due', round(coalesce(
+            case when coalesce(visible_manual_debt_components.component_value->'source_basis_json'->>'weekly_due', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->'source_basis_json'->>'weekly_due')::numeric else null::numeric end,
+            abs(coalesce(case when coalesce(visible_manual_debt_components.line_value->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.line_value->>'amount_ex_vat')::numeric else 0::numeric end, 0::numeric)),
+            0::numeric
+          ), 2),
+          'minimum_earnings_threshold', case when coalesce(visible_manual_debt_components.component_value->'source_basis_json'->>'minimum_earnings_threshold', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->'source_basis_json'->>'minimum_earnings_threshold')::numeric else null::numeric end,
+          'take_home_floor_override', case when coalesce(visible_manual_debt_components.component_value->'source_basis_json'->>'take_home_floor_override', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->'source_basis_json'->>'take_home_floor_override')::numeric else null::numeric end,
+          'default_take_home_floor', coalesce(
+            case when coalesce(visible_manual_debt_components.component_value->'source_basis_json'->>'default_take_home_floor', '') ~ '^-?[0-9]+(\.[0-9]+)?$' then (visible_manual_debt_components.component_value->'source_basis_json'->>'default_take_home_floor')::numeric else null::numeric end,
+            0::numeric
+          ),
+          'next_due_week_start', coalesce(
+            nullif(btrim(coalesce(visible_manual_debt_components.line_value->>'next_due_week_start', '')), ''),
+            nullif(btrim(coalesce(visible_manual_debt_components.component_value->'source_basis_json'->>'next_due_week_start', '')), '')
+          ),
+          'sort_order', visible_manual_debt_components.line_sort_key
+        )
+      ) as hidden_line
+    from visible_manual_debt_components
+  ),
+  dedup_hidden_template_lines as (
+    select distinct on (
+      built_hidden_template_lines.candidate_id_text,
+      built_hidden_template_lines.finance_case_id_text,
+      built_hidden_template_lines.finance_component_id_text,
+      built_hidden_template_lines.source_ref_text
+    )
+      built_hidden_template_lines.line_sort_key,
+      built_hidden_template_lines.hidden_line
+    from built_hidden_template_lines
+    order by
+      built_hidden_template_lines.candidate_id_text,
+      built_hidden_template_lines.finance_case_id_text,
+      built_hidden_template_lines.finance_component_id_text,
+      built_hidden_template_lines.source_ref_text,
+      built_hidden_template_lines.line_sort_key
+  )
+  select coalesce(
+           jsonb_agg(dedup_hidden_template_lines.hidden_line order by dedup_hidden_template_lines.line_sort_key),
+           '[]'::jsonb
+         )
+  into v_hidden_recovery_template_lines
+  from dedup_hidden_template_lines;
+
+  with raw_canonical_preview_lines as (
+    select
+      row_number() over () as line_sort_key,
+      raw_line.value as line_value
+    from jsonb_array_elements(coalesce(v_canonical_preview_lines, '[]'::jsonb)) as raw_line(value)
+    where jsonb_typeof(raw_line.value) = 'object'
+  )
+  select coalesce(
+           jsonb_agg(filtered_canonical_preview_lines.line_value order by filtered_canonical_preview_lines.line_sort_key),
+           '[]'::jsonb
+         )
+  into v_filtered_canonical_preview_lines
+  from (
+    select
+      raw_canonical_preview_lines.line_sort_key,
+      raw_canonical_preview_lines.line_value
+    from raw_canonical_preview_lines
+    where (
+      upper(coalesce(raw_canonical_preview_lines.line_value->>'line_type', '')) <> 'MANUAL_DEBT_RECOVERY'
+      or upper(coalesce(raw_canonical_preview_lines.line_value->>'pay_channel', '')) <> 'PAYE'
+      or upper(coalesce(raw_canonical_preview_lines.line_value->>'paye_treatment', '')) <> 'NET_DEDUCT'
+      or coalesce(nullif(btrim(coalesce(raw_canonical_preview_lines.line_value->>'finance_case_id', '')), ''), '') = ''
+      or exists (
+        select 1
+        from jsonb_array_elements(coalesce(v_hidden_recovery_template_lines, '[]'::jsonb)) as hidden_template_line(hidden_value)
+        where jsonb_typeof(hidden_template_line.hidden_value) = 'object'
+          and upper(coalesce(hidden_template_line.hidden_value->>'recovery_family', '')) = 'MANUAL_DEBT_RECOVERY'
+          and upper(coalesce(nullif(btrim(coalesce(hidden_template_line.hidden_value->>'pay_channel', '')), ''), 'PAYE')) = 'PAYE'
+          and coalesce(nullif(btrim(coalesce(hidden_template_line.hidden_value->>'finance_case_id', '')), ''), '') =
+              coalesce(nullif(btrim(coalesce(raw_canonical_preview_lines.line_value->>'finance_case_id', '')), ''), '')
+      )
+    )
+  ) as filtered_canonical_preview_lines;
+
+  v_canonical_preview_lines := coalesce(v_filtered_canonical_preview_lines, '[]'::jsonb);
+
+  if jsonb_typeof(v_paye) = 'array'
+ and jsonb_array_length(v_paye) > 0 then
     v_candidate_row := coalesce(v_paye->0, '{}'::jsonb);
   elsif jsonb_typeof(v_nonpaye) = 'array' and jsonb_array_length(v_nonpaye) > 0 then
     v_candidate_row := coalesce(v_nonpaye->0, '{}'::jsonb);
@@ -16428,6 +16770,8 @@ begin
     'summary_fragment', coalesce(v_summary, '{}'::jsonb),
     'case_resolution_states', coalesce(v_case_resolution_states, '[]'::jsonb),
     'canonical_preview_lines', coalesce(v_canonical_preview_lines, '[]'::jsonb),
+    'hidden_recovery_template_lines', coalesce(v_hidden_recovery_template_lines, '[]'::jsonb),
+    'hidden_recovery_template_line_count', case when jsonb_typeof(coalesce(v_hidden_recovery_template_lines, '[]'::jsonb)) = 'array' then jsonb_array_length(coalesce(v_hidden_recovery_template_lines, '[]'::jsonb)) else 0 end,
     'payees', coalesce(v_payees, '[]'::jsonb),
     'itemisation', coalesce(v_itemisation, '[]'::jsonb),
     'blocked_items', coalesce(v_blocked, '[]'::jsonb),
@@ -16440,6 +16784,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
@@ -20418,6 +20764,7 @@ $function$;
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid, uuid);
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_candidate(
   p_session_id uuid,
   p_candidate_id uuid,
@@ -20464,6 +20811,8 @@ DECLARE
   v_snapshot_has_hidden_recovery_templates boolean := false;
   v_effective_has_hidden_recovery_templates boolean := false;
   v_effective_missing_snapshot_hidden_manual_debt_template boolean := false;
+  v_snapshot_visible_paye_manual_debt_without_hidden_template boolean := false;
+  v_rollup_visible_paye_manual_debt_without_hidden_template boolean := false;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -20913,6 +21262,36 @@ BEGIN
            SELECT 1
            FROM jsonb_array_elements(
              CASE
+               WHEN jsonb_typeof(v_snapshot_candidate_row.canonical_preview_lines_json) = 'array' THEN COALESCE(v_snapshot_candidate_row.canonical_preview_lines_json, '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END
+           ) AS snapshot_preview_line(value)
+           WHERE jsonb_typeof(snapshot_preview_line.value) = 'object'
+             AND UPPER(COALESCE(snapshot_preview_line.value->>'line_type', '')) = 'MANUAL_DEBT_RECOVERY'
+             AND UPPER(COALESCE(snapshot_preview_line.value->>'pay_channel', '')) = 'PAYE'
+             AND UPPER(COALESCE(snapshot_preview_line.value->>'paye_treatment', '')) = 'NET_DEDUCT'
+             AND COALESCE(NULLIF(BTRIM(COALESCE(snapshot_preview_line.value->>'finance_case_id', '')), ''), '') <> ''
+             AND NOT EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(
+                 CASE
+                   WHEN jsonb_typeof(v_snapshot_candidate_row.candidate_fragment_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_snapshot_candidate_row.candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
+                   ELSE '[]'::jsonb
+                 END
+               ) AS snapshot_hidden_template(value)
+               WHERE jsonb_typeof(snapshot_hidden_template.value) = 'object'
+                 AND UPPER(COALESCE(snapshot_hidden_template.value->>'recovery_family', '')) = 'MANUAL_DEBT_RECOVERY'
+                 AND UPPER(COALESCE(NULLIF(BTRIM(COALESCE(snapshot_hidden_template.value->>'pay_channel', '')), ''), 'PAYE')) = 'PAYE'
+                 AND COALESCE(NULLIF(BTRIM(COALESCE(snapshot_hidden_template.value->>'finance_case_id', '')), ''), '') =
+                     COALESCE(NULLIF(BTRIM(COALESCE(snapshot_preview_line.value->>'finance_case_id', '')), ''), '')
+             )
+         )
+  INTO v_snapshot_visible_paye_manual_debt_without_hidden_template;
+
+  SELECT EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements(
+             CASE
                WHEN jsonb_typeof(v_snapshot_candidate_row.candidate_fragment_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_snapshot_candidate_row.candidate_fragment_json->'hidden_recovery_template_lines', '[]'::jsonb)
                ELSE '[]'::jsonb
              END
@@ -20945,6 +21324,41 @@ BEGIN
     p_context_json => v_context_json,
     p_candidate_effective_json => v_effective_json
   );
+
+  SELECT EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements(
+             CASE
+               WHEN jsonb_typeof(v_candidate_rollup_json->'canonical_preview_lines') = 'array' THEN COALESCE(v_candidate_rollup_json->'canonical_preview_lines', '[]'::jsonb)
+               ELSE '[]'::jsonb
+             END
+           ) AS rollup_preview_line(value)
+           WHERE jsonb_typeof(rollup_preview_line.value) = 'object'
+             AND UPPER(COALESCE(rollup_preview_line.value->>'line_type', '')) = 'MANUAL_DEBT_RECOVERY'
+             AND UPPER(COALESCE(rollup_preview_line.value->>'pay_channel', '')) = 'PAYE'
+             AND UPPER(COALESCE(rollup_preview_line.value->>'paye_treatment', '')) = 'NET_DEDUCT'
+             AND COALESCE(NULLIF(BTRIM(COALESCE(rollup_preview_line.value->>'finance_case_id', '')), ''), '') <> ''
+             AND NOT EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(
+                 CASE
+                   WHEN jsonb_typeof(v_effective_json->'hidden_recovery_template_lines') = 'array' THEN COALESCE(v_effective_json->'hidden_recovery_template_lines', '[]'::jsonb)
+                   ELSE '[]'::jsonb
+                 END
+               ) AS effective_hidden_template(value)
+               WHERE jsonb_typeof(effective_hidden_template.value) = 'object'
+                 AND UPPER(COALESCE(effective_hidden_template.value->>'recovery_family', '')) = 'MANUAL_DEBT_RECOVERY'
+                 AND UPPER(COALESCE(NULLIF(BTRIM(COALESCE(effective_hidden_template.value->>'pay_channel', '')), ''), 'PAYE')) = 'PAYE'
+                 AND COALESCE(NULLIF(BTRIM(COALESCE(effective_hidden_template.value->>'finance_case_id', '')), ''), '') =
+                     COALESCE(NULLIF(BTRIM(COALESCE(rollup_preview_line.value->>'finance_case_id', '')), ''), '')
+             )
+         )
+  INTO v_rollup_visible_paye_manual_debt_without_hidden_template;
+
+  IF v_requires_hidden_recovery_templates
+     AND (v_snapshot_visible_paye_manual_debt_without_hidden_template OR v_rollup_visible_paye_manual_debt_without_hidden_template) THEN
+    RAISE EXCEPTION 'SESSION_EFFECTIVE_FRAGMENT_LOST_HIDDEN_RECOVERY_TEMPLATE';
+  END IF;
 
   INSERT INTO public.banking_pay_workbench_session_candidate_state (
     session_id,
@@ -21129,6 +21543,12 @@ EXCEPTION
     RAISE;
 END;
 $function$;
+
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_discard(
