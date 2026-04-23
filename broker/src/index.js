@@ -16909,6 +16909,300 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
     return buildJsonResponseWithCors(status, payload);
   };
 
+  const explicitPrepareDraftRefreshErrorCodes = new Set([
+    'WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE',
+    'MANUAL_DEBT_TEMPLATE_SOURCE_MISSING_FOR_SELECTED_PAYE_CANDIDATE',
+    'MANUAL_DEBT_TEMPLATE_NOT_CARRIED_TO_BATCH_BUILD'
+  ]);
+
+  const unwrapRpcPayload = (rpcRes, propertyName) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
+        payload = rpcRes[0];
+      }
+      if (propertyName && payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, propertyName)) {
+        payload = payload[propertyName];
+      }
+    } catch {}
+    return (payload && typeof payload === 'object') ? payload : payload;
+  };
+
+  const extractPrepareDraftFailure = (errorLike) => {
+    const rawMessage = String(errorLike?.message || errorLike || '').trim();
+    const codeMatch = rawMessage.match(/\b(WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE|MANUAL_DEBT_TEMPLATE_SOURCE_MISSING_FOR_SELECTED_PAYE_CANDIDATE|MANUAL_DEBT_TEMPLATE_NOT_CARRIED_TO_BATCH_BUILD)\b/);
+    const candidateIds = Array.from(new Set(
+      (rawMessage.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/ig) || [])
+        .map((value) => String(value || '').trim())
+        .filter((value) => uuidRe.test(value))
+    ));
+    return {
+      rawMessage,
+      errorCode: codeMatch ? String(codeMatch[1] || '').trim() : null,
+      candidateIds,
+      isExplicitRefreshError: !!(codeMatch && explicitPrepareDraftRefreshErrorCodes.has(String(codeMatch[1] || '').trim()))
+    };
+  };
+
+  const resolvePrepareDraftTouchedCandidateContext = async (sessionId, fallbackCandidateIds = []) => {
+    const enc = encodeURIComponent;
+    const result = {
+      sessionId: String(sessionId || '').trim() || null,
+      sourceSnapshotRunId: null,
+      sessionVersion: null,
+      scopeCandidateIds: [],
+      selectedPreviewRowIds: [],
+      touchedCandidateIds: [],
+      warnings: []
+    };
+
+    if (!result.sessionId || !uuidRe.test(result.sessionId)) {
+      if (Array.isArray(fallbackCandidateIds) && fallbackCandidateIds.length) {
+        result.touchedCandidateIds = Array.from(new Set(fallbackCandidateIds.filter((value) => uuidRe.test(String(value || '').trim()))));
+      }
+      return result;
+    }
+
+    let sessionRow = null;
+    let syncResult = {
+      ok: true,
+      session_id: sessionIdText,
+      snapshot_run_id: null,
+      session_version: null,
+      applied_case_resolution_results: [],
+      cleared_case_resolution_results: [],
+      unchanged_case_resolution_count: 0,
+      selected_rows_result: null,
+      state_changed: false,
+      touched_candidate_ids: [],
+      job_ids: []
+    };
+
+    try {
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_sessions` +
+          `?id=eq.${enc(result.sessionId)}` +
+          `&select=id,source_snapshot_run_id,version,scope_candidate_ids,server_selected_preview_row_ids,server_selected_preview_row_ids_provided` +
+          `&limit=1`,
+        false
+      );
+
+      sessionRow = (rows && rows[0]) ? rows[0] : null;
+      if (!sessionRow) {
+        result.warnings.push({ code: 'SESSION_ROW_NOT_FOUND', message: 'Workbench session row was not found while resolving refresh scope.' });
+        if (Array.isArray(fallbackCandidateIds) && fallbackCandidateIds.length) {
+          result.touchedCandidateIds = Array.from(new Set(fallbackCandidateIds.filter((value) => uuidRe.test(String(value || '').trim()))));
+        }
+        return result;
+      }
+
+      result.sourceSnapshotRunId = trimStr(sessionRow.source_snapshot_run_id || '') || null;
+      result.sessionVersion = sessionRow.version ?? null;
+      result.scopeCandidateIds = Array.isArray(sessionRow.scope_candidate_ids)
+        ? Array.from(new Set(sessionRow.scope_candidate_ids.map((value) => String(value || '').trim()).filter((value) => uuidRe.test(value))))
+        : [];
+      result.selectedPreviewRowIds = normalizeStringArray(Array.isArray(sessionRow.server_selected_preview_row_ids) ? sessionRow.server_selected_preview_row_ids : []);
+
+      const touchedCandidateIds = new Set(
+        Array.isArray(fallbackCandidateIds)
+          ? fallbackCandidateIds.map((value) => String(value || '').trim()).filter((value) => uuidRe.test(value))
+          : []
+      );
+
+      if (result.selectedPreviewRowIds.length > 0 && result.scopeCandidateIds.length > 0) {
+        const candidateStateRows = [];
+        const candidateChunks = chunk(result.scopeCandidateIds, 150);
+
+        for (const candidateChunk of candidateChunks) {
+          if (!Array.isArray(candidateChunk) || candidateChunk.length === 0) continue;
+          try {
+            const { rows: stateRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_session_candidate_state` +
+                `?session_id=eq.${enc(result.sessionId)}` +
+                `&candidate_id=in.(${candidateChunk.map(enc).join(',')})` +
+                `&select=candidate_id,status,effective_canonical_preview_lines_json`,
+              false
+            );
+            for (const stateRow of stateRows || []) candidateStateRows.push(stateRow);
+          } catch (stateFetchError) {
+            result.warnings.push({
+              code: 'SESSION_CANDIDATE_STATE_FETCH_FAILED',
+              message: String(stateFetchError?.message || stateFetchError || 'Unknown session candidate state fetch error')
+            });
+            break;
+          }
+        }
+
+        if (candidateStateRows.length > 0) {
+          const selectedPreviewRowIdSet = new Set(result.selectedPreviewRowIds);
+          for (const stateRow of candidateStateRows) {
+            const candidateIdValue = trimStr(stateRow?.candidate_id || '');
+            if (!uuidRe.test(candidateIdValue)) continue;
+            const lineRows = Array.isArray(stateRow?.effective_canonical_preview_lines_json)
+              ? stateRow.effective_canonical_preview_lines_json
+              : [];
+            for (const lineRow of lineRows) {
+              if (!lineRow || typeof lineRow !== 'object') continue;
+              const previewRowId = trimStr(
+                lineRow.preview_row_id ||
+                lineRow.line_id ||
+                lineRow.row_id ||
+                lineRow.id ||
+                ''
+              );
+              if (!previewRowId) continue;
+              if (selectedPreviewRowIdSet.has(previewRowId)) {
+                touchedCandidateIds.add(candidateIdValue);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (touchedCandidateIds.size === 0 && result.scopeCandidateIds.length > 0) {
+        for (const candidateIdValue of result.scopeCandidateIds) touchedCandidateIds.add(candidateIdValue);
+      }
+
+      result.touchedCandidateIds = Array.from(touchedCandidateIds);
+      return result;
+    } catch (sessionFetchError) {
+      result.warnings.push({
+        code: 'SESSION_CONTEXT_FETCH_FAILED',
+        message: String(sessionFetchError?.message || sessionFetchError || 'Unknown session refresh context error')
+      });
+      if (Array.isArray(fallbackCandidateIds) && fallbackCandidateIds.length) {
+        result.touchedCandidateIds = Array.from(new Set(fallbackCandidateIds.filter((value) => uuidRe.test(String(value || '').trim()))));
+      }
+      return result;
+    }
+  };
+
+  const enqueuePrepareDraftRefresh = async ({
+    sessionId,
+    sourceSnapshotRunId,
+    touchedCandidateIds,
+    errorCode,
+    payChannelScopeValue
+  }) => {
+    const normalizedCandidateIds = Array.isArray(touchedCandidateIds)
+      ? Array.from(new Set(touchedCandidateIds.map((value) => String(value || '').trim()).filter((value) => uuidRe.test(value))))
+      : [];
+
+    const outcome = {
+      pendingCandidateIds: normalizedCandidateIds,
+      refreshJobIds: [],
+      candidateRefreshResults: [],
+      sessionRefreshResults: [],
+      warnings: []
+    };
+
+    for (const candidateIdValue of normalizedCandidateIds) {
+      if (sourceSnapshotRunId && uuidRe.test(String(sourceSnapshotRunId))) {
+        try {
+          const candidateRefreshRpc = await sbRpc(env, 'pay_workbench_enqueue_candidate_refresh', {
+            p_snapshot_run_id: sourceSnapshotRunId,
+            p_candidate_id: candidateIdValue,
+            p_reason: errorCode,
+            p_actor_user_id: actorUserId,
+            p_payload_json: {
+              source_route: 'handleBankingPayCreateDraft',
+              refresh_reason: errorCode,
+              session_id: sessionId,
+              candidate_id: candidateIdValue,
+              pay_date: payDate,
+              week_ending_cutoff: cutoffIso,
+              pay_channel_scope: payChannelScopeValue || 'ALL'
+            }
+          });
+          const candidateRefreshPayload = unwrapRpcPayload(candidateRefreshRpc, 'pay_workbench_enqueue_candidate_refresh');
+          const candidateRefreshResult = (candidateRefreshPayload && typeof candidateRefreshPayload === 'object')
+            ? { ...candidateRefreshPayload }
+            : { ok: false, candidate_id: candidateIdValue };
+          outcome.candidateRefreshResults.push(candidateRefreshResult);
+          const candidateRefreshJobId = trimStr(candidateRefreshResult?.job_id || '');
+          if (uuidRe.test(candidateRefreshJobId)) outcome.refreshJobIds.push(candidateRefreshJobId);
+        } catch (candidateRefreshError) {
+          outcome.warnings.push({
+            code: 'CANDIDATE_REFRESH_ENQUEUE_FAILED',
+            candidate_id: candidateIdValue,
+            message: String(candidateRefreshError?.message || candidateRefreshError || 'Unknown snapshot refresh enqueue error')
+          });
+        }
+      }
+
+      if (sessionId && uuidRe.test(String(sessionId))) {
+        try {
+          const sessionRefreshRpc = await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
+            p_session_id: sessionId,
+            p_candidate_id: candidateIdValue,
+            p_reason: errorCode,
+            p_actor_user_id: actorUserId,
+            p_payload_json: {
+              source_route: 'handleBankingPayCreateDraft',
+              refresh_reason: errorCode,
+              source_snapshot_run_id: sourceSnapshotRunId,
+              session_id: sessionId,
+              candidate_id: candidateIdValue,
+              pay_date: payDate,
+              week_ending_cutoff: cutoffIso,
+              pay_channel_scope: payChannelScopeValue || 'ALL'
+            }
+          });
+          const sessionRefreshPayload = unwrapRpcPayload(sessionRefreshRpc, 'pay_workbench_enqueue_session_candidate_refresh');
+          const sessionRefreshResult = (sessionRefreshPayload && typeof sessionRefreshPayload === 'object')
+            ? { ...sessionRefreshPayload }
+            : { ok: false, candidate_id: candidateIdValue };
+          outcome.sessionRefreshResults.push(sessionRefreshResult);
+          const sessionRefreshJobId = trimStr(sessionRefreshResult?.job_id || '');
+          if (uuidRe.test(sessionRefreshJobId)) outcome.refreshJobIds.push(sessionRefreshJobId);
+        } catch (sessionRefreshError) {
+          outcome.warnings.push({
+            code: 'SESSION_REFRESH_ENQUEUE_FAILED',
+            candidate_id: candidateIdValue,
+            message: String(sessionRefreshError?.message || sessionRefreshError || 'Unknown session refresh enqueue error')
+          });
+        }
+      }
+    }
+
+    outcome.refreshJobIds = Array.from(new Set(outcome.refreshJobIds.filter((value) => uuidRe.test(String(value || '').trim()))));
+    return outcome;
+  };
+
+  const buildExplicitPrepareDraftRefreshResponse = ({
+    prepareFailure,
+    sessionId,
+    sourceSnapshotRunId,
+    pendingCandidateIds,
+    refreshJobIds,
+    refreshWarnings
+  }) => buildJsonResponseWithCors(409, {
+    ok: false,
+    create_draft_unavailable: true,
+    refresh_required: true,
+    can_retry: true,
+    pending_candidate_ids: Array.isArray(pendingCandidateIds) ? pendingCandidateIds : [],
+    refresh_job_ids: Array.isArray(refreshJobIds) ? refreshJobIds : [],
+    preview_reopen_required: true,
+    error: {
+      code: String(prepareFailure?.errorCode || 'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED'),
+      message: 'Banking draft could not be prepared because the workbench session must refresh before draft creation can continue.',
+      details: {
+        pay_date: payDate,
+        week_ending_cutoff: cutoffIso,
+        provided_week_ending_cutoff: providedCutoffIso,
+        session_id: sessionId,
+        source_snapshot_run_id: sourceSnapshotRunId || null,
+        pay_channel_scope: payChannelScope || 'ALL',
+        reason: String(prepareFailure?.rawMessage || ''),
+        warnings: Array.isArray(refreshWarnings) ? refreshWarnings : []
+      }
+    }
+  });
+
   const sessionIdText = trimStr(body.session_id || body.sessionId || '');
   const payChannelScopeRaw = trimStr(body.pay_channel_scope || body.payChannelScope || body.scope || '');
   const payChannelScope = (() => {
@@ -16943,6 +17237,20 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
 
   if (sessionIdText) {
     const enc = encodeURIComponent;
+    let sessionRow = null;
+    let syncResult = {
+      ok: true,
+      session_id: sessionIdText,
+      snapshot_run_id: null,
+      session_version: null,
+      applied_case_resolution_results: [],
+      cleared_case_resolution_results: [],
+      unchanged_case_resolution_count: 0,
+      selected_rows_result: null,
+      state_changed: false,
+      touched_candidate_ids: [],
+      job_ids: []
+    };
 
     const mergedSessionDecisionInput = cloneJson(previewDecisionsIn) || {};
 
@@ -17007,7 +17315,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         false
       );
 
-      const sessionRow = (rows && rows[0]) ? rows[0] : null;
+      sessionRow = (rows && rows[0]) ? rows[0] : null;
       if (!sessionRow) {
         return withCORS(env, req, notFound('Workbench session not found'));
       }
@@ -17047,7 +17355,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         normalizedSessionDecisions.explicit.same_week_paye_override_verified_at_utc
       );
 
-      let syncResult = {
+      syncResult = {
         ok: true,
         session_id: sessionIdText,
         snapshot_run_id: String(sessionRow.source_snapshot_run_id || '').trim() || null,
@@ -17457,14 +17765,77 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
 
       return buildJsonResponseWithCors(200, outPayload);
     } catch (e) {
+      const prepareFailure = extractPrepareDraftFailure(e);
       logRouteDebug('error', 'PAY_CREATE_DRAFT_SESSION_PREPARE_FAILED', {
         pay_date: payDate,
         week_ending_cutoff: cutoffIso,
         provided_week_ending_cutoff: providedCutoffIso,
         session_id: sessionIdText,
         pay_channel_scope: payChannelScope || 'ALL',
-        error: String(e?.message || e || '')
+        error: prepareFailure.rawMessage,
+        error_code: prepareFailure.errorCode,
+        explicit_refresh_error: prepareFailure.isExplicitRefreshError,
+        candidate_ids_from_error: prepareFailure.candidateIds
       });
+
+      if (prepareFailure.isExplicitRefreshError) {
+        const refreshContext = await resolvePrepareDraftTouchedCandidateContext(sessionIdText, prepareFailure.candidateIds || []);
+        const scopeCandidateIdSet = new Set(
+          (Array.isArray(refreshContext.scopeCandidateIds) ? refreshContext.scopeCandidateIds : [])
+            .map((value) => String(value || '').trim())
+            .filter((value) => uuidRe.test(value))
+        );
+        const normalizeRefreshCandidateIds = (raw) => (
+          Array.isArray(raw)
+            ? raw
+                .map((value) => String(value || '').trim())
+                .filter((value) => uuidRe.test(value))
+                .filter((value) => scopeCandidateIdSet.size === 0 || scopeCandidateIdSet.has(value))
+            : []
+        );
+        const pendingCandidateIds = Array.from(new Set(
+          [
+            ...normalizeRefreshCandidateIds(prepareFailure.candidateIds),
+            ...normalizeRefreshCandidateIds(refreshContext.touchedCandidateIds),
+            ...normalizeRefreshCandidateIds(syncResult?.touched_candidate_ids)
+          ]
+        ));
+
+        const refreshOutcome = await enqueuePrepareDraftRefresh({
+          sessionId: sessionIdText,
+          sourceSnapshotRunId: refreshContext.sourceSnapshotRunId || syncResult.snapshot_run_id || (String(sessionRow.source_snapshot_run_id || '').trim() || null),
+          touchedCandidateIds: pendingCandidateIds,
+          errorCode: prepareFailure.errorCode,
+          payChannelScopeValue: payChannelScope || 'ALL'
+        });
+
+        const refreshWarnings = [
+          ...(Array.isArray(refreshContext.warnings) ? refreshContext.warnings : []),
+          ...(Array.isArray(refreshOutcome.warnings) ? refreshOutcome.warnings : [])
+        ];
+
+        logRouteDebug('warn', 'PAY_CREATE_DRAFT_SESSION_PREPARE_REFRESH_ENQUEUED', {
+          pay_date: payDate,
+          week_ending_cutoff: cutoffIso,
+          provided_week_ending_cutoff: providedCutoffIso,
+          session_id: sessionIdText,
+          pay_channel_scope: payChannelScope || 'ALL',
+          error_code: prepareFailure.errorCode,
+          pending_candidate_ids: pendingCandidateIds,
+          refresh_job_ids: refreshOutcome.refreshJobIds,
+          warning_count: refreshWarnings.length
+        });
+
+        return buildExplicitPrepareDraftRefreshResponse({
+          prepareFailure,
+          sessionId: sessionIdText,
+          sourceSnapshotRunId: refreshContext.sourceSnapshotRunId || syncResult.snapshot_run_id || (String(sessionRow.source_snapshot_run_id || '').trim() || null),
+          pendingCandidateIds,
+          refreshJobIds: refreshOutcome.refreshJobIds,
+          refreshWarnings
+        });
+      }
+
       return buildCreateDraftSessionErrorResponse(
         409,
         'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
@@ -17475,7 +17846,7 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
           provided_week_ending_cutoff: providedCutoffIso,
           session_id: sessionIdText,
           pay_channel_scope: payChannelScope || 'ALL',
-          reason: String(e?.message || e || 'Unknown error')
+          reason: prepareFailure.rawMessage || 'Unknown error'
         },
         true
       );
