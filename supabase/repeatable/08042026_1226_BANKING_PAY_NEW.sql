@@ -27209,13 +27209,14 @@ BEGIN
 
 v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
 
-  -- ✅ Integrity checks: every item must have ≥1 breakdown row; sums must match exactly
+  -- ✅ Integrity checks: every active (non-voided) item must have ≥1 breakdown row; sums must match exactly
   select count(*)
   into v_breakdown_missing_ct
   from public.pay_batch_items pbi_m
   join public.pay_batch_candidates pbc_m
     on pbc_m.id = pbi_m.pay_batch_candidate_id
   where pbc_m.pay_batch_id = v_batch_id
+    and coalesce(pbi_m.is_voided, false) = false
     and not exists (
       select 1
       from public.pay_batch_item_breakdowns pbib_m
@@ -27275,6 +27276,7 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
     left join public.pay_batch_item_breakdowns pbib_s
       on pbib_s.pay_batch_item_id = pbi_s.id
     where pbc_s.pay_batch_id = v_batch_id
+      and coalesce(pbi_s.is_voided, false) = false
     group by pbi_s.id, pbi_s.amount_ex_vat, pbi_s.amount_vat, pbi_s.amount_inc_vat
   ),
   bad as (
@@ -27667,8 +27669,6 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
   );
 END;
 $function$;
-
-
 
 CREATE OR REPLACE FUNCTION public.pay_build_batch_artifacts_from_preview(
   p_pay_date date,
