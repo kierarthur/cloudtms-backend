@@ -20590,7 +20590,6 @@ BEGIN
 END;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows(
   p_session_id uuid,
   p_selected_preview_row_ids jsonb,
@@ -20607,6 +20606,7 @@ DECLARE
   v_selected_preview_row_ids_input jsonb := COALESCE(p_selected_preview_row_ids, '[]'::jsonb);
   v_selected_preview_row_ids_normalized jsonb := '[]'::jsonb;
   v_missing_preview_row_ids jsonb := '[]'::jsonb;
+  v_non_draftable_preview_row_ids jsonb := '[]'::jsonb;
   v_audit_before_json jsonb := NULL;
   v_audit_after_json jsonb := '{}'::jsonb;
 BEGIN
@@ -20677,8 +20677,22 @@ BEGIN
         WHERE session_ready_candidates.candidate_id = public.banking_pay_snapshot_candidate_state.candidate_id
       )
   ),
-  valid_preview_rows AS (
-    SELECT DISTINCT BTRIM(COALESCE(line_element.value->>'preview_row_id', '')) AS preview_row_id
+  preview_rows_in_scope AS (
+    SELECT DISTINCT
+           BTRIM(COALESCE(line_element.value->>'preview_row_id', '')) AS preview_row_id,
+           CASE
+             WHEN LOWER(BTRIM(COALESCE(line_element.value->>'draftable', 'false'))) = 'true'
+              AND LOWER(BTRIM(COALESCE(line_element.value->>'is_ready_for_draft', 'false'))) = 'true'
+              AND UPPER(BTRIM(COALESCE(
+                    line_element.value->>'presentation_section',
+                    line_element.value->>'presentationSection',
+                    line_element.value->>'readiness_state',
+                    line_element.value->>'readinessState',
+                    ''
+                  ))) = 'READY_TO_PAY'
+             THEN true
+             ELSE false
+           END AS is_draftable_preview_row
     FROM (
       SELECT session_ready_candidates.lines_json AS lines_json
       FROM session_ready_candidates
@@ -20695,6 +20709,9 @@ BEGIN
       (
         SELECT jsonb_agg(to_jsonb(selected_ids_normalized.preview_row_id) ORDER BY selected_ids_normalized.first_ordinality)
         FROM selected_ids_normalized
+        JOIN preview_rows_in_scope
+          ON preview_rows_in_scope.preview_row_id = selected_ids_normalized.preview_row_id
+         AND preview_rows_in_scope.is_draftable_preview_row = true
       ),
       '[]'::jsonb
     ),
@@ -20702,15 +20719,26 @@ BEGIN
       (
         SELECT jsonb_agg(to_jsonb(selected_ids_normalized.preview_row_id) ORDER BY selected_ids_normalized.first_ordinality)
         FROM selected_ids_normalized
-        LEFT JOIN valid_preview_rows
-          ON valid_preview_rows.preview_row_id = selected_ids_normalized.preview_row_id
-        WHERE valid_preview_rows.preview_row_id IS NULL
+        LEFT JOIN preview_rows_in_scope
+          ON preview_rows_in_scope.preview_row_id = selected_ids_normalized.preview_row_id
+        WHERE preview_rows_in_scope.preview_row_id IS NULL
+      ),
+      '[]'::jsonb
+    ),
+    COALESCE(
+      (
+        SELECT jsonb_agg(to_jsonb(selected_ids_normalized.preview_row_id) ORDER BY selected_ids_normalized.first_ordinality)
+        FROM selected_ids_normalized
+        JOIN preview_rows_in_scope
+          ON preview_rows_in_scope.preview_row_id = selected_ids_normalized.preview_row_id
+         AND preview_rows_in_scope.is_draftable_preview_row = false
       ),
       '[]'::jsonb
     )
   INTO
     v_selected_preview_row_ids_normalized,
-    v_missing_preview_row_ids;
+    v_missing_preview_row_ids,
+    v_non_draftable_preview_row_ids;
 
   IF jsonb_array_length(v_missing_preview_row_ids) > 0 THEN
     RAISE EXCEPTION 'selected preview row ids are not present in current session or snapshot scope: %', v_missing_preview_row_ids::text;
@@ -20733,6 +20761,7 @@ BEGIN
     'id', v_session_row.id::text,
     'server_selected_preview_row_ids', v_selected_preview_row_ids_normalized,
     'server_selected_preview_row_ids_provided', true,
+    'dropped_non_draftable_preview_row_ids', v_non_draftable_preview_row_ids,
     'version', v_session_row.version,
     'updated_at_utc', v_now
   );
@@ -20752,13 +20781,14 @@ BEGIN
     'session_id', p_session_id::text,
     'snapshot_run_id', CASE WHEN v_session_row.source_snapshot_run_id IS NULL THEN NULL ELSE v_session_row.source_snapshot_run_id::text END,
     'session_version', v_session_row.version,
+    'selected_preview_row_ids', v_selected_preview_row_ids_normalized,
+    'selected_preview_row_ids_provided', true,
     'server_selected_preview_row_ids', v_selected_preview_row_ids_normalized,
-    'server_selected_preview_row_ids_provided', true
+    'server_selected_preview_row_ids_provided', true,
+    'dropped_non_draftable_preview_row_ids', v_non_draftable_preview_row_ids
   );
 END;
 $function$;
-
-
 
 
 DROP FUNCTION IF EXISTS public.pay_workbench_session_recompute_candidate(uuid, uuid);
