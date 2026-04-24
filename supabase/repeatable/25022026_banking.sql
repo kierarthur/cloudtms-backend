@@ -5066,7 +5066,6 @@ $$;
 
 
 
-
 create or replace function public.pay_settle_rail(
   p_pay_batch_id uuid,
   p_settlement_json jsonb,
@@ -5121,6 +5120,9 @@ declare
   v_payout_cases_marked_paid_ct int := 0;
   v_component_settled_count int := 0;
   v_component_settled_amount numeric := 0;
+  v_component_reconciliation_bad jsonb := '[]'::jsonb;
+  v_component_reconciliation_bad_ct int := 0;
+  v_component_reconciliation_checked_ct int := 0;
 
   v_comm_result jsonb := '{}'::jsonb;
   v_comm_trigger_status text := null;
@@ -5627,7 +5629,7 @@ begin
         pfc_fb.created_at_utc desc,
         pfc_fb.id desc
       limit 1
-    ) fb on true
+    ) fb on coalesce(par.finance_component_id, pbi.finance_component_id) is null
     where par.pay_batch_id = p_pay_batch_id
       and upper(coalesce(par.status,'')) = 'SETTLED'
       and par.settled_at_utc = v_now
@@ -6094,6 +6096,106 @@ begin
       v_manual_debt_patched_ct := v_manual_debt_patched_ct + 1;
     end if;
   end loop;
+
+  with affected_component_cases as (
+    select distinct csa.finance_case_id
+    from _tmp_component_settle_apply csa
+    where csa.finance_case_id is not null
+    union
+    select distinct trt.finance_case_id
+    from _tmp_repay_taken trt
+    where trt.finance_case_id is not null
+      and exists (
+        select 1
+        from public.pay_finance_case_components pfc_exists
+        where pfc_exists.finance_case_id = trt.finance_case_id
+        limit 1
+      )
+  ),
+  reconciled_component_cases as (
+    select
+      afc.finance_case_id,
+      round(coalesce(pa.outstanding_amount, 0), 2) as case_outstanding_amount,
+      round(coalesce(sum(coalesce(pfc.remaining_source_amount, 0)), 0), 2) as open_component_remaining_source_amount,
+      count(pfc.id)::int as open_component_count
+    from affected_component_cases afc
+    join public.pay_advances pa
+      on pa.id = afc.finance_case_id
+    left join public.pay_finance_case_components pfc
+      on pfc.finance_case_id = afc.finance_case_id
+     and pfc.closed_at_utc is null
+    where exists (
+      select 1
+      from public.pay_finance_case_components pfc_any
+      where pfc_any.finance_case_id = afc.finance_case_id
+      limit 1
+    )
+    group by
+      afc.finance_case_id,
+      pa.outstanding_amount
+  ),
+  reconciliation_bad as (
+    select
+      rcc.finance_case_id,
+      rcc.case_outstanding_amount,
+      rcc.open_component_remaining_source_amount,
+      rcc.open_component_count,
+      round(rcc.case_outstanding_amount - rcc.open_component_remaining_source_amount, 2) as mismatch_amount
+    from reconciled_component_cases rcc
+    where abs(round(rcc.case_outstanding_amount - rcc.open_component_remaining_source_amount, 2)) > 0.01
+  )
+  select
+    (select count(*)::int from reconciled_component_cases),
+    count(*)::int,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'finance_case_id', reconciliation_bad.finance_case_id::text,
+          'case_outstanding_amount', reconciliation_bad.case_outstanding_amount,
+          'open_component_remaining_source_amount', reconciliation_bad.open_component_remaining_source_amount,
+          'open_component_count', reconciliation_bad.open_component_count,
+          'mismatch_amount', reconciliation_bad.mismatch_amount
+        )
+        order by reconciliation_bad.finance_case_id::text
+      ),
+      '[]'::jsonb
+    )
+  into
+    v_component_reconciliation_checked_ct,
+    v_component_reconciliation_bad_ct,
+    v_component_reconciliation_bad
+  from reconciliation_bad;
+
+  begin
+    perform public._imp_debug_audit(
+      p_actor_user_id,
+      'PAY_SETTLE_RAIL:COMPONENT_RECONCILIATION_RESULT',
+      jsonb_build_object(
+        'pay_batch_id', p_pay_batch_id::text,
+        'checked_count', coalesce(v_component_reconciliation_checked_ct, 0),
+        'mismatch_count', coalesce(v_component_reconciliation_bad_ct, 0),
+        'mismatches', v_component_reconciliation_bad
+      ),
+      'pay_batches',
+      p_pay_batch_id::text,
+      null,
+      null,
+      null,
+      null
+    );
+  exception when others then
+    null;
+  end;
+
+  if coalesce(v_component_reconciliation_bad_ct, 0) > 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_RAIL_COMPONENT_RECONCILIATION_MISMATCH',
+      'pay_batch_id', p_pay_batch_id::text,
+      'message', 'Finance case outstanding amount does not reconcile to open component remaining_source_amount after settlement.',
+      'mismatches', v_component_reconciliation_bad
+    )::text;
+  end if;
+
 
   with payouts as (
     select distinct
@@ -6692,6 +6794,9 @@ begin
         'payout_cases_marked_paid', v_payout_cases_marked_paid_ct,
         'component_settlements_applied', v_component_settled_count,
         'component_settlement_amount', v_component_settled_amount,
+        'component_reconciliation_checked_count', coalesce(v_component_reconciliation_checked_ct, 0),
+        'component_reconciliation_mismatch_count', coalesce(v_component_reconciliation_bad_ct, 0),
+        'component_reconciliation_mismatches', v_component_reconciliation_bad,
         'batch_status', v_batch_status,
         'execution_commit_state', case when coalesce(v_completed_transfer_count, 0) > 0 then 'COMMITTED' else v_execution_commit_state end,
         'execution_commit_ref', coalesce(v_execution_commit_ref, v_detected_execution_commit_ref),
@@ -6731,7 +6836,9 @@ begin
       'manual_debt_recovery_patches_applied', v_manual_debt_patched_ct,
       'payout_cases_marked_paid', v_payout_cases_marked_paid_ct,
       'component_settlements_applied', v_component_settled_count,
-      'component_settlement_amount', v_component_settled_amount
+      'component_settlement_amount', v_component_settled_amount,
+      'component_reconciliation_checked_count', coalesce(v_component_reconciliation_checked_ct, 0),
+      'component_reconciliation_mismatch_count', coalesce(v_component_reconciliation_bad_ct, 0)
     ),
     'timesheet_channel_change_audit', jsonb_build_object(
       'settled_event_count', v_changed_channel_settled_ct
