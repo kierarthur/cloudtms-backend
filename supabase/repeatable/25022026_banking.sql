@@ -14038,12 +14038,6 @@ end;
 $function$;
 
 
-
-
-
-
-
-
 create or replace function public.pay_batch_export_csv_rows(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -14222,6 +14216,13 @@ begin
       pbi.finance_component_id as finance_component_id,
       pbi.paye_treatment as paye_treatment,
       pbi.payout_instruction_snapshot_json as payout_instruction_snapshot_json,
+      coalesce(pbi.frozen_component_snapshot_json, '{}'::jsonb) as frozen_component_snapshot_json,
+      coalesce(pbi.frozen_source_basis_json, '{}'::jsonb) as frozen_source_basis_json,
+      pbi.frozen_resolution_mode as frozen_resolution_mode,
+      pbi.frozen_resolution_payload_json as frozen_resolution_payload_json,
+      pbi.frozen_resolution_result_json as frozen_resolution_result_json,
+      pbi.frozen_source_amount as frozen_source_amount,
+      pbi.frozen_target_amount_ex_vat as frozen_target_amount_ex_vat,
 
       pbib.line_kind as line_kind,
       pbib.bucket_code as bucket_code,
@@ -14231,6 +14232,14 @@ begin
       pbib.amount_ex_vat as amount_ex_vat,
       pbib.amount_vat as amount_vat,
       pbib.amount_inc_vat as amount_inc_vat,
+      coalesce(pbib.meta_json, '{}'::jsonb) as breakdown_meta_json,
+
+      ecomp.key_type as economic_key_type,
+      ecomp.key_value as economic_key_value,
+      ecomp.source_amount_ex_vat as economic_source_amount_ex_vat,
+      ecomp.target_amount_ex_vat as economic_target_amount_ex_vat,
+      ecomp.key_resolution_source as economic_key_resolution_source,
+      ecomp.key_resolution_failure_reason as economic_key_resolution_failure_reason,
 
       ts.week_ending_date as week_ending_date,
       ts.reference_number as reference_number,
@@ -14269,13 +14278,92 @@ begin
       tuc.display_name as bank_details_created_by_display_name,
       tuc.email as bank_details_created_by_email,
       tuu.display_name as bank_details_updated_by_display_name,
-      tuu.email as bank_details_updated_by_email
+      tuu.email as bank_details_updated_by_email,
+
+      case
+        when coalesce(ecomp.key_type,'') = 'TS_DAY' and coalesce(ecomp.key_value,'') ~ '^\d{4}-\d{2}-\d{2}$' then ecomp.key_value::date
+        else null::date
+      end as economic_work_date,
+
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'source_units','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'source_units','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_units','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_units','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_source_basis_json->>'source_units','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_source_basis_json->>'source_units','')), ''))::numeric
+        else pbib.units
+      end as source_units,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'target_units','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'target_units','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_units','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_units','')), ''))::numeric
+        else pbib.units
+      end as target_units,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'source_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'source_rate','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_rate','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_source_basis_json->>'source_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_source_basis_json->>'source_rate','')), ''))::numeric
+        else pbib.rate
+      end as source_rate,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'target_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'target_rate','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_rate','')), ''))::numeric
+        else pbib.rate
+      end as target_rate,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'source_amount_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'source_amount_ex_vat','')), ''))::numeric
+        when nullif(btrim(coalesce(pbib.meta_json->>'source_pay_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'source_pay_ex_vat','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_pay_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_pay_ex_vat','')), ''))::numeric
+        else ecomp.source_amount_ex_vat
+      end as source_amount_ex_vat,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'target_amount_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'target_amount_ex_vat','')), ''))::numeric
+        when nullif(btrim(coalesce(pbib.meta_json->>'target_pay_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'target_pay_ex_vat','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_pay_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_pay_ex_vat','')), ''))::numeric
+        else coalesce(ecomp.target_amount_ex_vat, pbib.amount_ex_vat)
+      end as target_amount_ex_vat,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'source_charge_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'source_charge_rate','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_charge_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_charge_rate','')), ''))::numeric
+        else null::numeric
+      end as source_charge_rate,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'target_charge_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'target_charge_rate','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_charge_rate','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_charge_rate','')), ''))::numeric
+        else null::numeric
+      end as target_charge_rate,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'source_charge_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'source_charge_ex_vat','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_charge_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'source_charge_ex_vat','')), ''))::numeric
+        else null::numeric
+      end as source_charge_ex_vat,
+      case
+        when nullif(btrim(coalesce(pbib.meta_json->>'target_charge_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbib.meta_json->>'target_charge_ex_vat','')), ''))::numeric
+        when nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_charge_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$' then (nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'target_charge_ex_vat','')), ''))::numeric
+        else null::numeric
+      end as target_charge_ex_vat,
+      coalesce(
+        nullif(btrim(coalesce(pbib.meta_json->>'resolution_mode','')), ''),
+        nullif(btrim(coalesce(pbi.frozen_resolution_mode::text,'')), ''),
+        nullif(btrim(coalesce(pbi.frozen_component_snapshot_json->>'resolution_mode','')), '')
+      ) as resolution_mode,
+      coalesce(
+        nullif(pbib.meta_json->'resolution_payload_json', 'null'::jsonb),
+        pbi.frozen_resolution_payload_json,
+        nullif(pbi.frozen_component_snapshot_json->'resolution_payload_json', 'null'::jsonb),
+        nullif(pbi.frozen_component_snapshot_json->'saved_resolution_payload_json', 'null'::jsonb)
+      ) as resolution_payload_json,
+      coalesce(
+        nullif(pbib.meta_json->'resolution_result_json', 'null'::jsonb),
+        pbi.frozen_resolution_result_json,
+        nullif(pbi.frozen_component_snapshot_json->'resolution_result_json', 'null'::jsonb),
+        nullif(pbi.frozen_component_snapshot_json->'saved_resolution_result_json', 'null'::jsonb)
+      ) as resolution_result_json
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
      and pbc.pay_batch_id = p_pay_batch_id
     join public.pay_batch_item_breakdowns pbib
       on pbib.pay_batch_item_id = pbi.id
+    left join public._pay_batch_item_economic_components(p_pay_batch_id, null::uuid[]) ecomp
+      on ecomp.pay_batch_item_id = pbi.id
     left join public.candidates c
       on c.id = pbc.candidate_id
     left join public.timesheets ts
@@ -14342,7 +14430,7 @@ begin
         else 1
       end as sort_group,
 
-      coalesce(b.seg_work_date, b.week_ending_date, b.repayment_week_start) as sort_work_date,
+      coalesce(b.economic_work_date, b.seg_work_date, b.week_ending_date, b.repayment_week_start) as sort_work_date,
 
       b.timesheet_id as sort_timesheet_id,
 
@@ -14392,6 +14480,7 @@ begin
           'timesheet_id', case when b.timesheet_id is null then null else b.timesheet_id::text end,
           'week_ending_date', case when b.week_ending_date is null then null else b.week_ending_date::text end,
           'work_date', case
+            when b.economic_work_date is not null then b.economic_work_date::text
             when b.seg_work_date is not null then b.seg_work_date::text
             when b.week_ending_date is not null then b.week_ending_date::text
             when b.repayment_week_start is not null then b.repayment_week_start::text
@@ -14426,22 +14515,17 @@ begin
           'lifecycle_status', b.finance_lifecycle_status_display,
           'finance_status', case when b.finance_status is null then null else b.finance_status::text end,
           'finance_payout_status', case when b.finance_payout_status is null then null else b.finance_payout_status::text end,
-          'taxability', coalesce(
-            nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'taxability','')), ''),
-            case when b.finance_taxability is null then null else b.finance_taxability::text end
-          ),
-          'routing_kind', coalesce(
-            nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''),
-            case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end
-          )
+          'taxability', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'taxability','')), ''),
+          'routing_kind', nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), '')
         )
         || jsonb_build_object(
           'payout_destination', coalesce(
             nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'destination_label','')), ''),
             case
-              when coalesce(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''), case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'one-off specified bank account'
-              when coalesce(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), ''), case when b.finance_routing_kind is null then null else b.finance_routing_kind::text end) = 'UMBRELLA_COMPANY' then 'umbrella company'
+              when nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), '') = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'one-off specified bank account'
+              when nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'routing_kind','')), '') = 'UMBRELLA_COMPANY' then 'umbrella company'
               when upper(coalesce(b.pay_channel,'')) = 'PAYE' then 'normal PAYE route'
+              when upper(coalesce(b.pay_channel,'')) = 'UMBRELLA' then 'umbrella company'
               else null
             end
           ),
@@ -14474,9 +14558,9 @@ begin
             nullif(btrim(coalesce(b.bank_details_updated_by_email,'')), ''),
             case when b.bank_details_updated_by_user_id is null then null else b.bank_details_updated_by_user_id::text end
           ),
-          'appears_on_umbrella_remittance', coalesce(b.appears_on_umbrella_remittance, false),
-          'generates_candidate_payment_advice', coalesce(b.generates_candidate_payment_advice, false),
-          'is_candidate_directed_oneoff_payout', coalesce(b.is_candidate_directed_oneoff_payout, false),
+          'appears_on_umbrella_remittance', coalesce((lower(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance','')), '')) in ('true','t','1','yes','y')), false),
+          'generates_candidate_payment_advice', coalesce((lower(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'generates_candidate_payment_advice','')), '')) in ('true','t','1','yes','y')), false),
+          'is_candidate_directed_oneoff_payout', coalesce((lower(nullif(btrim(coalesce(b.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout','')), '')) in ('true','t','1','yes','y')), false),
           'line_kind', case
             when b.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
             when b.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
@@ -14537,6 +14621,41 @@ begin
         )
         || jsonb_build_object(
           'amount_inc_vat', b.amount_inc_vat,
+          'economic_key_type', b.economic_key_type,
+          'economic_key_value', b.economic_key_value,
+          'key_type', b.economic_key_type,
+          'key_value', b.economic_key_value,
+          'key_resolution_source', b.economic_key_resolution_source,
+          'key_resolution_failure_reason', b.economic_key_resolution_failure_reason,
+          'source_units', b.source_units,
+          'target_units', b.target_units,
+          'source_rate', b.source_rate,
+          'target_rate', b.target_rate,
+          'source_amount_ex_vat', b.source_amount_ex_vat,
+          'target_amount_ex_vat', b.target_amount_ex_vat,
+          'target_amount_paid_ex_vat', b.target_amount_ex_vat,
+          'source_charge_rate', b.source_charge_rate,
+          'target_charge_rate', b.target_charge_rate,
+          'source_charge_ex_vat', b.source_charge_ex_vat,
+          'target_charge_ex_vat', b.target_charge_ex_vat,
+          'resolution_mode', b.resolution_mode,
+          'resolution_payload_json', b.resolution_payload_json,
+          'resolution_result_json', b.resolution_result_json,
+          'source_target_detail', jsonb_strip_nulls(jsonb_build_object(
+            'source_units', b.source_units,
+            'target_units', b.target_units,
+            'source_rate', b.source_rate,
+            'target_rate', b.target_rate,
+            'source_amount_ex_vat', b.source_amount_ex_vat,
+            'target_amount_ex_vat', b.target_amount_ex_vat,
+            'source_charge_rate', b.source_charge_rate,
+            'target_charge_rate', b.target_charge_rate,
+            'source_charge_ex_vat', b.source_charge_ex_vat,
+            'target_charge_ex_vat', b.target_charge_ex_vat,
+            'economic_key_type', b.economic_key_type,
+            'economic_key_value', b.economic_key_value,
+            'resolution_mode', b.resolution_mode
+          )),
           'signed_amount_ex_vat', b.amount_ex_vat,
           'signed_amount_inc_vat', b.amount_inc_vat,
           'amount_sign', case
@@ -14670,6 +14789,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.timesheet_pay_state(
   p_timesheet_id uuid,
