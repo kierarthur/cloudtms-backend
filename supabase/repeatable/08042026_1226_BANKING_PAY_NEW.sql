@@ -26719,7 +26719,7 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
             'frozen_source_basis_work_date', nullif(btrim(coalesce(cbi.frozen_source_basis_json->>'work_date','')), ''),
             'live_component_key_type', cbi.live_component_key_type,
             'live_component_key_value', cbi.live_component_key_value,
-            'amount_ex_vat', cbi.amount_ex_vat
+            'source_reservation_amount_ex_vat', cbi.source_reservation_amount_ex_vat
           )
           order by cbi.timesheet_id::text, cbi.item_type, coalesce(cbi.segment_key,''), coalesce(cbi.source_ref,''), cbi.pay_batch_item_id::text
         ),
@@ -27007,7 +27007,6 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
   );
 END;
 $function$;
-
 
 
 
@@ -27904,6 +27903,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_batch_assert_integrity(
   p_pay_batch_id uuid,
   p_actor_user_id uuid DEFAULT NULL::uuid
@@ -28099,39 +28099,62 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
 
   v_stage := 'STAGE_23_FINAL_SAFETY_ASSERT_BLOCKERS';
 
-  with destinations as (
+  with destination_items as (
+    select
+      pbc.candidate_id,
+      pbi.id as pay_batch_item_id,
+      pbi.item_type,
+      upper(coalesce(pbi.pay_channel::text,'')) as pay_channel,
+      upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) as routing_kind,
+      pbi.payout_instruction_snapshot_json,
+      pbi.umbrella_id as item_umbrella_id,
+      c.umbrella_id as candidate_umbrella_id,
+      c.bank_details_hash as candidate_bank_hash,
+      u.bank_details_hash as umbrella_bank_hash,
+      nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'bank_details_hash','')), '') as snapshot_bank_hash
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join pg_temp.tmp_pay_build_candidates_ctx c
+      on c.id = pbc.candidate_id
+    left join pg_temp.tmp_pay_build_umbrellas_ctx u
+      on u.id = coalesce(pbi.umbrella_id, c.umbrella_id)
+    where pbc.pay_batch_id = v_batch_id
+      and coalesce(pbi.is_voided, false) = false
+      and pbi.item_type <> 'DEBT_CREATED'
+      and pbc.candidate_id = any(v_candidate_ids)
+  ),
+  destinations as (
     select distinct
-      spr.candidate_id,
+      di.candidate_id,
       case
-        when upper(coalesce(spr.routing_kind,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'CANDIDATE'
-        when upper(coalesce(spr.pay_channel,'')) = 'PAYE' then 'CANDIDATE'
-        when upper(coalesce(spr.routing_kind,'')) = 'UMBRELLA_COMPANY' then 'UMBRELLA'
-        when upper(coalesce(spr.pay_channel,'')) = 'UMBRELLA' and spr.finance_case_id is null then 'UMBRELLA'
+        when di.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'CANDIDATE'
+        when di.pay_channel = 'PAYE' then 'CANDIDATE'
+        when di.routing_kind = 'UMBRELLA_COMPANY' then 'UMBRELLA'
+        when di.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+         and di.pay_channel = 'UMBRELLA' then 'UMBRELLA'
         else 'CANDIDATE'
       end as entity_kind,
       case
-        when upper(coalesce(spr.routing_kind,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then spr.candidate_id
-        when upper(coalesce(spr.pay_channel,'')) = 'PAYE' then spr.candidate_id
-        when upper(coalesce(spr.routing_kind,'')) = 'UMBRELLA_COMPANY' then c.umbrella_id
-        when upper(coalesce(spr.pay_channel,'')) = 'UMBRELLA' and spr.finance_case_id is null then c.umbrella_id
-        else spr.candidate_id
+        when di.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then di.candidate_id
+        when di.pay_channel = 'PAYE' then di.candidate_id
+        when di.routing_kind = 'UMBRELLA_COMPANY' then coalesce(di.item_umbrella_id, di.candidate_umbrella_id)
+        when di.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+         and di.pay_channel = 'UMBRELLA' then coalesce(di.item_umbrella_id, di.candidate_umbrella_id)
+        else di.candidate_id
       end as entity_id,
       case
-        when upper(coalesce(spr.routing_kind,'')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then spr.bank_details_hash
-        when upper(coalesce(spr.pay_channel,'')) = 'PAYE' then c.bank_details_hash
-        when upper(coalesce(spr.routing_kind,'')) = 'UMBRELLA_COMPANY' then u.bank_details_hash
-        when upper(coalesce(spr.pay_channel,'')) = 'UMBRELLA' and spr.finance_case_id is null then u.bank_details_hash
-        else c.bank_details_hash
+        when di.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then di.snapshot_bank_hash
+        when di.pay_channel = 'PAYE' then di.candidate_bank_hash
+        when di.routing_kind = 'UMBRELLA_COMPANY' then di.umbrella_bank_hash
+        when di.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+         and di.pay_channel = 'UMBRELLA' then di.umbrella_bank_hash
+        else di.candidate_bank_hash
       end as bank_hash
-    from pg_temp.tmp_pay_build_selected_preview_rows spr
-    join pg_temp.tmp_pay_build_candidates_ctx c
-      on c.id = spr.candidate_id
-    left join pg_temp.tmp_pay_build_umbrellas_ctx u
-      on u.id = c.umbrella_id
-    where spr.draftable = true
-      and spr.candidate_id = any(v_candidate_ids)
+    from destination_items di
   ),
   destination_blockers as (
+
     select
       d.candidate_id,
       d.entity_kind,
@@ -28410,6 +28433,12 @@ v_stage := 'STAGE_21_BREAKDOWN_INTEGRITY_MISSING';
   );
 END;
 $function$;
+
+
+
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_build_batch_artifacts_from_preview(
   p_pay_date date,
