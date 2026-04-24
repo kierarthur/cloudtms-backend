@@ -169,6 +169,7 @@ begin
   return nullif(btrim(coalesce(p_field,'')), '');
 end;
 $$;
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -454,11 +455,14 @@ begin
           and par.settled_at_utc is null
         )
       )
-    returning par.id, par.finance_case_id, par.reserved_amount
+    returning
+      par.id,
+      par.finance_case_id,
+      round(abs(coalesce(par.reserved_source_amount, par.reserved_amount, 0)), 2)::numeric as released_source_amount
   )
   select
     count(*)::int,
-    round(coalesce(sum(rel.reserved_amount),0),2),
+    round(coalesce(sum(rel.released_source_amount),0),2),
     coalesce(jsonb_agg(distinct rel.finance_case_id::text), '[]'::jsonb)
   into
     v_released_reservation_count,
@@ -474,96 +478,93 @@ begin
 
   truncate table _tmp_component_restore;
 
-  with released_source as (
+  create temp table if not exists _tmp_component_restore_missing (
+    reservation_id uuid null,
+    pay_batch_item_id uuid null,
+    finance_case_id uuid null,
+    missing_reason text not null
+  ) on commit drop;
+
+  truncate table _tmp_component_restore_missing;
+
+  with released_base as (
     select
-      coalesce(
-        par.finance_component_id,
-        pbi.finance_component_id,
-        fb.finance_component_id
-      ) as finance_component_id,
-      coalesce(
-        par.finance_case_id,
-        pbi.finance_case_id,
-        fb.finance_case_id
-      ) as finance_case_id,
+      par.id as reservation_id,
+      pbi.id as pay_batch_item_id,
+      coalesce(par.finance_component_id, pbi.finance_component_id) as finance_component_id,
+      coalesce(par.finance_case_id, pbi.finance_case_id) as finance_case_id,
       round(
-        sum(
+        abs(
           coalesce(
             par.reserved_source_amount,
             pbi.frozen_source_amount,
-            abs(coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, par.reserved_amount, 0))
+            case
+              when pbi.id is not null
+               and pbi.frozen_source_amount is null
+               and pbi.frozen_target_amount_ex_vat is null
+               and pbi.frozen_resolution_mode is null
+               and pbi.frozen_resolution_result_json is null
+                then coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, par.reserved_amount, 0)
+              when pbi.id is null
+               and par.reserved_source_amount is null
+                then coalesce(par.reserved_amount, 0)
+              else null::numeric
+            end
           )
         ),
         2
-      ) as restore_source_amount
+      )::numeric as restore_source_amount
     from public.pay_advance_reservations par
     left join public.pay_batch_items pbi
       on pbi.id = par.pay_batch_item_id
-    left join lateral (
-      select
-        pfc_fb.id as finance_component_id,
-        pfc_fb.finance_case_id as finance_case_id
-      from public.pay_finance_case_components pfc_fb
-      where pfc_fb.finance_case_id = coalesce(par.finance_case_id, pbi.finance_case_id)
-        and pfc_fb.component_key_type = coalesce(
-          nullif(
-            btrim(
-              coalesce(
-                par.frozen_component_key_type,
-                pbi.frozen_component_key_type,
-                par.frozen_component_snapshot_json->>'component_key_type',
-                pbi.frozen_component_snapshot_json->>'component_key_type',
-                ''
-              )
-            ),
-            ''
-          ),
-          '§NO_COMPONENT_KEY§'
-        )
-        and pfc_fb.component_key_value = coalesce(
-          nullif(
-            btrim(
-              coalesce(
-                par.frozen_component_key_value,
-                pbi.frozen_component_key_value,
-                par.frozen_component_snapshot_json->>'component_key_value',
-                pbi.frozen_component_snapshot_json->>'component_key_value',
-                ''
-              )
-            ),
-            ''
-          ),
-          '§NO_COMPONENT_VALUE§'
-        )
-      order by
-        pfc_fb.closed_at_utc nulls first,
-        pfc_fb.updated_at_utc desc,
-        pfc_fb.created_at_utc desc,
-        pfc_fb.id desc
-      limit 1
-    ) fb on true
     where par.pay_batch_id = p_pay_batch_id
       and upper(coalesce(par.status,'')) = 'RELEASED'
       and par.released_at_utc = v_cancelled_at_utc
+  ),
+  missing_rows as (
+    select
+      rb.reservation_id,
+      rb.pay_batch_item_id,
+      rb.finance_case_id,
+      case
+        when rb.finance_component_id is null then 'MISSING_FINANCE_COMPONENT_ID'
+        when rb.restore_source_amount is null then 'MISSING_RESTORE_SOURCE_AMOUNT'
+        when round(coalesce(rb.restore_source_amount, 0), 2) <= 0 then 'NON_POSITIVE_RESTORE_SOURCE_AMOUNT'
+        else null
+      end as missing_reason
+    from released_base rb
+    where rb.finance_component_id is null
+       or rb.restore_source_amount is null
+       or round(coalesce(rb.restore_source_amount, 0), 2) <= 0
+  ),
+  inserted_missing as (
+    insert into _tmp_component_restore_missing(
+      reservation_id,
+      pay_batch_item_id,
+      finance_case_id,
+      missing_reason
+    )
+    select
+      mr.reservation_id,
+      mr.pay_batch_item_id,
+      mr.finance_case_id,
+      mr.missing_reason
+    from missing_rows mr
+    where mr.missing_reason is not null
+    returning 1
+  ),
+  released_source as (
+    select
+      rb.finance_component_id,
+      rb.finance_case_id,
+      round(sum(rb.restore_source_amount), 2) as restore_source_amount
+    from released_base rb
+    where rb.finance_component_id is not null
+      and rb.restore_source_amount is not null
+      and round(coalesce(rb.restore_source_amount, 0), 2) > 0
     group by
-      coalesce(
-        par.finance_component_id,
-        pbi.finance_component_id,
-        fb.finance_component_id
-      ),
-      coalesce(
-        par.finance_case_id,
-        pbi.finance_case_id,
-        fb.finance_case_id
-      )
-    having coalesce(
-      coalesce(
-        par.finance_component_id,
-        pbi.finance_component_id,
-        fb.finance_component_id
-      ),
-      '00000000-0000-0000-0000-000000000000'::uuid
-    ) <> '00000000-0000-0000-0000-000000000000'::uuid
+      rb.finance_component_id,
+      rb.finance_case_id
   )
   insert into _tmp_component_restore(finance_component_id, finance_case_id, restore_source_amount)
   select
@@ -573,6 +574,30 @@ begin
   from released_source rs
   where rs.finance_component_id is not null
     and rs.restore_source_amount > 0;
+
+  if exists (select 1 from _tmp_component_restore_missing) then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_CANCEL',
+      'code', 'FINANCE_COMPONENT_RESTORE_TARGET_UNRESOLVED',
+      'message', 'pay_batch_cancel: cannot restore released finance component reservations because frozen component identity or source amount is missing',
+      'pay_batch_id', p_pay_batch_id::text,
+      'missing', (
+        select coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'reservation_id', case when missing_rows_output.reservation_id is null then null else missing_rows_output.reservation_id::text end,
+              'pay_batch_item_id', case when missing_rows_output.pay_batch_item_id is null then null else missing_rows_output.pay_batch_item_id::text end,
+              'finance_case_id', case when missing_rows_output.finance_case_id is null then null else missing_rows_output.finance_case_id::text end,
+              'missing_reason', missing_rows_output.missing_reason
+            )
+            order by missing_rows_output.missing_reason, missing_rows_output.reservation_id::text, missing_rows_output.pay_batch_item_id::text
+          ),
+          '[]'::jsonb
+        )
+        from _tmp_component_restore_missing missing_rows_output
+      )
+    )::text;
+  end if;
 
   create temp table if not exists _tmp_component_restore_apply (
     finance_component_id uuid not null primary key,
@@ -942,6 +967,7 @@ begin
   );
 end;
 $$;
+
 
 
 create or replace function public.pay_set_paye_net_from_sage(
