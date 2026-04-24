@@ -29684,9 +29684,6 @@ END;
 $function$;
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_apply_case_resolution(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -29752,6 +29749,16 @@ DECLARE
   v_bucket_target_rate numeric := NULL::numeric;
   v_bucket_resolution_identity_key text := '';
   v_normalized_payload_json jsonb := '{}'::jsonb;
+  v_taxable_finance_case_id uuid := NULL::uuid;
+  v_taxable_case_candidate_id uuid := NULL::uuid;
+  v_taxable_resolution_path text := '';
+  v_taxable_schedule_input_mode text := NULL::text;
+  v_taxable_weeks_total integer := NULL::integer;
+  v_taxable_weekly_due numeric := NULL::numeric;
+  v_taxable_manual_total_remaining numeric := NULL::numeric;
+  v_taxable_effective_pay_date date := NULL::date;
+  v_taxable_note text := NULL::text;
+  v_taxable_result_json jsonb := '{}'::jsonb;
   v_audit_before_json jsonb := NULL;
   v_audit_after_json jsonb := '{}'::jsonb;
 BEGIN
@@ -29801,7 +29808,7 @@ BEGIN
     RAISE EXCEPTION 'case_key is required';
   END IF;
 
-  v_resolution_family := UPPER(BTRIM(COALESCE(v_resolution_payload_json->>'resolution_family', '')));
+  v_resolution_family := UPPER(BTRIM(COALESCE(v_resolution_payload_json->>'resolution_family', v_resolution_payload_json->>'resolution_kind', '')));
   v_default_resolution_mode := UPPER(BTRIM(COALESCE(
     v_resolution_payload_json->>'resolution_mode',
     v_resolution_payload_json->>'mode',
@@ -29846,8 +29853,8 @@ BEGIN
     END IF;
   END IF;
 
-  IF v_resolution_family NOT IN ('BUCKETED', 'NON_BUCKET') THEN
-    RAISE EXCEPTION 'resolution_family must be BUCKETED or NON_BUCKET';
+  IF v_resolution_family NOT IN ('BUCKETED', 'NON_BUCKET', 'TAXABLE_CHANNEL_RESTRUCTURE') THEN
+    RAISE EXCEPTION 'resolution_family must be BUCKETED, NON_BUCKET or TAXABLE_CHANNEL_RESTRUCTURE';
   END IF;
 
   IF v_candidate_id IS NOT NULL
@@ -29863,7 +29870,147 @@ BEGIN
 
   truncate table _tmp_bpay_session_case_resolution_existing;
 
-  IF v_resolution_family = 'BUCKETED' THEN
+  IF v_resolution_family = 'TAXABLE_CHANNEL_RESTRUCTURE' THEN
+    IF v_finance_case_id_text !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'finance_case_id is required for TAXABLE_CHANNEL_RESTRUCTURE resolution';
+    END IF;
+
+    v_taxable_finance_case_id := v_finance_case_id_text::uuid;
+
+    SELECT pa.candidate_id
+    INTO v_taxable_case_candidate_id
+    FROM public.pay_advances AS pa
+    WHERE pa.id = v_taxable_finance_case_id
+      AND pa.case_type IN (
+        'OVERPAYMENT'::public.pay_finance_case_type_enum,
+        'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+        'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+      )
+      AND pa.status = 'ACTIVE'::public.pay_advance_status_enum
+    LIMIT 1;
+
+    IF v_taxable_case_candidate_id IS NULL THEN
+      RAISE EXCEPTION 'No active taxable-channel finance case found for finance_case_id %', v_taxable_finance_case_id;
+    END IF;
+
+    IF v_candidate_id IS NOT NULL AND v_candidate_id <> v_taxable_case_candidate_id THEN
+      RAISE EXCEPTION 'candidate_id % does not match taxable-channel finance case candidate %', v_candidate_id, v_taxable_case_candidate_id;
+    END IF;
+
+    IF NOT (COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[]) @> ARRAY[v_taxable_case_candidate_id]::uuid[]) THEN
+      RAISE EXCEPTION 'finance case candidate % is not in workbench session scope %', v_taxable_case_candidate_id, p_session_id;
+    END IF;
+
+    v_resolved_candidate_id := v_taxable_case_candidate_id;
+
+    SELECT COUNT(*)::integer
+    INTO v_target_match_count
+    FROM public.banking_pay_snapshot_case_state AS snapshot_case
+    WHERE snapshot_case.snapshot_run_id = v_session_row.source_snapshot_run_id
+      AND snapshot_case.candidate_id = v_resolved_candidate_id
+      AND snapshot_case.case_key = v_case_key;
+
+    IF v_target_match_count = 0 THEN
+      RAISE EXCEPTION 'No matching snapshot baseline case found for TAXABLE_CHANNEL_RESTRUCTURE candidate % in session %', v_resolved_candidate_id, p_session_id;
+    ELSIF v_target_match_count > 1 THEN
+      RAISE EXCEPTION 'Ambiguous snapshot baseline case found for TAXABLE_CHANNEL_RESTRUCTURE candidate % in session %', v_resolved_candidate_id, p_session_id;
+    END IF;
+
+    v_taxable_resolution_path := UPPER(BTRIM(COALESCE(
+      v_resolution_payload_json->>'resolution_path',
+      v_resolution_payload_json->>'path',
+      'SUGGESTED'
+    )));
+    IF v_taxable_resolution_path = '' THEN
+      v_taxable_resolution_path := 'SUGGESTED';
+    END IF;
+
+    IF v_taxable_resolution_path NOT IN ('SUGGESTED', 'MANUAL') THEN
+      RAISE EXCEPTION 'resolution_path must be SUGGESTED or MANUAL for TAXABLE_CHANNEL_RESTRUCTURE';
+    END IF;
+
+    v_taxable_schedule_input_mode := NULLIF(UPPER(BTRIM(COALESCE(
+      v_resolution_payload_json->>'schedule_input_mode',
+      v_resolution_payload_json->>'schedule_mode',
+      ''
+    ))), '');
+    IF v_taxable_schedule_input_mode IS NOT NULL
+       AND v_taxable_schedule_input_mode NOT IN ('BY_WEEKS', 'BY_WEEKLY_DUE') THEN
+      RAISE EXCEPTION 'schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE for TAXABLE_CHANNEL_RESTRUCTURE';
+    END IF;
+
+    IF NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'weeks_total', '')), '') IS NOT NULL THEN
+      IF BTRIM(COALESCE(v_resolution_payload_json->>'weeks_total', '')) !~ '^\d+$' THEN
+        RAISE EXCEPTION 'weeks_total must be a positive integer for TAXABLE_CHANNEL_RESTRUCTURE';
+      END IF;
+      v_taxable_weeks_total := (v_resolution_payload_json->>'weeks_total')::integer;
+      IF v_taxable_weeks_total < 1 THEN
+        RAISE EXCEPTION 'weeks_total must be >= 1 for TAXABLE_CHANNEL_RESTRUCTURE';
+      END IF;
+    END IF;
+
+    IF NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'weekly_due', '')), '') IS NOT NULL THEN
+      IF BTRIM(COALESCE(v_resolution_payload_json->>'weekly_due', '')) !~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+        RAISE EXCEPTION 'weekly_due must be numeric for TAXABLE_CHANNEL_RESTRUCTURE';
+      END IF;
+      v_taxable_weekly_due := round((v_resolution_payload_json->>'weekly_due')::numeric, 2);
+      IF v_taxable_weekly_due <= 0 THEN
+        RAISE EXCEPTION 'weekly_due must be > 0 for TAXABLE_CHANNEL_RESTRUCTURE';
+      END IF;
+    END IF;
+
+    IF COALESCE(
+      NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'manual_total_remaining', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'target_remaining_balance_ex_vat', '')), '')
+    ) IS NOT NULL THEN
+      IF COALESCE(
+        NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'manual_total_remaining', '')), ''),
+        NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'target_remaining_balance_ex_vat', '')), '')
+      ) !~ '^-?[0-9]+(\.[0-9]+)?$' THEN
+        RAISE EXCEPTION 'manual_total_remaining must be numeric for TAXABLE_CHANNEL_RESTRUCTURE';
+      END IF;
+      v_taxable_manual_total_remaining := round(COALESCE(
+        NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'manual_total_remaining', '')), '')::numeric,
+        NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'target_remaining_balance_ex_vat', '')), '')::numeric
+      ), 2);
+      IF v_taxable_manual_total_remaining <= 0 THEN
+        RAISE EXCEPTION 'manual_total_remaining must be > 0 for TAXABLE_CHANNEL_RESTRUCTURE';
+      END IF;
+    END IF;
+
+    IF NULLIF(BTRIM(COALESCE(v_resolution_payload_json->>'effective_pay_date', '')), '') IS NOT NULL THEN
+      IF BTRIM(COALESCE(v_resolution_payload_json->>'effective_pay_date', '')) !~ '^\d{4}-\d{2}-\d{2}$' THEN
+        RAISE EXCEPTION 'effective_pay_date must be YYYY-MM-DD for TAXABLE_CHANNEL_RESTRUCTURE';
+      END IF;
+      v_taxable_effective_pay_date := (v_resolution_payload_json->>'effective_pay_date')::date;
+    END IF;
+
+    v_taxable_note := NULLIF(BTRIM(COALESCE(
+      v_resolution_payload_json->>'note',
+      v_resolution_payload_json->>'reason',
+      ''
+    )), '');
+
+    v_taxable_result_json := public.pay_finance_case_apply_taxable_channel_restructure(
+      p_finance_case_id => v_taxable_finance_case_id,
+      p_actor_user_id => p_actor_user_id,
+      p_resolution_path => v_taxable_resolution_path,
+      p_schedule_input_mode => v_taxable_schedule_input_mode,
+      p_weeks_total => v_taxable_weeks_total,
+      p_weekly_due => v_taxable_weekly_due,
+      p_manual_total_remaining => v_taxable_manual_total_remaining,
+      p_effective_pay_date => v_taxable_effective_pay_date,
+      p_note => v_taxable_note
+    );
+
+    v_resolution_identity_keys := jsonb_build_array(
+      concat_ws('|', 'TAXABLE_CHANNEL_RESTRUCTURE', v_case_key, v_taxable_finance_case_id::text)
+    );
+    v_case_resolution_ids := '[]'::jsonb;
+    v_case_resolution_id_text := NULL;
+    v_action := 'TAXABLE_CHANNEL_RESTRUCTURE_APPLIED';
+
+  ELSIF v_resolution_family = 'BUCKETED' THEN
     IF jsonb_typeof(v_bucket_resolutions_json) <> 'array' OR jsonb_array_length(v_bucket_resolutions_json) = 0 THEN
       RAISE EXCEPTION 'bucket_resolutions must be a non-empty JSON array for BUCKETED resolution';
     END IF;
@@ -30547,7 +30694,7 @@ BEGIN
   v_job_json := public.pay_workbench_enqueue_session_candidate_refresh(
     p_session_id => p_session_id,
     p_candidate_id => COALESCE(v_resolved_candidate_id, v_candidate_id),
-    p_reason => 'SESSION_CASE_RESOLUTION_APPLIED',
+    p_reason => v_action,
     p_actor_user_id => p_actor_user_id,
     p_payload_json => jsonb_build_object(
       'case_key', v_case_key,
@@ -30573,10 +30720,16 @@ BEGIN
     'resolution_identity_keys', v_resolution_identity_keys,
     'case_resolution_count', jsonb_array_length(v_case_resolution_ids),
     'state_changed', true,
-    'action', v_action
+    'action', v_action,
+    'durable_result', CASE WHEN v_resolution_family = 'TAXABLE_CHANNEL_RESTRUCTURE' THEN v_taxable_result_json ELSE NULL END
   );
 END;
 $function$;
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_progress(p_session_id uuid)
