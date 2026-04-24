@@ -20410,6 +20410,7 @@ $function$;
 
 
 
+
 create or replace function public.pay_finance_case_restructure(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -20445,6 +20446,8 @@ declare
   v_schedule_input_mode text := null;
   v_has_weekly_due_input boolean := false;
   v_has_weeks_total_input boolean := false;
+  v_candidate_pay_method text := null;
+  v_taxable_channel_restructure_required boolean := false;
 begin
   if p_finance_case_id is null then
     raise exception '%', jsonb_build_object(
@@ -20526,6 +20529,41 @@ begin
       'code','FINANCE_CASE_NOT_REPAYABLE',
       'message','pay_finance_case_restructure: manual credit adjustments are not repayable and cannot be restructured',
       'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  select upper(coalesce(c.pay_method, ''))
+  into v_candidate_pay_method
+  from public.candidates as c
+  where c.id = v_case.candidate_id
+  limit 1;
+
+  select exists (
+    select 1
+    from public.pay_finance_case_components as pfc_block
+    where pfc_block.finance_case_id = p_finance_case_id
+      and pfc_block.closed_at_utc is null
+      and pfc_block.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      and round(coalesce(pfc_block.remaining_source_amount, 0), 2) > 0
+      and upper(coalesce(pfc_block.source_pay_method, '')) in ('PAYE', 'UMBRELLA')
+      and v_candidate_pay_method in ('PAYE', 'UMBRELLA')
+      and upper(coalesce(pfc_block.source_pay_method, '')) <> v_candidate_pay_method
+      and (
+        coalesce(pfc_block.is_resolution_stale, false) = true
+        or nullif(btrim(coalesce(pfc_block.saved_target_pay_method, '')), '') is null
+        or upper(coalesce(pfc_block.saved_target_pay_method, '')) <> v_candidate_pay_method
+      )
+  )
+  into v_taxable_channel_restructure_required;
+
+  if coalesce(v_taxable_channel_restructure_required, false) = true then
+    raise exception '%', jsonb_build_object(
+      'error','PAY_FINANCE_CASE_RESTRUCTURE',
+      'code','TAXABLE_CHANNEL_RESTRUCTURE_REQUIRED',
+      'message','pay_finance_case_restructure: taxable PAYE/Umbrella channel restructure is required before schedule-only restructure can be applied',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text,
+      'candidate_pay_method', v_candidate_pay_method
     )::text;
   end if;
 
@@ -20757,6 +20795,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 
