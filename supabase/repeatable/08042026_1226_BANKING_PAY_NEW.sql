@@ -25849,6 +25849,8 @@ END;
 $function$;
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_batch_finalize_reservations_and_markers(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -25987,6 +25989,73 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
 
   v_stage := 'STAGE_15_DOUBLE_PAY_CONFLICT_CHECK';
 
+  with current_batch_item_resolution as (
+    select
+      pbi.id as pay_batch_item_id,
+      pbi.timesheet_id,
+      pbi.item_type,
+      ec.key_type,
+      ec.key_value,
+      ec.source_amount_ex_vat,
+      ec.key_resolution_failure_reason
+    from public.pay_batch_items pbi
+    join public.pay_batch_candidates pbc
+      on pbc.id = pbi.pay_batch_candidate_id
+    join lateral public._pay_batch_item_economic_components(null::uuid, array[pbi.id]::uuid[]) as ec
+      on true
+    where pbc.pay_batch_id = v_batch_id
+      and pbi.timesheet_id is not null
+      and coalesce(pbi.is_voided,false) = false
+      and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+  ),
+  invalid_current_batch_items as (
+    select
+      cbir.pay_batch_item_id,
+      cbir.timesheet_id,
+      cbir.item_type,
+      cbir.key_type,
+      cbir.key_value,
+      cbir.source_amount_ex_vat,
+      case
+        when cbir.key_resolution_failure_reason is not null then cbir.key_resolution_failure_reason
+        when cbir.key_type is null or btrim(coalesce(cbir.key_type,'')) = '' then 'MISSING_ECONOMIC_KEY_TYPE'
+        when cbir.key_value is null or btrim(coalesce(cbir.key_value,'')) = '' then 'MISSING_ECONOMIC_KEY_VALUE'
+        when cbir.key_type = 'TS_DAY' and cbir.key_value !~ '^\d{4}-\d{2}-\d{2}$' then 'INVALID_TS_DAY_KEY_VALUE'
+        when cbir.source_amount_ex_vat is null then 'MISSING_SOURCE_RESERVATION_AMOUNT'
+        else null
+      end as failure_reason
+    from current_batch_item_resolution cbir
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'pay_batch_item_id', invalid_current_batch_items.pay_batch_item_id::text,
+        'timesheet_id', invalid_current_batch_items.timesheet_id::text,
+        'item_type', invalid_current_batch_items.item_type,
+        'key_type', invalid_current_batch_items.key_type,
+        'key_value', invalid_current_batch_items.key_value,
+        'source_amount_ex_vat', invalid_current_batch_items.source_amount_ex_vat,
+        'failure_reason', invalid_current_batch_items.failure_reason
+      )
+      order by invalid_current_batch_items.pay_batch_item_id::text
+    ),
+    '[]'::jsonb
+  )
+  into v_reserved
+  from invalid_current_batch_items
+  where invalid_current_batch_items.failure_reason is not null;
+
+  if jsonb_array_length(v_reserved) > 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_BATCH_ITEM_ECONOMIC_KEY_OR_SOURCE_RESOLUTION_FAILED',
+      'stage', v_stage,
+      'pay_batch_id', v_batch_id::text,
+      'items', v_reserved
+    )::text;
+  end if;
+
+  v_reserved := '[]'::jsonb;
+
   -- Policy X: numeric reservation overrun check (stable keys).
   -- Validate that THIS draft batch has not introduced or worsened an overrun on any
   -- stable key. Pre-existing stale reservations in other active batches must not block
@@ -26093,191 +26162,33 @@ v_stage := 'STAGE_13_DELETE_EMPTY_CANDIDATES';
       pbi.frozen_component_key_value as frozen_component_key_value,
       pbi.frozen_component_snapshot_json as frozen_component_snapshot_json,
       pbi.frozen_source_basis_json as frozen_source_basis_json,
-      pfc.component_key_type as live_component_key_type,
-      pfc.component_key_value as live_component_key_value,
-      round(
-        coalesce(
-          pbi.amount_ex_vat,
-          pbi.frozen_target_amount_ex_vat,
-          pbi.amount_inc_vat,
-          pbi.frozen_target_amount_inc_vat,
-          0
-        ),
-        2
-      ) as amount_ex_vat
+      null::text as live_component_key_type,
+      null::text as live_component_key_value,
+      public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id) as source_reservation_amount_ex_vat
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
-    left join public.pay_finance_case_components pfc
-      on pfc.id = pbi.finance_component_id
     where pbc.pay_batch_id = v_batch_id
       and pbi.timesheet_id is not null
       and coalesce(pbi.is_voided,false) = false
       and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
   ),
-  current_batch_snapshot_choice as (
-    select
-      cbi.pay_batch_id,
-      cbi.timesheet_id,
-      (
-        select pbs1.target_snapshot_json
-        from public.pay_batch_timesheet_snapshots pbs1
-        where pbs1.pay_batch_id = cbi.pay_batch_id
-          and pbs1.timesheet_id = cbi.timesheet_id
-        order by pbs1.created_at_utc desc, pbs1.id desc
-        limit 1
-      ) as target_snapshot_json
-    from (
-      select distinct
-        cbi.pay_batch_id,
-        cbi.timesheet_id
-      from current_batch_items cbi
-    ) cbi
-  ),
-  current_batch_seg_lookup as (
-    select
-      cbi.pay_batch_id,
-      cbi.timesheet_id,
-      coalesce(
-        nullif(btrim(coalesce(cbi.segment_key,'')), ''),
-        case
-          when cbi.source_ref is not null and btrim(cbi.source_ref) like 'seg:%'
-            then nullif(btrim(split_part(cbi.source_ref,':',2)), '')
-          else null
-        end
-      ) as seg_id
-    from current_batch_items cbi
-    where cbi.item_type = 'SEGMENT_DELTA'
-  ),
-  current_batch_seg_date_map as (
-    select
-      csl.pay_batch_id,
-      csl.timesheet_id,
-      csl.seg_id,
-      nullif(btrim(coalesce(seg.value->>'date','')), '') as seg_date_raw
-    from current_batch_seg_lookup csl
-    join current_batch_snapshot_choice csc
-      on csc.pay_batch_id = csl.pay_batch_id
-     and csc.timesheet_id = csl.timesheet_id
-    join lateral jsonb_array_elements(coalesce(csc.target_snapshot_json->'segments','[]'::jsonb)) as seg(value)
-      on true
-    where csl.seg_id is not null
-      and seg.value is not null
-      and jsonb_typeof(seg.value) = 'object'
-      and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = csl.seg_id
-  ),
-  current_batch_seg_date_final as (
-    select
-      csdm.pay_batch_id,
-      csdm.timesheet_id,
-      csdm.seg_id,
-      case
-        when csdm.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then csdm.seg_date_raw
-        else null
-      end as seg_date
-    from current_batch_seg_date_map csdm
-  ),
   current_batch_keyed as (
     select
-      cbi.timesheet_id,
-      coalesce(
-        nullif(btrim(coalesce(cbi.frozen_component_key_type,'')), ''),
-        nullif(
-          btrim(
-            coalesce(
-              cbi.frozen_component_snapshot_json->>'component_key_type',
-              cbi.frozen_component_snapshot_json->>'key_type',
-              ''
-            )
-          ),
-          ''
-        ),
-        case
-          when cbi.item_type = 'SEGMENT_DELTA'
-            then case when cbsdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
-          when cbi.item_type = 'MILEAGE_DELTA'
-            then 'EXPENSE_CODE'
-          when cbi.item_type = 'ADJUSTMENT_DELTA'
-            then case
-              when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%'
-                then 'TS_TOTAL'
-              else 'ADJUSTMENT_CODE'
-            end
-          when cbi.item_type = 'EXPENSE_DELTA'
-            then case
-              when cbi.source_ref is not null and (
-                btrim(cbi.source_ref) like 'additional:%'
-                or btrim(cbi.source_ref) like 'add:%'
-                or btrim(cbi.source_ref) = 'additional'
-              )
-                then 'ADDITIONAL_CODE'
-              else 'EXPENSE_CODE'
-            end
-          else 'EXPENSE_CODE'
-        end
-      ) as key_type,
-      coalesce(
-        nullif(btrim(coalesce(cbi.frozen_component_key_value,'')), ''),
-        nullif(
-          btrim(
-            coalesce(
-              cbi.frozen_component_snapshot_json->>'component_key_value',
-              cbi.frozen_component_snapshot_json->>'key_value',
-              ''
-            )
-          ),
-          ''
-        ),
-        case
-          when cbi.item_type = 'SEGMENT_DELTA'
-            then coalesce(cbsdf.seg_date, 'TOTAL')
-          when cbi.item_type = 'MILEAGE_DELTA'
-            then 'MILEAGE'
-          when cbi.item_type = 'ADJUSTMENT_DELTA'
-            then case
-              when cbi.source_ref is not null and btrim(cbi.source_ref) like 'preview_seg:%'
-                then 'TOTAL'
-              when nullif(btrim(coalesce(cbi.frozen_source_basis_json->>'adjustment_id','')), '') is not null
-                then nullif(btrim(coalesce(cbi.frozen_source_basis_json->>'adjustment_id','')), '')
-              when cbi.source_ref is not null and btrim(cbi.source_ref) like 'adj:%'
-                then case
-                  when nullif(btrim(split_part(cbi.source_ref,':',2)), '') is null
-                    or btrim(split_part(cbi.source_ref,':',2)) like 'preview_adj_%'
-                    then 'TOTAL'
-                  else nullif(btrim(split_part(cbi.source_ref,':',2)), '')
-                end
-              else 'TOTAL'
-            end
-          when cbi.item_type = 'EXPENSE_DELTA'
-            then case
-              when cbi.source_ref is not null and (
-                btrim(cbi.source_ref) like 'additional:%'
-                or btrim(cbi.source_ref) like 'add:%'
-              )
-                then upper(nullif(btrim(split_part(cbi.source_ref,':',2)), ''))
-              when cbi.source_ref is not null and btrim(cbi.source_ref) = 'additional'
-                then 'TOTAL'
-              when cbi.source_ref is not null and btrim(cbi.source_ref) <> ''
-                then upper(btrim(cbi.source_ref))
-              else 'UNKNOWN'
-            end
-          else 'UNKNOWN'
-        end
-      ) as key_value,
-      cbi.amount_ex_vat
+      ec.timesheet_id,
+      ec.key_type,
+      ec.key_value,
+      round(coalesce(ec.source_amount_ex_vat, 0), 2) as amount_ex_vat
     from current_batch_items cbi
-    left join current_batch_seg_date_final cbsdf
-      on cbsdf.pay_batch_id = cbi.pay_batch_id
-     and cbsdf.timesheet_id = cbi.timesheet_id
-     and cbsdf.seg_id = coalesce(
-       nullif(btrim(coalesce(cbi.segment_key,'')), ''),
-       case
-         when cbi.source_ref is not null and btrim(cbi.source_ref) like 'seg:%'
-           then nullif(btrim(split_part(cbi.source_ref,':',2)), '')
-         else null
-       end
-     )
-    where cbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    join lateral public._pay_batch_item_economic_components(null::uuid, array[cbi.pay_batch_item_id]::uuid[]) as ec
+      on true
+    where ec.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+      and ec.key_resolution_failure_reason is null
+      and ec.source_amount_ex_vat is not null
+      and ec.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+      and ec.key_value is not null
+      and btrim(ec.key_value) <> ''
+      and not (ec.key_type = 'TS_DAY' and ec.key_value !~ '^\d{4}-\d{2}-\d{2}$')
   ),
   current_batch_reserved_sums as (
     select
@@ -26757,7 +26668,16 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
       pbi.frozen_resolution_mode,
       pbi.frozen_resolution_payload_json,
       pbi.frozen_resolution_result_json,
-      round(abs(coalesce(pbi.frozen_source_amount, pbi.amount_ex_vat, 0)), 2) as reserved_source_amount,
+      round(abs(coalesce(
+        case
+          when pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+            then public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id)
+          else null::numeric
+        end,
+        pbi.frozen_source_amount,
+        pbi.amount_ex_vat,
+        0
+      )), 2) as reserved_source_amount,
       round(abs(coalesce(pbi.frozen_target_amount_ex_vat, pbi.amount_ex_vat, 0)), 2) as frozen_rounded_target_amount
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
@@ -26794,6 +26714,9 @@ v_stage := 'STAGE_16D_CREATE_FINANCE_RESERVATIONS';
   );
 END;
 $function$;
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_batch_populate_candidate_summaries(
@@ -27141,13 +27064,11 @@ BEGIN
     RAISE EXCEPTION 'pay_batch_id is required';
   END IF;
 
+  v_stage := 'STAGE_20_BUILD_ITEM_BREAKDOWNS';
 
-v_stage := 'STAGE_20_BUILD_ITEM_BREAKDOWNS';
-
-  -- ✅ NEW: Build canonical breakdown lines for ALL items in this batch (including LOAN_REPAYMENT + DEBT_CREATED)
-  with my_items as (
-    select
-      pbi.id as pay_batch_item_id,
+  WITH my_items AS (
+    SELECT
+      pbi.id AS pay_batch_item_id,
       pbi.item_type,
       pbi.timesheet_id,
       pbi.segment_key,
@@ -27157,192 +27078,490 @@ v_stage := 'STAGE_20_BUILD_ITEM_BREAKDOWNS';
       pbi.amount_vat,
       pbi.amount_inc_vat,
       pbi.pay_channel,
+      pbi.finance_case_id,
+      pbi.finance_component_id,
+      pbi.frozen_component_key_type,
+      pbi.frozen_component_key_value,
       pbi.frozen_component_snapshot_json,
       pbi.frozen_source_basis_json,
+      pbi.frozen_resolution_mode,
+      pbi.frozen_resolution_payload_json,
       pbi.frozen_resolution_result_json,
-      pbi.frozen_component_classification
-    from public.pay_batch_items pbi
-    join public.pay_batch_candidates pbc
-      on pbc.id = pbi.pay_batch_candidate_id
-    where pbc.pay_batch_id = v_batch_id
-      and coalesce(pbi.is_voided, false) = false
-      and not exists (
-        select 1
-        from public.pay_batch_item_breakdowns pbib
-        where pbib.pay_batch_item_id = pbi.id
-        limit 1
+      pbi.frozen_component_classification,
+      pbi.frozen_source_amount,
+      pbi.frozen_target_amount_ex_vat,
+      pbi.frozen_target_amount_vat,
+      pbi.frozen_target_amount_inc_vat,
+      public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id) AS source_reservation_amount_ex_vat
+    FROM public.pay_batch_items AS pbi
+    JOIN public.pay_batch_candidates AS pbc
+      ON pbc.id = pbi.pay_batch_candidate_id
+    WHERE pbc.pay_batch_id = v_batch_id
+      AND COALESCE(pbi.is_voided, false) = false
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_batch_item_breakdowns AS pbib
+        WHERE pbib.pay_batch_item_id = pbi.id
+        LIMIT 1
       )
   ),
-  exact_component_seed as (
-    select
+  exact_component_seed AS (
+    SELECT
       mi.pay_batch_item_id,
       mi.item_type,
       mi.source_ref,
+      mi.description,
       mi.amount_ex_vat,
       mi.amount_vat,
       mi.amount_inc_vat,
-      coalesce(mi.frozen_component_snapshot_json, '{}'::jsonb) as frozen_component_snapshot_json,
-      coalesce(mi.frozen_source_basis_json, '{}'::jsonb) as frozen_source_basis_json,
-      coalesce(mi.frozen_resolution_result_json, '{}'::jsonb) as frozen_resolution_result_json,
-      nullif(
-        upper(
-          btrim(
-            coalesce(
+      mi.pay_channel,
+      mi.finance_case_id,
+      mi.finance_component_id,
+      mi.frozen_component_key_type,
+      mi.frozen_component_key_value,
+      mi.frozen_resolution_mode,
+      mi.frozen_resolution_payload_json,
+      mi.frozen_resolution_result_json,
+      mi.frozen_component_classification,
+      mi.frozen_source_amount,
+      mi.frozen_target_amount_ex_vat,
+      mi.frozen_target_amount_vat,
+      mi.frozen_target_amount_inc_vat,
+      mi.source_reservation_amount_ex_vat,
+      COALESCE(mi.frozen_component_snapshot_json, '{}'::jsonb) AS frozen_component_snapshot_json,
+      COALESCE(mi.frozen_source_basis_json, '{}'::jsonb) AS frozen_source_basis_json,
+      NULLIF(
+        UPPER(
+          BTRIM(
+            COALESCE(
               mi.frozen_component_snapshot_json->>'bucket_code',
               mi.frozen_source_basis_json->>'bucket_code',
-              case
-                when mi.item_type = 'EXPENSE_DELTA' and mi.source_ref like 'additional:%' then split_part(mi.source_ref, ':', 2)
-                when mi.item_type = 'EXPENSE_DELTA' and mi.source_ref = 'additional' then 'TOTAL'
-                else null
-              end,
+              CASE
+                WHEN mi.item_type = 'EXPENSE_DELTA' AND mi.source_ref LIKE 'additional:%' THEN split_part(mi.source_ref, ':', 2)
+                WHEN mi.item_type = 'EXPENSE_DELTA' AND mi.source_ref = 'additional' THEN 'TOTAL'
+                ELSE NULL
+              END,
               ''
             )
           )
         ),
         ''
-      ) as bucket_code,
-      nullif(btrim(coalesce(mi.frozen_component_snapshot_json->>'label', '')), '') as preview_label,
-      upper(coalesce(mi.frozen_component_snapshot_json->>'component_semantics', '')) as component_semantics,
-      coalesce(nullif(mi.frozen_component_snapshot_json->>'is_rate_bearing','')::boolean, false) as is_rate_bearing,
-      coalesce(nullif(mi.frozen_component_snapshot_json->>'is_amount_led','')::boolean, false) as is_amount_led,
-      case
-        when coalesce(
+      ) AS bucket_code,
+      NULLIF(BTRIM(COALESCE(mi.frozen_component_snapshot_json->>'label', '')), '') AS preview_label,
+      UPPER(COALESCE(mi.frozen_component_snapshot_json->>'component_semantics', '')) AS component_semantics,
+      COALESCE(NULLIF(mi.frozen_component_snapshot_json->>'is_rate_bearing','')::boolean, false) AS is_rate_bearing,
+      COALESCE(NULLIF(mi.frozen_component_snapshot_json->>'is_amount_led','')::boolean, false) AS is_amount_led,
+      NULLIF(
+        UPPER(
+          BTRIM(
+            COALESCE(
+              mi.frozen_component_key_type,
+              mi.frozen_component_snapshot_json->>'component_key_type',
+              mi.frozen_component_snapshot_json->>'key_type',
+              ''
+            )
+          )
+        ),
+        ''
+      ) AS component_key_type,
+      NULLIF(
+        BTRIM(
+          COALESCE(
+            mi.frozen_component_key_value,
+            mi.frozen_component_snapshot_json->>'component_key_value',
+            mi.frozen_component_snapshot_json->>'key_value',
+            ''
+          )
+        ),
+        ''
+      ) AS component_key_value,
+      NULLIF(
+        BTRIM(
+          COALESCE(
+            mi.frozen_component_snapshot_json->>'source_family_key',
+            mi.frozen_source_basis_json->>'source_family_key',
+            ''
+          )
+        ),
+        ''
+      ) AS source_family_key,
+      NULLIF(
+        BTRIM(
+          COALESCE(
+            mi.frozen_component_snapshot_json->>'source_basis_fingerprint',
+            mi.frozen_source_basis_json->>'source_basis_fingerprint',
+            mi.frozen_source_basis_json->>'basis_fingerprint',
+            ''
+          )
+        ),
+        ''
+      ) AS source_basis_fingerprint,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_component_snapshot_json->>'source_units',
+          mi.frozen_source_basis_json->>'source_units',
+          mi.frozen_source_basis_json->>'units',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_component_snapshot_json->>'source_units')::numeric,
+            (mi.frozen_source_basis_json->>'source_units')::numeric,
+            (mi.frozen_source_basis_json->>'units')::numeric
+          ), 6)
+        ELSE NULL::numeric
+      END AS source_units,
+      CASE
+        WHEN COALESCE(
           mi.frozen_resolution_result_json->>'target_units',
           mi.frozen_component_snapshot_json->>'target_units',
           mi.frozen_component_snapshot_json->>'source_units',
           mi.frozen_source_basis_json->>'source_units',
+          mi.frozen_source_basis_json->>'units',
           ''
-        ) ~ '^-?\d+(\.\d+)?$'
-          then round(
-            coalesce(
-              (mi.frozen_resolution_result_json->>'target_units')::numeric,
-              (mi.frozen_component_snapshot_json->>'target_units')::numeric,
-              (mi.frozen_component_snapshot_json->>'source_units')::numeric,
-              (mi.frozen_source_basis_json->>'source_units')::numeric
-            ),
-            6
-          )
-        else null::numeric
-      end as units,
-      case
-        when coalesce(
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_resolution_result_json->>'target_units')::numeric,
+            (mi.frozen_component_snapshot_json->>'target_units')::numeric,
+            (mi.frozen_component_snapshot_json->>'source_units')::numeric,
+            (mi.frozen_source_basis_json->>'source_units')::numeric,
+            (mi.frozen_source_basis_json->>'units')::numeric
+          ), 6)
+        ELSE NULL::numeric
+      END AS target_units,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_component_snapshot_json->>'source_rate',
+          mi.frozen_source_basis_json->>'source_rate',
+          mi.frozen_source_basis_json->>'rate',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_component_snapshot_json->>'source_rate')::numeric,
+            (mi.frozen_source_basis_json->>'source_rate')::numeric,
+            (mi.frozen_source_basis_json->>'rate')::numeric
+          ), 6)
+        ELSE NULL::numeric
+      END AS source_rate,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_resolution_result_json->>'target_rate',
           mi.frozen_resolution_result_json->>'replacement_rate',
           mi.frozen_component_snapshot_json->>'target_rate',
           mi.frozen_component_snapshot_json->>'source_rate',
           mi.frozen_source_basis_json->>'source_rate',
+          mi.frozen_source_basis_json->>'rate',
           ''
-        ) ~ '^-?\d+(\.\d+)?$'
-          then round(
-            coalesce(
-              (mi.frozen_resolution_result_json->>'replacement_rate')::numeric,
-              (mi.frozen_component_snapshot_json->>'target_rate')::numeric,
-              (mi.frozen_component_snapshot_json->>'source_rate')::numeric,
-              (mi.frozen_source_basis_json->>'source_rate')::numeric
-            ),
-            6
-          )
-        else null::numeric
-      end as rate
-    from my_items mi
-    where jsonb_typeof(mi.frozen_component_snapshot_json) = 'object'
-      and (
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_resolution_result_json->>'target_rate')::numeric,
+            (mi.frozen_resolution_result_json->>'replacement_rate')::numeric,
+            (mi.frozen_component_snapshot_json->>'target_rate')::numeric,
+            (mi.frozen_component_snapshot_json->>'source_rate')::numeric,
+            (mi.frozen_source_basis_json->>'source_rate')::numeric,
+            (mi.frozen_source_basis_json->>'rate')::numeric
+          ), 6)
+        ELSE NULL::numeric
+      END AS target_rate,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_component_snapshot_json->>'source_charge_rate',
+          mi.frozen_source_basis_json->>'source_charge_rate',
+          mi.frozen_source_basis_json->>'charge_rate',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_component_snapshot_json->>'source_charge_rate')::numeric,
+            (mi.frozen_source_basis_json->>'source_charge_rate')::numeric,
+            (mi.frozen_source_basis_json->>'charge_rate')::numeric
+          ), 6)
+        ELSE NULL::numeric
+      END AS source_charge_rate,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_resolution_result_json->>'target_charge_rate',
+          mi.frozen_component_snapshot_json->>'target_charge_rate',
+          mi.frozen_component_snapshot_json->>'source_charge_rate',
+          mi.frozen_source_basis_json->>'source_charge_rate',
+          mi.frozen_source_basis_json->>'charge_rate',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_resolution_result_json->>'target_charge_rate')::numeric,
+            (mi.frozen_component_snapshot_json->>'target_charge_rate')::numeric,
+            (mi.frozen_component_snapshot_json->>'source_charge_rate')::numeric,
+            (mi.frozen_source_basis_json->>'source_charge_rate')::numeric,
+            (mi.frozen_source_basis_json->>'charge_rate')::numeric
+          ), 6)
+        ELSE NULL::numeric
+      END AS target_charge_rate,
+      ROUND(ABS(COALESCE(
+        mi.source_reservation_amount_ex_vat,
+        mi.frozen_source_amount,
+        CASE
+          WHEN COALESCE(
+            mi.frozen_component_snapshot_json->>'source_pay_ex_vat',
+            mi.frozen_component_snapshot_json->>'source_entitlement_amount_ex_vat',
+            mi.frozen_component_snapshot_json->>'source_amount_ex_vat',
+            mi.frozen_source_basis_json->>'source_pay_ex_vat',
+            mi.frozen_source_basis_json->>'source_entitlement_amount_ex_vat',
+            mi.frozen_source_basis_json->>'source_amount_ex_vat',
+            mi.frozen_source_basis_json->>'pay_ex_vat',
+            mi.frozen_source_basis_json->>'amount_ex_vat',
+            ''
+          ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(
+              (mi.frozen_component_snapshot_json->>'source_pay_ex_vat')::numeric,
+              (mi.frozen_component_snapshot_json->>'source_entitlement_amount_ex_vat')::numeric,
+              (mi.frozen_component_snapshot_json->>'source_amount_ex_vat')::numeric,
+              (mi.frozen_source_basis_json->>'source_pay_ex_vat')::numeric,
+              (mi.frozen_source_basis_json->>'source_entitlement_amount_ex_vat')::numeric,
+              (mi.frozen_source_basis_json->>'source_amount_ex_vat')::numeric,
+              (mi.frozen_source_basis_json->>'pay_ex_vat')::numeric,
+              (mi.frozen_source_basis_json->>'amount_ex_vat')::numeric
+            )
+          ELSE NULL::numeric
+        END
+      )), 2) AS source_pay_ex_vat,
+      ROUND(COALESCE(
+        mi.frozen_target_amount_ex_vat,
+        CASE
+          WHEN COALESCE(
+            mi.frozen_resolution_result_json->>'target_pay_ex_vat',
+            mi.frozen_resolution_result_json->>'target_amount_ex_vat',
+            mi.frozen_component_snapshot_json->>'target_pay_ex_vat',
+            mi.frozen_component_snapshot_json->>'target_amount_ex_vat',
+            ''
+          ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN COALESCE(
+              (mi.frozen_resolution_result_json->>'target_pay_ex_vat')::numeric,
+              (mi.frozen_resolution_result_json->>'target_amount_ex_vat')::numeric,
+              (mi.frozen_component_snapshot_json->>'target_pay_ex_vat')::numeric,
+              (mi.frozen_component_snapshot_json->>'target_amount_ex_vat')::numeric
+            )
+          ELSE NULL::numeric
+        END,
+        mi.amount_ex_vat,
+        0
+      ), 2) AS target_pay_ex_vat,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_component_snapshot_json->>'source_charge_ex_vat',
+          mi.frozen_source_basis_json->>'source_charge_ex_vat',
+          mi.frozen_source_basis_json->>'charge_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_component_snapshot_json->>'source_charge_ex_vat')::numeric,
+            (mi.frozen_source_basis_json->>'source_charge_ex_vat')::numeric,
+            (mi.frozen_source_basis_json->>'charge_ex_vat')::numeric
+          ), 2)
+        ELSE NULL::numeric
+      END AS source_charge_ex_vat,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_resolution_result_json->>'target_charge_ex_vat',
+          mi.frozen_component_snapshot_json->>'target_charge_ex_vat',
+          mi.frozen_component_snapshot_json->>'source_charge_ex_vat',
+          mi.frozen_source_basis_json->>'source_charge_ex_vat',
+          mi.frozen_source_basis_json->>'charge_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_resolution_result_json->>'target_charge_ex_vat')::numeric,
+            (mi.frozen_component_snapshot_json->>'target_charge_ex_vat')::numeric,
+            (mi.frozen_component_snapshot_json->>'source_charge_ex_vat')::numeric,
+            (mi.frozen_source_basis_json->>'source_charge_ex_vat')::numeric,
+            (mi.frozen_source_basis_json->>'charge_ex_vat')::numeric
+          ), 2)
+        ELSE NULL::numeric
+      END AS target_charge_ex_vat,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_component_snapshot_json->>'source_margin_ex_vat',
+          mi.frozen_source_basis_json->>'source_margin_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_component_snapshot_json->>'source_margin_ex_vat')::numeric,
+            (mi.frozen_source_basis_json->>'source_margin_ex_vat')::numeric
+          ), 2)
+        ELSE NULL::numeric
+      END AS source_margin_ex_vat,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_resolution_result_json->>'target_margin_ex_vat',
+          mi.frozen_component_snapshot_json->>'target_margin_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_resolution_result_json->>'target_margin_ex_vat')::numeric,
+            (mi.frozen_component_snapshot_json->>'target_margin_ex_vat')::numeric
+          ), 2)
+        ELSE NULL::numeric
+      END AS target_margin_ex_vat,
+      CASE
+        WHEN COALESCE(
+          mi.frozen_resolution_result_json->>'margin_delta_ex_vat',
+          mi.frozen_component_snapshot_json->>'margin_delta_ex_vat',
+          ''
+        ) ~ '^-?[0-9]+(\.[0-9]+)?$'
+          THEN ROUND(COALESCE(
+            (mi.frozen_resolution_result_json->>'margin_delta_ex_vat')::numeric,
+            (mi.frozen_component_snapshot_json->>'margin_delta_ex_vat')::numeric
+          ), 2)
+        ELSE NULL::numeric
+      END AS margin_delta_ex_vat
+    FROM my_items AS mi
+    WHERE jsonb_typeof(mi.frozen_component_snapshot_json) = 'object'
+      AND (
         mi.item_type = 'SEGMENT_DELTA'
-        or (mi.item_type = 'EXPENSE_DELTA' and (mi.source_ref = 'additional' or mi.source_ref like 'additional:%'))
+        OR (mi.item_type = 'EXPENSE_DELTA' AND (mi.source_ref = 'additional' OR mi.source_ref LIKE 'additional:%'))
       )
   ),
-  exact_component_lines as (
-    select
+  exact_component_lines AS (
+    SELECT
       ecs.pay_batch_item_id,
-      case
-        when ecs.item_type = 'SEGMENT_DELTA' then 'TS_BUCKET'::text
-        else 'ADDITIONAL_UNIT'::text
-      end as line_kind,
+      CASE
+        WHEN ecs.item_type = 'SEGMENT_DELTA' THEN 'TS_BUCKET'::text
+        ELSE 'ADDITIONAL_UNIT'::text
+      END AS line_kind,
       ecs.bucket_code,
-      case
-        when ecs.item_type = 'SEGMENT_DELTA' then
-          case ecs.bucket_code
-            when 'DAY' then 'Day'::text
-            when 'NIGHT' then 'Night'::text
-            when 'SAT' then 'Sat'::text
-            when 'SUN' then 'Sun'::text
-            when 'BH' then 'BH'::text
-            else coalesce(ecs.preview_label, 'Bucket')::text
-          end
-        else coalesce(
+      CASE
+        WHEN ecs.item_type = 'SEGMENT_DELTA' THEN
+          CASE ecs.bucket_code
+            WHEN 'DAY' THEN 'Day'::text
+            WHEN 'NIGHT' THEN 'Night'::text
+            WHEN 'SAT' THEN 'Sat'::text
+            WHEN 'SUN' THEN 'Sun'::text
+            WHEN 'BH' THEN 'BH'::text
+            ELSE COALESCE(ecs.preview_label, 'Bucket')::text
+          END
+        ELSE COALESCE(
           ecs.preview_label,
-          case
-            when ecs.bucket_code is null or ecs.bucket_code = 'TOTAL' then 'Additional'::text
-            else ecs.bucket_code::text
-          end
+          CASE
+            WHEN ecs.bucket_code IS NULL OR ecs.bucket_code = 'TOTAL' THEN 'Additional'::text
+            ELSE ecs.bucket_code::text
+          END
         )
-      end as unit_name,
-      case when ecs.is_rate_bearing then ecs.units else null::numeric end as units,
-      case when ecs.is_rate_bearing then ecs.rate else null::numeric end as rate,
-      ecs.amount_ex_vat,
-      ecs.amount_vat,
-      ecs.amount_inc_vat,
+      END AS unit_name,
+      CASE WHEN ecs.is_rate_bearing THEN ecs.target_units ELSE NULL::numeric END AS units,
+      CASE WHEN ecs.is_rate_bearing THEN ecs.target_rate ELSE NULL::numeric END AS rate,
+      ecs.target_pay_ex_vat AS amount_ex_vat,
+      ROUND(COALESCE(ecs.frozen_target_amount_vat, 0), 2) AS amount_vat,
+      ROUND(COALESCE(ecs.frozen_target_amount_inc_vat, ecs.target_pay_ex_vat + COALESCE(ecs.frozen_target_amount_vat, 0)), 2) AS amount_inc_vat,
       jsonb_strip_nulls(
         jsonb_build_object(
-          'component_semantics', case when ecs.is_rate_bearing then 'RATE_BEARING' else coalesce(nullif(ecs.component_semantics,''), 'AMOUNT_LED') end,
-          'source_basis_json', case when ecs.frozen_source_basis_json = '{}'::jsonb then null else ecs.frozen_source_basis_json end,
-          'frozen_component_snapshot_json', case when ecs.frozen_component_snapshot_json = '{}'::jsonb then null else ecs.frozen_component_snapshot_json end
+          'component_semantics', CASE WHEN ecs.is_rate_bearing THEN 'RATE_BEARING' ELSE COALESCE(NULLIF(ecs.component_semantics,''), 'AMOUNT_LED') END,
+          'finance_case_id', CASE WHEN ecs.finance_case_id IS NULL THEN NULL ELSE ecs.finance_case_id::text END,
+          'finance_component_id', CASE WHEN ecs.finance_component_id IS NULL THEN NULL ELSE ecs.finance_component_id::text END,
+          'component_key_type', ecs.component_key_type,
+          'component_key_value', ecs.component_key_value,
+          'economic_key_type', ecs.component_key_type,
+          'economic_key_value', ecs.component_key_value,
+          'source_family_key', ecs.source_family_key,
+          'source_basis_json', CASE WHEN ecs.frozen_source_basis_json = '{}'::jsonb THEN NULL ELSE ecs.frozen_source_basis_json END,
+          'source_basis_fingerprint', ecs.source_basis_fingerprint,
+          'frozen_component_snapshot_json', CASE WHEN ecs.frozen_component_snapshot_json = '{}'::jsonb THEN NULL ELSE ecs.frozen_component_snapshot_json END,
+          'source_units', ecs.source_units,
+          'source_rate', ecs.source_rate,
+          'source_charge_rate', ecs.source_charge_rate,
+          'source_pay_ex_vat', ecs.source_pay_ex_vat,
+          'source_entitlement_amount_ex_vat', ecs.source_pay_ex_vat,
+          'source_reservation_amount_ex_vat', ecs.source_reservation_amount_ex_vat,
+          'source_charge_ex_vat', ecs.source_charge_ex_vat,
+          'source_margin_ex_vat', ecs.source_margin_ex_vat,
+          'target_units', ecs.target_units,
+          'target_rate', ecs.target_rate,
+          'target_charge_rate', ecs.target_charge_rate,
+          'target_pay_ex_vat', ecs.target_pay_ex_vat,
+          'target_amount_ex_vat', ecs.target_pay_ex_vat,
+          'target_charge_ex_vat', ecs.target_charge_ex_vat,
+          'target_margin_ex_vat', ecs.target_margin_ex_vat,
+          'margin_delta_ex_vat', ecs.margin_delta_ex_vat,
+          'resolution_mode', COALESCE(ecs.frozen_resolution_mode::text, ecs.frozen_component_snapshot_json->>'resolution_mode'),
+          'resolution_payload_json', CASE WHEN ecs.frozen_resolution_payload_json IS NULL OR ecs.frozen_resolution_payload_json = '{}'::jsonb THEN NULL ELSE ecs.frozen_resolution_payload_json END,
+          'resolution_result_json', CASE WHEN ecs.frozen_resolution_result_json IS NULL OR ecs.frozen_resolution_result_json = '{}'::jsonb THEN NULL ELSE ecs.frozen_resolution_result_json END,
+          'source_target_display', jsonb_build_object(
+            'source_units', ecs.source_units,
+            'source_rate', ecs.source_rate,
+            'source_amount_ex_vat', ecs.source_pay_ex_vat,
+            'target_units', ecs.target_units,
+            'target_rate', ecs.target_rate,
+            'target_amount_ex_vat', ecs.target_pay_ex_vat,
+            'economic_key_type', ecs.component_key_type,
+            'economic_key_value', ecs.component_key_value
+          )
         )
-      ) as meta_json
-    from exact_component_seed ecs
+      ) AS meta_json
+    FROM exact_component_seed AS ecs
   ),
-  exact_component_item_ids as (
-    select distinct ecl.pay_batch_item_id
-    from exact_component_lines ecl
+  exact_component_item_ids AS (
+    SELECT DISTINCT ecl.pay_batch_item_id
+    FROM exact_component_lines AS ecl
   ),
-  simple_lines as (
-    select
+  simple_lines AS (
+    SELECT
       mi.pay_batch_item_id,
-      case
-        when mi.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
-        when mi.item_type = 'EXPENSE_DELTA' then 'EXPENSE'
-        when mi.item_type = 'ADJUSTMENT_DELTA' then 'ADJUSTMENT'
-        when mi.item_type = 'CONVERSION_ADJ' then 'CONVERSION_ADJ'
-        when mi.item_type = 'OVERPAYMENT_RECOVERY' then 'OVERPAYMENT_RECOVERY'
-        when mi.item_type = 'LOAN_REPAYMENT' then 'LOAN_REPAYMENT'
-        when mi.item_type = 'MANUAL_DEBT_RECOVERY' then 'MANUAL_DEBT_RECOVERY'
-        when mi.item_type = 'DEBT_CREATED' then 'DEBT_CREATED'
-        when mi.item_type = 'LOAN_PAYOUT' then 'LOAN_PAYOUT'
-        when mi.item_type = 'MANUAL_CREDIT_PAYOUT' then 'MANUAL_CREDIT_PAYOUT'
-        else 'ADJUSTMENT'
-      end as line_kind,
-      null::text as bucket_code,
-      case
-        when mi.item_type = 'MILEAGE_DELTA' then 'Mileage'
-        when mi.item_type = 'EXPENSE_DELTA' then initcap(coalesce(mi.source_ref,'Expense'))
-        when mi.item_type = 'ADJUSTMENT_DELTA' then 'Adjustment'
-        when mi.item_type = 'CONVERSION_ADJ' then 'Conversion adjustment'
-        when mi.item_type = 'OVERPAYMENT_RECOVERY' then 'Overpayment recovery'
-        when mi.item_type = 'LOAN_REPAYMENT' then 'Loan repayment'
-        when mi.item_type = 'MANUAL_DEBT_RECOVERY' then 'Manual debt recovery'
-        when mi.item_type = 'DEBT_CREATED' then 'Debt created'
-        when mi.item_type = 'LOAN_PAYOUT' then 'Loan payout'
-        when mi.item_type = 'MANUAL_CREDIT_PAYOUT' then 'Manual credit adjustment payment'
-        else 'Adjustment'
-      end as unit_name,
-      null::numeric as units,
-      null::numeric as rate,
-      round(coalesce(mi.amount_ex_vat, 0), 2) as amount_ex_vat,
-      round(coalesce(mi.amount_vat, 0), 2) as amount_vat,
-      round(coalesce(mi.amount_inc_vat, 0), 2) as amount_inc_vat,
-      '{}'::jsonb as meta_json
-    from my_items mi
-    where not exists (
-      select 1
-      from exact_component_item_ids eci
-      where eci.pay_batch_item_id = mi.pay_batch_item_id
+      CASE
+        WHEN mi.item_type = 'MILEAGE_DELTA' THEN 'MILEAGE'
+        WHEN mi.item_type = 'EXPENSE_DELTA' THEN 'EXPENSE'
+        WHEN mi.item_type = 'ADJUSTMENT_DELTA' THEN 'ADJUSTMENT'
+        WHEN mi.item_type = 'CONVERSION_ADJ' THEN 'CONVERSION_ADJ'
+        WHEN mi.item_type = 'OVERPAYMENT_RECOVERY' THEN 'OVERPAYMENT_RECOVERY'
+        WHEN mi.item_type = 'LOAN_REPAYMENT' THEN 'LOAN_REPAYMENT'
+        WHEN mi.item_type = 'MANUAL_DEBT_RECOVERY' THEN 'MANUAL_DEBT_RECOVERY'
+        WHEN mi.item_type = 'DEBT_CREATED' THEN 'DEBT_CREATED'
+        WHEN mi.item_type = 'LOAN_PAYOUT' THEN 'LOAN_PAYOUT'
+        WHEN mi.item_type = 'MANUAL_CREDIT_PAYOUT' THEN 'MANUAL_CREDIT_PAYOUT'
+        ELSE 'ADJUSTMENT'
+      END AS line_kind,
+      NULL::text AS bucket_code,
+      CASE
+        WHEN mi.item_type = 'MILEAGE_DELTA' THEN 'Mileage'
+        WHEN mi.item_type = 'EXPENSE_DELTA' THEN initcap(COALESCE(mi.source_ref,'Expense'))
+        WHEN mi.item_type = 'ADJUSTMENT_DELTA' THEN 'Adjustment'
+        WHEN mi.item_type = 'CONVERSION_ADJ' THEN 'Conversion adjustment'
+        WHEN mi.item_type = 'OVERPAYMENT_RECOVERY' THEN 'Overpayment recovery'
+        WHEN mi.item_type = 'LOAN_REPAYMENT' THEN 'Loan repayment'
+        WHEN mi.item_type = 'MANUAL_DEBT_RECOVERY' THEN 'Manual debt recovery'
+        WHEN mi.item_type = 'DEBT_CREATED' THEN 'Debt created'
+        WHEN mi.item_type = 'LOAN_PAYOUT' THEN 'Loan payout'
+        WHEN mi.item_type = 'MANUAL_CREDIT_PAYOUT' THEN 'Manual credit adjustment payment'
+        ELSE 'Adjustment'
+      END AS unit_name,
+      NULL::numeric AS units,
+      NULL::numeric AS rate,
+      ROUND(COALESCE(mi.amount_ex_vat, 0), 2) AS amount_ex_vat,
+      ROUND(COALESCE(mi.amount_vat, 0), 2) AS amount_vat,
+      ROUND(COALESCE(mi.amount_inc_vat, 0), 2) AS amount_inc_vat,
+      jsonb_strip_nulls(
+        jsonb_build_object(
+          'finance_case_id', CASE WHEN mi.finance_case_id IS NULL THEN NULL ELSE mi.finance_case_id::text END,
+          'finance_component_id', CASE WHEN mi.finance_component_id IS NULL THEN NULL ELSE mi.finance_component_id::text END,
+          'component_key_type', NULLIF(UPPER(BTRIM(COALESCE(mi.frozen_component_key_type, mi.frozen_component_snapshot_json->>'component_key_type', mi.frozen_component_snapshot_json->>'key_type', ''))), ''),
+          'component_key_value', NULLIF(BTRIM(COALESCE(mi.frozen_component_key_value, mi.frozen_component_snapshot_json->>'component_key_value', mi.frozen_component_snapshot_json->>'key_value', '')), ''),
+          'source_basis_json', CASE WHEN COALESCE(mi.frozen_source_basis_json, '{}'::jsonb) = '{}'::jsonb THEN NULL ELSE mi.frozen_source_basis_json END,
+          'frozen_component_snapshot_json', CASE WHEN COALESCE(mi.frozen_component_snapshot_json, '{}'::jsonb) = '{}'::jsonb THEN NULL ELSE mi.frozen_component_snapshot_json END,
+          'source_reservation_amount_ex_vat', mi.source_reservation_amount_ex_vat,
+          'target_amount_ex_vat', COALESCE(mi.frozen_target_amount_ex_vat, mi.amount_ex_vat),
+          'resolution_mode', CASE WHEN mi.frozen_resolution_mode IS NULL THEN NULL ELSE mi.frozen_resolution_mode::text END,
+          'resolution_payload_json', CASE WHEN mi.frozen_resolution_payload_json IS NULL OR mi.frozen_resolution_payload_json = '{}'::jsonb THEN NULL ELSE mi.frozen_resolution_payload_json END,
+          'resolution_result_json', CASE WHEN mi.frozen_resolution_result_json IS NULL OR mi.frozen_resolution_result_json = '{}'::jsonb THEN NULL ELSE mi.frozen_resolution_result_json END
+        )
+      ) AS meta_json
+    FROM my_items AS mi
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM exact_component_item_ids AS eci
+      WHERE eci.pay_batch_item_id = mi.pay_batch_item_id
     )
   ),
-  all_lines as (
-    select * from exact_component_lines
-    union all
-    select * from simple_lines
+  all_lines AS (
+    SELECT * FROM exact_component_lines
+    UNION ALL
+    SELECT * FROM simple_lines
   )
-  insert into public.pay_batch_item_breakdowns(
+  INSERT INTO public.pay_batch_item_breakdowns(
     pay_batch_item_id,
     line_kind,
     bucket_code,
@@ -27354,7 +27573,7 @@ v_stage := 'STAGE_20_BUILD_ITEM_BREAKDOWNS';
     amount_inc_vat,
     meta_json
   )
-  select
+  SELECT
     al.pay_batch_item_id,
     al.line_kind,
     al.bucket_code,
@@ -27365,12 +27584,12 @@ v_stage := 'STAGE_20_BUILD_ITEM_BREAKDOWNS';
     al.amount_vat,
     al.amount_inc_vat,
     al.meta_json
-  from all_lines al;
+  FROM all_lines AS al;
 
   GET DIAGNOSTICS v_rows_ins_breakdowns = ROW_COUNT;
 
-  begin
-    perform public._imp_debug_audit(
+  BEGIN
+    PERFORM public._imp_debug_audit(
       p_actor_user_id,
       'PAY_CREATE_DRAFT_BATCH:STAGE_20_BREAKDOWNS_INSERTED',
       jsonb_build_object(
@@ -27380,16 +27599,14 @@ v_stage := 'STAGE_20_BUILD_ITEM_BREAKDOWNS';
       ),
       'pay_batches',
       v_batch_id::text,
-      null, null, null, null, null
+      NULL, NULL, NULL, NULL, NULL
     );
-  exception when others then null; end;
-
-  
+  EXCEPTION WHEN OTHERS THEN NULL; END;
 
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', v_batch_id::text,
-    'inserted_breakdown_rows', coalesce(v_rows_ins_breakdowns, 0)
+    'inserted_breakdown_rows', COALESCE(v_rows_ins_breakdowns, 0)
   );
 END;
 $function$;
