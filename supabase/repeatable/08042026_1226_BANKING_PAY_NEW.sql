@@ -16897,6 +16897,7 @@ $function$;
 
 
 
+
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_collect_scope(
   p_context_json jsonb,
   p_candidate_id uuid
@@ -17214,7 +17215,8 @@ begin
 
   create temporary table reserved_batch_items on commit drop as
         -- Items are considered "reserved" if they belong to an ACTIVE (non-cancelled, non-settled) batch.
-        -- These amounts must be SUBTRACTED numerically (Policy X), not used as an existence-only suppressor.
+        -- Policy X/source-target rule: entitlement reservations must subtract the positive ORIGINAL SOURCE
+        -- entitlement amount, not the resolved target payout amount. Finance bookkeeping item types are excluded.
         select
           pbi.id as pay_batch_item_id,
           pbc_r.pay_batch_id as pay_batch_id,
@@ -17234,15 +17236,22 @@ begin
           ) as segment_id_norm,
           pbi.source_ref as source_ref,
           pbi.item_type as item_type,
-          round(coalesce(pbi.amount_ex_vat,0), 2) as amount_ex_vat
+          ecomp.key_type as component_key_type,
+          ecomp.key_value as component_key_value,
+          ecomp.key_resolution_source as key_resolution_source,
+          ecomp.key_resolution_failure_reason as key_resolution_failure_reason,
+          round(public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id), 2) as amount_ex_vat
         from public.pay_batch_items pbi
         join public.pay_batch_candidates pbc_r
           on pbc_r.id = pbi.pay_batch_candidate_id
         join public.pay_batches pb_r
           on pb_r.id = pbc_r.pay_batch_id
+        left join lateral public._pay_batch_item_economic_components(null::uuid, array[pbi.id]::uuid[]) as ecomp
+          on ecomp.pay_batch_item_id = pbi.id
         where pbi.timesheet_id is not null
           and upper(coalesce(pbi.pay_channel,'')) in ('PAYE','UMBRELLA')
-          and pbi.item_type <> 'DEBT_CREATED'
+          and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+          and public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id) is not null
           and upper(coalesce(pb_r.status::text,'')) in (
             'DRAFT',
             'DRAFT_CREATED',
@@ -17284,46 +17293,30 @@ begin
         select
           rbi.timesheet_id,
           rbi.segment_id_norm as segment_id_norm,
-          case
-            when nullif(btrim(coalesce(seg->>'date','')), '') is not null then 'TS_DAY'::text
-            else 'TS_TOTAL'::text
-          end as component_key_type,
-          case
-            when nullif(btrim(coalesce(seg->>'date','')), '') is not null
-              then nullif(btrim(coalesce(seg->>'date','')), '')
-            else 'TOTAL'
-          end as component_key_value
+          rbi.component_key_type as component_key_type,
+          rbi.component_key_value as component_key_value
         from reserved_batch_items rbi
-        join public.pay_batch_timesheet_snapshots pbts
-          on pbts.pay_batch_id = rbi.pay_batch_id
-         and pbts.timesheet_id = rbi.timesheet_id
-        join lateral (
-          select s as seg
-          from jsonb_array_elements(coalesce(pbts.target_snapshot_json->'segments','[]'::jsonb)) s
-          where s is not null
-            and jsonb_typeof(s)='object'
-            and nullif(btrim(coalesce(s->>'segment_id','')),'') = rbi.segment_id_norm
-          limit 1
-        ) ss on true
         where rbi.item_type = 'SEGMENT_DELTA'
-          and rbi.segment_id_norm is not null
+          and rbi.component_key_type in ('TS_DAY','TS_TOTAL')
+          and rbi.component_key_value is not null
+          and btrim(coalesce(rbi.component_key_value,'')) <> ''
+          and (rbi.component_key_type <> 'TS_DAY' or rbi.component_key_value ~ '^\d{4}-\d{2}-\d{2}$')
   
   ;
 
   create temporary table reserved_segment_sums on commit drop as
         select
-          rskm.timesheet_id,
-          rskm.component_key_type,
-          rskm.component_key_value,
+          rbi.timesheet_id,
+          rbi.component_key_type,
+          rbi.component_key_value,
           round(sum(rbi.amount_ex_vat),2) as reserved_amount_ex_vat
-        from reserved_segment_key_map rskm
-        join reserved_batch_items rbi
-          on rbi.timesheet_id = rskm.timesheet_id
-         and rbi.item_type = 'SEGMENT_DELTA'
-         and rbi.segment_id_norm = rskm.segment_id_norm
-        where rskm.component_key_value is not null
-          and btrim(coalesce(rskm.component_key_value,'')) <> ''
-        group by rskm.timesheet_id, rskm.component_key_type, rskm.component_key_value
+        from reserved_batch_items rbi
+        where rbi.item_type = 'SEGMENT_DELTA'
+          and rbi.component_key_type in ('TS_DAY','TS_TOTAL')
+          and rbi.component_key_value is not null
+          and btrim(coalesce(rbi.component_key_value,'')) <> ''
+          and (rbi.component_key_type <> 'TS_DAY' or rbi.component_key_value ~ '^\d{4}-\d{2}-\d{2}$')
+        group by rbi.timesheet_id, rbi.component_key_type, rbi.component_key_value
   
   ;
 
@@ -17354,11 +17347,23 @@ begin
         select
           rbi.timesheet_id,
           nullif(btrim(coalesce(bd.bucket_code,'')), '') as code,
-          round(sum(coalesce(bd.amount_ex_vat,0)),2) as reserved_amount_ex_vat
+          round(
+            sum(
+              case
+                when nullif(btrim(coalesce(bd.meta_json->>'source_amount_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$'
+                  then abs((nullif(btrim(coalesce(bd.meta_json->>'source_amount_ex_vat','')), ''))::numeric)
+                when nullif(btrim(coalesce(bd.meta_json->>'source_pay_ex_vat','')), '') ~ '^-?\d+(\.\d+)?$'
+                  then abs((nullif(btrim(coalesce(bd.meta_json->>'source_pay_ex_vat','')), ''))::numeric)
+                else abs(coalesce(bd.amount_ex_vat,0))
+              end
+            ),
+            2
+          ) as reserved_amount_ex_vat
         from reserved_batch_items rbi
         join public.pay_batch_item_breakdowns bd
           on bd.pay_batch_item_id = rbi.pay_batch_item_id
-        where bd.line_kind = 'ADDITIONAL_UNIT'
+        where rbi.item_type in ('ADJUSTMENT_DELTA','SEGMENT_DELTA')
+          and bd.line_kind = 'ADDITIONAL_UNIT'
           and bd.bucket_code is not null
           and btrim(coalesce(bd.bucket_code,'')) <> ''
         group by rbi.timesheet_id, nullif(btrim(coalesce(bd.bucket_code,'')), '')
@@ -18360,7 +18365,39 @@ begin
                 or vfcr.next_due_week_start <= v_week_start
               )
             )
-            or vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+            or (
+              vfcr.case_type = 'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+              and (
+                upper(coalesce(vfcr.payout_status::text,'')) <> 'PAID'
+                or vfcr.next_due_week_start is null
+                or vfcr.next_due_week_start <= v_week_start
+              )
+            )
+            or (
+              vfcr.case_type in (
+                'OVERPAYMENT'::public.pay_finance_case_type_enum,
+                'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+                'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+              )
+              and exists (
+                select 1
+                from public.pay_finance_case_components as pfc_restructure_scope
+                join public.candidates as c_restructure_scope
+                  on c_restructure_scope.id = pfc_restructure_scope.candidate_id
+                where pfc_restructure_scope.finance_case_id = vfcr.finance_case_id
+                  and pfc_restructure_scope.closed_at_utc is null
+                  and pfc_restructure_scope.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+                  and round(coalesce(pfc_restructure_scope.remaining_source_amount, 0), 2) > 0
+                  and upper(coalesce(pfc_restructure_scope.source_pay_method, '')) in ('PAYE', 'UMBRELLA')
+                  and upper(coalesce(c_restructure_scope.pay_method, '')) in ('PAYE', 'UMBRELLA')
+                  and upper(coalesce(pfc_restructure_scope.source_pay_method, '')) <> upper(coalesce(c_restructure_scope.pay_method, ''))
+                  and (
+                    coalesce(pfc_restructure_scope.is_resolution_stale, false) = true
+                    or nullif(btrim(coalesce(pfc_restructure_scope.saved_target_pay_method, '')), '') is null
+                    or upper(coalesce(pfc_restructure_scope.saved_target_pay_method, '')) <> upper(coalesce(c_restructure_scope.pay_method, ''))
+                  )
+              )
+            )
           )
           and (v_candidate_id is null or vfcr.candidate_id = v_candidate_id)
           and (v_client_id is null or vfcr.client_id = v_client_id)
@@ -18384,6 +18421,13 @@ begin
   );
 end;
 $function$;
+
+
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_open(p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text)
