@@ -312,54 +312,31 @@ STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
-with
-inp as (
-  select coalesce(
+WITH
+inp AS (
+  SELECT COALESCE(
     (
-      select array_agg(distinct t_input.x)
-      from unnest(coalesce(p_timesheet_ids, array[]::uuid[])) as t_input(x)
-      where t_input.x is not null
+      SELECT array_agg(DISTINCT input_values.timesheet_id_value)
+      FROM unnest(COALESCE(p_timesheet_ids, ARRAY[]::uuid[])) AS input_values(timesheet_id_value)
+      WHERE input_values.timesheet_id_value IS NOT NULL
     ),
-    array[]::uuid[]
-  ) as ts_ids
+    ARRAY[]::uuid[]
+  ) AS ts_ids
 ),
-active_items as (
-  select
-    pb_r.id as pay_batch_id,
-    pbi.timesheet_id as timesheet_id,
-    pbc_r.candidate_id as candidate_id,
-    pbi.item_type as item_type,
-    pbi.segment_key as segment_key,
-    pbi.source_ref as source_ref,
-    pbi.finance_component_id as finance_component_id,
-    pbi.frozen_component_key_type as frozen_component_key_type,
-    pbi.frozen_component_key_value as frozen_component_key_value,
-    pbi.frozen_component_snapshot_json as frozen_component_snapshot_json,
-    pbi.frozen_source_basis_json as frozen_source_basis_json,
-    coalesce(
-      pbi.amount_ex_vat,
-      pbi.frozen_target_amount_ex_vat,
-      pbi.amount_inc_vat,
-      pbi.frozen_target_amount_inc_vat,
-      0
-    )::numeric as amount_ex_vat,
-    coalesce(
-      pbi.amount_inc_vat,
-      pbi.frozen_target_amount_inc_vat,
-      pbi.amount_ex_vat,
-      pbi.frozen_target_amount_ex_vat,
-      0
-    )::numeric as amount_inc_vat
-  from inp i
-  join public.pay_batch_items pbi
-    on pbi.timesheet_id = any(i.ts_ids)
-  join public.pay_batch_candidates pbc_r
-    on pbc_r.id = pbi.pay_batch_candidate_id
-  join public.pay_batches pb_r
-    on pb_r.id = pbc_r.pay_batch_id
-  where pbi.timesheet_id is not null
-    and pbi.pay_channel in ('PAYE','UMBRELLA')
-    and upper(coalesce(pb_r.status,'')) in (
+active_item_ids AS (
+  SELECT
+    pbi.id AS pay_batch_item_id
+  FROM inp AS i
+  JOIN public.pay_batch_items AS pbi
+    ON pbi.timesheet_id = ANY(i.ts_ids)
+  JOIN public.pay_batch_candidates AS pbc
+    ON pbc.id = pbi.pay_batch_candidate_id
+  JOIN public.pay_batches AS pb
+    ON pb.id = pbc.pay_batch_id
+  WHERE pbi.timesheet_id IS NOT NULL
+    AND COALESCE(pbi.is_voided, false) = false
+    AND pbi.pay_channel IN ('PAYE','UMBRELLA')
+    AND UPPER(COALESCE(pb.status,'')) IN (
       'DRAFT',
       'DRAFT_CREATED',
       'READY',
@@ -372,318 +349,51 @@ active_items as (
       'AWAITING_AUTHORISATION',
       'AUTHORISED_FOR_PAYMENT'
     )
-    and pbi.item_type not in (
-      'DEBT_CREATED',
-      'LOAN_REPAYMENT',
-      'OVERPAYMENT_RECOVERY',
-      'LOAN_PAYOUT'
-    )
+    AND pbi.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
 ),
-snap_choice as (
-  select
-    ai.pay_batch_id,
-    ai.timesheet_id,
-    (
-      select pbs1.target_snapshot_json
-      from public.pay_batch_timesheet_snapshots pbs1
-      where pbs1.pay_batch_id = ai.pay_batch_id
-        and pbs1.timesheet_id = ai.timesheet_id
-      order by pbs1.created_at_utc desc, pbs1.id desc
-      limit 1
-    ) as target_snapshot_json
-  from (
-    select distinct
-      ai.pay_batch_id,
-      ai.timesheet_id
-    from active_items ai
-  ) ai
+reserved_keyed AS (
+  SELECT
+    economic_components.timesheet_id,
+    UPPER(NULLIF(BTRIM(COALESCE(economic_components.key_type, '')), '')) AS key_type,
+    NULLIF(BTRIM(COALESCE(economic_components.key_value, '')), '') AS key_value,
+    ROUND(COALESCE(economic_components.source_amount_ex_vat, 0), 2) AS amount_ex_vat,
+    ROUND(COALESCE(economic_components.source_amount_ex_vat, 0), 2) AS amount_inc_vat
+  FROM active_item_ids AS active_items
+  JOIN LATERAL public._pay_batch_item_economic_components(NULL::uuid, ARRAY[active_items.pay_batch_item_id]::uuid[]) AS economic_components
+    ON true
+  WHERE economic_components.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    AND economic_components.key_resolution_failure_reason IS NULL
+    AND economic_components.source_amount_ex_vat IS NOT NULL
+    AND economic_components.key_type IN ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
 ),
-seg_resolution_basis as (
-  select
-    ai.pay_batch_id,
-    ai.timesheet_id,
-    ai.segment_key,
-    ai.source_ref,
-    coalesce(
-      nullif(btrim(coalesce(ai.frozen_source_basis_json->>'segment_id','')), ''),
-      nullif(btrim(coalesce(ai.segment_key,'')), ''),
-      case
-        when ai.source_ref is not null and btrim(ai.source_ref) like 'seg:%'
-          then nullif(btrim(split_part(ai.source_ref,':',2)), '')
-        else null
-      end
-    ) as seg_id,
-    coalesce(
-      nullif(btrim(coalesce(ai.frozen_source_basis_json->>'segment_key','')), ''),
-      nullif(
-        btrim(
-          coalesce(
-            ai.frozen_component_snapshot_json->'source_basis_json'->>'segment_key',
-            ''
-          )
-        ),
-        ''
-      )
-    ) as basis_segment_key_raw,
-    coalesce(
-      nullif(btrim(coalesce(ai.frozen_source_basis_json->>'ref_num','')), ''),
-      nullif(
-        btrim(
-          coalesce(
-            ai.frozen_component_snapshot_json->'source_basis_json'->>'ref_num',
-            ''
-          )
-        ),
-        ''
-      )
-    ) as basis_ref_num_raw,
-    coalesce(
-      nullif(btrim(coalesce(ai.frozen_source_basis_json->>'work_date','')), ''),
-      nullif(
-        btrim(
-          coalesce(
-            ai.frozen_component_snapshot_json->'source_basis_json'->>'work_date',
-            ''
-          )
-        ),
-        ''
-      )
-    ) as basis_work_date_raw
-  from active_items ai
-  where ai.item_type = 'SEGMENT_DELTA'
-),
-seg_date_candidates as (
-  select
-    srb.pay_batch_id,
-    srb.timesheet_id,
-    srb.segment_key,
-    srb.source_ref,
-    nullif(btrim(coalesce(seg.value->>'date','')), '') as seg_date_raw,
-    row_number() over (
-      partition by
-        srb.pay_batch_id,
-        srb.timesheet_id,
-        coalesce(srb.segment_key,''),
-        coalesce(srb.source_ref,'')
-      order by
-        case
-          when srb.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
-           and nullif(btrim(coalesce(seg.value->>'date','')), '') = srb.basis_work_date_raw
-            then 0
-          when srb.basis_ref_num_raw is not null
-           and nullif(btrim(coalesce(seg.value->>'ref_num','')), '') = srb.basis_ref_num_raw
-            then 1
-          when srb.seg_id is not null
-           and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = srb.seg_id
-            then 2
-          when srb.basis_segment_key_raw is not null
-           and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = srb.basis_segment_key_raw
-            then 3
-          else 9
-        end,
-        nullif(btrim(coalesce(seg.value->>'segment_id','')), '')
-    ) as rn
-  from seg_resolution_basis srb
-  join snap_choice sc
-    on sc.pay_batch_id = srb.pay_batch_id
-   and sc.timesheet_id = srb.timesheet_id
-  join lateral jsonb_array_elements(coalesce(sc.target_snapshot_json->'segments','[]'::jsonb)) as seg(value)
-    on true
-  where seg.value is not null
-    and jsonb_typeof(seg.value) = 'object'
-    and (
-      (
-        srb.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
-        and nullif(btrim(coalesce(seg.value->>'date','')), '') = srb.basis_work_date_raw
-      )
-      or (
-        srb.basis_ref_num_raw is not null
-        and nullif(btrim(coalesce(seg.value->>'ref_num','')), '') = srb.basis_ref_num_raw
-      )
-      or (
-        srb.seg_id is not null
-        and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = srb.seg_id
-      )
-      or (
-        srb.basis_segment_key_raw is not null
-        and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = srb.basis_segment_key_raw
-      )
-    )
-),
-seg_date_pick as (
-  select
-    sdc.pay_batch_id,
-    sdc.timesheet_id,
-    sdc.segment_key,
-    sdc.source_ref,
-    sdc.seg_date_raw
-  from seg_date_candidates sdc
-  where sdc.rn = 1
-),
-seg_date_final as (
-  select
-    srb.pay_batch_id,
-    srb.timesheet_id,
-    srb.segment_key,
-    srb.source_ref,
-    case
-      when srb.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then srb.basis_work_date_raw
-      when sdp.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then sdp.seg_date_raw
-      else null
-    end as seg_date
-  from seg_resolution_basis srb
-  left join seg_date_pick sdp
-    on sdp.pay_batch_id = srb.pay_batch_id
-   and sdp.timesheet_id = srb.timesheet_id
-   and coalesce(sdp.segment_key,'') = coalesce(srb.segment_key,'')
-   and coalesce(sdp.source_ref,'') = coalesce(srb.source_ref,'')
-),
-reserved_keyed as (
-  select
-    ai.timesheet_id,
-    coalesce(
-      nullif(btrim(coalesce(ai.frozen_component_key_type,'')), ''),
-      nullif(
-        btrim(
-          coalesce(
-            ai.frozen_component_snapshot_json->>'component_key_type',
-            ai.frozen_component_snapshot_json->>'key_type',
-            ''
-          )
-        ),
-        ''
-      ),
-      case
-        when ai.item_type = 'SEGMENT_DELTA'
-          then case when sdf.seg_date is not null then 'TS_DAY' else 'TS_TOTAL' end
-        when ai.item_type = 'MILEAGE_DELTA'
-          then 'EXPENSE_CODE'
-        when ai.item_type = 'ADJUSTMENT_DELTA'
-          then case
-            when coalesce(
-              nullif(btrim(coalesce(ai.frozen_source_basis_json->>'adjustment_id','')), ''),
-              nullif(
-                btrim(
-                  coalesce(
-                    ai.frozen_component_snapshot_json->'source_basis_json'->>'adjustment_id',
-                    ''
-                  )
-                ),
-                ''
-              )
-            ) is not null
-              then 'ADJUSTMENT_CODE'
-            when ai.source_ref is not null and btrim(ai.source_ref) like 'adj:%'
-              then 'ADJUSTMENT_CODE'
-            when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
-              then 'TS_TOTAL'
-            else null
-          end
-        when ai.item_type = 'EXPENSE_DELTA'
-          then case
-            when ai.source_ref is not null and (
-              btrim(ai.source_ref) like 'additional:%'
-              or btrim(ai.source_ref) like 'add:%'
-              or btrim(ai.source_ref) = 'additional'
-            )
-              then 'ADDITIONAL_CODE'
-            else 'EXPENSE_CODE'
-          end
-        else 'EXPENSE_CODE'
-      end
-    ) as key_type,
-    coalesce(
-      nullif(btrim(coalesce(ai.frozen_component_key_value,'')), ''),
-      nullif(
-        btrim(
-          coalesce(
-            ai.frozen_component_snapshot_json->>'component_key_value',
-            ai.frozen_component_snapshot_json->>'key_value',
-            ''
-          )
-        ),
-        ''
-      ),
-      case
-        when ai.item_type = 'SEGMENT_DELTA'
-          then coalesce(sdf.seg_date, 'TOTAL')
-        when ai.item_type = 'MILEAGE_DELTA'
-          then 'MILEAGE'
-        when ai.item_type = 'ADJUSTMENT_DELTA'
-          then coalesce(
-            nullif(btrim(coalesce(ai.frozen_source_basis_json->>'adjustment_id','')), ''),
-            nullif(
-              btrim(
-                coalesce(
-                  ai.frozen_component_snapshot_json->'source_basis_json'->>'adjustment_id',
-                  ''
-                )
-              ),
-              ''
-            ),
-            case
-              when ai.source_ref is not null and btrim(ai.source_ref) like 'adj:%'
-                then case
-                  when nullif(btrim(split_part(ai.source_ref,':',2)), '') like 'preview_adj_%'
-                    then 'TOTAL'
-                  else nullif(btrim(split_part(ai.source_ref,':',2)), '')
-                end
-              when ai.source_ref is not null and btrim(ai.source_ref) like 'preview_seg:%'
-                then 'TOTAL'
-              else null
-            end
-          )
-        when ai.item_type = 'EXPENSE_DELTA'
-          then case
-            when ai.source_ref is not null and (
-              btrim(ai.source_ref) like 'additional:%'
-              or btrim(ai.source_ref) like 'add:%'
-            )
-              then upper(nullif(btrim(split_part(ai.source_ref,':',2)), ''))
-            when ai.source_ref is not null and btrim(ai.source_ref) = 'additional'
-              then 'TOTAL'
-            when ai.source_ref is not null and btrim(ai.source_ref) <> ''
-              then upper(btrim(ai.source_ref))
-            else 'UNKNOWN'
-          end
-        else 'UNKNOWN'
-      end
-    ) as key_value,
-    ai.amount_ex_vat,
-    ai.amount_inc_vat
-  from active_items ai
-  left join seg_date_final sdf
-    on sdf.pay_batch_id = ai.pay_batch_id
-   and sdf.timesheet_id = ai.timesheet_id
-   and coalesce(sdf.segment_key,'') = coalesce(ai.segment_key,'')
-   and coalesce(sdf.source_ref,'') = coalesce(ai.source_ref,'')
-  where ai.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
-),
-reserved_components as (
-  select
-    rk.timesheet_id,
-    rk.key_type,
-    rk.key_value,
-    round(sum(coalesce(rk.amount_ex_vat,0)),2) as amount_ex_vat,
-    round(sum(coalesce(rk.amount_inc_vat,0)),2) as amount_inc_vat
-  from reserved_keyed rk
-  group by
-    rk.timesheet_id,
-    rk.key_type,
-    rk.key_value
+reserved_components AS (
+  SELECT
+    reserved_keyed.timesheet_id,
+    reserved_keyed.key_type,
+    reserved_keyed.key_value,
+    ROUND(SUM(COALESCE(reserved_keyed.amount_ex_vat, 0)), 2) AS amount_ex_vat,
+    ROUND(SUM(COALESCE(reserved_keyed.amount_inc_vat, 0)), 2) AS amount_inc_vat
+  FROM reserved_keyed
+  WHERE reserved_keyed.timesheet_id IS NOT NULL
+    AND reserved_keyed.key_type IS NOT NULL
+    AND BTRIM(reserved_keyed.key_type) <> ''
+    AND reserved_keyed.key_value IS NOT NULL
+    AND BTRIM(reserved_keyed.key_value) <> ''
+    AND NOT (reserved_keyed.key_type = 'TS_DAY' AND reserved_keyed.key_value !~ '^\d{4}-\d{2}-\d{2}$')
+  GROUP BY
+    reserved_keyed.timesheet_id,
+    reserved_keyed.key_type,
+    reserved_keyed.key_value
 )
-select
-  rc.timesheet_id,
-  rc.key_type,
-  rc.key_value,
-  rc.amount_ex_vat,
-  rc.amount_inc_vat
-from reserved_components rc
-where rc.key_type is not null
-  and btrim(rc.key_type) <> ''
-  and rc.key_value is not null
-  and btrim(rc.key_value) <> '';
+SELECT
+  reserved_components.timesheet_id,
+  reserved_components.key_type,
+  reserved_components.key_value,
+  reserved_components.amount_ex_vat,
+  reserved_components.amount_inc_vat
+FROM reserved_components;
 $$;
+
 
 CREATE OR REPLACE FUNCTION public._pay_outstanding_components(p_timesheet_ids uuid[])
  RETURNS TABLE(timesheet_id uuid, key_type text, key_value text, truth_ex_vat numeric, baseline_ex_vat numeric, reserved_ex_vat numeric, outstanding_ex_vat numeric, truth_inc_vat numeric, baseline_inc_vat numeric, reserved_inc_vat numeric, outstanding_inc_vat numeric, reservation_overrun_detected boolean)
