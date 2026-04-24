@@ -25384,8 +25384,6 @@ $$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -25429,6 +25427,7 @@ declare
   v_selected_note text;
   v_open_case_candidate record;
   v_target_case_amount_ex numeric(12,2);
+  v_case_taxability public.pay_finance_taxability_enum := NULL;
 begin
   if p_pay_date is null then
     raise exception 'pay_date is required';
@@ -25629,10 +25628,28 @@ begin
             'source_family_key', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_family_key', '')), ''), 'timesheet:' || tec.timesheet_id::text),
             'component_key_type', coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_type', '')), ''), 'CASE_TOTAL'),
             'component_key_value', coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_value', '')), ''), 'TOTAL'),
-            'classification', tec.component_json->>'classification',
+            'classification', CASE
+              WHEN upper(btrim(coalesce(tec.component_json->>'classification', ''))) IN ('TAXABLE_CHANNEL_SENSITIVE','REIMBURSEMENT_GROSS_FIXED','NET_PAY_FIXED_RECOVERY')
+                THEN upper(btrim(coalesce(tec.component_json->>'classification', '')))
+              WHEN upper(coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_type', '')), ''), '')) = 'EXPENSE_CODE'
+                THEN 'REIMBURSEMENT_GROSS_FIXED'
+              ELSE 'TAXABLE_CHANNEL_SENSITIVE'
+            END,
             'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
             'current_target_pay_method', tec.candidate_pay_method,
-            'source_basis_json', coalesce(tec.component_json->'source_basis_json', '{}'::jsonb),
+            'source_basis_json', CASE
+              WHEN jsonb_typeof(tec.component_json->'source_basis_json') = 'object'
+                   AND coalesce(tec.component_json->'source_basis_json', '{}'::jsonb) <> '{}'::jsonb
+                THEN tec.component_json->'source_basis_json'
+              ELSE jsonb_strip_nulls(jsonb_build_object(
+                'linked_timesheet_id', tec.timesheet_id::text,
+                'source_family_key', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_family_key', '')), ''), 'timesheet:' || tec.timesheet_id::text),
+                'component_key_type', coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_type', '')), ''), 'CASE_TOTAL'),
+                'component_key_value', coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_value', '')), ''), 'TOTAL'),
+                'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
+                'component_amount_ex_vat', abs(tec.component_amount_ex)
+              ))
+            END,
             'source_amount', abs(tec.component_amount_ex),
             'allocation_priority_group', case when tec.component_json->>'classification' = 'TAXABLE_CHANNEL_SENSITIVE' then 0 else 1 end,
             'allocation_priority_order', tec.component_order
@@ -25650,10 +25667,28 @@ begin
             'source_family_key', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_family_key', '')), ''), 'timesheet:' || tec.timesheet_id::text),
             'component_key_type', coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_type', '')), ''), 'CASE_TOTAL'),
             'component_key_value', coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_value', '')), ''), 'TOTAL'),
-            'classification', tec.component_json->>'classification',
+            'classification', CASE
+              WHEN upper(btrim(coalesce(tec.component_json->>'classification', ''))) IN ('TAXABLE_CHANNEL_SENSITIVE','REIMBURSEMENT_GROSS_FIXED','NET_PAY_FIXED_RECOVERY')
+                THEN upper(btrim(coalesce(tec.component_json->>'classification', '')))
+              WHEN upper(coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_type', '')), ''), '')) = 'EXPENSE_CODE'
+                THEN 'REIMBURSEMENT_GROSS_FIXED'
+              ELSE 'TAXABLE_CHANNEL_SENSITIVE'
+            END,
             'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
             'current_target_pay_method', tec.candidate_pay_method,
-            'source_basis_json', coalesce(tec.component_json->'source_basis_json', '{}'::jsonb),
+            'source_basis_json', CASE
+              WHEN jsonb_typeof(tec.component_json->'source_basis_json') = 'object'
+                   AND coalesce(tec.component_json->'source_basis_json', '{}'::jsonb) <> '{}'::jsonb
+                THEN tec.component_json->'source_basis_json'
+              ELSE jsonb_strip_nulls(jsonb_build_object(
+                'linked_timesheet_id', tec.timesheet_id::text,
+                'source_family_key', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_family_key', '')), ''), 'timesheet:' || tec.timesheet_id::text),
+                'component_key_type', coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_type', '')), ''), 'CASE_TOTAL'),
+                'component_key_value', coalesce(nullif(btrim(coalesce(tec.component_json->>'component_key_value', '')), ''), 'TOTAL'),
+                'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
+                'component_amount_ex_vat', abs(tec.component_amount_ex)
+              ))
+            END,
             'source_amount', abs(tec.component_amount_ex),
             'allocation_priority_group', case when tec.component_json->>'classification' = 'TAXABLE_CHANNEL_SENSITIVE' then 0 else 1 end,
             'allocation_priority_order', tec.component_order
@@ -25991,6 +26026,27 @@ begin
       v_target_case_amount_ex := null;
     end if;
 
+    v_case_taxability := NULL;
+    IF v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum THEN
+      SELECT
+        CASE
+          WHEN COUNT(*) = 0 THEN NULL::public.pay_finance_taxability_enum
+          WHEN BOOL_AND(COALESCE(normalized_component.classification = 'TAXABLE_CHANNEL_SENSITIVE', false)) THEN 'TAXABLE'::public.pay_finance_taxability_enum
+          WHEN BOOL_AND(COALESCE(normalized_component.classification IN ('REIMBURSEMENT_GROSS_FIXED','NET_PAY_FIXED_RECOVERY'), false)) THEN 'NON_TAXABLE'::public.pay_finance_taxability_enum
+          ELSE NULL::public.pay_finance_taxability_enum
+        END
+      INTO v_case_taxability
+      FROM (
+        SELECT upper(nullif(btrim(coalesce(component_element.value->>'classification', '')), '')) AS classification
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(v_target_case_row.components_sync_json) = 'array' THEN v_target_case_row.components_sync_json
+            ELSE '[]'::jsonb
+          END
+        ) AS component_element(value)
+      ) AS normalized_component;
+    END IF;
+
     select
       pa.id as finance_case_id,
       pa.case_type as old_case_type,
@@ -26000,7 +26056,8 @@ begin
       round(coalesce(pa.source_original_paid_amount, 0), 2)::numeric(12,2) as old_source_original_paid_amount,
       round(coalesce(pa.source_corrected_paid_amount, 0), 2)::numeric(12,2) as old_source_corrected_paid_amount,
       pa.linked_shift_date as old_linked_shift_date,
-      pa.baseline_signature as old_baseline_signature
+      pa.baseline_signature as old_baseline_signature,
+      pa.taxability as old_taxability
     into v_existing_case_row
     from public.pay_advances pa
     where pa.candidate_id = v_target_case_row.candidate_id
@@ -26039,7 +26096,8 @@ begin
         cleared_by_user_id,
         write_off_reason,
         written_off_at_utc,
-        written_off_by_user_id
+        written_off_by_user_id,
+        taxability
       )
       values (
         v_target_case_row.candidate_id,
@@ -26062,7 +26120,8 @@ begin
         null,
         null,
         null,
-        null
+        null,
+        v_case_taxability
       )
       returning id into v_selected_finance_case_id;
 
@@ -26081,6 +26140,7 @@ begin
         'outstanding_amount', v_target_case_amount_ex,
         'source_original_paid_amount', v_target_case_row.source_original_paid_amount,
         'source_corrected_paid_amount', v_target_case_row.source_corrected_paid_amount,
+        'taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
         'status', 'ACTIVE'
       );
     else
@@ -26091,6 +26151,7 @@ begin
         'outstanding_amount', v_existing_case_row.old_outstanding_amount,
         'source_original_paid_amount', v_existing_case_row.old_source_original_paid_amount,
         'source_corrected_paid_amount', v_existing_case_row.old_source_corrected_paid_amount,
+        'taxability', CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END,
         'linked_shift_date', case when v_existing_case_row.old_linked_shift_date is null then null else v_existing_case_row.old_linked_shift_date::text end,
         'baseline_signature', v_existing_case_row.old_baseline_signature
       );
@@ -26110,6 +26171,7 @@ begin
         status = case when v_new_outstanding_amount > 0 then 'ACTIVE'::public.pay_advance_status_enum else 'PAID_OFF'::public.pay_advance_status_enum end,
         cleared_at_utc = case when v_new_outstanding_amount > 0 then null else coalesce(pa.cleared_at_utc, now()) end,
         cleared_by_user_id = case when v_new_outstanding_amount > 0 then null else coalesce(pa.cleared_by_user_id, p_actor_user_id) end,
+        taxability = v_case_taxability,
         updated_at = now()
       where pa.id = v_existing_case_row.finance_case_id;
 
@@ -26127,6 +26189,7 @@ begin
            or v_existing_case_row.old_outstanding_amount is distinct from v_new_outstanding_amount
            or v_existing_case_row.old_source_original_paid_amount is distinct from v_target_case_row.source_original_paid_amount
            or v_existing_case_row.old_source_corrected_paid_amount is distinct from v_target_case_row.source_corrected_paid_amount
+           or v_existing_case_row.old_taxability is distinct from v_case_taxability
            or v_existing_case_row.old_linked_shift_date is distinct from v_target_case_row.linked_shift_date
            or v_existing_case_row.old_baseline_signature is distinct from v_target_case_row.baseline_signature then
           v_cases_amended := v_cases_amended + 1;
@@ -26143,6 +26206,7 @@ begin
         'outstanding_amount', v_new_outstanding_amount,
         'source_original_paid_amount', v_target_case_row.source_original_paid_amount,
         'source_corrected_paid_amount', v_target_case_row.source_corrected_paid_amount,
+        'taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
         'linked_shift_date', case when v_target_case_row.linked_shift_date is null then null else v_target_case_row.linked_shift_date::text end,
         'baseline_signature', v_target_case_row.baseline_signature
       );
