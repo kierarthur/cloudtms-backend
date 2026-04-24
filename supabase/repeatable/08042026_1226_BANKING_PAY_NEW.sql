@@ -34818,11 +34818,12 @@ set search_path = public
 as $function$
 declare
   v_now_utc timestamptz := now();
-  v_effective_pay_date date := coalesce(p_effective_pay_date, (now() at time zone 'Europe/London')::date);
+  v_effective_pay_date date := p_effective_pay_date;
 
   v_case public.pay_advances%rowtype;
   v_candidate record;
   v_finance_settings record;
+  v_target_umbrella_vat_chargeable boolean := false;
 
   v_resolution_path_norm text := upper(nullif(btrim(coalesce(p_resolution_path, '')), ''));
   v_schedule_input_mode_norm text := upper(nullif(btrim(coalesce(p_schedule_input_mode, '')), ''));
@@ -34875,6 +34876,15 @@ begin
       'error', 'PAY_FINANCE_CASE_TAXABLE_CHANNEL_RESTRUCTURE_SUGGESTION',
       'code', 'ACTOR_USER_ID_REQUIRED',
       'message', 'pay_finance_case_taxable_channel_restructure_suggestion: actor_user_id is required',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if p_effective_pay_date is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_TAXABLE_CHANNEL_RESTRUCTURE_SUGGESTION',
+      'code', 'EFFECTIVE_PAY_DATE_REQUIRED',
+      'message', 'pay_finance_case_taxable_channel_restructure_suggestion: effective_pay_date is required and must be supplied by the caller',
       'finance_case_id', p_finance_case_id::text
     )::text;
   end if;
@@ -34963,9 +34973,14 @@ begin
 
   select
     c.id,
-    upper(coalesce(c.pay_method, '')) as pay_method
+    upper(coalesce(c.pay_method, '')) as pay_method,
+    c.umbrella_id as umbrella_id,
+    u.id as target_umbrella_id,
+    coalesce(u.vat_chargeable, false) as target_umbrella_vat_chargeable
   into v_candidate
   from public.candidates as c
+  left join public.umbrellas as u
+    on u.id = c.umbrella_id
   where c.id = v_case.candidate_id
   limit 1;
 
@@ -34990,6 +35005,21 @@ begin
       'pay_method', v_candidate_pay_method
     )::text;
   end if;
+
+  if v_candidate_pay_method = 'UMBRELLA' and v_candidate.target_umbrella_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_TAXABLE_CHANNEL_RESTRUCTURE_SUGGESTION',
+      'code', 'TARGET_UMBRELLA_CONTEXT_REQUIRED',
+      'message', 'pay_finance_case_taxable_channel_restructure_suggestion: candidate is currently UMBRELLA but no target umbrella company is configured for VAT/routing context',
+      'finance_case_id', p_finance_case_id::text,
+      'candidate_id', v_case.candidate_id::text
+    )::text;
+  end if;
+
+  v_target_umbrella_vat_chargeable := case
+    when v_candidate_pay_method = 'UMBRELLA' then coalesce(v_candidate.target_umbrella_vat_chargeable, false)
+    else false
+  end;
 
   select
     sfp.vat_rate_pct,
@@ -35107,13 +35137,7 @@ begin
     );
   end if;
 
-  v_umbrella_vat_chargeable := coalesce(
-    (
-      select bool_or(lower(coalesce(trc.source_basis_json->>'umbrella_vat_chargeable', '')) in ('true','t','1','yes','y'))
-      from pg_temp._tmp_taxable_channel_restructure_components as trc
-    ),
-    false
-  );
+  v_umbrella_vat_chargeable := v_target_umbrella_vat_chargeable;
 
   update pg_temp._tmp_taxable_channel_restructure_components as trc
   set
@@ -35448,6 +35472,8 @@ begin
   );
 end;
 $function$;
+
+
 create or replace function public.pay_finance_case_apply_taxable_channel_restructure(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -35466,7 +35492,7 @@ set search_path = public
 as $function$
 declare
   v_now_utc timestamptz := now();
-  v_effective_pay_date date := coalesce(p_effective_pay_date, (now() at time zone 'Europe/London')::date);
+  v_effective_pay_date date := p_effective_pay_date;
 
   v_case public.pay_advances%rowtype;
   v_updated_case public.pay_advances%rowtype;
@@ -35500,6 +35526,7 @@ declare
   v_has_open_batch_item boolean := false;
   v_resolution_mode public.pay_finance_component_resolution_mode_enum := 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum;
   v_event_note text := null;
+  v_case_taxability public.pay_finance_taxability_enum := null;
 begin
   if p_finance_case_id is null then
     raise exception '%', jsonb_build_object(
@@ -35514,6 +35541,15 @@ begin
       'error', 'PAY_FINANCE_CASE_APPLY_TAXABLE_CHANNEL_RESTRUCTURE',
       'code', 'ACTOR_USER_ID_REQUIRED',
       'message', 'pay_finance_case_apply_taxable_channel_restructure: actor_user_id is required',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
+  if p_effective_pay_date is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_CASE_APPLY_TAXABLE_CHANNEL_RESTRUCTURE',
+      'code', 'EFFECTIVE_PAY_DATE_REQUIRED',
+      'message', 'pay_finance_case_apply_taxable_channel_restructure: effective_pay_date is required and must be supplied by the caller',
       'finance_case_id', p_finance_case_id::text
     )::text;
   end if;
@@ -35890,6 +35926,20 @@ begin
     and pfc.finance_case_id = p_finance_case_id
     and pfc.closed_at_utc is null;
 
+  select
+    case
+      when count(*) filter (where trc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum) = count(*)
+        then 'TAXABLE'::public.pay_finance_taxability_enum
+      when count(*) filter (where trc.classification in (
+        'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
+        'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum
+      )) = count(*)
+        then 'NON_TAXABLE'::public.pay_finance_taxability_enum
+      else null::public.pay_finance_taxability_enum
+    end
+  into v_case_taxability
+  from pg_temp._tmp_taxable_channel_restructure_components as trc;
+
   update public.pay_advances as pa
   set
     original_amount = v_rebased_original_amount,
@@ -35899,7 +35949,7 @@ begin
     weeks_total = v_weeks_total,
     start_week_start = v_start_week_start,
     next_due_week_start = v_next_due_week_start,
-    taxability = 'TAXABLE'::public.pay_finance_taxability_enum,
+    taxability = v_case_taxability,
     routing_kind = case
       when v_candidate_pay_method = 'PAYE' then 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
       else 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum
@@ -36061,6 +36111,8 @@ begin
 end;
 $function$;
 
+drop function if exists public.pay_manual_debt_adjustment_resolve_taxable_channel_change(uuid, uuid, text, text, integer, numeric, numeric, text);
+
 create or replace function public.pay_manual_debt_adjustment_resolve_taxable_channel_change(
   p_finance_case_id uuid,
   p_actor_user_id uuid,
@@ -36069,6 +36121,7 @@ create or replace function public.pay_manual_debt_adjustment_resolve_taxable_cha
   p_weeks_total integer default null::integer,
   p_weekly_due numeric default null::numeric,
   p_manual_total_remaining numeric default null::numeric,
+  p_effective_pay_date date default null::date,
   p_note text default null::text
 )
 returns jsonb
@@ -36094,6 +36147,15 @@ begin
     )::text;
   end if;
 
+  if p_effective_pay_date is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_MANUAL_DEBT_ADJUSTMENT_RESOLVE_TAXABLE_CHANNEL_CHANGE',
+      'code', 'EFFECTIVE_PAY_DATE_REQUIRED',
+      'message', 'pay_manual_debt_adjustment_resolve_taxable_channel_change: effective_pay_date is required and must be supplied by the caller',
+      'finance_case_id', p_finance_case_id::text
+    )::text;
+  end if;
+
   return public.pay_finance_case_apply_taxable_channel_restructure(
     p_finance_case_id => p_finance_case_id,
     p_actor_user_id => p_actor_user_id,
@@ -36102,10 +36164,8 @@ begin
     p_weeks_total => p_weeks_total,
     p_weekly_due => p_weekly_due,
     p_manual_total_remaining => p_manual_total_remaining,
-    p_effective_pay_date => null::date,
+    p_effective_pay_date => p_effective_pay_date,
     p_note => p_note
   );
 end;
 $function$;
-
-
