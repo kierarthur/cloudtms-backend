@@ -33170,3 +33170,710 @@ BEGIN
   );
 END;
 $function$;
+
+
+CREATE OR REPLACE FUNCTION public._pay_batch_item_economic_components(
+  p_pay_batch_id uuid DEFAULT NULL,
+  p_pay_batch_item_ids uuid[] DEFAULT NULL
+)
+RETURNS TABLE(
+  pay_batch_id uuid,
+  pay_batch_item_id uuid,
+  timesheet_id uuid,
+  item_type text,
+  key_type text,
+  key_value text,
+  source_amount_ex_vat numeric,
+  target_amount_ex_vat numeric,
+  key_resolution_source text,
+  key_resolution_failure_reason text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF p_pay_batch_id IS NULL
+     AND coalesce(array_length(p_pay_batch_item_ids, 1), 0) = 0 THEN
+    RAISE EXCEPTION '_pay_batch_item_economic_components requires p_pay_batch_id or p_pay_batch_item_ids';
+  END IF;
+
+  RETURN QUERY
+  WITH input_item_ids AS (
+    SELECT DISTINCT input_ids.item_id
+    FROM unnest(coalesce(p_pay_batch_item_ids, array[]::uuid[])) AS input_ids(item_id)
+    WHERE input_ids.item_id IS NOT NULL
+  ),
+  base_items AS (
+    SELECT
+      pbc.pay_batch_id AS batch_id,
+      pbi.id AS batch_item_id,
+      pbi.timesheet_id AS item_timesheet_id,
+      upper(nullif(btrim(coalesce(pbi.item_type, '')), '')) AS item_type_norm,
+      pbi.item_type AS item_type_raw,
+      pbi.segment_key AS item_segment_key,
+      pbi.source_ref AS item_source_ref,
+      pbi.amount_ex_vat AS item_amount_ex_vat,
+      pbi.finance_case_id AS item_finance_case_id,
+      pbi.finance_component_id AS item_finance_component_id,
+      pbi.frozen_target_amount_ex_vat AS item_frozen_target_amount_ex_vat,
+      pbi.frozen_source_amount AS item_frozen_source_amount,
+      pbi.frozen_resolution_mode AS item_frozen_resolution_mode,
+      pbi.frozen_resolution_payload_json AS item_frozen_resolution_payload_json,
+      pbi.frozen_resolution_result_json AS item_frozen_resolution_result_json,
+      pbi.frozen_component_key_type AS item_frozen_key_type,
+      pbi.frozen_component_key_value AS item_frozen_key_value,
+      coalesce(pbi.frozen_component_snapshot_json, '{}'::jsonb) AS item_frozen_component_snapshot_json,
+      coalesce(pbi.frozen_source_basis_json, '{}'::jsonb) AS item_frozen_source_basis_json
+    FROM public.pay_batch_items AS pbi
+    JOIN public.pay_batch_candidates AS pbc
+      ON pbc.id = pbi.pay_batch_candidate_id
+    WHERE (p_pay_batch_id IS NULL OR pbc.pay_batch_id = p_pay_batch_id)
+      AND (
+        coalesce(array_length(p_pay_batch_item_ids, 1), 0) = 0
+        OR EXISTS (
+          SELECT 1
+          FROM input_item_ids AS input_filter
+          WHERE input_filter.item_id = pbi.id
+        )
+      )
+  ),
+  single_breakdown_meta AS (
+    SELECT
+      pbb.pay_batch_item_id AS batch_item_id,
+      count(*)::integer AS breakdown_count,
+      (array_agg(pbb.meta_json ORDER BY pbb.id))[1] AS single_meta_json
+    FROM public.pay_batch_item_breakdowns AS pbb
+    JOIN base_items AS bi_for_breakdown
+      ON bi_for_breakdown.batch_item_id = pbb.pay_batch_item_id
+    GROUP BY pbb.pay_batch_item_id
+  ),
+  snapshot_choice AS (
+    SELECT
+      distinct_items.batch_id,
+      distinct_items.item_timesheet_id,
+      (
+        SELECT pbs.target_snapshot_json
+        FROM public.pay_batch_timesheet_snapshots AS pbs
+        WHERE pbs.pay_batch_id = distinct_items.batch_id
+          AND pbs.timesheet_id = distinct_items.item_timesheet_id
+        ORDER BY pbs.created_at_utc DESC, pbs.id DESC
+        LIMIT 1
+      ) AS target_snapshot_json
+    FROM (
+      SELECT DISTINCT
+        bi.batch_id,
+        bi.item_timesheet_id
+      FROM base_items AS bi
+      WHERE bi.item_timesheet_id IS NOT NULL
+    ) AS distinct_items
+  ),
+  prepared_items AS (
+    SELECT
+      bi.batch_id,
+      bi.batch_item_id,
+      bi.item_timesheet_id,
+      bi.item_type_norm,
+      bi.item_type_raw,
+      bi.item_segment_key,
+      bi.item_source_ref,
+      bi.item_amount_ex_vat,
+      bi.item_finance_case_id,
+      bi.item_finance_component_id,
+      bi.item_frozen_target_amount_ex_vat,
+      bi.item_frozen_source_amount,
+      bi.item_frozen_resolution_mode,
+      bi.item_frozen_resolution_payload_json,
+      bi.item_frozen_resolution_result_json,
+      bi.item_frozen_key_type,
+      bi.item_frozen_key_value,
+      bi.item_frozen_component_snapshot_json,
+      bi.item_frozen_source_basis_json,
+      coalesce(sbm.breakdown_count, 0) AS breakdown_count,
+      CASE
+        WHEN coalesce(sbm.breakdown_count, 0) = 1 THEN coalesce(sbm.single_meta_json, '{}'::jsonb)
+        ELSE '{}'::jsonb
+      END AS item_single_breakdown_meta_json,
+      coalesce(sc.target_snapshot_json, '{}'::jsonb) AS target_snapshot_json
+    FROM base_items AS bi
+    LEFT JOIN single_breakdown_meta AS sbm
+      ON sbm.batch_item_id = bi.batch_item_id
+    LEFT JOIN snapshot_choice AS sc
+      ON sc.batch_id = bi.batch_id
+     AND sc.item_timesheet_id = bi.item_timesheet_id
+  ),
+  raw_key_candidates AS (
+    SELECT
+      pi.batch_id,
+      pi.batch_item_id,
+      pi.item_timesheet_id,
+      pi.item_type_norm,
+      pi.item_type_raw,
+      pi.item_segment_key,
+      pi.item_source_ref,
+      pi.item_amount_ex_vat,
+      pi.item_finance_case_id,
+      pi.item_finance_component_id,
+      pi.item_frozen_target_amount_ex_vat,
+      pi.item_frozen_source_amount,
+      pi.item_frozen_resolution_mode,
+      pi.item_frozen_resolution_payload_json,
+      pi.item_frozen_resolution_result_json,
+      pi.item_frozen_component_snapshot_json,
+      pi.item_frozen_source_basis_json,
+      pi.item_single_breakdown_meta_json,
+      pi.target_snapshot_json,
+      (
+           pi.item_finance_case_id IS NOT NULL
+        OR pi.item_finance_component_id IS NOT NULL
+        OR pi.item_frozen_target_amount_ex_vat IS NOT NULL
+        OR pi.item_frozen_resolution_mode IS NOT NULL
+        OR pi.item_frozen_resolution_payload_json IS NOT NULL
+        OR pi.item_frozen_resolution_result_json IS NOT NULL
+        OR pi.item_frozen_component_snapshot_json ? 'target_amount_ex_vat'
+        OR pi.item_frozen_component_snapshot_json ? 'target_pay_ex_vat'
+        OR pi.item_frozen_component_snapshot_json ? 'target_pay_amount_ex_vat'
+        OR pi.item_frozen_component_snapshot_json ? 'frozen_target_amount_ex_vat'
+        OR pi.item_frozen_component_snapshot_json ? 'target_rate'
+        OR pi.item_frozen_component_snapshot_json ? 'target_units'
+        OR pi.item_frozen_component_snapshot_json ? 'resolution_mode'
+        OR pi.item_frozen_component_snapshot_json ? 'saved_resolution_mode'
+        OR pi.item_frozen_component_snapshot_json ? 'saved_resolution_payload_json'
+        OR pi.item_frozen_component_snapshot_json ? 'saved_resolution_result_json'
+        OR pi.item_single_breakdown_meta_json ? 'target_amount_ex_vat'
+        OR pi.item_single_breakdown_meta_json ? 'target_pay_ex_vat'
+        OR pi.item_single_breakdown_meta_json ? 'target_rate'
+        OR pi.item_single_breakdown_meta_json ? 'resolution_mode'
+      ) AS item_has_source_target_split,
+      upper(nullif(btrim(coalesce(pi.item_frozen_key_type, '')), '')) AS direct_key_type,
+      nullif(btrim(coalesce(pi.item_frozen_key_value, '')), '') AS direct_key_value,
+      upper(nullif(btrim(coalesce(
+        pi.item_frozen_component_snapshot_json->>'component_key_type',
+        pi.item_frozen_component_snapshot_json->>'key_type',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,component_key_type}',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,key_type}',
+        pi.item_frozen_source_basis_json->>'component_key_type',
+        pi.item_frozen_source_basis_json->>'key_type',
+        pi.item_single_breakdown_meta_json->>'component_key_type',
+        pi.item_single_breakdown_meta_json->>'key_type',
+        ''
+      )), '')) AS snapshot_key_type,
+      nullif(btrim(coalesce(
+        pi.item_frozen_component_snapshot_json->>'component_key_value',
+        pi.item_frozen_component_snapshot_json->>'key_value',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,component_key_value}',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,key_value}',
+        pi.item_frozen_source_basis_json->>'component_key_value',
+        pi.item_frozen_source_basis_json->>'key_value',
+        pi.item_single_breakdown_meta_json->>'component_key_value',
+        pi.item_single_breakdown_meta_json->>'key_value',
+        ''
+      )), '') AS snapshot_key_value,
+      nullif(btrim(coalesce(
+        pi.item_frozen_source_basis_json->>'work_date',
+        pi.item_frozen_source_basis_json->>'date',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,work_date}',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,date}',
+        pi.item_frozen_component_snapshot_json->>'work_date',
+        pi.item_frozen_component_snapshot_json->>'date',
+        pi.item_single_breakdown_meta_json->>'work_date',
+        pi.item_single_breakdown_meta_json->>'date',
+        ''
+      )), '') AS basis_work_date_raw,
+      nullif(btrim(coalesce(
+        pi.item_frozen_source_basis_json->>'segment_id',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,segment_id}',
+        pi.item_frozen_component_snapshot_json->>'segment_id',
+        pi.item_single_breakdown_meta_json->>'segment_id',
+        pi.item_segment_key,
+        CASE
+          WHEN pi.item_source_ref IS NOT NULL AND btrim(pi.item_source_ref) LIKE 'seg:%'
+            THEN split_part(pi.item_source_ref, ':', 2)
+          ELSE NULL
+        END,
+        ''
+      )), '') AS basis_segment_id_raw,
+      nullif(btrim(coalesce(
+        pi.item_frozen_source_basis_json->>'segment_key',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,segment_key}',
+        pi.item_frozen_component_snapshot_json->>'segment_key',
+        pi.item_single_breakdown_meta_json->>'segment_key',
+        ''
+      )), '') AS basis_segment_key_raw,
+      nullif(btrim(coalesce(
+        pi.item_frozen_source_basis_json->>'ref_num',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,ref_num}',
+        pi.item_frozen_component_snapshot_json->>'ref_num',
+        pi.item_single_breakdown_meta_json->>'ref_num',
+        ''
+      )), '') AS basis_ref_num_raw,
+      nullif(btrim(coalesce(
+        pi.item_frozen_source_basis_json->>'adjustment_id',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,adjustment_id}',
+        pi.item_frozen_component_snapshot_json->>'adjustment_id',
+        pi.item_single_breakdown_meta_json->>'adjustment_id',
+        ''
+      )), '') AS basis_adjustment_id_raw,
+      nullif(btrim(coalesce(
+        pi.item_frozen_source_basis_json->>'expense_code',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,expense_code}',
+        pi.item_frozen_component_snapshot_json->>'expense_code',
+        pi.item_single_breakdown_meta_json->>'expense_code',
+        ''
+      )), '') AS basis_expense_code_raw,
+      nullif(btrim(coalesce(
+        pi.item_frozen_source_basis_json->>'additional_code',
+        pi.item_frozen_component_snapshot_json#>>'{source_basis_json,additional_code}',
+        pi.item_frozen_component_snapshot_json->>'additional_code',
+        pi.item_single_breakdown_meta_json->>'additional_code',
+        ''
+      )), '') AS basis_additional_code_raw
+    FROM prepared_items AS pi
+  ),
+  segment_date_candidates AS (
+    SELECT
+      rkc.batch_id,
+      rkc.batch_item_id,
+      nullif(btrim(coalesce(segment_element.segment_json->>'date', '')), '') AS segment_date_raw,
+      row_number() OVER (
+        PARTITION BY rkc.batch_item_id
+        ORDER BY
+          CASE
+            WHEN rkc.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+             AND nullif(btrim(coalesce(segment_element.segment_json->>'date', '')), '') = rkc.basis_work_date_raw
+              THEN 0
+            WHEN rkc.basis_ref_num_raw IS NOT NULL
+             AND nullif(btrim(coalesce(segment_element.segment_json->>'ref_num', '')), '') = rkc.basis_ref_num_raw
+              THEN 1
+            WHEN rkc.basis_segment_id_raw IS NOT NULL
+             AND nullif(btrim(coalesce(segment_element.segment_json->>'segment_id', '')), '') = rkc.basis_segment_id_raw
+              THEN 2
+            WHEN rkc.basis_segment_key_raw IS NOT NULL
+             AND nullif(btrim(coalesce(segment_element.segment_json->>'segment_id', '')), '') = rkc.basis_segment_key_raw
+              THEN 3
+            ELSE 9
+          END,
+          nullif(btrim(coalesce(segment_element.segment_json->>'segment_id', '')), '')
+      ) AS segment_match_rank
+    FROM raw_key_candidates AS rkc
+    JOIN LATERAL jsonb_array_elements(coalesce(rkc.target_snapshot_json->'segments', '[]'::jsonb)) AS segment_element(segment_json)
+      ON true
+    WHERE rkc.item_type_norm = 'SEGMENT_DELTA'
+      AND segment_element.segment_json IS NOT NULL
+      AND jsonb_typeof(segment_element.segment_json) = 'object'
+      AND (
+        (
+          rkc.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+          AND nullif(btrim(coalesce(segment_element.segment_json->>'date', '')), '') = rkc.basis_work_date_raw
+        )
+        OR (
+          rkc.basis_ref_num_raw IS NOT NULL
+          AND nullif(btrim(coalesce(segment_element.segment_json->>'ref_num', '')), '') = rkc.basis_ref_num_raw
+        )
+        OR (
+          rkc.basis_segment_id_raw IS NOT NULL
+          AND nullif(btrim(coalesce(segment_element.segment_json->>'segment_id', '')), '') = rkc.basis_segment_id_raw
+        )
+        OR (
+          rkc.basis_segment_key_raw IS NOT NULL
+          AND nullif(btrim(coalesce(segment_element.segment_json->>'segment_id', '')), '') = rkc.basis_segment_key_raw
+        )
+      )
+  ),
+  segment_date_pick AS (
+    SELECT
+      sdc.batch_id,
+      sdc.batch_item_id,
+      sdc.segment_date_raw
+    FROM segment_date_candidates AS sdc
+    WHERE sdc.segment_match_rank = 1
+  ),
+  amount_candidates AS (
+    SELECT
+      rkc.batch_id,
+      rkc.batch_item_id,
+      rkc.item_timesheet_id,
+      rkc.item_type_norm,
+      rkc.item_type_raw,
+      rkc.item_source_ref,
+      rkc.item_amount_ex_vat,
+      rkc.item_frozen_target_amount_ex_vat,
+      rkc.item_frozen_source_amount,
+      rkc.item_has_source_target_split,
+      rkc.direct_key_type,
+      rkc.direct_key_value,
+      rkc.snapshot_key_type,
+      rkc.snapshot_key_value,
+      rkc.basis_work_date_raw,
+      rkc.basis_adjustment_id_raw,
+      rkc.basis_expense_code_raw,
+      rkc.basis_additional_code_raw,
+      sdp.segment_date_raw,
+      public._pay_batch_item_source_reservation_amount_ex_vat(rkc.batch_item_id) AS entitlement_source_amount_ex_vat,
+      (
+        SELECT target_candidates.target_text_value::numeric
+        FROM (
+          VALUES
+            (rkc.item_frozen_target_amount_ex_vat::text),
+            (rkc.item_amount_ex_vat::text),
+            (rkc.item_frozen_component_snapshot_json->>'frozen_target_amount_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'target_amount_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'target_pay_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'target_pay_amount_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'amount_ex_vat'),
+            (rkc.item_single_breakdown_meta_json->>'target_amount_ex_vat'),
+            (rkc.item_single_breakdown_meta_json->>'target_pay_ex_vat'),
+            (rkc.item_single_breakdown_meta_json->>'amount_ex_vat')
+        ) AS target_candidates(target_text_value)
+        WHERE target_candidates.target_text_value IS NOT NULL
+          AND btrim(target_candidates.target_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
+        LIMIT 1
+      ) AS raw_target_amount_ex_vat,
+      (
+        SELECT source_candidates.source_text_value::numeric
+        FROM (
+          VALUES
+            (rkc.item_frozen_source_amount::text),
+            (rkc.item_frozen_component_snapshot_json->>'source_reservation_amount_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'source_entitlement_amount_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'source_amount_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'source_pay_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'source_pay_amount_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'basis_source_amount_ex_vat'),
+            (rkc.item_frozen_component_snapshot_json->>'reserved_source_amount'),
+            (rkc.item_frozen_component_snapshot_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
+            (rkc.item_frozen_component_snapshot_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
+            (rkc.item_frozen_component_snapshot_json#>>'{source_basis_json,source_amount_ex_vat}'),
+            (rkc.item_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_ex_vat}'),
+            (rkc.item_frozen_source_basis_json->>'source_reservation_amount_ex_vat'),
+            (rkc.item_frozen_source_basis_json->>'source_entitlement_amount_ex_vat'),
+            (rkc.item_frozen_source_basis_json->>'source_amount_ex_vat'),
+            (rkc.item_frozen_source_basis_json->>'source_pay_ex_vat'),
+            (rkc.item_frozen_source_basis_json->>'pay_ex_vat'),
+            (rkc.item_frozen_source_basis_json->>'amount_ex_vat'),
+            (rkc.item_single_breakdown_meta_json->>'source_reservation_amount_ex_vat'),
+            (rkc.item_single_breakdown_meta_json->>'source_entitlement_amount_ex_vat'),
+            (rkc.item_single_breakdown_meta_json->>'source_amount_ex_vat'),
+            (rkc.item_single_breakdown_meta_json->>'source_pay_ex_vat')
+        ) AS source_candidates(source_text_value)
+        WHERE source_candidates.source_text_value IS NOT NULL
+          AND btrim(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
+        LIMIT 1
+      ) AS raw_artifact_source_amount_ex_vat
+    FROM raw_key_candidates AS rkc
+    LEFT JOIN segment_date_pick AS sdp
+      ON sdp.batch_item_id = rkc.batch_item_id
+  ),
+  resolved_rows AS (
+    SELECT
+      ac.batch_id,
+      ac.batch_item_id,
+      ac.item_timesheet_id,
+      ac.item_type_norm,
+      ac.item_type_raw,
+      ac.item_source_ref,
+      ac.direct_key_type,
+      ac.direct_key_value,
+      ac.snapshot_key_type,
+      ac.snapshot_key_value,
+      ac.basis_work_date_raw,
+      ac.basis_adjustment_id_raw,
+      ac.basis_expense_code_raw,
+      ac.basis_additional_code_raw,
+      ac.segment_date_raw,
+      round(abs(
+        CASE
+          WHEN ac.item_type_norm IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+            THEN coalesce(
+              ac.entitlement_source_amount_ex_vat,
+              ac.raw_artifact_source_amount_ex_vat,
+              CASE
+                WHEN ac.item_has_source_target_split THEN NULL
+                ELSE coalesce(ac.raw_target_amount_ex_vat, ac.item_amount_ex_vat)
+              END
+            )
+          ELSE coalesce(ac.raw_artifact_source_amount_ex_vat, ac.raw_target_amount_ex_vat, ac.item_amount_ex_vat)
+        END
+      ), 2)::numeric AS final_source_amount_ex_vat,
+      round(abs(coalesce(
+        ac.raw_target_amount_ex_vat,
+        ac.item_amount_ex_vat,
+        CASE
+          WHEN ac.item_type_norm IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA')
+            THEN coalesce(ac.entitlement_source_amount_ex_vat, ac.raw_artifact_source_amount_ex_vat)
+          ELSE ac.raw_artifact_source_amount_ex_vat
+        END
+      )), 2)::numeric AS final_target_amount_ex_vat,
+      CASE
+        WHEN ac.direct_key_type IS NOT NULL
+         AND ac.direct_key_value IS NOT NULL
+         AND (ac.direct_key_type <> 'TS_DAY' OR ac.direct_key_value ~ '^\d{4}-\d{2}-\d{2}$')
+          THEN ac.direct_key_type
+        WHEN ac.snapshot_key_type IS NOT NULL
+         AND ac.snapshot_key_value IS NOT NULL
+         AND (ac.snapshot_key_type <> 'TS_DAY' OR ac.snapshot_key_value ~ '^\d{4}-\d{2}-\d{2}$')
+          THEN ac.snapshot_key_type
+        WHEN ac.item_type_norm = 'SEGMENT_DELTA'
+         AND ac.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+          THEN 'TS_DAY'
+        WHEN ac.item_type_norm = 'SEGMENT_DELTA'
+         AND ac.segment_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+          THEN 'TS_DAY'
+        WHEN ac.item_type_norm = 'ADJUSTMENT_DELTA'
+         AND ac.basis_adjustment_id_raw IS NOT NULL
+          THEN 'ADJUSTMENT_CODE'
+        WHEN ac.item_type_norm = 'EXPENSE_DELTA'
+         AND ac.basis_additional_code_raw IS NOT NULL
+          THEN 'ADDITIONAL_CODE'
+        WHEN ac.item_type_norm IN ('EXPENSE_DELTA', 'MILEAGE_DELTA')
+         AND ac.basis_expense_code_raw IS NOT NULL
+          THEN 'EXPENSE_CODE'
+        ELSE NULL
+      END AS resolved_key_type,
+      CASE
+        WHEN ac.direct_key_type IS NOT NULL
+         AND ac.direct_key_value IS NOT NULL
+         AND (ac.direct_key_type <> 'TS_DAY' OR ac.direct_key_value ~ '^\d{4}-\d{2}-\d{2}$')
+          THEN ac.direct_key_value
+        WHEN ac.snapshot_key_type IS NOT NULL
+         AND ac.snapshot_key_value IS NOT NULL
+         AND (ac.snapshot_key_type <> 'TS_DAY' OR ac.snapshot_key_value ~ '^\d{4}-\d{2}-\d{2}$')
+          THEN ac.snapshot_key_value
+        WHEN ac.item_type_norm = 'SEGMENT_DELTA'
+         AND ac.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+          THEN ac.basis_work_date_raw
+        WHEN ac.item_type_norm = 'SEGMENT_DELTA'
+         AND ac.segment_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+          THEN ac.segment_date_raw
+        WHEN ac.item_type_norm = 'ADJUSTMENT_DELTA'
+         AND ac.basis_adjustment_id_raw IS NOT NULL
+          THEN ac.basis_adjustment_id_raw
+        WHEN ac.item_type_norm = 'EXPENSE_DELTA'
+         AND ac.basis_additional_code_raw IS NOT NULL
+          THEN upper(ac.basis_additional_code_raw)
+        WHEN ac.item_type_norm IN ('EXPENSE_DELTA', 'MILEAGE_DELTA')
+         AND ac.basis_expense_code_raw IS NOT NULL
+          THEN upper(ac.basis_expense_code_raw)
+        ELSE NULL
+      END AS resolved_key_value,
+      CASE
+        WHEN ac.direct_key_type IS NOT NULL
+         AND ac.direct_key_value IS NOT NULL
+         AND (ac.direct_key_type <> 'TS_DAY' OR ac.direct_key_value ~ '^\d{4}-\d{2}-\d{2}$')
+          THEN 'FROZEN_ITEM_KEY'
+        WHEN ac.snapshot_key_type IS NOT NULL
+         AND ac.snapshot_key_value IS NOT NULL
+         AND (ac.snapshot_key_type <> 'TS_DAY' OR ac.snapshot_key_value ~ '^\d{4}-\d{2}-\d{2}$')
+          THEN 'FROZEN_COMPONENT_OR_BASIS_KEY'
+        WHEN ac.item_type_norm = 'SEGMENT_DELTA'
+         AND ac.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+          THEN 'FROZEN_SOURCE_BASIS_DATE'
+        WHEN ac.item_type_norm = 'SEGMENT_DELTA'
+         AND ac.segment_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+          THEN 'FROZEN_TIMESHEET_SNAPSHOT'
+        WHEN ac.item_type_norm IN ('ADJUSTMENT_DELTA', 'EXPENSE_DELTA', 'MILEAGE_DELTA')
+         AND (
+              ac.basis_adjustment_id_raw IS NOT NULL
+           OR ac.basis_additional_code_raw IS NOT NULL
+           OR ac.basis_expense_code_raw IS NOT NULL
+         )
+          THEN 'FROZEN_SOURCE_BASIS_KEY'
+        ELSE NULL
+      END AS resolved_key_source,
+      CASE
+        WHEN ac.direct_key_type = 'TS_DAY'
+         AND ac.direct_key_value IS NOT NULL
+         AND ac.direct_key_value !~ '^\d{4}-\d{2}-\d{2}$'
+         AND NOT (
+           ac.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+           OR ac.segment_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+         )
+          THEN 'TS_DAY_FROZEN_ITEM_KEY_VALUE_NOT_DATE'
+        WHEN ac.snapshot_key_type = 'TS_DAY'
+         AND ac.snapshot_key_value IS NOT NULL
+         AND ac.snapshot_key_value !~ '^\d{4}-\d{2}-\d{2}$'
+         AND NOT (
+           ac.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+           OR ac.segment_date_raw ~ '^\d{4}-\d{2}-\d{2}$'
+         )
+          THEN 'TS_DAY_FROZEN_SNAPSHOT_KEY_VALUE_NOT_DATE'
+        ELSE NULL
+      END AS preliminary_failure_reason
+    FROM amount_candidates AS ac
+  ),
+  final_rows AS (
+    SELECT
+      rr.batch_id,
+      rr.batch_item_id,
+      rr.item_timesheet_id,
+      rr.item_type_raw,
+      rr.resolved_key_type,
+      rr.resolved_key_value,
+      rr.final_source_amount_ex_vat,
+      rr.final_target_amount_ex_vat,
+      rr.resolved_key_source,
+      CASE
+        WHEN rr.preliminary_failure_reason IS NOT NULL THEN rr.preliminary_failure_reason
+        WHEN rr.resolved_key_type IS NULL OR btrim(coalesce(rr.resolved_key_type, '')) = '' THEN 'KEY_TYPE_NOT_RESOLVED'
+        WHEN rr.resolved_key_value IS NULL OR btrim(coalesce(rr.resolved_key_value, '')) = '' THEN 'KEY_VALUE_NOT_RESOLVED'
+        WHEN rr.resolved_key_type = 'TS_DAY' AND rr.resolved_key_value !~ '^\d{4}-\d{2}-\d{2}$' THEN 'TS_DAY_KEY_VALUE_NOT_DATE'
+        WHEN rr.final_source_amount_ex_vat IS NULL THEN 'SOURCE_AMOUNT_NOT_RESOLVED'
+        WHEN rr.final_target_amount_ex_vat IS NULL THEN 'TARGET_AMOUNT_NOT_RESOLVED'
+        ELSE NULL
+      END AS final_failure_reason
+    FROM resolved_rows AS rr
+  )
+  SELECT
+    fr.batch_id AS pay_batch_id,
+    fr.batch_item_id AS pay_batch_item_id,
+    fr.item_timesheet_id AS timesheet_id,
+    fr.item_type_raw AS item_type,
+    CASE WHEN fr.final_failure_reason IS NULL THEN fr.resolved_key_type ELSE NULL END AS key_type,
+    CASE WHEN fr.final_failure_reason IS NULL THEN fr.resolved_key_value ELSE NULL END AS key_value,
+    CASE WHEN fr.final_source_amount_ex_vat IS NULL THEN NULL ELSE round(fr.final_source_amount_ex_vat, 2)::numeric END AS source_amount_ex_vat,
+    CASE WHEN fr.final_target_amount_ex_vat IS NULL THEN NULL ELSE round(fr.final_target_amount_ex_vat, 2)::numeric END AS target_amount_ex_vat,
+    CASE WHEN fr.final_failure_reason IS NULL THEN fr.resolved_key_source ELSE 'KEY_RESOLUTION_FAILED' END AS key_resolution_source,
+    fr.final_failure_reason AS key_resolution_failure_reason
+  FROM final_rows AS fr
+  ORDER BY fr.batch_id, fr.batch_item_id;
+END;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public._pay_batch_item_source_reservation_amount_ex_vat(p_pay_batch_item_id uuid)
+RETURNS numeric(12,2)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_item_type text;
+  v_finance_case_id uuid;
+  v_finance_component_id uuid;
+  v_amount_ex_vat numeric;
+  v_frozen_source_amount numeric;
+  v_frozen_target_amount_ex_vat numeric;
+  v_frozen_resolution_mode public.pay_finance_component_resolution_mode_enum;
+  v_frozen_resolution_payload_json jsonb;
+  v_frozen_resolution_result_json jsonb;
+  v_frozen_component_snapshot_json jsonb;
+  v_frozen_source_basis_json jsonb;
+  v_source_text text;
+  v_has_source_target_split boolean;
+BEGIN
+  IF p_pay_batch_item_id IS NULL THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  SELECT
+    upper(nullif(btrim(coalesce(pbi.item_type, '')), '')),
+    pbi.finance_case_id,
+    pbi.finance_component_id,
+    pbi.amount_ex_vat,
+    pbi.frozen_source_amount,
+    pbi.frozen_target_amount_ex_vat,
+    pbi.frozen_resolution_mode,
+    pbi.frozen_resolution_payload_json,
+    pbi.frozen_resolution_result_json,
+    coalesce(pbi.frozen_component_snapshot_json, '{}'::jsonb),
+    coalesce(pbi.frozen_source_basis_json, '{}'::jsonb)
+  INTO
+    v_item_type,
+    v_finance_case_id,
+    v_finance_component_id,
+    v_amount_ex_vat,
+    v_frozen_source_amount,
+    v_frozen_target_amount_ex_vat,
+    v_frozen_resolution_mode,
+    v_frozen_resolution_payload_json,
+    v_frozen_resolution_result_json,
+    v_frozen_component_snapshot_json,
+    v_frozen_source_basis_json
+  FROM public.pay_batch_items AS pbi
+  WHERE pbi.id = p_pay_batch_item_id;
+
+  IF NOT FOUND THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  IF v_item_type NOT IN ('SEGMENT_DELTA', 'EXPENSE_DELTA', 'ADJUSTMENT_DELTA', 'MILEAGE_DELTA') THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  IF v_frozen_source_amount IS NOT NULL THEN
+    RETURN round(abs(v_frozen_source_amount), 2)::numeric(12,2);
+  END IF;
+
+  SELECT source_candidates.source_text_value
+  INTO v_source_text
+  FROM (
+    VALUES
+      (v_frozen_component_snapshot_json->>'source_reservation_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'source_entitlement_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'source_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'source_pay_ex_vat'),
+      (v_frozen_component_snapshot_json->>'source_pay_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'basis_source_amount_ex_vat'),
+      (v_frozen_component_snapshot_json->>'reserved_source_amount'),
+      (v_frozen_component_snapshot_json->>'frozen_source_amount'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_reservation_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_entitlement_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,source_pay_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,basis_source_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,pay_amount_ex_vat}'),
+      (v_frozen_component_snapshot_json#>>'{source_basis_json,amount_ex_vat}'),
+      (v_frozen_source_basis_json->>'source_reservation_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'source_entitlement_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'source_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'source_pay_ex_vat'),
+      (v_frozen_source_basis_json->>'source_pay_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'basis_source_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'reserved_source_amount'),
+      (v_frozen_source_basis_json->>'frozen_source_amount'),
+      (v_frozen_source_basis_json->>'pay_ex_vat'),
+      (v_frozen_source_basis_json->>'pay_amount_ex_vat'),
+      (v_frozen_source_basis_json->>'amount_ex_vat'),
+      (v_frozen_source_basis_json->>'pay_amount')
+  ) AS source_candidates(source_text_value)
+  WHERE source_candidates.source_text_value IS NOT NULL
+    AND btrim(source_candidates.source_text_value) ~ '^-?[0-9]+(\.[0-9]+)?$'
+  LIMIT 1;
+
+  IF v_source_text IS NOT NULL THEN
+    RETURN round(abs(v_source_text::numeric), 2)::numeric(12,2);
+  END IF;
+
+  v_has_source_target_split :=
+       v_finance_case_id IS NOT NULL
+    OR v_finance_component_id IS NOT NULL
+    OR v_frozen_target_amount_ex_vat IS NOT NULL
+    OR v_frozen_resolution_mode IS NOT NULL
+    OR v_frozen_resolution_payload_json IS NOT NULL
+    OR v_frozen_resolution_result_json IS NOT NULL
+    OR v_frozen_component_snapshot_json ? 'target_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_pay_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_pay_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'frozen_target_amount_ex_vat'
+    OR v_frozen_component_snapshot_json ? 'target_rate'
+    OR v_frozen_component_snapshot_json ? 'target_units'
+    OR v_frozen_component_snapshot_json ? 'resolution_mode'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_mode'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_payload_json'
+    OR v_frozen_component_snapshot_json ? 'saved_resolution_result_json';
+
+  IF v_has_source_target_split THEN
+    RETURN NULL::numeric(12,2);
+  END IF;
+
+  IF v_amount_ex_vat IS NOT NULL THEN
+    RETURN round(abs(v_amount_ex_vat), 2)::numeric(12,2);
+  END IF;
+
+  RETURN NULL::numeric(12,2);
+END;
+$function$;
