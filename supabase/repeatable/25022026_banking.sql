@@ -12280,11 +12280,6 @@ begin
 end;
 $function$;
 
-
-
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_batch_validate_freshness(p_pay_batch_id uuid, p_actor_user_id uuid)
 returns jsonb
 language plpgsql
@@ -12518,282 +12513,58 @@ begin
       array[]::uuid[]
     ) as ts_ids
   ),
-  this_items_raw as (
+  this_components_raw as (
     select
-      pbi.id as pay_batch_item_id,
-      pbi.timesheet_id,
-      pbi.item_type,
-      pbi.segment_key,
-      pbi.source_ref,
-      pbi.frozen_component_key_type,
-      pbi.frozen_component_key_value,
-      pbi.frozen_component_snapshot_json,
-      pbi.frozen_source_basis_json,
-      round(
-        coalesce(
-          pbi.amount_ex_vat,
-          pbi.frozen_target_amount_ex_vat,
-          0
-        ),
-        2
-      )::numeric(12,2) as amount_ex_vat
-    from public.pay_batch_items pbi
-    join public.pay_batch_candidates pbc
-      on pbc.id = pbi.pay_batch_candidate_id
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbi.timesheet_id is not null
-      and pbi.is_voided = false
-      and pbi.item_type in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+      pbec.pay_batch_item_id,
+      pbec.timesheet_id,
+      upper(nullif(btrim(coalesce(pbec.item_type, '')), '')) as item_type,
+      upper(nullif(btrim(coalesce(pbec.key_type, '')), '')) as key_type,
+      nullif(btrim(coalesce(pbec.key_value, '')), '') as key_value,
+      round(coalesce(pbec.source_amount_ex_vat, 0), 2)::numeric(12,2) as amount_ex_vat,
+      pbec.source_amount_ex_vat as source_amount_ex_vat_raw,
+      nullif(btrim(coalesce(pbec.key_resolution_failure_reason, '')), '') as key_resolution_failure_reason
+    from public._pay_batch_item_economic_components(
+      p_pay_batch_id => p_pay_batch_id,
+      p_pay_batch_item_ids => null::uuid[]
+    ) pbec
+    where upper(nullif(btrim(coalesce(pbec.item_type, '')), '')) in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
   ),
-  this_snap as (
+  this_component_resolution_failures as (
     select
-      pbs.timesheet_id,
-      pbs.target_snapshot_json
-    from public.pay_batch_timesheet_snapshots pbs
-    where pbs.pay_batch_id = p_pay_batch_id
-  ),
-  this_item_basis as (
-    select
-      tir.pay_batch_item_id,
-      tir.timesheet_id,
-      tir.item_type,
-      tir.segment_key,
-      tir.source_ref,
-      tir.frozen_component_key_type,
-      tir.frozen_component_key_value,
-      tir.frozen_component_snapshot_json,
-      tir.frozen_source_basis_json,
-      tir.amount_ex_vat,
-      nullif(
-        btrim(
-          coalesce(
-            tir.frozen_component_key_type,
-            tir.frozen_component_snapshot_json->>'component_key_type',
-            tir.frozen_component_snapshot_json->>'key_type',
-            ''
-          )
-        ),
-        ''
-      ) as stored_key_type,
-      nullif(
-        btrim(
-          coalesce(
-            tir.frozen_component_key_value,
-            tir.frozen_component_snapshot_json->>'component_key_value',
-            tir.frozen_component_snapshot_json->>'key_value',
-            ''
-          )
-        ),
-        ''
-      ) as stored_key_value,
-      nullif(
-        btrim(
-          coalesce(
-            tir.frozen_source_basis_json->>'work_date',
-            tir.frozen_component_snapshot_json->'source_basis_json'->>'work_date',
-            ''
-          )
-        ),
-        ''
-      ) as basis_work_date_raw,
-      coalesce(
-        nullif(btrim(coalesce(tir.frozen_source_basis_json->>'segment_id','')), ''),
-        nullif(btrim(coalesce(tir.frozen_source_basis_json->>'segment_key','')), ''),
-        nullif(btrim(coalesce(tir.frozen_source_basis_json->>'segment_stable_key','')), ''),
-        nullif(btrim(coalesce(tir.frozen_component_snapshot_json->'source_basis_json'->>'segment_id','')), ''),
-        nullif(btrim(coalesce(tir.frozen_component_snapshot_json->'source_basis_json'->>'segment_key','')), ''),
-        nullif(btrim(coalesce(tir.frozen_component_snapshot_json->'source_basis_json'->>'segment_stable_key','')), ''),
-        nullif(btrim(coalesce(tir.segment_key,'')), ''),
-        case
-          when tir.source_ref is not null and btrim(tir.source_ref) like 'seg:%'
-            then nullif(btrim(substring(tir.source_ref from 5)), '')
-          else null
-        end
-      ) as snapshot_segment_id
-    from this_items_raw tir
-  ),
-  this_item_basis_norm as (
-    select
-      tib.pay_batch_item_id,
-      tib.timesheet_id,
-      tib.item_type,
-      tib.segment_key,
-      tib.source_ref,
-      tib.frozen_component_key_type,
-      tib.frozen_component_key_value,
-      tib.frozen_component_snapshot_json,
-      tib.frozen_source_basis_json,
-      tib.amount_ex_vat,
-      tib.stored_key_type,
-      tib.stored_key_value,
+      tcr.timesheet_id,
       case
-        when tib.basis_work_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then tib.basis_work_date_raw
-        else null
-      end as basis_work_date,
-      tib.snapshot_segment_id
-    from this_item_basis tib
-  ),
-  this_seg_lookup as (
-    select
-      tibn.timesheet_id,
-      tibn.snapshot_segment_id as seg_id
-    from this_item_basis_norm tibn
-    where tibn.item_type = 'SEGMENT_DELTA'
-      and tibn.snapshot_segment_id is not null
-      and not (
-        upper(coalesce(tibn.stored_key_type, '')) = 'TS_DAY'
-        and tibn.stored_key_value ~ '^\d{4}-\d{2}-\d{2}$'
-      )
-      and not (
-        tibn.stored_key_type is not null
-        and tibn.stored_key_value is not null
-        and upper(coalesce(tibn.stored_key_type, '')) <> 'TS_DAY'
-      )
-      and tibn.basis_work_date is null
-  ),
-  this_seg_date_map as (
-    select
-      tsl.timesheet_id,
-      tsl.seg_id,
-      nullif(btrim(coalesce(seg.value->>'date','')), '') as seg_date_raw
-    from this_seg_lookup tsl
-    join this_snap tsn
-      on tsn.timesheet_id = tsl.timesheet_id
-    join lateral jsonb_array_elements(coalesce(tsn.target_snapshot_json->'segments','[]'::jsonb)) as seg(value)
-      on true
-    where seg.value is not null
-      and jsonb_typeof(seg.value) = 'object'
-      and nullif(btrim(coalesce(seg.value->>'segment_id','')), '') = tsl.seg_id
-  ),
-  this_seg_date_final as (
-    select
-      tsdm.timesheet_id,
-      tsdm.seg_id,
-      case
-        when tsdm.seg_date_raw ~ '^\d{4}-\d{2}-\d{2}$' then tsdm.seg_date_raw
-        else null
-      end as seg_date
-    from this_seg_date_map tsdm
-  ),
-  this_keyed as (
-    select
-      tibn.timesheet_id,
-      coalesce(
-        case
-          when upper(coalesce(tibn.stored_key_type, '')) = 'TS_DAY'
-           and tibn.stored_key_value ~ '^\d{4}-\d{2}-\d{2}$'
-            then 'TS_DAY'
-          when tibn.stored_key_type is not null
-           and tibn.stored_key_value is not null
-           and upper(coalesce(tibn.stored_key_type, '')) <> 'TS_DAY'
-            then tibn.stored_key_type
-          else null
-        end,
-        case
-          when tibn.item_type = 'SEGMENT_DELTA' and tibn.basis_work_date is not null then 'TS_DAY'
-          when tibn.item_type = 'SEGMENT_DELTA' and tsdf.seg_date is not null then 'TS_DAY'
-          when tibn.item_type = 'SEGMENT_DELTA' then 'TS_TOTAL'
-          when tibn.item_type = 'MILEAGE_DELTA' then 'EXPENSE_CODE'
-          when tibn.item_type = 'ADJUSTMENT_DELTA'
-            then case
-              when tibn.source_ref is not null and btrim(tibn.source_ref) like 'preview_seg:%'
-                then 'TS_TOTAL'
-              else 'ADJUSTMENT_CODE'
-            end
-          when tibn.item_type = 'EXPENSE_DELTA'
-            then case
-              when tibn.source_ref is not null and (
-                btrim(tibn.source_ref) like 'additional:%'
-                or btrim(tibn.source_ref) like 'add:%'
-                or btrim(tibn.source_ref) = 'additional'
-              )
-                then 'ADDITIONAL_CODE'
-              else 'EXPENSE_CODE'
-            end
-          else 'EXPENSE_CODE'
-        end
-      ) as key_type,
-      coalesce(
-        case
-          when upper(coalesce(tibn.stored_key_type, '')) = 'TS_DAY'
-           and tibn.stored_key_value ~ '^\d{4}-\d{2}-\d{2}$'
-            then tibn.stored_key_value
-          when tibn.stored_key_type is not null
-           and tibn.stored_key_value is not null
-           and upper(coalesce(tibn.stored_key_type, '')) <> 'TS_DAY'
-            then tibn.stored_key_value
-          else null
-        end,
-        case
-          when tibn.item_type = 'SEGMENT_DELTA' and tibn.basis_work_date is not null then tibn.basis_work_date
-          when tibn.item_type = 'SEGMENT_DELTA' then coalesce(tsdf.seg_date, 'TOTAL')
-          when tibn.item_type = 'MILEAGE_DELTA' then 'MILEAGE'
-          when tibn.item_type = 'ADJUSTMENT_DELTA'
-            then case
-              when tibn.source_ref is not null and btrim(tibn.source_ref) like 'preview_seg:%'
-                then 'TOTAL'
-              when nullif(btrim(coalesce(tibn.frozen_source_basis_json->>'adjustment_id','')), '') is not null
-                then nullif(btrim(coalesce(tibn.frozen_source_basis_json->>'adjustment_id','')), '')
-              when nullif(
-                btrim(
-                  coalesce(
-                    tibn.frozen_component_snapshot_json->'source_basis_json'->>'adjustment_id',
-                    ''
-                  )
-                ),
-                ''
-              ) is not null
-                then nullif(
-                  btrim(
-                    coalesce(
-                      tibn.frozen_component_snapshot_json->'source_basis_json'->>'adjustment_id',
-                      ''
-                    )
-                  ),
-                  ''
-                )
-              when tibn.source_ref is not null and btrim(tibn.source_ref) like 'adj:%'
-                then case
-                  when nullif(btrim(split_part(tibn.source_ref,':',2)), '') is null
-                    or btrim(split_part(tibn.source_ref,':',2)) like 'preview_adj_%'
-                    then 'TOTAL'
-                  else nullif(btrim(split_part(tibn.source_ref,':',2)), '')
-                end
-              else 'TOTAL'
-            end
-          when tibn.item_type = 'EXPENSE_DELTA'
-            then case
-              when tibn.source_ref is not null and (
-                btrim(tibn.source_ref) like 'additional:%'
-                or btrim(tibn.source_ref) like 'add:%'
-              )
-                then upper(nullif(btrim(split_part(tibn.source_ref,':',2)), ''))
-              when tibn.source_ref is not null and btrim(tibn.source_ref) = 'additional'
-                then 'TOTAL'
-              when tibn.source_ref is not null and btrim(tibn.source_ref) <> ''
-                then upper(btrim(tibn.source_ref))
-              else 'UNKNOWN'
-            end
-          else 'UNKNOWN'
-        end
-      ) as key_value,
-      tibn.amount_ex_vat
-    from this_item_basis_norm tibn
-    left join this_seg_date_final tsdf
-      on tsdf.timesheet_id = tibn.timesheet_id
-     and tsdf.seg_id = tibn.snapshot_segment_id
+        when tcr.key_type is null
+          or tcr.key_value is null
+          or tcr.key_resolution_failure_reason is not null
+          then 'KEY_RESOLUTION_FAILURE'
+        else 'SOURCE_RESOLUTION_FAILURE'
+      end as key_type,
+      tcr.pay_batch_item_id::text as key_value,
+      0::numeric(12,2) as expected_ex,
+      1::numeric(12,2) as actual_ex,
+      2 as ord
+    from this_components_raw tcr
+    where tcr.key_type is null
+       or tcr.key_value is null
+       or tcr.key_resolution_failure_reason is not null
+       or tcr.source_amount_ex_vat_raw is null
   ),
   this_components as (
     select
-      tk.timesheet_id,
-      tk.key_type,
-      tk.key_value,
-      round(sum(coalesce(tk.amount_ex_vat, 0)), 2)::numeric(12,2) as amount_ex_vat
-    from this_keyed tk
+      tcr.timesheet_id,
+      tcr.key_type,
+      tcr.key_value,
+      round(sum(coalesce(tcr.amount_ex_vat, 0)), 2)::numeric(12,2) as amount_ex_vat
+    from this_components_raw tcr
+    where tcr.timesheet_id is not null
+      and tcr.key_type is not null
+      and tcr.key_value is not null
+      and tcr.key_resolution_failure_reason is null
+      and tcr.source_amount_ex_vat_raw is not null
     group by
-      tk.timesheet_id,
-      tk.key_type,
-      tk.key_value
+      tcr.timesheet_id,
+      tcr.key_type,
+      tcr.key_value
   ),
   helper_outstanding_raw as (
     select
@@ -12817,22 +12588,44 @@ begin
       hor.timesheet_id,
       hor.key_type,
       hor.key_value
+  ),
+  reservation_mismatches as (
+    select
+      tc.timesheet_id,
+      tc.key_type,
+      tc.key_value,
+      0::numeric(12,2) as expected_ex,
+      round(coalesce(ho.outstanding_ex_vat, 0) + coalesce(tc.amount_ex_vat, 0), 2)::numeric(12,2) as actual_ex,
+      2 as ord
+    from this_components tc
+    left join helper_outstanding ho
+      on ho.timesheet_id = tc.timesheet_id
+     and ho.key_type = tc.key_type
+     and ho.key_value = tc.key_value
+    where round(coalesce(ho.outstanding_ex_vat, 0) + coalesce(tc.amount_ex_vat, 0), 2) <> 0
   )
   select
-    tc.timesheet_id,
-    tc.key_type,
-    tc.key_value,
-    0::numeric(12,2) as expected_ex,
-    round(coalesce(ho.outstanding_ex_vat, 0) + coalesce(tc.amount_ex_vat, 0), 2)::numeric(12,2) as actual_ex,
-    2 as ord
-  from this_components tc
-  left join helper_outstanding ho
-    on ho.timesheet_id = tc.timesheet_id
-   and ho.key_type = tc.key_type
-   and ho.key_value = tc.key_value
-  where round(coalesce(ho.outstanding_ex_vat, 0) + coalesce(tc.amount_ex_vat, 0), 2) <> 0;
+    tcrf.timesheet_id,
+    tcrf.key_type,
+    tcrf.key_value,
+    tcrf.expected_ex,
+    tcrf.actual_ex,
+    tcrf.ord
+  from this_component_resolution_failures tcrf
 
-  select count(*)::int
+  union all
+
+  select
+    rm.timesheet_id,
+    rm.key_type,
+    rm.key_value,
+    rm.expected_ex,
+    rm.actual_ex,
+    rm.ord
+  from reservation_mismatches rm;
+
+  
+select count(*)::int
   into v_key_diff_ct
   from pg_temp.tmp_fresh_key_diffs;
 
@@ -12863,7 +12656,7 @@ begin
       pbi.reservation_id,
       pbi.item_type,
       pbi.repayment_week_start,
-      round(abs(coalesce(pbi.amount_ex_vat, 0)), 2)::numeric(12,2) as reserved_amount_ex
+      round(abs(coalesce(pbi.frozen_source_amount, case when pbi.frozen_target_amount_ex_vat is null and pbi.frozen_resolution_mode is null and pbi.frozen_resolution_result_json is null then pbi.amount_ex_vat else null end, 0)), 2)::numeric(12,2) as reserved_amount_ex
     from public.pay_batch_items pbi
     join public.pay_batch_candidates pbc
       on pbc.id = pbi.pay_batch_candidate_id
@@ -14243,6 +14036,8 @@ begin
   );
 end;
 $function$;
+
+
 
 
 
