@@ -25025,7 +25025,7 @@ begin
   ) into v_has_newflow_draft_item;
 
   if v_has_batch then
-    v_can_edit_pre_draft := (v_is_committed = false);
+    v_can_edit_pre_draft := false;
   else
     v_can_edit_pre_draft := (v_has_newflow_draft_item = false);
   end if;
@@ -25894,7 +25894,6 @@ begin
   );
 end;
 $$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_finance_ledger_export_rows(
   p_actor_user_id uuid DEFAULT NULL::uuid,
@@ -26901,8 +26900,6 @@ AS $function$
   );
 $function$;
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_finance_components_sync_from_preview(
   p_finance_case_id uuid,
   p_preview_lines_json jsonb,
@@ -27160,7 +27157,7 @@ BEGIN
       v_component_key_value := 'TOTAL';
     END IF;
 
-    IF v_raw_classification IN ('TAXABLE_CHANNEL_SENSITIVE', 'REIMBURSEMENT_GROSS_FIXED') THEN
+    IF v_raw_classification IN ('TAXABLE_CHANNEL_SENSITIVE', 'REIMBURSEMENT_GROSS_FIXED', 'NET_PAY_FIXED_RECOVERY') THEN
       v_classification := v_raw_classification::public.pay_finance_component_classification_enum;
     ELSIF v_component_key_type IN ('TS_DAY', 'TS_TOTAL', 'ADDITIONAL_CODE', 'CASE_TOTAL') THEN
       v_classification := 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum;
