@@ -23382,6 +23382,83 @@ BEGIN
   FROM pg_temp.tmp_pay_build_selected_preview_rows spr;
 
 
+  IF EXISTS (
+    WITH finance_case_draft_scope AS (
+      SELECT DISTINCT
+        spr.finance_case_id AS finance_case_id,
+        spr.candidate_id AS candidate_id,
+        upper(coalesce(nullif(spr.pay_channel, ''), v_scope)) AS target_pay_channel,
+        spr.line_type AS source_line_type
+      FROM pg_temp.tmp_pay_build_selected_preview_rows AS spr
+      WHERE spr.draftable = true
+        AND spr.finance_case_id IS NOT NULL
+        AND spr.candidate_id = ANY(v_candidate_ids)
+        AND (v_client_filter_single IS NULL OR spr.client_id = v_client_filter_single)
+        AND spr.line_type IN (
+          'OVERPAYMENT_RECOVERY',
+          'MANUAL_DEBT_RECOVERY',
+          'MANUAL_CREDIT_ADJUSTMENT_PAYMENT',
+          'MANUAL_CREDIT_PAYOUT'
+        )
+
+      UNION
+
+      SELECT DISTINCT
+        template_rows.finance_case_id AS finance_case_id,
+        template_rows.candidate_id AS candidate_id,
+        CASE
+          WHEN upper(coalesce(template_rows.pay_channel, '')) IN ('PAYE', 'UMBRELLA') THEN upper(coalesce(template_rows.pay_channel, ''))
+          WHEN coalesce(btrim(coalesce(template_rows.pay_channel, '')), '') = '' THEN v_scope
+          ELSE upper(coalesce(template_rows.pay_channel, ''))
+        END AS target_pay_channel,
+        template_rows.recovery_family AS source_line_type
+      FROM pg_temp.tmp_pay_build_recovery_template_rows AS template_rows
+      WHERE template_rows.finance_case_id IS NOT NULL
+        AND template_rows.candidate_id = ANY(v_candidate_ids)
+        AND template_rows.recovery_family IN (
+          'OVERPAYMENT_RECOVERY',
+          'MANUAL_DEBT_RECOVERY'
+        )
+    )
+    SELECT 1
+    FROM finance_case_draft_scope AS draft_scope
+    JOIN public.pay_advances AS finance_case
+      ON finance_case.id = draft_scope.finance_case_id
+     AND finance_case.case_type IN (
+       'OVERPAYMENT'::public.pay_finance_case_type_enum,
+       'MANUAL_DEBT_ADJUSTMENT'::public.pay_finance_case_type_enum,
+       'MANUAL_CREDIT_ADJUSTMENT'::public.pay_finance_case_type_enum
+     )
+     AND finance_case.status = 'ACTIVE'::public.pay_advance_status_enum
+    JOIN public.pay_finance_case_components AS finance_component
+      ON finance_component.finance_case_id = draft_scope.finance_case_id
+     AND finance_component.closed_at_utc IS NULL
+    WHERE draft_scope.target_pay_channel IN ('PAYE', 'UMBRELLA')
+      AND finance_component.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+      AND round(coalesce(finance_component.remaining_source_amount, 0), 2) > 0
+      AND upper(coalesce(finance_component.source_pay_method, '')) IN ('PAYE', 'UMBRELLA')
+      AND upper(coalesce(finance_component.source_pay_method, '')) <> draft_scope.target_pay_channel
+      AND (
+        coalesce(finance_component.is_resolution_stale, false) = true
+        OR nullif(btrim(coalesce(finance_component.saved_target_pay_method, '')), '') IS NULL
+        OR upper(coalesce(finance_component.saved_target_pay_method, '')) <> draft_scope.target_pay_channel
+        OR finance_component.saved_resolution_mode IS NULL
+        OR jsonb_typeof(coalesce(finance_component.saved_resolution_payload_json, 'null'::jsonb)) <> 'object'
+        OR jsonb_typeof(coalesce(finance_component.saved_resolution_result_json, 'null'::jsonb)) <> 'object'
+        OR nullif(btrim(coalesce(finance_component.resolution_fingerprint, '')), '') IS NULL
+      )
+    LIMIT 1
+  ) THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_BATCH_APPLY_FINANCE_ADJUSTMENTS',
+      'code', 'TAXABLE_CHANNEL_RESTRUCTURE_REQUIRED',
+      'message', 'pay_batch_apply_finance_adjustments: taxable PAYE/Umbrella channel restructure is required before finance items can be drafted',
+      'pay_batch_id', v_batch_id::text,
+      'pay_channel_scope', v_scope
+    )::text;
+  END IF;
+
+
 v_stage := 'STAGE_12C_APPLY_LOAN_PAYOUTS';
   begin
     perform public._imp_debug_audit(
@@ -23699,7 +23776,12 @@ v_stage := 'STAGE_12C_APPLY_LOAN_PAYOUTS';
         end
       )
     ) as payout_instruction_snapshot_json,
-    case when a.pay_channel = 'PAYE' then coalesce(nullif(a.paye_treatment,''),'NET_ADD') else 'NONE' end as paye_treatment
+    case
+      when a.pay_channel <> 'PAYE' then 'NONE'
+      when a.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'GROSS_ADD'
+      when a.classification in ('REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum, 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum) then 'NET_ADD'
+      else coalesce(nullif(a.paye_treatment,''), 'NET_ADD')
+    end as paye_treatment
   from alloc a
   where a.take_target_ex > 0;
 
@@ -23976,26 +24058,10 @@ v_stage := 'STAGE_12D_APPLY_MANUAL_CREDIT_PAYOUTS';
       n.source_pay_method,
       n.source_basis_json,
       case
-        when n.preview_resolution_mode_text is not null
-         and upper(coalesce(n.preview_resolution_mode_text,'')) = 'SUGGESTED_EQUIVALENT_BASIS'
-        then 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum
         when n.saved_resolution_mode_text is not null then n.saved_resolution_mode_text::public.pay_finance_component_resolution_mode_enum
-        when n.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-         and upper(coalesce(n.source_pay_method,'')) <> upper(coalesce(n.pay_channel,''))
-        then 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum
         else null::public.pay_finance_component_resolution_mode_enum
       end as frozen_resolution_mode,
       case
-        when jsonb_typeof(n.preview_resolution_payload_json) = 'object' then jsonb_strip_nulls(
-          n.preview_resolution_payload_json
-          || jsonb_build_object(
-            'target_pay_method', n.pay_channel,
-            'target_units', n.source_units,
-            'suggested_target_rate', n.target_rate,
-            'source_rate', n.source_rate,
-            'source_charge_rate', n.source_charge_rate
-          )
-        )
         when jsonb_typeof(n.saved_resolution_payload_json) = 'object' then jsonb_strip_nulls(
           n.saved_resolution_payload_json
           || jsonb_build_object(
@@ -24007,7 +24073,7 @@ v_stage := 'STAGE_12D_APPLY_MANUAL_CREDIT_PAYOUTS';
           )
         )
         else jsonb_strip_nulls(jsonb_build_object(
-          'resolution_mode', coalesce(n.preview_resolution_mode_text, 'SUGGESTED_EQUIVALENT_BASIS'),
+          'resolution_mode', n.saved_resolution_mode_text,
           'target_pay_method', n.pay_channel,
           'target_units', n.source_units,
           'suggested_target_rate', n.target_rate,
@@ -24046,7 +24112,7 @@ v_stage := 'STAGE_12D_APPLY_MANUAL_CREDIT_PAYOUTS';
         coalesce(n.comp_json, '{}'::jsonb)
         || jsonb_build_object(
           'frozen_target_pay_method', n.pay_channel,
-          'frozen_resolution_mode_text', coalesce(n.preview_resolution_mode_text, n.saved_resolution_mode_text),
+          'frozen_resolution_mode_text', n.saved_resolution_mode_text,
           'frozen_source_amount', round(
             case
               when n.allocated_source_due_amount_ex_vat > 0 then n.allocated_source_due_amount_ex_vat
@@ -24079,9 +24145,9 @@ v_stage := 'STAGE_12D_APPLY_MANUAL_CREDIT_PAYOUTS';
         )
       ) as frozen_component_snapshot_json,
       jsonb_strip_nulls(
-        coalesce(n.preview_resolution_result_json, n.saved_resolution_result_json, '{}'::jsonb)
+        coalesce(n.saved_resolution_result_json, '{}'::jsonb)
         || jsonb_build_object(
-          'resolution_mode', coalesce(n.preview_resolution_mode_text, coalesce(n.saved_resolution_mode_text, 'SUGGESTED_EQUIVALENT_BASIS')),
+          'resolution_mode', n.saved_resolution_mode_text,
           'target_pay_method', n.pay_channel,
           'target_amount_ex_vat', round(n.take_target_ex, 2),
           'target_amount_vat', round(
@@ -24175,7 +24241,12 @@ v_stage := 'STAGE_12D_APPLY_MANUAL_CREDIT_PAYOUTS';
         end
       )
     ) as payout_instruction_snapshot_json,
-    case when fa.pay_channel = 'PAYE' then coalesce(nullif(fa.paye_treatment,''),'GROSS_ADD') else 'NONE' end as paye_treatment
+    case
+      when fa.pay_channel <> 'PAYE' then 'NONE'
+      when fa.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'GROSS_ADD'
+      when fa.classification in ('REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum, 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum) then 'NET_ADD'
+      else coalesce(nullif(fa.paye_treatment,''), 'NET_ADD')
+    end as paye_treatment
   from final_alloc fa
   where fa.take_target_ex > 0;
 
@@ -24559,7 +24630,12 @@ v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY';
     v_now_utc as updated_at,
     fa.finance_case_id,
     null::uuid as reservation_id,
-    fa.paye_treatment,
+    case
+      when fa.pay_channel <> 'PAYE' then 'NONE'
+      when fa.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'GROSS_DEDUCT'
+      when fa.classification in ('NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum, 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum) then 'NET_DEDUCT'
+      else coalesce(nullif(fa.paye_treatment,''), 'NET_DEDUCT')
+    end as paye_treatment,
     fa.finance_component_id,
     fa.frozen_component_snapshot_json,
     fa.component_key_type,
@@ -24850,26 +24926,10 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
       n.source_pay_method,
       n.source_basis_json,
       case
-        when n.preview_resolution_mode_text is not null
-         and upper(coalesce(n.preview_resolution_mode_text,'')) = 'SUGGESTED_EQUIVALENT_BASIS'
-        then 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum
         when n.saved_resolution_mode_text is not null then n.saved_resolution_mode_text::public.pay_finance_component_resolution_mode_enum
-        when n.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
-         and upper(coalesce(n.source_pay_method,'')) <> upper(coalesce(n.pay_channel,''))
-        then 'SUGGESTED_EQUIVALENT_BASIS'::public.pay_finance_component_resolution_mode_enum
         else null::public.pay_finance_component_resolution_mode_enum
       end as frozen_resolution_mode,
       case
-        when jsonb_typeof(n.preview_resolution_payload_json) = 'object' then jsonb_strip_nulls(
-          n.preview_resolution_payload_json
-          || jsonb_build_object(
-            'target_pay_method', n.pay_channel,
-            'target_units', n.source_units,
-            'suggested_target_rate', n.target_rate,
-            'source_rate', n.source_rate,
-            'source_charge_rate', n.source_charge_rate
-          )
-        )
         when jsonb_typeof(n.saved_resolution_payload_json) = 'object' then jsonb_strip_nulls(
           n.saved_resolution_payload_json
           || jsonb_build_object(
@@ -24881,7 +24941,7 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
           )
         )
         else jsonb_strip_nulls(jsonb_build_object(
-          'resolution_mode', coalesce(n.preview_resolution_mode_text, 'SUGGESTED_EQUIVALENT_BASIS'),
+          'resolution_mode', n.saved_resolution_mode_text,
           'target_pay_method', n.pay_channel,
           'target_units', n.source_units,
           'suggested_target_rate', n.target_rate,
@@ -24920,7 +24980,7 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
         coalesce(n.comp_json, '{}'::jsonb)
         || jsonb_build_object(
           'frozen_target_pay_method', n.pay_channel,
-          'frozen_resolution_mode_text', coalesce(n.preview_resolution_mode_text, n.saved_resolution_mode_text),
+          'frozen_resolution_mode_text', n.saved_resolution_mode_text,
           'frozen_source_amount', round(
             case
               when n.allocated_source_due_amount_ex_vat > 0 then n.allocated_source_due_amount_ex_vat
@@ -24953,9 +25013,9 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
         )
       ) as frozen_component_snapshot_json,
       jsonb_strip_nulls(
-        coalesce(n.preview_resolution_result_json, n.saved_resolution_result_json, '{}'::jsonb)
+        coalesce(n.saved_resolution_result_json, '{}'::jsonb)
         || jsonb_build_object(
-          'resolution_mode', coalesce(n.preview_resolution_mode_text, coalesce(n.saved_resolution_mode_text, 'SUGGESTED_EQUIVALENT_BASIS')),
+          'resolution_mode', n.saved_resolution_mode_text,
           'target_pay_method', n.pay_channel,
           'target_amount_ex_vat', round(n.take_target_ex, 2),
           'target_amount_vat', round(
@@ -25009,7 +25069,12 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
     v_now_utc as updated_at,
     fa.finance_case_id,
     null::uuid as reservation_id,
-    fa.paye_treatment,
+    case
+      when fa.pay_channel <> 'PAYE' then 'NONE'
+      when fa.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'GROSS_DEDUCT'
+      when fa.classification in ('NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum, 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum) then 'NET_DEDUCT'
+      else coalesce(nullif(fa.paye_treatment,''), 'NET_DEDUCT')
+    end as paye_treatment,
     fa.finance_component_id,
     fa.frozen_component_snapshot_json,
     fa.component_key_type,
@@ -25030,7 +25095,14 @@ v_stage := 'STAGE_16B_APPLY_MANUAL_DEBT_RECOVERY';
     and not (
       upper(coalesce(fa.pay_channel, '')) = 'PAYE'
       and coalesce(fa.has_paye_net_input, false) = false
-      and upper(coalesce(fa.paye_treatment, 'NONE')) = 'NET_DEDUCT'
+      and (
+        case
+          when fa.pay_channel <> 'PAYE' then 'NONE'
+          when fa.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'GROSS_DEDUCT'
+          when fa.classification in ('NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum, 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum) then 'NET_DEDUCT'
+          else coalesce(nullif(fa.paye_treatment,''), 'NET_DEDUCT')
+        end
+      ) = 'NET_DEDUCT'
     );
 
   get diagnostics v_rows_ins_debt_items = row_count;
@@ -25412,7 +25484,12 @@ v_stage := 'STAGE_16C_APPLY_PAYMENT_ADVANCE_REPAYMENTS';
     v_now_utc as updated_at,
     fa.finance_case_id,
     null::uuid as reservation_id,
-    fa.paye_treatment,
+    case
+      when fa.pay_channel <> 'PAYE' then 'NONE'
+      when fa.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'GROSS_DEDUCT'
+      when fa.classification in ('NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum, 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum) then 'NET_DEDUCT'
+      else coalesce(nullif(fa.paye_treatment,''), 'NET_DEDUCT')
+    end as paye_treatment,
     fa.finance_component_id,
     fa.frozen_component_snapshot_json,
     fa.component_key_type,
@@ -25722,7 +25799,12 @@ v_stage := 'STAGE_16BD_INSERT_DORMANT_RECOVERY_TEMPLATES';
     v_now_utc as updated_at,
     stage_rows.finance_case_id,
     null::uuid as reservation_id,
-    coalesce(stage_rows.paye_treatment, 'NONE') as paye_treatment,
+    case
+      when stage_rows.normalized_pay_channel <> 'PAYE' then 'NONE'
+      when stage_rows.frozen_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum then 'GROSS_DEDUCT'
+      when stage_rows.frozen_component_classification in ('NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum, 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum) then 'NET_DEDUCT'
+      else coalesce(stage_rows.paye_treatment, 'NET_DEDUCT')
+    end as paye_treatment,
     stage_rows.finance_component_id,
     stage_rows.frozen_component_snapshot_json,
     stage_rows.frozen_component_key_type,
@@ -26059,7 +26141,6 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
   );
 END;
 $function$;
-
 
 
 
