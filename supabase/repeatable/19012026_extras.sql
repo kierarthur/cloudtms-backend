@@ -7197,8 +7197,6 @@ BEGIN
   RETURN NEXT;
 END;
 $function$;
-
-
 CREATE OR REPLACE FUNCTION public.timesheet_unauthorise_atomic(
   p_timesheet_id uuid,
   p_expected_timesheet_id uuid,
@@ -7227,6 +7225,7 @@ DECLARE
   v_contract_week public.contract_weeks%ROWTYPE;
   v_prev_status public.ts_fin_processing_status_enum;
   v_new_status public.ts_fin_processing_status_enum := 'PENDING_AUTH'::public.ts_fin_processing_status_enum;
+  v_segment_invoice_locked boolean := false;
 BEGIN
   IF p_timesheet_id IS NULL THEN
     RAISE EXCEPTION 'p_timesheet_id is required';
@@ -7295,8 +7294,20 @@ BEGIN
     RAISE EXCEPTION 'NO_TSFIN';
   END IF;
 
+  SELECT (
+    COALESCE(upper(v_current_tsfin.invoice_breakdown_json ->> 'mode') = 'SEGMENTS', false)
+    AND EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(COALESCE(v_current_tsfin.invoice_breakdown_json -> 'segments', '[]'::jsonb)) AS seg(segment_json)
+      WHERE NULLIF(btrim(seg.segment_json ->> 'invoice_locked_invoice_id'), '') IS NOT NULL
+      LIMIT 1
+    )
+  )
+  INTO v_segment_invoice_locked;
+
   IF v_current_tsfin.locked_by_invoice_id IS NOT NULL
-     OR v_current_tsfin.paid_at_utc IS NOT NULL THEN
+     OR v_current_tsfin.paid_at_utc IS NOT NULL
+     OR COALESCE(v_segment_invoice_locked, false) THEN
     RAISE EXCEPTION 'TIMESHEET_LOCKED_OR_PAID';
   END IF;
 
@@ -7397,6 +7408,8 @@ BEGIN
   RETURN NEXT;
 END;
 $function$;
+
+
 CREATE OR REPLACE FUNCTION public.timesheet_authorise_generic_atomic(
   p_timesheet_id uuid,
   p_expected_timesheet_id uuid,
