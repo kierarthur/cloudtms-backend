@@ -14836,6 +14836,12 @@ begin
               'taxable_channel_restructure_resolution', g.taxable_channel_restructure_resolution_json
             )
           ) as case_resolution_summary_json,
+          case
+            when g.resolution_family = 'NON_BUCKET'
+              and jsonb_typeof(g.non_bucket_resolution_json) = 'object'
+            then g.non_bucket_resolution_json
+            else null::jsonb
+          end as taxable_manual_debt_resolution_json,
           g.case_components_json
         from grouped g
   
@@ -14848,9 +14854,6 @@ begin
   );
 end;
 $function$;
-
-
-
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_payee_baseline(
   p_context_json jsonb,
