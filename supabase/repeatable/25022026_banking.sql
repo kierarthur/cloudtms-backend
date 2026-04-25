@@ -28110,10 +28110,10 @@ BEGIN
     coalesce(
       jsonb_agg(
         jsonb_build_object(
-          'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+          'week_start', (v_target_week_start + (((sr.seq_no - 1)::integer) * 7))::date,
           'amount', sr.amount_value
         )
-        ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+        ORDER BY (v_target_week_start + (((sr.seq_no - 1)::integer) * 7))::date ASC
       ),
       '[]'::jsonb
     ),
@@ -28142,6 +28142,9 @@ BEGIN
   );
 END;
 $function$;
+
+
+
 
 
 DROP FUNCTION IF EXISTS public._pay_repayment_schedule_rebase_for_snooze(uuid,date);
@@ -28249,10 +28252,10 @@ BEGIN
     coalesce(
       jsonb_agg(
         jsonb_build_object(
-          'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+          'week_start', (v_target_week_start + (((sr.seq_no - 1)::integer) * 7))::date,
           'amount', sr.amount_value
         )
-        ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+        ORDER BY (v_target_week_start + (((sr.seq_no - 1)::integer) * 7))::date ASC
       ),
       '[]'::jsonb
     ),
@@ -28280,6 +28283,8 @@ BEGIN
   );
 END;
 $function$;
+
+
 
 
 DROP FUNCTION IF EXISTS public._pay_finance_case_freeze_payout_instruction_to_batch_item(uuid,uuid);
