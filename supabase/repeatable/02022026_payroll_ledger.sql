@@ -25382,9 +25382,6 @@ $$;
 
 
 
-
-
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -25429,6 +25426,10 @@ declare
   v_open_case_candidate record;
   v_target_case_amount_ex numeric(12,2);
   v_case_taxability public.pay_finance_taxability_enum := NULL;
+  v_synced_case_taxability public.pay_finance_taxability_enum := NULL;
+  v_synced_before_taxability public.pay_finance_taxability_enum := NULL;
+  v_taxability_event_before_json jsonb;
+  v_taxability_event_after_json jsonb;
 begin
   if p_pay_date is null then
     raise exception 'pay_date is required';
@@ -26143,7 +26144,16 @@ begin
         'source_corrected_paid_amount', v_target_case_row.source_corrected_paid_amount,
         'taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
         'status', 'ACTIVE'
-      );
+      )
+      || CASE
+        WHEN v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+         AND v_case_taxability IS NOT NULL THEN jsonb_build_object(
+          'before_taxability', null,
+          'after_taxability', v_case_taxability::text,
+          'inferred_from_open_components', true
+        )
+        ELSE '{}'::jsonb
+      END;
     else
       v_case_before_json := jsonb_build_object(
         'case_type', v_existing_case_row.old_case_type::text,
@@ -26155,7 +26165,13 @@ begin
         'taxability', CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END,
         'linked_shift_date', case when v_existing_case_row.old_linked_shift_date is null then null else v_existing_case_row.old_linked_shift_date::text end,
         'baseline_signature', v_existing_case_row.old_baseline_signature
-      );
+      )
+      || CASE
+        WHEN v_existing_case_row.old_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum THEN jsonb_build_object(
+          'before_taxability', CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END
+        )
+        ELSE '{}'::jsonb
+      END;
 
       update public.pay_advances pa
       set
@@ -26210,7 +26226,16 @@ begin
         'taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
         'linked_shift_date', case when v_target_case_row.linked_shift_date is null then null else v_target_case_row.linked_shift_date::text end,
         'baseline_signature', v_target_case_row.baseline_signature
-      );
+      )
+      || CASE
+        WHEN v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+         AND v_existing_case_row.old_taxability IS DISTINCT FROM v_case_taxability THEN jsonb_build_object(
+          'before_taxability', CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END,
+          'after_taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
+          'inferred_from_open_components', true
+        )
+        ELSE '{}'::jsonb
+      END;
     end if;
 
     insert into pg_temp.tmp_sync_case_links (
@@ -26427,6 +26452,76 @@ begin
       v_target_case_row.components_sync_json,
       p_actor_user_id
     );
+
+    if v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then
+      select pa.taxability
+      into v_synced_before_taxability
+      from public.pay_advances pa
+      where pa.id = v_target_case_row.finance_case_id
+      limit 1;
+
+      select
+        case
+          when count(*) = 0 then null::public.pay_finance_taxability_enum
+          when bool_and(pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum) then 'TAXABLE'::public.pay_finance_taxability_enum
+          when bool_and(pfc.classification in (
+            'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum,
+            'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum
+          )) then 'NON_TAXABLE'::public.pay_finance_taxability_enum
+          else null::public.pay_finance_taxability_enum
+        end
+      into v_synced_case_taxability
+      from public.pay_finance_case_components pfc
+      where pfc.finance_case_id = v_target_case_row.finance_case_id
+        and pfc.closed_at_utc is null
+        and round(coalesce(pfc.remaining_source_amount, 0), 2) > 0;
+
+      if v_synced_before_taxability is distinct from v_synced_case_taxability then
+        v_taxability_event_before_json := jsonb_build_object(
+          'case_type', 'OVERPAYMENT',
+          'taxability', case when v_synced_before_taxability is null then null else v_synced_before_taxability::text end
+        );
+
+        v_taxability_event_after_json := jsonb_build_object(
+          'case_type', 'OVERPAYMENT',
+          'taxability', case when v_synced_case_taxability is null then null else v_synced_case_taxability::text end,
+          'before_taxability', case when v_synced_before_taxability is null then null else v_synced_before_taxability::text end,
+          'after_taxability', case when v_synced_case_taxability is null then null else v_synced_case_taxability::text end,
+          'inferred_from_open_components', true
+        );
+
+        update public.pay_advances pa
+        set
+          taxability = v_synced_case_taxability,
+          updated_at = now()
+        where pa.id = v_target_case_row.finance_case_id;
+
+        insert into public.pay_finance_case_events (
+          finance_case_id,
+          event_type,
+          event_at_utc,
+          actor_user_id,
+          pay_batch_id,
+          reservation_id,
+          before_json,
+          after_json,
+          reason,
+          note
+        )
+        values (
+          v_target_case_row.finance_case_id,
+          'TAXABILITY_INFERRED',
+          now(),
+          p_actor_user_id,
+          null,
+          null,
+          v_taxability_event_before_json,
+          v_taxability_event_after_json,
+          'PREVIEW_FINANCE_SYNC',
+          'Inferred overpayment taxability from open finance case components after component sync'
+        );
+      end if;
+    end if;
   end loop;
 
   return jsonb_build_object(
@@ -26446,3 +26541,7 @@ begin
   );
 end;
 $$;
+
+
+
+
