@@ -3676,7 +3676,6 @@ begin;
 --   - date => snoozed until that date (inclusive)
 -- =========================================================
 
-
 CREATE OR REPLACE FUNCTION public.pay_snooze_upsert(
   p_candidate_id uuid,
   p_timesheet_id uuid,
@@ -4343,10 +4342,10 @@ BEGIN
         coalesce(
           jsonb_agg(
             jsonb_build_object(
-              'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+              'week_start', (v_target_week_start + (((sr.seq_no - 1)::integer) * 7))::date,
               'amount', sr.amount_value
             )
-            ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+            ORDER BY (v_target_week_start + (((sr.seq_no - 1)::integer) * 7))::date ASC
           ),
           '[]'::jsonb
         ),
@@ -4534,6 +4533,8 @@ END;
 $$;
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_snooze_clear(
   p_snooze_id uuid,
   p_actor_user_id uuid DEFAULT NULL
@@ -4677,10 +4678,10 @@ BEGIN
         coalesce(
           jsonb_agg(
             jsonb_build_object(
-              'week_start', (v_target_week_start + ((sr.seq_no - 1) * 7))::date,
+              'week_start', (v_target_week_start + (((sr.seq_no - 1)::integer) * 7))::date,
               'amount', sr.amount_value
             )
-            ORDER BY (v_target_week_start + ((sr.seq_no - 1) * 7))::date ASC
+            ORDER BY (v_target_week_start + (((sr.seq_no - 1)::integer) * 7))::date ASC
           ),
           '[]'::jsonb
         ),
