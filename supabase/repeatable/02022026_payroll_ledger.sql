@@ -22238,16 +22238,22 @@ begin
         nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'taxability','')), ''),
         case when vfcr.taxability is null then null else vfcr.taxability::text end
       ) as taxability_txt,
-      coalesce(
-        nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''),
-        case when vfcr.routing_kind is null then null else vfcr.routing_kind::text end
-      ) as routing_kind_txt,
+      case
+        when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), '') is not null
+          then nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), '')
+        when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then 'NORMAL_PAY_ROUTE'
+        when upper(coalesce(pbi.pay_channel::text,'')) = 'UMBRELLA' then 'UMBRELLA_COMPANY'
+        else case when vfcr.routing_kind is null then null else vfcr.routing_kind::text end
+      end as routing_kind_txt,
       coalesce(
         nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'destination_label','')), ''),
         case
+          when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), '') = 'UMBRELLA_COMPANY' then 'umbrella company'
+          when nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), '') = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'one-off specified bank account'
+          when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then 'normal PAYE route'
+          when upper(coalesce(pbi.pay_channel::text,'')) = 'UMBRELLA' then 'umbrella company'
           when case when vfcr.routing_kind is null then null else vfcr.routing_kind::text end = 'UMBRELLA_COMPANY' then 'umbrella company'
           when case when vfcr.routing_kind is null then null else vfcr.routing_kind::text end = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then 'one-off specified bank account'
-          when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then 'normal PAYE route'
           else null
         end
       ) as destination_label,
@@ -22259,18 +22265,28 @@ begin
         when jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
          and pbi.payout_instruction_snapshot_json ? 'appears_on_umbrella_remittance'
           then lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance','false'))) in ('true','1','yes','y','on')
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) = 'UMBRELLA_COMPANY' then true
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) in ('NORMAL_PAY_ROUTE','ONE_OFF_SPECIFIED_BANK_ACCOUNT') then false
+        when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then false
+        when upper(coalesce(pbi.pay_channel::text,'')) = 'UMBRELLA' then true
         else coalesce(vfcr.appears_on_umbrella_remittance, false)
       end as appears_on_umbrella_remittance,
       case
         when jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
          and pbi.payout_instruction_snapshot_json ? 'generates_candidate_payment_advice'
           then lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice','false'))) in ('true','1','yes','y','on')
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then true
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) in ('NORMAL_PAY_ROUTE','UMBRELLA_COMPANY') then false
+        when upper(coalesce(pbi.pay_channel::text,'')) in ('PAYE','UMBRELLA') then false
         else coalesce(vfcr.generates_candidate_payment_advice, false)
       end as generates_candidate_payment_advice,
       case
         when jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
          and pbi.payout_instruction_snapshot_json ? 'is_candidate_directed_oneoff_payout'
           then lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'is_candidate_directed_oneoff_payout','false'))) in ('true','1','yes','y','on')
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then true
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) in ('NORMAL_PAY_ROUTE','UMBRELLA_COMPANY') then false
+        when upper(coalesce(pbi.pay_channel::text,'')) in ('PAYE','UMBRELLA') then false
         else coalesce(vfcr.is_candidate_directed_oneoff_payout, false)
       end as is_candidate_directed_oneoff_payout,
       case
@@ -22786,12 +22802,19 @@ begin
         when jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
          and pbi.payout_instruction_snapshot_json ? 'appears_on_umbrella_remittance'
           then lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance','false'))) in ('true','1','yes','y','on')
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) = 'UMBRELLA_COMPANY' then true
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) in ('NORMAL_PAY_ROUTE','ONE_OFF_SPECIFIED_BANK_ACCOUNT') then false
+        when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then false
+        when upper(coalesce(pbi.pay_channel::text,'')) = 'UMBRELLA' then true
         else coalesce(vfcr.appears_on_umbrella_remittance, false)
       end as appears_on_umbrella_remittance,
       case
         when jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
          and pbi.payout_instruction_snapshot_json ? 'generates_candidate_payment_advice'
           then lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice','false'))) in ('true','1','yes','y','on')
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then true
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) in ('NORMAL_PAY_ROUTE','UMBRELLA_COMPANY') then false
+        when upper(coalesce(pbi.pay_channel::text,'')) in ('PAYE','UMBRELLA') then false
         else coalesce(vfcr.generates_candidate_payment_advice, false)
       end as generates_candidate_payment_advice
     from public.pay_batch_candidates pbc
@@ -22847,12 +22870,19 @@ begin
         when jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
          and pbi.payout_instruction_snapshot_json ? 'appears_on_umbrella_remittance'
           then lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'appears_on_umbrella_remittance','false'))) in ('true','1','yes','y','on')
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) = 'UMBRELLA_COMPANY' then true
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) in ('NORMAL_PAY_ROUTE','ONE_OFF_SPECIFIED_BANK_ACCOUNT') then false
+        when upper(coalesce(pbi.pay_channel::text,'')) = 'PAYE' then false
+        when upper(coalesce(pbi.pay_channel::text,'')) = 'UMBRELLA' then true
         else coalesce(vfcr.appears_on_umbrella_remittance, false)
       end as appears_on_umbrella_remittance,
       case
         when jsonb_typeof(pbi.payout_instruction_snapshot_json) = 'object'
          and pbi.payout_instruction_snapshot_json ? 'generates_candidate_payment_advice'
           then lower(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'generates_candidate_payment_advice','false'))) in ('true','1','yes','y','on')
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT' then true
+        when upper(coalesce(nullif(btrim(coalesce(pbi.payout_instruction_snapshot_json->>'routing_kind','')), ''), '')) in ('NORMAL_PAY_ROUTE','UMBRELLA_COMPANY') then false
+        when upper(coalesce(pbi.pay_channel::text,'')) in ('PAYE','UMBRELLA') then false
         else coalesce(vfcr.generates_candidate_payment_advice, false)
       end as generates_candidate_payment_advice
     from public.pay_batch_candidates pbc
@@ -23280,6 +23310,7 @@ begin
   );
 end;
 $$;
+
 
 
 
