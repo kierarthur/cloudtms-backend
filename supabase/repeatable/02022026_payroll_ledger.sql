@@ -25392,7 +25392,6 @@ end;
 $$;
 
 
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -26058,8 +26057,8 @@ begin
         END,
         CASE
           WHEN COUNT(*) = 0 THEN NULL::public.pay_finance_routing_kind_enum
-          WHEN BOOL_AND(COALESCE(normalized_component.source_pay_method = 'PAYE', false)) THEN 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
-          WHEN BOOL_AND(COALESCE(normalized_component.source_pay_method = 'UMBRELLA', false)) THEN 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum
+          WHEN upper(coalesce(v_target_case_row.candidate_pay_method, '')) = 'PAYE' THEN 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
+          WHEN upper(coalesce(v_target_case_row.candidate_pay_method, '')) = 'UMBRELLA' THEN 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum
           ELSE NULL::public.pay_finance_routing_kind_enum
         END
       INTO
@@ -26554,8 +26553,8 @@ begin
         end,
         case
           when count(*) = 0 then null::public.pay_finance_routing_kind_enum
-          when bool_and(upper(coalesce(pfc.source_pay_method, '')) = 'PAYE') then 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
-          when bool_and(upper(coalesce(pfc.source_pay_method, '')) = 'UMBRELLA') then 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum
+          when v_scope = 'PAYE' then 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
+          when v_scope = 'UMBRELLA' then 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum
           else null::public.pay_finance_routing_kind_enum
         end
       into
@@ -26644,6 +26643,7 @@ begin
   );
 end;
 $$;
+
 
 
 
