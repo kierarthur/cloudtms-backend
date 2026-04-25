@@ -336,19 +336,7 @@ active_item_ids AS (
   WHERE pbi.timesheet_id IS NOT NULL
     AND COALESCE(pbi.is_voided, false) = false
     AND pbi.pay_channel IN ('PAYE','UMBRELLA')
-    AND UPPER(COALESCE(pb.status,'')) IN (
-      'DRAFT',
-      'DRAFT_CREATED',
-      'READY',
-      'WAITING_BANK_CONFIRM',
-      'PARTIAL',
-      'FAILED',
-      'BLOCKED_FUNDS',
-      'SCHEDULED',
-      'EXECUTING',
-      'AWAITING_AUTHORISATION',
-      'AUTHORISED_FOR_PAYMENT'
-    )
+    AND public._pay_batch_status_is_active_reservation(pb.status)
     AND pbi.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
 ),
 reserved_keyed AS (
@@ -12423,6 +12411,8 @@ declare
   v_paye_net_diff_ct int := 0;
 
   v_batch_created_at_utc timestamptz;
+  v_batch_status text;
+  v_batch_is_active_reservation boolean := false;
   v_same_week_paye_override_used boolean := false;
   v_paye_guardrails jsonb := '{}'::jsonb;
 
@@ -12440,11 +12430,13 @@ begin
     pb.pay_date,
     pb.batch_kind_fixed,
     pb.created_at_utc,
+    upper(coalesce(pb.status, '')),
     coalesce(pb.same_week_paye_override_used, false)
   into
     v_pay_date,
     v_batch_kind_fixed,
     v_batch_created_at_utc,
+    v_batch_status,
     v_same_week_paye_override_used
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -12453,6 +12445,8 @@ begin
   if v_pay_date is null then
     raise exception 'pay_batch_validate_freshness: pay_batch_id not found (%).', p_pay_batch_id::text;
   end if;
+
+  v_batch_is_active_reservation := public._pay_batch_status_is_active_reservation(v_batch_status);
 
   v_week_start := public._pay_week_start_monday(v_pay_date);
 
@@ -12592,147 +12586,188 @@ begin
   v_ts_changed_ct := 0;
 
   ---------------------------------------------------------------------------
-  -- RESERVATION_CHANGED: compare this-batch stable keys to helper outstanding
-  -- in the helper's canonical key space, but neutralize this batch's own
-  -- reserved amount before deciding drift. A fresh draft should net to zero
-  -- outstanding residual on every stable key reserved by this batch.
+  -- RESERVATION_CHANGED: compare this batch's frozen source entitlement
+  -- against the current entitlement available before this batch.
   --
-  -- Policy X (post-draft): batch artifacts are authoritative. This validator
-  -- must prefer frozen economic key identity first, then frozen basis/snapshot,
-  -- and must never fall back to live finance-component identity.
+  -- Policy X (post-draft): the batch side is resolved only from frozen
+  -- batch artifacts via _pay_batch_item_economic_components. Current
+  -- live truth is comparison-only via _pay_current_timesheet_entitlement_components.
+  -- This section must not call the broad outstanding helper, must not
+  -- remap batch items from live TSFIN, and must not validate resolved rows
+  -- against target payout amounts.
   ---------------------------------------------------------------------------
-  insert into pg_temp.tmp_fresh_key_diffs (
-    timesheet_id,
-    key_type,
-    key_value,
-    expected_ex,
-    actual_ex,
-    ord
-  )
-  with
-  inp as (
-    select coalesce(
-      (
-        select array_agg(distinct t0.x)
-        from unnest(coalesce(v_ts_ids, array[]::uuid[])) as t0(x)
-        where t0.x is not null
-      ),
-      array[]::uuid[]
-    ) as ts_ids
-  ),
-  this_components_raw as (
+  if v_batch_is_active_reservation then
+    insert into pg_temp.tmp_fresh_key_diffs (
+      timesheet_id,
+      key_type,
+      key_value,
+      expected_ex,
+      actual_ex,
+      ord
+    )
+    with
+    this_components_raw as (
+      select
+        pbec.pay_batch_item_id,
+        pbec.timesheet_id,
+        upper(nullif(btrim(coalesce(pbec.item_type, '')), '')) as item_type,
+        upper(nullif(btrim(coalesce(pbec.key_type, '')), '')) as key_type,
+        nullif(btrim(coalesce(pbec.key_value, '')), '') as key_value,
+        pbec.source_amount_ex_vat as source_amount_ex_vat_raw,
+        pbec.target_amount_ex_vat as target_amount_ex_vat_raw,
+        nullif(btrim(coalesce(pbec.key_resolution_failure_reason, '')), '') as key_resolution_failure_reason
+      from public._pay_batch_item_economic_components(
+        p_pay_batch_id => p_pay_batch_id,
+        p_pay_batch_item_ids => null::uuid[]
+      ) as pbec
+      where upper(nullif(btrim(coalesce(pbec.item_type, '')), '')) in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+    ),
+    this_component_resolution_failures as (
+      select
+        tcr.timesheet_id,
+        case
+          when tcr.key_resolution_failure_reason is not null then tcr.key_resolution_failure_reason
+          when tcr.key_type is null or tcr.key_value is null then 'KEY_RESOLUTION_FAILURE'
+          when tcr.key_type not in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE') then 'KEY_RESOLUTION_FAILURE'
+          when tcr.key_type = 'TS_DAY' and tcr.key_value !~ '^\d{4}-\d{2}-\d{2}$' then 'TS_DAY_KEY_VALUE_NOT_DATE'
+          when tcr.source_amount_ex_vat_raw is null then 'SOURCE_RESOLUTION_FAILURE'
+          else 'SOURCE_RESOLUTION_FAILURE'
+        end as key_type,
+        coalesce(tcr.pay_batch_item_id::text, 'UNKNOWN_PAY_BATCH_ITEM') as key_value,
+        0::numeric(12,2) as expected_ex,
+        1::numeric(12,2) as actual_ex,
+        2 as ord
+      from this_components_raw as tcr
+      where tcr.key_resolution_failure_reason is not null
+         or tcr.key_type is null
+         or tcr.key_value is null
+         or tcr.key_type not in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+         or (tcr.key_type = 'TS_DAY' and tcr.key_value !~ '^\d{4}-\d{2}-\d{2}$')
+         or tcr.source_amount_ex_vat_raw is null
+    ),
+    this_components as (
+      select
+        tcr.timesheet_id,
+        tcr.key_type,
+        tcr.key_value,
+        round(sum(round(coalesce(tcr.source_amount_ex_vat_raw, 0), 2)), 2)::numeric(12,2) as current_source_ex_vat
+      from this_components_raw as tcr
+      where tcr.timesheet_id is not null
+        and tcr.key_type is not null
+        and tcr.key_value is not null
+        and tcr.key_type in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+        and not (tcr.key_type = 'TS_DAY' and tcr.key_value !~ '^\d{4}-\d{2}-\d{2}$')
+        and tcr.key_resolution_failure_reason is null
+        and tcr.source_amount_ex_vat_raw is not null
+      group by
+        tcr.timesheet_id,
+        tcr.key_type,
+        tcr.key_value
+    ),
+    current_truth_baseline as (
+      select
+        ctec.timesheet_id,
+        upper(nullif(btrim(coalesce(ctec.key_type, '')), '')) as key_type,
+        nullif(btrim(coalesce(ctec.key_value, '')), '') as key_value,
+        round(sum(coalesce(ctec.truth_ex_vat, 0)), 2)::numeric(12,2) as truth_ex_vat,
+        round(sum(coalesce(ctec.baseline_ex_vat, 0)), 2)::numeric(12,2) as baseline_ex_vat
+      from public._pay_current_timesheet_entitlement_components(v_ts_ids) as ctec
+      where ctec.timesheet_id is not null
+        and ctec.key_type is not null
+        and btrim(ctec.key_type) <> ''
+        and ctec.key_value is not null
+        and btrim(ctec.key_value) <> ''
+        and upper(nullif(btrim(coalesce(ctec.key_type, '')), '')) in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+        and not (
+          upper(nullif(btrim(coalesce(ctec.key_type, '')), '')) = 'TS_DAY'
+          and nullif(btrim(coalesce(ctec.key_value, '')), '') !~ '^\d{4}-\d{2}-\d{2}$'
+        )
+      group by
+        ctec.timesheet_id,
+        upper(nullif(btrim(coalesce(ctec.key_type, '')), '')),
+        nullif(btrim(coalesce(ctec.key_value, '')), '')
+    ),
+    all_reserved as (
+      select
+        rc.timesheet_id,
+        upper(nullif(btrim(coalesce(rc.key_type, '')), '')) as key_type,
+        nullif(btrim(coalesce(rc.key_value, '')), '') as key_value,
+        round(sum(coalesce(rc.amount_ex_vat, 0)), 2)::numeric(12,2) as all_reserved_ex_vat
+      from public._pay_reserved_components(v_ts_ids) as rc
+      where rc.timesheet_id is not null
+        and rc.key_type is not null
+        and btrim(rc.key_type) <> ''
+        and rc.key_value is not null
+        and btrim(rc.key_value) <> ''
+        and upper(nullif(btrim(coalesce(rc.key_type, '')), '')) in ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE')
+        and not (
+          upper(nullif(btrim(coalesce(rc.key_type, '')), '')) = 'TS_DAY'
+          and nullif(btrim(coalesce(rc.key_value, '')), '') !~ '^\d{4}-\d{2}-\d{2}$'
+        )
+      group by
+        rc.timesheet_id,
+        upper(nullif(btrim(coalesce(rc.key_type, '')), '')),
+        nullif(btrim(coalesce(rc.key_value, '')), '')
+    ),
+    reservation_comparison as (
+      select
+        tc.timesheet_id,
+        tc.key_type,
+        tc.key_value,
+        tc.current_source_ex_vat as expected_ex,
+        round(
+          coalesce(ctb.truth_ex_vat, 0)
+          - coalesce(ctb.baseline_ex_vat, 0)
+          - (
+              coalesce(ar.all_reserved_ex_vat, 0)
+              - coalesce(tc.current_source_ex_vat, 0)
+            ),
+          2
+        )::numeric(12,2) as actual_ex,
+        2 as ord
+      from this_components as tc
+      left join current_truth_baseline as ctb
+        on ctb.timesheet_id = tc.timesheet_id
+       and ctb.key_type = tc.key_type
+       and ctb.key_value = tc.key_value
+      left join all_reserved as ar
+        on ar.timesheet_id = tc.timesheet_id
+       and ar.key_type = tc.key_type
+       and ar.key_value = tc.key_value
+    ),
+    reservation_mismatches as (
+      select
+        rc.timesheet_id,
+        rc.key_type,
+        rc.key_value,
+        rc.expected_ex,
+        rc.actual_ex,
+        rc.ord
+      from reservation_comparison as rc
+      where abs(round(coalesce(rc.actual_ex, 0), 2) - round(coalesce(rc.expected_ex, 0), 2)) > 0.01
+    )
     select
-      pbec.pay_batch_item_id,
-      pbec.timesheet_id,
-      upper(nullif(btrim(coalesce(pbec.item_type, '')), '')) as item_type,
-      upper(nullif(btrim(coalesce(pbec.key_type, '')), '')) as key_type,
-      nullif(btrim(coalesce(pbec.key_value, '')), '') as key_value,
-      round(coalesce(pbec.source_amount_ex_vat, 0), 2)::numeric(12,2) as amount_ex_vat,
-      pbec.source_amount_ex_vat as source_amount_ex_vat_raw,
-      nullif(btrim(coalesce(pbec.key_resolution_failure_reason, '')), '') as key_resolution_failure_reason
-    from public._pay_batch_item_economic_components(
-      p_pay_batch_id => p_pay_batch_id,
-      p_pay_batch_item_ids => null::uuid[]
-    ) pbec
-    where upper(nullif(btrim(coalesce(pbec.item_type, '')), '')) in ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
-  ),
-  this_component_resolution_failures as (
-    select
-      tcr.timesheet_id,
-      case
-        when tcr.key_type is null
-          or tcr.key_value is null
-          or tcr.key_resolution_failure_reason is not null
-          then 'KEY_RESOLUTION_FAILURE'
-        else 'SOURCE_RESOLUTION_FAILURE'
-      end as key_type,
-      tcr.pay_batch_item_id::text as key_value,
-      0::numeric(12,2) as expected_ex,
-      1::numeric(12,2) as actual_ex,
-      2 as ord
-    from this_components_raw tcr
-    where tcr.key_type is null
-       or tcr.key_value is null
-       or tcr.key_resolution_failure_reason is not null
-       or tcr.source_amount_ex_vat_raw is null
-  ),
-  this_components as (
-    select
-      tcr.timesheet_id,
-      tcr.key_type,
-      tcr.key_value,
-      round(sum(coalesce(tcr.amount_ex_vat, 0)), 2)::numeric(12,2) as amount_ex_vat
-    from this_components_raw tcr
-    where tcr.timesheet_id is not null
-      and tcr.key_type is not null
-      and tcr.key_value is not null
-      and tcr.key_resolution_failure_reason is null
-      and tcr.source_amount_ex_vat_raw is not null
-    group by
-      tcr.timesheet_id,
-      tcr.key_type,
-      tcr.key_value
-  ),
-  helper_outstanding_raw as (
-    select
-      hoc.timesheet_id,
-      upper(nullif(btrim(coalesce(hoc.key_type,'')), '')) as key_type,
-      nullif(btrim(coalesce(hoc.key_value,'')), '') as key_value,
-      round(coalesce(hoc.outstanding_ex_vat, 0), 2)::numeric(12,2) as outstanding_ex_vat
-    from public._pay_outstanding_components((select inp.ts_ids from inp)) hoc
-    where hoc.timesheet_id is not null
-      and nullif(btrim(coalesce(hoc.key_type,'')), '') is not null
-      and nullif(btrim(coalesce(hoc.key_value,'')), '') is not null
-  ),
-  helper_outstanding as (
-    select
-      hor.timesheet_id,
-      hor.key_type,
-      hor.key_value,
-      round(sum(coalesce(hor.outstanding_ex_vat, 0)), 2)::numeric(12,2) as outstanding_ex_vat
-    from helper_outstanding_raw hor
-    group by
-      hor.timesheet_id,
-      hor.key_type,
-      hor.key_value
-  ),
-  reservation_mismatches as (
-    select
-      tc.timesheet_id,
-      tc.key_type,
-      tc.key_value,
-      0::numeric(12,2) as expected_ex,
-      round(coalesce(ho.outstanding_ex_vat, 0) + coalesce(tc.amount_ex_vat, 0), 2)::numeric(12,2) as actual_ex,
-      2 as ord
-    from this_components tc
-    left join helper_outstanding ho
-      on ho.timesheet_id = tc.timesheet_id
-     and ho.key_type = tc.key_type
-     and ho.key_value = tc.key_value
-    where round(coalesce(ho.outstanding_ex_vat, 0) + coalesce(tc.amount_ex_vat, 0), 2) <> 0
-  )
-  select
-    tcrf.timesheet_id,
-    tcrf.key_type,
-    tcrf.key_value,
-    tcrf.expected_ex,
-    tcrf.actual_ex,
-    tcrf.ord
-  from this_component_resolution_failures tcrf
+      tcrf.timesheet_id,
+      tcrf.key_type,
+      tcrf.key_value,
+      tcrf.expected_ex,
+      tcrf.actual_ex,
+      tcrf.ord
+    from this_component_resolution_failures as tcrf
 
-  union all
+    union all
 
-  select
-    rm.timesheet_id,
-    rm.key_type,
-    rm.key_value,
-    rm.expected_ex,
-    rm.actual_ex,
-    rm.ord
-  from reservation_mismatches rm;
+    select
+      rm.timesheet_id,
+      rm.key_type,
+      rm.key_value,
+      rm.expected_ex,
+      rm.actual_ex,
+      rm.ord
+    from reservation_mismatches as rm;
+  end if;
 
-  
-select count(*)::int
+  select count(*)::int
   into v_key_diff_ct
   from pg_temp.tmp_fresh_key_diffs;
 
@@ -14143,6 +14178,8 @@ select count(*)::int
   );
 end;
 $function$;
+
+
 
 
 create or replace function public.pay_batch_export_csv_rows(
