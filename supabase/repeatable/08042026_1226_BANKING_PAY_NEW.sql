@@ -14836,7 +14836,6 @@ begin
               'taxable_channel_restructure_resolution', g.taxable_channel_restructure_resolution_json
             )
           ) as case_resolution_summary_json,
-          g.taxable_channel_restructure_resolution_json,
           g.case_components_json
         from grouped g
   
@@ -14849,8 +14848,6 @@ begin
   );
 end;
 $function$;
-
-
 
 
 
