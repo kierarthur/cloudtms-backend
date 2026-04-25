@@ -120897,6 +120897,13 @@ if (req.method === 'POST' && p === '/api/banking/pay/snooze/upsert') {
 }
 
 {
+  const m = matchPath(p, '/api/banking/pay/finance-cases/:id/taxable-channel-restructure/suggestion');
+  if (m && (req.method === 'GET' || req.method === 'POST')) {
+    return handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(env, req, user, m.id);
+  }
+}
+
+{
   const m = matchPath(p, '/api/banking/pay/finance-cases/:id/taxable-channel-restructure');
   if (m && req.method === 'POST') {
     return handleBankingPayFinanceCaseTaxableChannelRestructure(env, req, user, m.id);
@@ -120907,6 +120914,13 @@ if (req.method === 'POST' && p === '/api/banking/pay/snooze/upsert') {
   const m = matchPath(p, '/api/banking/pay/finance-cases/:id/resolve-channel-change');
   if (m && req.method === 'POST') {
     return handleBankingPayFinanceCaseTaxableChannelRestructure(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/manual-debt-adjustments/:id/resolve-channel-change');
+  if (m && req.method === 'POST') {
+    return handleBankingPayTaxableManualDebtResolution(env, req, user, m.id);
   }
 }
 
@@ -120957,21 +120971,6 @@ if (req.method === 'POST' && p === '/api/banking/finance/manual-debt-adjustments
   }
 }
 
-
-
-{
-  const m = matchPath(p, '/api/banking/pay/finance-cases/:id/taxable-channel-restructure/suggestion');
-  if (m && (req.method === 'GET' || req.method === 'POST')) {
-    return handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(env, req, user, m.id);
-  }
-}
-
-{
-  const m = matchPath(p, '/api/banking/finance/manual-debt-adjustments/:id');
-  if (m && req.method === 'PATCH') {
-    return handleBankingManualDebtAdjustmentUpdate(env, req, user, m.id);
-  }
-}
 
 {
   const m = matchPath(p, '/api/banking/finance/cases/:id/pause');
@@ -122607,12 +122606,6 @@ if (req.method === 'GET' && p === '/api/comms/by-recipient') {
       // =============================================================================
       if (req.method === 'GET' && p === '/api/funnel/timesheets') return handleFunnelTimesheets(env, req);
       if (req.method === 'GET' && p === '/api/invoices/precheck') return handleInvoicesPrecheck(env, req);
-{
-  const m = matchPath(p, '/api/banking/pay/manual-debt-adjustments/:id/resolve-channel-change');
-  if (m && req.method === 'POST') {
-    return handleBankingPayTaxableManualDebtResolution(env, req, user, m.id);
-  }
-}
 
 // ─────────────────────────────────────────────────────────────
 // Users (admin) + self-service password change
