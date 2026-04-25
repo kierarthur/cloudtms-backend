@@ -27710,6 +27710,22 @@ BEGIN
         OR (mi.item_type = 'EXPENSE_DELTA' AND (mi.source_ref = 'additional' OR mi.source_ref LIKE 'additional:%'))
       )
   ),
+  exact_component_display_seed AS (
+    SELECT
+      ecs.*,
+      (
+        COALESCE(ecs.is_rate_bearing, false)
+        OR (
+          ecs.item_type = 'SEGMENT_DELTA'
+          AND ecs.frozen_component_classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          AND COALESCE(ecs.bucket_code, '') IN ('DAY', 'NIGHT', 'SAT', 'SUN', 'BH')
+          AND ecs.target_units IS NOT NULL
+          AND ecs.target_units > 0
+          AND ecs.target_rate IS NOT NULL
+        )
+      ) AS effective_is_rate_bearing
+    FROM exact_component_seed AS ecs
+  ),
   exact_component_lines AS (
     SELECT
       ecs.pay_batch_item_id,
@@ -27736,14 +27752,14 @@ BEGIN
           END
         )
       END AS unit_name,
-      CASE WHEN ecs.is_rate_bearing THEN ecs.target_units ELSE NULL::numeric END AS units,
-      CASE WHEN ecs.is_rate_bearing THEN ecs.target_rate ELSE NULL::numeric END AS rate,
+      CASE WHEN ecs.effective_is_rate_bearing THEN ecs.target_units ELSE NULL::numeric END AS units,
+      CASE WHEN ecs.effective_is_rate_bearing THEN ecs.target_rate ELSE NULL::numeric END AS rate,
       ecs.target_pay_ex_vat AS amount_ex_vat,
       ROUND(COALESCE(ecs.frozen_target_amount_vat, 0), 2) AS amount_vat,
       ROUND(COALESCE(ecs.frozen_target_amount_inc_vat, ecs.target_pay_ex_vat + COALESCE(ecs.frozen_target_amount_vat, 0)), 2) AS amount_inc_vat,
       jsonb_strip_nulls(
         jsonb_build_object(
-          'component_semantics', CASE WHEN ecs.is_rate_bearing THEN 'RATE_BEARING' ELSE COALESCE(NULLIF(ecs.component_semantics,''), 'AMOUNT_LED') END,
+          'component_semantics', CASE WHEN ecs.effective_is_rate_bearing THEN 'RATE_BEARING' ELSE COALESCE(NULLIF(ecs.component_semantics,''), 'AMOUNT_LED') END,
           'finance_case_id', CASE WHEN ecs.finance_case_id IS NULL THEN NULL ELSE ecs.finance_case_id::text END,
           'finance_component_id', CASE WHEN ecs.finance_component_id IS NULL THEN NULL ELSE ecs.finance_component_id::text END,
           'component_key_type', ecs.component_key_type,
@@ -27785,7 +27801,7 @@ BEGIN
           )
         )
       ) AS meta_json
-    FROM exact_component_seed AS ecs
+    FROM exact_component_display_seed AS ecs
   ),
   exact_component_item_ids AS (
     SELECT DISTINCT ecl.pay_batch_item_id
@@ -27902,6 +27918,7 @@ BEGIN
   );
 END;
 $function$;
+
 
 
 CREATE OR REPLACE FUNCTION public.pay_batch_assert_integrity(
