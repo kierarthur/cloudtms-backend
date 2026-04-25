@@ -170,6 +170,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -497,13 +498,21 @@ begin
         abs(
           coalesce(
             par.reserved_source_amount,
+            pbi_source.helper_source_reservation_amount,
             pbi.frozen_source_amount,
             case
               when pbi.id is not null
+               and par.reserved_source_amount is null
+               and pbi_source.helper_source_reservation_amount is null
                and pbi.frozen_source_amount is null
+               and pbi.finance_case_id is null
+               and pbi.finance_component_id is null
                and pbi.frozen_target_amount_ex_vat is null
                and pbi.frozen_resolution_mode is null
+               and pbi.frozen_resolution_payload_json is null
                and pbi.frozen_resolution_result_json is null
+               and coalesce(pbi.frozen_component_snapshot_json, '{}'::jsonb) = '{}'::jsonb
+               and coalesce(pbi.frozen_source_basis_json, '{}'::jsonb) = '{}'::jsonb
                 then coalesce(pbi.amount_ex_vat, pbi.amount_inc_vat, par.reserved_amount, 0)
               when pbi.id is null
                and par.reserved_source_amount is null
@@ -517,6 +526,10 @@ begin
     from public.pay_advance_reservations par
     left join public.pay_batch_items pbi
       on pbi.id = par.pay_batch_item_id
+    left join lateral (
+      select public._pay_batch_item_source_reservation_amount_ex_vat(pbi.id) as helper_source_reservation_amount
+    ) as pbi_source
+      on true
     where par.pay_batch_id = p_pay_batch_id
       and upper(coalesce(par.status,'')) = 'RELEASED'
       and par.released_at_utc = v_cancelled_at_utc
@@ -25380,8 +25393,6 @@ $$;
 
 
 
-
-
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
   p_week_ending_cutoff date,
@@ -25426,8 +25437,13 @@ declare
   v_open_case_candidate record;
   v_target_case_amount_ex numeric(12,2);
   v_case_taxability public.pay_finance_taxability_enum := NULL;
+  v_case_routing_kind public.pay_finance_routing_kind_enum := NULL;
   v_synced_case_taxability public.pay_finance_taxability_enum := NULL;
+  v_synced_case_routing_kind public.pay_finance_routing_kind_enum := NULL;
   v_synced_before_taxability public.pay_finance_taxability_enum := NULL;
+  v_synced_before_routing_kind public.pay_finance_routing_kind_enum := NULL;
+  v_case_metadata_component_count integer := 0;
+  v_synced_open_component_count integer := 0;
   v_taxability_event_before_json jsonb;
   v_taxability_event_after_json jsonb;
 begin
@@ -26029,17 +26045,36 @@ begin
     end if;
 
     v_case_taxability := NULL;
+    v_case_routing_kind := NULL;
+    v_case_metadata_component_count := 0;
     IF v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum THEN
       SELECT
+        COUNT(*)::integer,
         CASE
           WHEN COUNT(*) = 0 THEN NULL::public.pay_finance_taxability_enum
           WHEN BOOL_AND(COALESCE(normalized_component.classification = 'TAXABLE_CHANNEL_SENSITIVE', false)) THEN 'TAXABLE'::public.pay_finance_taxability_enum
           WHEN BOOL_AND(COALESCE(normalized_component.classification IN ('REIMBURSEMENT_GROSS_FIXED','NET_PAY_FIXED_RECOVERY'), false)) THEN 'NON_TAXABLE'::public.pay_finance_taxability_enum
           ELSE NULL::public.pay_finance_taxability_enum
+        END,
+        CASE
+          WHEN COUNT(*) = 0 THEN NULL::public.pay_finance_routing_kind_enum
+          WHEN BOOL_AND(COALESCE(normalized_component.source_pay_method = 'PAYE', false)) THEN 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
+          WHEN BOOL_AND(COALESCE(normalized_component.source_pay_method = 'UMBRELLA', false)) THEN 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum
+          ELSE NULL::public.pay_finance_routing_kind_enum
         END
-      INTO v_case_taxability
+      INTO
+        v_case_metadata_component_count,
+        v_case_taxability,
+        v_case_routing_kind
       FROM (
-        SELECT upper(nullif(btrim(coalesce(component_element.value->>'classification', '')), '')) AS classification
+        SELECT
+          upper(nullif(btrim(coalesce(component_element.value->>'classification', '')), '')) AS classification,
+          upper(nullif(btrim(coalesce(
+            component_element.value->>'source_pay_method',
+            component_element.value->>'current_target_pay_method',
+            v_target_case_row.candidate_pay_method,
+            ''
+          )), '')) AS source_pay_method
         FROM jsonb_array_elements(
           CASE
             WHEN jsonb_typeof(v_target_case_row.components_sync_json) = 'array' THEN v_target_case_row.components_sync_json
@@ -26059,7 +26094,8 @@ begin
       round(coalesce(pa.source_corrected_paid_amount, 0), 2)::numeric(12,2) as old_source_corrected_paid_amount,
       pa.linked_shift_date as old_linked_shift_date,
       pa.baseline_signature as old_baseline_signature,
-      pa.taxability as old_taxability
+      pa.taxability as old_taxability,
+      pa.routing_kind as old_routing_kind
     into v_existing_case_row
     from public.pay_advances pa
     where pa.candidate_id = v_target_case_row.candidate_id
@@ -26099,7 +26135,8 @@ begin
         write_off_reason,
         written_off_at_utc,
         written_off_by_user_id,
-        taxability
+        taxability,
+        routing_kind
       )
       values (
         v_target_case_row.candidate_id,
@@ -26123,7 +26160,8 @@ begin
         null,
         null,
         null,
-        v_case_taxability
+        v_case_taxability,
+        v_case_routing_kind
       )
       returning id into v_selected_finance_case_id;
 
@@ -26143,13 +26181,17 @@ begin
         'source_original_paid_amount', v_target_case_row.source_original_paid_amount,
         'source_corrected_paid_amount', v_target_case_row.source_corrected_paid_amount,
         'taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
+        'routing_kind', CASE WHEN v_case_routing_kind IS NULL THEN NULL ELSE v_case_routing_kind::text END,
         'status', 'ACTIVE'
       )
       || CASE
         WHEN v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-         AND v_case_taxability IS NOT NULL THEN jsonb_build_object(
+         AND v_case_metadata_component_count > 0
+         AND (v_case_taxability IS NOT NULL OR v_case_routing_kind IS NOT NULL) THEN jsonb_build_object(
           'before_taxability', null,
-          'after_taxability', v_case_taxability::text,
+          'after_taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
+          'before_routing_kind', null,
+          'after_routing_kind', CASE WHEN v_case_routing_kind IS NULL THEN NULL ELSE v_case_routing_kind::text END,
           'inferred_from_open_components', true
         )
         ELSE '{}'::jsonb
@@ -26163,12 +26205,14 @@ begin
         'source_original_paid_amount', v_existing_case_row.old_source_original_paid_amount,
         'source_corrected_paid_amount', v_existing_case_row.old_source_corrected_paid_amount,
         'taxability', CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END,
+        'routing_kind', CASE WHEN v_existing_case_row.old_routing_kind IS NULL THEN NULL ELSE v_existing_case_row.old_routing_kind::text END,
         'linked_shift_date', case when v_existing_case_row.old_linked_shift_date is null then null else v_existing_case_row.old_linked_shift_date::text end,
         'baseline_signature', v_existing_case_row.old_baseline_signature
       )
       || CASE
         WHEN v_existing_case_row.old_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum THEN jsonb_build_object(
-          'before_taxability', CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END
+          'before_taxability', CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END,
+          'before_routing_kind', CASE WHEN v_existing_case_row.old_routing_kind IS NULL THEN NULL ELSE v_existing_case_row.old_routing_kind::text END
         )
         ELSE '{}'::jsonb
       END;
@@ -26188,7 +26232,14 @@ begin
         status = case when v_new_outstanding_amount > 0 then 'ACTIVE'::public.pay_advance_status_enum else 'PAID_OFF'::public.pay_advance_status_enum end,
         cleared_at_utc = case when v_new_outstanding_amount > 0 then null else coalesce(pa.cleared_at_utc, now()) end,
         cleared_by_user_id = case when v_new_outstanding_amount > 0 then null else coalesce(pa.cleared_by_user_id, p_actor_user_id) end,
-        taxability = v_case_taxability,
+        taxability = case
+          when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum and v_case_metadata_component_count > 0 then v_case_taxability
+          else pa.taxability
+        end,
+        routing_kind = case
+          when v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum and v_case_metadata_component_count > 0 then v_case_routing_kind
+          else pa.routing_kind
+        end,
         updated_at = now()
       where pa.id = v_existing_case_row.finance_case_id;
 
@@ -26206,7 +26257,16 @@ begin
            or v_existing_case_row.old_outstanding_amount is distinct from v_new_outstanding_amount
            or v_existing_case_row.old_source_original_paid_amount is distinct from v_target_case_row.source_original_paid_amount
            or v_existing_case_row.old_source_corrected_paid_amount is distinct from v_target_case_row.source_corrected_paid_amount
-           or v_existing_case_row.old_taxability is distinct from v_case_taxability
+           or (
+             v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+             and v_case_metadata_component_count > 0
+             and v_existing_case_row.old_taxability is distinct from v_case_taxability
+           )
+           or (
+             v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
+             and v_case_metadata_component_count > 0
+             and v_existing_case_row.old_routing_kind is distinct from v_case_routing_kind
+           )
            or v_existing_case_row.old_linked_shift_date is distinct from v_target_case_row.linked_shift_date
            or v_existing_case_row.old_baseline_signature is distinct from v_target_case_row.baseline_signature then
           v_cases_amended := v_cases_amended + 1;
@@ -26223,15 +26283,28 @@ begin
         'outstanding_amount', v_new_outstanding_amount,
         'source_original_paid_amount', v_target_case_row.source_original_paid_amount,
         'source_corrected_paid_amount', v_target_case_row.source_corrected_paid_amount,
-        'taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
+        'taxability', CASE
+          WHEN v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum AND v_case_metadata_component_count > 0 THEN CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END
+          ELSE CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END
+        END,
+        'routing_kind', CASE
+          WHEN v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum AND v_case_metadata_component_count > 0 THEN CASE WHEN v_case_routing_kind IS NULL THEN NULL ELSE v_case_routing_kind::text END
+          ELSE CASE WHEN v_existing_case_row.old_routing_kind IS NULL THEN NULL ELSE v_existing_case_row.old_routing_kind::text END
+        END,
         'linked_shift_date', case when v_target_case_row.linked_shift_date is null then null else v_target_case_row.linked_shift_date::text end,
         'baseline_signature', v_target_case_row.baseline_signature
       )
       || CASE
         WHEN v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-         AND v_existing_case_row.old_taxability IS DISTINCT FROM v_case_taxability THEN jsonb_build_object(
+         AND v_case_metadata_component_count > 0
+         AND (
+           v_existing_case_row.old_taxability IS DISTINCT FROM v_case_taxability
+           OR v_existing_case_row.old_routing_kind IS DISTINCT FROM v_case_routing_kind
+         ) THEN jsonb_build_object(
           'before_taxability', CASE WHEN v_existing_case_row.old_taxability IS NULL THEN NULL ELSE v_existing_case_row.old_taxability::text END,
           'after_taxability', CASE WHEN v_case_taxability IS NULL THEN NULL ELSE v_case_taxability::text END,
+          'before_routing_kind', CASE WHEN v_existing_case_row.old_routing_kind IS NULL THEN NULL ELSE v_existing_case_row.old_routing_kind::text END,
+          'after_routing_kind', CASE WHEN v_case_routing_kind IS NULL THEN NULL ELSE v_case_routing_kind::text END,
           'inferred_from_open_components', true
         )
         ELSE '{}'::jsonb
@@ -26454,13 +26527,22 @@ begin
     );
 
     if v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum then
-      select pa.taxability
-      into v_synced_before_taxability
+      v_synced_open_component_count := 0;
+      v_synced_case_taxability := NULL;
+      v_synced_case_routing_kind := NULL;
+
+      select
+        pa.taxability,
+        pa.routing_kind
+      into
+        v_synced_before_taxability,
+        v_synced_before_routing_kind
       from public.pay_advances pa
       where pa.id = v_target_case_row.finance_case_id
       limit 1;
 
       select
+        count(*)::integer,
         case
           when count(*) = 0 then null::public.pay_finance_taxability_enum
           when bool_and(pfc.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum) then 'TAXABLE'::public.pay_finance_taxability_enum
@@ -26469,30 +26551,46 @@ begin
             'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum
           )) then 'NON_TAXABLE'::public.pay_finance_taxability_enum
           else null::public.pay_finance_taxability_enum
+        end,
+        case
+          when count(*) = 0 then null::public.pay_finance_routing_kind_enum
+          when bool_and(upper(coalesce(pfc.source_pay_method, '')) = 'PAYE') then 'NORMAL_PAY_ROUTE'::public.pay_finance_routing_kind_enum
+          when bool_and(upper(coalesce(pfc.source_pay_method, '')) = 'UMBRELLA') then 'UMBRELLA_COMPANY'::public.pay_finance_routing_kind_enum
+          else null::public.pay_finance_routing_kind_enum
         end
-      into v_synced_case_taxability
+      into
+        v_synced_open_component_count,
+        v_synced_case_taxability,
+        v_synced_case_routing_kind
       from public.pay_finance_case_components pfc
       where pfc.finance_case_id = v_target_case_row.finance_case_id
         and pfc.closed_at_utc is null
         and round(coalesce(pfc.remaining_source_amount, 0), 2) > 0;
 
-      if v_synced_before_taxability is distinct from v_synced_case_taxability then
+      if v_synced_open_component_count > 0
+         and (v_synced_before_taxability is distinct from v_synced_case_taxability
+              or v_synced_before_routing_kind is distinct from v_synced_case_routing_kind) then
         v_taxability_event_before_json := jsonb_build_object(
           'case_type', 'OVERPAYMENT',
-          'taxability', case when v_synced_before_taxability is null then null else v_synced_before_taxability::text end
+          'taxability', case when v_synced_before_taxability is null then null else v_synced_before_taxability::text end,
+          'routing_kind', case when v_synced_before_routing_kind is null then null else v_synced_before_routing_kind::text end
         );
 
         v_taxability_event_after_json := jsonb_build_object(
           'case_type', 'OVERPAYMENT',
           'taxability', case when v_synced_case_taxability is null then null else v_synced_case_taxability::text end,
+          'routing_kind', case when v_synced_case_routing_kind is null then null else v_synced_case_routing_kind::text end,
           'before_taxability', case when v_synced_before_taxability is null then null else v_synced_before_taxability::text end,
           'after_taxability', case when v_synced_case_taxability is null then null else v_synced_case_taxability::text end,
+          'before_routing_kind', case when v_synced_before_routing_kind is null then null else v_synced_before_routing_kind::text end,
+          'after_routing_kind', case when v_synced_case_routing_kind is null then null else v_synced_case_routing_kind::text end,
           'inferred_from_open_components', true
         );
 
         update public.pay_advances pa
         set
           taxability = v_synced_case_taxability,
+          routing_kind = v_synced_case_routing_kind,
           updated_at = now()
         where pa.id = v_target_case_row.finance_case_id;
 
@@ -26510,7 +26608,12 @@ begin
         )
         values (
           v_target_case_row.finance_case_id,
-          'TAXABILITY_INFERRED',
+          case
+            when v_synced_before_taxability is distinct from v_synced_case_taxability
+             and v_synced_before_routing_kind is distinct from v_synced_case_routing_kind then 'HEADER_METADATA_INFERRED'
+            when v_synced_before_taxability is distinct from v_synced_case_taxability then 'TAXABILITY_INFERRED'
+            else 'ROUTING_KIND_INFERRED'
+          end,
           now(),
           p_actor_user_id,
           null,
@@ -26518,7 +26621,7 @@ begin
           v_taxability_event_before_json,
           v_taxability_event_after_json,
           'PREVIEW_FINANCE_SYNC',
-          'Inferred overpayment taxability from open finance case components after component sync'
+          'Inferred overpayment taxability/routing metadata from open finance case components after component sync'
         );
       end if;
     end if;
