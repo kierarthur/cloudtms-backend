@@ -38784,7 +38784,7 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
 async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const actorUserId = String(user?.id || '').trim();
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   if (!uuidRe.test(actorUserId)) {
     return withCORS(env, req, unauthorized('Unauthorized'));
@@ -39066,6 +39066,10 @@ async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(en
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to calculate taxable finance channel restructure suggestion')));
   }
 }
+
+
+
+
 
 
 async function fetchBulkAuthoriseEligibilityFactsMap(env, timesheetIds) {
