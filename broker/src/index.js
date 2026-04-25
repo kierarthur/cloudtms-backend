@@ -9261,6 +9261,7 @@ function clampPlannedToWindow(plan, weekEndingYmd, wew, windowStartYmd, windowEn
   return [];
 }
 
+
 async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, user, sessionId) {
   const id = String(sessionId || '').trim();
   const actorUserId = String(user?.id || '').trim();
@@ -9309,6 +9310,52 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
     if (value === undefined || value === null || value === '') return null;
     if (typeof value !== 'number' || !Number.isFinite(value)) return NaN;
     return Number(value);
+  };
+  const readPositiveNumber = (value) => {
+    if (value === undefined || value === null || String(value).trim() === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : NaN;
+  };
+  const readPositiveInteger = (value) => {
+    if (value === undefined || value === null || String(value).trim() === '') return null;
+    const n = Number(value);
+    if (!Number.isFinite(n) || Math.trunc(n) !== n) return NaN;
+    return n;
+  };
+  const readIsoDate = (value) => {
+    const text = trimStr(value);
+    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+  };
+  const normalizeResolutionPath = (value) => {
+    const text = trimStr(value).toUpperCase();
+    return ['SUGGESTED', 'MANUAL'].includes(text) ? text : '';
+  };
+  const normalizeScheduleMode = (value) => {
+    const text = trimStr(value).toUpperCase();
+    if (!text) return '';
+    if (['BY_WEEKS', 'WEEKS', 'BY_NUMBER_OF_WEEKS', 'NUMBER_OF_WEEKS'].includes(text)) return 'BY_WEEKS';
+    if (['BY_WEEKLY_DUE', 'BY_WEEKLY_AMOUNT', 'WEEKLY_AMOUNT', 'WEEKLY_DUE'].includes(text)) return 'BY_WEEKLY_DUE';
+    return '';
+  };
+  const hasOwnValue = (obj, keys) => keys.some((key) => (
+    Object.prototype.hasOwnProperty.call(obj || {}, key) &&
+    obj[key] !== undefined &&
+    obj[key] !== null &&
+    String(obj[key]).trim() !== ''
+  ));
+  const hasFrontendAuthoritativeConversionValue = (obj) => {
+    const disallowedKeys = [
+      'erni_rate', 'erniRate', 'erni_rate_pct', 'erniRatePct',
+      'erni_component', 'erniComponent', 'erni_component_ex_vat', 'erniComponentExVat',
+      'vat_rate', 'vatRate', 'vat_rate_pct', 'vatRatePct',
+      'vat_amount', 'vatAmount',
+      'suggested_target_remaining_balance', 'suggestedTargetRemainingBalance',
+      'suggested_target_remaining_balance_ex_vat', 'suggestedTargetRemainingBalanceExVat',
+      'suggested_target_remaining_balance_inc_vat', 'suggestedTargetRemainingBalanceIncVat',
+      'suggested_weekly_amount', 'suggestedWeeklyAmount',
+      'suggested_weekly_due', 'suggestedWeeklyDue'
+    ];
+    return disallowedKeys.some((key) => Object.prototype.hasOwnProperty.call(obj || {}, key));
   };
   const normalizeBucketResolution = (bucket, fallback = {}) => {
     const bucketObj = isPlainObject(bucket) ? bucket : null;
@@ -9393,7 +9440,13 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
   const resolveAllLinkedTimesheetsRaw = body.resolve_all_linked_timesheets ?? body.resolveAllLinkedTimesheets;
   const resolutionFamilyRaw = trimStr(body.resolution_family ?? body.resolutionFamily).toUpperCase();
   const hasBucketResolutions = Array.isArray(body.bucket_resolutions) || Array.isArray(body.bucketResolutions);
-  const resolutionFamily = resolutionFamilyRaw || (hasBucketResolutions ? 'BUCKETED' : 'NON_BUCKET');
+  const hasTaxableChannelRestructureShape = !!rawFinanceCaseId && (
+    body.resolution_path !== undefined ||
+    body.resolutionPath !== undefined ||
+    body.effective_pay_date !== undefined ||
+    body.effectivePayDate !== undefined
+  );
+  const resolutionFamily = resolutionFamilyRaw || (hasBucketResolutions ? 'BUCKETED' : (hasTaxableChannelRestructureShape ? 'TAXABLE_CHANNEL_RESTRUCTURE' : 'NON_BUCKET'));
 
   if (!caseKey) {
     return withCORS(env, req, badRequest('case_key is required'));
@@ -9410,13 +9463,92 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
   if (resolveAllLinkedTimesheetsRaw !== undefined && resolveAllLinkedTimesheetsRaw !== null && typeof resolveAllLinkedTimesheetsRaw !== 'boolean') {
     return withCORS(env, req, badRequest('resolve_all_linked_timesheets must be a boolean when supplied'));
   }
-  if (!['BUCKETED', 'NON_BUCKET'].includes(resolutionFamily)) {
-    return withCORS(env, req, badRequest('resolution_family must be BUCKETED or NON_BUCKET'));
+  if (!['BUCKETED', 'NON_BUCKET', 'TAXABLE_CHANNEL_RESTRUCTURE'].includes(resolutionFamily)) {
+    return withCORS(env, req, badRequest('resolution_family must be BUCKETED, NON_BUCKET or TAXABLE_CHANNEL_RESTRUCTURE'));
   }
 
   let resolutionPayloadJson = null;
 
-  if (resolutionFamily === 'BUCKETED') {
+  if (resolutionFamily === 'TAXABLE_CHANNEL_RESTRUCTURE') {
+    if (!candidateId) {
+      return withCORS(env, req, badRequest('candidate_id is required for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+    if (!financeCaseId) {
+      return withCORS(env, req, badRequest('finance_case_id is required for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+    if (hasFrontendAuthoritativeConversionValue(body)) {
+      return withCORS(env, req, badRequest('Frontend-supplied ERNI/VAT conversion totals are not accepted for TAXABLE_CHANNEL_RESTRUCTURE; the backend calculates them.'));
+    }
+
+    const resolutionPath = normalizeResolutionPath(body.resolution_path ?? body.resolutionPath ?? body.path);
+    if (!resolutionPath) {
+      return withCORS(env, req, badRequest('resolution_path must be SUGGESTED or MANUAL for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+
+    const effectivePayDate = readIsoDate(body.effective_pay_date ?? body.effectivePayDate ?? body.pay_date ?? body.payDate);
+    if (!effectivePayDate) {
+      return withCORS(env, req, badRequest('effective_pay_date must be supplied as YYYY-MM-DD for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+
+    const scheduleInputModeRaw = body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode;
+    const scheduleInputMode = normalizeScheduleMode(scheduleInputModeRaw);
+    const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+    const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+    const manualTotalProvided = hasOwnValue(body, ['manual_total_remaining', 'manualTotalRemaining', 'total_remaining_amount', 'totalRemainingAmount', 'target_remaining_balance_ex_vat', 'targetRemainingBalanceExVat']);
+
+    if ((scheduleInputModeRaw !== undefined && scheduleInputModeRaw !== null && trimStr(scheduleInputModeRaw) !== '') && !scheduleInputMode) {
+      return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+    if (weeksTotalProvided && weeklyDueProvided) {
+      return withCORS(env, req, badRequest('Supply either weekly_due or weeks_total, not both, for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+    if (resolutionPath === 'MANUAL' && !scheduleInputMode) {
+      return withCORS(env, req, badRequest('schedule_input_mode is required when TAXABLE_CHANNEL_RESTRUCTURE resolution_path is MANUAL'));
+    }
+    if (resolutionPath === 'MANUAL' && !weeksTotalProvided && !weeklyDueProvided) {
+      return withCORS(env, req, badRequest('weekly_due or weeks_total is required when TAXABLE_CHANNEL_RESTRUCTURE resolution_path is MANUAL'));
+    }
+    if (scheduleInputMode === 'BY_WEEKS' && !weeksTotalProvided) {
+      return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+    }
+    if (scheduleInputMode === 'BY_WEEKLY_DUE' && !weeklyDueProvided) {
+      return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+    }
+
+    const weeksTotal = weeksTotalProvided ? readPositiveInteger(body.weeks_total ?? body.weeksTotal) : null;
+    if (weeksTotalProvided && (!Number.isFinite(weeksTotal) || weeksTotal < 1)) {
+      return withCORS(env, req, badRequest('weeks_total must be an integer greater than 0 for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+
+    const weeklyDue = weeklyDueProvided ? readPositiveNumber(body.weekly_due ?? body.weeklyDue) : null;
+    if (weeklyDueProvided && (!Number.isFinite(weeklyDue) || weeklyDue <= 0)) {
+      return withCORS(env, req, badRequest('weekly_due must be a number greater than 0 for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+
+    const manualTotalRemaining = manualTotalProvided
+      ? readPositiveNumber(body.manual_total_remaining ?? body.manualTotalRemaining ?? body.total_remaining_amount ?? body.totalRemainingAmount ?? body.target_remaining_balance_ex_vat ?? body.targetRemainingBalanceExVat)
+      : null;
+    if (manualTotalProvided && (!Number.isFinite(manualTotalRemaining) || manualTotalRemaining <= 0)) {
+      return withCORS(env, req, badRequest('manual_total_remaining must be a number greater than 0 for TAXABLE_CHANNEL_RESTRUCTURE'));
+    }
+
+    const note = body.note === undefined || body.note === null ? null : trimStr(body.note) || null;
+
+    resolutionPayloadJson = {
+      candidate_id: candidateId,
+      case_key: caseKey,
+      finance_case_id: financeCaseId,
+      ...(linkedTimesheetId ? { linked_timesheet_id: linkedTimesheetId, timesheet_id: linkedTimesheetId } : {}),
+      resolution_family: 'TAXABLE_CHANNEL_RESTRUCTURE',
+      resolution_path: resolutionPath,
+      effective_pay_date: effectivePayDate,
+      ...(scheduleInputMode ? { schedule_input_mode: scheduleInputMode } : {}),
+      ...(weeksTotalProvided ? { weeks_total: weeksTotal } : {}),
+      ...(weeklyDueProvided ? { weekly_due: weeklyDue } : {}),
+      ...(manualTotalProvided ? { manual_total_remaining: manualTotalRemaining } : {}),
+      ...(note ? { note } : {})
+    };
+  } else if (resolutionFamily === 'BUCKETED') {
     const rawBucketResolutions = Array.isArray(body.bucket_resolutions)
       ? body.bucket_resolutions
       : (Array.isArray(body.bucketResolutions) ? body.bucketResolutions : []);
@@ -9540,13 +9672,19 @@ async function handleBankingPayWorkbenchSessionApplyCaseResolution(env, req, use
       }
     }
 
-    return withCORS(env, req, ok(responsePayload));
+    return withCORS(env, req, ok({
+      ...responsePayload,
+      refresh_signal: responsePayload.refresh_signal || {
+        type: 'banking_pay_candidate_refresh',
+        candidate_id: fastLaneCandidateId || candidateId || null,
+        finance_case_id: financeCaseId || null,
+        session_id: id
+      }
+    }));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 
 async function handleBankingPayWorkbenchSessionClearCaseResolution(env, req, user, sessionId) {
   const id = String(sessionId || '').trim();
@@ -13753,6 +13891,8 @@ async function buildPayBatchDetailPdfFromRows(exportObj) {
   const pdfBytes = await pdfDoc.save();
   return pdfBytes;
 }
+
+
 async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -13837,6 +13977,45 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
     if (n == null) return '';
     const abs = Math.abs(n).toFixed(2);
     return n < 0 ? `-£${abs}` : `£${abs}`;
+  };
+  const formatOptionalMoney = (v) => {
+    const n = asNum(v);
+    if (n == null) return '';
+    return `£${n.toFixed(2)}`;
+  };
+  const formatOptionalNumber = (v) => {
+    const n = asNum(v);
+    if (n == null) return '';
+    return n.toFixed(2);
+  };
+  const economicKeyDisplay = (row) => {
+    const kt = safeStr(row?.economic_key_type || row?.key_type || '').trim();
+    const kv = safeStr(row?.economic_key_value || row?.key_value || '').trim();
+    return kt && kv ? `${kt}:${kv}` : '';
+  };
+  const staleReasonsDisplay = (freshness) => {
+    const reasons = freshness && Array.isArray(freshness.stale_reasons) ? freshness.stale_reasons : [];
+    return reasons.map((reason) => {
+      if (reason === null || reason === undefined) return '';
+      if (typeof reason === 'string') return reason;
+      try { return JSON.stringify(reason); } catch { return String(reason); }
+    }).filter(Boolean).join(' | ');
+  };
+  const sourceTargetDetailLine = (row) => {
+    const parts = [];
+    const sourceUnits = formatOptionalNumber(row?.source_units);
+    const targetUnits = formatOptionalNumber(row?.target_units);
+    const sourceRate = formatOptionalMoney(row?.source_rate);
+    const targetRate = formatOptionalMoney(row?.target_rate);
+    const sourceAmount = formatOptionalMoney(row?.source_amount_ex_vat);
+    const targetAmount = formatOptionalMoney(row?.target_amount_paid_ex_vat ?? row?.target_amount_ex_vat);
+    const key = economicKeyDisplay(row);
+    const resolutionMode = safeStr(row?.resolution_mode || '').trim();
+    if (sourceUnits || sourceRate || sourceAmount) parts.push(`Source: ${[sourceUnits ? `${sourceUnits} units` : '', sourceRate ? `rate ${sourceRate}` : '', sourceAmount ? `amount ${sourceAmount}` : ''].filter(Boolean).join(', ')}`);
+    if (targetUnits || targetRate || targetAmount) parts.push(`Target: ${[targetUnits ? `${targetUnits} units` : '', targetRate ? `rate ${targetRate}` : '', targetAmount ? `amount ${targetAmount}` : ''].filter(Boolean).join(', ')}`);
+    if (key) parts.push(`Key: ${key}`);
+    if (resolutionMode) parts.push(`Resolution: ${resolutionMode}`);
+    return parts.join('    ');
   };
   const hasVatValue = (row) => {
     const vat = round2(row?.amount_vat);
@@ -13971,6 +14150,11 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       : {};
 
     const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+    const freshness = (exportObj && typeof exportObj === 'object' && exportObj.freshness && typeof exportObj.freshness === 'object')
+      ? exportObj.freshness
+      : {};
+    const exportIsStale = Boolean(freshness?.is_stale);
+    const exportStaleReasons = staleReasonsDisplay(freshness);
 
     const mmToPt = (mm) => (Number(mm) || 0) * 72 / 25.4;
     const PAGE_W_MM = 210;
@@ -14048,9 +14232,12 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
       drawText(state.page, font, `Pay date: ${payDate}`, M, y + 17, small);
       drawText(state.page, font, `Kind: ${batchKind}`, M, y + 22, small);
       if (generatedAt) drawText(state.page, font, `Generated: ${generatedAt}`, M, y + 27, tiny);
+      if (exportIsStale) {
+        drawText(state.page, fontBold, fitText(fontBold, `Stale metadata included: ${exportStaleReasons || 'batch marked stale'}`, tiny, PAGE_W_MM - (M * 2) - 30), M, y + 31, tiny);
+      }
       drawText(state.page, font, `Page ${state.pageNo}`, PAGE_W_MM - M - 20, y, small);
-      drawLine(state.page, M, y + 31, PAGE_W_MM - M);
-      state.yTop = y + 35;
+      drawLine(state.page, M, exportIsStale ? y + 35 : y + 31, PAGE_W_MM - M);
+      state.yTop = exportIsStale ? y + 39 : y + 35;
     };
 
     const newPage = () => {
@@ -14181,7 +14368,8 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
         for (const row of destinationRows) {
           const label = lineLabel(row);
           const note = meaningfulNote(row);
-          ensureSpace(note ? 10 : 6);
+          const sourceTargetDetail = sourceTargetDetailLine(row);
+          ensureSpace((note ? 3.4 : 0) + (sourceTargetDetail ? 3.4 : 0) + 6);
           drawText(state.page, font, fitText(font, safeStr(row?.work_date || row?.seg_work_date || row?.week_ending_date || row?.repayment_week_start || ''), tiny, cols.date.w), cols.date.x, state.yTop, tiny);
           drawText(state.page, font, fitText(font, safeStr(row?.client_name || ''), tiny, cols.client.w), cols.client.x, state.yTop, tiny);
           drawText(state.page, font, fitText(font, label, tiny, cols.desc.w), cols.desc.x, state.yTop, tiny);
@@ -14193,6 +14381,10 @@ async function handleBankingPayBatchExportDetailPdf(env, req, user, payBatchId) 
             drawText(state.page, fontBold, fitText(fontBold, formatMoney(lineInc(row)), tiny, cols.inc.w), cols.inc.x, state.yTop, tiny);
           }
           state.yTop += 4.0;
+          if (sourceTargetDetail) {
+            drawText(state.page, font, fitText(font, sourceTargetDetail, tiny, PAGE_W_MM - (M * 2) - 6), M + 6, state.yTop, tiny);
+            state.yTop += 3.4;
+          }
           if (note) {
             drawText(state.page, font, fitText(font, `Note: ${note}`, tiny, PAGE_W_MM - (M * 2) - 6), M + 6, state.yTop, tiny);
             state.yTop += 3.4;
@@ -14366,6 +14558,15 @@ async function handleBankingPayTaxableManualDebtResolution(env, req, user, finan
       ? null
       : String(body.note).trim() || null;
 
+  const effectivePayDateRaw = String(body.effective_pay_date ?? body.effectivePayDate ?? body.pay_date ?? body.payDate ?? '').trim();
+  let effectivePayDate = null;
+  if (effectivePayDateRaw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectivePayDateRaw)) {
+      return withCORS(env, req, badRequest('effective_pay_date must be YYYY-MM-DD when supplied'));
+    }
+    effectivePayDate = effectivePayDateRaw;
+  }
+
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
@@ -14477,7 +14678,7 @@ async function handleBankingPayTaxableManualDebtResolution(env, req, user, finan
   };
 
   try {
-    const rpcRes = await sbRpc(env, 'pay_manual_debt_adjustment_resolve_taxable_channel_change', {
+    const rpcRes = await sbRpc(env, 'pay_finance_case_apply_taxable_channel_restructure', {
       p_finance_case_id: financeCaseIdText,
       p_actor_user_id: user.id,
       p_resolution_path: resolutionPath,
@@ -14485,21 +14686,251 @@ async function handleBankingPayTaxableManualDebtResolution(env, req, user, finan
       p_weeks_total: scheduleInputMode === 'BY_WEEKS' ? Math.trunc(weeksTotalRaw) : null,
       p_weekly_due: scheduleInputMode === 'BY_WEEKLY_DUE' ? weeklyDueRaw : null,
       p_manual_total_remaining: resolutionPath === 'MANUAL' ? manualTotalRemainingRaw : null,
+      p_effective_pay_date: effectivePayDate,
       p_note: note
     });
 
-    const payload = unwrapRpc(rpcRes, 'pay_manual_debt_adjustment_resolve_taxable_channel_change');
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_apply_taxable_channel_restructure');
     return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
   } catch (e) {
     const raised = _extractDbRaisedJson(e);
     const raisedRes = _raisedPayloadResponse(raised, e?.status === 404 ? 404 : (e?.status === 409 ? 409 : 400));
     if (raisedRes) return raisedRes;
-    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to resolve taxable manual debt channel change')));
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to apply taxable finance channel restructure')));
   }
 }
 
+async function handleBankingPayFinanceCaseTaxableChannelRestructure(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!financeCaseIdText) {
+    return withCORS(env, req, badRequest('finance_case_id is required'));
+  }
+  if (!uuidRe.test(financeCaseIdText)) {
+    return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+  }
 
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+
+  const normalizeResolutionPath = (raw) => {
+    const s = upperTrim(raw);
+    if (s === 'SUGGESTED') return 'SUGGESTED';
+    if (s === 'MANUAL') return 'MANUAL';
+    return '';
+  };
+
+  const normalizeScheduleMode = (raw) => {
+    const s = upperTrim(raw);
+    if (!s) return '';
+    if (['BY_WEEKS', 'WEEKS', 'BY_NUMBER_OF_WEEKS', 'NUMBER_OF_WEEKS'].includes(s)) return 'BY_WEEKS';
+    if (['BY_WEEKLY_DUE', 'BY_WEEKLY_AMOUNT', 'WEEKLY_AMOUNT', 'WEEKLY_DUE'].includes(s)) return 'BY_WEEKLY_DUE';
+    return '';
+  };
+
+  const hasOwnValue = (obj, keys) => keys.some((key) => (
+    Object.prototype.hasOwnProperty.call(obj || {}, key) &&
+    obj[key] !== undefined &&
+    obj[key] !== null &&
+    String(obj[key]).trim() !== ''
+  ));
+
+  const readPositiveNumber = (value, label) => {
+    if (value === undefined || value === null || String(value).trim() === '') return { value: null };
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return { error: `${label} must be a number greater than 0` };
+    return { value: Math.round(n * 100) / 100 };
+  };
+
+  const readPositiveInteger = (value, label) => {
+    if (value === undefined || value === null || String(value).trim() === '') return { value: null };
+    const n = Number(value);
+    if (!Number.isFinite(n) || Math.trunc(n) !== n || n < 1) return { error: `${label} must be an integer greater than 0` };
+    return { value: Math.trunc(n) };
+  };
+
+  const readIsoDate = (value) => {
+    const text = trimStr(value);
+    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const bodyObj = _safeJsonParse(e.body);
+        if (bodyObj && typeof bodyObj === 'object' && typeof bodyObj.message === 'string') msg = bodyObj.message;
+        if (!msg && bodyObj && typeof bodyObj === 'object' && typeof bodyObj.code === 'string') return bodyObj;
+      }
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const embedded = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (embedded && typeof embedded === 'object' && typeof embedded.message === 'string') msg = embedded.message;
+          if (!msg && embedded && typeof embedded === 'object' && typeof embedded.code === 'string') return embedded;
+        }
+      }
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _raisedPayloadResponse = (payload, fallbackStatus) => {
+    if (!payload || typeof payload !== 'object') return null;
+    const code = String(payload.code || '').trim().toUpperCase();
+    let status = Number.isFinite(Number(fallbackStatus)) ? Number(fallbackStatus) : 400;
+
+    if (code === 'FINANCE_CASE_NOT_FOUND' || code === 'CANDIDATE_NOT_FOUND') {
+      status = 404;
+    } else if (code === 'RESTRUCTURE_NOT_REQUIRED' || code === 'CASE_ALREADY_IN_OPEN_BATCH' || code === 'TAXABLE_CHANNEL_RESTRUCTURE_REQUIRED') {
+      status = 409;
+    }
+
+    return withCORS(env, req, new Response(JSON.stringify(payload), {
+      status,
+      headers: JSON_HEADERS
+    }));
+  };
+
+  const resolutionPath = normalizeResolutionPath(body.resolution_path ?? body.resolutionPath ?? body.path);
+  if (!resolutionPath) {
+    return withCORS(env, req, badRequest('resolution_path must be SUGGESTED or MANUAL'));
+  }
+
+  const effectivePayDate = readIsoDate(body.effective_pay_date ?? body.effectivePayDate ?? body.pay_date ?? body.payDate);
+  if (!effectivePayDate) {
+    return withCORS(env, req, badRequest('effective_pay_date must be supplied as YYYY-MM-DD'));
+  }
+
+  const scheduleInputModeRaw = body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode;
+  const scheduleInputMode = normalizeScheduleMode(scheduleInputModeRaw);
+  const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+  const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+  const manualTotalProvided = hasOwnValue(body, ['manual_total_remaining', 'manualTotalRemaining', 'total_remaining_amount', 'totalRemainingAmount', 'target_remaining_balance_ex_vat', 'targetRemainingBalanceExVat']);
+
+  if ((scheduleInputModeRaw !== undefined && scheduleInputModeRaw !== null && trimStr(scheduleInputModeRaw) !== '') && !scheduleInputMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE'));
+  }
+
+  if (weeksTotalProvided && weeklyDueProvided) {
+    return withCORS(env, req, badRequest('Supply either weekly_due or weeks_total, not both'));
+  }
+
+  if (resolutionPath === 'MANUAL' && !scheduleInputMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode is required when resolution_path is MANUAL'));
+  }
+
+  if (resolutionPath === 'MANUAL' && !weeksTotalProvided && !weeklyDueProvided) {
+    return withCORS(env, req, badRequest('weekly_due or weeks_total is required when resolution_path is MANUAL'));
+  }
+
+  if (scheduleInputMode === 'BY_WEEKS' && !weeksTotalProvided) {
+    return withCORS(env, req, badRequest('weeks_total is required when schedule_input_mode is BY_WEEKS'));
+  }
+
+  if (scheduleInputMode === 'BY_WEEKLY_DUE' && !weeklyDueProvided) {
+    return withCORS(env, req, badRequest('weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE'));
+  }
+
+  const weeksTotalResult = readPositiveInteger(body.weeks_total ?? body.weeksTotal, 'weeks_total');
+  if (weeksTotalResult.error) return withCORS(env, req, badRequest(weeksTotalResult.error));
+
+  const weeklyDueResult = readPositiveNumber(body.weekly_due ?? body.weeklyDue, 'weekly_due');
+  if (weeklyDueResult.error) return withCORS(env, req, badRequest(weeklyDueResult.error));
+
+  const manualTotalResult = readPositiveNumber(
+    body.manual_total_remaining ?? body.manualTotalRemaining ?? body.total_remaining_amount ?? body.totalRemainingAmount ?? body.target_remaining_balance_ex_vat ?? body.targetRemainingBalanceExVat,
+    'manual_total_remaining'
+  );
+  if (manualTotalProvided && manualTotalResult.error) return withCORS(env, req, badRequest(manualTotalResult.error));
+
+  const frontendAuthoritativeKeys = [
+    'erni_rate', 'erniRate', 'erni_rate_pct', 'erniRatePct',
+    'erni_component', 'erniComponent', 'erni_component_ex_vat', 'erniComponentExVat',
+    'vat_rate', 'vatRate', 'vat_rate_pct', 'vatRatePct',
+    'vat_amount', 'vatAmount',
+    'suggested_target_remaining_balance', 'suggestedTargetRemainingBalance',
+    'suggested_target_remaining_balance_ex_vat', 'suggestedTargetRemainingBalanceExVat',
+    'suggested_target_remaining_balance_inc_vat', 'suggestedTargetRemainingBalanceIncVat',
+    'suggested_weekly_amount', 'suggestedWeeklyAmount',
+    'suggested_weekly_due', 'suggestedWeeklyDue'
+  ];
+
+  if (frontendAuthoritativeKeys.some((key) => Object.prototype.hasOwnProperty.call(body || {}, key))) {
+    return withCORS(env, req, badRequest('Frontend-supplied ERNI/VAT conversion totals are not accepted; the backend calculates taxable channel restructure values.'));
+  }
+
+  const note = (body.note === undefined || body.note === null) ? null : String(body.note).trim() || null;
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_finance_case_apply_taxable_channel_restructure', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: actorUserId,
+      p_resolution_path: resolutionPath,
+      p_schedule_input_mode: scheduleInputMode || null,
+      p_weeks_total: weeksTotalResult.value,
+      p_weekly_due: weeklyDueResult.value,
+      p_manual_total_remaining: manualTotalProvided ? manualTotalResult.value : null,
+      p_effective_pay_date: effectivePayDate,
+      p_note: note
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_apply_taxable_channel_restructure');
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+
+    return withCORS(env, req, ok({
+      ...payloadObj,
+      refresh_signal: payloadObj.refresh_signal || {
+        type: 'banking_pay_candidate_refresh',
+        finance_case_id: financeCaseIdText,
+        candidate_id: payloadObj.candidate_id || payloadObj?.after?.candidate_id || payloadObj?.case?.candidate_id || null
+      }
+    }));
+  } catch (e) {
+    const raised = _extractDbRaisedJson(e);
+    const raisedRes = _raisedPayloadResponse(raised, e?.status === 404 ? 404 : (e?.status === 409 ? 409 : 400));
+    if (raisedRes) return raisedRes;
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to apply taxable finance channel restructure')));
+  }
+}
 
 async function handleBankingPayReconcileExternal(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -24302,7 +24733,6 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   }
 }
 
-
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -24394,6 +24824,23 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
   const formatNum = (v) => {
     const n = asNum(v);
     return n == null ? '' : n.toFixed(2);
+  };
+  const formatOptionalNum = (v) => {
+    const n = asNum(v);
+    return n == null ? '' : n.toFixed(2);
+  };
+  const economicKeyDisplay = (row) => {
+    const kt = safeStr(row?.economic_key_type || row?.key_type || '').trim();
+    const kv = safeStr(row?.economic_key_value || row?.key_value || '').trim();
+    return kt && kv ? `${kt}:${kv}` : '';
+  };
+  const staleReasonsDisplay = (freshness) => {
+    const reasons = freshness && Array.isArray(freshness.stale_reasons) ? freshness.stale_reasons : [];
+    return reasons.map((reason) => {
+      if (reason === null || reason === undefined) return '';
+      if (typeof reason === 'string') return reason;
+      try { return JSON.stringify(reason); } catch { return String(reason); }
+    }).filter(Boolean).join(' | ');
   };
   const hasVatValue = (row) => {
     const vat = round2(row?.amount_vat);
@@ -24516,6 +24963,11 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
       : {};
 
     const rows = Array.isArray(exportObj?.rows) ? exportObj.rows : [];
+    const freshness = (exportObj && typeof exportObj === 'object' && exportObj.freshness && typeof exportObj.freshness === 'object')
+      ? exportObj.freshness
+      : {};
+    const exportIsStale = Boolean(freshness?.is_stale);
+    const exportStaleReasons = staleReasonsDisplay(freshness);
     const batchHasVat = rows.some((row) => hasVatValue(row));
 
     const batchId = (batch && batch.id != null) ? String(batch.id) : id;
@@ -24568,6 +25020,18 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
             hours_or_units: normalizeText(unitsDisplay(row)),
             unit_type: normalizeText(unitTypeDisplay(row)),
             rate: normalizeText(formatNum(row?.rate)),
+            source_units: normalizeText(formatOptionalNum(row?.source_units)),
+            target_units: normalizeText(formatOptionalNum(row?.target_units)),
+            source_rate: normalizeText(formatOptionalNum(row?.source_rate)),
+            target_rate: normalizeText(formatOptionalNum(row?.target_rate)),
+            source_amount_ex_vat: normalizeText(formatOptionalNum(row?.source_amount_ex_vat)),
+            target_amount_paid_ex_vat: normalizeText(formatOptionalNum(row?.target_amount_paid_ex_vat ?? row?.target_amount_ex_vat)),
+            economic_key: normalizeText(economicKeyDisplay(row)),
+            economic_key_type: normalizeText(safeStr(row?.economic_key_type || row?.key_type || '').trim()),
+            economic_key_value: normalizeText(safeStr(row?.economic_key_value || row?.key_value || '').trim()),
+            resolution_mode: normalizeText(safeStr(row?.resolution_mode || '').trim()),
+            export_is_stale: exportIsStale ? 'YES' : 'NO',
+            export_stale_reasons: normalizeText(exportStaleReasons),
             gross_pay_ex_vat: normalizeText(formatNum(lineEx(row))),
             vat_amount: batchHasVat ? normalizeText(formatNum(lineVat(row))) : undefined,
             gross_pay_inc_vat: batchHasVat ? normalizeText(formatNum(lineInc(row))) : undefined,
@@ -24605,6 +25069,18 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
       'hours_or_units',
       'unit_type',
       'rate',
+      'source_units',
+      'target_units',
+      'source_rate',
+      'target_rate',
+      'source_amount_ex_vat',
+      'target_amount_paid_ex_vat',
+      'economic_key',
+      'economic_key_type',
+      'economic_key_value',
+      'resolution_mode',
+      'export_is_stale',
+      'export_stale_reasons',
       'gross_pay_ex_vat'
     ];
 
@@ -24647,6 +25123,10 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
     return withCORS(env, req, serverError(String(e?.message || e || 'EXPORT_DETAIL_CSV_FAILED')));
   }
 }
+
+
+
+
 
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
@@ -37889,89 +38369,886 @@ async function handleBulkProcessDataset(env, req) {
 }
 
 
-
-async function handleBulkAuthoriseDataset(env, req) {
-  const user = await requireUser(env, req, ['admin']);
-  if (!user) return withCORS(env, req, unauthorized());
-
-  const enc = encodeURIComponent;
-  const urlObj = new URL(req.url);
-  const q = (k) => urlObj.searchParams.get(k);
-
-  const textQ = String(q('q') || '').trim();
-  const candidateId = String(q('candidate_id') || '').trim() || null;
-  const clientId = String(q('client_id') || '').trim() || null;
-  const includeManualNonQr = String(q('include_manual_non_qr') || 'true').trim().toLowerCase() !== 'false';
-  const includeQr = String(q('include_qr') || 'true').trim().toLowerCase() !== 'false';
-  const includeElectronic = String(q('include_electronic') || 'true').trim().toLowerCase() !== 'false';
-  const includeImportAuthoritative = String(q('include_import_authoritative') || 'true').trim().toLowerCase() !== 'false';
-  const includeImportNhsp = String(q('include_import_nhsp') || 'true').trim().toLowerCase() !== 'false';
-  const includeImportHealthrosterNoTimesheet = String(q('include_import_healthroster_no_timesheet') || 'true').trim().toLowerCase() !== 'false';
-
-  const toBool = (v) => {
+function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family) {
+  const upper = (v) => String(v == null ? '' : v).trim().toUpperCase();
+  const boolish = (v) => {
     if (v === true) return true;
     if (v === false) return false;
     if (v == null) return false;
     const s = String(v).trim().toLowerCase();
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
   };
+  const readOwn = (obj, key) => {
+    if (!obj || typeof obj !== 'object') return undefined;
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) return undefined;
+    return obj[key];
+  };
+  const readBool = (...entries) => {
+    for (const entry of entries) {
+      const obj = Array.isArray(entry) ? entry[0] : null;
+      const key = Array.isArray(entry) ? entry[1] : '';
+      if (!obj || typeof obj !== 'object' || !key) continue;
+      if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+      return boolish(obj[key]);
+    }
+    return null;
+  };
+  const normaliseInvoiceBreakdown = (invoiceBreakdownInput) => {
+    if (!invoiceBreakdownInput) return null;
+    if (typeof invoiceBreakdownInput === 'object') return invoiceBreakdownInput;
+    if (typeof invoiceBreakdownInput !== 'string') return null;
+    const raw = invoiceBreakdownInput.trim();
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return (parsed && typeof parsed === 'object') ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+  const hasAnySegmentInvoiceLock = (invoiceBreakdownInput) => {
+    try {
+      const invoiceBreakdown = normaliseInvoiceBreakdown(invoiceBreakdownInput);
+      if (!invoiceBreakdown || typeof invoiceBreakdown !== 'object') return false;
+      const mode = upper(invoiceBreakdown.mode);
+      if (mode !== 'SEGMENTS') return false;
+      const segments = Array.isArray(invoiceBreakdown.segments) ? invoiceBreakdown.segments : [];
+      return segments.some((segment) => {
+        const invoiceId = segment?.invoice_locked_invoice_id;
+        return invoiceId != null && String(invoiceId).trim() !== '';
+      });
+    } catch {
+      return false;
+    }
+  };
+
+  const source = (row && typeof row === 'object') ? row : {};
+  const tsfin = (fin && typeof fin === 'object') ? fin : ((source.tsfin && typeof source.tsfin === 'object') ? source.tsfin : {});
+  const summary = (summaryBase && typeof summaryBase === 'object') ? summaryBase : {};
+  const validationRow = (validation && typeof validation === 'object') ? validation : {};
+  const routeInfo = (family && typeof family === 'object') ? family : {};
+  const effective = (source.effective && typeof source.effective === 'object') ? source.effective : {};
+  const timesheet = (source.timesheet && typeof source.timesheet === 'object')
+    ? source.timesheet
+    : ((summary.timesheet && typeof summary.timesheet === 'object') ? summary.timesheet : {});
+  const contractWeek = (source.contract_week && typeof source.contract_week === 'object')
+    ? source.contract_week
+    : ((summary.contract_week && typeof summary.contract_week === 'object') ? summary.contract_week : {});
+  const actionFlags = (source.action_flags && typeof source.action_flags === 'object') ? source.action_flags : {};
+  const bulkAuthorise = (source.bulk_authorise && typeof source.bulk_authorise === 'object') ? source.bulk_authorise : {};
+  const artifactHints = (source.artifact_hints && typeof source.artifact_hints === 'object') ? source.artifact_hints : {};
+
+  const timesheetId = String(
+    readOwn(source, 'timesheet_id') ??
+    readOwn(timesheet, 'timesheet_id') ??
+    readOwn(source, 'current_timesheet_id') ??
+    ''
+  ).trim();
+
+  const contractWeekId = String(
+    readOwn(source, 'contract_week_id') ??
+    readOwn(summary, 'contract_week_id') ??
+    readOwn(contractWeek, 'id') ??
+    ''
+  ).trim();
+
+  const hasTimesheet = !!timesheetId;
+
+  const lockedByInvoiceId =
+    readOwn(tsfin, 'locked_by_invoice_id') ??
+    readOwn(source, 'locked_by_invoice_id') ??
+    null;
+
+  const paidAtUtc =
+    readOwn(tsfin, 'paid_at_utc') ??
+    readOwn(source, 'paid_at_utc') ??
+    null;
+
+  const locked = !!(
+    lockedByInvoiceId ||
+    paidAtUtc ||
+    hasAnySegmentInvoiceLock(readOwn(tsfin, 'invoice_breakdown_json') ?? readOwn(source, 'invoice_breakdown_json') ?? null)
+  );
+
+  const isAuthorised = !!(
+    readOwn(timesheet, 'authorised_at_server') ??
+    readOwn(source, 'authorised_at_server') ??
+    readOwn(tsfin, 'authorised_at_utc') ??
+    readOwn(source, 'authorised_at_utc') ??
+    null
+  );
+
+  const routeFamily = upper(routeInfo.route_family || readOwn(source, 'route_family') || '');
+  const routeSubfamily = upper(routeInfo.route_subfamily || readOwn(source, 'route_subfamily') || '');
+  const underlyingChannelFamily = upper(routeInfo.underlying_channel_family || readOwn(source, 'underlying_channel_family') || '');
+  const isImportAuthoritative = !!(
+    routeInfo.is_import_authoritative === true ||
+    readOwn(source, 'is_import_authoritative') === true
+  );
+  const periodType = upper(
+    routeInfo.period_type ||
+    readOwn(source, 'period_type') ||
+    readOwn(source, 'sheet_scope') ||
+    readOwn(timesheet, 'sheet_scope') ||
+    readOwn(summary, 'sheet_scope') ||
+    ''
+  );
+  const isQrFamily = (
+    routeFamily === 'QR' ||
+    routeSubfamily === 'QR' ||
+    underlyingChannelFamily === 'QR'
+  );
+
+  const processingStatus = upper(
+    readOwn(tsfin, 'processing_status') ??
+    readOwn(source, 'processing_status') ??
+    readOwn(source, 'tools_stage') ??
+    readOwn(source, 'summary_stage') ??
+    ''
+  );
+
+  const requiresHr = boolish(
+    readOwn(source, 'client_requires_hr') ??
+    readOwn(effective, 'client_requires_hr') ??
+    readOwn(summary, 'client_requires_hr') ??
+    false
+  );
+
+  const clientAutoprocessHr = boolish(
+    readOwn(source, 'client_autoprocess_hr') ??
+    readOwn(effective, 'client_autoprocess_hr') ??
+    readOwn(summary, 'client_autoprocess_hr') ??
+    false
+  );
+
+  const requiresAuthorisation = (
+    processingStatus === 'PENDING_AUTH' ||
+    (requiresHr && !clientAutoprocessHr && processingStatus === 'READY_FOR_HR')
+  );
+
+  const qrStatus = upper(
+    readOwn(timesheet, 'qr_status') ??
+    readOwn(source, 'qr_status') ??
+    readOwn(summary, 'qr_status') ??
+    ''
+  );
+
+  const qrToken = String(
+    readOwn(timesheet, 'qr_token') ??
+    readOwn(source, 'qr_token') ??
+    readOwn(summary, 'qr_token') ??
+    ''
+  ).trim();
+
+  const qrGeneratedAt =
+    readOwn(timesheet, 'qr_generated_at') ??
+    readOwn(source, 'qr_generated_at') ??
+    readOwn(summary, 'qr_generated_at') ??
+    null;
+
+  const qrLastSentHash = String(
+    readOwn(timesheet, 'qr_last_sent_hash') ??
+    readOwn(source, 'qr_last_sent_hash') ??
+    readOwn(summary, 'qr_last_sent_hash') ??
+    ''
+  ).trim();
+
+  const qrScannedAt =
+    readOwn(timesheet, 'qr_scanned_at') ??
+    readOwn(source, 'qr_scanned_at') ??
+    readOwn(summary, 'qr_scanned_at') ??
+    null;
+
+  const qrSignedHash = String(
+    readOwn(timesheet, 'qr_signed_hash') ??
+    readOwn(source, 'qr_signed_hash') ??
+    readOwn(summary, 'qr_signed_hash') ??
+    ''
+  ).trim();
+
+  const qrSignedAtUtc =
+    readOwn(timesheet, 'qr_signed_at_utc') ??
+    readOwn(source, 'qr_signed_at_utc') ??
+    readOwn(summary, 'qr_signed_at_utc') ??
+    null;
+
+  const hasQrIssuedProof = (((qrToken && qrGeneratedAt) ? true : false) || !!qrLastSentHash);
+
+  let qrUnsignedByIssueCode = false;
+  try {
+    const issueCodes = Array.isArray(readOwn(source, 'issue_codes'))
+      ? readOwn(source, 'issue_codes')
+      : (Array.isArray(readOwn(effective, 'issue_codes')) ? readOwn(effective, 'issue_codes') : []);
+    qrUnsignedByIssueCode = issueCodes.map((value) => String(value || '').trim()).includes('Awaiting signed QR timesheet');
+  } catch {
+    qrUnsignedByIssueCode = false;
+  }
+
+  const qrUnsignedBlocked = (
+    (qrStatus === 'PENDING' && hasQrIssuedProof && !qrScannedAt) ||
+    processingStatus === 'AWAITING_MANUAL_SIGNATURE' ||
+    qrUnsignedByIssueCode
+  );
+
+  const qrSignedReturned = (qrStatus === 'USED' && !!qrScannedAt);
+
+  const hrValidationRequiredForInvoice = boolish(
+    readOwn(summary, 'hr_validation_required_for_invoice') ??
+    readOwn(source, 'hr_validation_required_for_invoice') ??
+    false
+  );
+
+  const validationStatus = upper(
+    readOwn(summary, 'validation_status') ??
+    readOwn(source, 'validation_status') ??
+    ''
+  );
+
+  const validationPreValidated = boolish(
+    readOwn(validationRow, 'pre_validated') ??
+    readOwn(source, 'validation_pre_validated') ??
+    false
+  );
+
+  const hrValidationSatisfied = (
+    validationStatus === 'VALIDATION_OK' ||
+    validationStatus === 'OVERRIDDEN'
+  );
+
+  const hrValidationAwaiting = hrValidationRequiredForInvoice && !hrValidationSatisfied;
+
+  const qrBulkAuthoriseVisible = (!isQrFamily || qrSignedReturned === true);
+
+  const canBulkAuthorise = hasTimesheet && !locked && requiresAuthorisation && !isAuthorised && !qrUnsignedBlocked && qrBulkAuthoriseVisible;
+  const canBulkUnauthorise = hasTimesheet && !locked && isAuthorised && qrBulkAuthoriseVisible;
+
+  const bulkAuthoriseSection = canBulkAuthorise
+    ? 'processed_eligible'
+    : (canBulkUnauthorise ? 'authorised_eligible' : null);
+
+  const canEditTimesheetData = !locked && !isAuthorised && routeFamily === 'MANUAL_NON_QR';
+  const canManageEvidence = !locked && !isAuthorised && !isImportAuthoritative;
+
+  const backendUnprocessed = (
+    processingStatus === 'UNPROCESSED' ||
+    upper(readOwn(source, 'summary_stage') || '') === 'UNPROCESSED' ||
+    upper(readOwn(source, 'tools_stage') || '') === 'UNPROCESSED'
+  );
+
+  const canUnprocess = (
+    hasTimesheet &&
+    !locked &&
+    !isAuthorised &&
+    routeFamily === 'MANUAL_NON_QR' &&
+    (
+      (periodType === 'WEEKLY' && !!contractWeekId) ||
+      (periodType === 'DAILY' && !backendUnprocessed)
+    )
+  );
+
+  const statusValue = upper(
+    readOwn(source, 'status') ??
+    readOwn(contractWeek, 'status') ??
+    readOwn(source, 'contract_week_status') ??
+    readOwn(summary, 'contract_week_status') ??
+    readOwn(timesheet, 'status') ??
+    readOwn(summary, 'timesheet_status') ??
+    ''
+  );
+
+  const isCancelled = (
+    statusValue === 'CANCELLED' ||
+    !!(
+      readOwn(source, 'cancelled_at_utc') ??
+      readOwn(contractWeek, 'cancelled_at_utc') ??
+      readOwn(summary, 'cancelled_at_utc') ??
+      readOwn(timesheet, 'cancelled_at_utc') ??
+      null
+    )
+  );
+
+  const isAdjustment = !!(
+    boolish(readOwn(timesheet, 'is_adjustment')) ||
+    boolish(readOwn(contractWeek, 'is_adjustment')) ||
+    boolish(readOwn(source, 'is_adjustment')) ||
+    boolish(readOwn(summary, 'is_adjustment')) ||
+    Number(readOwn(contractWeek, 'additional_seq') ?? readOwn(source, 'additional_seq') ?? readOwn(summary, 'additional_seq') ?? 0) > 0
+  );
+
+  const weeklyMode = upper(
+    readOwn(contractWeek, 'submission_mode_snapshot') ??
+    readOwn(source, 'submission_mode_snapshot') ??
+    readOwn(summary, 'submission_mode_snapshot') ??
+    readOwn(source, 'submission_mode') ??
+    readOwn(summary, 'submission_mode') ??
+    ''
+  );
+
+  const dailyMode = upper(
+    readOwn(timesheet, 'submission_mode') ??
+    readOwn(source, 'submission_mode') ??
+    readOwn(summary, 'submission_mode') ??
+    ''
+  );
+
+  const effectiveMode = (periodType === 'WEEKLY') ? weeklyMode : dailyMode;
+
+  const isQr = (
+    routeFamily === 'QR' ||
+    routeSubfamily === 'QR' ||
+    underlyingChannelFamily === 'QR' ||
+    qrStatus === 'PENDING' ||
+    qrStatus === 'USED' ||
+    qrStatus === 'EXPIRED' ||
+    qrStatus === 'CANCELLED'
+  );
+
+  const isElectronic = (
+    routeFamily === 'ELECTRONIC' ||
+    underlyingChannelFamily === 'ELECTRONIC' ||
+    effectiveMode === 'ELECTRONIC'
+  );
+
+  const sourceReviewOnly = readBool(
+    [source, 'review_only'],
+    [actionFlags, 'review_only'],
+    [bulkAuthorise, 'review_only'],
+    [artifactHints, 'review_only']
+  ) === true;
+
+  const sourceCanEditTimesheetData = readBool(
+    [source, 'can_edit_timesheet_data'],
+    [actionFlags, 'can_edit_timesheet_data'],
+    [bulkAuthorise, 'can_edit_timesheet_data'],
+    [artifactHints, 'can_edit_timesheet_data']
+  );
+
+  const additionalManualStructuralAllowed = (
+    hasTimesheet &&
+    periodType === 'WEEKLY' &&
+    !!contractWeekId &&
+    routeFamily === 'MANUAL_NON_QR' &&
+    effectiveMode === 'MANUAL' &&
+    !isAdjustment &&
+    !isImportAuthoritative &&
+    !locked &&
+    !isCancelled &&
+    !isQr &&
+    !isElectronic
+  );
+
+  const canAddAdditionalManual = isAuthorised
+    ? additionalManualStructuralAllowed
+    : (additionalManualStructuralAllowed && canEditTimesheetData && sourceCanEditTimesheetData !== false && sourceReviewOnly !== true);
+
+  const reviewOnly = !!(locked || isAuthorised || routeFamily !== 'MANUAL_NON_QR');
+
+  const existingHighlightRedValue = readOwn(source, 'nhsp_highlight_red');
+  const existingHighlightReason = readOwn(source, 'nhsp_highlight_reason');
+  const existingDeviationPctRaw = readOwn(source, 'nhsp_deviation_pct');
+  const existingDeviationPct = Number(existingDeviationPctRaw);
+  const hasExistingHighlightRed = existingHighlightRedValue !== undefined;
+  const hasDeviationMarker = hasExistingHighlightRed ? boolish(existingHighlightRedValue) : false;
+
+  const deviationMarkerReason = (() => {
+    if (!hasDeviationMarker) return null;
+    if (existingHighlightReason != null && String(existingHighlightReason).trim() !== '') return String(existingHighlightReason).trim();
+    if (Number.isFinite(existingDeviationPct) && existingDeviationPct !== 0) return `NHSP_DEVIATION_${existingDeviationPct}`;
+    return 'NHSP_DEVIATION';
+  })();
+
+  return {
+    has_timesheet: hasTimesheet,
+    locked,
+    is_authorised: isAuthorised,
+    requires_authorisation: requiresAuthorisation,
+    qr_unsigned_blocked: qrUnsignedBlocked,
+    qr_signed_returned: qrSignedReturned,
+    hr_validation_required_for_invoice: hrValidationRequiredForInvoice,
+    validation_status: validationStatus || null,
+    validation_pre_validated: validationPreValidated,
+    hr_validation_satisfied: hrValidationSatisfied,
+    hr_validation_awaiting: hrValidationAwaiting,
+    can_bulk_authorise: canBulkAuthorise,
+    can_bulk_unauthorise: canBulkUnauthorise,
+    bulk_authorise_section: bulkAuthoriseSection,
+    can_edit_timesheet_data: canEditTimesheetData,
+    can_manage_evidence: canManageEvidence,
+    can_unprocess: canUnprocess,
+    can_add_additional_manual: canAddAdditionalManual,
+    review_only: reviewOnly,
+    has_deviation_marker: hasDeviationMarker,
+    deviation_marker_reason: deviationMarkerReason
+  };
+}
+async function handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(env, req, user, financeCaseId) {
+  const financeCaseIdText = String(financeCaseId || '').trim();
+  const actorUserId = String(user?.id || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+
+  if (!uuidRe.test(actorUserId)) {
+    return withCORS(env, req, unauthorized('Unauthorized'));
+  }
+  if (!financeCaseIdText) {
+    return withCORS(env, req, badRequest('finance_case_id is required'));
+  }
+  if (!uuidRe.test(financeCaseIdText)) {
+    return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
+  }
+
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const upperTrim = (value) => trimStr(value).toUpperCase();
+
+  const normalizeResolutionPath = (raw) => {
+    const s = upperTrim(raw);
+    if (!s) return 'SUGGESTED';
+    if (s === 'SUGGESTED') return 'SUGGESTED';
+    if (s === 'MANUAL') return 'MANUAL';
+    return '';
+  };
+
+  const normalizeScheduleMode = (raw) => {
+    const s = upperTrim(raw);
+    if (!s) return '';
+    if (['BY_WEEKS', 'WEEKS', 'BY_NUMBER_OF_WEEKS', 'NUMBER_OF_WEEKS'].includes(s)) return 'BY_WEEKS';
+    if (['BY_WEEKLY_DUE', 'BY_WEEKLY_AMOUNT', 'WEEKLY_AMOUNT', 'WEEKLY_DUE'].includes(s)) return 'BY_WEEKLY_DUE';
+    return '';
+  };
+
+  const hasOwnValue = (obj, keys) => keys.some((key) => (
+    Object.prototype.hasOwnProperty.call(obj || {}, key) &&
+    obj[key] !== undefined &&
+    obj[key] !== null &&
+    String(obj[key]).trim() !== ''
+  ));
+
+  const readPositiveNumber = (value, label) => {
+    if (value === undefined || value === null || String(value).trim() === '') return { value: null };
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return { error: `${label} must be a number greater than 0` };
+    return { value: Math.round(n * 100) / 100 };
+  };
+
+  const readPositiveInteger = (value, label) => {
+    if (value === undefined || value === null || String(value).trim() === '') return { value: null };
+    const n = Number(value);
+    if (!Number.isFinite(n) || Math.trunc(n) !== n || n < 1) return { error: `${label} must be an integer greater than 0` };
+    return { value: Math.trunc(n) };
+  };
+
+  const readIsoDate = (value) => {
+    const text = trimStr(value);
+    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+  };
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
+  };
+
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const bodyObj = _safeJsonParse(e.body);
+        if (bodyObj && typeof bodyObj === 'object' && typeof bodyObj.message === 'string') msg = bodyObj.message;
+        if (!msg && bodyObj && typeof bodyObj === 'object' && typeof bodyObj.code === 'string') return bodyObj;
+      }
+
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const embedded = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (embedded && typeof embedded === 'object' && typeof embedded.message === 'string') msg = embedded.message;
+          if (!msg && embedded && typeof embedded === 'object' && typeof embedded.code === 'string') return embedded;
+        }
+      }
+
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  const _raisedPayloadResponse = (payload, fallbackStatus) => {
+    if (!payload || typeof payload !== 'object') return null;
+
+    const code = String(payload.code || '').trim().toUpperCase();
+    let status = Number.isFinite(Number(fallbackStatus)) ? Number(fallbackStatus) : 400;
+
+    if (code === 'FINANCE_CASE_NOT_FOUND' || code === 'CANDIDATE_NOT_FOUND') {
+      status = 404;
+    } else if (
+      code === 'RESTRUCTURE_NOT_REQUIRED' ||
+      code === 'CASE_ALREADY_IN_OPEN_BATCH' ||
+      code === 'TAXABLE_CHANNEL_RESTRUCTURE_REQUIRED'
+    ) {
+      status = 409;
+    }
+
+    return withCORS(env, req, new Response(JSON.stringify(payload), {
+      status,
+      headers: JSON_HEADERS
+    }));
+  };
+
+  const buildQueryObject = () => {
+    const url = new URL(req.url);
+    const obj = {};
+    for (const [key, value] of url.searchParams.entries()) {
+      obj[key] = value;
+    }
+    return obj;
+  };
+
+  let body = null;
+  if (req.method === 'GET') {
+    body = buildQueryObject();
+  } else if (req.method === 'POST') {
+    try { body = await parseJSONBody(req); } catch { body = null; }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return withCORS(env, req, badRequest('Invalid JSON'));
+    }
+  } else {
+    return withCORS(env, req, badRequest('Method not allowed'));
+  }
+
+  const frontendAuthoritativeKeys = new Set([
+    'erni_rate', 'erniRate', 'erni_rate_pct', 'erniRatePct',
+    'erni_percent', 'erniPercent', 'erni_pct', 'erniPct',
+    'erni_component', 'erniComponent', 'erni_component_ex_vat', 'erniComponentExVat',
+    'vat_rate', 'vatRate', 'vat_rate_pct', 'vatRatePct',
+    'vat_amount', 'vatAmount', 'vat_amount_ex_vat', 'vatAmountExVat', 'vat_amount_inc_vat', 'vatAmountIncVat',
+    'suggested_target_remaining_balance', 'suggestedTargetRemainingBalance',
+    'suggested_target_remaining_balance_ex_vat', 'suggestedTargetRemainingBalanceExVat',
+    'suggested_target_remaining_balance_inc_vat', 'suggestedTargetRemainingBalanceIncVat',
+    'suggested_target_amount', 'suggestedTargetAmount',
+    'suggested_target_amount_ex_vat', 'suggestedTargetAmountExVat',
+    'suggested_target_amount_inc_vat', 'suggestedTargetAmountIncVat',
+    'suggested_weekly_amount', 'suggestedWeeklyAmount',
+    'suggested_weekly_due', 'suggestedWeeklyDue',
+    'target_remaining_amount', 'targetRemainingAmount',
+    'target_remaining_amount_ex_vat', 'targetRemainingAmountExVat',
+    'target_remaining_balance', 'targetRemainingBalance',
+    'target_remaining_balance_ex_vat', 'targetRemainingBalanceExVat',
+    'target_amount_ex_vat', 'targetAmountExVat'
+  ]);
+
+  const findFrontendAuthoritativeKey = (value, path = '') => {
+    if (!value || typeof value !== 'object') return '';
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i += 1) {
+        const found = findFrontendAuthoritativeKey(value[i], `${path}[${i}]`);
+        if (found) return found;
+      }
+      return '';
+    }
+    for (const key of Object.keys(value)) {
+      const keyPath = path ? `${path}.${key}` : key;
+      if (frontendAuthoritativeKeys.has(key)) return keyPath;
+      const found = findFrontendAuthoritativeKey(value[key], keyPath);
+      if (found) return found;
+    }
+    return '';
+  };
+
+  const blockedFrontendKey = findFrontendAuthoritativeKey(body);
+  if (blockedFrontendKey) {
+    return withCORS(env, req, badRequest(`Frontend-supplied ERNI/VAT/target conversion values are not accepted (${blockedFrontendKey}); the backend calculates taxable channel restructure values.`));
+  }
+
+  const resolutionPath = normalizeResolutionPath(body.resolution_path ?? body.resolutionPath ?? body.path);
+  if (!resolutionPath) {
+    return withCORS(env, req, badRequest('resolution_path must be SUGGESTED or MANUAL'));
+  }
+
+  const effectivePayDate = readIsoDate(body.effective_pay_date ?? body.effectivePayDate ?? body.pay_date ?? body.payDate);
+  if (!effectivePayDate) {
+    return withCORS(env, req, badRequest('effective_pay_date must be supplied as YYYY-MM-DD'));
+  }
+
+  const scheduleInputModeRaw = body.schedule_input_mode ?? body.scheduleInputMode ?? body.repayment_input_mode ?? body.repaymentInputMode ?? body.repayment_mode ?? body.repaymentMode;
+  let scheduleInputMode = normalizeScheduleMode(scheduleInputModeRaw);
+  const weeksTotalProvided = hasOwnValue(body, ['weeks_total', 'weeksTotal']);
+  const weeklyDueProvided = hasOwnValue(body, ['weekly_due', 'weeklyDue']);
+  const manualTotalProvided = hasOwnValue(body, ['manual_total_remaining', 'manualTotalRemaining', 'total_remaining_amount', 'totalRemainingAmount']);
+
+  if ((scheduleInputModeRaw !== undefined && scheduleInputModeRaw !== null && trimStr(scheduleInputModeRaw) !== '') && !scheduleInputMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE'));
+  }
+
+  if (weeksTotalProvided && weeklyDueProvided) {
+    return withCORS(env, req, badRequest('Supply either weekly_due or weeks_total, not both'));
+  }
+
+  if (!scheduleInputMode && weeksTotalProvided) {
+    scheduleInputMode = 'BY_WEEKS';
+  }
+  if (!scheduleInputMode && weeklyDueProvided) {
+    scheduleInputMode = 'BY_WEEKLY_DUE';
+  }
+
+  if (scheduleInputMode === 'BY_WEEKS' && weeklyDueProvided) {
+    return withCORS(env, req, badRequest('weekly_due must not be supplied when schedule_input_mode is BY_WEEKS'));
+  }
+
+  if (scheduleInputMode === 'BY_WEEKLY_DUE' && weeksTotalProvided) {
+    return withCORS(env, req, badRequest('weeks_total must not be supplied when schedule_input_mode is BY_WEEKLY_DUE'));
+  }
+
+  if (resolutionPath === 'MANUAL' && !scheduleInputMode) {
+    return withCORS(env, req, badRequest('schedule_input_mode is required when resolution_path is MANUAL'));
+  }
+
+  if (resolutionPath === 'MANUAL' && !weeksTotalProvided && !weeklyDueProvided && !manualTotalProvided) {
+    return withCORS(env, req, badRequest('weekly_due, weeks_total, or manual_total_remaining is required when resolution_path is MANUAL'));
+  }
+
+  const weeksTotalResult = readPositiveInteger(body.weeks_total ?? body.weeksTotal, 'weeks_total');
+  if (weeksTotalResult.error) return withCORS(env, req, badRequest(weeksTotalResult.error));
+
+  const weeklyDueResult = readPositiveNumber(body.weekly_due ?? body.weeklyDue, 'weekly_due');
+  if (weeklyDueResult.error) return withCORS(env, req, badRequest(weeklyDueResult.error));
+
+  const manualTotalResult = readPositiveNumber(
+    body.manual_total_remaining ?? body.manualTotalRemaining ?? body.total_remaining_amount ?? body.totalRemainingAmount,
+    'manual_total_remaining'
+  );
+  if (manualTotalProvided && manualTotalResult.error) return withCORS(env, req, badRequest(manualTotalResult.error));
+
+  const note = (body.note === undefined || body.note === null) ? null : String(body.note).trim() || null;
+
+  try {
+    const rpcRes = await sbRpc(env, 'pay_finance_case_taxable_channel_restructure_suggestion', {
+      p_finance_case_id: financeCaseIdText,
+      p_actor_user_id: actorUserId,
+      p_effective_pay_date: effectivePayDate,
+      p_resolution_path: resolutionPath,
+      p_schedule_input_mode: scheduleInputMode || null,
+      p_weeks_total: weeksTotalResult.value,
+      p_weekly_due: weeklyDueResult.value,
+      p_manual_total_remaining: manualTotalProvided ? manualTotalResult.value : null,
+      p_note: note
+    });
+
+    const payload = unwrapRpc(rpcRes, 'pay_finance_case_taxable_channel_restructure_suggestion');
+    const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : { ok: true, suggestion: payload };
+
+    return withCORS(env, req, ok(payloadObj));
+  } catch (e) {
+    const raised = _extractDbRaisedJson(e);
+    const raisedRes = _raisedPayloadResponse(raised, e?.status === 404 ? 404 : (e?.status === 409 ? 409 : 400));
+    if (raisedRes) return raisedRes;
+    return withCORS(env, req, serverError(String(e?.message || e || 'Failed to calculate taxable finance channel restructure suggestion')));
+  }
+}
+
+
+async function fetchBulkAuthoriseEligibilityFactsMap(env, timesheetIds) {
+  const enc = encodeURIComponent;
+  const finByTimesheetId = Object.create(null);
+  const summaryBaseByTimesheetId = Object.create(null);
+  const validationByTimesheetId = Object.create(null);
+
+  const ids = [...new Set((Array.isArray(timesheetIds) ? timesheetIds : []).map(v => String(v || '').trim()).filter(Boolean))];
+  if (!ids.length) {
+    return {
+      finByTimesheetId,
+      summaryBaseByTimesheetId,
+      validationByTimesheetId
+    };
+  }
+
+  const chunkSize = 200;
+
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const inList = chunk.map(enc).join(',');
+
+    const { rows: finRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+        `?timesheet_id=in.(${inList})` +
+        `&is_current=eq.true` +
+        `&select=timesheet_id,processing_status,processed_at_utc,processed_by_user_id,authorised_at_utc,authorised_by_user_id,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json,external_source_rows_json`,
+      false
+    );
+
+    for (const finRow of (finRows || [])) {
+      const timesheetId = finRow?.timesheet_id ? String(finRow.timesheet_id).trim() : '';
+      if (!timesheetId) continue;
+      finByTimesheetId[timesheetId] = finRow;
+    }
+
+    const { rows: summaryRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+        `?timesheet_id=in.(${inList})` +
+        `&select=timesheet_id,client_requires_hr,client_autoprocess_hr,hr_validation_required_for_invoice,validation_status,qr_status,qr_token,qr_generated_at,qr_scanned_at,submission_mode,sheet_scope,is_adjustment,contract_week_id,contract_week_status,additional_seq,summary_stage,tools_stage,processing_status_display,route_type,client_no_timesheet_required,client_is_nhsp,issue_codes,paid_at_utc,locked_by_invoice_id,invoice_segments_locked,invoice_segment_stage,timesheet_status,candidate_id,client_id`,
+      false
+    );
+
+    for (const summaryRow of (summaryRows || [])) {
+      const timesheetId = summaryRow?.timesheet_id ? String(summaryRow.timesheet_id).trim() : '';
+      if (!timesheetId) continue;
+      summaryBaseByTimesheetId[timesheetId] = summaryRow;
+    }
+
+    const { rows: timesheetRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=in.(${inList})` +
+        `&select=timesheet_id,qr_status,qr_token,qr_generated_at,qr_last_sent_hash,qr_scanned_at,qr_signed_hash,qr_signed_at_utc,submission_mode,sheet_scope,is_adjustment,status,authorised_at_server,parent_timesheet_id,adjustment_origin`,
+      false
+    );
+
+    for (const timesheetRow of (timesheetRows || [])) {
+      const timesheetId = timesheetRow?.timesheet_id ? String(timesheetRow.timesheet_id).trim() : '';
+      if (!timesheetId) continue;
+      summaryBaseByTimesheetId[timesheetId] = {
+        ...(summaryBaseByTimesheetId[timesheetId] || { timesheet_id: timesheetId }),
+        timesheet: {
+          ...((summaryBaseByTimesheetId[timesheetId]?.timesheet && typeof summaryBaseByTimesheetId[timesheetId].timesheet === 'object') ? summaryBaseByTimesheetId[timesheetId].timesheet : {}),
+          ...Object.fromEntries(
+            Object.entries(timesheetRow || {}).filter(([, value]) => value !== undefined && value !== null)
+          )
+        },
+        ...Object.fromEntries(
+          Object.entries(timesheetRow || {}).filter(([, value]) => value !== undefined && value !== null)
+        )
+      };
+    }
+
+    const contractWeekIds = [...new Set(
+      chunk
+        .map((timesheetId) => String(summaryBaseByTimesheetId[timesheetId]?.contract_week_id || '').trim())
+        .filter(Boolean)
+    )];
+
+    if (contractWeekIds.length) {
+      const weekInList = contractWeekIds.map(enc).join(',');
+      const { rows: contractWeekRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?id=in.(${weekInList})` +
+          `&select=id,status,submission_mode_snapshot,timesheet_id,additional_seq,is_adjustment,week_ending_date`,
+        false
+      );
+
+      const contractWeekById = Object.create(null);
+      for (const contractWeekRow of (contractWeekRows || [])) {
+        const contractWeekId = contractWeekRow?.id ? String(contractWeekRow.id).trim() : '';
+        if (!contractWeekId) continue;
+        contractWeekById[contractWeekId] = contractWeekRow;
+      }
+
+      for (const timesheetId of chunk) {
+        const summaryRow = summaryBaseByTimesheetId[timesheetId];
+        if (!summaryRow || typeof summaryRow !== 'object') continue;
+        const contractWeekId = summaryRow.contract_week_id ? String(summaryRow.contract_week_id).trim() : '';
+        if (!contractWeekId || !contractWeekById[contractWeekId]) continue;
+        const contractWeekRow = contractWeekById[contractWeekId];
+        summaryBaseByTimesheetId[timesheetId] = {
+          ...summaryRow,
+          contract_week: contractWeekRow,
+          contract_week_status: contractWeekRow.status ?? summaryRow.contract_week_status ?? null,
+          submission_mode_snapshot: contractWeekRow.submission_mode_snapshot ?? summaryRow.submission_mode_snapshot ?? null,
+          additional_seq: contractWeekRow.additional_seq ?? summaryRow.additional_seq ?? null,
+          is_adjustment: contractWeekRow.is_adjustment ?? summaryRow.is_adjustment ?? false
+        };
+      }
+    }
+
+    const { rows: validationRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+        `?timesheet_id=in.(${inList})` +
+        `&select=timesheet_id,pre_validated` +
+        `&order=updated_at.desc.nullslast,created_at.desc.nullslast,id.desc`,
+      false
+    );
+
+    for (const validationRow of (validationRows || [])) {
+      const timesheetId = validationRow?.timesheet_id ? String(validationRow.timesheet_id).trim() : '';
+      if (!timesheetId) continue;
+      if (!Object.prototype.hasOwnProperty.call(validationByTimesheetId, timesheetId)) {
+        validationByTimesheetId[timesheetId] = validationRow;
+      }
+    }
+  }
+
+  return {
+    finByTimesheetId,
+    summaryBaseByTimesheetId,
+    validationByTimesheetId
+  };
+}
+
+async function handleBulkAuthoriseDataset(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const urlObj = new URL(req.url);
+  const q = (k) => urlObj.searchParams.get(k);
+
+  const textQ = String(q('q') || '').trim();
+  const candidateId = String(q('candidate_id') || '').trim() || null;
+  const clientId = String(q('client_id') || '').trim() || null;
+  const classificationRaw = String(q('classification') || '').trim().toUpperCase();
+  const requestedClassification = (
+    classificationRaw === 'TIMESHEETS' ||
+    classificationRaw === 'NHSP' ||
+    classificationRaw === 'HR'
+  ) ? classificationRaw : null;
 
   const safeString = (v) => (v == null ? '' : String(v));
 
   const normalizeSummaryRows = (rows) => {
     return (rows || []).map((r) => {
-      const o = { ...(r || {}) };
-      if (!Object.prototype.hasOwnProperty.call(o, 'route_type')) o.route_type = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'route_display')) o.route_display = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'client_no_timesheet_required')) o.client_no_timesheet_required = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'client_autoprocess_hr')) o.client_autoprocess_hr = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'client_is_nhsp')) o.client_is_nhsp = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'summary_stage')) o.summary_stage = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'tools_stage')) o.tools_stage = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'processing_status_display')) o.processing_status_display = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'pay_icon_code')) o.pay_icon_code = 'NONE';
-      if (!Object.prototype.hasOwnProperty.call(o, 'pay_status_code')) o.pay_status_code = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'pay_paid_at_utc')) o.pay_paid_at_utc = null;
-      if (!Object.prototype.hasOwnProperty.call(o, 'net_delta_ex_vat')) o.net_delta_ex_vat = 0;
-      if (!Object.prototype.hasOwnProperty.call(o, 'id') || o.id == null || String(o.id).trim() === '') {
-        o.id = o.timesheet_id || o.contract_week_id || null;
+      const summaryRow = { ...(r || {}) };
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'route_type')) summaryRow.route_type = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'route_display')) summaryRow.route_display = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'client_no_timesheet_required')) summaryRow.client_no_timesheet_required = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'client_autoprocess_hr')) summaryRow.client_autoprocess_hr = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'client_requires_hr')) summaryRow.client_requires_hr = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'client_is_nhsp')) summaryRow.client_is_nhsp = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'summary_stage')) summaryRow.summary_stage = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'tools_stage')) summaryRow.tools_stage = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'processing_status_display')) summaryRow.processing_status_display = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'pay_icon_code')) summaryRow.pay_icon_code = 'NONE';
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'pay_status_code')) summaryRow.pay_status_code = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'pay_paid_at_utc')) summaryRow.pay_paid_at_utc = null;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'net_delta_ex_vat')) summaryRow.net_delta_ex_vat = 0;
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'issue_codes')) summaryRow.issue_codes = [];
+      if (!Object.prototype.hasOwnProperty.call(summaryRow, 'id') || summaryRow.id == null || String(summaryRow.id).trim() === '') {
+        summaryRow.id = summaryRow.timesheet_id || summaryRow.contract_week_id || null;
       }
-      return o;
+      return summaryRow;
     });
-  };
-
-  const classifyRouteFamily = (row) => {
-    const routeType = String(row?.route_type || '').trim().toUpperCase();
-    const submissionMode = String(row?.submission_mode || '').trim().toUpperCase();
-    const clientNoTimesheetRequired = toBool(row?.client_no_timesheet_required);
-    const qrStatus = String(row?.qr_status || '').trim().toUpperCase();
-    const isQr = toBool(row?.is_qr) || !!qrStatus;
-
-    if (
-      routeType === 'WEEKLY_NHSP' ||
-      routeType === 'WEEKLY_NHSP_ADJUSTMENT' ||
-      (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired)
-    ) {
-      return {
-        route_family: 'IMPORT_AUTHORITATIVE',
-        route_subfamily: (routeType === 'WEEKLY_HEALTHROSTER') ? 'HEALTHROSTER_NO_TIMESHEET' : 'NHSP',
-        underlying_channel_family: null,
-        compare_block_required: false,
-        is_import_authoritative: true
-      };
-    }
-
-    const underlyingChannelFamily = isQr
-      ? 'QR'
-      : (submissionMode === 'ELECTRONIC' ? 'ELECTRONIC' : 'MANUAL_NON_QR');
-
-    return {
-      route_family: underlyingChannelFamily,
-      route_subfamily: (routeType === 'WEEKLY_HEALTHROSTER') ? 'HEALTHROSTER_TIMESHEET_REQUIRED' : underlyingChannelFamily,
-      underlying_channel_family: underlyingChannelFamily,
-      compare_block_required: (routeType === 'WEEKLY_HEALTHROSTER' && !clientNoTimesheetRequired),
-      is_import_authoritative: false
-    };
   };
 
   const makeRowKey = (row) => {
@@ -37982,55 +39259,107 @@ async function handleBulkAuthoriseDataset(env, req) {
     return '';
   };
 
-  const fetchAllMatchingRows = async () => {
+  const rowMatchesText = (row, needle) => {
+    if (!needle) return true;
+
+    const collectIssueCodes = (value) => {
+      if (!value) return [];
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'string') {
+        const raw = value.trim();
+        if (!raw) return [];
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [raw];
+        } catch {
+          return [raw];
+        }
+      }
+      return [];
+    };
+
+    const haystackValues = [
+      row?.candidate_name,
+      row?.candidate_display_name,
+      row?.worker_name,
+      row?.occupant_key_norm,
+      row?.candidate_id,
+      row?.client_name,
+      row?.client_display_name,
+      row?.client_id,
+      row?.booking_id,
+      row?.booking_ref,
+      row?.booking_reference,
+      row?.external_booking_id,
+      row?.external_reference,
+      row?.external_ref,
+      row?.shift_reference,
+      row?.reference_number,
+      row?.po_number,
+      row?.timesheet_id,
+      row?.current_timesheet_id,
+      row?.requested_timesheet_id,
+      row?.contract_week_id,
+      row?.contract_id,
+      row?.hospital_norm,
+      row?.hospital_name,
+      row?.hospital,
+      row?.ward_norm,
+      row?.ward_name,
+      row?.ward,
+      row?.location_norm,
+      row?.location_name,
+      row?.location,
+      row?.site_name,
+      row?.site,
+      row?.route_family,
+      row?.route_subfamily,
+      row?.underlying_channel_family,
+      row?.bulk_authorise_classification,
+      row?.bulk_authorise_section,
+      row?.route_type,
+      row?.route_display,
+      row?.sheet_scope,
+      row?.period_type,
+      row?.submission_mode,
+      row?.submission_mode_snapshot,
+      row?.summary_stage,
+      row?.tools_stage,
+      row?.processing_status,
+      row?.processing_status_display,
+      row?.validation_status,
+      row?.pay_icon_code,
+      row?.pay_status_code,
+      row?.processed_by_display,
+      row?.authorised_by_display,
+      row?.processed_by_user_id,
+      row?.authorised_by_user_id,
+      row?.nhsp_highlight_reason,
+      row?.deviation_marker_reason,
+      row?.job_title_norm,
+      row?.role,
+      row?.band,
+      ...collectIssueCodes(row?.issue_codes)
+    ];
+
+    const haystack = haystackValues
+      .map((value) => String(value == null ? '' : value).toLowerCase())
+      .join('\\n');
+    return haystack.includes(needle);
+  };
+
+  const fetchAllSummaryRows = async () => {
     const batchSize = 1000;
     let offset = 0;
     const acc = [];
 
     while (true) {
-      let api =
+      const api =
         `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
         `?select=*` +
         `&limit=${batchSize}` +
-        `&offset=${offset}`;
-
-      const orGroups = [];
-
-      if (textQ) {
-        const pat = `*${textQ}*`;
-        orGroups.push([
-          `candidate_name.ilike.${pat}`,
-          `client_name.ilike.${pat}`,
-          `booking_id.ilike.${pat}`,
-          `occupant_key_norm.ilike.${pat}`,
-          `hospital_norm.ilike.${pat}`
-        ]);
-      }
-
-      if (candidateId) api += `&candidate_id=eq.${enc(candidateId)}`;
-      if (clientId) api += `&client_id=eq.${enc(clientId)}`;
-
-      if (orGroups.length) {
-        let accOr = null;
-        for (const group of orGroups) {
-          const clean = group.map(s => String(s || '').trim()).filter(Boolean);
-          if (!clean.length) continue;
-          if (!accOr) {
-            accOr = clean.slice();
-            continue;
-          }
-          const combined = [];
-          for (const a of accOr) {
-            for (const b of clean) combined.push(`and(${a},${b})`);
-          }
-          accOr = combined;
-        }
-        if (accOr && accOr.length) {
-          api += `&or=${enc(`(${accOr.join(',')})`)}`;
-        }
-      }
-
-      api += `&order=week_ending_date.asc.nullslast,client_name.asc.nullslast,candidate_name.asc.nullslast`;
+        `&offset=${offset}` +
+        `&order=week_ending_date.asc.nullslast,client_name.asc.nullslast,candidate_name.asc.nullslast`;
 
       const { rows } = await sbFetch(env, api, false);
       const batch = Array.isArray(rows) ? rows : [];
@@ -38042,38 +39371,15 @@ async function handleBulkAuthoriseDataset(env, req) {
     return normalizeSummaryRows(acc);
   };
 
-  const fetchCurrentTsfinMap = async (timesheetIds) => {
-    const out = Object.create(null);
-    const ids = Array.isArray(timesheetIds) ? timesheetIds.filter(Boolean) : [];
-    if (!ids.length) return out;
-
-    const chunkSize = 200;
-    for (let i = 0; i < ids.length; i += chunkSize) {
-      const chunk = ids.slice(i, i + chunkSize);
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=in.(${chunk.map(enc).join(',')})` +
-          `&is_current=eq.true` +
-          `&select=timesheet_id,processing_status,basis,processed_at_utc,processed_by_user_id,authorised_at_utc,authorised_by_user_id,external_source_rows_json`,
-        false
-      );
-      for (const row of (rows || [])) {
-        const tsId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
-        if (tsId) out[tsId] = row;
-      }
-    }
-    return out;
-  };
-
   const fetchUserDisplayMap = async (userIds) => {
-    const out = Object.create(null);
-    const ids = [...new Set((userIds || []).map(v => String(v || '').trim()).filter(Boolean))];
-    if (!ids.length) return out;
+    const enc = encodeURIComponent;
+    const userDisplayById = Object.create(null);
+    const uniqueIds = [...new Set((userIds || []).map((value) => String(value || '').trim()).filter(Boolean))];
+    if (!uniqueIds.length) return userDisplayById;
 
     const chunkSize = 200;
-    for (let i = 0; i < ids.length; i += chunkSize) {
-      const chunk = ids.slice(i, i + chunkSize);
+    for (let index = 0; index < uniqueIds.length; index += chunkSize) {
+      const chunk = uniqueIds.slice(index, index + chunkSize);
       const { rows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/tms_users` +
@@ -38081,22 +39387,24 @@ async function handleBulkAuthoriseDataset(env, req) {
           `&select=id,display_name`,
         false
       );
-      for (const row of (rows || [])) {
-        const id = row?.id ? String(row.id).trim() : '';
-        if (id) out[id] = row?.display_name ? String(row.display_name) : null;
+      for (const userRow of (rows || [])) {
+        const userId = userRow?.id ? String(userRow.id).trim() : '';
+        if (!userId) continue;
+        userDisplayById[userId] = userRow?.display_name ? String(userRow.display_name) : null;
       }
     }
-    return out;
+    return userDisplayById;
   };
 
   const fetchContractAdHocMap = async (contractIds) => {
-    const out = Object.create(null);
-    const ids = [...new Set((contractIds || []).map(v => String(v || '').trim()).filter(Boolean))];
-    if (!ids.length) return out;
+    const enc = encodeURIComponent;
+    const contractIsAdHocById = Object.create(null);
+    const uniqueIds = [...new Set((contractIds || []).map((value) => String(value || '').trim()).filter(Boolean))];
+    if (!uniqueIds.length) return contractIsAdHocById;
 
     const chunkSize = 200;
-    for (let i = 0; i < ids.length; i += chunkSize) {
-      const chunk = ids.slice(i, i + chunkSize);
+    for (let index = 0; index < uniqueIds.length; index += chunkSize) {
+      const chunk = uniqueIds.slice(index, index + chunkSize);
       const { rows } = await sbFetch(
         env,
         `${env.SUPABASE_URL}/rest/v1/contracts` +
@@ -38104,131 +39412,105 @@ async function handleBulkAuthoriseDataset(env, req) {
           `&select=id,is_ad_hoc`,
         false
       );
-      for (const row of (rows || [])) {
-        const id = row?.id ? String(row.id).trim() : '';
-        if (id) out[id] = toBool(row?.is_ad_hoc);
+      for (const contractRow of (rows || [])) {
+        const contractId = contractRow?.id ? String(contractRow.id).trim() : '';
+        if (!contractId) continue;
+        contractIsAdHocById[contractId] = contractRow?.is_ad_hoc === true;
       }
     }
-    return out;
+    return contractIsAdHocById;
   };
 
-  const allRows = await fetchAllMatchingRows();
-  const filteredRows = [];
+  const allRows = await fetchAllSummaryRows();
+  const broadRows = [];
 
-  for (const row of allRows) {
-    const tsId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
-    if (!tsId) continue;
-
-    const family = classifyRouteFamily(row);
-    const summaryStage = String(row?.summary_stage || '').trim().toUpperCase();
-    const isLocked = !!(row?.locked_by_invoice_id || row?.paid_at_utc);
-
+  for (const summaryRow of allRows) {
+    const timesheetId = summaryRow?.timesheet_id ? String(summaryRow.timesheet_id).trim() : '';
+    const summaryStage = String(summaryRow?.summary_stage || '').trim().toUpperCase();
+    if (!timesheetId) continue;
     if (summaryStage === 'UNPROCESSED') continue;
-    if (isLocked) continue;
-
-    if (family.route_family === 'MANUAL_NON_QR' && !includeManualNonQr) continue;
-    if (family.route_family === 'QR' && !includeQr) continue;
-    if (family.route_family === 'ELECTRONIC' && !includeElectronic) continue;
-    if (family.route_family === 'IMPORT_AUTHORITATIVE') {
-      if (!includeImportAuthoritative) continue;
-      if (family.route_subfamily === 'NHSP' && !includeImportNhsp) continue;
-      if (family.route_subfamily === 'HEALTHROSTER_NO_TIMESHEET' && !includeImportHealthrosterNoTimesheet) continue;
-    }
-
-    filteredRows.push(row);
+    broadRows.push(summaryRow);
   }
 
-  const timesheetIds = filteredRows.map(r => String(r.timesheet_id));
-  const tsfinMap = await fetchCurrentTsfinMap(timesheetIds);
+  const broadTimesheetIds = broadRows.map((summaryRow) => String(summaryRow.timesheet_id || '').trim()).filter(Boolean);
+  const factsMap = await fetchBulkAuthoriseEligibilityFactsMap(env, broadTimesheetIds);
 
   const userIds = [];
-  for (const tsId of timesheetIds) {
-    const fin = tsfinMap[tsId];
-    if (fin?.processed_by_user_id) userIds.push(String(fin.processed_by_user_id));
-    if (fin?.authorised_by_user_id) userIds.push(String(fin.authorised_by_user_id));
+  for (const timesheetId of broadTimesheetIds) {
+    const finRow = factsMap.finByTimesheetId[timesheetId];
+    if (finRow?.processed_by_user_id) userIds.push(String(finRow.processed_by_user_id));
+    if (finRow?.authorised_by_user_id) userIds.push(String(finRow.authorised_by_user_id));
   }
   const userDisplayMap = await fetchUserDisplayMap(userIds);
-  const contractAdHocMap = await fetchContractAdHocMap(filteredRows.map(r => r?.contract_id));
+  const contractAdHocMap = await fetchContractAdHocMap(broadRows.map((summaryRow) => summaryRow?.contract_id));
 
-  const rows = filteredRows.map((row) => {
-    const tsId = String(row.timesheet_id || '').trim();
-    const family = classifyRouteFamily(row);
-    const fin = tsfinMap[tsId] || null;
-    const processedById = fin?.processed_by_user_id ? String(fin.processed_by_user_id).trim() : '';
-    const authorisedById = fin?.authorised_by_user_id ? String(fin.authorised_by_user_id).trim() : '';
-    const isLocked = !!(row?.locked_by_invoice_id || row?.paid_at_utc);
-    const isAuthorised = !!row?.authorised_at_server;
-    const isAdHoc = !!contractAdHocMap[String(row?.contract_id || '').trim()];
-    const canEditTimesheetData =
-      !isLocked &&
-      !isAuthorised &&
-      family.route_family === 'MANUAL_NON_QR';
+  const eligibleRowsBeforeRequestedClassification = [];
 
-    const canManageEvidence =
-      !isLocked &&
-      !family.is_import_authoritative;
+  for (const summaryRow of broadRows) {
+    const timesheetId = String(summaryRow?.timesheet_id || '').trim();
+    if (!timesheetId) continue;
 
-    const reviewOnly =
-      !!isLocked ||
-      !!isAuthorised ||
-      family.route_family !== 'MANUAL_NON_QR';
+    const contractId = String(summaryRow?.contract_id || '').trim();
+    const rowForEligibility = {
+      ...summaryRow,
+      nhsp_is_ad_hoc: !!contractAdHocMap[contractId]
+    };
 
-    const totalPayExVat = Number(row?.total_pay_ex_vat || 0) || 0;
-    const netDeltaExVat = Number(row?.net_delta_ex_vat || 0) || 0;
+    const finRow = factsMap.finByTimesheetId[timesheetId] || null;
+    const summaryBaseRow = factsMap.summaryBaseByTimesheetId[timesheetId] || null;
+    const validationRow = factsMap.validationByTimesheetId[timesheetId] || null;
 
-    const nhspDeviationPct =
-      family.route_subfamily === 'NHSP' && totalPayExVat > 0
-        ? Number(((Math.abs(netDeltaExVat) / Math.abs(totalPayExVat)) * 100).toFixed(2))
-        : null;
+    const family = classifyBulkAuthoriseRow(rowForEligibility, finRow, summaryBaseRow);
+    const eligibility = buildBulkAuthoriseEligibility(rowForEligibility, finRow, summaryBaseRow, validationRow, family);
 
-    const nhspHighlightRed =
-      !!isAdHoc ||
-      (nhspDeviationPct != null && Number.isFinite(nhspDeviationPct) && nhspDeviationPct > 20);
+    if (!eligibility.bulk_authorise_section) continue;
 
-    const nhspHighlightReason =
-      isAdHoc
-        ? 'AD_HOC'
-        : ((nhspDeviationPct != null && Number.isFinite(nhspDeviationPct) && nhspDeviationPct > 20)
-            ? 'DEVIATION_GT_20'
-            : null);
+    const processedById = finRow?.processed_by_user_id ? String(finRow.processed_by_user_id).trim() : '';
+    const authorisedById = finRow?.authorised_by_user_id ? String(finRow.authorised_by_user_id).trim() : '';
 
-    return {
-      ...row,
-      id: tsId,
-      row_key: makeRowKey(row),
-      stable_row_id: tsId,
-      route_family: family.route_family,
-      route_subfamily: family.route_subfamily,
-      underlying_channel_family: family.underlying_channel_family,
-      compare_block_required: family.compare_block_required,
-      is_import_authoritative: family.is_import_authoritative,
-      processed_at_utc: fin?.processed_at_utc || null,
+    eligibleRowsBeforeRequestedClassification.push({
+      ...rowForEligibility,
+      id: timesheetId,
+      row_key: makeRowKey(summaryRow),
+      stable_row_id: timesheetId,
+      processed_at_utc: finRow?.processed_at_utc || null,
       processed_by_user_id: processedById || null,
       processed_by_display: processedById ? (userDisplayMap[processedById] || null) : null,
-      authorised_at_utc: fin?.authorised_at_utc || null,
+      authorised_at_utc: finRow?.authorised_at_utc || null,
       authorised_by_user_id: authorisedById || null,
       authorised_by_display: authorisedById ? (userDisplayMap[authorisedById] || null) : null,
-      can_edit_timesheet_data: canEditTimesheetData,
-      can_manage_evidence: canManageEvidence,
-      review_only: reviewOnly,
-      can_unprocess: !isLocked && !isAuthorised,
-      can_add_additional_manual: !isLocked && !!tsId,
-      nhsp_deviation_pct: nhspDeviationPct,
-      nhsp_is_ad_hoc: isAdHoc,
-      nhsp_highlight_red: nhspHighlightRed,
-      nhsp_highlight_reason: nhspHighlightReason
-    };
+      ...family,
+      ...eligibility
+    });
+  }
+
+  const textNeedle = textQ.toLowerCase();
+  const filteredRowsAfterRequestedClassificationAndSearch = eligibleRowsBeforeRequestedClassification.filter((row) => {
+    if (requestedClassification && row.bulk_authorise_classification !== requestedClassification) return false;
+    if (candidateId && String(row?.candidate_id || '').trim() !== candidateId) return false;
+    if (clientId && String(row?.client_id || '').trim() !== clientId) return false;
+    if (!rowMatchesText(row, textNeedle)) return false;
+    return true;
   });
 
   const counts = {
-    total: rows.length,
-    manual_non_qr: rows.filter(r => r.route_family === 'MANUAL_NON_QR').length,
-    qr: rows.filter(r => r.route_family === 'QR').length,
-    electronic: rows.filter(r => r.route_family === 'ELECTRONIC').length,
-    import_authoritative: rows.filter(r => r.route_family === 'IMPORT_AUTHORITATIVE').length,
-    nhsp: rows.filter(r => r.route_subfamily === 'NHSP').length,
-    healthroster_no_timesheet: rows.filter(r => r.route_subfamily === 'HEALTHROSTER_NO_TIMESHEET').length,
-    healthroster_timesheet_required: rows.filter(r => r.route_subfamily === 'HEALTHROSTER_TIMESHEET_REQUIRED').length
+    total: filteredRowsAfterRequestedClassificationAndSearch.length,
+    processed_eligible: filteredRowsAfterRequestedClassificationAndSearch.filter((row) => row.bulk_authorise_section === 'processed_eligible').length,
+    authorised_eligible: filteredRowsAfterRequestedClassificationAndSearch.filter((row) => row.bulk_authorise_section === 'authorised_eligible').length,
+    by_classification: {
+      TIMESHEETS: eligibleRowsBeforeRequestedClassification.filter((row) => row.bulk_authorise_classification === 'TIMESHEETS').length,
+      NHSP: eligibleRowsBeforeRequestedClassification.filter((row) => row.bulk_authorise_classification === 'NHSP').length,
+      HR: eligibleRowsBeforeRequestedClassification.filter((row) => row.bulk_authorise_classification === 'HR').length
+    },
+    timesheets_by_type: {
+      manual: filteredRowsAfterRequestedClassificationAndSearch.filter((row) => row.bulk_authorise_classification === 'TIMESHEETS' && row.route_family === 'MANUAL_NON_QR').length,
+      qr: filteredRowsAfterRequestedClassificationAndSearch.filter((row) => row.bulk_authorise_classification === 'TIMESHEETS' && row.route_family === 'QR').length,
+      electronic: filteredRowsAfterRequestedClassificationAndSearch.filter((row) => row.bulk_authorise_classification === 'TIMESHEETS' && row.route_family === 'ELECTRONIC').length
+    },
+    validation: {
+      already_validated: filteredRowsAfterRequestedClassificationAndSearch.filter((row) => row.bulk_authorise_classification === 'TIMESHEETS' && row.hr_validation_awaiting !== true).length,
+      awaiting_validation: filteredRowsAfterRequestedClassificationAndSearch.filter((row) => row.bulk_authorise_classification === 'TIMESHEETS' && row.hr_validation_awaiting === true).length
+    }
   };
 
   return withCORS(env, req, ok({
@@ -38236,16 +39518,244 @@ async function handleBulkAuthoriseDataset(env, req) {
       q: textQ || null,
       candidate_id: candidateId,
       client_id: clientId,
-      include_manual_non_qr: includeManualNonQr,
-      include_qr: includeQr,
-      include_electronic: includeElectronic,
-      include_import_authoritative: includeImportAuthoritative,
-      include_import_nhsp: includeImportNhsp,
-      include_import_healthroster_no_timesheet: includeImportHealthrosterNoTimesheet
+      classification: requestedClassification
     },
     counts,
-    rows
+    rows: filteredRowsAfterRequestedClassificationAndSearch
   }));
+}
+
+function classifyBulkAuthoriseRow(row, fin, summaryBase) {
+  const upper = (v) => String(v == null ? '' : v).trim().toUpperCase();
+  const boolish = (v) => {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (v == null) return false;
+    const s = String(v).trim().toLowerCase();
+    return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+  };
+  const readOwn = (obj, key) => {
+    if (!obj || typeof obj !== 'object') return undefined;
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) return undefined;
+    return obj[key];
+  };
+  const readFirst = (...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return undefined;
+  };
+  const numeric = (value) => {
+    if (value === undefined || value === null || String(value).trim() === '') return 0;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const source = (row && typeof row === 'object') ? row : {};
+  const summary = (summaryBase && typeof summaryBase === 'object') ? summaryBase : {};
+  const effective = (source.effective && typeof source.effective === 'object')
+    ? source.effective
+    : ((summary.effective && typeof summary.effective === 'object') ? summary.effective : {});
+  const timesheet = (source.timesheet && typeof source.timesheet === 'object')
+    ? source.timesheet
+    : ((summary.timesheet && typeof summary.timesheet === 'object') ? summary.timesheet : {});
+  const contractWeek = (source.contract_week && typeof source.contract_week === 'object')
+    ? source.contract_week
+    : ((summary.contract_week && typeof summary.contract_week === 'object') ? summary.contract_week : {});
+  const tsfin = (fin && typeof fin === 'object') ? fin : ((source.tsfin && typeof source.tsfin === 'object') ? source.tsfin : {});
+
+  const routeType = upper(
+    readFirst(
+      readOwn(source, 'route_type'),
+      readOwn(effective, 'route_type'),
+      readOwn(summary, 'route_type'),
+      ''
+    )
+  );
+
+  const explicitRouteFamily = upper(
+    readOwn(source, 'route_family') ??
+    readOwn(source.bulk_authorise, 'route_family') ??
+    readOwn(source.action_flags, 'route_family') ??
+    readOwn(source.artifact_hints, 'route_family') ??
+    ''
+  );
+
+  const explicitRouteSubfamily = upper(
+    readOwn(source, 'route_subfamily') ??
+    readOwn(source.bulk_authorise, 'route_subfamily') ??
+    readOwn(source.action_flags, 'route_subfamily') ??
+    readOwn(source.artifact_hints, 'route_subfamily') ??
+    ''
+  );
+
+  const explicitUnderlyingChannelFamily = upper(
+    readOwn(source, 'underlying_channel_family') ??
+    readOwn(source.bulk_authorise, 'underlying_channel_family') ??
+    readOwn(source.action_flags, 'underlying_channel_family') ??
+    readOwn(source.artifact_hints, 'underlying_channel_family') ??
+    ''
+  );
+
+  const explicitCompareBlockRequired = readOwn(source, 'compare_block_required');
+  const explicitIsImportAuthoritative = readOwn(source, 'is_import_authoritative');
+
+  const clientNoTimesheetRequired = boolish(
+    readFirst(
+      readOwn(source, 'client_no_timesheet_required'),
+      readOwn(effective, 'client_no_timesheet_required'),
+      readOwn(summary, 'client_no_timesheet_required'),
+      false
+    )
+  );
+
+  const qrStatus = upper(
+    readFirst(
+      readOwn(source, 'qr_status'),
+      readOwn(timesheet, 'qr_status'),
+      readOwn(summary, 'qr_status'),
+      ''
+    )
+  );
+
+  const isQr =
+    boolish(readOwn(source, 'is_qr')) ||
+    boolish(readOwn(source, 'qr_required')) ||
+    qrStatus === 'PENDING' ||
+    qrStatus === 'USED' ||
+    qrStatus === 'EXPIRED' ||
+    qrStatus === 'CANCELLED' ||
+    !!String(readFirst(readOwn(timesheet, 'qr_token'), readOwn(source, 'qr_token'), readOwn(summary, 'qr_token'), '') || '').trim() ||
+    !!readFirst(readOwn(timesheet, 'qr_generated_at'), readOwn(source, 'qr_generated_at'), readOwn(summary, 'qr_generated_at')) ||
+    !!String(readFirst(readOwn(timesheet, 'qr_last_sent_hash'), readOwn(source, 'qr_last_sent_hash'), readOwn(summary, 'qr_last_sent_hash'), '') || '').trim() ||
+    !!readFirst(readOwn(timesheet, 'qr_scanned_at'), readOwn(source, 'qr_scanned_at'), readOwn(summary, 'qr_scanned_at'));
+
+  const submissionMode = upper(
+    readFirst(
+      readOwn(timesheet, 'submission_mode'),
+      readOwn(source, 'submission_mode'),
+      readOwn(effective, 'submission_mode'),
+      readOwn(timesheet, 'submission_mode_snapshot'),
+      readOwn(contractWeek, 'submission_mode_snapshot'),
+      readOwn(source, 'submission_mode_snapshot'),
+      readOwn(effective, 'submission_mode_snapshot'),
+      readOwn(summary, 'submission_mode'),
+      readOwn(summary, 'submission_mode_snapshot'),
+      ''
+    )
+  );
+
+  const additionalSeq = Math.max(
+    numeric(readOwn(source, 'additional_seq')),
+    numeric(readOwn(timesheet, 'additional_seq')),
+    numeric(readOwn(contractWeek, 'additional_seq')),
+    numeric(readOwn(summary, 'additional_seq'))
+  );
+
+  const isAdjustmentOrAdditional = !!(
+    boolish(readOwn(source, 'is_adjustment')) ||
+    boolish(readOwn(timesheet, 'is_adjustment')) ||
+    boolish(readOwn(contractWeek, 'is_adjustment')) ||
+    boolish(readOwn(summary, 'is_adjustment')) ||
+    additionalSeq > 0
+  );
+
+  const isManualNhspAdditionalAdjustment = (
+    routeType === 'WEEKLY_NHSP_ADJUSTMENT' &&
+    isAdjustmentOrAdditional &&
+    submissionMode === 'MANUAL'
+  );
+
+  const routeFamily = (() => {
+    if (explicitRouteFamily === 'IMPORT_AUTHORITATIVE' || explicitRouteFamily === 'QR' || explicitRouteFamily === 'ELECTRONIC' || explicitRouteFamily === 'MANUAL_NON_QR') {
+      return explicitRouteFamily;
+    }
+
+    if (
+      routeType === 'WEEKLY_NHSP' ||
+      (routeType === 'WEEKLY_NHSP_ADJUSTMENT' && !isManualNhspAdditionalAdjustment) ||
+      (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired)
+    ) {
+      return 'IMPORT_AUTHORITATIVE';
+    }
+
+    if (isQr) return 'QR';
+    if (submissionMode === 'ELECTRONIC') return 'ELECTRONIC';
+    return 'MANUAL_NON_QR';
+  })();
+
+  const routeSubfamily = (() => {
+    if (explicitRouteSubfamily) return explicitRouteSubfamily;
+    if (routeFamily === 'IMPORT_AUTHORITATIVE') {
+      return (routeType === 'WEEKLY_HEALTHROSTER') ? 'HEALTHROSTER_NO_TIMESHEET' : 'NHSP';
+    }
+    if (routeType === 'WEEKLY_HEALTHROSTER') return 'HEALTHROSTER_TIMESHEET_REQUIRED';
+    return routeFamily;
+  })();
+
+  const underlyingChannelFamily = (() => {
+    if (explicitUnderlyingChannelFamily === 'QR' || explicitUnderlyingChannelFamily === 'ELECTRONIC' || explicitUnderlyingChannelFamily === 'MANUAL_NON_QR') {
+      return explicitUnderlyingChannelFamily;
+    }
+    if (routeFamily === 'IMPORT_AUTHORITATIVE') return null;
+    if (isQr) return 'QR';
+    if (submissionMode === 'ELECTRONIC') return 'ELECTRONIC';
+    return 'MANUAL_NON_QR';
+  })();
+
+  const isImportAuthoritative = (() => {
+    if (typeof explicitIsImportAuthoritative === 'boolean') return explicitIsImportAuthoritative;
+    return routeFamily === 'IMPORT_AUTHORITATIVE';
+  })();
+
+  const compareBlockRequired = (() => {
+    if (typeof explicitCompareBlockRequired === 'boolean') return explicitCompareBlockRequired;
+    return (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired !== true);
+  })();
+
+  const rawSheetScope = upper(
+    readFirst(
+      readOwn(source, 'sheet_scope'),
+      readOwn(timesheet, 'sheet_scope'),
+      readOwn(summary, 'sheet_scope'),
+      ''
+    )
+  );
+
+  const periodType = (() => {
+    if (rawSheetScope === 'DAILY' || rawSheetScope === 'WEEKLY') return rawSheetScope;
+    if (routeType.startsWith('DAILY_')) return 'DAILY';
+    return 'WEEKLY';
+  })();
+
+  const bulkAuthoriseClassification = (() => {
+    if (routeFamily === 'IMPORT_AUTHORITATIVE') {
+      if (routeSubfamily === 'NHSP') return 'NHSP';
+      if (routeSubfamily === 'HEALTHROSTER_NO_TIMESHEET') return 'HR';
+      if (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired === true) return 'HR';
+      return 'NHSP';
+    }
+    return 'TIMESHEETS';
+  })();
+
+  const timesheetTypeSortKey = (() => {
+    if (bulkAuthoriseClassification !== 'TIMESHEETS') return 99;
+    if (routeFamily === 'MANUAL_NON_QR') return 1;
+    if (routeFamily === 'QR') return 2;
+    if (routeFamily === 'ELECTRONIC') return 3;
+    return 99;
+  })();
+
+  return {
+    route_family: routeFamily,
+    route_subfamily: routeSubfamily,
+    underlying_channel_family: underlyingChannelFamily,
+    is_import_authoritative: isImportAuthoritative,
+    compare_block_required: compareBlockRequired,
+    bulk_authorise_classification: bulkAuthoriseClassification,
+    period_type: periodType,
+    timesheet_type_sort_key: timesheetTypeSortKey
+  };
 }
 
 async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
@@ -38266,42 +39776,6 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { json = null; }
     return { text, json };
-  };
-
-  const classifyRouteFamily = (details) => {
-    const effective = (details && details.effective && typeof details.effective === 'object') ? details.effective : {};
-    const timesheet = (details && details.timesheet && typeof details.timesheet === 'object') ? details.timesheet : {};
-    const routeType = String(details?.route_type || effective.route_type || '').trim().toUpperCase();
-    const clientNoTimesheetRequired = toBool(effective.client_no_timesheet_required);
-    const qrStatus = String(details?.qr_status || timesheet.qr_status || '').trim().toUpperCase();
-    const isQr = !!qrStatus;
-    const submissionMode = String(timesheet.submission_mode || '').trim().toUpperCase();
-
-    if (
-      routeType === 'WEEKLY_NHSP' ||
-      routeType === 'WEEKLY_NHSP_ADJUSTMENT' ||
-      (routeType === 'WEEKLY_HEALTHROSTER' && clientNoTimesheetRequired)
-    ) {
-      return {
-        route_family: 'IMPORT_AUTHORITATIVE',
-        route_subfamily: (routeType === 'WEEKLY_HEALTHROSTER') ? 'HEALTHROSTER_NO_TIMESHEET' : 'NHSP',
-        underlying_channel_family: null,
-        compare_block_required: false,
-        is_import_authoritative: true
-      };
-    }
-
-    const underlyingChannelFamily = isQr
-      ? 'QR'
-      : (submissionMode === 'ELECTRONIC' ? 'ELECTRONIC' : 'MANUAL_NON_QR');
-
-    return {
-      route_family: underlyingChannelFamily,
-      route_subfamily: (routeType === 'WEEKLY_HEALTHROSTER') ? 'HEALTHROSTER_TIMESHEET_REQUIRED' : underlyingChannelFamily,
-      underlying_channel_family: underlyingChannelFamily,
-      compare_block_required: (routeType === 'WEEKLY_HEALTHROSTER' && !clientNoTimesheetRequired),
-      is_import_authoritative: false
-    };
   };
 
   const fmtLondonHm = (iso) => {
@@ -38438,8 +39912,8 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
     return out;
   };
 
-  const selectPrimaryLeftPaneArtifact = (details, evidenceItems) => {
-    const family = classifyRouteFamily(details);
+  const selectPrimaryLeftPaneArtifact = (details, evidenceItems, familyInfo) => {
+    const family = (familyInfo && typeof familyInfo === 'object') ? familyInfo : classifyBulkAuthoriseRow(details, details?.tsfin || null);
     const items = Array.isArray(evidenceItems) ? evidenceItems.slice() : [];
 
     const firstMatch = (pred) => items.find((item) => pred(item)) || null;
@@ -38508,6 +39982,22 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
     };
   };
 
+  const fetchContractAdHocValue = async (contractId) => {
+    const cleanContractId = contractId ? String(contractId).trim() : '';
+    if (!cleanContractId) return false;
+    const enc = encodeURIComponent;
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?id=eq.${enc(cleanContractId)}` +
+        `&select=is_ad_hoc` +
+        `&limit=1`,
+      false
+    );
+    const contractRow = Array.isArray(rows) ? rows[0] : null;
+    return contractRow?.is_ad_hoc === true;
+  };
+
   const detailsRes = await handleTimesheetDetails(env, req, timesheetId);
   if (!detailsRes || !detailsRes.ok) {
     const payload = await readResponsePayload(detailsRes);
@@ -38546,9 +40036,71 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
     ? evPayload.json
     : ((evPayload.json && typeof evPayload.json === 'object' && Array.isArray(evPayload.json.evidence)) ? evPayload.json.evidence : []);
 
-  const family = classifyRouteFamily(details);
+  const currentTimesheetId = String(details.current_timesheet_id || details.timesheet.timesheet_id || '').trim();
+  const factsMap = await fetchBulkAuthoriseEligibilityFactsMap(env, currentTimesheetId ? [currentTimesheetId] : []);
+  const finRow = currentTimesheetId ? (factsMap.finByTimesheetId[currentTimesheetId] || null) : null;
+  const summaryBaseRow = currentTimesheetId ? (factsMap.summaryBaseByTimesheetId[currentTimesheetId] || null) : null;
+  const validationRow = currentTimesheetId ? (factsMap.validationByTimesheetId[currentTimesheetId] || null) : null;
+
+  let summaryRow = null;
+  try {
+    const enc = encodeURIComponent;
+    const { rows: summaryRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+        `&select=*` +
+        `&limit=1`,
+      false
+    );
+    summaryRow = Array.isArray(summaryRows) ? (summaryRows[0] || null) : null;
+  } catch {
+    summaryRow = null;
+  }
+
+  const contractId = String(
+    summaryRow?.contract_id ||
+    details?.effective?.contract_id ||
+    details?.contract_week?.contract_id ||
+    details?.timesheet?.contract_id ||
+    ''
+  ).trim();
+  const isAdHoc = contractId ? await fetchContractAdHocValue(contractId).catch(() => false) : false;
+
+  const contextRow = {
+    ...(summaryRow && typeof summaryRow === 'object' ? summaryRow : {}),
+    ...details,
+    timesheet_id: currentTimesheetId || null,
+    contract_week_id: details.contract_week_id || details.contract_week?.id || summaryRow?.contract_week_id || null,
+    route_type: details.route_type ?? details.effective?.route_type ?? summaryRow?.route_type ?? null,
+    route_display: details.route_display ?? details.effective?.route_display ?? summaryRow?.route_display ?? null,
+    summary_stage: details.summary_stage ?? details.effective?.summary_stage ?? summaryRow?.summary_stage ?? null,
+    processing_status: details.tsfin?.processing_status ?? summaryRow?.processing_status ?? null,
+    qr_status: details.qr_status ?? details.timesheet?.qr_status ?? summaryRow?.qr_status ?? null,
+    issue_codes: Array.isArray(details.issue_codes) ? details.issue_codes : (Array.isArray(summaryRow?.issue_codes) ? summaryRow.issue_codes : []),
+    client_requires_hr: details.effective?.client_requires_hr ?? summaryRow?.client_requires_hr ?? null,
+    client_autoprocess_hr: details.effective?.client_autoprocess_hr ?? summaryRow?.client_autoprocess_hr ?? null,
+    client_no_timesheet_required: details.effective?.client_no_timesheet_required ?? summaryRow?.client_no_timesheet_required ?? null,
+    total_pay_ex_vat: summaryRow?.total_pay_ex_vat ?? details.tsfin?.total_pay_ex_vat ?? null,
+    net_delta_ex_vat: summaryRow?.net_delta_ex_vat ?? null,
+    nhsp_deviation_pct: summaryRow?.nhsp_deviation_pct ?? null,
+    nhsp_highlight_red: summaryRow?.nhsp_highlight_red ?? null,
+    nhsp_highlight_reason: summaryRow?.nhsp_highlight_reason ?? null,
+    nhsp_is_ad_hoc: !!isAdHoc,
+    effective: details.effective,
+    timesheet: details.timesheet,
+    contract_week: details.contract_week,
+    tsfin: details.tsfin,
+    action_flags: details.action_flags,
+    bulk_authorise: details.bulk_authorise,
+    artifact_hints: details.artifact_hints,
+    healthroster_compare: details.healthroster_compare
+  };
+
+  const family = classifyBulkAuthoriseRow(contextRow, finRow || details.tsfin || null, summaryBaseRow);
+  const eligibility = buildBulkAuthoriseEligibility(contextRow, finRow || details.tsfin || null, summaryBaseRow, validationRow, family);
   const comparePayload = buildHealthRosterComparePayload(details);
-  const leftPaneSelection = selectPrimaryLeftPaneArtifact(details, evidenceItems);
+  const leftPaneSelection = selectPrimaryLeftPaneArtifact(details, evidenceItems, family);
 
   return withCORS(env, req, ok({
     requested_timesheet_id: details.requested_timesheet_id || timesheetId,
@@ -38559,6 +40111,9 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
     underlying_channel_family: family.underlying_channel_family,
     is_import_authoritative: family.is_import_authoritative,
     compare_block_required: family.compare_block_required,
+    bulk_authorise_classification: family.bulk_authorise_classification,
+    period_type: family.period_type,
+    timesheet_type_sort_key: family.timesheet_type_sort_key,
     details,
     evidence: evidenceItems,
     left_pane: {
@@ -38570,9 +40125,12 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
       primary_artifact: leftPaneSelection.primary_artifact || null,
       source_items: Array.isArray(leftPaneSelection.source_items) ? leftPaneSelection.source_items : []
     },
-    compare_payload: comparePayload
+    compare_payload: comparePayload,
+    ...eligibility
   }));
 }
+
+
 
 async function handleBulkTimesheetAuthoriseSelected(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -38613,27 +40171,27 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
 
     if (Array.isArray(input?.selected_ids)) {
       for (const raw of input.selected_ids) {
-        const v = String(raw || '').trim();
-        if (!v) continue;
-        if (v.startsWith('timesheet:')) add({ row_key: v, timesheet_id: v.slice('timesheet:'.length) });
-        else if (v.startsWith('contract_week:')) add({ row_key: v, contract_week_id: v.slice('contract_week:'.length) });
-        else add({ row_key: `timesheet:${v}`, timesheet_id: v, expected_timesheet_id: v });
+        const value = String(raw || '').trim();
+        if (!value) continue;
+        if (value.startsWith('timesheet:')) add({ row_key: value, timesheet_id: value.slice('timesheet:'.length) });
+        else if (value.startsWith('contract_week:')) add({ row_key: value, contract_week_id: value.slice('contract_week:'.length) });
+        else add({ row_key: `timesheet:${value}`, timesheet_id: value, expected_timesheet_id: value });
       }
     }
 
     if (Array.isArray(input?.timesheet_ids)) {
       for (const raw of input.timesheet_ids) {
-        const v = String(raw || '').trim();
-        if (!v) continue;
-        add({ row_key: `timesheet:${v}`, timesheet_id: v, expected_timesheet_id: v });
+        const value = String(raw || '').trim();
+        if (!value) continue;
+        add({ row_key: `timesheet:${value}`, timesheet_id: value, expected_timesheet_id: value });
       }
     }
 
     if (Array.isArray(input?.contract_week_ids)) {
       for (const raw of input.contract_week_ids) {
-        const v = String(raw || '').trim();
-        if (!v) continue;
-        add({ row_key: `contract_week:${v}`, contract_week_id: v });
+        const value = String(raw || '').trim();
+        if (!value) continue;
+        add({ row_key: `contract_week:${value}`, contract_week_id: value });
       }
     }
 
@@ -38642,14 +40200,14 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
 
   const queryRowsForSelection = async (items) => {
     const orParts = [];
-    const tsIds = [...new Set(items.map(x => x.timesheet_id).filter(Boolean))];
-    const cwIds = [...new Set(items.map(x => x.contract_week_id).filter(Boolean))];
+    const timesheetIds = [...new Set(items.map((item) => item.timesheet_id).filter(Boolean))];
+    const contractWeekIds = [...new Set(items.map((item) => item.contract_week_id).filter(Boolean))];
 
-    if (tsIds.length === 1) orParts.push(`timesheet_id.eq.${tsIds[0]}`);
-    else if (tsIds.length > 1) orParts.push(`timesheet_id.in.(${tsIds.join(',')})`);
+    if (timesheetIds.length === 1) orParts.push(`timesheet_id.eq.${timesheetIds[0]}`);
+    else if (timesheetIds.length > 1) orParts.push(`timesheet_id.in.(${timesheetIds.join(',')})`);
 
-    if (cwIds.length === 1) orParts.push(`contract_week_id.eq.${cwIds[0]}`);
-    else if (cwIds.length > 1) orParts.push(`contract_week_id.in.(${cwIds.join(',')})`);
+    if (contractWeekIds.length === 1) orParts.push(`contract_week_id.eq.${contractWeekIds[0]}`);
+    else if (contractWeekIds.length > 1) orParts.push(`contract_week_id.in.(${contractWeekIds.join(',')})`);
 
     if (!orParts.length) return [];
 
@@ -38674,24 +40232,27 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
   const rowByContractWeekId = Object.create(null);
 
   for (const row of rows) {
-    const tsId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
-    const cwId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
-    if (tsId) rowByTimesheetId[tsId] = row;
-    if (cwId) rowByContractWeekId[cwId] = row;
+    const timesheetId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
+    const contractWeekId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
+    if (timesheetId) rowByTimesheetId[timesheetId] = row;
+    if (contractWeekId) rowByContractWeekId[contractWeekId] = row;
   }
+
+  const factsTimesheetIds = [...new Set(rows.map((row) => String(row?.timesheet_id || '').trim()).filter(Boolean))];
+  const factsMap = await fetchBulkAuthoriseEligibilityFactsMap(env, factsTimesheetIds);
 
   const results = [];
 
   for (const selection of selections) {
-    const tsId = selection?.timesheet_id ? String(selection.timesheet_id).trim() : '';
-    const cwId = selection?.contract_week_id ? String(selection.contract_week_id).trim() : '';
-    const row = (tsId && rowByTimesheetId[tsId]) || (cwId && rowByContractWeekId[cwId]) || null;
+    const timesheetId = selection?.timesheet_id ? String(selection.timesheet_id).trim() : '';
+    const contractWeekId = selection?.contract_week_id ? String(selection.contract_week_id).trim() : '';
+    const row = (timesheetId && rowByTimesheetId[timesheetId]) || (contractWeekId && rowByContractWeekId[contractWeekId]) || null;
 
-    const result = await runTimesheetAuthoriseDecision(env, req, selection, row);
+    const result = await runTimesheetAuthoriseDecision(env, req, selection, row, factsMap);
     results.push(result);
   }
 
-  const success_count = results.filter(r => r.ok).length;
+  const success_count = results.filter((result) => result.ok).length;
   const failure_count = results.length - success_count;
 
   return withCORS(env, req, ok({
@@ -38700,6 +40261,8 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
     results
   }));
 }
+
+
 
 async function handleBulkTimesheetUnauthoriseSelected(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -38740,27 +40303,27 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
 
     if (Array.isArray(input?.selected_ids)) {
       for (const raw of input.selected_ids) {
-        const v = String(raw || '').trim();
-        if (!v) continue;
-        if (v.startsWith('timesheet:')) add({ row_key: v, timesheet_id: v.slice('timesheet:'.length) });
-        else if (v.startsWith('contract_week:')) add({ row_key: v, contract_week_id: v.slice('contract_week:'.length) });
-        else add({ row_key: `timesheet:${v}`, timesheet_id: v, expected_timesheet_id: v });
+        const value = String(raw || '').trim();
+        if (!value) continue;
+        if (value.startsWith('timesheet:')) add({ row_key: value, timesheet_id: value.slice('timesheet:'.length) });
+        else if (value.startsWith('contract_week:')) add({ row_key: value, contract_week_id: value.slice('contract_week:'.length) });
+        else add({ row_key: `timesheet:${value}`, timesheet_id: value, expected_timesheet_id: value });
       }
     }
 
     if (Array.isArray(input?.timesheet_ids)) {
       for (const raw of input.timesheet_ids) {
-        const v = String(raw || '').trim();
-        if (!v) continue;
-        add({ row_key: `timesheet:${v}`, timesheet_id: v, expected_timesheet_id: v });
+        const value = String(raw || '').trim();
+        if (!value) continue;
+        add({ row_key: `timesheet:${value}`, timesheet_id: value, expected_timesheet_id: value });
       }
     }
 
     if (Array.isArray(input?.contract_week_ids)) {
       for (const raw of input.contract_week_ids) {
-        const v = String(raw || '').trim();
-        if (!v) continue;
-        add({ row_key: `contract_week:${v}`, contract_week_id: v });
+        const value = String(raw || '').trim();
+        if (!value) continue;
+        add({ row_key: `contract_week:${value}`, contract_week_id: value });
       }
     }
 
@@ -38769,14 +40332,14 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
 
   const queryRowsForSelection = async (items) => {
     const orParts = [];
-    const tsIds = [...new Set(items.map(x => x.timesheet_id).filter(Boolean))];
-    const cwIds = [...new Set(items.map(x => x.contract_week_id).filter(Boolean))];
+    const timesheetIds = [...new Set(items.map((item) => item.timesheet_id).filter(Boolean))];
+    const contractWeekIds = [...new Set(items.map((item) => item.contract_week_id).filter(Boolean))];
 
-    if (tsIds.length === 1) orParts.push(`timesheet_id.eq.${tsIds[0]}`);
-    else if (tsIds.length > 1) orParts.push(`timesheet_id.in.(${tsIds.join(',')})`);
+    if (timesheetIds.length === 1) orParts.push(`timesheet_id.eq.${timesheetIds[0]}`);
+    else if (timesheetIds.length > 1) orParts.push(`timesheet_id.in.(${timesheetIds.join(',')})`);
 
-    if (cwIds.length === 1) orParts.push(`contract_week_id.eq.${cwIds[0]}`);
-    else if (cwIds.length > 1) orParts.push(`contract_week_id.in.(${cwIds.join(',')})`);
+    if (contractWeekIds.length === 1) orParts.push(`contract_week_id.eq.${contractWeekIds[0]}`);
+    else if (contractWeekIds.length > 1) orParts.push(`contract_week_id.in.(${contractWeekIds.join(',')})`);
 
     if (!orParts.length) return [];
 
@@ -38801,24 +40364,27 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
   const rowByContractWeekId = Object.create(null);
 
   for (const row of rows) {
-    const tsId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
-    const cwId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
-    if (tsId) rowByTimesheetId[tsId] = row;
-    if (cwId) rowByContractWeekId[cwId] = row;
+    const timesheetId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
+    const contractWeekId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
+    if (timesheetId) rowByTimesheetId[timesheetId] = row;
+    if (contractWeekId) rowByContractWeekId[contractWeekId] = row;
   }
+
+  const factsTimesheetIds = [...new Set(rows.map((row) => String(row?.timesheet_id || '').trim()).filter(Boolean))];
+  const factsMap = await fetchBulkAuthoriseEligibilityFactsMap(env, factsTimesheetIds);
 
   const results = [];
 
   for (const selection of selections) {
-    const tsId = selection?.timesheet_id ? String(selection.timesheet_id).trim() : '';
-    const cwId = selection?.contract_week_id ? String(selection.contract_week_id).trim() : '';
-    const row = (tsId && rowByTimesheetId[tsId]) || (cwId && rowByContractWeekId[cwId]) || null;
+    const timesheetId = selection?.timesheet_id ? String(selection.timesheet_id).trim() : '';
+    const contractWeekId = selection?.contract_week_id ? String(selection.contract_week_id).trim() : '';
+    const row = (timesheetId && rowByTimesheetId[timesheetId]) || (contractWeekId && rowByContractWeekId[contractWeekId]) || null;
 
-    const result = await runTimesheetUnauthoriseDecision(env, req, selection, row);
+    const result = await runTimesheetUnauthoriseDecision(env, req, selection, row, factsMap);
     results.push(result);
   }
 
-  const success_count = results.filter(r => r.ok).length;
+  const success_count = results.filter((result) => result.ok).length;
   const failure_count = results.length - success_count;
 
   return withCORS(env, req, ok({
@@ -38828,8 +40394,7 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
   }));
 }
 
-
-async function runTimesheetAuthoriseDecision(env, req, selection, row) {
+async function runTimesheetAuthoriseDecision(env, req, selection, row, factsMap) {
   const readResponsePayload = async (res) => {
     const text = await res.text().catch(() => '');
     let json = null;
@@ -38852,8 +40417,6 @@ async function runTimesheetAuthoriseDecision(env, req, selection, row) {
   const selectedRowKey = selection?.row_key ? String(selection.row_key).trim() : '';
   const rowTimesheetId = row?.timesheet_id ? String(row.timesheet_id).trim() : '';
   const rowContractWeekId = row?.contract_week_id ? String(row.contract_week_id).trim() : '';
-  const submissionMode = String(row?.submission_mode || '').trim().toUpperCase();
-  const sheetScope = String(row?.sheet_scope || '').trim().toUpperCase();
 
   if (!row) {
     return {
@@ -38879,10 +40442,48 @@ async function runTimesheetAuthoriseDecision(env, req, selection, row) {
     };
   }
 
+  const factBag = (factsMap && typeof factsMap === 'object') ? factsMap : {};
+  const finRow = (factBag.finByTimesheetId && typeof factBag.finByTimesheetId === 'object') ? (factBag.finByTimesheetId[rowTimesheetId] || null) : null;
+  const summaryBaseRow = (factBag.summaryBaseByTimesheetId && typeof factBag.summaryBaseByTimesheetId === 'object') ? (factBag.summaryBaseByTimesheetId[rowTimesheetId] || null) : null;
+  const validationRow = (factBag.validationByTimesheetId && typeof factBag.validationByTimesheetId === 'object') ? (factBag.validationByTimesheetId[rowTimesheetId] || null) : null;
+
+  const family = classifyBulkAuthoriseRow(row, finRow, summaryBaseRow);
+  const eligibility = buildBulkAuthoriseEligibility(row, finRow, summaryBaseRow, validationRow, family);
+  const routeFamily = String(family?.route_family || row?.route_family || '').trim().toUpperCase();
+
+  if (eligibility.can_bulk_authorise !== true) {
+    let reason = 'row no longer eligible to authorise';
+    if (routeFamily === 'QR' && eligibility.qr_signed_returned !== true) {
+      reason = 'awaiting signed QR timesheet';
+    } else if (eligibility.qr_unsigned_blocked === true) {
+      reason = 'awaiting signed QR timesheet';
+    } else if (eligibility.locked === true) {
+      reason = 'row is locked or paid';
+    } else if (eligibility.bulk_authorise_section !== 'processed_eligible') {
+      reason = 'row is not in Processed Eligible';
+    }
+
+    return {
+      row_key: selectedRowKey || `timesheet:${rowTimesheetId}`,
+      timesheet_id: rowTimesheetId,
+      contract_week_id: rowContractWeekId || null,
+      ok: false,
+      status: 'FAILED',
+      reason,
+      warnings: []
+    };
+  }
+
   const expectedTimesheetId = rowTimesheetId;
+  const isWeeklyManualAuthorise = (
+    !!rowContractWeekId &&
+    String(family?.period_type || '').trim().toUpperCase() === 'WEEKLY' &&
+    String(family?.route_family || '').trim().toUpperCase() === 'MANUAL_NON_QR' &&
+    family?.is_import_authoritative !== true
+  );
 
   let res;
-  if (rowContractWeekId && sheetScope === 'WEEKLY' && submissionMode === 'MANUAL') {
+  if (isWeeklyManualAuthorise) {
     const subReq = new Request(req.url, {
       method: 'POST',
       headers: req.headers,
@@ -38924,7 +40525,8 @@ async function runTimesheetAuthoriseDecision(env, req, selection, row) {
   };
 }
 
-async function runTimesheetUnauthoriseDecision(env, req, selection, row) {
+
+async function runTimesheetUnauthoriseDecision(env, req, selection, row, factsMap) {
   const readResponsePayload = async (res) => {
     const text = await res.text().catch(() => '');
     let json = null;
@@ -38968,6 +40570,41 @@ async function runTimesheetUnauthoriseDecision(env, req, selection, row) {
       ok: false,
       status: 'FAILED',
       reason: 'Selected row does not have a real timesheet to unauthorise',
+      warnings: []
+    };
+  }
+
+  const factBag = (factsMap && typeof factsMap === 'object') ? factsMap : {};
+  const finRow = (factBag.finByTimesheetId && typeof factBag.finByTimesheetId === 'object') ? (factBag.finByTimesheetId[rowTimesheetId] || null) : null;
+  const summaryBaseRow = (factBag.summaryBaseByTimesheetId && typeof factBag.summaryBaseByTimesheetId === 'object') ? (factBag.summaryBaseByTimesheetId[rowTimesheetId] || null) : null;
+  const validationRow = (factBag.validationByTimesheetId && typeof factBag.validationByTimesheetId === 'object') ? (factBag.validationByTimesheetId[rowTimesheetId] || null) : null;
+
+  const family = classifyBulkAuthoriseRow(row, finRow, summaryBaseRow);
+  const eligibility = buildBulkAuthoriseEligibility(row, finRow, summaryBaseRow, validationRow, family);
+  const routeFamily = String(family?.route_family || row?.route_family || '').trim().toUpperCase();
+  const routeSubfamily = String(family?.route_subfamily || row?.route_subfamily || '').trim().toUpperCase();
+  const underlyingChannelFamily = String(family?.underlying_channel_family || row?.underlying_channel_family || '').trim().toUpperCase();
+  const isQrFamily = (routeFamily === 'QR' || routeSubfamily === 'QR' || underlyingChannelFamily === 'QR');
+
+  if (eligibility.can_bulk_unauthorise !== true) {
+    let reason = 'row no longer eligible to unauthorise';
+    if (isQrFamily && eligibility.qr_signed_returned !== true) {
+      reason = 'awaiting signed QR timesheet';
+    } else if (eligibility.qr_unsigned_blocked === true) {
+      reason = 'awaiting signed QR timesheet';
+    } else if (eligibility.locked === true) {
+      reason = 'row is locked or paid';
+    } else if (eligibility.bulk_authorise_section !== 'authorised_eligible') {
+      reason = 'row is not in Authorised Eligible';
+    }
+
+    return {
+      row_key: selectedRowKey || `timesheet:${rowTimesheetId}`,
+      timesheet_id: rowTimesheetId,
+      contract_week_id: rowContractWeekId || null,
+      ok: false,
+      status: 'FAILED',
+      reason,
       warnings: []
     };
   }
@@ -44452,10 +46089,10 @@ async function handleBankingManualDebtAdjustmentUpdate(env, req, user, financeCa
 
 
 
-
 async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId) {
   const financeCaseIdText = String(financeCaseId || '').trim();
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const enc = encodeURIComponent;
 
   if (!financeCaseIdText) return withCORS(env, req, badRequest('finance_case_id is required'));
   if (!uuidRe.test(financeCaseIdText)) return withCORS(env, req, badRequest('finance_case_id must be a UUID'));
@@ -44582,7 +46219,115 @@ async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId
     return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : payload;
   };
 
+  const _safeJsonParse = (s) => {
+    try { return JSON.parse(String(s || '')); } catch { return null; }
+  };
+  const _extractDbRaisedJson = (e) => {
+    try {
+      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
+      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
+      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
+        const bodyObj = _safeJsonParse(e.body);
+        if (bodyObj && typeof bodyObj === 'object' && typeof bodyObj.message === 'string') msg = bodyObj.message;
+        if (!msg && bodyObj && typeof bodyObj === 'object' && typeof bodyObj.code === 'string') return bodyObj;
+      }
+      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
+        const m = e.message;
+        const i1 = m.indexOf('{');
+        const i2 = m.lastIndexOf('}');
+        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
+          const embedded = _safeJsonParse(m.slice(i1, i2 + 1));
+          if (embedded && typeof embedded === 'object' && typeof embedded.message === 'string') msg = embedded.message;
+          if (!msg && embedded && typeof embedded === 'object' && typeof embedded.code === 'string') return embedded;
+        }
+      }
+      if (!msg || typeof msg !== 'string') return null;
+      const t = msg.trim();
+      if (t.startsWith('{') && t.endsWith('}')) {
+        const payload = _safeJsonParse(t);
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+      const j1 = t.indexOf('{');
+      const j2 = t.lastIndexOf('}');
+      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
+        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
+        return (payload && typeof payload === 'object') ? payload : null;
+      }
+    } catch {}
+    return null;
+  };
+  const _jsonError = (payload, status = 409) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    return withCORS(env, req, new Response(JSON.stringify(payload), { status, headers }));
+  };
+
   try {
+    const { rows: financeCaseRows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_advances` +
+      `?id=eq.${enc(financeCaseIdText)}` +
+      `&select=id,candidate_id,case_type,status` +
+      `&limit=1`,
+      false
+    );
+
+    const financeCaseRow = (Array.isArray(financeCaseRows) && financeCaseRows[0]) ? financeCaseRows[0] : null;
+    if (financeCaseRow && ['OVERPAYMENT', 'MANUAL_DEBT_ADJUSTMENT', 'MANUAL_CREDIT_ADJUSTMENT'].includes(String(financeCaseRow.case_type || '').trim().toUpperCase())) {
+      const candidateId = String(financeCaseRow.candidate_id || '').trim();
+      const { rows: candidateRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=eq.${enc(candidateId)}` +
+        `&select=id,pay_method` +
+        `&limit=1`,
+        false
+      );
+      const candidateRow = (Array.isArray(candidateRows) && candidateRows[0]) ? candidateRows[0] : null;
+      const candidatePayMethod = String(candidateRow?.pay_method || '').trim().toUpperCase();
+
+      if (candidatePayMethod === 'PAYE' || candidatePayMethod === 'UMBRELLA') {
+        const { rows: componentRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/pay_finance_case_components` +
+          `?finance_case_id=eq.${enc(financeCaseIdText)}` +
+          `&closed_at_utc=is.null` +
+          `&classification=eq.TAXABLE_CHANNEL_SENSITIVE` +
+          `&select=id,source_pay_method,remaining_source_amount,saved_target_pay_method,saved_resolution_mode,saved_resolution_payload_json,saved_resolution_result_json,resolution_fingerprint,is_resolution_stale`,
+          false
+        );
+
+        const needsTaxableChannelRestructure = (Array.isArray(componentRows) ? componentRows : []).some((componentRow) => {
+          const remaining = Number(componentRow?.remaining_source_amount || 0);
+          const sourceMethod = String(componentRow?.source_pay_method || '').trim().toUpperCase();
+          const savedTarget = String(componentRow?.saved_target_pay_method || '').trim().toUpperCase();
+          const hasPayload = componentRow?.saved_resolution_payload_json && typeof componentRow.saved_resolution_payload_json === 'object' && !Array.isArray(componentRow.saved_resolution_payload_json);
+          const hasResult = componentRow?.saved_resolution_result_json && typeof componentRow.saved_resolution_result_json === 'object' && !Array.isArray(componentRow.saved_resolution_result_json);
+          return remaining > 0.0049 &&
+            (sourceMethod === 'PAYE' || sourceMethod === 'UMBRELLA') &&
+            sourceMethod !== candidatePayMethod &&
+            (
+              componentRow?.is_resolution_stale === true ||
+              !savedTarget ||
+              savedTarget !== candidatePayMethod ||
+              !componentRow?.saved_resolution_mode ||
+              !hasPayload ||
+              !hasResult ||
+              !String(componentRow?.resolution_fingerprint || '').trim()
+            );
+        });
+
+        if (needsTaxableChannelRestructure) {
+          return _jsonError({
+            error: 'BANKING_FINANCE_CASE_RESTRUCTURE',
+            code: 'TAXABLE_CHANNEL_RESTRUCTURE_REQUIRED',
+            message: 'This finance case requires taxable PAYE/Umbrella channel restructure before schedule-only restructure can be applied.',
+            finance_case_id: financeCaseIdText
+          }, 409);
+        }
+      }
+    }
+
     const rpcRes = await sbRpc(env, 'pay_finance_case_restructure', {
       p_finance_case_id: financeCaseIdText,
       p_actor_user_id: user.id,
@@ -44597,11 +46342,13 @@ async function handleBankingFinanceCaseRestructure(env, req, user, financeCaseId
     const payload = unwrapRpc(rpcRes, 'pay_finance_case_restructure');
     return withCORS(env, req, ok((payload && typeof payload === 'object') ? payload : {}));
   } catch (e) {
+    const raised = _extractDbRaisedJson(e);
+    if (raised && typeof raised === 'object' && String(raised.code || '').toUpperCase() === 'TAXABLE_CHANNEL_RESTRUCTURE_REQUIRED') {
+      return _jsonError(raised, 409);
+    }
     return withCORS(env, req, serverError(String(e?.message || e || 'Failed to restructure finance case')));
   }
 }
-
-
 
 
 
@@ -102174,7 +103921,6 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
   return withCORS(env, req, ok(row || { updated: true, week_id: weekId, hours }));
 }
 
-
 async function handleContractWeekManualAuthorise(env, req, weekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -102195,6 +103941,23 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
     if (v == null) return false;
     const s = String(v).trim().toLowerCase();
     return (s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on');
+  };
+
+  const hasSegmentInvoiceLock = (invoiceBreakdownInput) => {
+    let invoiceBreakdown = invoiceBreakdownInput || null;
+    if (!invoiceBreakdown) return false;
+    if (typeof invoiceBreakdown === 'string') {
+      const raw = invoiceBreakdown.trim();
+      if (!raw) return false;
+      try { invoiceBreakdown = JSON.parse(raw); } catch { return false; }
+    }
+    if (!invoiceBreakdown || typeof invoiceBreakdown !== 'object') return false;
+    if (String(invoiceBreakdown.mode || '').trim().toUpperCase() !== 'SEGMENTS') return false;
+    const segments = Array.isArray(invoiceBreakdown.segments) ? invoiceBreakdown.segments : [];
+    return segments.some((segment) => {
+      const invoiceId = segment?.invoice_locked_invoice_id;
+      return invoiceId != null && String(invoiceId).trim() !== '';
+    });
   };
 
   let cw = await sbGetOne(
@@ -102334,7 +104097,7 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
     `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
       `?timesheet_id=eq.${enc(currentTimesheetId)}` +
       `&is_current=eq.true` +
-      `&select=id,client_id,basis,processing_status,locked_by_invoice_id,paid_at_utc`
+      `&select=id,client_id,basis,processing_status,locked_by_invoice_id,paid_at_utc,invoice_breakdown_json`
   );
   const fin = finRows?.[0] || null;
 
@@ -102379,7 +104142,7 @@ async function handleContractWeekManualAuthorise(env, req, weekId) {
   if (fin) {
     const ps = finBeforeStatus;
 
-    if (fin.locked_by_invoice_id || fin.paid_at_utc) {
+    if (fin.locked_by_invoice_id || fin.paid_at_utc || hasSegmentInvoiceLock(fin.invoice_breakdown_json)) {
       return withCORS(env, req, badRequest('Cannot authorise: timesheet is locked or paid'));
     }
 
@@ -113484,10 +115247,6 @@ async function bankingCronTick(env, opts = {}) {
 }
 
 
-
-
-
-
 function normalizeBankingPayPreviewDecisions(input, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
   const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
@@ -113767,6 +115526,137 @@ function normalizeBankingPayPreviewDecisions(input, options = {}) {
     return payload;
   };
 
+  const parseOptionalPositiveTwoDp = (raw, label) => {
+    if (raw === undefined || raw === null || trimStr(raw) === '') return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) {
+      errors.push(`${label} must be a number greater than 0 when supplied`);
+      return null;
+    }
+    if (Math.abs((n * 100) - Math.round(n * 100)) > 1e-9) {
+      errors.push(`${label} must have at most 2 decimal places`);
+      return null;
+    }
+    return Number(n.toFixed(2));
+  };
+
+  const parseOptionalPositiveInteger = (raw, label) => {
+    if (raw === undefined || raw === null || trimStr(raw) === '') return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || Math.trunc(n) !== n || n < 1) {
+      errors.push(`${label} must be an integer greater than 0 when supplied`);
+      return null;
+    }
+    return Math.trunc(n);
+  };
+
+  const normalizeScheduleModeForTaxableRestructure = (raw, label) => {
+    const text = upperTrim(raw);
+    if (!text) return null;
+    if (['BY_WEEKS', 'WEEKS', 'BY_NUMBER_OF_WEEKS', 'NUMBER_OF_WEEKS'].includes(text)) return 'BY_WEEKS';
+    if (['BY_WEEKLY_DUE', 'BY_WEEKLY_AMOUNT', 'WEEKLY_AMOUNT', 'WEEKLY_DUE'].includes(text)) return 'BY_WEEKLY_DUE';
+    errors.push(`${label}.schedule_input_mode must be BY_WEEKS or BY_WEEKLY_DUE when supplied`);
+    return null;
+  };
+
+  const normalizeIsoDateForTaxableRestructure = (raw, label) => {
+    const text = trimStr(raw);
+    if (!text) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    errors.push(`${label}.effective_pay_date must be YYYY-MM-DD`);
+    return '';
+  };
+
+  const buildTaxableChannelRestructurePayload = (caseKey, resolution, label) => {
+    const candidateId = trimStr(resolution.candidate_id || resolution.candidateId || '');
+    const financeCaseId = trimStr(resolution.finance_case_id || resolution.financeCaseId || '');
+    const resolutionPath = upperTrim(resolution.resolution_path || resolution.resolutionPath || resolution.path || '');
+    const scheduleInputMode = normalizeScheduleModeForTaxableRestructure(
+      resolution.schedule_input_mode || resolution.scheduleInputMode || resolution.repayment_input_mode || resolution.repaymentInputMode || resolution.repayment_mode || resolution.repaymentMode,
+      label
+    );
+    const effectivePayDate = normalizeIsoDateForTaxableRestructure(
+      resolution.effective_pay_date || resolution.effectivePayDate || resolution.pay_date || resolution.payDate || options.effective_pay_date || options.effectivePayDate || options.pay_date || options.payDate,
+      label
+    );
+    const hasWeeklyDue = (
+      resolution.weekly_due !== undefined ||
+      resolution.weeklyDue !== undefined
+    );
+    const hasWeeksTotal = (
+      resolution.weeks_total !== undefined ||
+      resolution.weeksTotal !== undefined
+    );
+    const hasManualTotal = (
+      resolution.manual_total_remaining !== undefined ||
+      resolution.manualTotalRemaining !== undefined ||
+      resolution.total_remaining_amount !== undefined ||
+      resolution.totalRemainingAmount !== undefined ||
+      resolution.target_remaining_balance_ex_vat !== undefined ||
+      resolution.targetRemainingBalanceExVat !== undefined
+    );
+    const frontendAuthoritativeKeys = [
+      'erni_rate', 'erniRate', 'erni_rate_pct', 'erniRatePct',
+      'erni_component', 'erniComponent', 'erni_component_ex_vat', 'erniComponentExVat',
+      'vat_rate', 'vatRate', 'vat_rate_pct', 'vatRatePct',
+      'vat_amount', 'vatAmount',
+      'suggested_target_remaining_balance', 'suggestedTargetRemainingBalance',
+      'suggested_target_remaining_balance_ex_vat', 'suggestedTargetRemainingBalanceExVat',
+      'suggested_target_remaining_balance_inc_vat', 'suggestedTargetRemainingBalanceIncVat',
+      'suggested_weekly_amount', 'suggestedWeeklyAmount',
+      'suggested_weekly_due', 'suggestedWeeklyDue'
+    ];
+
+    if (!candidateId || !uuidRe.test(candidateId)) errors.push(`${label}.candidate_id is required and must be a UUID`);
+    if (!financeCaseId || !uuidRe.test(financeCaseId)) errors.push(`${label}.finance_case_id is required and must be a UUID`);
+    if (!['SUGGESTED', 'MANUAL'].includes(resolutionPath)) errors.push(`${label}.resolution_path must be SUGGESTED or MANUAL`);
+    if (!effectivePayDate) errors.push(`${label}.effective_pay_date is required or must be derivable`);
+    if (frontendAuthoritativeKeys.some((key) => Object.prototype.hasOwnProperty.call(resolution || {}, key))) {
+      errors.push(`${label} must not supply frontend-calculated ERNI/VAT conversion totals as authoritative values`);
+    }
+    if (hasWeeklyDue && hasWeeksTotal) {
+      errors.push(`${label} must supply either weekly_due or weeks_total, not both`);
+    }
+    if (resolutionPath === 'MANUAL' && !scheduleInputMode) {
+      errors.push(`${label}.schedule_input_mode is required when resolution_path is MANUAL`);
+    }
+    if (resolutionPath === 'MANUAL' && !hasWeeklyDue && !hasWeeksTotal) {
+      errors.push(`${label} must supply weekly_due or weeks_total when resolution_path is MANUAL`);
+    }
+    if (scheduleInputMode === 'BY_WEEKLY_DUE' && !hasWeeklyDue) {
+      errors.push(`${label}.weekly_due is required when schedule_input_mode is BY_WEEKLY_DUE`);
+    }
+    if (scheduleInputMode === 'BY_WEEKS' && !hasWeeksTotal) {
+      errors.push(`${label}.weeks_total is required when schedule_input_mode is BY_WEEKS`);
+    }
+
+    const weeklyDue = hasWeeklyDue ? parseOptionalPositiveTwoDp(resolution.weekly_due ?? resolution.weeklyDue, `${label}.weekly_due`) : null;
+    const weeksTotal = hasWeeksTotal ? parseOptionalPositiveInteger(resolution.weeks_total ?? resolution.weeksTotal, `${label}.weeks_total`) : null;
+    const manualTotalRemaining = hasManualTotal
+      ? parseOptionalPositiveTwoDp(
+          resolution.manual_total_remaining ?? resolution.manualTotalRemaining ?? resolution.total_remaining_amount ?? resolution.totalRemainingAmount ?? resolution.target_remaining_balance_ex_vat ?? resolution.targetRemainingBalanceExVat,
+          `${label}.manual_total_remaining`
+        )
+      : null;
+
+    const payload = {
+      case_key: caseKey,
+      candidate_id: candidateId,
+      finance_case_id: financeCaseId,
+      resolution_family: 'TAXABLE_CHANNEL_RESTRUCTURE',
+      resolution_path: resolutionPath,
+      effective_pay_date: effectivePayDate
+    };
+
+    if (scheduleInputMode) payload.schedule_input_mode = scheduleInputMode;
+    if (weeklyDue !== null) payload.weekly_due = weeklyDue;
+    if (weeksTotal !== null) payload.weeks_total = weeksTotal;
+    if (manualTotalRemaining !== null) payload.manual_total_remaining = manualTotalRemaining;
+    if (trimStr(resolution.note || resolution.reason || '')) payload.note = trimStr(resolution.note || resolution.reason);
+
+    return payload;
+  };
+
   const caseResolutionSource = hasOwn(src, 'case_resolutions')
     ? src.case_resolutions
     : hasOwn(src, 'caseResolutions')
@@ -113840,8 +115730,34 @@ function normalizeBankingPayPreviewDecisions(input, options = {}) {
             rawResolution.componentKeyValue !== undefined
           ) return 'BUCKETED';
 
+          if (
+            rawResolution.finance_case_id !== undefined ||
+            rawResolution.financeCaseId !== undefined ||
+            rawResolution.resolution_path !== undefined ||
+            rawResolution.resolutionPath !== undefined
+          ) return 'TAXABLE_CHANNEL_RESTRUCTURE';
+
           return '';
         })();
+
+
+        if (inferredResolutionFamily === 'TAXABLE_CHANNEL_RESTRUCTURE') {
+          const label = `preview_decisions_json.case_resolutions.${caseKey}`;
+          const sanitizedPayload = buildTaxableChannelRestructurePayload(caseKey, rawResolution, label);
+
+          if (
+            sanitizedPayload.candidate_id &&
+            uuidRe.test(sanitizedPayload.candidate_id) &&
+            sanitizedPayload.finance_case_id &&
+            uuidRe.test(sanitizedPayload.finance_case_id) &&
+            ['SUGGESTED', 'MANUAL'].includes(sanitizedPayload.resolution_path) &&
+            sanitizedPayload.effective_pay_date
+          ) {
+            normalizedCaseResolutions[caseKey] = cloneJson(sanitizedPayload);
+            normalizedResolutionPayloads.push(cloneJson(sanitizedPayload));
+          }
+          continue;
+        }
 
         if (inferredResolutionFamily === 'BUCKETED') {
           const bucketResolutions = Array.isArray(rawResolution.bucket_resolutions)
@@ -113974,7 +115890,7 @@ function normalizeBankingPayPreviewDecisions(input, options = {}) {
           continue;
         }
 
-        errors.push(`preview_decisions_json.case_resolutions.${caseKey}.resolution_family must be BUCKETED or NON_BUCKET`);
+        errors.push(`preview_decisions_json.case_resolutions.${caseKey}.resolution_family must be BUCKETED, NON_BUCKET or TAXABLE_CHANNEL_RESTRUCTURE`);
       }
 
       if (Object.keys(normalizedCaseResolutions).length > 0) {
@@ -114107,6 +116023,7 @@ function normalizeBankingPayPreviewDecisions(input, options = {}) {
     __normalizedBankingPayPreviewDecisions: true
   };
 }
+
 
 async function syncBankingPayPreviewDecisionsToSession(env, actorUserId, sessionId, normalizedInput, options = {}) {
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -118958,6 +120875,8 @@ if (req.method === 'GET' && p === '/api/banking/pay/authorisers') {
   return withCORS(env, req, await handlePaymentAuthorisersList(env, req, user));
 }
 
+
+
 if (req.method === 'POST' && p === '/api/banking/pay/payee-map/ensure') {
   return handleBankingPayEnsurePayeeMap(env, req, user);
 }
@@ -118975,6 +120894,20 @@ if (req.method === 'POST' && p === '/api/banking/pay/payee-map/ensure') {
 
 if (req.method === 'POST' && p === '/api/banking/pay/snooze/upsert') {
   return handleBankingPaySnoozeUpsert(env, req, user);
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/finance-cases/:id/taxable-channel-restructure');
+  if (m && req.method === 'POST') {
+    return handleBankingPayFinanceCaseTaxableChannelRestructure(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/finance-cases/:id/resolve-channel-change');
+  if (m && req.method === 'POST') {
+    return handleBankingPayFinanceCaseTaxableChannelRestructure(env, req, user, m.id);
+  }
 }
 
 if (req.method === 'POST' && p === '/api/banking/pay/snooze/clear') {
@@ -119023,6 +120956,16 @@ if (req.method === 'POST' && p === '/api/banking/finance/manual-debt-adjustments
     return handleBankingManualDebtAdjustmentUpdate(env, req, user, m.id);
   }
 }
+
+
+
+{
+  const m = matchPath(p, '/api/banking/pay/finance-cases/:id/taxable-channel-restructure/suggestion');
+  if (m && (req.method === 'GET' || req.method === 'POST')) {
+    return handleBankingPayFinanceCaseTaxableChannelRestructureSuggestion(env, req, user, m.id);
+  }
+}
+
 {
   const m = matchPath(p, '/api/banking/finance/manual-debt-adjustments/:id');
   if (m && req.method === 'PATCH') {
