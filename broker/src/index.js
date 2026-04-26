@@ -40694,6 +40694,462 @@ async function handleBulkTimesheetUnauthoriseSelected(env, req) {
   }));
 }
 
+async function handleBulkAuthoriseImportEvidencePage(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const enc = encodeURIComponent;
+
+  let body;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON'));
+  }
+
+  const normalizeClassification = (value) => {
+    const raw = String(value || '').trim().toUpperCase();
+    if (raw === 'NHSP') return 'NHSP';
+    if (raw === 'HR' || raw === 'HEALTHROSTER') return 'HR';
+    return '';
+  };
+
+  const normalizeMode = (value) => {
+    const raw = String(value || '').trim().toLowerCase();
+    return raw === 'single' ? 'single' : (raw === 'view_all' ? 'view_all' : '');
+  };
+
+  const normalizeSection = (value) => {
+    const raw = String(value || '').trim().toLowerCase();
+    return (raw === 'processed_eligible' || raw === 'authorised_eligible') ? raw : '';
+  };
+
+  const normalizePageSize = (value) => {
+    if (String(value || '').trim().toUpperCase() === 'ALL') return 'ALL';
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 20;
+    if ([5, 10, 20, 50].includes(n)) return n;
+    return 20;
+  };
+
+  const normalizePage = (value) => {
+    const n = Math.trunc(Number(value));
+    return (Number.isFinite(n) && n > 0) ? n : 1;
+  };
+
+  const normalizeVisibleRows = (input) => {
+    const rows = Array.isArray(input) ? input : [];
+    const out = [];
+    const seen = new Set();
+
+    for (const item of rows) {
+      if (!item || typeof item !== 'object') continue;
+      const rowKey = String(item.row_key || '').trim();
+      let timesheetId = String(item.timesheet_id || '').trim();
+      let contractWeekId = String(item.contract_week_id || '').trim();
+      if (rowKey && (!timesheetId && !contractWeekId)) {
+        if (rowKey.startsWith('timesheet:')) {
+          timesheetId = rowKey.slice('timesheet:'.length).trim();
+        } else if (rowKey.startsWith('contract_week:')) {
+          contractWeekId = rowKey.slice('contract_week:'.length).trim();
+        } else if (rowKey.startsWith('contract-week:')) {
+          contractWeekId = rowKey.slice('contract-week:'.length).trim();
+        }
+      }
+      const dedupeKey = rowKey || `${timesheetId}|${contractWeekId}`;
+      if (!dedupeKey || seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      out.push({
+        row_key: rowKey || null,
+        timesheet_id: timesheetId || null,
+        contract_week_id: contractWeekId || null
+      });
+    }
+
+    return out;
+  };
+
+  const requestedClassification = normalizeClassification(body?.classification);
+  const mode = normalizeMode(body?.mode);
+  const selectedSection = normalizeSection(body?.selected_section);
+  const requestedPage = normalizePage(body?.page);
+  const pageSize = normalizePageSize(body?.page_size);
+
+  if (!requestedClassification) {
+    return withCORS(env, req, badRequest('classification must be NHSP, HR, or HEALTHROSTER'));
+  }
+  if (!mode) {
+    return withCORS(env, req, badRequest('mode must be single or view_all'));
+  }
+  if (!selectedSection) {
+    return withCORS(env, req, badRequest('selected_section must be processed_eligible or authorised_eligible'));
+  }
+
+  const warnings = [];
+  const requestedItems = [];
+  const seenRequested = new Set();
+
+  const addRequested = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    let timesheetId = String(obj.timesheet_id || '').trim();
+    let contractWeekId = String(obj.contract_week_id || '').trim();
+    const rowKey = String(obj.row_key || '').trim();
+    if (rowKey && (!timesheetId && !contractWeekId)) {
+      if (rowKey.startsWith('timesheet:')) {
+        timesheetId = rowKey.slice('timesheet:'.length).trim();
+      } else if (rowKey.startsWith('contract_week:')) {
+        contractWeekId = rowKey.slice('contract_week:'.length).trim();
+      } else if (rowKey.startsWith('contract-week:')) {
+        contractWeekId = rowKey.slice('contract-week:'.length).trim();
+      }
+    }
+    if (!timesheetId && !contractWeekId) {
+      warnings.push({
+        code: 'ROW_SCOPE_MISSING_IDS',
+        row_key: rowKey || null
+      });
+      return;
+    }
+    const dedupeKey = rowKey || `${timesheetId}|${contractWeekId}`;
+    if (!dedupeKey || seenRequested.has(dedupeKey)) return;
+    seenRequested.add(dedupeKey);
+    requestedItems.push({
+      row_key: rowKey || null,
+      timesheet_id: timesheetId || null,
+      contract_week_id: contractWeekId || null
+    });
+  };
+
+  if (mode === 'single') {
+    const activeTimesheetId = String(body?.active_timesheet_id || '').trim();
+    const activeRowId = String(body?.active_row_id || '').trim();
+    const derivedTimesheetId = activeRowId.startsWith('timesheet:') ? activeRowId.slice('timesheet:'.length).trim() : '';
+    const derivedContractWeekId = (
+      activeRowId.startsWith('contract_week:')
+        ? activeRowId.slice('contract_week:'.length).trim()
+        : (activeRowId.startsWith('contract-week:') ? activeRowId.slice('contract-week:'.length).trim() : '')
+    );
+    if (!activeTimesheetId && !derivedTimesheetId && !derivedContractWeekId) {
+      return withCORS(env, req, badRequest('active_timesheet_id is required for single mode'));
+    }
+    addRequested({
+      row_key: activeRowId || (activeTimesheetId ? `timesheet:${activeTimesheetId}` : null),
+      timesheet_id: activeTimesheetId || derivedTimesheetId || null,
+      contract_week_id: derivedContractWeekId || null
+    });
+  } else {
+    const visibleRows = normalizeVisibleRows(body?.visible_rows);
+    if (!visibleRows.length) {
+      return withCORS(env, req, badRequest('visible_rows is required for view_all mode'));
+    }
+    for (const row of visibleRows) addRequested(row);
+  }
+
+  const uniqueTimesheetIds = [...new Set(requestedItems.map((item) => String(item.timesheet_id || '').trim()).filter(Boolean))];
+  const uniqueContractWeekIds = [...new Set(requestedItems.map((item) => String(item.contract_week_id || '').trim()).filter(Boolean))];
+
+  const orParts = [];
+  if (uniqueTimesheetIds.length === 1) orParts.push(`timesheet_id.eq.${uniqueTimesheetIds[0]}`);
+  else if (uniqueTimesheetIds.length > 1) orParts.push(`timesheet_id.in.(${uniqueTimesheetIds.join(',')})`);
+  if (uniqueContractWeekIds.length === 1) orParts.push(`contract_week_id.eq.${uniqueContractWeekIds[0]}`);
+  else if (uniqueContractWeekIds.length > 1) orParts.push(`contract_week_id.in.(${uniqueContractWeekIds.join(',')})`);
+
+  if (!orParts.length) {
+    return withCORS(env, req, badRequest('No valid timesheet scope provided'));
+  }
+
+  const { rows: summaryRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+      `?select=*` +
+      `&or=${enc(`(${orParts.join(',')})`)}`,
+    false
+  );
+
+  const rowByTimesheetId = Object.create(null);
+  const rowByContractWeekId = Object.create(null);
+  const foundTimesheetIds = [];
+  for (const row of (Array.isArray(summaryRows) ? summaryRows : [])) {
+    const timesheetId = String(row?.timesheet_id || '').trim();
+    const contractWeekId = String(row?.contract_week_id || '').trim();
+    if (timesheetId) {
+      rowByTimesheetId[timesheetId] = row;
+      foundTimesheetIds.push(timesheetId);
+    }
+    if (contractWeekId) rowByContractWeekId[contractWeekId] = row;
+  }
+
+  const factsMap = await fetchBulkAuthoriseEligibilityFactsMap(env, [...new Set(foundTimesheetIds)]);
+
+  const acceptedScope = [];
+  const acceptedTimesheetSeen = new Set();
+  for (const item of requestedItems) {
+    const itemTimesheetId = String(item.timesheet_id || '').trim();
+    const itemContractWeekId = String(item.contract_week_id || '').trim();
+    const summaryRow =
+      (itemTimesheetId && rowByTimesheetId[itemTimesheetId]) ||
+      (itemContractWeekId && rowByContractWeekId[itemContractWeekId]) ||
+      null;
+
+    if (!summaryRow) {
+      warnings.push({
+        code: 'ROW_NOT_FOUND',
+        row_key: item.row_key || null,
+        timesheet_id: itemTimesheetId || null,
+        contract_week_id: itemContractWeekId || null
+      });
+      continue;
+    }
+
+    const currentTimesheetId = String(summaryRow?.timesheet_id || '').trim();
+    if (!currentTimesheetId) {
+      warnings.push({
+        code: 'NO_REAL_TIMESHEET',
+        row_key: item.row_key || null,
+        contract_week_id: itemContractWeekId || null
+      });
+      continue;
+    }
+
+    const finRow = factsMap?.finByTimesheetId?.[currentTimesheetId] || null;
+    const summaryBaseRow = factsMap?.summaryBaseByTimesheetId?.[currentTimesheetId] || null;
+    const validationRow = factsMap?.validationByTimesheetId?.[currentTimesheetId] || null;
+    const family = classifyBulkAuthoriseRow(summaryRow, finRow, summaryBaseRow);
+    const eligibility = buildBulkAuthoriseEligibility(summaryRow, finRow, summaryBaseRow, validationRow, family);
+    const rowClassification = normalizeClassification(family?.bulk_authorise_classification);
+    const isImportAuthoritative = family?.is_import_authoritative === true;
+
+    if (!isImportAuthoritative) {
+      warnings.push({
+        code: 'NOT_IMPORT_AUTHORITATIVE',
+        row_key: item.row_key || null,
+        timesheet_id: currentTimesheetId
+      });
+      continue;
+    }
+
+    if (!rowClassification || rowClassification !== requestedClassification) {
+      warnings.push({
+        code: 'CLASSIFICATION_MISMATCH',
+        row_key: item.row_key || null,
+        timesheet_id: currentTimesheetId,
+        expected_classification: requestedClassification,
+        actual_classification: rowClassification || null
+      });
+      continue;
+    }
+
+    if (eligibility?.bulk_authorise_section !== selectedSection) {
+      warnings.push({
+        code: 'SECTION_MISMATCH',
+        row_key: item.row_key || null,
+        timesheet_id: currentTimesheetId,
+        expected_section: selectedSection,
+        actual_section: eligibility?.bulk_authorise_section || null
+      });
+      continue;
+    }
+
+    if (acceptedTimesheetSeen.has(currentTimesheetId)) continue;
+    acceptedTimesheetSeen.add(currentTimesheetId);
+    acceptedScope.push({
+      row_key: item.row_key || `timesheet:${currentTimesheetId}`,
+      timesheet_id: currentTimesheetId,
+      contract_week_id: String(summaryRow?.contract_week_id || '').trim() || null,
+      candidate_name: summaryRow?.candidate_name || summaryRow?.candidate_display_name || null,
+      client_name: summaryRow?.client_name || summaryRow?.client_display_name || null,
+      week_ending_date: summaryRow?.week_ending_date || null
+    });
+  }
+
+  const flattenedRows = [];
+  const dedupe = new Set();
+  const imports = [];
+  const importSeen = new Set();
+  const rowToTimesheetMapping = [];
+  let headerRowsOut = [];
+  let headerColumnsOut = [];
+  let headerRowsSignature = '';
+  let headerColumnsSignature = '';
+  let sourceSystemOut = null;
+  const displayColumnsSeen = new Set();
+  const fallbackDisplayColumns = [];
+
+  const addDisplayColumnsFromObject = (obj) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return;
+    for (const key of Object.keys(obj)) {
+      const k = String(key || '').trim();
+      if (!k || displayColumnsSeen.has(k)) continue;
+      displayColumnsSeen.add(k);
+      fallbackDisplayColumns.push(k);
+    }
+  };
+
+  for (const scopeRow of acceptedScope) {
+    const tsId = scopeRow.timesheet_id;
+    let collected;
+    try {
+      collected = await collectSourceRowsForTimesheet(env, tsId, { scope: 'all' });
+    } catch (e) {
+      warnings.push({
+        code: 'SOURCE_FETCH_FAILED',
+        timesheet_id: tsId,
+        message: e?.message || String(e)
+      });
+      continue;
+    }
+
+    for (const importGroup of (Array.isArray(collected?.imports) ? collected.imports : [])) {
+      const sourceSystem = String(importGroup?.source_system || '').trim().toUpperCase() || null;
+      if (!sourceSystemOut && sourceSystem) sourceSystemOut = sourceSystem;
+      const importHeaderRows = Array.isArray(importGroup?.header_rows) ? importGroup.header_rows : [];
+      const importHeaderColumns = Array.isArray(importGroup?.header_columns) ? importGroup.header_columns : [];
+      const importHeaderRowsSig = importHeaderRows.length ? JSON.stringify(importHeaderRows) : '';
+      const importHeaderColumnsSig = importHeaderColumns.length ? JSON.stringify(importHeaderColumns) : '';
+      if (!headerRowsOut.length && importHeaderRows.length) {
+        headerRowsOut = importHeaderRows;
+        headerRowsSignature = importHeaderRowsSig;
+      } else if (headerRowsOut.length && importHeaderRows.length && headerRowsSignature && importHeaderRowsSig && headerRowsSignature !== importHeaderRowsSig) {
+        warnings.push({
+          code: 'HEADER_ROWS_MIXED',
+          timesheet_id: tsId,
+          import_id: importGroup?.import_id || null
+        });
+      }
+      if (!headerColumnsOut.length && importHeaderColumns.length) {
+        headerColumnsOut = importHeaderColumns;
+        headerColumnsSignature = importHeaderColumnsSig;
+      } else if (headerColumnsOut.length && importHeaderColumns.length && headerColumnsSignature && importHeaderColumnsSig && headerColumnsSignature !== importHeaderColumnsSig) {
+        warnings.push({
+          code: 'HEADER_COLUMNS_MIXED',
+          timesheet_id: tsId,
+          import_id: importGroup?.import_id || null
+        });
+      }
+
+      const importId = importGroup?.import_id || null;
+      const importKey = `${tsId}|${String(importId || '')}|${String(importGroup?.file_r2_key || '')}`;
+      if (!importSeen.has(importKey)) {
+        importSeen.add(importKey);
+        imports.push({
+          timesheet_id: tsId,
+          source_system: sourceSystem,
+          import_id: importId,
+          filename: importGroup?.filename || null,
+          uploaded_at_utc: importGroup?.uploaded_at_utc || null,
+          file_r2_key: importGroup?.file_r2_key || null,
+          header_rows: Array.isArray(importGroup?.header_rows) ? importGroup.header_rows : [],
+          header_columns: Array.isArray(importGroup?.header_columns) ? importGroup.header_columns : []
+        });
+      }
+
+      const rows = Array.isArray(importGroup?.rows) ? importGroup.rows : [];
+      rows.forEach((rawRow, index) => {
+        const rawRowObj = (rawRow && typeof rawRow === 'object' && !Array.isArray(rawRow)) ? rawRow : {};
+        const payload = (
+          rawRowObj && typeof rawRowObj.payload === 'object' && rawRowObj.payload && !Array.isArray(rawRowObj.payload)
+        ) ? rawRowObj.payload : (
+          rawRowObj && typeof rawRowObj.raw === 'object' && rawRowObj.raw && !Array.isArray(rawRowObj.raw)
+        ) ? rawRowObj.raw : (
+          rawRowObj && typeof rawRowObj.raw_row === 'object' && rawRowObj.raw_row && !Array.isArray(rawRowObj.raw_row)
+        ) ? rawRowObj.raw_row : (
+          rawRowObj && typeof rawRowObj.row === 'object' && rawRowObj.row && !Array.isArray(rawRowObj.row)
+        ) ? rawRowObj.row : (
+          rawRowObj && Object.keys(rawRowObj).length
+        ) ? rawRowObj : {};
+        const rawColumns = Array.isArray(rawRowObj?.raw_columns)
+          ? rawRowObj.raw_columns
+          : (Array.isArray(rawRowObj?.columns) ? rawRowObj.columns : null);
+        addDisplayColumnsFromObject(payload);
+        const externalRowKey = String(
+          payload.external_row_key ??
+          payload.row_key ??
+          payload.external_key ??
+          ''
+        ).trim();
+        const sourceRowKey = String(
+          payload.source_row_key ??
+          payload.stable_source_key ??
+          payload.source_key ??
+          ''
+        ).trim();
+        const dedupeKey = [
+          tsId,
+          String(importId || ''),
+          externalRowKey,
+          sourceRowKey || String(index)
+        ].join('|');
+        if (dedupe.has(dedupeKey)) return;
+        dedupe.add(dedupeKey);
+
+        const nhspShiftId = payload.nhsp_shift_id ?? payload.shift_id ?? null;
+        const hrRequestId = payload.hr_request_id ?? payload.request_id ?? null;
+        const hrShiftId = payload.hr_shift_id ?? null;
+
+        const rowId = `${dedupeKey}|${flattenedRows.length}`;
+        flattenedRows.push({
+          id: rowId,
+          timesheet_id: tsId,
+          row_key: scopeRow.row_key || null,
+          contract_week_id: scopeRow.contract_week_id || null,
+          candidate_name: scopeRow.candidate_name || null,
+          client_name: scopeRow.client_name || null,
+          week_ending_date: scopeRow.week_ending_date || null,
+          source_system: sourceSystem,
+          import_id: importId,
+          filename: importGroup?.filename || null,
+          uploaded_at_utc: importGroup?.uploaded_at_utc || null,
+          file_r2_key: importGroup?.file_r2_key || null,
+          header_rows: Array.isArray(importGroup?.header_rows) ? importGroup.header_rows : [],
+          header_columns: Array.isArray(importGroup?.header_columns) ? importGroup.header_columns : [],
+          raw_row_index: index,
+          raw_columns: rawColumns,
+          raw_row: payload,
+          external_row_key: externalRowKey || null,
+          source_row_key: sourceRowKey || null,
+          nhsp_shift_id: nhspShiftId,
+          hr_request_id: hrRequestId,
+          hr_shift_id: hrShiftId
+        });
+        rowToTimesheetMapping.push({
+          row_id: rowId,
+          timesheet_id: tsId,
+          row_key: scopeRow.row_key || null,
+          contract_week_id: scopeRow.contract_week_id || null
+        });
+      });
+    }
+  }
+
+  const totalRows = flattenedRows.length;
+  const effectivePageSize = pageSize === 'ALL' ? 'ALL' : pageSize;
+  const totalPages = pageSize === 'ALL' ? (totalRows > 0 ? 1 : 0) : Math.ceil(totalRows / pageSize);
+  const page = pageSize === 'ALL' ? 1 : Math.min(requestedPage, Math.max(totalPages, 1));
+  const start = pageSize === 'ALL' ? 0 : (page - 1) * pageSize;
+  const end = pageSize === 'ALL' ? totalRows : (start + pageSize);
+  const pageRows = flattenedRows.slice(start, end);
+  const displayColumns = Array.isArray(headerColumnsOut) && headerColumnsOut.length
+    ? headerColumnsOut
+    : fallbackDisplayColumns;
+
+  return withCORS(env, req, ok({
+    source_system: sourceSystemOut,
+    mode,
+    selected_section: selectedSection,
+    page,
+    page_size: effectivePageSize,
+    total_rows: totalRows,
+    total_pages: totalPages,
+    rows: pageRows,
+    header_rows: headerRowsOut,
+    header_columns: headerColumnsOut,
+    display_columns: displayColumns,
+    imports,
+    row_to_timesheet_mapping: rowToTimesheetMapping,
+    warnings
+  }));
+}
+
 async function runTimesheetAuthoriseDecision(env, req, selection, row, factsMap) {
   const readResponsePayload = async (res) => {
     const text = await res.text().catch(() => '');
@@ -121691,6 +122147,10 @@ if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-selected') {
 
 if (req.method === 'POST' && p === '/api/timesheets/bulk-unauthorise-selected') {
   return handleBulkTimesheetUnauthoriseSelected(env, req);
+}
+
+if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-import-evidence') {
+  return handleBulkAuthoriseImportEvidencePage(env, req);
 }
       // ====================== PUBLIC (mobile) WRITE FLOW ======================
       if (req.method === "POST" && p === "/timesheets/presign")            return handlePresign(env, req);
