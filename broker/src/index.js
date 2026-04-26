@@ -29718,6 +29718,8 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
 
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
+  const replaceExisting = body?.replace_existing === true || body?.replace_existing === 'true';
+  const replaceEvidenceId = body?.replace_evidence_id ? String(body.replace_evidence_id).trim() : '';
 
   const normalizeKind = (k) => {
     const s = String(k || '').trim();
@@ -29797,7 +29799,7 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       String(row?.storage_key || '').trim().replace(/^\/+/, '') !== cleanStorageKey
     ) || null;
 
-    if (String(requestedKind).toUpperCase() === 'TIMESHEET' && existingTimesheetEvidence) {
+    if (String(requestedKind).toUpperCase() === 'TIMESHEET' && existingTimesheetEvidence && !replaceExisting && !replaceEvidenceId) {
       throw new Error('Only one TIMESHEET evidence file may be attached to a timesheet at a time');
     }
 
@@ -29886,16 +29888,12 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
     );
     if (!ts) return withCORS(env, req, badRequest('Timesheet not found for timesheet_id'));
 
-    const fin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=locked_by_invoice_id,paid_at_utc` +
-        `&limit=1`
-    );
-    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot attach evidence'));
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTimesheetId);
+    if (evidencePolicy.document_locked) {
+      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot attach evidence'));
+    }
+    if (evidencePolicy.import_authoritative) {
+      return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be attached here'));
     }
 
     const attachedId = String(item.timesheet_id || '').trim();
@@ -29921,38 +29919,93 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       };
     }
 
-    const evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind, evidenceStorageKey);
-
     const currentMeta = (item.meta_json && typeof item.meta_json === 'object' && !Array.isArray(item.meta_json))
       ? item.meta_json
       : {};
 
-    const patchQueueRes = await fetch(`${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        status: 'ATTACHED',
-        timesheet_id: currentTimesheetId,
-        meta_json: {
-          ...currentMeta,
-          attached_kind: requestedKind,
-          attached_to_timesheet_id: currentTimesheetId,
-          attached_at_utc: nowIso()
-        }
-      })
-    });
+    const nextQueueMeta = {
+      ...currentMeta,
+      attached_kind: requestedKind,
+      attached_to_timesheet_id: currentTimesheetId,
+      attached_at_utc: nowIso()
+    };
 
-    if (!patchQueueRes.ok) {
-      const txt = await patchQueueRes.text().catch(() => '');
-      return withCORS(env, req, serverError(`Failed to attach queue item: ${txt}`));
+    const patchQueueAttached = async () => {
+      const patchQueueRes = await fetch(`${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          status: 'ATTACHED',
+          timesheet_id: currentTimesheetId,
+          meta_json: nextQueueMeta
+        })
+      });
+      if (!patchQueueRes.ok) {
+        const txt = await patchQueueRes.text().catch(() => '');
+        throw new Error(`Failed to attach queue item: ${txt}`);
+      }
+    };
+
+    let evidenceRow = null;
+    const isExplicitReplacement = !!(replaceExisting || replaceEvidenceId);
+    if (isExplicitReplacement) {
+      if (!replaceEvidenceId) return withCORS(env, req, badRequest('replace_evidence_id is required when replace_existing=true'));
+      await patchQueueAttached();
+      try {
+        const replaced = await applyTimesheetEvidenceReplacement(env, {
+          current_timesheet_id: currentTimesheetId,
+          old_evidence_id: replaceEvidenceId,
+          new_kind: requestedKind,
+          new_storage_key: evidenceStorageKey,
+          display_name: (item?.original_filename && String(item.original_filename).trim().length
+            ? String(item.original_filename).trim()
+            : prettyKind(requestedKind) || requestedKind),
+          replacement_rotation_degrees: Number.isFinite(Number(item?.last_rotation_deg)) ? Number(item.last_rotation_deg) : 0,
+          user
+        });
+        evidenceRow = replaced?.inserted || null;
+      } catch (e) {
+        let rollbackErr = null;
+        try {
+          const revertRes = await fetch(`${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
+            method: 'PATCH',
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+            body: JSON.stringify({
+              status: item.status || null,
+              timesheet_id: item.timesheet_id || null,
+              meta_json: currentMeta
+            })
+          });
+          if (!revertRes.ok) rollbackErr = await revertRes.text().catch(() => 'UNKNOWN_ROLLBACK_ERROR');
+        } catch (rb) {
+          rollbackErr = rb?.message || String(rb);
+        }
+        if (rollbackErr) {
+          console.error('[handleManualTimesheetQueueAttach] replacement failed and queue rollback failed', {
+            queue_id: queueId,
+            current_timesheet_id: currentTimesheetId,
+            replace_evidence_id: replaceEvidenceId || null,
+            original_queue_status: item.status || null,
+            original_queue_timesheet_id: item.timesheet_id || null,
+            original_queue_meta_json: currentMeta,
+            replacement_error: e?.message || String(e),
+            rollback_error: rollbackErr
+          });
+          throw new Error(`Replacement failed and queue rollback also failed: ${e?.message || e}; rollback_error=${rollbackErr}`);
+        }
+        throw e;
+      }
+    } else {
+      evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind, evidenceStorageKey);
+      await patchQueueAttached();
     }
 
-    if (evidenceStorageKey && String(requestedKind).toUpperCase() === 'TIMESHEET') {
+    if (!isExplicitReplacement && evidenceStorageKey && String(requestedKind).toUpperCase() === 'TIMESHEET') {
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
           method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
           body: JSON.stringify({
             manual_pdf_r2_key: evidenceStorageKey,
             manual_pdf_rotation_degrees: (item.last_rotation_deg != null ? Number(item.last_rotation_deg) : 0)
@@ -34635,6 +34688,291 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 // GET /api/timesheets/:id/evidence
 
 
+async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
+  const enc = encodeURIComponent;
+  const out = {
+    can_manage_evidence: false,
+    document_locked: false,
+    document_lock_reason: null,
+    candidate_paid: false,
+    authorised: false,
+    import_authoritative: false,
+    protected_reason: null,
+    current_timesheet_id: null,
+    resolved: null,
+    summary: null
+  };
+
+  const resolved = await resolveTimesheetToCurrent(env, timesheetId).catch(() => null);
+  if (!resolved?.current_timesheet_id) {
+    out.protected_reason = 'INVALID_TIMESHEET_CONTEXT';
+    return out;
+  }
+
+  const currentTsId = String(resolved.current_timesheet_id);
+  out.current_timesheet_id = currentTsId;
+  out.resolved = resolved;
+
+  const tsRow = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,authorised_at_server,revoked_at` +
+      `&limit=1`
+  ).catch(() => null);
+  out.authorised =
+    !!(tsRow?.authorised_at_server) &&
+    !(tsRow?.revoked_at && String(tsRow.revoked_at).trim());
+
+  const fin = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&is_current=eq.true` +
+      `&select=locked_by_invoice_id,paid_at_utc,invoice_breakdown_json` +
+      `&limit=1`
+  ).catch(() => null);
+
+  out.candidate_paid = !!fin?.paid_at_utc;
+  if (fin?.locked_by_invoice_id || hasAnySegmentInvoiceLock(fin)) {
+    out.document_locked = true;
+    out.document_lock_reason = fin?.locked_by_invoice_id ? 'INVOICE_LOCKED' : 'INVOICE_SEGMENT_LOCKED';
+  }
+
+  const summary = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&select=timesheet_id,client_no_timesheet_required,basis,route_type` +
+      `&limit=1`
+  ).catch(() => null);
+  out.summary = summary || null;
+  out.import_authoritative = isImportAuthoritativeEvidenceContext(summary);
+  if (out.import_authoritative) out.protected_reason = 'IMPORT_AUTHORITATIVE_ROUTE';
+
+  const evidence = opts?.evidence_item || null;
+  const evidenceId = String(evidence?.id || opts?.evidence_id || '').trim();
+  if (evidenceId.startsWith('SYS:')) out.protected_reason = out.protected_reason || 'SYSTEM_EVIDENCE';
+
+  if (evidence && typeof evidence === 'object') {
+    const src = String(
+      evidence?.source_system ||
+      evidence?.source_badge ||
+      evidence?.provenance ||
+      evidence?.origin ||
+      ''
+    ).toUpperCase();
+    if (
+      evidence?.is_system === true ||
+      evidence?.system === true ||
+      evidence?.is_protected === true ||
+      evidence?.from_import === true ||
+      !!evidence?.import_id ||
+      src.includes('NHSP') ||
+      src.includes('HEALTHROSTER')
+    ) {
+      out.protected_reason = out.protected_reason || 'PROTECTED_IMPORT_OR_SYSTEM_EVIDENCE';
+    }
+  }
+
+  out.can_manage_evidence = !out.document_locked && !out.import_authoritative && !out.protected_reason;
+  return out;
+}
+
+async function applyTimesheetEvidenceReplacement(env, args = {}) {
+  const enc = encodeURIComponent;
+  const currentTsId = String(args?.current_timesheet_id || '').trim();
+  const oldEvidenceId = String(args?.old_evidence_id || '').trim();
+  const newKind = String(args?.new_kind || '').trim().toUpperCase();
+  const displayName = String(args?.display_name || '').trim();
+  const userId = args?.user?.id || null;
+  const newStorageKey = String(args?.new_storage_key || '').trim().replace(/^\/+/, '');
+  const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
+  const explicitRotationRaw = args?.replacement_rotation_degrees;
+  const explicitRotation = Number.isFinite(Number(explicitRotationRaw)) ? Number(explicitRotationRaw) : null;
+
+  if (!currentTsId) throw new Error('Invalid current timesheet context');
+  if (!oldEvidenceId) throw new Error('replace_evidence_id is required');
+  if (oldEvidenceId.startsWith('SYS:')) throw new Error('System evidence cannot be replaced');
+  if (!newStorageKey) throw new Error('storage_key is required');
+  if (!newKind || !allowedKinds.has(newKind)) throw new Error('Invalid evidence kind');
+  if (newKind === 'TIMESHEET') {
+    const sourceBytes = await r2GetBytes(env, newStorageKey);
+    if (!sourceBytes?.length) throw new Error('Timesheet evidence source file is missing or empty');
+    const contentKind = detectPdfOrImageContentKind(sourceBytes);
+    if (contentKind !== 'application/pdf' && contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
+      throw new Error(`TIMESHEET evidence must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
+    }
+  }
+
+  const oldEvidence = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+      `?id=eq.${enc(oldEvidenceId)}` +
+      `&timesheet_id=eq.${enc(currentTsId)}` +
+      `&select=id,kind,display_name,storage_key,created_at,created_by` +
+      `&limit=1`
+  ).catch(() => null);
+  if (!oldEvidence) throw new Error('replace_evidence_id does not belong to this current timesheet');
+
+  const tsBefore = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,manual_pdf_r2_key,manual_pdf_rotation_degrees` +
+      `&limit=1`
+  ).catch(() => null);
+  if (!tsBefore) throw new Error('Invalid current timesheet context');
+
+  const originalManualPdfKey = String(tsBefore?.manual_pdf_r2_key || '').trim().replace(/^\/+/, '') || null;
+  const originalRotation = Number.isFinite(Number(tsBefore?.manual_pdf_rotation_degrees))
+    ? Number(tsBefore.manual_pdf_rotation_degrees)
+    : 0;
+
+  const policy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: oldEvidence });
+  if (!policy.can_manage_evidence) {
+    if (policy.document_locked) throw new Error('Timesheet is invoice/document locked; cannot replace evidence');
+    throw new Error('Evidence is protected and cannot be replaced');
+  }
+
+  const { rows: existingRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+      `?timesheet_id=eq.${enc(currentTsId)}` +
+      `&select=id,kind,storage_key`
+  );
+  const existingEvidence = Array.isArray(existingRows) ? existingRows : [];
+  const duplicateSameFileAndKind = existingEvidence.find((row) =>
+    String(row?.id || '') !== oldEvidenceId &&
+    String(row?.storage_key || '').trim().replace(/^\/+/, '') === newStorageKey &&
+    String(row?.kind || '').trim().toUpperCase() === newKind
+  );
+  if (duplicateSameFileAndKind) {
+    throw new Error('An evidence item with the same file and type is already attached');
+  }
+  if (newKind === 'TIMESHEET') {
+    const duplicateTimesheet = existingEvidence.find((row) =>
+      String(row?.id || '') !== oldEvidenceId &&
+      String(row?.kind || '').trim().toUpperCase() === 'TIMESHEET'
+    );
+    if (duplicateTimesheet) throw new Error('Only one TIMESHEET evidence file may be attached to a timesheet at a time');
+  }
+
+  const nowIsoVal = new Date().toISOString();
+  const payload = [{
+    timesheet_id: currentTsId,
+    kind: newKind,
+    display_name: displayName || oldEvidence.display_name || newKind,
+    storage_key: newStorageKey,
+    created_at: nowIsoVal,
+    created_by: userId
+  }];
+
+  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+    body: JSON.stringify(payload)
+  });
+  const insTxt = await insRes.text().catch(() => '');
+  if (!insRes.ok) throw new Error(`Failed to attach replacement evidence: ${insTxt}`);
+
+  let inserted = null;
+  try {
+    const json = insTxt ? JSON.parse(insTxt) : [];
+    inserted = Array.isArray(json) ? json[0] : json;
+  } catch {
+    inserted = null;
+  }
+  if (!inserted?.id) throw new Error('Failed to attach replacement evidence');
+
+  const oldKindU = String(oldEvidence?.kind || '').trim().toUpperCase();
+  const oldStorageKey = String(oldEvidence?.storage_key || '').trim().replace(/^\/+/, '');
+  const insertedStorageKey = String(inserted?.storage_key || newStorageKey).trim().replace(/^\/+/, '');
+
+  let pointerMutated = false;
+  const restoreOriginalPointer = async () => {
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+      {
+        method: 'PATCH',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          manual_pdf_r2_key: originalManualPdfKey,
+          manual_pdf_rotation_degrees: originalRotation
+        })
+      }
+    );
+  };
+
+  try {
+    if (newKind === 'TIMESHEET') {
+      const nextRotation = explicitRotation != null ? explicitRotation : originalRotation;
+      const updPtrRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            manual_pdf_r2_key: insertedStorageKey,
+            manual_pdf_rotation_degrees: nextRotation
+          })
+        }
+      );
+      if (!updPtrRes.ok) {
+        const txt = await updPtrRes.text().catch(() => '');
+        throw new Error(`Failed to update manual PDF pointer during replacement: ${txt}`);
+      }
+      pointerMutated = true;
+    } else if (oldKindU === 'TIMESHEET' && originalManualPdfKey && originalManualPdfKey === oldStorageKey) {
+      const clearPtrRes = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
+        {
+          method: 'PATCH',
+          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+          body: JSON.stringify({ manual_pdf_r2_key: null, manual_pdf_rotation_degrees: 0 })
+        }
+      );
+      if (!clearPtrRes.ok) {
+        const txt = await clearPtrRes.text().catch(() => '');
+        throw new Error(`Failed to clear manual PDF pointer during replacement: ${txt}`);
+      }
+      pointerMutated = true;
+    }
+
+    const delRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(oldEvidenceId)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    );
+    if (!delRes.ok) {
+      const delTxt = await delRes.text().catch(() => '');
+      throw new Error(`Failed to remove replaced evidence: ${delTxt}`);
+    }
+
+    // mirror delete-handler provenance cleanup for replacement path
+    if (oldStorageKey) {
+      await fetch(
+        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&r2_key=eq.${enc(oldStorageKey)}`,
+        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+      ).catch(() => {});
+    }
+  } catch (e) {
+    if (pointerMutated) {
+      try { await restoreOriginalPointer(); } catch {}
+    }
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(inserted.id)}`,
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
+    ).catch(() => {});
+    throw e;
+  }
+
+  return { inserted, replaced: oldEvidence, original_pointer: { manual_pdf_r2_key: originalManualPdfKey, manual_pdf_rotation_degrees: originalRotation } };
+}
+
 async function handleTimesheetEvidenceList(env, req, tsId) {
   const enc = encodeURIComponent;
 
@@ -34849,38 +35187,12 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       !!current_hash && !!signedHash && (String(current_hash) === String(signedHash));
 
     // ─────────────────────────────────────────────────────────────
-    // 0b) Load TSFIN lock state + route-family editability truth
+    // 0b) Shared evidence mutation policy
     // ─────────────────────────────────────────────────────────────
-    let isLockedOrPaid = false;
-    try {
-      const fin = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          `&select=locked_by_invoice_id,paid_at_utc` +
-          `&limit=1`
-      );
-      isLockedOrPaid = !!(fin && (fin.locked_by_invoice_id || fin.paid_at_utc));
-    } catch {
-      isLockedOrPaid = false;
-    }
-
-      let summary = null;
-    try {
-      summary = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&select=timesheet_id,client_no_timesheet_required,basis,route_type` +
-          `&limit=1`
-      );
-    } catch {
-      summary = null;
-    }
-
-    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
-    const routeEvidenceEditable = !isLockedOrPaid && !importAuthoritative;
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    const summary = evidencePolicy?.summary || null;
+    const importAuthoritative = !!evidencePolicy?.import_authoritative;
+    const routeEvidenceEditable = !!evidencePolicy?.can_manage_evidence;
 
     // ─────────────────────────────────────────────────────────────
     // 1) User evidence rows (timesheet_evidence)
@@ -35432,30 +35744,11 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
   };
 
   try {
-    const fin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(currentTsId)}` +
-        `&is_current=eq.true` +
-        `&select=locked_by_invoice_id,paid_at_utc` +
-        `&limit=1`
-    ).catch(() => null);
-
-    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot return evidence to queue'));
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    if (evidencePolicy.document_locked) {
+      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot return evidence to queue'));
     }
-
-    const summary = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
-        `?timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=timesheet_id,client_no_timesheet_required,basis` +
-        `&limit=1`
-    ).catch(() => null);
-
-    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
-
-    if (importAuthoritative) {
+    if (evidencePolicy.import_authoritative) {
       return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be returned to queue here'));
     }
 
@@ -35469,6 +35762,12 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
     );
     const ev = evRows?.[0] || null;
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+    const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
+    if (!evPolicy.can_manage_evidence) {
+      if (evPolicy.document_locked) return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot return evidence to queue'));
+      if (evPolicy.import_authoritative) return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be returned to queue here'));
+      return withCORS(env, req, badRequest('Protected evidence cannot be returned to queue'));
+    }
 
     const tsMeta = await sbGetOne(
       env,
@@ -35600,7 +35899,7 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
 
     const delRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
     );
 
     if (!delRes.ok) {
@@ -35711,21 +36010,12 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
   const newKeyRaw = body?.manual_pdf_r2_key ?? null;
   const newKey = newKeyRaw ? normalize(String(newKeyRaw)) : null;
 
-  // ✅ Lock/paid enforcement (same rule as evidence add/delete + QR scan)
-  try {
-    const fin = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&is_current=eq.true` +
-        `&select=locked_by_invoice_id,paid_at_utc` +
-        `&limit=1`
-    );
-    if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-      return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot replace manual PDF'));
-    }
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to validate timesheet lock state: ${e?.message || e}`));
+  const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTimesheetId);
+  if (evidencePolicy.document_locked) {
+    return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot replace manual PDF'));
+  }
+  if (evidencePolicy.import_authoritative) {
+    return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be replaced here'));
   }
 
   // Load current timesheet row to know the old pointer (so we can delete it)
@@ -35738,25 +36028,6 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
       `&limit=1`
   );
   if (!tsBefore) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const isCurrentAuthorised =
-    tsBefore.authorised_at_server != null &&
-    String(tsBefore.authorised_at_server).trim() !== '' &&
-    (tsBefore.revoked_at == null || String(tsBefore.revoked_at).trim() === '');
-
-  if (isCurrentAuthorised) {
-    return withCORS(
-      env,
-      req,
-      new Response(
-        JSON.stringify({
-          error_code: 'TIMESHEET_AUTHORISED_EDIT_BLOCKED',
-          message: 'This timesheet is authorised. Unauthorise it before replacing the manual PDF.'
-        }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
-  }
 
   const oldKey = tsBefore?.manual_pdf_r2_key ? normalize(tsBefore.manual_pdf_r2_key) : null;
 
@@ -35915,7 +36186,7 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
     // Delete the evidence rows
     await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(currentTimesheetId)}&kind=eq.MANUAL_PDF`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
     ).catch(() => {});
   } catch (e) {
     // Non-fatal: evidence cleanup shouldn’t block the replace action
@@ -82485,41 +82756,23 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
 
   const storageKeyRaw = body && body.storage_key && String(body.storage_key).trim();
   const storageKey = storageKeyRaw ? storageKeyRaw.replace(/^\/+/, '') : '';
+  const replaceExisting = body?.replace_existing === true || body?.replace_existing === 'true';
+  const replaceEvidenceId = body?.replace_evidence_id ? String(body.replace_evidence_id).trim() : '';
 
   if (!kind) return withCORS(env, req, badRequest('kind is required'));
   if (!allowedKinds.has(kind)) return withCORS(env, req, badRequest('Invalid evidence kind'));
   if (!storageKey) return withCORS(env, req, badRequest('storage_key is required'));
 
   try {
-    // Block evidence add if invoiced/paid
-    try {
-      const fin = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          `&select=locked_by_invoice_id,paid_at_utc` +
-          `&limit=1`
-      );
-      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot add evidence'));
-      }
-    } catch (e) {
-      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    if (evidencePolicy.document_locked) {
+      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot add evidence'));
     }
-
-    const summary = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
-        `?timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=timesheet_id,client_no_timesheet_required,basis` +
-        `&limit=1`
-    ).catch(() => null);
-
-    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
-
-    if (importAuthoritative) {
+    if (evidencePolicy.import_authoritative) {
       return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be added here'));
+    }
+    if (!evidencePolicy.current_timesheet_id) {
+      return withCORS(env, req, badRequest('Invalid or missing current timesheet context'));
     }
 
     const { rows: tsRows } = await sbFetch(
@@ -82569,6 +82822,35 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
         `&select=id,kind,display_name,storage_key,created_at,created_by`
     );
     const existingEvidence = Array.isArray(existingRows) ? existingRows : [];
+
+    if (replaceExisting || replaceEvidenceId) {
+      if (!replaceEvidenceId) return withCORS(env, req, badRequest('replace_evidence_id is required when replace_existing=true'));
+      const replacementRotation = Number.isFinite(Number(body?.rotation_degrees))
+        ? Number(body.rotation_degrees)
+        : (
+          Number.isFinite(Number(body?.manual_pdf_rotation_degrees))
+            ? Number(body.manual_pdf_rotation_degrees)
+            : (Number.isFinite(Number(ts?.manual_pdf_rotation_degrees)) ? Number(ts.manual_pdf_rotation_degrees) : 0)
+        );
+      const replaced = await applyTimesheetEvidenceReplacement(env, {
+        current_timesheet_id: currentTsId,
+        old_evidence_id: replaceEvidenceId,
+        new_kind: kind,
+        new_storage_key: finalStorageKey,
+        display_name: (displayNameIn && displayNameIn.length ? displayNameIn : prettyKind(kind) || kind),
+        replacement_rotation_degrees: replacementRotation,
+        user
+      });
+      return withCORS(env, req, ok({
+        ok: true,
+        replaced: true,
+        replaced_evidence_id: replaceEvidenceId,
+        requested_timesheet_id: resolved.requested_timesheet_id || tsId,
+        current_timesheet_id: currentTsId,
+        was_stale: !!resolved.was_stale,
+        evidence: replaced?.inserted || null
+      }));
+    }
 
     const sameStorageExisting = existingEvidence.find(row =>
       String(row?.storage_key || '').trim().replace(/^\/+/, '') === finalStorageKey
@@ -82768,34 +83050,11 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
   if (!allowedKinds.has(newKind)) return withCORS(env, req, badRequest('Invalid evidence kind'));
 
   try {
-    // Block evidence kind update if invoiced/paid
-    try {
-      const fin = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          `&select=locked_by_invoice_id,paid_at_utc` +
-          `&limit=1`
-      );
-      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot update evidence kind'));
-      }
-    } catch (e) {
-      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    if (evidencePolicy.document_locked) {
+      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot update evidence kind'));
     }
-
-    const summary = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
-        `?timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=timesheet_id,client_no_timesheet_required,basis` +
-        `&limit=1`
-    ).catch(() => null);
-
-    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
-
-    if (importAuthoritative) {
+    if (evidencePolicy.import_authoritative) {
       return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be edited here'));
     }
 
@@ -82811,6 +83070,12 @@ async function handleTimesheetEvidenceUpdateKind(env, req, tsId, evidenceId) {
 
     const ev = evRows?.[0] || null;
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+    const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
+    if (!evPolicy.can_manage_evidence) {
+      if (evPolicy.document_locked) return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot update evidence kind'));
+      if (evPolicy.import_authoritative) return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be edited here'));
+      return withCORS(env, req, badRequest('Protected evidence cannot be edited'));
+    }
 
     const oldKind = ev.kind != null ? String(ev.kind) : '';
     const oldKindU = String(oldKind || '').toUpperCase();
@@ -83047,34 +83312,11 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
   };
 
   try {
-    // ✅ Block evidence delete if invoiced/paid (match QR scan rule)
-    try {
-      const fin = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&is_current=eq.true` +
-          `&select=locked_by_invoice_id,paid_at_utc` +
-          `&limit=1`
-      );
-      if (fin && (fin.locked_by_invoice_id || fin.paid_at_utc)) {
-        return withCORS(env, req, badRequest('Timesheet already invoiced or paid; cannot delete evidence'));
-      }
-    } catch (e) {
-      return withCORS(env, req, serverError(`Failed to validate timesheet financial lock state: ${e?.message || e}`));
+    const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
+    if (evidencePolicy.document_locked) {
+      return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot delete evidence'));
     }
-
-    const summary = await sbGetOne(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary_base` +
-        `?timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=timesheet_id,client_no_timesheet_required,basis` +
-        `&limit=1`
-    ).catch(() => null);
-
-    const importAuthoritative = isImportAuthoritativeEvidenceContext(summary);
-
-    if (importAuthoritative) {
+    if (evidencePolicy.import_authoritative) {
       return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be deleted here'));
     }
 
@@ -83089,6 +83331,12 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     );
     const ev = evRows?.[0] || null;
     if (!ev) return withCORS(env, req, notFound('Evidence not found for this timesheet'));
+    const evPolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: ev });
+    if (!evPolicy.can_manage_evidence) {
+      if (evPolicy.document_locked) return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot delete evidence'));
+      if (evPolicy.import_authoritative) return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be deleted here'));
+      return withCORS(env, req, badRequest('Protected evidence cannot be deleted'));
+    }
 
     // Load minimal TS context for audit + optional cleanup of pointers
     let tsMeta = null;
@@ -83122,7 +83370,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
     // 2) Delete DB evidence row (timesheet_evidence)
     const delRes = await fetch(
       `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(evidenceId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return-minimal' } }
+      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
     );
 
     if (!delRes.ok) {
@@ -83139,7 +83387,7 @@ async function handleTimesheetEvidenceDelete(env, req, tsId, evidenceId) {
             `&r2_key=eq.${enc(storageKeyForR2)}`,
           {
             method: 'DELETE',
-            headers: { ...sbHeaders(env), Prefer: 'return-minimal' }
+            headers: { ...sbHeaders(env), Prefer: 'return=minimal' }
           }
         );
         if (!provDelRes.ok) {
