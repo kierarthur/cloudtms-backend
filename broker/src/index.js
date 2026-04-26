@@ -38735,11 +38735,17 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     readOwn(source, 'paid_at_utc') ??
     null;
 
+  const hasSegmentInvoiceLock = hasAnySegmentInvoiceLock(
+    readOwn(tsfin, 'invoice_breakdown_json') ?? readOwn(source, 'invoice_breakdown_json') ?? null
+  );
+
   const locked = !!(
     lockedByInvoiceId ||
     paidAtUtc ||
-    hasAnySegmentInvoiceLock(readOwn(tsfin, 'invoice_breakdown_json') ?? readOwn(source, 'invoice_breakdown_json') ?? null)
+    hasSegmentInvoiceLock
   );
+
+  const evidenceDocumentLocked = !!(lockedByInvoiceId || hasSegmentInvoiceLock);
 
   const isAuthorised = !!(
     readOwn(timesheet, 'authorised_at_server') ??
@@ -38898,7 +38904,8 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     : (canBulkUnauthorise ? 'authorised_eligible' : null);
 
   const canEditTimesheetData = !locked && !isAuthorised && routeFamily === 'MANUAL_NON_QR';
-  const canManageEvidence = !locked && !isAuthorised && !isImportAuthoritative;
+  const hasValidEvidenceContext = hasTimesheet;
+  const canManageEvidence = hasValidEvidenceContext && !evidenceDocumentLocked && !isImportAuthoritative;
 
   const backendUnprocessed = (
     processingStatus === 'UNPROCESSED' ||
@@ -38980,37 +38987,29 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     effectiveMode === 'ELECTRONIC'
   );
 
-  const sourceReviewOnly = readBool(
-    [source, 'review_only'],
-    [actionFlags, 'review_only'],
-    [bulkAuthorise, 'review_only'],
-    [artifactHints, 'review_only']
-  ) === true;
-
-  const sourceCanEditTimesheetData = readBool(
-    [source, 'can_edit_timesheet_data'],
-    [actionFlags, 'can_edit_timesheet_data'],
-    [bulkAuthorise, 'can_edit_timesheet_data'],
-    [artifactHints, 'can_edit_timesheet_data']
+  const additionalManualHasIdentity = (
+    (periodType === 'WEEKLY' && !!contractWeekId) ||
+    (periodType === 'DAILY' && !!timesheetId)
   );
+
+  const additionalManualRouteAllowed = isImportAuthoritative
+    ? true
+    : (
+      routeFamily === 'MANUAL_NON_QR' &&
+      effectiveMode === 'MANUAL' &&
+      !isQr &&
+      !isElectronic
+    );
 
   const additionalManualStructuralAllowed = (
     hasTimesheet &&
-    periodType === 'WEEKLY' &&
-    !!contractWeekId &&
-    routeFamily === 'MANUAL_NON_QR' &&
-    effectiveMode === 'MANUAL' &&
+    additionalManualHasIdentity &&
+    additionalManualRouteAllowed &&
     !isAdjustment &&
-    !isImportAuthoritative &&
-    !locked &&
-    !isCancelled &&
-    !isQr &&
-    !isElectronic
+    !isCancelled
   );
 
-  const canAddAdditionalManual = isAuthorised
-    ? additionalManualStructuralAllowed
-    : (additionalManualStructuralAllowed && canEditTimesheetData && sourceCanEditTimesheetData !== false && sourceReviewOnly !== true);
+  const canAddAdditionalManual = additionalManualStructuralAllowed;
 
   const reviewOnly = !!(locked || isAuthorised || routeFamily !== 'MANUAL_NON_QR');
 
@@ -39045,6 +39044,12 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     bulk_authorise_section: bulkAuthoriseSection,
     can_edit_timesheet_data: canEditTimesheetData,
     can_manage_evidence: canManageEvidence,
+    evidence_document_locked: evidenceDocumentLocked,
+    evidence_lock_reason: !hasValidEvidenceContext
+      ? 'INVALID_TIMESHEET_CONTEXT'
+      : (evidenceDocumentLocked
+          ? (lockedByInvoiceId ? 'INVOICE_LOCKED' : 'INVOICE_SEGMENT_LOCKED')
+          : (isImportAuthoritative ? 'IMPORT_AUTHORITATIVE_ROUTE' : null)),
     can_unprocess: canUnprocess,
     can_add_additional_manual: canAddAdditionalManual,
     review_only: reviewOnly,
@@ -40033,6 +40038,25 @@ function classifyBulkAuthoriseRow(row, fin, summaryBase) {
   };
 }
 
+function isBulkAuthoriseSystemAuthorisationEvidence(item) {
+  if (!item || typeof item !== 'object') return false;
+  const id = String(item.id || '').trim().toUpperCase();
+  const kind = String(item.kind || '').trim().toUpperCase();
+  const previewMode = String(item.preview_mode || '').trim().toUpperCase();
+  const displayName = String(item.display_name || item.filename || '').trim().toUpperCase();
+  const isSystemViewOnly = (
+    item.system === true ||
+    item.is_system === true ||
+    item.is_view_only === true
+  );
+
+  if (!id.startsWith('SYS:AUTHORISATION:')) return false;
+  if (!(kind === 'AUTHORISATION' || previewMode === 'AUTHORISATION')) return false;
+  if (!displayName.includes('TIMESHEET AUTHORISED')) return false;
+  if (!isSystemViewOnly) return false;
+  return true;
+}
+
 async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -40310,6 +40334,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
   const evidenceItems = Array.isArray(evPayload.json)
     ? evPayload.json
     : ((evPayload.json && typeof evPayload.json === 'object' && Array.isArray(evPayload.json.evidence)) ? evPayload.json.evidence : []);
+  const bulkAuthoriseEvidenceItems = evidenceItems.filter((item) => !isBulkAuthoriseSystemAuthorisationEvidence(item));
 
   const currentTimesheetId = String(details.current_timesheet_id || details.timesheet.timesheet_id || '').trim();
   const factsMap = await fetchBulkAuthoriseEligibilityFactsMap(env, currentTimesheetId ? [currentTimesheetId] : []);
@@ -40375,7 +40400,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
   const family = classifyBulkAuthoriseRow(contextRow, finRow || details.tsfin || null, summaryBaseRow);
   const eligibility = buildBulkAuthoriseEligibility(contextRow, finRow || details.tsfin || null, summaryBaseRow, validationRow, family);
   const comparePayload = buildHealthRosterComparePayload(details);
-  const leftPaneSelection = selectPrimaryLeftPaneArtifact(details, evidenceItems, family);
+  const leftPaneSelection = selectPrimaryLeftPaneArtifact(details, bulkAuthoriseEvidenceItems, family);
 
   return withCORS(env, req, ok({
     requested_timesheet_id: details.requested_timesheet_id || timesheetId,
@@ -40390,7 +40415,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId) {
     period_type: family.period_type,
     timesheet_type_sort_key: family.timesheet_type_sort_key,
     details,
-    evidence: evidenceItems,
+    evidence: bulkAuthoriseEvidenceItems,
     left_pane: {
       route_family: family.route_family,
       route_subfamily: family.route_subfamily,
