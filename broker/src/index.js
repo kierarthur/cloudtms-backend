@@ -34688,6 +34688,36 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 // GET /api/timesheets/:id/evidence
 
 
+function hasAnySegmentInvoiceLock(input) {
+  try {
+    const invoiceBreakdownInput = (input && typeof input === 'object' && Object.prototype.hasOwnProperty.call(input, 'invoice_breakdown_json'))
+      ? input.invoice_breakdown_json
+      : input;
+
+    if (invoiceBreakdownInput == null) return false;
+
+    let parsed = invoiceBreakdownInput;
+    if (typeof parsed === 'string') {
+      const raw = parsed.trim();
+      if (!raw) return false;
+      parsed = JSON.parse(raw);
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+
+    const mode = String(parsed.mode == null ? '' : parsed.mode).trim().toUpperCase();
+    if (mode !== 'SEGMENTS') return false;
+
+    const segments = Array.isArray(parsed.segments) ? parsed.segments : [];
+    return segments.some((segment) => {
+      const invoiceId = segment?.invoice_locked_invoice_id;
+      return invoiceId != null && String(invoiceId).trim() !== '';
+    });
+  } catch {
+    return false;
+  }
+}
+
 async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
   const enc = encodeURIComponent;
   const out = {
@@ -38664,34 +38694,6 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     }
     return null;
   };
-  const normaliseInvoiceBreakdown = (invoiceBreakdownInput) => {
-    if (!invoiceBreakdownInput) return null;
-    if (typeof invoiceBreakdownInput === 'object') return invoiceBreakdownInput;
-    if (typeof invoiceBreakdownInput !== 'string') return null;
-    const raw = invoiceBreakdownInput.trim();
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw);
-      return (parsed && typeof parsed === 'object') ? parsed : null;
-    } catch {
-      return null;
-    }
-  };
-  const hasAnySegmentInvoiceLock = (invoiceBreakdownInput) => {
-    try {
-      const invoiceBreakdown = normaliseInvoiceBreakdown(invoiceBreakdownInput);
-      if (!invoiceBreakdown || typeof invoiceBreakdown !== 'object') return false;
-      const mode = upper(invoiceBreakdown.mode);
-      if (mode !== 'SEGMENTS') return false;
-      const segments = Array.isArray(invoiceBreakdown.segments) ? invoiceBreakdown.segments : [];
-      return segments.some((segment) => {
-        const invoiceId = segment?.invoice_locked_invoice_id;
-        return invoiceId != null && String(invoiceId).trim() !== '';
-      });
-    } catch {
-      return false;
-    }
-  };
 
   const source = (row && typeof row === 'object') ? row : {};
   const tsfin = (fin && typeof fin === 'object') ? fin : ((source.tsfin && typeof source.tsfin === 'object') ? source.tsfin : {});
@@ -39002,11 +39004,14 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     );
 
   const additionalManualStructuralAllowed = (
-    hasTimesheet &&
     additionalManualHasIdentity &&
     additionalManualRouteAllowed &&
     !isAdjustment &&
-    !isCancelled
+    !isCancelled &&
+    (
+      (periodType === 'WEEKLY' && !!contractWeekId) ||
+      (periodType === 'DAILY' && hasTimesheet && !!timesheetId)
+    )
   );
 
   const canAddAdditionalManual = additionalManualStructuralAllowed;
