@@ -21970,186 +21970,6 @@ async function handleBankingBankNameCheckClearOverride(env, req, user) {
 }
 
 
-async function handleBankingPayBatchExecute(env, req, user, payBatchId) {
-  const id = String(payBatchId || '').trim();
-  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
-
-  let body = null;
-  try { body = await parseJSONBody(req); } catch { body = null; }
-  if (!body || typeof body !== 'object') return withCORS(env, req, badRequest('Invalid JSON'));
-
-  const scopeRaw = String(body.pay_channel_scope || body.scope || 'ALL').trim().toUpperCase();
-  const payChannelScope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
-
-  const jsonResponse = (status, payload) => {
-    const headers = new Headers();
-    headers.set('Content-Type', 'application/json; charset=utf-8');
-    let bodyOut = '';
-    try { bodyOut = JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }); }
-    catch { bodyOut = JSON.stringify({ error: 'RPC_ERROR', message: 'Failed to serialize error payload' }); }
-    return new Response(bodyOut, { status, headers });
-  };
-
-  const _safeJsonParse = (s) => {
-    try { return JSON.parse(String(s || '')); } catch { return null; }
-  };
-
-  const _extractDbRaisedJson = (e) => {
-    try {
-      const ej = (e && typeof e === 'object' && e.json && typeof e.json === 'object') ? e.json : null;
-
-      let msg = (ej && typeof ej.message === 'string') ? ej.message : null;
-
-      if (!msg && e && typeof e === 'object' && typeof e.body === 'string' && e.body.trim()) {
-        const envObj = _safeJsonParse(e.body);
-        if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-      }
-
-      if (!msg && e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) {
-        const m = e.message;
-        const i1 = m.indexOf('{');
-        const i2 = m.lastIndexOf('}');
-        if (i1 !== -1 && i2 !== -1 && i2 > i1) {
-          const envObj = _safeJsonParse(m.slice(i1, i2 + 1));
-          if (envObj && typeof envObj === 'object' && typeof envObj.message === 'string') msg = envObj.message;
-          if (!msg && envObj && typeof envObj === 'object' && typeof envObj.code === 'string') return envObj;
-        }
-      }
-
-      if (!msg || typeof msg !== 'string') return null;
-      const t = msg.trim();
-
-      if (t.startsWith('{') && t.endsWith('}')) {
-        const payload = _safeJsonParse(t);
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-
-      const j1 = t.indexOf('{');
-      const j2 = t.lastIndexOf('}');
-      if (j1 !== -1 && j2 !== -1 && j2 > j1) {
-        const payload = _safeJsonParse(t.slice(j1, j2 + 1));
-        return (payload && typeof payload === 'object') ? payload : null;
-      }
-    } catch {}
-    return null;
-  };
-
-  const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR') => {
-    const stalePayload = _extractDbRaisedJson(e);
-    if (stalePayload && typeof stalePayload === 'object' && String(stalePayload.code || '').toUpperCase() === 'BATCH_STALE') {
-      return { status: 409, body: stalePayload };
-    }
-
-    const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
-    const status = (statusRaw && statusRaw >= 400 && statusRaw < 600) ? statusRaw : null;
-
-    let msg = '';
-    let msgFromJson = '';
-    try {
-      const jm = (e && e.json && typeof e.json === 'object' && typeof e.json.message === 'string') ? e.json.message : '';
-      msgFromJson = jm ? String(jm) : '';
-    } catch {}
-
-    msg = msgFromJson || String(e?.message || e || '');
-
-    if (!msgFromJson) {
-      try {
-        const i = msg.indexOf('{');
-        const j = msg.lastIndexOf('}');
-        if (i >= 0 && j > i) {
-          const maybe = msg.slice(i, j + 1);
-          const parsed = JSON.parse(maybe);
-          if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
-            msg = String(parsed.message);
-          }
-        }
-      } catch {}
-    }
-
-    const raw = String(msg || '').trim();
-    const rawU = raw.toUpperCase();
-
-    let error_code = fallbackCode;
-    let user_message = 'Request failed. Please try again.';
-
-    const prefix = raw.split(':')[0] ? raw.split(':')[0].trim() : '';
-    const prefixU = prefix.toUpperCase();
-
-    if (prefixU === 'PAYE_NOT_READY' || rawU.startsWith('PAYE_NOT_READY')) {
-      error_code = 'PAYE_NOT_READY';
-      user_message = 'Some PAYE candidates are not ready. Open the PAYE worksheet, enter any missing net amounts, click Save, then try again.';
-    } else if (prefixU === 'PAYE_NET_MISSING' || rawU.startsWith('PAYE_NET_MISSING')) {
-      error_code = 'PAYE_NET_MISSING';
-      user_message = 'Missing PAYE net amounts. Open the PAYE worksheet, enter net amounts, click Save, then try again.';
-    } else if (raw) {
-      user_message = raw;
-    }
-
-    const httpStatus = (status && status >= 400 && status < 500) ? status : null;
-
-    return {
-      status: httpStatus || 400,
-      body: {
-        error: user_message,
-        message: user_message,
-        error_code
-      }
-    };
-  };
-
-  const _unwrapRpcPayload = (rpcRes, key) => {
-    let payload = rpcRes;
-    try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) {
-        payload = payload[key];
-      }
-    } catch {}
-    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  };
-
-  const _extractExecutionFields = (batchPayload) => {
-    const payload = (batchPayload && typeof batchPayload === 'object' && !Array.isArray(batchPayload)) ? batchPayload : {};
-    const batchObj = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : payload;
-    return {
-      execution_commit_state: batchObj.execution_commit_state ?? payload.execution_commit_state ?? null,
-      execution_commit_ref: batchObj.execution_commit_ref ?? payload.execution_commit_ref ?? null,
-      execution_committed_at_utc: batchObj.execution_committed_at_utc ?? payload.execution_committed_at_utc ?? null
-    };
-  };
-
-  try {
-    const rpcRes = await sbRpc(env, 'pay_execute_bank', {
-      p_pay_batch_id: id,
-      p_pay_channel_scope: payChannelScope,
-      p_actor_user_id: user.id
-    });
-
-    const executedPayload = _unwrapRpcPayload(rpcRes, 'pay_execute_bank');
-
-    let batchGetPayload = {};
-    try {
-      const batchGetRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
-      batchGetPayload = _unwrapRpcPayload(batchGetRes, 'pay_batch_get');
-    } catch {}
-
-    const executionFields = _extractExecutionFields(batchGetPayload);
-
-    return withCORS(env, req, ok({
-      ...(executedPayload && typeof executedPayload === 'object' ? executedPayload : {}),
-      execution_commit_state: executionFields.execution_commit_state,
-      execution_commit_ref: executionFields.execution_commit_ref,
-      execution_committed_at_utc: executionFields.execution_committed_at_utc,
-      batch_get: batchGetPayload
-    }));
-  } catch (e) {
-    const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
-    return withCORS(env, req, jsonResponse(norm.status, norm.body));
-  }
-}
-
 async function handleBankingPayBatchPayeNetImportSage(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -24863,14 +24683,66 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     }
 
     const raw = String(msg || '').trim();
+
+    let parsed = null;
+    try {
+      const firstBrace = raw.indexOf('{');
+      const lastBrace = raw.lastIndexOf('}');
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1));
+      }
+    } catch {
+      parsed = null;
+    }
+
+    const parsedCode =
+      (parsed && typeof parsed === 'object' && typeof parsed.code === 'string' && parsed.code.trim())
+        ? parsed.code.trim()
+        : '';
+    const parsedMessage =
+      (parsed && typeof parsed === 'object' && typeof parsed.message === 'string' && parsed.message.trim())
+        ? parsed.message.trim()
+        : '';
+
+    const errorCode = parsedCode || fallbackCode;
+    const message = parsedMessage || raw || fallbackCode;
+
+    const conflictCodes = new Set([
+      'BATCH_STALE',
+      'NO_PENDING_TRANSFERS',
+      'NO_PENDING_TRANSFER_ROWS',
+      'PAY_EXPORT_BANK_CSV_FAILED',
+      'PAY_EXECUTE_BANK_FAILED'
+    ]);
+
     return {
-      status: status || 400,
+      status: status || (conflictCodes.has(String(errorCode).toUpperCase()) ? 409 : 400),
       body: {
-        error: raw || fallbackCode,
-        message: raw || fallbackCode,
-        error_code: fallbackCode
+        error: errorCode,
+        message,
+        error_code: errorCode,
+        detail: parsed || null
       }
     };
+  };
+
+  const isMissingTransferRowsError = (e) => {
+    const raw = (() => {
+      try {
+        const jm = (e && e.json && typeof e.json === 'object' && typeof e.json.message === 'string') ? e.json.message : '';
+        return String(jm || e?.message || e || '');
+      } catch {
+        return String(e || '');
+      }
+    })().toUpperCase();
+
+    return raw.includes('NO_PENDING_TRANSFERS')
+      || raw.includes('NO_PENDING_TRANSFER_ROWS')
+      || raw.includes('NO_PENDING_BANK_TRANSFERS')
+      || raw.includes('NO PENDING TRANSFERS')
+      || raw.includes('NO PENDING BANK TRANSFERS')
+      || raw.includes('NO TRANSFER ROWS')
+      || raw.includes('PENDING TRANSFERS EXIST');
   };
 
   const jsonResponse = (status, payload) => {
@@ -24884,64 +24756,50 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
     const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
 
-    const providerRaw = String(batchObj?.rail_provider_snapshot || '').trim().toUpperCase();
-    const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
+    if (!batchObj || typeof batchObj !== 'object') {
+      return withCORS(env, req, badRequest('PAY_BATCH_NOT_FOUND'));
+    }
+
+    const providerRaw = String(batchObj.rail_provider_snapshot || '').trim().toUpperCase();
+    const provider = providerRaw === 'REV' ? 'REVOLUT' : (providerRaw || 'CSV');
+
+    if (!['REVOLUT', 'CSV'].includes(provider)) {
+      return withCORS(env, req, badRequest(`UNKNOWN_RAIL_PROVIDER: ${provider || 'UNKNOWN'}`));
+    }
+
     const adapter = getRailAdapter(provider);
-    if (!adapter) return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    if (!adapter) return withCORS(env, req, badRequest(`UNKNOWN_RAIL_PROVIDER: ${provider || 'UNKNOWN'}`));
 
-    if (typeof adapter.exportCsv !== 'function') {
-      return withCORS(env, req, badRequest('CSV_EXPORT_NOT_SUPPORTED_FOR_THIS_RAIL'));
-    }
-
-    let caps = null;
-    try {
-      if (typeof adapter.capabilities === 'function') {
-        caps = await adapter.capabilities(env);
-        if (caps && typeof caps === 'object' && caps.available === false) {
-          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
-          return withCORS(env, req, badRequest(reason));
-        }
-      }
-    } catch (e) {
-      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
-      return withCORS(env, req, badRequest(msg));
-    }
-
-    const batchEnvRaw = (batchObj && batchObj.rail_env_snapshot !== undefined && batchObj.rail_env_snapshot !== null)
-      ? String(batchObj.rail_env_snapshot).trim().toUpperCase()
-      : '';
-    const expectedEnv = batchEnvRaw ? batchEnvRaw : 'PROD';
-
-    const capsWorkerEnvRaw = (caps && typeof caps === 'object' && caps.worker_env !== undefined && caps.worker_env !== null)
-      ? String(caps.worker_env).trim().toUpperCase()
-      : '';
-    const workerEnv = capsWorkerEnvRaw ? capsWorkerEnvRaw : null;
-
-    const apiBase = (caps && typeof caps === 'object' && caps.api_base !== undefined && caps.api_base !== null)
-      ? String(caps.api_base)
-      : '';
-
-    if (workerEnv && expectedEnv && workerEnv !== expectedEnv) {
-      return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
-    }
-
-    try {
-      await sbRpc(env, 'pay_execute_bank', {
-        p_pay_batch_id: id,
-        p_pay_channel_scope: payChannelScope,
-        p_actor_user_id: user.id
-      });
-    } catch (e) {
-      const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
-    }
+    const exportFrozenCsv = async () => {
+      return csvAdapter_export(env, id, payChannelScope, user.id);
+    };
 
     let csvText;
     try {
-      csvText = await adapter.exportCsv(env, id, { scope: payChannelScope }, user.id);
-    } catch (e) {
-      const norm = normalizeRpcError(e, 'PAY_EXPORT_BANK_CSV_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      csvText = await exportFrozenCsv();
+    } catch (firstExportError) {
+      if (!isMissingTransferRowsError(firstExportError)) {
+        const norm = normalizeRpcError(firstExportError, 'PAY_EXPORT_BANK_CSV_FAILED');
+        return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      }
+
+      try {
+        await sbRpc(env, 'pay_execute_bank', {
+          p_pay_batch_id: id,
+          p_pay_channel_scope: payChannelScope,
+          p_actor_user_id: user.id
+        });
+      } catch (materialiseError) {
+        const norm = normalizeRpcError(materialiseError, 'PAY_EXECUTE_BANK_FAILED');
+        return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      }
+
+      try {
+        csvText = await exportFrozenCsv();
+      } catch (retryExportError) {
+        const norm = normalizeRpcError(retryExportError, 'PAY_EXPORT_BANK_CSV_FAILED');
+        return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      }
     }
 
     const headers = new Headers();
@@ -25349,7 +25207,6 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
 
 
 
-
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -25446,24 +25303,75 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       const railTx = String(t?.rail_tx_id || '').trim();
       if (railTx) return true;
 
-      const railState = String(t?.rail_state || '').trim().toUpperCase();
-      if (railState.includes('ACCEPTED') || railState.includes('SUBMITTED')) return true;
+      const externalStateTokens = [
+        'SUBMITTED',
+        'QUEUED',
+        'ACCEPTED',
+        'SENT',
+        'PROCESSING',
+        'IN_FLIGHT',
+        'PENDING_SETTLEMENT',
+        'PENDING_CONFIRMATION',
+        'PENDING_SUBMISSION'
+      ];
+
+      const stateHasExternalSubmissionEvidence = (value) => {
+        const state = String(value || '').trim().toUpperCase();
+        if (!state) return false;
+        if (state === 'NOT_SUBMITTED' || state === 'UNSUBMITTED') return false;
+        if (externalStateTokens.includes(state)) return true;
+        if (state.includes('NOT_SUBMITTED') || state.includes('UNSUBMITTED')) return false;
+        return externalStateTokens.some(token => {
+          if (token === 'SUBMITTED') return state === 'SUBMITTED';
+          return state.includes(token);
+        });
+      };
+
+      const truthyMetaFlag = (value) => {
+        if (value === true) return true;
+        const s = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+        return ['true', '1', 'yes', 'y', 'on'].includes(s);
+      };
+
+      if (stateHasExternalSubmissionEvidence(t?.rail_state)) return true;
 
       const meta = (t?.rail_meta_json && typeof t.rail_meta_json === 'object' && !Array.isArray(t.rail_meta_json))
         ? t.rail_meta_json
         : null;
       if (!meta) return false;
 
-      const metaTxId = String(meta.id || meta.transaction_id || meta.transfer_id || meta.payment_id || '').trim();
-      if (metaTxId) return true;
+      const metaExternalId = String(
+        meta.provider_submission_id
+        || meta.submission_id
+        || meta.provider_transfer_id
+        || meta.transfer_id
+        || meta.external_transfer_id
+        || meta.provider_payment_id
+        || meta.payment_id
+        || meta.external_payment_id
+        || meta.transaction_id
+        || meta.id
+        || ''
+      ).trim();
+      if (metaExternalId) return true;
 
-      const metaState = String(meta.state || meta.status || meta.rail_state || '').trim().toUpperCase();
-      if (metaState.includes('ACCEPTED') || metaState.includes('SUBMITTED')) return true;
+      if (stateHasExternalSubmissionEvidence(meta.state || meta.status || meta.rail_state || meta.payment_state || meta.transfer_state)) return true;
 
-      if (meta.submitted === true || meta.accepted === true) return true;
+      if (
+        truthyMetaFlag(meta.submitted)
+        || truthyMetaFlag(meta.queued)
+        || truthyMetaFlag(meta.accepted)
+        || truthyMetaFlag(meta.sent)
+        || truthyMetaFlag(meta.processing)
+        || truthyMetaFlag(meta.in_flight)
+        || truthyMetaFlag(meta.pending_settlement)
+        || truthyMetaFlag(meta.pending_confirmation)
+        || truthyMetaFlag(meta.pending_submission)
+      ) return true;
 
       return false;
     };
+
     const hasPollable = (transfers || []).some(t => hasPollableSubmissionEvidence(t));
 
     const lastCheckedIso = batchObj?.last_status_checked_at_utc ? String(batchObj.last_status_checked_at_utc).trim() : '';
@@ -25477,7 +25385,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     const nowMs = Date.now();
     const THROTTLE_MS = 2 * 60 * 1000;
 
-    if (hasPending && lastCheckedMs > 0 && (nowMs - lastCheckedMs) < THROTTLE_MS) {
+    if (hasPollable && lastCheckedMs > 0 && (nowMs - lastCheckedMs) < THROTTLE_MS) {
       const freshObj = (batchPayload && typeof batchPayload === 'object') ? batchPayload : {};
       const executionFields = _extractExecutionFields(freshObj);
       return withCORS(env, req, ok({
@@ -25676,8 +25584,6 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
-
 
 
 async function handleContractsCalendar(env, req, contractId) {
@@ -113939,7 +113845,7 @@ function getRailAdapter(provider) {
           return csvAdapter_export(env, batchId, sc, actorUserId);
         },
 
-        async pollBatch(env, batchId, actorUserId) {
+     async pollBatch(env, batchId, actorUserId) {
           if (!batchId) throw new Error('pollBatch: batchId required');
           if (!actorUserId) throw new Error('pollBatch: actorUserId required');
 
@@ -113966,31 +113872,82 @@ function getRailAdapter(provider) {
             return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: settled0 };
           }
 
-          const token = await revolutAuth_getAccessToken(env);
-
           const hasRailSubmissionEvidence = (row) => {
+            if (String(row?.status || '').trim().toUpperCase() !== 'PENDING') return false;
+
             const railTxId = String(row?.rail_tx_id || '').trim();
             if (railTxId) return true;
 
-            const railState = String(row?.rail_state || '').trim().toUpperCase();
-            if (railState.includes('ACCEPTED') || railState.includes('SUBMITTED')) return true;
+            const externalStateTokens = [
+              'SUBMITTED',
+              'QUEUED',
+              'ACCEPTED',
+              'SENT',
+              'PROCESSING',
+              'IN_FLIGHT',
+              'PENDING_SETTLEMENT',
+              'PENDING_CONFIRMATION',
+              'PENDING_SUBMISSION'
+            ];
+
+            const stateHasExternalSubmissionEvidence = (value) => {
+              const state = String(value || '').trim().toUpperCase();
+              if (!state) return false;
+              if (state === 'NOT_SUBMITTED' || state === 'UNSUBMITTED') return false;
+              if (externalStateTokens.includes(state)) return true;
+              if (state.includes('NOT_SUBMITTED') || state.includes('UNSUBMITTED')) return false;
+              return externalStateTokens.some(token => {
+                if (token === 'SUBMITTED') return state === 'SUBMITTED';
+                return state.includes(token);
+              });
+            };
+
+            const truthyMetaFlag = (value) => {
+              if (value === true) return true;
+              const s = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+              return ['true', '1', 'yes', 'y', 'on'].includes(s);
+            };
+
+            if (stateHasExternalSubmissionEvidence(row?.rail_state)) return true;
 
             const meta = (row?.rail_meta_json && typeof row.rail_meta_json === 'object' && !Array.isArray(row.rail_meta_json))
               ? row.rail_meta_json
               : null;
             if (!meta) return false;
 
-            const metaTxId = String(meta.id || meta.transaction_id || meta.transfer_id || meta.payment_id || '').trim();
-            if (metaTxId) return true;
+            const metaExternalId = String(
+              meta.provider_submission_id
+              || meta.submission_id
+              || meta.provider_transfer_id
+              || meta.transfer_id
+              || meta.external_transfer_id
+              || meta.provider_payment_id
+              || meta.payment_id
+              || meta.external_payment_id
+              || meta.transaction_id
+              || meta.id
+              || ''
+            ).trim();
+            if (metaExternalId) return true;
 
-            const metaState = String(meta.state || meta.status || meta.rail_state || '').trim().toUpperCase();
-            if (metaState.includes('ACCEPTED') || metaState.includes('SUBMITTED')) return true;
-            if (meta.submitted === true || meta.accepted === true) return true;
+            if (stateHasExternalSubmissionEvidence(meta.state || meta.status || meta.rail_state || meta.payment_state || meta.transfer_state)) return true;
+
+            if (
+              truthyMetaFlag(meta.submitted)
+              || truthyMetaFlag(meta.queued)
+              || truthyMetaFlag(meta.accepted)
+              || truthyMetaFlag(meta.sent)
+              || truthyMetaFlag(meta.processing)
+              || truthyMetaFlag(meta.in_flight)
+              || truthyMetaFlag(meta.pending_settlement)
+              || truthyMetaFlag(meta.pending_confirmation)
+              || truthyMetaFlag(meta.pending_submission)
+            ) return true;
 
             return false;
           };
 
-          const updates = [];
+          const pollableTransfers = [];
           for (const t of transfers) {
             const st = String(t?.status || '').toUpperCase();
             if (st !== 'PENDING') continue;
@@ -113999,7 +113956,19 @@ function getRailAdapter(provider) {
             const reqId = String(t?.request_id || '').trim();
             if (!reqId) continue;
 
-            const polled = await revolutPayment_poll(env, token, { request_id: reqId });
+            pollableTransfers.push({ transfer: t, requestId: reqId });
+          }
+
+          if (!pollableTransfers.length) {
+            return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
+          }
+
+          const token = await revolutAuth_getAccessToken(env);
+
+          const updates = [];
+          for (const pollable of pollableTransfers) {
+            const t = pollable.transfer;
+            const polled = await revolutPayment_poll(env, token, { request_id: pollable.requestId });
 
             updates.push({
               transfer_id: String(t?.id || '').trim(),
