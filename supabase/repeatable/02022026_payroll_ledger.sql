@@ -24091,10 +24091,6 @@ begin
 end;
 $$;
 
-
-
-
-
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -24206,8 +24202,14 @@ begin
   if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
     v_execution_commit_state := 'NOT_SUBMITTED';
   end if;
-  v_execution_commit_ref := v_batch.execution_commit_ref;
-  v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
+  v_execution_commit_ref := case
+    when v_execution_commit_state = 'NOT_SUBMITTED' then null
+    else v_batch.execution_commit_ref
+  end;
+  v_execution_committed_at_utc := case
+    when v_execution_commit_state = 'NOT_SUBMITTED' then null
+    else v_batch.execution_committed_at_utc
+  end;
 
   if v_execution_commit_state = 'NOT_SUBMITTED' then
     select
@@ -24240,6 +24242,18 @@ begin
           or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'accepted','false'))) in ('true', '1', 'yes', 'y', 'on')
           or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'sent','false'))) in ('true', '1', 'yes', 'y', 'on')
           or lower(btrim(coalesce(pbt_exec.rail_meta_json->>'processing','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or coalesce(
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'provider_submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'provider_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'external_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'provider_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'external_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'transaction_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec.rail_meta_json->>'id','')), '')
+          ) is not null
         )
       )::int,
       (
@@ -24247,7 +24261,12 @@ begin
           nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_transfer_id','')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_payment_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'payment_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_payment_id','')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
         )
@@ -24267,6 +24286,18 @@ begin
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'accepted','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'sent','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'processing','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or coalesce(
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
+          ) is not null
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
@@ -24278,7 +24309,12 @@ begin
           case when coalesce(
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_transfer_id','')), ''),
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_payment_id','')), ''),
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
           ) is not null then 0 else 1 end,
@@ -24334,10 +24370,10 @@ begin
       update public.pay_batches pb_exec
       set
         execution_commit_state = v_execution_commit_state,
-        execution_commit_ref = coalesce(pb_exec.execution_commit_ref, v_execution_commit_ref),
+        execution_commit_ref = v_execution_commit_ref,
         execution_committed_at_utc = case
-          when v_execution_commit_state = 'COMMITTED' then coalesce(pb_exec.execution_committed_at_utc, v_execution_committed_at_utc)
-          else pb_exec.execution_committed_at_utc
+          when v_execution_commit_state = 'COMMITTED' then v_execution_committed_at_utc
+          else null
         end
       where pb_exec.id = p_pay_batch_id;
     end if;
@@ -24900,16 +24936,101 @@ begin
       transfer_group_key,
       grouping_mode_used
     )
+    with paye_candidate_destination_guard as (
+      select
+        tig_guard.candidate_id,
+        count(*) filter (
+          where round(greatest(coalesce(tig_guard.amount, 0), 0), 2) > 0
+        )::int as positive_item_count,
+        count(*) filter (
+          where round(greatest(coalesce(tig_guard.amount, 0), 0), 2) > 0
+            and tig_guard.status = 'BLOCKED'
+        )::int as blocked_positive_item_count,
+        count(distinct concat_ws(
+          '|',
+          upper(coalesce(nullif(btrim(tig_guard.payee_entity_kind), ''), '')),
+          coalesce(tig_guard.payee_entity_id::text, ''),
+          coalesce(nullif(btrim(tig_guard.payee_name), ''), ''),
+          regexp_replace(coalesce(tig_guard.sort_code, ''), '[^0-9]', '', 'g'),
+          regexp_replace(coalesce(tig_guard.account_number, ''), '[^0-9]', '', 'g'),
+          upper(coalesce(nullif(btrim(tig_guard.account_type), ''), '')),
+          coalesce(nullif(btrim(tig_guard.bank_details_hash_snapshot), ''), '')
+        )) filter (
+          where round(greatest(coalesce(tig_guard.amount, 0), 0), 2) > 0
+        )::int as destination_variant_count,
+        count(distinct concat_ws(
+          '|',
+          upper(coalesce(nullif(btrim(tig_guard.payee_entity_kind), ''), '')),
+          coalesce(tig_guard.payee_entity_id::text, ''),
+          coalesce(nullif(btrim(tig_guard.payee_name), ''), ''),
+          regexp_replace(coalesce(tig_guard.sort_code, ''), '[^0-9]', '', 'g'),
+          regexp_replace(coalesce(tig_guard.account_number, ''), '[^0-9]', '', 'g'),
+          upper(coalesce(nullif(btrim(tig_guard.account_type), ''), '')),
+          coalesce(nullif(btrim(tig_guard.bank_details_hash_snapshot), ''), '')
+        )) filter (
+          where round(greatest(coalesce(tig_guard.amount, 0), 0), 2) > 0
+            and tig_guard.status <> 'BLOCKED'
+        )::int as valid_destination_variant_count
+      from _tmp_pay_transfer_item_groups tig_guard
+      join public.pay_batch_candidates pbc_guard
+        on pbc_guard.pay_batch_id = p_pay_batch_id
+       and pbc_guard.candidate_id = tig_guard.candidate_id
+      where tig_guard.pay_channel = 'PAYE'
+        and round(greatest(coalesce(tig_guard.amount, 0), 0), 2) > 0
+        and round(coalesce(pbc_guard.net_bank_amount, 0), 2) > 0
+      group by tig_guard.candidate_id
+    )
     select
       tig.pay_channel,
-      (array_agg(tig.candidate_id order by tig.candidate_id::text nulls last))[1] as candidate_id,
+      tig.candidate_id,
       (array_agg(tig.umbrella_id order by tig.umbrella_id::text nulls last))[1] as umbrella_id,
       null::date as week_ending_bucket,
-      round(max(coalesce(pbc_net.net_bank_amount, 0)), 2) as amount,
+      case
+        when coalesce(pcdg.positive_item_count, 0) > 0
+          and coalesce(pcdg.blocked_positive_item_count, 0) = 0
+          and coalesce(pcdg.destination_variant_count, 0) = 1
+          and coalesce(pcdg.valid_destination_variant_count, 0) = 1
+          then round(max(coalesce(pbc_net.net_bank_amount, 0)), 2)
+        else round(sum(greatest(coalesce(tig.amount, 0), 0)), 2)
+      end as amount,
       max(tig.currency) as currency,
-      case when bool_or(tig.status = 'BLOCKED') then 'BLOCKED' else 'PENDING' end as status,
-      case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_state) else null end as rail_state,
-      case when bool_or(tig.status = 'BLOCKED') then (array_agg(tig.rail_meta_json order by tig.rail_meta_json::text nulls last))[1] else null end as rail_meta_json,
+      case
+        when coalesce(pcdg.positive_item_count, 0) = 0 then 'BLOCKED'
+        when coalesce(pcdg.blocked_positive_item_count, 0) <> 0 then 'BLOCKED'
+        when coalesce(pcdg.destination_variant_count, 0) <> 1 then 'BLOCKED'
+        when coalesce(pcdg.valid_destination_variant_count, 0) <> 1 then 'BLOCKED'
+        when bool_or(tig.status = 'BLOCKED') then 'BLOCKED'
+        else 'PENDING'
+      end as status,
+      case
+        when coalesce(pcdg.positive_item_count, 0) = 0 then 'BLOCKED_PAYE_DESTINATION_MISSING'
+        when coalesce(pcdg.blocked_positive_item_count, 0) <> 0 then 'BLOCKED_PAYE_DESTINATION_INVALID'
+        when coalesce(pcdg.destination_variant_count, 0) <> 1 then 'BLOCKED_PAYE_DESTINATION_VARIANT'
+        when coalesce(pcdg.valid_destination_variant_count, 0) <> 1 then 'BLOCKED_PAYE_DESTINATION_VARIANT'
+        when bool_or(tig.status = 'BLOCKED') then min(tig.rail_state)
+        else null
+      end as rail_state,
+      case
+        when coalesce(pcdg.positive_item_count, 0) = 0
+          or coalesce(pcdg.blocked_positive_item_count, 0) <> 0
+          or coalesce(pcdg.destination_variant_count, 0) <> 1
+          or coalesce(pcdg.valid_destination_variant_count, 0) <> 1
+          then jsonb_build_object(
+            'reason_code', case
+              when coalesce(pcdg.blocked_positive_item_count, 0) <> 0 then 'PAYE_DESTINATION_INVALID'
+              else 'PAYE_DESTINATION_VARIANT_COUNT_INVALID'
+            end,
+            'message', 'PAYE candidate must have exactly one valid frozen payout destination signature before candidate-level net_bank_amount can be materialised',
+            'candidate_id', tig.candidate_id::text,
+            'positive_item_count', coalesce(pcdg.positive_item_count, 0),
+            'blocked_positive_item_count', coalesce(pcdg.blocked_positive_item_count, 0),
+            'destination_variant_count', coalesce(pcdg.destination_variant_count, 0),
+            'valid_destination_variant_count', coalesce(pcdg.valid_destination_variant_count, 0),
+            'transfer_group_key', tig.transfer_group_key
+          )
+        when bool_or(tig.status = 'BLOCKED') then (array_agg(tig.rail_meta_json order by tig.rail_meta_json::text nulls last))[1]
+        else null
+      end as rail_meta_json,
       min(tig.payment_reference) as payment_reference,
       min(tig.payee_name) as payee_name,
       min(tig.sort_code) as sort_code,
@@ -24924,11 +25045,20 @@ begin
     join public.pay_batch_candidates pbc_net
       on pbc_net.pay_batch_id = p_pay_batch_id
      and pbc_net.candidate_id = tig.candidate_id
+    left join paye_candidate_destination_guard pcdg
+      on pcdg.candidate_id = tig.candidate_id
     where tig.pay_channel = 'PAYE'
-      and round(greatest(tig.amount,0),2) > 0
-      and round(coalesce(pbc_net.net_bank_amount,0),2) > 0
-    group by tig.pay_channel, tig.transfer_group_key
-    having round(max(coalesce(pbc_net.net_bank_amount,0)),2) > 0;
+      and round(greatest(coalesce(tig.amount, 0), 0), 2) > 0
+      and round(coalesce(pbc_net.net_bank_amount, 0), 2) > 0
+    group by
+      tig.pay_channel,
+      tig.candidate_id,
+      tig.transfer_group_key,
+      pcdg.positive_item_count,
+      pcdg.blocked_positive_item_count,
+      pcdg.destination_variant_count,
+      pcdg.valid_destination_variant_count
+    having round(max(coalesce(pbc_net.net_bank_amount, 0)), 2) > 0;
   end if;
 
   -- =========================================================
@@ -25423,6 +25553,18 @@ begin
             or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'accepted','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'sent','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'processing','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or coalesce(
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'provider_submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'provider_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'external_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'provider_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'external_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'transaction_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_after.rail_meta_json->>'id','')), '')
+          ) is not null
           )
       )::int,
       (
@@ -25430,7 +25572,12 @@ begin
           nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_transfer_id','')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_payment_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'payment_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_payment_id','')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
           nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
         )
@@ -25450,6 +25597,18 @@ begin
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'accepted','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'sent','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'processing','false'))) in ('true', '1', 'yes', 'y', 'on')
+          or coalesce(
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
+          ) is not null
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
@@ -25461,7 +25620,12 @@ begin
           case when coalesce(
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_transfer_id','')), ''),
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'payment_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'external_payment_id','')), ''),
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
             nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
           ) is not null then 0 else 1 end,
@@ -25622,6 +25786,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 
