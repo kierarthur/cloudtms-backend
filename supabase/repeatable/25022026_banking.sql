@@ -3405,6 +3405,7 @@ $$;
 
 
 
+
 create or replace function public.pay_batch_prepare(
   p_pay_batch_id uuid,
   p_actor_user_id uuid
@@ -3864,6 +3865,8 @@ begin
         pbi.pay_channel,
         pbi.finance_case_id,
         pbi.source_ref,
+        pbi.amount_inc_vat,
+        pbi.paye_treatment,
         pbi.payout_instruction_snapshot_json
       from public.pay_batch_items as pbi
       join public.pay_batch_candidates as pbc3
@@ -3879,6 +3882,15 @@ begin
         upper(coalesce(fi.pay_channel,'')) as pay_channel,
         fi.finance_case_id,
         fi.source_ref,
+        fi.amount_inc_vat,
+        upper(coalesce(fi.paye_treatment,'')) as paye_treatment,
+        (
+          fi.item_type in ('LOAN_PAYOUT','MANUAL_CREDIT_PAYOUT')
+          or (
+            coalesce(fi.amount_inc_vat, 0) > 0
+            and upper(coalesce(fi.paye_treatment,'')) <> 'NET_DEDUCT'
+          )
+        ) as requires_payout_snapshot,
         fi.payout_instruction_snapshot_json,
         upper(nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'routing_kind','')), '')) as routing_kind,
         nullif(btrim(coalesce(fi.payout_instruction_snapshot_json->>'destination_label','')), '') as destination_label,
@@ -3896,9 +3908,10 @@ begin
     enriched as (
       select
         p.*,
-        (p.payout_instruction_snapshot_json is null) as is_missing_snapshot,
+        (p.requires_payout_snapshot = true and p.payout_instruction_snapshot_json is null) as is_missing_snapshot,
         (
-          p.payout_instruction_snapshot_json is not null
+          p.requires_payout_snapshot = true
+          and p.payout_instruction_snapshot_json is not null
           and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
           and (
             p.bank_details_hash is null
@@ -3911,7 +3924,8 @@ begin
         (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash) as name_check_has_override,
         (bpm.payee_id is not null) as payee_map_present,
         (
-          p.payout_instruction_snapshot_json is not null
+          p.requires_payout_snapshot = true
+          and p.payout_instruction_snapshot_json is not null
           and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
           and p.bank_details_hash is not null
           and v_need_name_check = true
@@ -3919,7 +3933,8 @@ begin
           and not (bnc.override_reason is not null and bnc.override_hash = p.bank_details_hash)
         ) as is_name_check_blocked,
         (
-          p.payout_instruction_snapshot_json is not null
+          p.requires_payout_snapshot = true
+          and p.payout_instruction_snapshot_json is not null
           and p.routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'
           and p.bank_details_hash is not null
           and v_requires_payee_map = true
@@ -4191,6 +4206,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 
 
