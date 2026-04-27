@@ -10897,7 +10897,6 @@ begin
 end;
 $$;
 
-
 create or replace function public.pay_batches_claim_due_scheduled(
   p_limit int,
   p_now_utc timestamptz
@@ -10915,22 +10914,39 @@ declare
   v_claimed jsonb := '[]'::jsonb;
   v_claimed_count int := 0;
 begin
-  with claim as (
+  with candidate as (
     select
       pb.id,
       pb.rail_provider_snapshot,
       pb.rail_env_snapshot,
       pb.schedule_kind,
       pb.scheduled_at_utc,
-      pb.funding_account_ref
+      pb.funding_account_ref,
+      pb.created_by_user_id,
+      public.pay_batch_validate_freshness(
+        pb.id,
+        coalesce(pb.created_by_user_id, '00000000-0000-0000-0000-000000000000'::uuid)
+      ) as freshness_json
     from public.pay_batches pb
     where upper(coalesce(pb.status,'')) in ('AUTHORISED_FOR_PAYMENT')
+      and upper(coalesce(pb.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED'
       and pb.scheduled_at_utc is not null
       and pb.scheduled_at_utc <= v_cutoff
       and nullif(btrim(coalesce(pb.funding_account_ref,'')), '') is not null
     order by pb.scheduled_at_utc asc, pb.id asc
     for update skip locked
     limit v_limit
+  ),
+  claim as (
+    select
+      c.id,
+      c.rail_provider_snapshot,
+      c.rail_env_snapshot,
+      c.schedule_kind,
+      c.scheduled_at_utc,
+      c.funding_account_ref
+    from candidate c
+    where coalesce((c.freshness_json->>'is_stale')::boolean, false) = false
   ),
   upd as (
     update public.pay_batches pb2
@@ -10939,6 +10955,7 @@ begin
       executing_started_at_utc = coalesce(pb2.executing_started_at_utc, v_now)
     from claim c
     where pb2.id = c.id
+      and upper(coalesce(pb2.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED'
     returning
       pb2.id,
       pb2.rail_provider_snapshot,
@@ -10978,6 +10995,10 @@ begin
   );
 end;
 $$;
+
+
+
+
 
 create or replace function public.pay_bank_transfers_apply_rail_updates(
   p_pay_batch_id uuid,
