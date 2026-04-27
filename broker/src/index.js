@@ -19994,6 +19994,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
   const actorIntentRaw = String(body.actor_intent || body.actorIntent || '').trim().toUpperCase();
   const actorIntent = (actorIntentRaw === 'USE_GOLDEN_KEY') ? 'USE_GOLDEN_KEY' : null;
+  const reauthToken = String(body.reauth_token || '').trim();
 
   if (!scheduleKind) {
     return withCORS(env, req, badRequest('schedule_kind must be IMMEDIATE or SCHEDULED (legacy AT_TIME accepted)'));
@@ -20001,6 +20002,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   if (scheduleKind === 'SCHEDULED' && !scheduledAtUtc) {
     return withCORS(env, req, badRequest('scheduled_at_utc is required when schedule_kind=SCHEDULED (legacy AT_TIME)'));
   }
+
+  const reauthCheck = await verifyPaymentScheduleReauth(env, user, reauthToken);
+  if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -20190,6 +20194,22 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   };
 
   try {
+    try {
+      const enc = encodeURIComponent;
+      const { rows: urows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/tms_users` +
+        `?id=eq.${enc(user.id)}` +
+        `&select=id,is_active,email,display_name,payment_authoriser,payment_golden_key` +
+        `&limit=1`
+      );
+      const u0 = (urows && urows[0]) ? urows[0] : null;
+      if (!u0 || u0.is_active !== true) return withCORS(env, req, unauthorized('Unauthorized'));
+      if (u0.payment_authoriser !== true) return withCORS(env, req, badRequest('PAYMENT_AUTHORISER_REQUIRED'));
+    } catch (e) {
+      return withCORS(env, req, serverError(String(e?.message || e || 'Failed to validate payment authoriser')));
+    }
+
     let gateGet0;
     try {
       gateGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
@@ -20200,11 +20220,81 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     const gateGet = unwrapRpc(gateGet0, 'pay_batch_get');
     const gateBatch = (gateGet && typeof gateGet === 'object') ? (gateGet.batch || null) : null;
     const gateStatus = String(gateBatch?.status || '').trim().toUpperCase();
-
-    const gateAllowed = (gateStatus === 'DRAFT' || gateStatus === 'DRAFT_CREATED' || gateStatus === 'READY');
+    const gateExecutionState = String(gateBatch?.execution_commit_state || gateGet?.execution_commit_state || '').trim().toUpperCase();
+    const gateAllowed =
+      gateStatus === 'DRAFT'
+      || gateStatus === 'DRAFT_CREATED'
+      || gateStatus === 'READY'
+      || gateStatus === 'WAITING_BANK_CONFIRM'
+      || gateStatus === 'PARTIAL';
     if (!gateAllowed) {
       const msg = `EXECUTE_NOT_ALLOWED status=${gateStatus || '—'}`;
       return withCORS(env, req, jsonResponse(400, { error: msg, message: msg, error_code: 'EXECUTE_NOT_ALLOWED' }));
+    }
+    if (gateExecutionState === 'SUBMITTED_NOT_COMMITTED') {
+      const msg = `EXECUTE_NOT_ALLOWED execution_commit_state=${gateExecutionState}`;
+      return withCORS(env, req, jsonResponse(409, { error: msg, message: msg, error_code: 'EXECUTION_ALREADY_SUBMITTED' }));
+    }
+    if (gateExecutionState === 'COMMITTED' || gateExecutionState === 'CANCELLED') {
+      const msg = `EXECUTE_NOT_ALLOWED execution_commit_state=${gateExecutionState}`;
+      return withCORS(env, req, jsonResponse(409, { error: msg, message: msg, error_code: 'EXECUTE_NOT_ALLOWED' }));
+    }
+
+    const providerRaw = String(gateBatch?.rail_provider_snapshot || '').trim().toUpperCase();
+    const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
+    const adapter = getRailAdapter(provider);
+    if (!adapter) {
+      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    }
+
+    let caps = null;
+    try {
+      if (adapter && typeof adapter.capabilities === 'function') {
+        caps = await adapter.capabilities(env);
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
+          return withCORS(env, req, badRequest(reason));
+        }
+      }
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
+      return withCORS(env, req, badRequest(msg));
+    }
+
+    const batchEnvRaw = (gateBatch && gateBatch.rail_env_snapshot !== undefined && gateBatch.rail_env_snapshot !== null)
+      ? String(gateBatch.rail_env_snapshot).trim().toUpperCase()
+      : '';
+    const expectedEnv = batchEnvRaw ? batchEnvRaw : 'PROD';
+    const capsWorkerEnvRaw = (caps && typeof caps === 'object' && caps.worker_env !== undefined && caps.worker_env !== null)
+      ? String(caps.worker_env).trim().toUpperCase()
+      : '';
+    const workerEnv = capsWorkerEnvRaw ? capsWorkerEnvRaw : null;
+    const apiBase = (caps && typeof caps === 'object' && caps.api_base !== undefined && caps.api_base !== null)
+      ? String(caps.api_base)
+      : '';
+    if (workerEnv && expectedEnv && workerEnv !== expectedEnv) {
+      return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
+    }
+
+    const supportsScheduling =
+      !!(adapter && typeof adapter.scheduleBatch === 'function')
+      && !!(caps && typeof caps === 'object' && caps.supports_scheduling === true);
+
+    if (!supportsScheduling && provider !== 'CSV') {
+      return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+
+    let execRes = null;
+    try {
+      const execRes0 = await sbRpc(env, 'pay_execute_bank', {
+        p_pay_batch_id: id,
+        p_pay_channel_scope: payChannelScope,
+        p_actor_user_id: user.id
+      });
+      execRes = unwrapRpc(execRes0, 'pay_execute_bank');
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
     }
 
     let prepRes0;
@@ -20245,64 +20335,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }));
     }
 
-    let execRes = null;
-
-    let batchGet0;
-    try {
-      batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
-    } catch (e) {
-      const norm = normalizeRpcError(e, 'PAY_BATCH_GET_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
-    }
-    const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
-
-    const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
-    const providerRaw = String(batchObj?.rail_provider_snapshot || 'CSV').trim().toUpperCase();
-    const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
-    const adapter = getRailAdapter(provider);
-
-    if (!adapter) {
-      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
-    }
-
-    let caps = null;
-    try {
-      if (adapter && typeof adapter.capabilities === 'function') {
-        caps = await adapter.capabilities(env);
-        if (caps && typeof caps === 'object' && caps.available === false) {
-          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
-          return withCORS(env, req, badRequest(reason));
-        }
-      }
-    } catch (e) {
-      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
-      return withCORS(env, req, badRequest(msg));
-    }
-
-    const batchEnvRaw = (batchObj && batchObj.rail_env_snapshot !== undefined && batchObj.rail_env_snapshot !== null)
-      ? String(batchObj.rail_env_snapshot).trim().toUpperCase()
-      : '';
-    const expectedEnv = batchEnvRaw ? batchEnvRaw : 'PROD';
-
-    const capsWorkerEnvRaw = (caps && typeof caps === 'object' && caps.worker_env !== undefined && caps.worker_env !== null)
-      ? String(caps.worker_env).trim().toUpperCase()
-      : '';
-    const workerEnv = capsWorkerEnvRaw ? capsWorkerEnvRaw : null;
-
-    const apiBase = (caps && typeof caps === 'object' && caps.api_base !== undefined && caps.api_base !== null)
-      ? String(caps.api_base)
-      : '';
-
-    if (workerEnv && expectedEnv && workerEnv !== expectedEnv) {
-      return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
-    }
-
     let scheduledOut = null;
     let scheduleAttempted = false;
-
-    const supportsScheduling =
-      !!(adapter && typeof adapter.scheduleBatch === 'function')
-      && !!(caps && typeof caps === 'object' && caps.supports_scheduling === true);
 
     if (supportsScheduling) {
       scheduleAttempted = true;
@@ -20375,25 +20409,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         (scheduledOut && scheduledOut.became_authorised === true)
         || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT')
       );
-
-    const shouldExecuteBank =
-      (!scheduleAttempted)
-      || becameAuthorisedForPayment;
-
-    if (shouldExecuteBank) {
-      let execRes0;
-      try {
-        execRes0 = await sbRpc(env, 'pay_execute_bank', {
-          p_pay_batch_id: id,
-          p_pay_channel_scope: payChannelScope,
-          p_actor_user_id: user.id
-        });
-      } catch (e) {
-        const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
-        return withCORS(env, req, jsonResponse(norm.status, norm.body));
-      }
-      execRes = unwrapRpc(execRes0, 'pay_execute_bank');
-    }
 
     if (becameAuthorisedForPayment) {
       try {
@@ -20501,6 +20516,21 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     }
     return withCORS(env, req, jsonResponse(500, { error: 'Execute payment failed.', message: 'Execute payment failed.', error_code: 'BANKING_EXECUTE_PAYMENT_FAILED' }));
   }
+}
+
+async function verifyPaymentScheduleReauth(env, user, reauthToken) {
+  const token = String(reauthToken || '').trim();
+  if (!token) return { ok: false, response: badRequest('reauth_token is required') };
+
+  const rt = await verifyToken(sessionSecret(env), token);
+  if (!rt || rt.ok !== true) return { ok: false, response: unauthorized('Invalid reauth_token') };
+
+  const payload = (rt && rt.payload && typeof rt.payload === 'object') ? rt.payload : {};
+  if (String(payload.typ || '').trim() !== 'reauth') return { ok: false, response: unauthorized('Invalid reauth_token') };
+  if (String(payload.purpose || '').trim() !== 'PAYMENT_SCHEDULE') return { ok: false, response: unauthorized('Invalid reauth_token') };
+  if (String(payload.sub || '').trim() !== String(user?.id || '').trim()) return { ok: false, response: unauthorized('Invalid reauth_token') };
+
+  return { ok: true, payload };
 }
 
 
@@ -22582,6 +22612,8 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   const fundingAccountRef = (body.funding_account_ref === null || body.funding_account_ref === undefined)
     ? null
     : String(body.funding_account_ref).trim() || null;
+  const scopeRaw = String(body.pay_channel_scope || body.scope || 'ALL').trim().toUpperCase();
+  const payChannelScope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
 
   let warningHoursJson = null;
   if (body.warning_hours_json === null || body.warning_hours_json === undefined) {
@@ -22671,15 +22703,8 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
   };
 
   const reauthToken = String(body.reauth_token || '').trim();
-  if (!reauthToken) return withCORS(env, req, badRequest('reauth_token is required'));
-
-  const rt = await verifyToken(sessionSecret(env), reauthToken);
-  if (!rt || rt.ok !== true) return withCORS(env, req, unauthorized('Invalid reauth_token'));
-
-  const rtp = (rt && rt.payload && typeof rt.payload === 'object') ? rt.payload : {};
-  if (String(rtp.typ || '').trim() !== 'reauth') return withCORS(env, req, unauthorized('Invalid reauth_token'));
-  if (String(rtp.purpose || '').trim() !== 'PAYMENT_SCHEDULE') return withCORS(env, req, unauthorized('Invalid reauth_token'));
-  if (String(rtp.sub || '').trim() !== String(user.id || '').trim()) return withCORS(env, req, unauthorized('Invalid reauth_token'));
+  const reauthCheck = await verifyPaymentScheduleReauth(env, user, reauthToken);
+  if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
 
   try {
     const enc = encodeURIComponent;
@@ -22704,7 +22729,7 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     const batchRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
     const batchPayload = _unwrapRpcPayload(batchRes, 'pay_batch_get');
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
-    const providerRaw = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+    const providerRaw = String(batchObj?.rail_provider_snapshot || '').trim().toUpperCase();
     const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
 
     const adapter = getRailAdapter(provider);
@@ -22729,6 +22754,9 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
     if (!adapter || typeof adapter.scheduleBatch !== 'function') {
       return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
     }
+    if (!(caps && typeof caps === 'object' && caps.supports_scheduling === true)) {
+      return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
 
     const batchEnvRaw = (batchObj && batchObj.rail_env_snapshot !== undefined && batchObj.rail_env_snapshot !== null)
       ? String(batchObj.rail_env_snapshot).trim().toUpperCase()
@@ -22746,6 +22774,21 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId) {
 
     if (workerEnv && expectedEnv && workerEnv !== expectedEnv) {
       return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
+    }
+
+    let executeRes0;
+    try {
+      executeRes0 = await sbRpc(env, 'pay_execute_bank', {
+        p_pay_batch_id: id,
+        p_pay_channel_scope: payChannelScope,
+        p_actor_user_id: user.id
+      });
+      _unwrapRpcPayload(executeRes0, 'pay_execute_bank');
+    } catch (e) {
+      const stale409 = _maybeStale409(e);
+      if (stale409) return stale409;
+      const msg = (e && e.message) ? String(e.message) : String(e || 'PAY_EXECUTE_BANK_FAILED');
+      return withCORS(env, req, badRequest(msg));
     }
 
     const rpcRes = await sbRpc(env, 'pay_batch_auth_start', {
@@ -113900,8 +113943,8 @@ function getRailAdapter(provider) {
   if (p === '__REGISTRY__') return getRailAdapter.__RAIL_REGISTRY;
   if (p === '__LIST__') return Object.keys(getRailAdapter.__RAIL_REGISTRY);
 
-  const mk = getRailAdapter.__RAIL_REGISTRY[p] || getRailAdapter.__RAIL_REGISTRY.CSV;
-  return mk();
+  const mk = getRailAdapter.__RAIL_REGISTRY[p];
+  return (typeof mk === 'function') ? mk() : null;
 }
 async function revolutAuth_getAccessToken(env) {
   const cacheKey = '__REVOLUT_TOKEN_CACHE__';
