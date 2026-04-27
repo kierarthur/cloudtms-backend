@@ -23966,7 +23966,6 @@ $$;
 
 
 
-
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -24746,7 +24745,7 @@ begin
       (array_agg(tig.candidate_id order by tig.candidate_id::text nulls last))[1] as candidate_id,
       (array_agg(tig.umbrella_id order by tig.umbrella_id::text nulls last))[1] as umbrella_id,
       null::date as week_ending_bucket,
-      round(sum(tig.amount), 2) as amount,
+      round(max(coalesce(pbc_net.net_bank_amount, 0)), 2) as amount,
       max(tig.currency) as currency,
       case when bool_or(tig.status = 'BLOCKED') then 'BLOCKED' else 'PENDING' end as status,
       case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_state) else null end as rail_state,
@@ -24762,10 +24761,14 @@ begin
       tig.transfer_group_key,
       min(tig.grouping_mode_used) as grouping_mode_used
     from _tmp_pay_transfer_item_groups tig
+    join public.pay_batch_candidates pbc_net
+      on pbc_net.pay_batch_id = p_pay_batch_id
+     and pbc_net.candidate_id = tig.candidate_id
     where tig.pay_channel = 'PAYE'
       and round(greatest(tig.amount,0),2) > 0
+      and round(coalesce(pbc_net.net_bank_amount,0),2) > 0
     group by tig.pay_channel, tig.transfer_group_key
-    having round(greatest(sum(tig.amount),0),2) > 0;
+    having round(max(coalesce(pbc_net.net_bank_amount,0)),2) > 0;
   end if;
 
   -- =========================================================
@@ -24803,6 +24806,7 @@ begin
         pbc_u.candidate_id,
         pbi_u.finance_case_id,
         pbi_u.item_type,
+        coalesce(pbi_u.amount_inc_vat, pbi_u.amount_ex_vat, 0)::numeric as item_amount,
         pbi_u.payout_instruction_snapshot_json as payout_instruction_snapshot_json,
         c_u.first_name as candidate_first_name,
         c_u.last_name as candidate_last_name,
@@ -25419,7 +25423,6 @@ begin
   );
 end;
 $$;
-
 
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
