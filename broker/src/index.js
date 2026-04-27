@@ -40486,15 +40486,39 @@ async function handleBulkAuthoriseImportEvidencePage(env, req) {
       continue;
     }
 
-    if (eligibility?.bulk_authorise_section !== selectedSection) {
-      warnings.push({
-        code: 'SECTION_MISMATCH',
-        row_key: item.row_key || null,
-        timesheet_id: currentTimesheetId,
-        expected_section: selectedSection,
-        actual_section: eligibility?.bulk_authorise_section || null
-      });
-      continue;
+    const actualSection = String(eligibility?.bulk_authorise_section || '').trim().toLowerCase();
+    const isValidDisplaySection = (actualSection === 'processed_eligible' || actualSection === 'authorised_eligible');
+
+    if (mode === 'view_all') {
+      if (actualSection !== selectedSection) {
+        warnings.push({
+          code: 'SECTION_MISMATCH',
+          row_key: item.row_key || null,
+          timesheet_id: currentTimesheetId,
+          expected_section: selectedSection,
+          actual_section: actualSection || null
+        });
+        continue;
+      }
+    } else {
+      if (!isValidDisplaySection) {
+        warnings.push({
+          code: 'SECTION_NOT_DISPLAY_ELIGIBLE',
+          row_key: item.row_key || null,
+          timesheet_id: currentTimesheetId,
+          actual_section: actualSection || null
+        });
+        continue;
+      }
+      if (selectedSection && actualSection && selectedSection !== actualSection) {
+        warnings.push({
+          code: 'SELECTED_SECTION_STALE',
+          row_key: item.row_key || null,
+          timesheet_id: currentTimesheetId,
+          requested_section: selectedSection,
+          actual_section: actualSection
+        });
+      }
     }
 
     if (acceptedTimesheetSeen.has(currentTimesheetId)) continue;
@@ -40505,7 +40529,8 @@ async function handleBulkAuthoriseImportEvidencePage(env, req) {
       contract_week_id: String(summaryRow?.contract_week_id || '').trim() || null,
       candidate_name: summaryRow?.candidate_name || summaryRow?.candidate_display_name || null,
       client_name: summaryRow?.client_name || summaryRow?.client_display_name || null,
-      week_ending_date: summaryRow?.week_ending_date || null
+      week_ending_date: summaryRow?.week_ending_date || null,
+      actual_section: actualSection || null
     });
   }
 
@@ -40662,7 +40687,8 @@ async function handleBulkAuthoriseImportEvidencePage(env, req) {
           row_id: rowId,
           timesheet_id: tsId,
           row_key: scopeRow.row_key || null,
-          contract_week_id: scopeRow.contract_week_id || null
+          contract_week_id: scopeRow.contract_week_id || null,
+          accepted_section: scopeRow.actual_section || null
         });
       });
     }
@@ -40678,11 +40704,17 @@ async function handleBulkAuthoriseImportEvidencePage(env, req) {
   const displayColumns = Array.isArray(headerColumnsOut) && headerColumnsOut.length
     ? headerColumnsOut
     : fallbackDisplayColumns;
+  const resolvedSection = (
+    mode === 'single' && acceptedScope.length === 1
+      ? (String(acceptedScope[0]?.actual_section || '').trim().toLowerCase() || null)
+      : null
+  );
 
   return withCORS(env, req, ok({
     source_system: sourceSystemOut,
     mode,
     selected_section: selectedSection,
+    resolved_section: resolvedSection,
     page,
     page_size: effectivePageSize,
     total_rows: totalRows,
