@@ -1949,6 +1949,14 @@ begin
 end;
 $$;
 
+
+
+
+
+commit;
+
+
+
 create or replace function public.pay_set_paye_net_manual(
   p_pay_batch_id uuid,
   p_entries_json jsonb,
@@ -2770,7 +2778,7 @@ begin
           'target_amount_inc_vat', round(-a.take_ex, 2)
         )
       ) as frozen_resolution_result_json,
-      round(coalesce(a.frozen_source_amount, a.frozen_remaining_source_amount, a.take_ex), 2)::numeric(12,2) as frozen_source_amount,
+      round(coalesce(a.take_ex, 0), 2)::numeric(12,2) as frozen_source_amount,
       round(-a.take_ex, 2)::numeric(12,2) as frozen_target_amount_ex_vat,
       0::numeric(12,2) as frozen_target_amount_vat,
       round(-a.take_ex, 2)::numeric(12,2) as frozen_target_amount_inc_vat,
@@ -3018,7 +3026,7 @@ begin
           'target_amount_inc_vat', round(-la.take_ex, 2)
         )
       ) as frozen_resolution_result_json,
-      round(coalesce(ct.frozen_source_amount, ct.frozen_remaining_source_amount, la.take_ex), 2)::numeric(12,2) as frozen_source_amount,
+      round(coalesce(la.take_ex, 0), 2)::numeric(12,2) as frozen_source_amount,
       round(-la.take_ex, 2)::numeric(12,2) as frozen_target_amount_ex_vat,
       0::numeric(12,2) as frozen_target_amount_vat,
       round(-la.take_ex, 2)::numeric(12,2) as frozen_target_amount_inc_vat,
@@ -3335,7 +3343,7 @@ begin
           'target_amount_inc_vat', round(-mda.take_ex, 2)
         )
       ) as frozen_resolution_result_json,
-      round(coalesce(mdt.frozen_source_amount, mdt.frozen_remaining_source_amount, mda.take_ex), 2)::numeric(12,2) as frozen_source_amount,
+      round(coalesce(mda.take_ex, 0), 2)::numeric(12,2) as frozen_source_amount,
       round(-mda.take_ex, 2)::numeric(12,2) as frozen_target_amount_ex_vat,
       0::numeric(12,2) as frozen_target_amount_vat,
       round(-mda.take_ex, 2)::numeric(12,2) as frozen_target_amount_inc_vat,
@@ -3662,15 +3670,6 @@ begin
   );
 end;
 $$;
-
-
-
-
-
-
-commit;
-
-
 
 
 begin;
