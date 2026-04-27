@@ -19953,6 +19953,7 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
+
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -20207,19 +20208,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return withCORS(env, req, jsonResponse(400, { error: msg, message: msg, error_code: 'EXECUTE_NOT_ALLOWED' }));
     }
 
-    let execRes0;
-    try {
-      execRes0 = await sbRpc(env, 'pay_execute_bank', {
-        p_pay_batch_id: id,
-        p_pay_channel_scope: payChannelScope,
-        p_actor_user_id: user.id
-      });
-    } catch (e) {
-      const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
-    }
-    const execRes = unwrapRpc(execRes0, 'pay_execute_bank');
-
     let prepRes0;
     try {
       prepRes0 = await sbRpc(env, 'pay_batch_prepare', {
@@ -20250,7 +20238,6 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         message: msg,
         error_code: 'PREVIEW_GATE_NOT_SATISFIED',
         pay_batch_id: id,
-        executed: execRes,
         prepared: prepRes,
         batch_get: afterGet,
         execution_commit_state: executionFields.execution_commit_state,
@@ -20258,6 +20245,19 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         execution_committed_at_utc: executionFields.execution_committed_at_utc
       }));
     }
+
+    let execRes0;
+    try {
+      execRes0 = await sbRpc(env, 'pay_execute_bank', {
+        p_pay_batch_id: id,
+        p_pay_channel_scope: payChannelScope,
+        p_actor_user_id: user.id
+      });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
+    const execRes = unwrapRpc(execRes0, 'pay_execute_bank');
 
     let batchGet0;
     try {
