@@ -171,6 +171,8 @@ end;
 $$;
 
 
+
+
 create or replace function public.pay_batch_cancel(
   p_pay_batch_id uuid,
   p_actor_user_id uuid,
@@ -263,13 +265,108 @@ begin
     )::text;
   elsif v_execution_commit_state = 'SUBMITTED_NOT_COMMITTED' then
     select
-      count(*)::int,
+      count(*) filter (
+        where nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is not null
+           or upper(coalesce(pbt.rail_state, '')) in (
+             'SUBMITTED',
+             'QUEUED',
+             'ACCEPTED',
+             'SENT',
+             'PROCESSING',
+             'IN_FLIGHT',
+             'PENDING_SETTLEMENT',
+             'PENDING_CONFIRMATION',
+             'PENDING_SUBMISSION',
+             'COMPLETED',
+             'SETTLED',
+             'COMMITTED',
+             'PAID',
+             'EXECUTED',
+             'CANCELLED',
+             'CANCELED',
+             'REVOKED',
+             'VOIDED',
+             'ABORTED',
+             'UNWOUND',
+             'CANCEL_CONFIRMED',
+             'CANCELLATION_CONFIRMED',
+             'FAILED_BEFORE_COMMIT',
+             'SUBMISSION_FAILED'
+           )
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'submitted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'queued', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'accepted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'sent', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'processing', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'completed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'committed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'settled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'paid', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'executed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'cancellation_confirmed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'cancelled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'canceled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'revoked', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'voided', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'aborted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'unwound', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'submission_failed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'failed_before_commit', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+      )::int,
       count(*) filter (
         where upper(coalesce(pbt.status,'')) = 'COMPLETED'
            or pbt.completed_at_utc is not null
+           or upper(coalesce(pbt.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'completed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'committed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'settled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'paid', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+           or lower(btrim(coalesce(pbt.rail_meta_json->>'executed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
       )::int,
       count(*) filter (
         where upper(coalesce(pbt.status,'')) = 'PENDING'
+          and (
+            nullif(btrim(coalesce(pbt.rail_tx_id, '')), '') is not null
+            or upper(coalesce(pbt.rail_state, '')) in (
+              'SUBMITTED',
+              'QUEUED',
+              'ACCEPTED',
+              'SENT',
+              'PROCESSING',
+              'IN_FLIGHT',
+              'PENDING_SETTLEMENT',
+              'PENDING_CONFIRMATION',
+              'PENDING_SUBMISSION'
+            )
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'submitted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'queued', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'accepted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'sent', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'processing', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          )
+          and not (
+            upper(coalesce(pbt.rail_state, '')) in (
+              'CANCELLED',
+              'CANCELED',
+              'REVOKED',
+              'VOIDED',
+              'ABORTED',
+              'UNWOUND',
+              'CANCEL_CONFIRMED',
+              'CANCELLATION_CONFIRMED',
+              'FAILED_BEFORE_COMMIT',
+              'SUBMISSION_FAILED'
+            )
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'cancellation_confirmed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'cancelled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'canceled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'revoked', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'voided', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'aborted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'unwound', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'submission_failed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt.rail_meta_json->>'failed_before_commit', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+          )
       )::int
     into
       v_total_transfer_count,
@@ -384,9 +481,10 @@ begin
     'PARTIAL',
     'SCHEDULED',
     'AWAITING_AUTHORISATION',
-    'AUTHORISED_FOR_PAYMENT'
+    'AUTHORISED_FOR_PAYMENT',
+    'EXECUTING'
   ) then
-    raise exception 'pay_batch_cancel: batch status must be DRAFT, DRAFT_CREATED, READY, WAITING_BANK_CONFIRM, PARTIAL, SCHEDULED, AWAITING_AUTHORISATION or AUTHORISED_FOR_PAYMENT (current=%)', v_batch.status;
+    raise exception 'pay_batch_cancel: batch status must be DRAFT, DRAFT_CREATED, READY, WAITING_BANK_CONFIRM, PARTIAL, SCHEDULED, AWAITING_AUTHORISATION, AUTHORISED_FOR_PAYMENT or EXECUTING (current=%)', v_batch.status;
   end if;
 
   create temp table if not exists _tmp_cancel_batch_candidates (
@@ -418,7 +516,33 @@ begin
     and pbi.pay_bank_transfer_id is not null;
 
   delete from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id;
+  where pbt.pay_batch_id = p_pay_batch_id
+    and not (
+      v_execution_commit_state = 'SUBMITTED_NOT_COMMITTED'
+      and (
+        upper(coalesce(pbt.rail_state, '')) in (
+          'CANCELLED',
+          'CANCELED',
+          'REVOKED',
+          'VOIDED',
+          'ABORTED',
+          'UNWOUND',
+          'CANCEL_CONFIRMED',
+          'CANCELLATION_CONFIRMED',
+          'FAILED_BEFORE_COMMIT',
+          'SUBMISSION_FAILED'
+        )
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'cancellation_confirmed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'cancelled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'canceled', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'revoked', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'voided', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'aborted', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'unwound', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'submission_failed', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+        or lower(btrim(coalesce(pbt.rail_meta_json->>'failed_before_commit', 'false'))) in ('true', '1', 'yes', 'y', 'on')
+      )
+    );
 
   if to_regclass('public.pay_batch_auth_requests') is not null then
     execute
@@ -980,6 +1104,10 @@ begin
   );
 end;
 $$;
+
+
+
+
 
 
 
@@ -23966,6 +24094,7 @@ $$;
 
 
 
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -24114,7 +24243,14 @@ begin
         )
       )::int,
       (
-        select nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '')
+        select coalesce(
+          nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
+        )
         from public.pay_bank_transfers pbt_exec_ref
         where pbt_exec_ref.pay_batch_id = p_pay_batch_id
           and (
@@ -24122,8 +24258,32 @@ begin
             or (v_do_umbrella = true and pbt_exec_ref.pay_channel = 'UMBRELLA')
             or (v_do_loans = true and pbt_exec_ref.pay_channel = 'PAYE')
           )
-          and nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '') is not null
-        order by pbt_exec_ref.completed_at_utc desc nulls last, pbt_exec_ref.id desc
+          and upper(coalesce(pbt_exec_ref.status,'')) <> 'BLOCKED'
+          and (
+            nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '') is not null
+            or upper(coalesce(pbt_exec_ref.rail_state,'')) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submitted','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'queued','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'accepted','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'sent','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'processing','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
+          )
+        order by
+          case when nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '') is not null then 0 else 1 end,
+          case when coalesce(
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
+          ) is not null then 0 else 1 end,
+          pbt_exec_ref.completed_at_utc desc nulls last,
+          pbt_exec_ref.id desc
         limit 1
       ),
       (
@@ -25224,9 +25384,10 @@ begin
   where sd.id = 1
   limit 1;
 
-  -- Execution-boundary update for non-manual rails.
-  -- pay_execute_bank(...) is the submission/send boundary for non-CSV providers.
-  -- CSV remains pre-submission until manual confirmation.
+  -- Execution-boundary reconciliation for non-manual rails.
+  -- Local transfer rows, local PENDING status, bulk_reference, and request_id are not rail-submission evidence.
+  -- pay_execute_bank materialises frozen local transfer instructions; real submission state is only inferred
+  -- from rail evidence written back by the rail adaptor / rail update path.
   if v_provider <> 'CSV' then
     select
       count(*) filter (
@@ -25243,10 +25404,19 @@ begin
           )
       )::int,
       count(*) filter (
-        where upper(coalesce(pbt_exec_after.status,'')) = 'PENDING'
+        where upper(coalesce(pbt_exec_after.status,'')) <> 'BLOCKED'
+          and not (
+            upper(coalesce(pbt_exec_after.status,'')) = 'COMPLETED'
+            or pbt_exec_after.completed_at_utc is not null
+            or upper(coalesce(pbt_exec_after.rail_state,'')) in ('COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+            or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
+          )
           and (
             nullif(btrim(coalesce(pbt_exec_after.rail_tx_id,'')), '') is not null
-            or nullif(btrim(coalesce(pbt_exec_after.request_id,'')), '') is not null
             or upper(coalesce(pbt_exec_after.rail_state,'')) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION')
             or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'submitted','false'))) in ('true', '1', 'yes', 'y', 'on')
             or lower(btrim(coalesce(pbt_exec_after.rail_meta_json->>'queued','false'))) in ('true', '1', 'yes', 'y', 'on')
@@ -25258,8 +25428,11 @@ begin
       (
         select coalesce(
           nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), ''),
-          nullif(btrim(coalesce(pbt_exec_ref.request_id,'')), ''),
-          v_bulk_reference
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
+          nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
         )
         from public.pay_bank_transfers pbt_exec_ref
         where pbt_exec_ref.pay_batch_id = p_pay_batch_id
@@ -25269,9 +25442,29 @@ begin
             or (v_do_loans = true and pbt_exec_ref.pay_channel = 'PAYE')
           )
           and upper(coalesce(pbt_exec_ref.status,'')) <> 'BLOCKED'
+          and (
+            nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '') is not null
+            or upper(coalesce(pbt_exec_ref.rail_state,'')) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submitted','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'queued','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'accepted','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'sent','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'processing','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'completed','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'committed','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'settled','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'paid','false'))) in ('true', '1', 'yes', 'y', 'on')
+            or lower(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'executed','false'))) in ('true', '1', 'yes', 'y', 'on')
+          )
         order by
           case when nullif(btrim(coalesce(pbt_exec_ref.rail_tx_id,'')), '') is not null then 0 else 1 end,
-          case when nullif(btrim(coalesce(pbt_exec_ref.request_id,'')), '') is not null then 0 else 1 end,
+          case when coalesce(
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'provider_submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'submission_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transfer_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'transaction_id','')), ''),
+            nullif(btrim(coalesce(pbt_exec_ref.rail_meta_json->>'id','')), '')
+          ) is not null then 0 else 1 end,
           pbt_exec_ref.completed_at_utc desc nulls last,
           pbt_exec_ref.id desc
         limit 1
@@ -25314,11 +25507,11 @@ begin
 
     if coalesce(v_detected_committed_transfer_count, 0) > 0 then
       v_execution_commit_state := 'COMMITTED';
-      v_execution_commit_ref := coalesce(v_execution_commit_ref, v_detected_execution_commit_ref, v_bulk_reference);
+      v_execution_commit_ref := coalesce(v_execution_commit_ref, v_detected_execution_commit_ref);
       v_execution_committed_at_utc := coalesce(v_execution_committed_at_utc, v_detected_execution_committed_at_utc, now());
     elsif coalesce(v_detected_submitted_transfer_count, 0) > 0 then
       v_execution_commit_state := 'SUBMITTED_NOT_COMMITTED';
-      v_execution_commit_ref := coalesce(v_execution_commit_ref, v_detected_execution_commit_ref, v_bulk_reference);
+      v_execution_commit_ref := coalesce(v_execution_commit_ref, v_detected_execution_commit_ref);
     end if;
   end if;
 
@@ -25332,8 +25525,14 @@ begin
         'PARTIAL'
     end,
     execution_commit_state = v_execution_commit_state,
-    execution_commit_ref = v_execution_commit_ref,
-    execution_committed_at_utc = v_execution_committed_at_utc
+    execution_commit_ref = case
+      when v_execution_commit_state = 'NOT_SUBMITTED' then null
+      else v_execution_commit_ref
+    end,
+    execution_committed_at_utc = case
+      when v_execution_commit_state = 'COMMITTED' then v_execution_committed_at_utc
+      else null
+    end
   where pb3.id = p_pay_batch_id;
 
   -- Return transfers (including snapshot fields)
@@ -25423,6 +25622,9 @@ begin
   );
 end;
 $$;
+
+
+
 
 CREATE OR REPLACE FUNCTION public.pay_sync_overpayments_from_preview(
   p_pay_date date,
