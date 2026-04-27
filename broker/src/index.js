@@ -19953,7 +19953,6 @@ async function handleBankingIdLedgerList(env, req, user) {
   }
 }
 
-
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -20246,18 +20245,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }));
     }
 
-    let execRes0;
-    try {
-      execRes0 = await sbRpc(env, 'pay_execute_bank', {
-        p_pay_batch_id: id,
-        p_pay_channel_scope: payChannelScope,
-        p_actor_user_id: user.id
-      });
-    } catch (e) {
-      const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
-      return withCORS(env, req, jsonResponse(norm.status, norm.body));
-    }
-    const execRes = unwrapRpc(execRes0, 'pay_execute_bank');
+    let execRes = null;
 
     let batchGet0;
     try {
@@ -20387,6 +20375,25 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         (scheduledOut && scheduledOut.became_authorised === true)
         || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT')
       );
+
+    const shouldExecuteBank =
+      (!scheduleAttempted)
+      || becameAuthorisedForPayment;
+
+    if (shouldExecuteBank) {
+      let execRes0;
+      try {
+        execRes0 = await sbRpc(env, 'pay_execute_bank', {
+          p_pay_batch_id: id,
+          p_pay_channel_scope: payChannelScope,
+          p_actor_user_id: user.id
+        });
+      } catch (e) {
+        const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
+        return withCORS(env, req, jsonResponse(norm.status, norm.body));
+      }
+      execRes = unwrapRpc(execRes0, 'pay_execute_bank');
+    }
 
     if (becameAuthorisedForPayment) {
       try {
