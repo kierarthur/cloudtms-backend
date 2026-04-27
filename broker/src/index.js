@@ -24783,6 +24783,136 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
   }
 }
 
+async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const id = String(payBatchId || '').trim();
+  if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
+
+  const scopeFromQuery = (() => {
+    try {
+      const u = new URL(req.url);
+      return String(u.searchParams.get('scope') || u.searchParams.get('pay_channel_scope') || 'ALL').trim().toUpperCase();
+    } catch {
+      return 'ALL';
+    }
+  })();
+  const payChannelScope = ['ALL', 'PAYE', 'UMBRELLA'].includes(scopeFromQuery) ? scopeFromQuery : 'ALL';
+
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return payload;
+  };
+
+  const normalizeRpcError = (e, fallbackCode = 'RPC_ERROR') => {
+    const statusRaw = (e && Number.isFinite(Number(e.status))) ? Number(e.status) : null;
+    const status = (statusRaw && statusRaw >= 400 && statusRaw < 600) ? statusRaw : null;
+
+    let msg = '';
+    try {
+      const jm = (e && e.json && typeof e.json === 'object' && typeof e.json.message === 'string') ? e.json.message : '';
+      msg = jm ? String(jm) : String(e?.message || e || fallbackCode);
+    } catch {
+      msg = String(e?.message || e || fallbackCode);
+    }
+
+    const raw = String(msg || '').trim();
+    return {
+      status: status || 400,
+      body: {
+        error: raw || fallbackCode,
+        message: raw || fallbackCode,
+        error_code: fallbackCode
+      }
+    };
+  };
+
+  const jsonResponse = (status, payload) => {
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+    return new Response(JSON.stringify(payload && typeof payload === 'object' ? payload : { error: 'RPC_ERROR' }), { status, headers });
+  };
+
+  try {
+    const batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    const batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
+    const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
+
+    const providerRaw = String(batchObj?.rail_provider_snapshot || '').trim().toUpperCase();
+    const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
+    const adapter = getRailAdapter(provider);
+    if (!adapter) return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+
+    if (typeof adapter.exportCsv !== 'function') {
+      return withCORS(env, req, badRequest('CSV_EXPORT_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    }
+
+    let caps = null;
+    try {
+      if (typeof adapter.capabilities === 'function') {
+        caps = await adapter.capabilities(env);
+        if (caps && typeof caps === 'object' && caps.available === false) {
+          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
+          return withCORS(env, req, badRequest(reason));
+        }
+      }
+    } catch (e) {
+      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
+      return withCORS(env, req, badRequest(msg));
+    }
+
+    const batchEnvRaw = (batchObj && batchObj.rail_env_snapshot !== undefined && batchObj.rail_env_snapshot !== null)
+      ? String(batchObj.rail_env_snapshot).trim().toUpperCase()
+      : '';
+    const expectedEnv = batchEnvRaw ? batchEnvRaw : 'PROD';
+
+    const capsWorkerEnvRaw = (caps && typeof caps === 'object' && caps.worker_env !== undefined && caps.worker_env !== null)
+      ? String(caps.worker_env).trim().toUpperCase()
+      : '';
+    const workerEnv = capsWorkerEnvRaw ? capsWorkerEnvRaw : null;
+
+    const apiBase = (caps && typeof caps === 'object' && caps.api_base !== undefined && caps.api_base !== null)
+      ? String(caps.api_base)
+      : '';
+
+    if (workerEnv && expectedEnv && workerEnv !== expectedEnv) {
+      return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
+    }
+
+    try {
+      await sbRpc(env, 'pay_execute_bank', {
+        p_pay_batch_id: id,
+        p_pay_channel_scope: payChannelScope,
+        p_actor_user_id: user.id
+      });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_EXECUTE_BANK_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
+
+    let csvText;
+    try {
+      csvText = await adapter.exportCsv(env, id, { scope: payChannelScope }, user.id);
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_EXPORT_BANK_CSV_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
+    }
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'text/csv; charset=utf-8');
+    headers.set('Content-Disposition', `attachment; filename="pay-batch-${id}.csv"`);
+
+    return withCORS(env, req, new Response((csvText === null || csvText === undefined) ? '' : String(csvText), { status: 200, headers }));
+  } catch (e) {
+    const norm = normalizeRpcError(e, 'PAY_BATCH_EXPORT_CSV_FAILED');
+    return withCORS(env, req, jsonResponse(norm.status, norm.body));
+  }
+}
+
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -25268,11 +25398,31 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     const transfers = (batchPayload && typeof batchPayload === 'object' && Array.isArray(batchPayload.transfers)) ? batchPayload.transfers : [];
 
     const hasPending = (transfers || []).some(t => String(t?.status || '').trim().toUpperCase() === 'PENDING');
-    const hasPollable = (transfers || []).some(t => {
+    const hasPollableSubmissionEvidence = (t) => {
       if (String(t?.status || '').trim().toUpperCase() !== 'PENDING') return false;
+
       const railTx = String(t?.rail_tx_id || '').trim();
-      return !!railTx;
-    });
+      if (railTx) return true;
+
+      const railState = String(t?.rail_state || '').trim().toUpperCase();
+      if (railState.includes('ACCEPTED') || railState.includes('SUBMITTED')) return true;
+
+      const meta = (t?.rail_meta_json && typeof t.rail_meta_json === 'object' && !Array.isArray(t.rail_meta_json))
+        ? t.rail_meta_json
+        : null;
+      if (!meta) return false;
+
+      const metaTxId = String(meta.id || meta.transaction_id || meta.transfer_id || meta.payment_id || '').trim();
+      if (metaTxId) return true;
+
+      const metaState = String(meta.state || meta.status || meta.rail_state || '').trim().toUpperCase();
+      if (metaState.includes('ACCEPTED') || metaState.includes('SUBMITTED')) return true;
+
+      if (meta.submitted === true || meta.accepted === true) return true;
+
+      return false;
+    };
+    const hasPollable = (transfers || []).some(t => hasPollableSubmissionEvidence(t));
 
     const lastCheckedIso = batchObj?.last_status_checked_at_utc ? String(batchObj.last_status_checked_at_utc).trim() : '';
     const lastCheckedMs = (() => {
@@ -25342,7 +25492,7 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
       const executionFields = _extractExecutionFields(freshObj2);
       return withCORS(env, req, ok({
         ...freshObj2,
-        poll_result: { ok: true, skipped: true, reason: 'NO_POLLABLE_RAIL_TX_ID' },
+        poll_result: { ok: true, skipped: true, reason: 'NO_POLLABLE_SUBMISSION_EVIDENCE' },
         poll_provider: provider,
         poll_server_utc: new Date().toISOString(),
         remittances: remitInfo,
@@ -113742,6 +113892,11 @@ function getRailAdapter(provider) {
           return out;
         },
 
+        async exportCsv(env, batchId, opts = {}, actorUserId = null) {
+          const sc = String(opts && opts.scope ? opts.scope : 'ALL').trim().toUpperCase();
+          return csvAdapter_export(env, batchId, sc, actorUserId);
+        },
+
         async pollBatch(env, batchId, actorUserId) {
           if (!batchId) throw new Error('pollBatch: batchId required');
           if (!actorUserId) throw new Error('pollBatch: actorUserId required');
@@ -113771,10 +113926,33 @@ function getRailAdapter(provider) {
 
           const token = await revolutAuth_getAccessToken(env);
 
+          const hasRailSubmissionEvidence = (row) => {
+            const railTxId = String(row?.rail_tx_id || '').trim();
+            if (railTxId) return true;
+
+            const railState = String(row?.rail_state || '').trim().toUpperCase();
+            if (railState.includes('ACCEPTED') || railState.includes('SUBMITTED')) return true;
+
+            const meta = (row?.rail_meta_json && typeof row.rail_meta_json === 'object' && !Array.isArray(row.rail_meta_json))
+              ? row.rail_meta_json
+              : null;
+            if (!meta) return false;
+
+            const metaTxId = String(meta.id || meta.transaction_id || meta.transfer_id || meta.payment_id || '').trim();
+            if (metaTxId) return true;
+
+            const metaState = String(meta.state || meta.status || meta.rail_state || '').trim().toUpperCase();
+            if (metaState.includes('ACCEPTED') || metaState.includes('SUBMITTED')) return true;
+            if (meta.submitted === true || meta.accepted === true) return true;
+
+            return false;
+          };
+
           const updates = [];
           for (const t of transfers) {
             const st = String(t?.status || '').toUpperCase();
             if (st !== 'PENDING') continue;
+            if (!hasRailSubmissionEvidence(t)) continue;
 
             const reqId = String(t?.request_id || '').trim();
             if (!reqId) continue;
@@ -114399,13 +114577,18 @@ async function revolutPayment_poll(env, token, { request_id }) {
 
 async function csvAdapter_export(env, batchId, scope, actorUserId) {
   if (!batchId) throw new Error('csvAdapter_export: batchId required');
-  // actorUserId not required by DB export RPC, but keep signature consistent for adapters
-  const sc = String(scope || 'ALL').trim();
-  const csvText = await sbRpc(env, 'pay_export_bank_csv', {
-    p_pay_batch_id: String(batchId),
-    p_scope: sc
-  });
-  return csvText;
+  const sc = String(scope || 'ALL').trim().toUpperCase();
+
+  try {
+    const csvText = await sbRpc(env, 'pay_export_bank_csv', {
+      p_pay_batch_id: String(batchId),
+      p_scope: sc
+    });
+    return (csvText === null || csvText === undefined) ? '' : String(csvText);
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : String(e || 'PAY_EXPORT_BANK_CSV_FAILED');
+    throw new Error(msg);
+  }
 }
 
 async function csvAdapter_confirmManual(env, batchId, bankConfirmRef, actorUserId, scope = 'ALL') {
