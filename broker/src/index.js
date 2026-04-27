@@ -29718,8 +29718,22 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
 
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
-  const replaceExisting = body?.replace_existing === true || body?.replace_existing === 'true';
-  const replaceEvidenceId = body?.replace_evidence_id ? String(body.replace_evidence_id).trim() : '';
+  const hasReplacementField =
+    Object.prototype.hasOwnProperty.call(body || {}, 'replace_existing') ||
+    Object.prototype.hasOwnProperty.call(body || {}, 'replace_evidence_id');
+  if (hasReplacementField) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error: 'DIRECT_REPLACEMENT_NOT_SUPPORTED',
+          message: 'Direct replacement is not supported. Delete the existing evidence or return it to queue first, then add/attach the new evidence.'
+        }),
+        { status: 409, headers: JSON_HEADERS }
+      )
+    );
+  }
 
   const normalizeKind = (k) => {
     const s = String(k || '').trim();
@@ -29799,7 +29813,7 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       String(row?.storage_key || '').trim().replace(/^\/+/, '') !== cleanStorageKey
     ) || null;
 
-    if (String(requestedKind).toUpperCase() === 'TIMESHEET' && existingTimesheetEvidence && !replaceExisting && !replaceEvidenceId) {
+    if (String(requestedKind).toUpperCase() === 'TIMESHEET' && existingTimesheetEvidence) {
       throw new Error('Only one TIMESHEET evidence file may be attached to a timesheet at a time');
     }
 
@@ -29946,61 +29960,10 @@ async function handleManualTimesheetQueueAttach(env, req, queueId) {
       }
     };
 
-    let evidenceRow = null;
-    const isExplicitReplacement = !!(replaceExisting || replaceEvidenceId);
-    if (isExplicitReplacement) {
-      if (!replaceEvidenceId) return withCORS(env, req, badRequest('replace_evidence_id is required when replace_existing=true'));
-      await patchQueueAttached();
-      try {
-        const replaced = await applyTimesheetEvidenceReplacement(env, {
-          current_timesheet_id: currentTimesheetId,
-          old_evidence_id: replaceEvidenceId,
-          new_kind: requestedKind,
-          new_storage_key: evidenceStorageKey,
-          display_name: (item?.original_filename && String(item.original_filename).trim().length
-            ? String(item.original_filename).trim()
-            : prettyKind(requestedKind) || requestedKind),
-          replacement_rotation_degrees: Number.isFinite(Number(item?.last_rotation_deg)) ? Number(item.last_rotation_deg) : 0,
-          user
-        });
-        evidenceRow = replaced?.inserted || null;
-      } catch (e) {
-        let rollbackErr = null;
-        try {
-          const revertRes = await fetch(`${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue?id=eq.${enc(queueId)}`, {
-            method: 'PATCH',
-            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-            body: JSON.stringify({
-              status: item.status || null,
-              timesheet_id: item.timesheet_id || null,
-              meta_json: currentMeta
-            })
-          });
-          if (!revertRes.ok) rollbackErr = await revertRes.text().catch(() => 'UNKNOWN_ROLLBACK_ERROR');
-        } catch (rb) {
-          rollbackErr = rb?.message || String(rb);
-        }
-        if (rollbackErr) {
-          console.error('[handleManualTimesheetQueueAttach] replacement failed and queue rollback failed', {
-            queue_id: queueId,
-            current_timesheet_id: currentTimesheetId,
-            replace_evidence_id: replaceEvidenceId || null,
-            original_queue_status: item.status || null,
-            original_queue_timesheet_id: item.timesheet_id || null,
-            original_queue_meta_json: currentMeta,
-            replacement_error: e?.message || String(e),
-            rollback_error: rollbackErr
-          });
-          throw new Error(`Replacement failed and queue rollback also failed: ${e?.message || e}; rollback_error=${rollbackErr}`);
-        }
-        throw e;
-      }
-    } else {
-      evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind, evidenceStorageKey);
-      await patchQueueAttached();
-    }
+    const evidenceRow = await attachQueueItemAsTimesheetEvidence(item, currentTimesheetId, requestedKind, evidenceStorageKey);
+    await patchQueueAttached();
 
-    if (!isExplicitReplacement && evidenceStorageKey && String(requestedKind).toUpperCase() === 'TIMESHEET') {
+    if (evidenceStorageKey && String(requestedKind).toUpperCase() === 'TIMESHEET') {
       await fetch(
         `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
         {
@@ -34690,9 +34653,11 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 
 function hasAnySegmentInvoiceLock(input) {
   try {
-    const invoiceBreakdownInput = (input && typeof input === 'object' && Object.prototype.hasOwnProperty.call(input, 'invoice_breakdown_json'))
-      ? input.invoice_breakdown_json
-      : input;
+    const invoiceBreakdownInput = (
+      input &&
+      typeof input === 'object' &&
+      Object.prototype.hasOwnProperty.call(input, 'invoice_breakdown_json')
+    ) ? input.invoice_breakdown_json : input;
 
     if (invoiceBreakdownInput == null) return false;
 
@@ -34700,15 +34665,23 @@ function hasAnySegmentInvoiceLock(input) {
     if (typeof parsed === 'string') {
       const raw = parsed.trim();
       if (!raw) return false;
-      parsed = JSON.parse(raw);
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return false;
+      }
     }
 
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    let segments = [];
+    if (Array.isArray(parsed)) {
+      // Legacy array-shaped segment breakdown
+      segments = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      segments = Array.isArray(parsed.segments) ? parsed.segments : [];
+    } else {
+      return false;
+    }
 
-    const mode = String(parsed.mode == null ? '' : parsed.mode).trim().toUpperCase();
-    if (mode !== 'SEGMENTS') return false;
-
-    const segments = Array.isArray(parsed.segments) ? parsed.segments : [];
     return segments.some((segment) => {
       const invoiceId = segment?.invoice_locked_invoice_id;
       return invoiceId != null && String(invoiceId).trim() !== '';
@@ -34811,196 +34784,7 @@ async function getTimesheetEvidenceMutationPolicy(env, timesheetId, opts = {}) {
 }
 
 async function applyTimesheetEvidenceReplacement(env, args = {}) {
-  const enc = encodeURIComponent;
-  const currentTsId = String(args?.current_timesheet_id || '').trim();
-  const oldEvidenceId = String(args?.old_evidence_id || '').trim();
-  const newKind = String(args?.new_kind || '').trim().toUpperCase();
-  const displayName = String(args?.display_name || '').trim();
-  const userId = args?.user?.id || null;
-  const newStorageKey = String(args?.new_storage_key || '').trim().replace(/^\/+/, '');
-  const allowedKinds = new Set(['TIMESHEET', 'MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
-  const explicitRotationRaw = args?.replacement_rotation_degrees;
-  const explicitRotation = Number.isFinite(Number(explicitRotationRaw)) ? Number(explicitRotationRaw) : null;
-
-  if (!currentTsId) throw new Error('Invalid current timesheet context');
-  if (!oldEvidenceId) throw new Error('replace_evidence_id is required');
-  if (oldEvidenceId.startsWith('SYS:')) throw new Error('System evidence cannot be replaced');
-  if (!newStorageKey) throw new Error('storage_key is required');
-  if (!newKind || !allowedKinds.has(newKind)) throw new Error('Invalid evidence kind');
-  if (newKind === 'TIMESHEET') {
-    const sourceBytes = await r2GetBytes(env, newStorageKey);
-    if (!sourceBytes?.length) throw new Error('Timesheet evidence source file is missing or empty');
-    const contentKind = detectPdfOrImageContentKind(sourceBytes);
-    if (contentKind !== 'application/pdf' && contentKind !== 'image/png' && contentKind !== 'image/jpeg') {
-      throw new Error(`TIMESHEET evidence must be a PDF or supported image (PNG/JPEG). Detected: ${contentKind}`);
-    }
-  }
-
-  const oldEvidence = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-      `?id=eq.${enc(oldEvidenceId)}` +
-      `&timesheet_id=eq.${enc(currentTsId)}` +
-      `&select=id,kind,display_name,storage_key,created_at,created_by` +
-      `&limit=1`
-  ).catch(() => null);
-  if (!oldEvidence) throw new Error('replace_evidence_id does not belong to this current timesheet');
-
-  const tsBefore = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTsId)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,manual_pdf_r2_key,manual_pdf_rotation_degrees` +
-      `&limit=1`
-  ).catch(() => null);
-  if (!tsBefore) throw new Error('Invalid current timesheet context');
-
-  const originalManualPdfKey = String(tsBefore?.manual_pdf_r2_key || '').trim().replace(/^\/+/, '') || null;
-  const originalRotation = Number.isFinite(Number(tsBefore?.manual_pdf_rotation_degrees))
-    ? Number(tsBefore.manual_pdf_rotation_degrees)
-    : 0;
-
-  const policy = await getTimesheetEvidenceMutationPolicy(env, currentTsId, { evidence_item: oldEvidence });
-  if (!policy.can_manage_evidence) {
-    if (policy.document_locked) throw new Error('Timesheet is invoice/document locked; cannot replace evidence');
-    throw new Error('Evidence is protected and cannot be replaced');
-  }
-
-  const { rows: existingRows } = await sbFetch(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-      `?timesheet_id=eq.${enc(currentTsId)}` +
-      `&select=id,kind,storage_key`
-  );
-  const existingEvidence = Array.isArray(existingRows) ? existingRows : [];
-  const duplicateSameFileAndKind = existingEvidence.find((row) =>
-    String(row?.id || '') !== oldEvidenceId &&
-    String(row?.storage_key || '').trim().replace(/^\/+/, '') === newStorageKey &&
-    String(row?.kind || '').trim().toUpperCase() === newKind
-  );
-  if (duplicateSameFileAndKind) {
-    throw new Error('An evidence item with the same file and type is already attached');
-  }
-  if (newKind === 'TIMESHEET') {
-    const duplicateTimesheet = existingEvidence.find((row) =>
-      String(row?.id || '') !== oldEvidenceId &&
-      String(row?.kind || '').trim().toUpperCase() === 'TIMESHEET'
-    );
-    if (duplicateTimesheet) throw new Error('Only one TIMESHEET evidence file may be attached to a timesheet at a time');
-  }
-
-  const nowIsoVal = new Date().toISOString();
-  const payload = [{
-    timesheet_id: currentTsId,
-    kind: newKind,
-    display_name: displayName || oldEvidence.display_name || newKind,
-    storage_key: newStorageKey,
-    created_at: nowIsoVal,
-    created_by: userId
-  }];
-
-  const insRes = await fetch(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify(payload)
-  });
-  const insTxt = await insRes.text().catch(() => '');
-  if (!insRes.ok) throw new Error(`Failed to attach replacement evidence: ${insTxt}`);
-
-  let inserted = null;
-  try {
-    const json = insTxt ? JSON.parse(insTxt) : [];
-    inserted = Array.isArray(json) ? json[0] : json;
-  } catch {
-    inserted = null;
-  }
-  if (!inserted?.id) throw new Error('Failed to attach replacement evidence');
-
-  const oldKindU = String(oldEvidence?.kind || '').trim().toUpperCase();
-  const oldStorageKey = String(oldEvidence?.storage_key || '').trim().replace(/^\/+/, '');
-  const insertedStorageKey = String(inserted?.storage_key || newStorageKey).trim().replace(/^\/+/, '');
-
-  let pointerMutated = false;
-  const restoreOriginalPointer = async () => {
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
-      {
-        method: 'PATCH',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify({
-          manual_pdf_r2_key: originalManualPdfKey,
-          manual_pdf_rotation_degrees: originalRotation
-        })
-      }
-    );
-  };
-
-  try {
-    if (newKind === 'TIMESHEET') {
-      const nextRotation = explicitRotation != null ? explicitRotation : originalRotation;
-      const updPtrRes = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-          body: JSON.stringify({
-            manual_pdf_r2_key: insertedStorageKey,
-            manual_pdf_rotation_degrees: nextRotation
-          })
-        }
-      );
-      if (!updPtrRes.ok) {
-        const txt = await updPtrRes.text().catch(() => '');
-        throw new Error(`Failed to update manual PDF pointer during replacement: ${txt}`);
-      }
-      pointerMutated = true;
-    } else if (oldKindU === 'TIMESHEET' && originalManualPdfKey && originalManualPdfKey === oldStorageKey) {
-      const clearPtrRes = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTsId)}&is_current=eq.true`,
-        {
-          method: 'PATCH',
-          headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-          body: JSON.stringify({ manual_pdf_r2_key: null, manual_pdf_rotation_degrees: 0 })
-        }
-      );
-      if (!clearPtrRes.ok) {
-        const txt = await clearPtrRes.text().catch(() => '');
-        throw new Error(`Failed to clear manual PDF pointer during replacement: ${txt}`);
-      }
-      pointerMutated = true;
-    }
-
-    const delRes = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(oldEvidenceId)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    );
-    if (!delRes.ok) {
-      const delTxt = await delRes.text().catch(() => '');
-      throw new Error(`Failed to remove replaced evidence: ${delTxt}`);
-    }
-
-    // mirror delete-handler provenance cleanup for replacement path
-    if (oldStorageKey) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
-          `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&r2_key=eq.${enc(oldStorageKey)}`,
-        { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-      ).catch(() => {});
-    }
-  } catch (e) {
-    if (pointerMutated) {
-      try { await restoreOriginalPointer(); } catch {}
-    }
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?id=eq.${enc(inserted.id)}`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    ).catch(() => {});
-    throw e;
-  }
-
-  return { inserted, replaced: oldEvidence, original_pointer: { manual_pdf_r2_key: originalManualPdfKey, manual_pdf_rotation_degrees: originalRotation } };
+  throw new Error('Direct evidence replacement is not supported. Delete or return the existing evidence first, then add/attach the new evidence.');
 }
 
 async function handleTimesheetEvidenceList(env, req, tsId) {
@@ -36005,24 +35789,24 @@ async function handleTimesheetEvidenceReturnToQueue(env, req, tsId, evidenceId) 
 // DELETE /api/timesheets/:id/evidence/:evidence_id
 
 async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
-  const enc = encodeURIComponent;
-
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
   if (!timesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
 
-  const body = await parseJSONBody(req).catch(() => null);
+  let body = null;
+  try {
+    body = await parseJSONBody(req);
+  } catch {
+    return withCORS(env, req, badRequest('Invalid JSON payload'));
+  }
 
-  // ✅ Guarded write
   const expected = body?.expected_timesheet_id ? String(body.expected_timesheet_id) : '';
   if (!expected) return withCORS(env, req, badRequest('expected_timesheet_id is required'));
 
-  // ✅ stale-safe resolve
   const resolved = await resolveTimesheetToCurrent(env, timesheetId);
   if (!resolved) return withCORS(env, req, notFound('Timesheet not found'));
   const currentTimesheetId = resolved.current_timesheet_id;
 
-  // ✅ Guard mismatch → 409 TIMESHEET_MOVED
   if (String(expected) !== String(currentTimesheetId)) {
     return withCORS(
       env,
@@ -36034,259 +35818,17 @@ async function handleTimesheetReplaceManualPdf(env, req, timesheetId) {
     );
   }
 
-  const normalize = (k) => normalizeKey(String(k || '')); // uses your existing helper
-  const cleanKey = (k) => String(k || '').replace(/^\/+/, '').trim();
-
-  const newKeyRaw = body?.manual_pdf_r2_key ?? null;
-  const newKey = newKeyRaw ? normalize(String(newKeyRaw)) : null;
-
-  const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTimesheetId);
-  if (evidencePolicy.document_locked) {
-    return withCORS(env, req, badRequest('Timesheet is invoice/document locked; cannot replace manual PDF'));
-  }
-  if (evidencePolicy.import_authoritative) {
-    return withCORS(env, req, badRequest('Evidence is view-only for this route and cannot be replaced here'));
-  }
-
-  // Load current timesheet row to know the old pointer (so we can delete it)
-  const tsBefore = await sbGetOne(
+  return withCORS(
     env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-      `&is_current=eq.true` +
-      `&select=timesheet_id,manual_pdf_r2_key,authorised_at_server,revoked_at` +
-      `&limit=1`
+    req,
+    new Response(
+      JSON.stringify({
+        error: 'DIRECT_REPLACEMENT_NOT_SUPPORTED',
+        message: 'Direct replacement is not supported. Delete the existing evidence or return it to queue first, then add/attach the new evidence.'
+      }),
+      { status: 409, headers: JSON_HEADERS }
+    )
   );
-  if (!tsBefore) return withCORS(env, req, notFound('Timesheet not found'));
-
-  const oldKey = tsBefore?.manual_pdf_r2_key ? normalize(tsBefore.manual_pdf_r2_key) : null;
-
-  // Canonical deterministic key for this timesheet version
-  const canonicalPdfKey = cleanKey(`docs-pdf/timesheets/ts_${currentTimesheetId}.pdf`);
-
-  // If a key is provided, sanity check it exists in R2
-  if (newKey) {
-    const exists = await r2Exists(env, newKey).catch(() => false);
-    if (!exists) return withCORS(env, req, badRequest('manual_pdf_r2_key does not exist in R2'));
-  }
-
-  // R2 helpers (inline so this function is paste-ready)
-  const bucket = env.R2_BUCKET || env.R2;
-  const canGetPut = !!(bucket && typeof bucket.get === 'function' && typeof bucket.put === 'function');
-  const canDelete = !!(bucket && typeof bucket.delete === 'function');
-
-  const r2CopyOverwriteLocal = async (fromKey, toKey) => {
-    if (!canGetPut) throw new Error('Storage not configured for copy (need env.R2 or env.R2_BUCKET with get/put)');
-    const src = cleanKey(fromKey);
-    const dst = cleanKey(toKey);
-    const obj = await bucket.get(src);
-    if (!obj) throw new Error(`Source not found in R2: ${src}`);
-    const putOpts = {};
-    if (obj.httpMetadata) putOpts.httpMetadata = obj.httpMetadata;
-    if (obj.customMetadata) putOpts.customMetadata = obj.customMetadata;
-    await bucket.put(dst, obj.body, putOpts);
-    return true;
-  };
-
-  const r2DeleteBestEffort = async (k) => {
-    if (!canDelete) return false;
-    const kk = cleanKey(k);
-    if (!kk) return false;
-    try { await bucket.delete(kk); return true; } catch { return false; }
-  };
-
-  const detectStoredObjectKind = async (keyToInspect) => {
-    if (!canGetPut) throw new Error('Storage not configured for read (need env.R2 or env.R2_BUCKET with get/put)');
-    const src = cleanKey(keyToInspect);
-    const obj = await bucket.get(src);
-    if (!obj) throw new Error(`Source not found in R2: ${src}`);
-
-    const contentType = String(obj?.httpMetadata?.contentType || '').trim().toLowerCase();
-    if (contentType === 'application/pdf') return 'PDF';
-    if (contentType === 'image/png') return 'PNG';
-    if (contentType === 'image/jpeg' || contentType === 'image/jpg') return 'JPEG';
-
-    const ab = await obj.arrayBuffer();
-    const bytes = new Uint8Array(ab || new ArrayBuffer(0));
-
-    if (
-      bytes.length >= 5 &&
-      bytes[0] === 0x25 &&
-      bytes[1] === 0x50 &&
-      bytes[2] === 0x44 &&
-      bytes[3] === 0x46 &&
-      bytes[4] === 0x2D
-    ) return 'PDF';
-
-    if (
-      bytes.length >= 8 &&
-      bytes[0] === 0x89 &&
-      bytes[1] === 0x50 &&
-      bytes[2] === 0x4E &&
-      bytes[3] === 0x47 &&
-      bytes[4] === 0x0D &&
-      bytes[5] === 0x0A &&
-      bytes[6] === 0x1A &&
-      bytes[7] === 0x0A
-    ) return 'PNG';
-
-    if (
-      bytes.length >= 3 &&
-      bytes[0] === 0xFF &&
-      bytes[1] === 0xD8 &&
-      bytes[2] === 0xFF
-    ) return 'JPEG';
-
-    return '';
-  };
-
-  // Compute target key we will store on the timesheet:
-  // - If setting a new manual PDF: keep PDFs on canonical key; keep JPEG/PNG on uploaded image key.
-  // - If clearing: set manual_pdf_r2_key null.
-  let targetKey = null;
-
-  try {
-    if (newKey) {
-      const sourceKind = await detectStoredObjectKind(newKey);
-      if (sourceKind === 'PDF') {
-        await r2CopyOverwriteLocal(newKey, canonicalPdfKey);
-
-        // Delete the uploaded PDF key after copy (best-effort)
-        if (cleanKey(newKey) !== canonicalPdfKey) {
-          await r2DeleteBestEffort(newKey);
-        }
-
-        targetKey = canonicalPdfKey;
-      } else if (sourceKind === 'PNG' || sourceKind === 'JPEG') {
-        targetKey = cleanKey(newKey);
-      } else {
-        return withCORS(env, req, badRequest('manual_pdf_r2_key must point to a PDF, PNG, or JPEG object in R2'));
-      }
-    } else {
-      targetKey = null;
-    }
-  } catch (e) {
-    return withCORS(env, req, serverError(`Failed to store manual PDF: ${e?.message || e}`));
-  }
-
-  // Patch the CURRENT timesheet row's manual_pdf_r2_key
-  const tsRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(currentTimesheetId)}&is_current=eq.true`,
-    {
-      method: 'PATCH',
-      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-      body: JSON.stringify({
-        manual_pdf_r2_key: targetKey,
-        updated_at: new Date().toISOString()
-      })
-    }
-  );
-
-  if (!tsRes.ok) return withCORS(env, req, serverError(await tsRes.text()));
-
-  const tsJson = await tsRes.json().catch(() => []);
-  const row = (Array.isArray(tsJson) ? tsJson[0] : tsJson) || null;
-
-  // ✅ Purge previous MANUAL_PDF evidence rows for this timesheet version
-  // and delete their storage keys (but NEVER delete the canonical system PDF key).
-  try {
-    const { rows: evRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&kind=eq.MANUAL_PDF` +
-        `&select=id,storage_key` +
-        `&limit=10000`
-    );
-
-    const existing = Array.isArray(evRows) ? evRows : [];
-    for (const ev of existing) {
-      const k = ev?.storage_key ? normalize(ev.storage_key) : null;
-      if (!k) continue;
-
-      // never delete canonical system key
-      if (cleanKey(k) === canonicalPdfKey) continue;
-
-      // never delete the new target key (if we somehow stored it directly)
-      if (targetKey && cleanKey(k) === cleanKey(targetKey)) continue;
-
-      await r2DeleteBestEffort(k);
-    }
-
-    // Delete the evidence rows
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence?timesheet_id=eq.${enc(currentTimesheetId)}&kind=eq.MANUAL_PDF`,
-      { method: 'DELETE', headers: { ...sbHeaders(env), Prefer: 'return=minimal' } }
-    ).catch(() => {});
-  } catch (e) {
-    // Non-fatal: evidence cleanup shouldn’t block the replace action
-    console.warn('[handleTimesheetReplaceManualPdf] evidence cleanup failed (non-fatal)', {
-      timesheet_id: currentTimesheetId,
-      err: e?.message || String(e)
-    });
-  }
-
-  // ✅ Delete the old manual_pdf_r2_key object if it was superseded and was a non-canonical blob
-  // (canonical should never be deleted here).
-  try {
-    if (oldKey) {
-      const oldClean = cleanKey(oldKey);
-      const nextClean = targetKey ? cleanKey(targetKey) : '';
-      if (oldClean && oldClean !== canonicalPdfKey && (!nextClean || oldClean !== nextClean)) {
-        await r2DeleteBestEffort(oldClean);
-      }
-    }
-  } catch {
-    // non-fatal
-  }
-
-  // Insert a single MANUAL_PDF evidence row when a new manual PDF/image is set
-  if (targetKey) {
-    try {
-      const payload = [{
-        timesheet_id: currentTimesheetId,
-        kind: 'MANUAL_PDF',
-        display_name: 'Scanned timesheet',
-        storage_key: cleanKey(targetKey),
-        created_by: user.id || null
-      }];
-
-      const evRes = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence`,
-        {
-          method: 'POST',
-          headers: { ...sbHeaders(env), Prefer: 'return-minimal' },
-          body: JSON.stringify(payload)
-        }
-      );
-
-      if (!evRes.ok) {
-        const errTxt = await evRes.text().catch(() => '');
-        return withCORS(env, req, serverError(`Failed to record timesheet evidence: ${errTxt}`));
-      }
-    } catch (e) {
-      return withCORS(env, req, serverError(`Failed to record timesheet evidence: ${e?.message || e}`));
-    }
-  }
-
-  // Audit the PDF replacement (whether we set or cleared it)
-  try {
-    await writeAudit(
-      env,
-      user,
-      'TIMESHEET_MANUAL_PDF_REPLACED',
-      { manual_pdf_r2_key: targetKey },
-      { entity: 'timesheets', subject_id: currentTimesheetId, req }
-    );
-  } catch {}
-
-  return withCORS(env, req, ok({
-    timesheet_id: currentTimesheetId,
-    current_timesheet_id: currentTimesheetId,
-    requested_timesheet_id: resolved.requested_timesheet_id || timesheetId,
-    was_stale: !!resolved.was_stale,
-    manual_pdf_r2_key: row?.manual_pdf_r2_key || null
-  }));
 }
 
 
@@ -83242,12 +82784,26 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
 
   const storageKeyRaw = body && body.storage_key && String(body.storage_key).trim();
   const storageKey = storageKeyRaw ? storageKeyRaw.replace(/^\/+/, '') : '';
-  const replaceExisting = body?.replace_existing === true || body?.replace_existing === 'true';
-  const replaceEvidenceId = body?.replace_evidence_id ? String(body.replace_evidence_id).trim() : '';
+  const hasReplacementField =
+    Object.prototype.hasOwnProperty.call(body || {}, 'replace_existing') ||
+    Object.prototype.hasOwnProperty.call(body || {}, 'replace_evidence_id');
 
   if (!kind) return withCORS(env, req, badRequest('kind is required'));
   if (!allowedKinds.has(kind)) return withCORS(env, req, badRequest('Invalid evidence kind'));
   if (!storageKey) return withCORS(env, req, badRequest('storage_key is required'));
+  if (hasReplacementField) {
+    return withCORS(
+      env,
+      req,
+      new Response(
+        JSON.stringify({
+          error: 'DIRECT_REPLACEMENT_NOT_SUPPORTED',
+          message: 'Direct replacement is not supported. Delete the existing evidence or return it to queue first, then add/attach the new evidence.'
+        }),
+        { status: 409, headers: JSON_HEADERS }
+      )
+    );
+  }
 
   try {
     const evidencePolicy = await getTimesheetEvidenceMutationPolicy(env, currentTsId);
@@ -83308,35 +82864,6 @@ async function handleTimesheetEvidenceAdd(env, req, tsId) {
         `&select=id,kind,display_name,storage_key,created_at,created_by`
     );
     const existingEvidence = Array.isArray(existingRows) ? existingRows : [];
-
-    if (replaceExisting || replaceEvidenceId) {
-      if (!replaceEvidenceId) return withCORS(env, req, badRequest('replace_evidence_id is required when replace_existing=true'));
-      const replacementRotation = Number.isFinite(Number(body?.rotation_degrees))
-        ? Number(body.rotation_degrees)
-        : (
-          Number.isFinite(Number(body?.manual_pdf_rotation_degrees))
-            ? Number(body.manual_pdf_rotation_degrees)
-            : (Number.isFinite(Number(ts?.manual_pdf_rotation_degrees)) ? Number(ts.manual_pdf_rotation_degrees) : 0)
-        );
-      const replaced = await applyTimesheetEvidenceReplacement(env, {
-        current_timesheet_id: currentTsId,
-        old_evidence_id: replaceEvidenceId,
-        new_kind: kind,
-        new_storage_key: finalStorageKey,
-        display_name: (displayNameIn && displayNameIn.length ? displayNameIn : prettyKind(kind) || kind),
-        replacement_rotation_degrees: replacementRotation,
-        user
-      });
-      return withCORS(env, req, ok({
-        ok: true,
-        replaced: true,
-        replaced_evidence_id: replaceEvidenceId,
-        requested_timesheet_id: resolved.requested_timesheet_id || tsId,
-        current_timesheet_id: currentTsId,
-        was_stale: !!resolved.was_stale,
-        evidence: replaced?.inserted || null
-      }));
-    }
 
     const sameStorageExisting = existingEvidence.find(row =>
       String(row?.storage_key || '').trim().replace(/^\/+/, '') === finalStorageKey
