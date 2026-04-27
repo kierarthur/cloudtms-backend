@@ -23967,7 +23967,6 @@ $$;
 
 
 
-
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -24497,7 +24496,7 @@ begin
         count(distinct lir.destination_signature) filter (where lir.is_missing_snapshot = false) as destination_variant_count,
         min(lir.routing_kind_txt) filter (where lir.is_missing_snapshot = false) as routing_kind_txt,
         min(lir.payee_entity_kind_txt) filter (where lir.is_missing_snapshot = false) as payee_entity_kind_txt,
-        min(lir.snapshot_payee_entity_id) filter (where lir.is_missing_snapshot = false) as snapshot_payee_entity_id,
+        (array_agg(lir.snapshot_payee_entity_id order by lir.snapshot_payee_entity_id::text nulls last) filter (where lir.is_missing_snapshot = false))[1] as snapshot_payee_entity_id,
         min(lir.snapshot_beneficiary_name) filter (where lir.is_missing_snapshot = false) as snapshot_beneficiary_name,
         min(lir.snapshot_sort_code) filter (where lir.is_missing_snapshot = false) as snapshot_sort_code,
         min(lir.snapshot_account_number) filter (where lir.is_missing_snapshot = false) as snapshot_account_number,
@@ -24744,14 +24743,14 @@ begin
     )
     select
       tig.pay_channel,
-      min(tig.candidate_id) as candidate_id,
-      min(tig.umbrella_id) as umbrella_id,
+      (array_agg(tig.candidate_id order by tig.candidate_id::text nulls last))[1] as candidate_id,
+      (array_agg(tig.umbrella_id order by tig.umbrella_id::text nulls last))[1] as umbrella_id,
       null::date as week_ending_bucket,
       round(sum(tig.amount), 2) as amount,
       max(tig.currency) as currency,
       case when bool_or(tig.status = 'BLOCKED') then 'BLOCKED' else 'PENDING' end as status,
       case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_state) else null end as rail_state,
-      case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_meta_json) else null end as rail_meta_json,
+      case when bool_or(tig.status = 'BLOCKED') then (array_agg(tig.rail_meta_json order by tig.rail_meta_json::text nulls last))[1] else null end as rail_meta_json,
       min(tig.payment_reference) as payment_reference,
       min(tig.payee_name) as payee_name,
       min(tig.sort_code) as sort_code,
@@ -24759,7 +24758,7 @@ begin
       min(tig.account_type) as account_type,
       min(tig.bank_details_hash_snapshot) as bank_details_hash_snapshot,
       min(tig.payee_entity_kind) as payee_entity_kind,
-      min(tig.payee_entity_id) as payee_entity_id,
+      (array_agg(tig.payee_entity_id order by tig.payee_entity_id::text nulls last))[1] as payee_entity_id,
       tig.transfer_group_key,
       min(tig.grouping_mode_used) as grouping_mode_used
     from _tmp_pay_transfer_item_groups tig
@@ -24980,14 +24979,14 @@ begin
     )
     select
       tig.pay_channel,
-      min(tig.candidate_id) as candidate_id,
-      min(tig.umbrella_id) as umbrella_id,
+      (array_agg(tig.candidate_id order by tig.candidate_id::text nulls last))[1] as candidate_id,
+      (array_agg(tig.umbrella_id order by tig.umbrella_id::text nulls last))[1] as umbrella_id,
       min(tig.week_ending_bucket) as week_ending_bucket,
       round(sum(tig.amount), 2) as amount,
       max(tig.currency) as currency,
       case when bool_or(tig.status = 'BLOCKED') then 'BLOCKED' else 'PENDING' end as status,
       case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_state) else null end as rail_state,
-      case when bool_or(tig.status = 'BLOCKED') then min(tig.rail_meta_json) else null end as rail_meta_json,
+      case when bool_or(tig.status = 'BLOCKED') then (array_agg(tig.rail_meta_json order by tig.rail_meta_json::text nulls last))[1] else null end as rail_meta_json,
       min(tig.payment_reference) as payment_reference,
       min(tig.payee_name) as payee_name,
       min(tig.sort_code) as sort_code,
@@ -24995,7 +24994,7 @@ begin
       min(tig.account_type) as account_type,
       min(tig.bank_details_hash_snapshot) as bank_details_hash_snapshot,
       min(tig.payee_entity_kind) as payee_entity_kind,
-      min(tig.payee_entity_id) as payee_entity_id,
+      (array_agg(tig.payee_entity_id order by tig.payee_entity_id::text nulls last))[1] as payee_entity_id,
       tig.transfer_group_key,
       min(tig.grouping_mode_used) as grouping_mode_used
     from _tmp_pay_transfer_item_groups tig
