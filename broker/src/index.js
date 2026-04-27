@@ -24463,6 +24463,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
 
     const correctionOnly = (
       code === 'CORRECTION_ONLY_REQUIRED' ||
+      code === 'PAYMENT_ALREADY_COMMITTED' ||
       cancellationOutcome === 'CORRECTION_ONLY' ||
       cancellationOutcome === 'POST_COMMIT_CORRECTION_ONLY' ||
       p.correction_only === true
@@ -24511,13 +24512,53 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     };
   };
 
+  const _cancelConflictMeta = (payload) => {
+    const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const analysis = _analyzeCancelPayload(p);
+    const code = String(
+      p.code ||
+      p.error_code ||
+      (analysis.external_cancel_confirmation_required ? 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED' : '') ||
+      (analysis.correction_only ? 'CORRECTION_ONLY_REQUIRED' : '') ||
+      ''
+    ).trim().toUpperCase() || 'BATCH_NOT_CANCELLABLE';
+
+    if (code === 'CORRECTION_ONLY_REQUIRED' || code === 'PAYMENT_ALREADY_COMMITTED') {
+      return {
+        error_code: code,
+        message: 'This batch has already been committed or paid and cannot be cancelled. Use correction flow instead.'
+      };
+    }
+    if (code === 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED') {
+      return {
+        error_code: code,
+        message: 'External bank-side cancellation or confirmation is required before the system can restore this batch.'
+      };
+    }
+    if (code === 'BATCH_NOT_CANCELLABLE') {
+      return {
+        error_code: code,
+        message: 'This batch cannot be cancelled in its current state.'
+      };
+    }
+
+    return {
+      error_code: code,
+      message: String(p.message || p.error || 'Batch cancellation could not be completed.').trim() || 'Batch cancellation could not be completed.'
+    };
+  };
+
   const _buildConflictResponse = (payload) => {
     const p = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
     const cancelFlow = _buildCancelFlow(p);
+    const conflictMeta = _cancelConflictMeta(p);
     const responsePayload = {
       ok: false,
       pay_batch_id: id,
-      error: p,
+      error_code: conflictMeta.error_code,
+      message: conflictMeta.message,
+      error: conflictMeta.message,
+      details: p,
       cancel_flow: cancelFlow,
       session_discard: {
         requested: discardSessionRequested,
@@ -24775,7 +24816,8 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId) {
     if (
       dbPayload &&
       typeof dbPayload === 'object' &&
-      ['CORRECTION_ONLY_REQUIRED', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED'].includes(String(dbPayload.code || '').trim().toUpperCase())
+      ['CORRECTION_ONLY_REQUIRED', 'PAYMENT_ALREADY_COMMITTED', 'EXTERNAL_CANCEL_CONFIRMATION_REQUIRED', 'BATCH_NOT_CANCELLABLE']
+        .includes(String(dbPayload.code || dbPayload.error_code || '').trim().toUpperCase())
     ) {
       return _buildConflictResponse(dbPayload);
     }
