@@ -24091,6 +24091,7 @@ begin
 end;
 $$;
 
+
 create or replace function public.pay_execute_bank(
   p_pay_batch_id uuid,
   p_pay_channel_scope text,
@@ -24438,8 +24439,34 @@ begin
     raise exception 'pay_batch pay_date is required';
   end if;
 
-  v_provider := upper(coalesce(v_batch.rail_provider_snapshot, 'CSV'));
-  v_env := upper(coalesce(v_batch.rail_env_snapshot, 'PROD'));
+  v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot, '')));
+  if v_provider = 'REV' then
+    v_provider := 'REVOLUT';
+  end if;
+
+  if v_provider = '' then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_BANK',
+      'code', 'MISSING_RAIL_PROVIDER',
+      'message', 'pay_execute_bank: rail_provider_snapshot is required and must be explicit; blank provider is not treated as CSV',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+
+  if v_provider not in ('REVOLUT','CSV') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_EXECUTE_BANK',
+      'code', 'UNKNOWN_RAIL_PROVIDER',
+      'message', 'pay_execute_bank: unsupported rail_provider_snapshot',
+      'pay_batch_id', p_pay_batch_id::text,
+      'rail_provider_snapshot', v_batch.rail_provider_snapshot
+    )::text;
+  end if;
+
+  v_env := upper(btrim(coalesce(v_batch.rail_env_snapshot, 'PROD')));
+  if v_env = '' then
+    v_env := 'PROD';
+  end if;
 
   -- Allocate bulk reference ONCE per batch (digits-only canonical)
   if v_batch.bulk_reference is null then
@@ -25786,9 +25813,6 @@ begin
   );
 end;
 $$;
-
-
-
 
 
 
