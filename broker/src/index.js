@@ -19753,20 +19753,147 @@ async function handleBankingPayBatchGet(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
 
-  try {
-    const rpcRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
-
+  const _unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
     try {
-      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') {
-        payload = rpcRes[0];
-      }
-      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'pay_batch_get')) {
-        payload = payload.pay_batch_get;
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  };
+
+  const _toBool = (v, fallback = false) => (typeof v === 'boolean' ? v : !!fallback);
+
+  const _normalizeProvider = (rawProvider) => {
+    const raw = String(rawProvider || '').trim().toUpperCase();
+    if (!raw) return { provider: null, valid: false, reason: 'RAIL_PROVIDER_REQUIRED' };
+    const provider = raw === 'REV' ? 'REVOLUT' : raw;
+    const knownProviders = new Set(['CSV', 'REVOLUT']);
+    try {
+      const listed = getRailAdapter('__LIST__');
+      if (Array.isArray(listed)) {
+        for (const p of listed) {
+          const v = String(p || '').trim().toUpperCase();
+          if (v) knownProviders.add(v);
+        }
       }
     } catch {}
+    if (!knownProviders.has(provider)) return { provider, valid: false, reason: 'UNKNOWN_RAIL_PROVIDER' };
+    return { provider, valid: true, reason: null };
+  };
 
-    return withCORS(env, req, ok(payload && typeof payload === 'object' ? payload : {}));
+  try {
+    const payload = _unwrapRpc(await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id }), 'pay_batch_get');
+    const batch = (payload.batch && typeof payload.batch === 'object' && !Array.isArray(payload.batch)) ? payload.batch : {};
+
+    const status = String(batch.status || payload.status || '').trim().toUpperCase();
+    const executionCommitState = String(batch.execution_commit_state || payload.execution_commit_state || '').trim().toUpperCase();
+    const terminalStatus = new Set(['COMMITTED', 'CANCELLED', 'SETTLED', 'PAID']);
+    const terminalExecState = new Set(['COMMITTED', 'CANCELLED']);
+    const isTerminal = terminalStatus.has(status) || terminalExecState.has(executionCommitState);
+
+    const providerMeta = _normalizeProvider(batch.rail_provider_snapshot || payload.rail_provider_snapshot || null);
+
+    const rpcCanCreateCsv = _toBool(payload.can_create_bank_csv_file, false);
+    const rpcCanStartStandard = _toBool(payload.can_start_standard_execution, false);
+    const rpcCanStartCsvSettlement = _toBool(payload.can_start_csv_settlement, false);
+    const rpcCanStartExternalSettlement = _toBool(payload.can_start_external_settlement, false);
+    const hasCloudCsv = _toBool(payload.has_cloudtms_csv_export, !!(payload.bank_csv_export_json && typeof payload.bank_csv_export_json === 'object'));
+    const csvMatchesTransfers = _toBool(payload.csv_export_matches_current_transfers, false);
+    const hasExternalSubmissionEvidence = _toBool(payload.has_external_submission_evidence, false);
+
+    let nativeExecutionAvailable = false;
+    let nativeExecutionUnavailableReason = null;
+
+    let canCreateBankCsvFile = false;
+    let canStartStandardExecution = false;
+    let canStartCsvSettlement = false;
+    let canStartExternalSettlement = false;
+
+    const configErrors = [];
+
+    if (!providerMeta.valid) {
+      nativeExecutionAvailable = false;
+      nativeExecutionUnavailableReason = providerMeta.reason;
+      if (providerMeta.reason === 'RAIL_PROVIDER_REQUIRED') configErrors.push('Bank rail provider is required for this batch.');
+      else configErrors.push('Unknown bank rail provider for this batch.');
+    } else {
+      const provider = providerMeta.provider;
+      const isSubmitted = executionCommitState === 'SUBMITTED_NOT_COMMITTED';
+      const canMutateExecution = !isTerminal && !isSubmitted;
+
+      canCreateBankCsvFile = canMutateExecution;
+      canStartCsvSettlement = canMutateExecution
+        && hasCloudCsv
+        && csvMatchesTransfers
+        && !hasExternalSubmissionEvidence
+        && executionCommitState === 'NOT_SUBMITTED';
+      canStartExternalSettlement = canMutateExecution
+        && !hasExternalSubmissionEvidence
+        && executionCommitState === 'NOT_SUBMITTED';
+
+      if (provider === 'CSV') {
+        nativeExecutionAvailable = false;
+        nativeExecutionUnavailableReason = 'STANDARD_BANK_NOT_AVAILABLE_FOR_CSV_PROVIDER';
+        canStartStandardExecution = false;
+      } else {
+        const adapter = getRailAdapter(provider);
+        if (!adapter || typeof adapter !== 'object') {
+          nativeExecutionAvailable = false;
+          nativeExecutionUnavailableReason = 'UNKNOWN_RAIL_PROVIDER';
+          canStartStandardExecution = false;
+        } else {
+          nativeExecutionAvailable = canMutateExecution;
+          if (canMutateExecution && typeof adapter.capabilities === 'function') {
+            try {
+              const caps = await adapter.capabilities(env);
+              if (caps && typeof caps === 'object' && caps.available === false) {
+                nativeExecutionAvailable = false;
+                nativeExecutionUnavailableReason = String(caps.reason || 'RAIL_NOT_CONFIGURED').trim() || 'RAIL_NOT_CONFIGURED';
+              }
+            } catch (e) {
+              nativeExecutionAvailable = false;
+              nativeExecutionUnavailableReason = String(e?.message || e || 'RAIL_NOT_CONFIGURED');
+            }
+          } else if (!canMutateExecution) {
+            nativeExecutionUnavailableReason = isTerminal ? 'BATCH_TERMINAL_STATE' : 'EXECUTION_ALREADY_SUBMITTED';
+          }
+          canStartStandardExecution = nativeExecutionAvailable;
+        }
+      }
+    }
+
+    canCreateBankCsvFile = !!(canCreateBankCsvFile && rpcCanCreateCsv);
+    canStartStandardExecution = !!(canStartStandardExecution && rpcCanStartStandard);
+    canStartCsvSettlement = !!(canStartCsvSettlement && rpcCanStartCsvSettlement);
+    canStartExternalSettlement = !!(canStartExternalSettlement && rpcCanStartExternalSettlement);
+
+    const bankCsvExportJson = (payload.bank_csv_export_json && typeof payload.bank_csv_export_json === 'object' && !Array.isArray(payload.bank_csv_export_json))
+      ? payload.bank_csv_export_json
+      : null;
+
+    const enriched = {
+      ...payload,
+      can_create_bank_csv_file: canCreateBankCsvFile,
+      can_start_standard_execution: canStartStandardExecution,
+      can_start_csv_settlement: canStartCsvSettlement,
+      can_start_external_settlement: canStartExternalSettlement,
+      native_execution_available: !!nativeExecutionAvailable,
+      native_execution_unavailable_reason: nativeExecutionAvailable ? null : (nativeExecutionUnavailableReason || null),
+      csv_file_generated: hasCloudCsv,
+      csv_file_generated_at_utc: bankCsvExportJson?.generated_at_utc || null,
+      csv_export_matches_current_transfers: csvMatchesTransfers,
+      has_external_submission_evidence: hasExternalSubmissionEvidence
+    };
+
+    if (!providerMeta.valid) {
+      enriched.configuration_error = {
+        code: providerMeta.reason,
+        message: configErrors[0] || 'Invalid rail provider configuration.'
+      };
+    }
+
+    return withCORS(env, req, ok(enriched));
   } catch (e) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
@@ -24595,15 +24722,25 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest('PAY_BATCH_NOT_FOUND'));
     }
 
-    const providerRaw = String(batchObj.rail_provider_snapshot || '').trim().toUpperCase();
-    const provider = providerRaw === 'REV' ? 'REVOLUT' : (providerRaw || 'CSV');
-
-    if (!['REVOLUT', 'CSV'].includes(provider)) {
-      return withCORS(env, req, badRequest(`UNKNOWN_RAIL_PROVIDER: ${provider || 'UNKNOWN'}`));
-    }
-
-    const adapter = getRailAdapter(provider);
-    if (!adapter) return withCORS(env, req, badRequest(`UNKNOWN_RAIL_PROVIDER: ${provider || 'UNKNOWN'}`));
+    const normalizeProvider = (rawProvider) => {
+      const raw = String(rawProvider || '').trim().toUpperCase();
+      if (!raw) return { provider: null, valid: false, reason: 'RAIL_PROVIDER_REQUIRED' };
+      const provider = raw === 'REV' ? 'REVOLUT' : raw;
+      const knownProviders = new Set(['CSV', 'REVOLUT']);
+      try {
+        const listed = getRailAdapter('__LIST__');
+        if (Array.isArray(listed)) {
+          for (const p of listed) {
+            const v = String(p || '').trim().toUpperCase();
+            if (v) knownProviders.add(v);
+          }
+        }
+      } catch {}
+      if (!knownProviders.has(provider)) return { provider, valid: false, reason: 'UNKNOWN_RAIL_PROVIDER' };
+      return { provider, valid: true, reason: null };
+    };
+    const providerMeta = normalizeProvider(batchObj.rail_provider_snapshot || batchGet?.rail_provider_snapshot || null);
+    if (!providerMeta.valid) return withCORS(env, req, badRequest(providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER'));
 
     const exportFrozenCsv = async () => {
       return csvAdapter_export(env, id, payChannelScope, user.id);
@@ -24636,6 +24773,52 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
         return withCORS(env, req, jsonResponse(norm.status, norm.body));
       }
     }
+
+    const _scopeFilter = (transfers) => {
+      const rows = Array.isArray(transfers) ? transfers : [];
+      if (payChannelScope === 'ALL') return rows;
+      return rows.filter((row) => String(row?.pay_channel || '').trim().toUpperCase() === payChannelScope);
+    };
+
+    const batchGetAfter0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
+    const batchGetAfter = unwrapRpc(batchGetAfter0, 'pay_batch_get');
+    const batchAfterObj = (batchGetAfter && typeof batchGetAfter === 'object') ? (batchGetAfter.batch || {}) : {};
+    const exportedTransfers = _scopeFilter(batchGetAfter?.transfers);
+    const rowCount = exportedTransfers.length;
+    const totalAmount = exportedTransfers.reduce((acc, row) => {
+      const n = Number(row?.amount);
+      return acc + (Number.isFinite(n) ? n : 0);
+    }, 0);
+    const transferHash = String(batchGetAfter?.current_transfer_hash || '').trim();
+    if (!transferHash) {
+      return withCORS(env, req, jsonResponse(409, {
+        error: 'CURRENT_TRANSFER_HASH_REQUIRED',
+        message: 'Missing authoritative current_transfer_hash from pay_batch_get after export.',
+        error_code: 'CURRENT_TRANSFER_HASH_REQUIRED'
+      }));
+    }
+    const evidence = {
+      generated_at_utc: new Date().toISOString(),
+      generated_by_user_id: String(user?.id || '').trim() || null,
+      scope: payChannelScope,
+      filename: `pay-batch-${id}.csv`,
+      row_count: rowCount,
+      total_amount: Number(totalAmount.toFixed(2)),
+      transfer_hash: transferHash,
+      columns: null,
+      format_summary: null,
+      provider_snapshot: batchAfterObj?.rail_provider_snapshot ?? batchGetAfter?.rail_provider_snapshot ?? null,
+      rail_env_snapshot: batchAfterObj?.rail_env_snapshot ?? batchGetAfter?.rail_env_snapshot ?? null
+    };
+    await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ bank_csv_export_json: evidence })
+      }
+    );
 
     const headers = new Headers();
     headers.set('Content-Type', 'text/csv; charset=utf-8');
@@ -115477,15 +115660,107 @@ async function bankingCronTick(env, opts = {}) {
 
   summary.claimed = claimedRows;
 
-  // Group claimed rows by provider snapshot
-  const byProvider = new Map();
-  for (const r of claimedRows) {
-    const prov = String(r?.rail_provider_snapshot || r?.rail_provider || 'CSV').trim().toUpperCase() || 'CSV';
-    if (!byProvider.has(prov)) byProvider.set(prov, []);
-    byProvider.get(prov).push(r);
+  const _parseExecutionIntent = (row) => {
+    const src = row?.execution_intent_json;
+    if (src && typeof src === 'object' && !Array.isArray(src)) return src;
+    if (typeof src === 'string' && src.trim()) {
+      try {
+        const parsed = JSON.parse(src);
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  };
+  const _normalizeProviderStrict = (rawProvider) => {
+    const raw = String(rawProvider || '').trim().toUpperCase();
+    if (!raw) return { provider: null, valid: false, reason: 'RAIL_PROVIDER_REQUIRED' };
+    const provider = raw === 'REV' ? 'REVOLUT' : raw;
+    const knownProviders = new Set(['CSV', 'REVOLUT']);
+    try {
+      const listed = getRailAdapter('__LIST__');
+      if (Array.isArray(listed)) {
+        for (const p of listed) {
+          const v = String(p || '').trim().toUpperCase();
+          if (v) knownProviders.add(v);
+        }
+      }
+    } catch {}
+    if (!knownProviders.has(provider)) return { provider, valid: false, reason: 'UNKNOWN_RAIL_PROVIDER' };
+    return { provider, valid: true, reason: null };
+  };
+
+  const standardRowsByProvider = new Map();
+  for (const row of claimedRows) {
+    const payBatchId = String(row?.pay_batch_id || row?.id || '').trim();
+    if (!payBatchId) continue;
+    const intent = _parseExecutionIntent(row);
+    const executionMode = String(row?.execution_mode || intent?.execution_mode || 'STANDARD_BANK').trim().toUpperCase() || 'STANDARD_BANK';
+    const providerMeta = _normalizeProviderStrict(row?.rail_provider_snapshot || row?.rail_provider || null);
+    if (!providerMeta.valid) {
+      summary.errors.push({
+        code: providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER',
+        pay_batch_id: payBatchId,
+        execution_mode: executionMode
+      });
+      continue;
+    }
+    if (executionMode === 'CSV_SETTLEMENT' || executionMode === 'EXTERNAL_SETTLEMENT') {
+      const authRequestId = String(row?.auth_request_id || intent?.auth_request_id || intent?.auth?.auth_request_id || '').trim();
+      if (!authRequestId) {
+        summary.errors.push({
+          code: 'AUTH_REQUEST_ID_REQUIRED',
+          pay_batch_id: payBatchId,
+          execution_mode: executionMode
+        });
+        continue;
+      }
+      try {
+        const finalisation = await finaliseAuthorisedBankingPaySettlement(
+          env,
+          new Request('https://cron.local/internal', { method: 'POST' }),
+          { id: actorUserId },
+          payBatchId,
+          authRequestId,
+          {}
+        );
+        if (!finalisation || finalisation.ok !== true) {
+          summary.errors.push({
+            code: String(finalisation?.error_code || 'SETTLEMENT_FINALISATION_FAILED').toUpperCase(),
+            pay_batch_id: payBatchId,
+            execution_mode: executionMode,
+            message: String(finalisation?.message || 'Settlement finalisation failed')
+          });
+        } else {
+          summary.settled_batches.push({
+            pay_batch_id: payBatchId,
+            provider: providerMeta.provider,
+            execution_mode: executionMode,
+            settled: finalisation,
+            remittances: { attempted: false, ok: null, error: null, result: null }
+          });
+        }
+      } catch (e) {
+        summary.errors.push({
+          code: 'SETTLEMENT_FINALISATION_FAILED',
+          pay_batch_id: payBatchId,
+          execution_mode: executionMode,
+          error: _errMsg(e)
+        });
+      }
+      continue;
+    }
+    if (executionMode !== 'STANDARD_BANK') {
+      summary.errors.push({ code: 'UNSUPPORTED_EXECUTION_MODE', pay_batch_id: payBatchId, execution_mode: executionMode });
+      continue;
+    }
+    const prov = providerMeta.provider;
+    if (!standardRowsByProvider.has(prov)) standardRowsByProvider.set(prov, []);
+    standardRowsByProvider.get(prov).push(row);
   }
 
-  for (const [prov, rows] of byProvider.entries()) {
+  for (const [prov, rows] of standardRowsByProvider.entries()) {
     try {
       const adapter = getRailAdapter(prov);
       if (!adapter || typeof adapter.executeDueBatches !== 'function') {
@@ -115556,7 +115831,18 @@ async function bankingCronTick(env, opts = {}) {
       const batchId = b && b.id ? String(b.id).trim() : '';
       if (!batchId) continue;
 
-      const prov = String(b?.rail_provider_snapshot || 'CSV').trim().toUpperCase() || 'CSV';
+      const providerMeta = _normalizeProviderStrict(b?.rail_provider_snapshot || null);
+      if (!providerMeta.valid) {
+        const issue = {
+          code: providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER',
+          pay_batch_id: batchId,
+          stage: 'POLL'
+        };
+        if (providerMeta.provider) issue.provider = providerMeta.provider;
+        summary.warnings.push(issue);
+        continue;
+      }
+      const prov = providerMeta.provider;
       const adapter = getRailAdapter(prov);
 
       if (!adapter || typeof adapter.pollBatch !== 'function') {
@@ -115574,23 +115860,53 @@ async function bankingCronTick(env, opts = {}) {
 
         const settledObj = (polled && typeof polled === 'object') ? polled.settled : null;
         if (settledObj !== undefined && settledObj !== null && _settlementAdvanced(settledObj)) {
-          remAttempted = true;
+          let suppressRemittances = false;
           try {
-            remResult = await sendPayBatchRemittancesInternal(env, {
-              payBatchId: batchId,
-              scope: 'ALL',
-              actorUserId
-            });
-            remOk = true;
-          } catch (e) {
-            remOk = false;
-            remError = _errMsg(e);
+            const batchGetRes = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: batchId });
+            const batchGetPayload = _unwrapRpcPayload(batchGetRes, 'pay_batch_get');
+            const authObj = (batchGetPayload?.auth && typeof batchGetPayload.auth === 'object') ? batchGetPayload.auth : null;
+            const authIntent = (authObj?.execution_intent_json && typeof authObj.execution_intent_json === 'object')
+              ? authObj.execution_intent_json
+              : null;
+            const fallbackIntent = (batchGetPayload?.execution_intent_json && typeof batchGetPayload.execution_intent_json === 'object')
+              ? batchGetPayload.execution_intent_json
+              : null;
+            const intent = authIntent || fallbackIntent || {};
+            suppressRemittances =
+              batchGetPayload?.suppress_remittances_pending === true
+              || intent?.suppress_remittances === true;
+          } catch (intentErr) {
             summary.warnings.push({
-              code: 'REMITTANCES_SEND_FAILED',
+              code: 'REMITTANCES_SUPPRESSION_CHECK_FAILED',
               provider: prov,
               pay_batch_id: batchId,
-              error: remError
+              error: _errMsg(intentErr)
             });
+          }
+
+          if (!suppressRemittances) {
+            remAttempted = true;
+            try {
+              remResult = await sendPayBatchRemittancesInternal(env, {
+                payBatchId: batchId,
+                scope: 'ALL',
+                actorUserId
+              });
+              remOk = true;
+            } catch (e) {
+              remOk = false;
+              remError = _errMsg(e);
+              summary.warnings.push({
+                code: 'REMITTANCES_SEND_FAILED',
+                provider: prov,
+                pay_batch_id: batchId,
+                error: remError
+              });
+            }
+          } else {
+            remAttempted = false;
+            remOk = null;
+            remError = 'SUPPRESSED_BY_EXECUTION_INTENT';
           }
         }
 
