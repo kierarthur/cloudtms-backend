@@ -20089,7 +20089,6 @@ async function handleBankingIdLedgerList(env, req, user) {
     return withCORS(env, req, serverError(String(e?.message || e)));
   }
 }
-
 async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -20128,6 +20127,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   const executionMode = executionModeRaw || 'STANDARD_BANK';
   if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) {
     return withCORS(env, req, badRequest('execution_mode must be STANDARD_BANK, CSV_SETTLEMENT or EXTERNAL_SETTLEMENT'));
+  }
+  if (executionMode === 'CSV_SETTLEMENT' && payChannelScope !== 'ALL') {
+    return withCORS(env, req, badRequest('CSV_SETTLEMENT_SCOPE_MUST_BE_ALL'));
   }
   const paymentDate = (() => {
     const raw = body.payment_date ?? body.paymentDate ?? null;
@@ -20489,7 +20491,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
         p_pay_channel_scope: payChannelScope,
         p_suppress_remittances: suppressRemittances,
         p_suppress_remittances_confirmed: suppressRemittancesConfirmed,
-        p_csv_uploaded_confirmed: executionMode === 'CSV_SETTLEMENT' ? true : false,
+        p_csv_uploaded_confirmed: executionMode === 'CSV_SETTLEMENT' ? csvUploadedConfirmed : false,
         p_csv_bank_confirm_ref: executionMode === 'CSV_SETTLEMENT' ? csvBankConfirmRef : null,
         p_external_settlement_comment: executionMode === 'EXTERNAL_SETTLEMENT' ? externalSettlementComment : null
       });
@@ -20556,6 +20558,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   }
 }
 
+
+
 async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   const token = String(reauthToken || '').trim();
   if (!token) return { ok: false, response: badRequest('reauth_token is required') };
@@ -20580,10 +20584,53 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
     } catch {}
     return payload;
   };
+  const truthyIntentFlag = (value) => {
+    if (value === true) return true;
+    const s = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+    return ['true', '1', 'yes', 'y', 'on'].includes(s);
+  };
   const id = String(payBatchId || '').trim();
   const authId = String(authRequestId || '').trim();
-  const actorUserId = String(userOrActor?.id || options?.actorUserId || '').trim();
+  const actorUserId = String(
+    (userOrActor && typeof userOrActor === 'object' ? userOrActor.id : userOrActor)
+    || options?.actorUserId
+    || options?.actor_user_id
+    || ''
+  ).trim();
   if (!id || !authId || !actorUserId) return { ok: false, error_code: 'INVALID_FINALISATION_INPUT', message: 'Missing finalisation input.' };
+
+  let authRow = null;
+  try {
+    const enc = encodeURIComponent;
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/pay_batch_auth_requests` +
+      `?id=eq.${enc(authId)}` +
+      `&select=id,pay_batch_id,state,execution_intent_json` +
+      `&limit=1`
+    );
+    authRow = (Array.isArray(rows) && rows[0] && typeof rows[0] === 'object') ? rows[0] : null;
+  } catch (e) {
+    return { ok: false, error_code: 'AUTH_REQUEST_LOAD_FAILED', message: String(e?.message || e || 'AUTH_REQUEST_LOAD_FAILED') };
+  }
+
+  if (!authRow) return { ok: false, error_code: 'AUTH_REQUEST_NOT_FOUND', message: 'Auth request not found.' };
+  if (String(authRow.pay_batch_id || '').trim() !== id) {
+    return { ok: false, error_code: 'AUTH_REQUEST_BATCH_MISMATCH', message: 'Auth request does not belong to this batch.' };
+  }
+
+  const authState = String(authRow.state || '').trim().toUpperCase();
+  if (authState !== 'AUTHORISED') {
+    return { ok: false, waiting: true, error_code: 'AUTH_NOT_AUTHORISED', message: 'Auth request is not authorised yet.', auth_state: authState || null };
+  }
+
+  const intent = (authRow.execution_intent_json && typeof authRow.execution_intent_json === 'object' && !Array.isArray(authRow.execution_intent_json))
+    ? authRow.execution_intent_json
+    : null;
+  const mode = String(intent?.execution_mode || '').trim().toUpperCase();
+  if (!intent || !['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(mode)) {
+    return { ok: false, error_code: 'INVALID_FROZEN_EXECUTION_MODE', message: 'Frozen execution_mode missing or invalid.' };
+  }
 
   let batchGet = null;
   try {
@@ -20593,50 +20640,47 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
   }
 
   const batchObj = (batchGet && typeof batchGet === 'object' && batchGet.batch && typeof batchGet.batch === 'object') ? batchGet.batch : {};
-  const authObj = (batchGet && typeof batchGet === 'object' && batchGet.auth && typeof batchGet.auth === 'object') ? batchGet.auth : {};
-  const intent = (authObj.execution_intent_json && typeof authObj.execution_intent_json === 'object')
-    ? authObj.execution_intent_json
-    : ((batchGet && typeof batchGet.execution_intent_json === 'object') ? batchGet.execution_intent_json : null);
-  const mode = String(intent?.execution_mode || '').trim().toUpperCase();
-  const authState = String(authObj.auth_state || authObj.state || '').trim().toUpperCase();
-  const activeAuthId = String(authObj.auth_request_id || '').trim();
   const status = String(batchObj.status || '').trim().toUpperCase();
   const executionCommitState = String(batchObj.execution_commit_state || batchGet?.execution_commit_state || '').trim().toUpperCase();
-  const settlementConfirmation = (batchGet && typeof batchGet.settlement_confirmation_json === 'object') ? batchGet.settlement_confirmation_json : null;
+  const settlementConfirmation =
+    (batchGet && typeof batchGet.settlement_confirmation_json === 'object' && batchGet.settlement_confirmation_json && !Array.isArray(batchGet.settlement_confirmation_json))
+      ? batchGet.settlement_confirmation_json
+      : ((batchObj.settlement_confirmation_json && typeof batchObj.settlement_confirmation_json === 'object' && !Array.isArray(batchObj.settlement_confirmation_json)) ? batchObj.settlement_confirmation_json : null);
   const settledAuthId = String(settlementConfirmation?.auth_request_id || '').trim();
   const confirmationMode = String(settlementConfirmation?.execution_mode || settlementConfirmation?.settlement_mode || '').trim().toUpperCase();
 
   if (['SETTLED', 'PAID', 'COMMITTED', 'CANCELLED'].includes(status) || ['COMMITTED', 'CANCELLED'].includes(executionCommitState)) {
     if (settlementConfirmation && settledAuthId === authId && confirmationMode === mode) {
-      return { ok: true, already_finalised: true, execution_mode: mode, pay_batch_id: id, auth_request_id: authId };
+      return { ok: true, already_finalised: true, execution_mode: mode, pay_batch_id: id, auth_request_id: authId, settlement_confirmation_json: settlementConfirmation };
     }
     return { ok: false, error_code: 'BATCH_ALREADY_FINALISED', message: 'Batch is already finalised.' };
   }
-  if (!intent || !['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(mode)) {
-    return { ok: false, error_code: 'INVALID_FROZEN_EXECUTION_MODE', message: 'Frozen execution_mode missing or invalid.' };
-  }
-  if (!activeAuthId || activeAuthId !== authId || authState !== 'AUTHORISED') {
-    return { ok: false, waiting: true, error_code: 'AUTH_NOT_AUTHORISED', message: 'Auth request is not authorised yet.' };
-  }
+
   if ((mode === 'CSV_SETTLEMENT' || mode === 'EXTERNAL_SETTLEMENT') && batchGet?.has_external_submission_evidence === true) {
     return { ok: false, error_code: 'EXTERNAL_SUBMISSION_ALREADY_RECORDED', message: 'External submission evidence already exists.' };
   }
+
   if (mode === 'STANDARD_BANK') {
     return { ok: true, authorised_pending_native_execution: true, execution_mode: mode, pay_batch_id: id, auth_request_id: authId };
   }
 
-  const scope = String(options?.pay_channel_scope || intent?.pay_channel_scope || 'ALL').trim().toUpperCase() || 'ALL';
+  const scopeRaw = String(intent?.pay_channel_scope || 'ALL').trim().toUpperCase();
+  const scope = ['ALL', 'PAYE', 'UMBRELLA'].includes(scopeRaw) ? scopeRaw : 'ALL';
+  const paymentDate = String(intent?.payment_date || '').trim() || null;
+  const csvUploadedConfirmed = truthyIntentFlag(intent?.csv_uploaded_confirmed);
+  const suppressRemittances = truthyIntentFlag(intent?.suppress_remittances);
+
   const params = {
     p_pay_batch_id: id,
     p_scope: scope,
     p_bank_confirm_ref: mode === 'CSV_SETTLEMENT' ? (intent?.csv_bank_confirm_ref ?? null) : null,
-    p_payment_date: intent?.payment_date ?? null,
+    p_payment_date: paymentDate,
     p_actor_user_id: actorUserId,
     p_settlement_mode: mode,
     p_auth_request_id: authId,
-    p_csv_uploaded_confirmed: mode === 'CSV_SETTLEMENT',
+    p_csv_uploaded_confirmed: mode === 'CSV_SETTLEMENT' ? csvUploadedConfirmed : false,
     p_external_settlement_comment: mode === 'EXTERNAL_SETTLEMENT' ? (intent?.external_settlement_comment ?? null) : null,
-    p_suppress_remittances: intent?.suppress_remittances === true
+    p_suppress_remittances: suppressRemittances
   };
   try {
     const settled = unwrapRpc(await sbRpc(env, 'pay_settle_manual_confirm', params), 'pay_settle_manual_confirm');
@@ -20645,6 +20689,8 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
     return { ok: false, error_code: 'SETTLEMENT_FINALISATION_FAILED', message: String(e?.message || e || 'SETTLEMENT_FINALISATION_FAILED') };
   }
 }
+
+
 
 
 
@@ -24673,7 +24719,7 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
 
-  const scopeFromQuery = (() => {
+  const requestedScopeFromQuery = (() => {
     try {
       const u = new URL(req.url);
       return String(u.searchParams.get('scope') || u.searchParams.get('pay_channel_scope') || 'ALL').trim().toUpperCase();
@@ -24681,7 +24727,12 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       return 'ALL';
     }
   })();
-  const payChannelScope = ['ALL', 'PAYE', 'UMBRELLA'].includes(scopeFromQuery) ? scopeFromQuery : 'ALL';
+  const requestedPayChannelScope = ['ALL', 'PAYE', 'UMBRELLA'].includes(requestedScopeFromQuery) ? requestedScopeFromQuery : 'ALL';
+
+  // Banking CSV settlement is intentionally whole-batch evidence. Scoped CSV exports were a legacy convenience,
+  // but settlement evidence must hash the same frozen transfer set that settlement will later confirm.
+  // Keeping this route on ALL avoids a scoped hash drifting from pay_settle_manual_confirm(...).
+  const payChannelScope = 'ALL';
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -24799,6 +24850,83 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       if (!knownProviders.has(provider)) return { provider, valid: false, reason: 'UNKNOWN_RAIL_PROVIDER' };
       return { provider, valid: true, reason: null };
     };
+
+    const loadCsvExportSettingsSummary = async () => {
+      const DEFAULT_COLUMNS = ['payment_reference', 'payee_name', 'sort_code', 'account_number', 'account_type', 'amount'];
+      const parseJsonish = (value) => {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'string') {
+          const s = value.trim();
+          if (!s) return null;
+          try { return JSON.parse(s); } catch { return null; }
+        }
+        return value;
+      };
+      const toBool = (value, fallback) => {
+        if (typeof value === 'boolean') return value;
+        if (value === null || value === undefined || value === '') return fallback;
+        const s = String(value).trim().toLowerCase();
+        if (['true', '1', 'yes', 'y', 'on'].includes(s)) return true;
+        if (['false', '0', 'no', 'n', 'off'].includes(s)) return false;
+        return fallback;
+      };
+      const normalizeDelimiter = (value) => {
+        const raw = String(value === null || value === undefined ? '' : value).trim();
+        const upper = raw.toUpperCase();
+        if (upper === 'TAB' || raw === '\t') return 'TAB';
+        if ([',', ';', '|'].includes(raw)) return raw;
+        return ',';
+      };
+      const normalizeEnum = (value, allowed, fallback) => {
+        const s = String(value === null || value === undefined ? '' : value).trim().toUpperCase();
+        return allowed.includes(s) ? s : fallback;
+      };
+      const normalizeAmountDecimals = (value) => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 2;
+        return Math.max(0, Math.min(4, Math.trunc(n)));
+      };
+      const normalizeColumns = (value) => {
+        const parsed = parseJsonish(value);
+        if (!Array.isArray(parsed)) return DEFAULT_COLUMNS.slice(0);
+        const out = [];
+        const seen = new Set();
+        for (const raw of parsed) {
+          const key = String(raw || '').trim();
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          out.push(key);
+        }
+        return out.length ? out : DEFAULT_COLUMNS.slice(0);
+      };
+
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=pay_export_csv_columns_json,pay_export_csv_format_json&limit=1`
+      );
+      const settingsRow = Array.isArray(rows) && rows[0] && typeof rows[0] === 'object' ? rows[0] : {};
+      const columns = normalizeColumns(settingsRow.pay_export_csv_columns_json);
+      const format = parseJsonish(settingsRow.pay_export_csv_format_json);
+      const formatObj = (format && typeof format === 'object' && !Array.isArray(format)) ? format : {};
+      const headersObj = (formatObj.headers && typeof formatObj.headers === 'object' && !Array.isArray(formatObj.headers)) ? formatObj.headers : {};
+      const headerOverrideKeys = columns.filter((key) => String(headersObj[key] || '').trim());
+
+      return {
+        columns,
+        format_summary: {
+          include_header: toBool(formatObj.include_header, true),
+          delimiter: normalizeDelimiter(formatObj.delimiter),
+          line_ending: normalizeEnum(formatObj.line_ending, ['LF', 'CRLF'], 'LF'),
+          quote_mode: normalizeEnum(formatObj.quote_mode, ['MINIMAL', 'ALL'], 'MINIMAL'),
+          bom: toBool(formatObj.bom, false),
+          sort_code_format: normalizeEnum(formatObj.sort_code_format, ['AS_STORED', 'DIGITS', 'HYPHENATED'], 'AS_STORED'),
+          account_number_format: normalizeEnum(formatObj.account_number_format, ['AS_STORED', 'DIGITS'], 'AS_STORED'),
+          amount_decimals: normalizeAmountDecimals(formatObj.amount_decimals),
+          empty_value: String(formatObj.empty_value === null || formatObj.empty_value === undefined ? '' : formatObj.empty_value),
+          header_override_keys: headerOverrideKeys
+        }
+      };
+    };
     const providerMeta = normalizeProvider(batchObj.rail_provider_snapshot || batchGet?.rail_provider_snapshot || null);
     if (!providerMeta.valid) return withCORS(env, req, badRequest(providerMeta.reason || 'UNKNOWN_RAIL_PROVIDER'));
 
@@ -24834,16 +24962,22 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       }
     }
 
-    const _scopeFilter = (transfers) => {
+    const _exportedTransferRowsFilter = (transfers) => {
       const rows = Array.isArray(transfers) ? transfers : [];
-      if (payChannelScope === 'ALL') return rows;
-      return rows.filter((row) => String(row?.pay_channel || '').trim().toUpperCase() === payChannelScope);
+      return rows.filter((row) => {
+        const rowStatus = String(row?.status || '').trim().toUpperCase();
+        const rowChannel = String(row?.pay_channel || '').trim().toUpperCase();
+        if (rowStatus !== 'PENDING') return false;
+        if (payChannelScope === 'ALL') return true;
+        return rowChannel === payChannelScope;
+      });
     };
 
+    const csvSettingsSummary = await loadCsvExportSettingsSummary();
     const batchGetAfter0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id });
     const batchGetAfter = unwrapRpc(batchGetAfter0, 'pay_batch_get');
     const batchAfterObj = (batchGetAfter && typeof batchGetAfter === 'object') ? (batchGetAfter.batch || {}) : {};
-    const exportedTransfers = _scopeFilter(batchGetAfter?.transfers);
+    const exportedTransfers = _exportedTransferRowsFilter(batchGetAfter?.transfers);
     const rowCount = exportedTransfers.length;
     const totalAmount = exportedTransfers.reduce((acc, row) => {
       const n = Number(row?.amount);
@@ -24861,12 +24995,13 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
       generated_at_utc: new Date().toISOString(),
       generated_by_user_id: String(user?.id || '').trim() || null,
       scope: payChannelScope,
+      requested_scope: requestedPayChannelScope,
       filename: `pay-batch-${id}.csv`,
       row_count: rowCount,
       total_amount: Number(totalAmount.toFixed(2)),
       transfer_hash: transferHash,
-      columns: null,
-      format_summary: null,
+      columns: csvSettingsSummary.columns,
+      format_summary: csvSettingsSummary.format_summary,
       provider_snapshot: batchAfterObj?.rail_provider_snapshot ?? batchGetAfter?.rail_provider_snapshot ?? null,
       rail_env_snapshot: batchAfterObj?.rail_env_snapshot ?? batchGetAfter?.rail_env_snapshot ?? null
     };
@@ -24890,6 +25025,9 @@ async function handleBankingPayBatchExportCsv(env, req, user, payBatchId) {
     return withCORS(env, req, jsonResponse(norm.status, norm.body));
   }
 }
+
+
+
 
 async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) {
   if (!user) return withCORS(env, req, unauthorized());
@@ -25284,7 +25422,6 @@ async function handleBankingPayBatchExportDetailCsv(env, req, user, payBatchId) 
 
 
 
-
 async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
   const id = String(payBatchId || '').trim();
   if (!id) return withCORS(env, req, badRequest('pay_batch_id is required'));
@@ -25371,7 +25508,14 @@ async function handleBankingPayBatchPoll(env, req, user, payBatchId) {
     } catch {}
 
     const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
-    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
+    const providerRaw = String(batchObj?.rail_provider_snapshot ?? batchPayload?.rail_provider_snapshot ?? '').trim().toUpperCase();
+    const provider = providerRaw === 'REV' ? 'REVOLUT' : providerRaw;
+    if (!provider) {
+      return withCORS(env, req, badRequest('MISSING_RAIL_PROVIDER'));
+    }
+    if (!['REVOLUT', 'CSV'].includes(provider)) {
+      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    }
     const transfers = (batchPayload && typeof batchPayload === 'object' && Array.isArray(batchPayload.transfers)) ? batchPayload.transfers : [];
 
     const hasPending = (transfers || []).some(t => String(t?.status || '').trim().toUpperCase() === 'PENDING');
