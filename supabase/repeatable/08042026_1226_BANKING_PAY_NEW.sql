@@ -31313,6 +31313,7 @@ BEGIN
 END;
 $function$;
 
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_prepare_draft(
   p_session_id uuid,
   p_actor_user_id uuid,
@@ -31343,6 +31344,7 @@ DECLARE
   v_stale_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_unresolved_selected_preview_row_count integer := 0;
   v_payee_blocked_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_payee_blocked_route_details_json jsonb := '[]'::jsonb;
   v_filter_candidate_id uuid := NULL::uuid;
   v_filter_client_id uuid := NULL::uuid;
   v_context_json jsonb := '{}'::jsonb;
@@ -31776,32 +31778,133 @@ BEGIN
       array_to_string(v_missing_manual_debt_template_source_candidate_ids, ',');
   END IF;
 
-  SELECT COALESCE(array_agg(blocked_rows.candidate_id ORDER BY blocked_rows.candidate_id), ARRAY[]::uuid[])
-  INTO v_payee_blocked_candidate_ids
-  FROM (
-    SELECT DISTINCT session_candidate.candidate_id
-    FROM public.banking_pay_workbench_session_candidate_state AS session_candidate
-    CROSS JOIN LATERAL jsonb_array_elements(
+  WITH required_payee_routes AS (
+    SELECT DISTINCT
+      selected_rows.candidate_id,
+      selected_rows.pay_channel,
       CASE
-        WHEN jsonb_typeof(session_candidate.effective_payees_json) = 'array' THEN COALESCE(session_candidate.effective_payees_json, '[]'::jsonb)
-        ELSE '[]'::jsonb
-      END
-    ) AS payee_element(value)
-    WHERE session_candidate.session_id = p_session_id
-      AND session_candidate.candidate_id = ANY(v_touched_candidate_ids)
-      AND session_candidate.status = 'READY'
-      AND jsonb_typeof(payee_element.value) = 'object'
-      AND EXISTS (
-        SELECT 1
-        FROM jsonb_array_elements_text(
+        WHEN selected_rows.pay_channel = 'PAYE' THEN 'CANDIDATE'
+        WHEN selected_rows.pay_channel = 'UMBRELLA' THEN 'UMBRELLA'
+        ELSE NULL::text
+      END AS required_payee_entity_kind,
+      CASE
+        WHEN selected_rows.pay_channel = 'PAYE' THEN selected_rows.candidate_id
+        WHEN selected_rows.pay_channel = 'UMBRELLA' THEN route_candidate.umbrella_id
+        ELSE NULL::uuid
+      END AS required_payee_entity_id
+    FROM pg_temp.tmp_pay_workbench_prepare_selected_rows AS selected_rows
+    JOIN public.candidates AS route_candidate
+      ON route_candidate.id = selected_rows.candidate_id
+    JOIN public.banking_pay_workbench_session_candidate_state AS session_candidate
+      ON session_candidate.session_id = p_session_id
+     AND session_candidate.candidate_id = selected_rows.candidate_id
+     AND session_candidate.status = 'READY'
+    WHERE selected_rows.pay_channel IN ('PAYE', 'UMBRELLA')
+  ),
+  route_payee_matches AS (
+    SELECT
+      required_routes.candidate_id,
+      required_routes.pay_channel,
+      required_routes.required_payee_entity_kind,
+      required_routes.required_payee_entity_id,
+      matched_payee.payee_json
+    FROM required_payee_routes AS required_routes
+    JOIN public.banking_pay_workbench_session_candidate_state AS session_candidate
+      ON session_candidate.session_id = p_session_id
+     AND session_candidate.candidate_id = required_routes.candidate_id
+     AND session_candidate.status = 'READY'
+    LEFT JOIN LATERAL (
+      SELECT payee_element.value AS payee_json
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(session_candidate.effective_payees_json) = 'array' THEN COALESCE(session_candidate.effective_payees_json, '[]'::jsonb)
+          ELSE '[]'::jsonb
+        END
+      ) AS payee_element(value)
+      WHERE jsonb_typeof(payee_element.value) = 'object'
+        AND UPPER(BTRIM(COALESCE(payee_element.value->>'payee_entity_kind', ''))) = required_routes.required_payee_entity_kind
+        AND (
           CASE
-            WHEN jsonb_typeof(payee_element.value->'blockers') = 'array' THEN COALESCE(payee_element.value->'blockers', '[]'::jsonb)
+            WHEN BTRIM(COALESCE(payee_element.value->>'payee_entity_id', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN BTRIM(COALESCE(payee_element.value->>'payee_entity_id', ''))::uuid
+            ELSE NULL::uuid
+          END
+        ) IS NOT DISTINCT FROM required_routes.required_payee_entity_id
+      ORDER BY
+        CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(payee_element.value->'blockers') = 'array' THEN COALESCE(payee_element.value->'blockers', '[]'::jsonb)
+                ELSE '[]'::jsonb
+              END
+            ) AS blocker_element(value)
+            WHERE UPPER(BTRIM(blocker_element.value)) IN ('BLOCKED_NAME_CHECK', 'BLOCKED_NO_PAYEE_MAP', 'BLOCKED_BANK_DETAILS')
+          ) THEN 1
+          ELSE 0
+        END,
+        BTRIM(COALESCE(payee_element.value->>'payee_name', '')),
+        BTRIM(COALESCE(payee_element.value->>'payee_entity_id', ''))
+      LIMIT 1
+    ) AS matched_payee
+      ON true
+  ),
+  failed_payee_routes AS (
+    SELECT
+      route_matches.candidate_id,
+      route_matches.pay_channel,
+      route_matches.required_payee_entity_kind,
+      route_matches.required_payee_entity_id,
+      route_matches.payee_json,
+      CASE
+        WHEN route_matches.required_payee_entity_kind IS NULL THEN 'REQUIRED_PAYEE_ROUTE_KIND_MISSING'
+        WHEN route_matches.required_payee_entity_id IS NULL THEN 'REQUIRED_PAYEE_ROUTE_ID_MISSING'
+        WHEN route_matches.payee_json IS NULL THEN 'REQUIRED_PAYEE_ROUTE_NOT_FOUND'
+        WHEN EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(
+            CASE
+              WHEN jsonb_typeof(route_matches.payee_json->'blockers') = 'array' THEN COALESCE(route_matches.payee_json->'blockers', '[]'::jsonb)
+              ELSE '[]'::jsonb
+            END
+          ) AS blocker_element(value)
+          WHERE UPPER(BTRIM(blocker_element.value)) IN ('BLOCKED_NAME_CHECK', 'BLOCKED_NO_PAYEE_MAP', 'BLOCKED_BANK_DETAILS')
+        ) THEN 'REQUIRED_PAYEE_ROUTE_BLOCKED'
+        ELSE NULL::text
+      END AS failure_reason
+    FROM route_payee_matches AS route_matches
+  )
+  SELECT
+    COALESCE(array_agg(DISTINCT failed_routes.candidate_id ORDER BY failed_routes.candidate_id), ARRAY[]::uuid[]),
+    COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'candidate_id', failed_routes.candidate_id::text,
+          'selected_pay_channel', failed_routes.pay_channel,
+          'required_payee_entity_kind', failed_routes.required_payee_entity_kind,
+          'required_payee_entity_id', CASE WHEN failed_routes.required_payee_entity_id IS NULL THEN NULL ELSE failed_routes.required_payee_entity_id::text END,
+          'failure_reason', failed_routes.failure_reason,
+          'matched_payee_entity_kind', CASE WHEN failed_routes.payee_json IS NULL THEN NULL ELSE failed_routes.payee_json->>'payee_entity_kind' END,
+          'matched_payee_entity_id', CASE WHEN failed_routes.payee_json IS NULL THEN NULL ELSE failed_routes.payee_json->>'payee_entity_id' END,
+          'matched_payee_name', CASE WHEN failed_routes.payee_json IS NULL THEN NULL ELSE failed_routes.payee_json->>'payee_name' END,
+          'matched_blockers', CASE
+            WHEN failed_routes.payee_json IS NULL THEN '[]'::jsonb
+            WHEN jsonb_typeof(failed_routes.payee_json->'blockers') = 'array' THEN COALESCE(failed_routes.payee_json->'blockers', '[]'::jsonb)
             ELSE '[]'::jsonb
           END
-        ) AS blocker_element(value)
-        WHERE UPPER(BTRIM(blocker_element.value)) IN ('BLOCKED_NAME_CHECK', 'BLOCKED_NO_PAYEE_MAP', 'BLOCKED_BANK_DETAILS')
-      )
-  ) AS blocked_rows;
+        )
+        ORDER BY
+          failed_routes.candidate_id,
+          failed_routes.pay_channel,
+          failed_routes.required_payee_entity_kind,
+          failed_routes.required_payee_entity_id::text
+      ),
+      '[]'::jsonb
+    )
+  INTO v_payee_blocked_candidate_ids, v_payee_blocked_route_details_json
+  FROM failed_payee_routes AS failed_routes
+  WHERE failed_routes.failure_reason IS NOT NULL;
 
   IF COALESCE(array_length(v_payee_blocked_candidate_ids, 1), 0) > 0 THEN
     FOR v_filter_candidate_id IN
@@ -31818,7 +31921,8 @@ BEGIN
         p_payload_json => jsonb_build_object(
           'session_id', p_session_id::text,
           'candidate_id', v_filter_candidate_id::text,
-          'requested_scope', v_scope_filter
+          'requested_scope', v_scope_filter,
+          'selected_route_failures', COALESCE(v_payee_blocked_route_details_json, '[]'::jsonb)
         )
       )
       INTO v_enqueue_json
@@ -31828,7 +31932,15 @@ BEGIN
       LIMIT 1;
     END LOOP;
 
-    RAISE EXCEPTION 'Touched candidates are not payee-ready and must be refreshed before draft creation: %', array_to_string(v_payee_blocked_candidate_ids, ',');
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_WORKBENCH_PREPARE_DRAFT',
+      'code', 'SELECTED_PAYEE_ROUTE_NOT_READY',
+      'message', 'Selected payment routes are not payee-ready and must be refreshed before draft creation.',
+      'session_id', p_session_id::text,
+      'requested_scope', v_scope_filter,
+      'candidate_ids', to_jsonb(COALESCE(v_payee_blocked_candidate_ids, ARRAY[]::uuid[])),
+      'route_failures', COALESCE(v_payee_blocked_route_details_json, '[]'::jsonb)
+    )::text;
   END IF;
 
   IF BTRIM(COALESCE(v_session_row.filters_json->>'candidate_id', v_session_row.filters_json->>'candidateId', '')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -32462,9 +32574,6 @@ BEGIN
   );
 END;
 $$;
-
-
-
 
 
 
