@@ -21653,6 +21653,15 @@ $$;
 -- =========================================================
 
 
+
+
+
+
+
+-- =========================================================
+-- A4.9 pay_batches_list / pay_batch_get
+-- =========================================================
+
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -21691,6 +21700,24 @@ declare
   v_auth jsonb := null;
 
   v_batch_kind_fixed text := null;
+
+  v_provider_normalized text := null;
+  v_provider_known boolean := false;
+  v_execution_commit_state text := 'NOT_SUBMITTED';
+  v_batch_status_upper text := null;
+  v_has_external_submission_evidence boolean := false;
+  v_current_transfer_hash text := null;
+  v_bank_csv_export_hash text := null;
+  v_has_cloudtms_csv_export boolean := false;
+  v_csv_export_matches_current_transfers boolean := false;
+  v_can_create_bank_csv_file boolean := false;
+  v_can_start_standard_execution boolean := false;
+  v_can_start_csv_settlement boolean := false;
+  v_can_start_external_settlement boolean := false;
+  v_execution_intent_json jsonb := '{}'::jsonb;
+  v_active_auth_execution_intent_json jsonb := null;
+  v_execution_mode_pending text := null;
+  v_suppress_remittances_pending boolean := false;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_batch_id is required';
@@ -21708,6 +21735,23 @@ begin
   end if;
 
   v_batch_kind_fixed := upper(btrim(coalesce(v_batch.batch_kind_fixed::text,'')));
+  v_batch_status_upper := upper(btrim(coalesce(v_batch.status::text, '')));
+  v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state::text, 'NOT_SUBMITTED')));
+  if v_execution_commit_state not in ('NOT_SUBMITTED','SUBMITTED_NOT_COMMITTED','COMMITTED') then
+    v_execution_commit_state := 'NOT_SUBMITTED';
+  end if;
+
+  v_provider_normalized := upper(btrim(coalesce(v_batch.rail_provider_snapshot::text, '')));
+  if v_provider_normalized = 'REV' then
+    v_provider_normalized := 'REVOLUT';
+  end if;
+  v_provider_known := (v_provider_normalized in ('REVOLUT','CSV'));
+
+  if v_batch.execution_intent_json is not null and jsonb_typeof(v_batch.execution_intent_json) = 'object' then
+    v_execution_intent_json := v_batch.execution_intent_json;
+  else
+    v_execution_intent_json := '{}'::jsonb;
+  end if;
 
   -- ✅ NEW: derive batch kind + channels from items (excludes DEBT_CREATED)
   select
@@ -21758,7 +21802,10 @@ begin
     'approved_by', '[]'::jsonb,
     'invited_to', '[]'::jsonb,
     'golden_key_used', false,
-    'golden_key_user_id', null
+    'golden_key_user_id', null,
+    'execution_intent_json', null,
+    'execution_mode', null,
+    'suppress_remittances', false
   );
 
   select
@@ -21766,7 +21813,8 @@ begin
     pbar0.state as auth_state,
     pbar0.required_quantity as required_quantity,
     pbar0.golden_key_used as golden_key_used,
-    pbar0.golden_key_user_id as golden_key_user_id
+    pbar0.golden_key_user_id as golden_key_user_id,
+    pbar0.execution_intent_json as execution_intent_json
   into v_ar
   from public.pay_batch_auth_requests pbar0
   where pbar0.pay_batch_id = p_pay_batch_id
@@ -21775,6 +21823,12 @@ begin
   limit 1;
 
   if v_ar.auth_request_id is not null then
+    if v_ar.execution_intent_json is not null and jsonb_typeof(v_ar.execution_intent_json) = 'object' then
+      v_active_auth_execution_intent_json := v_ar.execution_intent_json;
+    else
+      v_active_auth_execution_intent_json := null;
+    end if;
+
     select count(*)::int
     into v_auth_approved_count
     from public.pay_batch_auth_actions pbaa0
@@ -21827,7 +21881,10 @@ begin
       'approved_by', v_auth_approved_by,
       'invited_to', v_auth_invited_to,
       'golden_key_used', coalesce(v_ar.golden_key_used,false),
-      'golden_key_user_id', case when v_ar.golden_key_user_id is null then null else v_ar.golden_key_user_id::text end
+      'golden_key_user_id', case when v_ar.golden_key_user_id is null then null else v_ar.golden_key_user_id::text end,
+      'execution_intent_json', v_active_auth_execution_intent_json,
+      'execution_mode', case when v_active_auth_execution_intent_json is null then null else v_active_auth_execution_intent_json->>'execution_mode' end,
+      'suppress_remittances', lower(btrim(coalesce(v_active_auth_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on')
     );
   end if;
 
@@ -21959,7 +22016,134 @@ begin
   from public.pay_bank_transfers pbt
   where pbt.pay_batch_id = p_pay_batch_id;
 
-  -- Items unchanged (still returned for audit/debug and UI fallback)
+  select md5(coalesce(jsonb_agg(
+    jsonb_build_object(
+      'id', transfer_hash_rows.id,
+      'candidate_id', transfer_hash_rows.candidate_id,
+      'umbrella_id', transfer_hash_rows.umbrella_id,
+      'pay_channel', transfer_hash_rows.pay_channel,
+      'amount', transfer_hash_rows.amount,
+      'currency', transfer_hash_rows.currency,
+      'payment_reference', transfer_hash_rows.payment_reference,
+      'payee_name', transfer_hash_rows.payee_name,
+      'sort_code_digits', transfer_hash_rows.sort_code_digits,
+      'account_number_digits', transfer_hash_rows.account_number_digits,
+      'account_type', transfer_hash_rows.account_type,
+      'bank_details_hash_snapshot', transfer_hash_rows.bank_details_hash_snapshot,
+      'payee_entity_kind', transfer_hash_rows.payee_entity_kind,
+      'payee_entity_id', transfer_hash_rows.payee_entity_id,
+      'transfer_group_key', transfer_hash_rows.transfer_group_key
+    )
+    order by transfer_hash_rows.id
+  )::text, '[]'))
+  into v_current_transfer_hash
+  from (
+    select
+      pbt_hash.id::text as id,
+      case when pbt_hash.candidate_id is null then null else pbt_hash.candidate_id::text end as candidate_id,
+      case when pbt_hash.umbrella_id is null then null else pbt_hash.umbrella_id::text end as umbrella_id,
+      pbt_hash.pay_channel,
+      round(pbt_hash.amount, 2) as amount,
+      pbt_hash.currency,
+      pbt_hash.payment_reference,
+      pbt_hash.payee_name,
+      regexp_replace(coalesce(pbt_hash.sort_code,''), '[^0-9]', '', 'g') as sort_code_digits,
+      regexp_replace(coalesce(pbt_hash.account_number,''), '[^0-9]', '', 'g') as account_number_digits,
+      pbt_hash.account_type,
+      pbt_hash.bank_details_hash_snapshot,
+      pbt_hash.payee_entity_kind,
+      case when pbt_hash.payee_entity_id is null then null else pbt_hash.payee_entity_id::text end as payee_entity_id,
+      pbt_hash.transfer_group_key
+    from public.pay_bank_transfers pbt_hash
+    where pbt_hash.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(pbt_hash.status,'')) = 'PENDING'
+    order by pbt_hash.id
+  ) transfer_hash_rows;
+
+  v_bank_csv_export_hash := nullif(btrim(coalesce(v_batch.bank_csv_export_json->>'transfer_hash', '')), '');
+  v_has_cloudtms_csv_export := (
+    v_batch.bank_csv_export_json is not null
+    and jsonb_typeof(v_batch.bank_csv_export_json) = 'object'
+    and v_bank_csv_export_hash is not null
+  );
+  v_csv_export_matches_current_transfers := (
+    v_has_cloudtms_csv_export = true
+    and v_current_transfer_hash is not null
+    and v_bank_csv_export_hash = v_current_transfer_hash
+  );
+
+  select exists(
+    select 1
+    from public.pay_bank_transfers pbt_ext
+    where pbt_ext.pay_batch_id = p_pay_batch_id
+      and upper(coalesce(pbt_ext.status,'')) <> 'BLOCKED'
+      and (
+        nullif(btrim(coalesce(pbt_ext.rail_tx_id,'')), '') is not null
+        or upper(coalesce(pbt_ext.rail_state,'')) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'submitted','false'))) in ('true','1','yes','y','on')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'queued','false'))) in ('true','1','yes','y','on')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'accepted','false'))) in ('true','1','yes','y','on')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'sent','false'))) in ('true','1','yes','y','on')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'processing','false'))) in ('true','1','yes','y','on')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'completed','false'))) in ('true','1','yes','y','on')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'committed','false'))) in ('true','1','yes','y','on')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'settled','false'))) in ('true','1','yes','y','on')
+        or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'paid','false'))) in ('true','1','yes','y','on')
+        or coalesce(
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_submission_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'submission_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'external_transfer_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_payment_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'payment_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'external_payment_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'transaction_id','')), ''),
+          nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'id','')), '')
+        ) is not null
+      )
+  )
+  into v_has_external_submission_evidence;
+
+  if v_active_auth_execution_intent_json is not null then
+    v_execution_mode_pending := nullif(btrim(coalesce(v_active_auth_execution_intent_json->>'execution_mode','')), '');
+    v_suppress_remittances_pending := lower(btrim(coalesce(v_active_auth_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on');
+  elsif v_execution_intent_json is not null and jsonb_typeof(v_execution_intent_json) = 'object' then
+    v_execution_mode_pending := nullif(btrim(coalesce(v_execution_intent_json->>'execution_mode','')), '');
+    v_suppress_remittances_pending := lower(btrim(coalesce(v_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on');
+  else
+    v_execution_mode_pending := null;
+    v_suppress_remittances_pending := false;
+  end if;
+
+  v_can_create_bank_csv_file := (
+    v_provider_known = true
+    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
+    and v_execution_commit_state <> 'COMMITTED'
+  );
+  v_can_start_standard_execution := (
+    v_provider_known = true
+    and v_provider_normalized <> 'CSV'
+    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
+    and v_execution_commit_state = 'NOT_SUBMITTED'
+    and v_has_external_submission_evidence = false
+  );
+  v_can_start_csv_settlement := (
+    v_provider_known = true
+    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
+    and v_execution_commit_state = 'NOT_SUBMITTED'
+    and v_has_external_submission_evidence = false
+    and v_has_cloudtms_csv_export = true
+    and v_csv_export_matches_current_transfers = true
+  );
+  v_can_start_external_settlement := (
+    v_provider_known = true
+    and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
+    and v_execution_commit_state = 'NOT_SUBMITTED'
+    and v_has_external_submission_evidence = false
+  );
+
+  -- Items returned for audit/debug and UI fallback
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -23365,6 +23549,20 @@ begin
   return jsonb_build_object(
     'ok', true,
 
+    'bank_csv_export_json', v_batch.bank_csv_export_json,
+    'execution_intent_json', v_execution_intent_json,
+    'settlement_confirmation_json', v_batch.settlement_confirmation_json,
+    'can_create_bank_csv_file', v_can_create_bank_csv_file,
+    'can_start_standard_execution', v_can_start_standard_execution,
+    'can_start_csv_settlement', v_can_start_csv_settlement,
+    'can_start_external_settlement', v_can_start_external_settlement,
+    'has_cloudtms_csv_export', v_has_cloudtms_csv_export,
+    'csv_export_matches_current_transfers', v_csv_export_matches_current_transfers,
+    'has_external_submission_evidence', v_has_external_submission_evidence,
+    'execution_mode_pending', v_execution_mode_pending,
+    'suppress_remittances_pending', v_suppress_remittances_pending,
+    'current_transfer_hash', v_current_transfer_hash,
+
     -- ✅ NEW: batch kind + channels for UI
     'batch_kind', v_batch_kind,
     'batch_kind_fixed', case when v_batch.batch_kind_fixed is null then null else v_batch.batch_kind_fixed end,
@@ -23391,6 +23589,19 @@ begin
 
     'batch', jsonb_build_object(
       'id', v_batch.id::text,
+      'bank_csv_export_json', v_batch.bank_csv_export_json,
+      'execution_intent_json', v_execution_intent_json,
+      'settlement_confirmation_json', v_batch.settlement_confirmation_json,
+      'can_create_bank_csv_file', v_can_create_bank_csv_file,
+      'can_start_standard_execution', v_can_start_standard_execution,
+      'can_start_csv_settlement', v_can_start_csv_settlement,
+      'can_start_external_settlement', v_can_start_external_settlement,
+      'has_cloudtms_csv_export', v_has_cloudtms_csv_export,
+      'csv_export_matches_current_transfers', v_csv_export_matches_current_transfers,
+      'has_external_submission_evidence', v_has_external_submission_evidence,
+      'execution_mode_pending', v_execution_mode_pending,
+      'suppress_remittances_pending', v_suppress_remittances_pending,
+      'current_transfer_hash', v_current_transfer_hash,
       'pay_date', v_batch.pay_date::text,
       'authoritative_payment_date', case when v_batch.authoritative_payment_date is null then null else v_batch.authoritative_payment_date::text end,
       'authoritative_payment_date_source', v_batch.authoritative_payment_date_source,
@@ -23437,18 +23648,6 @@ begin
   );
 end;
 $$;
-
-
-
-
-
-
-
-
--- =========================================================
--- A4.9 pay_batches_list / pay_batch_get
--- =========================================================
-
 
 
 
