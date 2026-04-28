@@ -12235,31 +12235,15 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
   try { body = await parseJSONBody(req); } catch { return withCORS(env, req, badRequest('Invalid JSON')); }
 
   const scope = String(body?.scope ?? body?.pay_channel_scope ?? 'ALL').trim().toUpperCase();
-  if (!['ALL', 'PAYE', 'UMBRELLA'].includes(scope)) {
-    return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
+  if (!['ALL', 'PAYE', 'UMBRELLA'].includes(scope)) return withCORS(env, req, badRequest('Invalid scope (ALL|PAYE|UMBRELLA)'));
+  const authRequestId = String(body?.auth_request_id ?? '').trim();
+  if (!authRequestId) {
+    return withCORS(env, req, new Response(JSON.stringify({
+      error: 'USE_EXECUTE_MODAL_SETTLEMENT',
+      message: 'Use execute-payment modal authorisation before manual settlement.',
+      error_code: 'USE_EXECUTE_MODAL_SETTLEMENT'
+    }), { status: 409, headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
   }
-
-  const bankConfirmRef = String(body?.bank_confirm_ref ?? body?.bank_confirm_code ?? body?.bank_reference ?? '').trim();
-
-  const paymentDateRaw = String(
-    body?.payment_date ?? body?.paymentDate ?? body?.paid_date ?? body?.paidDate ?? ''
-  ).trim();
-
-  const parseIsoOrUkDateToIso = (raw) => {
-    const s = String(raw || '').trim();
-    if (!s) return null;
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) {
-      const dd = m[1], mm = m[2], yyyy = m[3];
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    return null;
-  };
-
-  const paymentDateIso = paymentDateRaw ? parseIsoOrUkDateToIso(paymentDateRaw) : null;
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -12354,69 +12338,35 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
       }
     } catch {}
 
-    const batchObj = (batchPayload && typeof batchPayload === 'object') ? (batchPayload.batch || null) : null;
-    const transfers = (batchPayload && typeof batchPayload === 'object' && Array.isArray(batchPayload.transfers)) ? batchPayload.transfers : [];
-
-    const pendingInScope = (transfers || []).filter(t => {
-      const st = String(t?.status || '').trim().toUpperCase();
-      if (st !== 'PENDING') return false;
-      const ch = String(t?.pay_channel || '').trim().toUpperCase();
-      if (!ch) return false;
-      return (scope === 'ALL') ? true : (ch === scope);
-    });
-
-    if (!pendingInScope.length) {
-      const settleOnlyRes0 = await sbRpc(env, 'pay_settle_rail', {
-        p_pay_batch_id: String(payBatchId),
-        p_settlement_json: [],
-        p_actor_user_id: user.id
-      });
-      const settleOnlyRes = unwrapRpc(settleOnlyRes0, 'pay_settle_rail');
-
-      const afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
-      const afterGet = unwrapRpc(afterGet0, 'pay_batch_get');
-      const executionFields = _extractExecutionFields(afterGet);
-
-      return withCORS(env, req, ok({
-        ...((settleOnlyRes && typeof settleOnlyRes === 'object') ? settleOnlyRes : {}),
-        execution_commit_state: executionFields.execution_commit_state,
-        execution_commit_ref: executionFields.execution_commit_ref,
-        execution_committed_at_utc: executionFields.execution_committed_at_utc,
-        batch_get: afterGet
+    const authObj = (batchPayload && typeof batchPayload === 'object' && batchPayload.auth && typeof batchPayload.auth === 'object')
+      ? batchPayload.auth
+      : null;
+    const authState = String(authObj?.auth_state || authObj?.state || '').trim().toUpperCase();
+    const activeAuthRequestId = String(authObj?.auth_request_id || '').trim();
+    const authIntent = (authObj && typeof authObj.execution_intent_json === 'object' && authObj.execution_intent_json)
+      ? authObj.execution_intent_json
+      : null;
+    const batchIntent = (batchPayload && typeof batchPayload === 'object' && batchPayload.execution_intent_json && typeof batchPayload.execution_intent_json === 'object')
+      ? batchPayload.execution_intent_json
+      : null;
+    const frozenIntent = authIntent || batchIntent;
+    const frozenMode = String(frozenIntent?.execution_mode || '').trim().toUpperCase();
+    if (!activeAuthRequestId || !authRequestId || activeAuthRequestId !== authRequestId || authState !== 'AUTHORISED' || !frozenIntent || !['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(frozenMode)) {
+      return withCORS(env, req, jsonResponse(409, {
+        error: 'USE_EXECUTE_MODAL_SETTLEMENT',
+        message: 'Use execute-payment modal authorisation before manual settlement.',
+        error_code: 'USE_EXECUTE_MODAL_SETTLEMENT'
       }));
     }
 
-    if (!bankConfirmRef) {
-      return withCORS(env, req, badRequest('bank_confirm_ref is required'));
-    }
-    if (!paymentDateIso) {
-      return withCORS(env, req, badRequest('payment_date is required (YYYY-MM-DD or DD/MM/YYYY)'));
-    }
-
-    const provider = String(batchObj?.rail_provider_snapshot || 'CSV').toUpperCase();
-
-    let out = null;
-
-    if (provider === 'CSV') {
-      const out0 = await sbRpc(env, 'pay_settle_manual_confirm', {
-        p_pay_batch_id: String(payBatchId),
-        p_scope: scope,
-        p_bank_confirm_ref: bankConfirmRef,
-        p_payment_date: paymentDateIso,
-        p_actor_user_id: user.id
-      });
-      out = unwrapRpc(out0, 'pay_settle_manual_confirm');
-    } else {
-      const adapter = getRailAdapter(provider);
-      if (!adapter || typeof adapter.confirmManual !== 'function') {
-        return withCORS(env, req, badRequest('MANUAL_CONFIRM_NOT_SUPPORTED_FOR_THIS_RAIL'));
-      }
-
-      out = await adapter.confirmManual(env, String(payBatchId), {
-        scope,
-        bank_confirm_ref: bankConfirmRef,
-        payment_date: paymentDateIso
-      }, user.id);
+    const finalised = await finaliseAuthorisedBankingPaySettlement(env, req, user, String(payBatchId), authRequestId, { pay_channel_scope: scope });
+    if (!finalised || finalised.ok !== true) {
+      const code = String(finalised?.error_code || 'USE_EXECUTE_MODAL_SETTLEMENT').toUpperCase();
+      return withCORS(env, req, jsonResponse(409, {
+        error: String(finalised?.message || 'Settlement not authorised via execute modal.'),
+        message: String(finalised?.message || 'Settlement not authorised via execute modal.'),
+        error_code: code
+      }));
     }
 
     const afterGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: String(payBatchId) });
@@ -12424,7 +12374,7 @@ async function handleBankingPayBatchManualConfirm(env, req, payBatchId) {
     const executionFields = _extractExecutionFields(afterGet);
 
     return withCORS(env, req, ok({
-      ...((out && typeof out === 'object') ? out : {}),
+      finalisation: finalised,
       execution_commit_state: executionFields.execution_commit_state,
       execution_commit_ref: executionFields.execution_commit_ref,
       execution_committed_at_utc: executionFields.execution_committed_at_utc,
@@ -19959,30 +19909,24 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
 
   let body = null;
   try { body = await parseJSONBody(req); } catch { body = null; }
-  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) {
-    return withCORS(env, req, badRequest('Invalid JSON'));
-  }
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) return withCORS(env, req, badRequest('Invalid JSON'));
   body = body || {};
 
   const scopeRaw = String(body.pay_channel_scope || body.scope || 'ALL').trim().toUpperCase();
   const payChannelScope = (scopeRaw === 'PAYE' || scopeRaw === 'UMBRELLA' || scopeRaw === 'ALL') ? scopeRaw : 'ALL';
-
   const scheduleKindRaw0 = String(body.schedule_kind || body.scheduleKind || 'IMMEDIATE').trim().toUpperCase();
   const scheduleKindRaw = (scheduleKindRaw0 === 'AT_TIME') ? 'SCHEDULED' : scheduleKindRaw0;
   const scheduleKind = (scheduleKindRaw === 'IMMEDIATE' || scheduleKindRaw === 'SCHEDULED') ? scheduleKindRaw : null;
-
   const scheduledAtUtcRaw =
     (body.scheduled_at_utc === null || body.scheduled_at_utc === undefined)
       ? null
       : String(body.scheduled_at_utc).trim();
   const scheduledAtUtc = scheduledAtUtcRaw ? scheduledAtUtcRaw : null;
-
   const fundingAccountRefRaw =
     (body.funding_account_ref === null || body.funding_account_ref === undefined)
       ? null
       : String(body.funding_account_ref).trim();
   const fundingAccountRef = fundingAccountRefRaw ? fundingAccountRefRaw : null;
-
   let warningHoursJson = null;
   if (body.warning_hours_json === null || body.warning_hours_json === undefined) {
     warningHoursJson = null;
@@ -19991,20 +19935,46 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
   } else {
     return withCORS(env, req, badRequest('warning_hours_json must be an array (e.g. [24,12]) or null'));
   }
-
   const actorIntentRaw = String(body.actor_intent || body.actorIntent || '').trim().toUpperCase();
   const actorIntent = (actorIntentRaw === 'USE_GOLDEN_KEY') ? 'USE_GOLDEN_KEY' : null;
+  const executionModeRaw = String(body.execution_mode || '').trim().toUpperCase();
+  const executionMode = executionModeRaw || 'STANDARD_BANK';
+  if (!['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode)) {
+    return withCORS(env, req, badRequest('execution_mode must be STANDARD_BANK, CSV_SETTLEMENT or EXTERNAL_SETTLEMENT'));
+  }
+  const paymentDate = (() => {
+    const raw = body.payment_date ?? body.paymentDate ?? null;
+    if (raw === null || raw === undefined) return null;
+    const v = String(raw).trim();
+    return v || null;
+  })();
+  const suppressRemittances = (() => {
+    const v = body.suppress_remittances;
+    if (typeof v === 'boolean') return v;
+    const s = String(v ?? '').trim().toLowerCase();
+    return ['1', 'true', 't', 'yes', 'y', 'on'].includes(s);
+  })();
+  const suppressRemittancesConfirmed = (() => {
+    const v = body.suppress_remittances_confirmed;
+    if (typeof v === 'boolean') return v;
+    const s = String(v ?? '').trim().toLowerCase();
+    return ['1', 'true', 't', 'yes', 'y', 'on'].includes(s);
+  })();
+  const csvUploadedConfirmed = (() => {
+    const v = body.csv_uploaded_confirmed;
+    if (typeof v === 'boolean') return v;
+    const s = String(v ?? '').trim().toLowerCase();
+    return ['1', 'true', 't', 'yes', 'y', 'on'].includes(s);
+  })();
+  const csvBankConfirmRef = String(body.csv_bank_confirm_ref ?? '').trim() || null;
+  const externalSettlementComment = String(body.external_settlement_comment ?? '').trim() || null;
   const reauthToken = String(body.reauth_token || '').trim();
-
   if (!scheduleKind) {
     return withCORS(env, req, badRequest('schedule_kind must be IMMEDIATE or SCHEDULED (legacy AT_TIME accepted)'));
   }
   if (scheduleKind === 'SCHEDULED' && !scheduledAtUtc) {
     return withCORS(env, req, badRequest('scheduled_at_utc is required when schedule_kind=SCHEDULED (legacy AT_TIME)'));
   }
-
-  const reauthCheck = await verifyPaymentScheduleReauth(env, user, reauthToken);
-  if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
 
   const unwrapRpc = (rpcRes, key) => {
     let payload = rpcRes;
@@ -20156,44 +20126,18 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     };
   };
 
-  const buildCommunicationsSummary = (res) => {
-    const communicationMode = String(res?.communication_mode || 'NONE').trim().toUpperCase() || 'NONE';
-
-    const remittanceResult = (res && typeof res === 'object' && res.remittance_result && typeof res.remittance_result === 'object')
-      ? res.remittance_result
-      : null;
-
-    const payoutNoticeResult = (res && typeof res === 'object' && res.payout_notice_result && typeof res.payout_notice_result === 'object')
-      ? res.payout_notice_result
-      : null;
-
-    const remittanceQueuedCount = Number(remittanceResult?.queued_count || 0);
-    const remittanceSkippedCount = Number(remittanceResult?.skipped_count || 0);
-    const payoutNoticeQueuedCount = Number(payoutNoticeResult?.queued_count || 0);
-    const payoutNoticeSkippedCount = Number(payoutNoticeResult?.skipped_count || 0);
-
-    const queuedCount = Number(res?.queued_count || (remittanceQueuedCount + payoutNoticeQueuedCount) || 0);
-    const skippedCount = Number(res?.skipped_count || (remittanceSkippedCount + payoutNoticeSkippedCount) || 0);
-
-    return {
-      communication_mode: communicationMode,
-      sent_or_queued: queuedCount > 0,
-      queued_count: queuedCount,
-      skipped_count: skippedCount,
-      remittances: {
-        trigger_status: String(remittanceResult?.trigger_status || '').trim() || null,
-        queued_count: remittanceQueuedCount,
-        skipped_count: remittanceSkippedCount
-      },
-      payout_notices: {
-        trigger_status: String(payoutNoticeResult?.trigger_status || '').trim() || null,
-        queued_count: payoutNoticeQueuedCount,
-        skipped_count: payoutNoticeSkippedCount
-      }
-    };
-  };
-
   try {
+    const reauthCheck = await verifyPaymentScheduleReauth(env, user, reauthToken);
+    if (!reauthCheck.ok) return withCORS(env, req, reauthCheck.response);
+
+    if (suppressRemittances && !suppressRemittancesConfirmed) {
+      return withCORS(env, req, jsonResponse(400, {
+        error: 'SUPPRESS_REMITTANCES_CONFIRM_REQUIRED',
+        message: 'suppress_remittances_confirmed must be true when suppress_remittances is true.',
+        error_code: 'SUPPRESS_REMITTANCES_CONFIRM_REQUIRED'
+      }));
+    }
+
     try {
       const enc = encodeURIComponent;
       const { rows: urows } = await sbFetch(
@@ -20221,44 +20165,49 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
     const gateBatch = (gateGet && typeof gateGet === 'object') ? (gateGet.batch || null) : null;
     const gateStatus = String(gateBatch?.status || '').trim().toUpperCase();
     const gateExecutionState = String(gateBatch?.execution_commit_state || gateGet?.execution_commit_state || '').trim().toUpperCase();
-    const gateAllowed =
-      gateStatus === 'DRAFT'
-      || gateStatus === 'DRAFT_CREATED'
-      || gateStatus === 'READY'
-      || gateStatus === 'WAITING_BANK_CONFIRM'
-      || gateStatus === 'PARTIAL';
-    if (!gateAllowed) {
-      const msg = `EXECUTE_NOT_ALLOWED status=${gateStatus || '—'}`;
-      return withCORS(env, req, jsonResponse(400, { error: msg, message: msg, error_code: 'EXECUTE_NOT_ALLOWED' }));
+    if (['COMMITTED', 'CANCELLED', 'SETTLED', 'PAID'].includes(gateStatus) || ['COMMITTED', 'CANCELLED'].includes(gateExecutionState)) {
+      return withCORS(env, req, jsonResponse(409, { error: 'EXECUTE_NOT_ALLOWED', message: 'Batch is not executable.', error_code: 'EXECUTE_NOT_ALLOWED' }));
     }
     if (gateExecutionState === 'SUBMITTED_NOT_COMMITTED') {
-      const msg = `EXECUTE_NOT_ALLOWED execution_commit_state=${gateExecutionState}`;
-      return withCORS(env, req, jsonResponse(409, { error: msg, message: msg, error_code: 'EXECUTION_ALREADY_SUBMITTED' }));
-    }
-    if (gateExecutionState === 'COMMITTED' || gateExecutionState === 'CANCELLED') {
-      const msg = `EXECUTE_NOT_ALLOWED execution_commit_state=${gateExecutionState}`;
-      return withCORS(env, req, jsonResponse(409, { error: msg, message: msg, error_code: 'EXECUTE_NOT_ALLOWED' }));
+      return withCORS(env, req, jsonResponse(409, {
+        error: 'Batch has already crossed the native execution submission boundary.',
+        message: 'Batch has already crossed the native execution submission boundary.',
+        error_code: 'EXECUTION_ALREADY_SUBMITTED'
+      }));
     }
 
-    const providerRaw = String(gateBatch?.rail_provider_snapshot || '').trim().toUpperCase();
+    const providerRaw = String(gateBatch?.rail_provider_snapshot || gateGet?.rail_provider_snapshot || '').trim().toUpperCase();
     const provider = (providerRaw === 'REV') ? 'REVOLUT' : providerRaw;
-    const adapter = getRailAdapter(provider);
-    if (!adapter) {
-      return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    if (!provider) return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    if (!['CSV', 'REVOLUT'].includes(provider)) return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+    if (executionMode === 'STANDARD_BANK' && provider === 'CSV') {
+      return withCORS(env, req, jsonResponse(400, {
+        error: 'Standard bank execution is not available for CSV rail batches. Use CSV settlement or Settle Batch Externally.',
+        message: 'Standard bank execution is not available for CSV rail batches. Use CSV settlement or Settle Batch Externally.',
+        error_code: 'STANDARD_BANK_NOT_AVAILABLE_FOR_CSV_PROVIDER'
+      }));
     }
 
+    const hasExternalSubmissionEvidence = gateGet?.has_external_submission_evidence === true;
+    if ((executionMode === 'CSV_SETTLEMENT' || executionMode === 'EXTERNAL_SETTLEMENT') && hasExternalSubmissionEvidence) {
+      return withCORS(env, req, badRequest('EXTERNAL_SUBMISSION_ALREADY_RECORDED'));
+    }
+
+    const adapter = getRailAdapter(provider);
     let caps = null;
-    try {
-      if (adapter && typeof adapter.capabilities === 'function') {
-        caps = await adapter.capabilities(env);
-        if (caps && typeof caps === 'object' && caps.available === false) {
-          const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
-          return withCORS(env, req, badRequest(reason));
+    if (executionMode === 'STANDARD_BANK') {
+      if (!adapter) return withCORS(env, req, badRequest('UNKNOWN_RAIL_PROVIDER'));
+      try {
+        if (typeof adapter.capabilities === 'function') {
+          caps = await adapter.capabilities(env);
+          if (caps && typeof caps === 'object' && caps.available === false) {
+            const reason = (caps.reason && String(caps.reason).trim()) ? String(caps.reason).trim() : 'RAIL_NOT_CONFIGURED';
+            return withCORS(env, req, badRequest(reason));
+          }
         }
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e || 'RAIL_CAPABILITIES_FAILED')));
       }
-    } catch (e) {
-      const msg = (e && e.message) ? String(e.message) : String(e || 'RAIL_CAPABILITIES_FAILED');
-      return withCORS(env, req, badRequest(msg));
     }
 
     const batchEnvRaw = (gateBatch && gateBatch.rail_env_snapshot !== undefined && gateBatch.rail_env_snapshot !== null)
@@ -20276,12 +20225,15 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       return withCORS(env, req, badRequest(`RAIL_ENV_MISMATCH expected_env=${expectedEnv} worker_env=${workerEnv} api_base=${apiBase || ''}`));
     }
 
-    const supportsScheduling =
-      !!(adapter && typeof adapter.scheduleBatch === 'function')
-      && !!(caps && typeof caps === 'object' && caps.supports_scheduling === true);
-
-    if (!supportsScheduling && provider !== 'CSV') {
-      return withCORS(env, req, badRequest('SCHEDULING_NOT_SUPPORTED_FOR_THIS_RAIL'));
+    if (executionMode === 'CSV_SETTLEMENT') {
+      if (gateGet?.has_cloudtms_csv_export !== true || gateGet?.csv_export_matches_current_transfers !== true) {
+        return withCORS(env, req, badRequest('CSV_EXPORT_EVIDENCE_REQUIRED'));
+      }
+      if (csvUploadedConfirmed !== true) return withCORS(env, req, badRequest('csv_uploaded_confirmed must be true'));
+      if (!csvBankConfirmRef) return withCORS(env, req, badRequest('csv_bank_confirm_ref is required'));
+    }
+    if (executionMode === 'EXTERNAL_SETTLEMENT' && !externalSettlementComment) {
+      return withCORS(env, req, badRequest('external_settlement_comment is required'));
     }
 
     let execRes = null;
@@ -20335,146 +20287,45 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       }));
     }
 
-    let scheduledOut = null;
-    let scheduleAttempted = false;
-
-    if (supportsScheduling) {
-      scheduleAttempted = true;
-
-      let schedRes0;
-      try {
-        schedRes0 = await sbRpc(env, 'pay_batch_auth_start', {
-          p_pay_batch_id: id,
-          p_schedule_kind: scheduleKind,
-          p_scheduled_at_utc: (scheduleKind === 'SCHEDULED') ? scheduledAtUtc : null,
-          p_funding_account_ref: fundingAccountRef,
-          p_warning_hours_json: warningHoursJson,
-          p_actor_user_id: user.id,
-          p_actor_intent: actorIntent
-        });
-      } catch (e) {
-        const norm = normalizeRpcError(e, 'PAY_BATCH_AUTH_START_FAILED');
-        return withCORS(env, req, jsonResponse(norm.status, norm.body));
-      }
-
-      scheduledOut = unwrapRpc(schedRes0, 'pay_batch_auth_start');
-
-      try {
-        const becameAuthorised = (scheduledOut && scheduledOut.became_authorised === true)
-          || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
-        const authRequestId = (scheduledOut && scheduledOut.auth_request_id != null && String(scheduledOut.auth_request_id).trim())
-          ? String(scheduledOut.auth_request_id).trim()
-          : null;
-
-        if (becameAuthorised && typeof sendPayBatchScheduledNoticeAllAuthorisers === 'function') {
-          await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user?.id || null);
-        }
-      } catch {}
+    let authStart0;
+    try {
+      authStart0 = await sbRpc(env, 'pay_batch_auth_start', {
+        p_pay_batch_id: id,
+        p_schedule_kind: scheduleKind,
+        p_scheduled_at_utc: (scheduleKind === 'SCHEDULED') ? scheduledAtUtc : null,
+        p_funding_account_ref: fundingAccountRef,
+        p_warning_hours_json: warningHoursJson,
+        p_actor_user_id: user.id,
+        p_actor_intent: actorIntent,
+        p_execution_mode: executionMode,
+        p_payment_date: paymentDate,
+        p_pay_channel_scope: payChannelScope,
+        p_suppress_remittances: suppressRemittances,
+        p_suppress_remittances_confirmed: suppressRemittancesConfirmed,
+        p_csv_uploaded_confirmed: executionMode === 'CSV_SETTLEMENT' ? true : false,
+        p_csv_bank_confirm_ref: executionMode === 'CSV_SETTLEMENT' ? csvBankConfirmRef : null,
+        p_external_settlement_comment: executionMode === 'EXTERNAL_SETTLEMENT' ? externalSettlementComment : null
+      });
+    } catch (e) {
+      const norm = normalizeRpcError(e, 'PAY_BATCH_AUTH_START_FAILED');
+      return withCORS(env, req, jsonResponse(norm.status, norm.body));
     }
-
-    let workerCommunications = {
-      attempted: false,
-      sent_or_queued: false,
-      trigger_status: scheduleAttempted ? 'NOT_YET_AUTHORISED' : 'SCHEDULING_NOT_APPLICABLE',
-      communication_mode: 'NONE',
-      message_kind: null,
-      error: null,
-      scope: payChannelScope,
-      queued_count: 0,
-      skipped_count: 0,
-      remittance_result: null,
-      payout_notice_result: null,
-      communications_summary: {
-        communication_mode: 'NONE',
-        sent_or_queued: false,
-        queued_count: 0,
-        skipped_count: 0,
-        remittances: {
-          trigger_status: null,
-          queued_count: 0,
-          skipped_count: 0
-        },
-        payout_notices: {
-          trigger_status: null,
-          queued_count: 0,
-          skipped_count: 0
-        }
-      },
-      result: null
-    };
-
-    const becameAuthorisedForPayment =
-      scheduleAttempted
-      && (
-        (scheduledOut && scheduledOut.became_authorised === true)
-        || (String(scheduledOut?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT')
-      );
-
-    if (becameAuthorisedForPayment) {
+    const authStart = unwrapRpc(authStart0, 'pay_batch_auth_start');
+    const authRequestId = String(authStart?.auth_request_id || '').trim() || null;
+    const becameAuthorised = (authStart?.became_authorised === true) || (String(authStart?.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
+    const finalisation = (becameAuthorised && authRequestId)
+      ? await finaliseAuthorisedBankingPaySettlement(env, req, user, id, authRequestId, {})
+      : null;
+    if (becameAuthorised && ['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(executionMode) && (!finalisation || finalisation.ok !== true)) {
+      const msg = String(finalisation?.message || 'Settlement finalisation failed.');
+      const code = String(finalisation?.error_code || 'SETTLEMENT_FINALISATION_FAILED').toUpperCase();
+      return withCORS(env, req, jsonResponse(409, { error: msg, message: msg, error_code: code, finalisation }));
+    }
+    if (becameAuthorised && authRequestId) {
       try {
-        const sendResult = await sendPayBatchRemittancesInternal(env, {
-          payBatchId: id,
-          scope: payChannelScope,
-          actorUserId: user.id
-        });
-
-        const sendTriggerStatus = String(sendResult?.trigger_status || '').trim();
-        const queuedCount = Number(sendResult?.queued_count || 0);
-        const skippedCount = Number(sendResult?.skipped_count || 0);
-        const sentOrQueued = Number.isFinite(queuedCount) && queuedCount > 0;
-        const communicationMode = String(sendResult?.communication_mode || 'NONE').trim().toUpperCase() || 'NONE';
-        const communicationsSummary = buildCommunicationsSummary(sendResult);
-
-        workerCommunications = {
-          attempted: true,
-          sent_or_queued: sentOrQueued,
-          trigger_status: sendTriggerStatus || 'COMMIT_STAGE_SEND_COMPLETED',
-          communication_mode: communicationMode,
-          message_kind: null,
-          error: null,
-          scope: payChannelScope,
-          queued_count: queuedCount,
-          skipped_count: skippedCount,
-          remittance_result: (sendResult && typeof sendResult === 'object' && sendResult.remittance_result && typeof sendResult.remittance_result === 'object')
-            ? sendResult.remittance_result
-            : null,
-          payout_notice_result: (sendResult && typeof sendResult === 'object' && sendResult.payout_notice_result && typeof sendResult.payout_notice_result === 'object')
-            ? sendResult.payout_notice_result
-            : null,
-          communications_summary: communicationsSummary,
-          result: sendResult
-        };
-      } catch (e) {
-        workerCommunications = {
-          attempted: true,
-          sent_or_queued: false,
-          trigger_status: 'COMMIT_STAGE_SEND_ERROR',
-          communication_mode: 'NONE',
-          message_kind: null,
-          error: String(e?.message || e || 'COMMIT_STAGE_SEND_ERROR'),
-          scope: payChannelScope,
-          queued_count: 0,
-          skipped_count: 0,
-          remittance_result: null,
-          payout_notice_result: null,
-          communications_summary: {
-            communication_mode: 'NONE',
-            sent_or_queued: false,
-            queued_count: 0,
-            skipped_count: 0,
-            remittances: {
-              trigger_status: null,
-              queued_count: 0,
-              skipped_count: 0
-            },
-            payout_notices: {
-              trigger_status: null,
-              queued_count: 0,
-              skipped_count: 0
-            }
-          },
-          result: null
-        };
+        await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user?.id || null);
+      } catch {
+        // best-effort only
       }
     }
 
@@ -20493,11 +20344,11 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId) {
       pay_batch_id: id,
       executed: execRes,
       prepared: prepRes,
-      scheduled: scheduledOut,
-      schedule_attempted: scheduleAttempted,
-      remittances: workerCommunications,
-      communications: workerCommunications,
-      worker_communications: workerCommunications,
+      auth_start: authStart,
+      awaiting_authorisation: !becameAuthorised,
+      finalisation,
+      execution_mode: executionMode,
+      suppress_remittances: suppressRemittances,
       execution_commit_state: executionFields.execution_commit_state,
       execution_commit_ref: executionFields.execution_commit_ref,
       execution_committed_at_utc: executionFields.execution_committed_at_utc,
@@ -20531,6 +20382,81 @@ async function verifyPaymentScheduleReauth(env, user, reauthToken) {
   if (String(payload.sub || '').trim() !== String(user?.id || '').trim()) return { ok: false, response: unauthorized('Invalid reauth_token') };
 
   return { ok: true, payload };
+}
+
+async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, payBatchId, authRequestId, options = {}) {
+  const unwrapRpc = (rpcRes, key) => {
+    let payload = rpcRes;
+    try {
+      if (Array.isArray(rpcRes) && rpcRes.length === 1 && rpcRes[0] && typeof rpcRes[0] === 'object') payload = rpcRes[0];
+      if (payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    } catch {}
+    return payload;
+  };
+  const id = String(payBatchId || '').trim();
+  const authId = String(authRequestId || '').trim();
+  const actorUserId = String(userOrActor?.id || options?.actorUserId || '').trim();
+  if (!id || !authId || !actorUserId) return { ok: false, error_code: 'INVALID_FINALISATION_INPUT', message: 'Missing finalisation input.' };
+
+  let batchGet = null;
+  try {
+    batchGet = unwrapRpc(await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: id }), 'pay_batch_get');
+  } catch (e) {
+    return { ok: false, error_code: 'PAY_BATCH_GET_FAILED', message: String(e?.message || e || 'PAY_BATCH_GET_FAILED') };
+  }
+
+  const batchObj = (batchGet && typeof batchGet === 'object' && batchGet.batch && typeof batchGet.batch === 'object') ? batchGet.batch : {};
+  const authObj = (batchGet && typeof batchGet === 'object' && batchGet.auth && typeof batchGet.auth === 'object') ? batchGet.auth : {};
+  const intent = (authObj.execution_intent_json && typeof authObj.execution_intent_json === 'object')
+    ? authObj.execution_intent_json
+    : ((batchGet && typeof batchGet.execution_intent_json === 'object') ? batchGet.execution_intent_json : null);
+  const mode = String(intent?.execution_mode || '').trim().toUpperCase();
+  const authState = String(authObj.auth_state || authObj.state || '').trim().toUpperCase();
+  const activeAuthId = String(authObj.auth_request_id || '').trim();
+  const status = String(batchObj.status || '').trim().toUpperCase();
+  const executionCommitState = String(batchObj.execution_commit_state || batchGet?.execution_commit_state || '').trim().toUpperCase();
+  const settlementConfirmation = (batchGet && typeof batchGet.settlement_confirmation_json === 'object') ? batchGet.settlement_confirmation_json : null;
+  const settledAuthId = String(settlementConfirmation?.auth_request_id || '').trim();
+  const confirmationMode = String(settlementConfirmation?.execution_mode || settlementConfirmation?.settlement_mode || '').trim().toUpperCase();
+
+  if (['SETTLED', 'PAID', 'COMMITTED', 'CANCELLED'].includes(status) || ['COMMITTED', 'CANCELLED'].includes(executionCommitState)) {
+    if (settlementConfirmation && settledAuthId === authId && confirmationMode === mode) {
+      return { ok: true, already_finalised: true, execution_mode: mode, pay_batch_id: id, auth_request_id: authId };
+    }
+    return { ok: false, error_code: 'BATCH_ALREADY_FINALISED', message: 'Batch is already finalised.' };
+  }
+  if (!intent || !['STANDARD_BANK', 'CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(mode)) {
+    return { ok: false, error_code: 'INVALID_FROZEN_EXECUTION_MODE', message: 'Frozen execution_mode missing or invalid.' };
+  }
+  if (!activeAuthId || activeAuthId !== authId || authState !== 'AUTHORISED') {
+    return { ok: false, waiting: true, error_code: 'AUTH_NOT_AUTHORISED', message: 'Auth request is not authorised yet.' };
+  }
+  if ((mode === 'CSV_SETTLEMENT' || mode === 'EXTERNAL_SETTLEMENT') && batchGet?.has_external_submission_evidence === true) {
+    return { ok: false, error_code: 'EXTERNAL_SUBMISSION_ALREADY_RECORDED', message: 'External submission evidence already exists.' };
+  }
+  if (mode === 'STANDARD_BANK') {
+    return { ok: true, authorised_pending_native_execution: true, execution_mode: mode, pay_batch_id: id, auth_request_id: authId };
+  }
+
+  const scope = String(options?.pay_channel_scope || intent?.pay_channel_scope || 'ALL').trim().toUpperCase() || 'ALL';
+  const params = {
+    p_pay_batch_id: id,
+    p_scope: scope,
+    p_bank_confirm_ref: mode === 'CSV_SETTLEMENT' ? (intent?.csv_bank_confirm_ref ?? null) : null,
+    p_payment_date: intent?.payment_date ?? null,
+    p_actor_user_id: actorUserId,
+    p_settlement_mode: mode,
+    p_auth_request_id: authId,
+    p_csv_uploaded_confirmed: mode === 'CSV_SETTLEMENT',
+    p_external_settlement_comment: mode === 'EXTERNAL_SETTLEMENT' ? (intent?.external_settlement_comment ?? null) : null,
+    p_suppress_remittances: intent?.suppress_remittances === true
+  };
+  try {
+    const settled = unwrapRpc(await sbRpc(env, 'pay_settle_manual_confirm', params), 'pay_settle_manual_confirm');
+    return { ok: true, execution_mode: mode, pay_batch_id: id, auth_request_id: authId, settlement: settled };
+  } catch (e) {
+    return { ok: false, error_code: 'SETTLEMENT_FINALISATION_FAILED', message: String(e?.message || e || 'SETTLEMENT_FINALISATION_FAILED') };
+  }
 }
 
 
@@ -23538,6 +23464,26 @@ async function handleBankingPayAuthTokenAction(env, req, user) {
 
   const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   const becameAuthorised = (out.became_authorised === true) || (String(out.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
+  const outMode = String(out.execution_mode || '').trim().toUpperCase();
+  let finalisation = null;
+  if (becameAuthorised && actionKind !== 'REJECT') {
+    finalisation = await finaliseAuthorisedBankingPaySettlement(env, req, user, payBatchId, authRequestId, {});
+    if (['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(outMode) && (!finalisation || finalisation.ok !== true)) {
+      const msg = String(finalisation?.message || 'Settlement finalisation failed.');
+      const code = String(finalisation?.error_code || 'SETTLEMENT_FINALISATION_FAILED').toUpperCase();
+      return withCORS(env, req, new Response(JSON.stringify({ error: msg, message: msg, error_code: code, finalisation }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      }));
+    }
+  }
+  if (becameAuthorised && actionKind !== 'REJECT') {
+    try {
+      await sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, user?.id || null);
+    } catch {
+      // best-effort only
+    }
+  }
 
   // Mark THIS token used (prevents link reuse). Best-effort (DB also invalidates tokens on REJECT).
   try {
@@ -23565,21 +23511,16 @@ async function handleBankingPayAuthTokenAction(env, req, user) {
     afterGet = null;
   }
 
-  // Send “payment scheduled” notice if it just became AUTHORISED_FOR_PAYMENT (best-effort)
-  if (becameAuthorised) {
-    try {
-      await sendPayBatchScheduledNoticeAllAuthorisers(env, payBatchId, authRequestId, user?.id || null);
-    } catch {
-      // best-effort only
-    }
-  }
-
   const respAuth = afterGet && typeof afterGet === 'object' ? (afterGet.auth || null) : null;
   const respBatch = afterGet && typeof afterGet === 'object' ? (afterGet.batch || null) : null;
 
   return withCORS(env, req, ok({
     ok: true,
     result: out,
+    execution_intent_json: out.execution_intent_json || respAuth?.execution_intent_json || null,
+    execution_mode: out.execution_mode || null,
+    suppress_remittances: (typeof out.suppress_remittances === 'boolean') ? out.suppress_remittances : null,
+    finalisation,
     batch: respBatch,
     auth: respAuth
   }));
@@ -23737,6 +23678,26 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
 
   const out = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
   const becameAuthorised = (out.became_authorised === true) || (String(out.status || '').toUpperCase() === 'AUTHORISED_FOR_PAYMENT');
+  const outMode = String(out.execution_mode || '').trim().toUpperCase();
+  let finalisation = null;
+  if (becameAuthorised && actionKind !== 'REJECT') {
+    finalisation = await finaliseAuthorisedBankingPaySettlement(env, req, user, id, authRequestId, {});
+    if (['CSV_SETTLEMENT', 'EXTERNAL_SETTLEMENT'].includes(outMode) && (!finalisation || finalisation.ok !== true)) {
+      const msg = String(finalisation?.message || 'Settlement finalisation failed.');
+      const code = String(finalisation?.error_code || 'SETTLEMENT_FINALISATION_FAILED').toUpperCase();
+      return withCORS(env, req, new Response(JSON.stringify({ error: msg, message: msg, error_code: code, finalisation }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      }));
+    }
+  }
+  if (becameAuthorised && actionKind !== 'REJECT') {
+    try {
+      await sendPayBatchScheduledNoticeAllAuthorisers(env, id, authRequestId, user?.id || null);
+    } catch {
+      // best-effort only
+    }
+  }
 
   // Load updated batch/auth for response + email content
   let afterGet = null;
@@ -23754,142 +23715,16 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId) {
     afterGet = null;
   }
 
-  // If finalised, queue notification email to ALL authorisers (best-effort; never blocks)
-  if (becameAuthorised && afterGet && typeof afterGet === 'object') {
-    try {
-      const batchObj = afterGet.batch || null;
-      const authObj = afterGet.auth || null;
-      const transfers = Array.isArray(afterGet.transfers) ? afterGet.transfers : [];
-
-      const payDate = batchObj && batchObj.pay_date ? String(batchObj.pay_date) : '';
-      const scheduledAt = batchObj && batchObj.scheduled_at_utc ? String(batchObj.scheduled_at_utc) : '';
-      const scheduleKind = batchObj && batchObj.schedule_kind ? String(batchObj.schedule_kind) : '';
-
-      let totalAmount = 0;
-      for (const t of transfers) {
-        const n = Number(t && t.amount);
-        if (Number.isFinite(n)) totalAmount += n;
-      }
-      totalAmount = Math.round(totalAmount * 100) / 100;
-
-      // Initiator display/email (user may not have display_name in token)
-      let initiatorName = user.id;
-      let initiatorEmail = user.email || null;
-      try {
-        const { rows: urows2 } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${enc(user.id)}` +
-          `&select=id,email,display_name&limit=1`,
-          false
-        );
-        const u2 = (urows2 && urows2[0]) ? urows2[0] : null;
-        if (u2 && u2.display_name) initiatorName = String(u2.display_name);
-        if (u2 && u2.email) initiatorEmail = String(u2.email);
-      } catch {}
-
-      const fmtUk = (iso) => {
-        try {
-          const d = new Date(String(iso || '').trim());
-          if (isNaN(d.getTime())) return '';
-          const parts = new Intl.DateTimeFormat('en-GB', {
-            timeZone: 'Europe/London',
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit',
-            hour12: false
-          }).formatToParts(d).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
-          return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}hrs`;
-        } catch { return ''; }
-      };
-
-      const scheduledAtUk = scheduledAt ? fmtUk(scheduledAt) : '';
-
-      const approvedBy = (authObj && Array.isArray(authObj.approved_by)) ? authObj.approved_by : [];
-      const linesAuth = approvedBy.map(a => {
-        const who = (a && a.actor_display_name) ? String(a.actor_display_name) : (a && a.actor_user_id ? String(a.actor_user_id) : 'Unknown');
-        const act = (a && a.action) ? String(a.action) : '';
-        const at  = (a && a.action_at_utc) ? fmtUk(a.action_at_utc) : '';
-        return `- ${who} (${act}) at ${at}`;
-      });
-
-      const subject = `Payment scheduled – Pay batch ${String(id).slice(0, 8)}${payDate ? ` – ${payDate}` : ''}`;
-
-      const textLines = [
-        `A payment has been scheduled in CloudTMS.`,
-        ``,
-        `Pay batch: ${id}`,
-        ...(payDate ? [`Pay date: ${payDate}`] : []),
-        `Schedule: ${scheduleKind || ''}${scheduledAtUk ? ` (release: ${scheduledAtUk})` : ''}`,
-        ``,
-        `Total amount: £${totalAmount.toFixed(2)}`,
-        ``,
-        `Processed by: ${initiatorName}${initiatorEmail ? ` <${initiatorEmail}>` : ''}`,
-        ``,
-        `Authorised by:`,
-        ...(linesAuth.length ? linesAuth : ['- (none recorded)']),
-        ``,
-        `This email is for audit visibility for all payment authorisers.`
-      ];
-
-      const body_text = textLines.join('\n');
-      const body_html = `<pre>${textLines.map(l => String(l)).join('\n')}</pre>`;
-
-      // Recipients: all active authorisers or golden key users
-      const { rows: authUsers } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/tms_users` +
-        `?select=id,email,is_active,payment_authoriser,payment_golden_key` +
-        `&is_active=eq.true` +
-        `&or=(payment_authoriser.eq.true,payment_golden_key.eq.true)`,
-        false
-      );
-
-      const toEmails = (authUsers || [])
-        .map(r => (r && r.email) ? String(r.email).trim() : '')
-        .filter(Boolean);
-
-      const reference = `pay_batch_scheduled:${id}:${authRequestId}`;
-
-      for (const toEmail of toEmails) {
-        try {
-          await fetch(`${env.SUPABASE_URL}/rest/v1/mail_outbox`, {
-            method: 'POST',
-            headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-            body: JSON.stringify({
-              type: 'BROADCAST',
-              to: toEmail,
-              cc: null,
-              bcc: null,
-              reply_to: null,
-              importance: 'Normal',
-              email_type: 'html',
-              subject,
-              body_html,
-              body_text,
-              attachments: null,
-              status: 'QUEUED',
-              reference,
-              recipient_kind: null,
-              recipient_id: null,
-              context_kind: 'pay_batches',
-              context_id: id,
-              mailshot_run_id: null,
-              document_template_id: null,
-              created_by: user?.id || null
-            })
-          }).catch(() => {});
-        } catch {}
-      }
-    } catch {
-      // best-effort only
-    }
-  }
-
   const respAuth = afterGet && typeof afterGet === 'object' ? (afterGet.auth || null) : null;
   const respBatch = afterGet && typeof afterGet === 'object' ? (afterGet.batch || null) : null;
 
   return withCORS(env, req, ok({
     ok: true,
     result: out,
+    execution_intent_json: out.execution_intent_json || respAuth?.execution_intent_json || null,
+    execution_mode: out.execution_mode || null,
+    suppress_remittances: (typeof out.suppress_remittances === 'boolean') ? out.suppress_remittances : null,
+    finalisation,
     batch: respBatch,
     auth: respAuth
   }));
@@ -121874,7 +121709,11 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
   {
     const m = matchPath(p, '/api/banking/pay/batch/:id/execute');
     if (m && req.method === 'POST') {
-      return handleBankingPayBatchExecute(env, req, user, m.id);
+      return withCORS(env, req, new Response(JSON.stringify({
+        error: 'USE_EXECUTE_PAYMENT_ROUTE',
+        message: 'Use /api/banking/pay/batch/:id/execute-payment',
+        error_code: 'USE_EXECUTE_PAYMENT_ROUTE'
+      }), { status: 410, headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
     }
   }
 }
