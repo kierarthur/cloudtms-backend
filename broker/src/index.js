@@ -17356,6 +17356,10 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
     'MANUAL_DEBT_TEMPLATE_NOT_CARRIED_TO_BATCH_BUILD'
   ]);
 
+  const structuredPrepareDraftPassThroughErrorCodes = new Set([
+    'SELECTED_PAYEE_ROUTE_NOT_READY'
+  ]);
+
   const unwrapRpcPayload = (rpcRes, propertyName) => {
     let payload = rpcRes;
     try {
@@ -17371,17 +17375,66 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
 
   const extractPrepareDraftFailure = (errorLike) => {
     const rawMessage = String(errorLike?.message || errorLike || '').trim();
-    const codeMatch = rawMessage.match(/\b(WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE|MANUAL_DEBT_TEMPLATE_SOURCE_MISSING_FOR_SELECTED_PAYE_CANDIDATE|MANUAL_DEBT_TEMPLATE_NOT_CARRIED_TO_BATCH_BUILD)\b/);
+
+    const parseJsonObjectCandidate = (raw) => {
+      const source = String(raw || '').trim();
+      if (!source) return null;
+
+      const candidates = [source];
+      const firstBrace = source.indexOf('{');
+      const lastBrace = source.lastIndexOf('}');
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        candidates.push(source.slice(firstBrace, lastBrace + 1));
+      }
+
+      for (const candidate of candidates) {
+        try {
+          const parsed = JSON.parse(candidate);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+        } catch {}
+      }
+
+      return null;
+    };
+
+    const outerRpcError = parseJsonObjectCandidate(rawMessage);
+    const innerRpcMessage = parseJsonObjectCandidate(outerRpcError?.message);
+    const outerRpcCode = trimStr(outerRpcError?.code || '');
+    const structuredPayload =
+      (innerRpcMessage && typeof innerRpcMessage === 'object' && !Array.isArray(innerRpcMessage))
+        ? innerRpcMessage
+        : (
+            outerRpcError &&
+            typeof outerRpcError === 'object' &&
+            !Array.isArray(outerRpcError) &&
+            outerRpcCode &&
+            !/^[A-Z0-9]{5}$/.test(outerRpcCode)
+              ? outerRpcError
+              : null
+          );
+
+    const structuredCodeRaw = trimStr(structuredPayload?.code || '');
+    const structuredCode = structuredCodeRaw && !/^[A-Z0-9]{5}$/.test(structuredCodeRaw)
+      ? structuredCodeRaw
+      : '';
+    const codeMatch = structuredCode
+      ? null
+      : rawMessage.match(/\b(WORKBENCH_SESSION_CANDIDATE_PROJECTION_STALE|MANUAL_DEBT_TEMPLATE_SOURCE_MISSING_FOR_SELECTED_PAYE_CANDIDATE|MANUAL_DEBT_TEMPLATE_NOT_CARRIED_TO_BATCH_BUILD|SELECTED_PAYEE_ROUTE_NOT_READY)\b/);
+    const errorCode = structuredCode || (codeMatch ? String(codeMatch[1] || '').trim() : null);
+
     const candidateIds = Array.from(new Set(
       (rawMessage.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/ig) || [])
         .map((value) => String(value || '').trim())
         .filter((value) => uuidRe.test(value))
     ));
+
     return {
       rawMessage,
-      errorCode: codeMatch ? String(codeMatch[1] || '').trim() : null,
+      errorCode,
       candidateIds,
-      isExplicitRefreshError: !!(codeMatch && explicitPrepareDraftRefreshErrorCodes.has(String(codeMatch[1] || '').trim()))
+      structuredPayload,
+      isExplicitRefreshError: !!(errorCode && explicitPrepareDraftRefreshErrorCodes.has(errorCode)),
+      isStructuredPassThroughError: !!(errorCode && structuredPrepareDraftPassThroughErrorCodes.has(errorCode))
     };
   };
 
@@ -18277,6 +18330,32 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
         });
       }
 
+      if (prepareFailure.isStructuredPassThroughError) {
+        const structuredDetails = (
+          prepareFailure.structuredPayload &&
+          typeof prepareFailure.structuredPayload === 'object' &&
+          !Array.isArray(prepareFailure.structuredPayload)
+        )
+          ? cloneJson(prepareFailure.structuredPayload) || {}
+          : {};
+
+        return buildCreateDraftSessionErrorResponse(
+          409,
+          prepareFailure.errorCode,
+          trimStr(structuredDetails.message) || 'Banking draft could not be prepared because the selected payment route is not payee-ready.',
+          {
+            pay_date: payDate,
+            week_ending_cutoff: cutoffIso,
+            provided_week_ending_cutoff: providedCutoffIso,
+            session_id: sessionIdText,
+            pay_channel_scope: payChannelScope || 'ALL',
+            reason: prepareFailure.rawMessage || 'Unknown error',
+            rpc_error: structuredDetails
+          },
+          true
+        );
+      }
+
       return buildCreateDraftSessionErrorResponse(
         409,
         'BANKING_PAY_CREATE_DRAFT_SESSION_BACKED_FAILED',
@@ -19110,7 +19189,6 @@ const CREATE_DRAFT_CHECKPOINT = 'NONE';
     });
   }
 }
-
 
 
 
