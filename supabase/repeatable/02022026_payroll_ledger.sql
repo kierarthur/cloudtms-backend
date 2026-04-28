@@ -21661,7 +21661,6 @@ $$;
 -- =========================================================
 -- A4.9 pay_batches_list / pay_batch_get
 -- =========================================================
-
 create or replace function public.pay_batch_get(p_pay_batch_id uuid)
 returns jsonb
 language plpgsql
@@ -21738,7 +21737,7 @@ begin
   v_batch_status_upper := upper(btrim(coalesce(v_batch.status::text, '')));
   v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state::text, 'NOT_SUBMITTED')));
   if v_execution_commit_state not in ('NOT_SUBMITTED','SUBMITTED_NOT_COMMITTED','COMMITTED') then
-    v_execution_commit_state := 'NOT_SUBMITTED';
+    v_execution_commit_state := null;
   end if;
 
   v_provider_normalized := upper(btrim(coalesce(v_batch.rail_provider_snapshot::text, '')));
@@ -22106,10 +22105,10 @@ begin
   into v_has_external_submission_evidence;
 
   if v_active_auth_execution_intent_json is not null then
-    v_execution_mode_pending := nullif(btrim(coalesce(v_active_auth_execution_intent_json->>'execution_mode','')), '');
+    v_execution_mode_pending := upper(nullif(btrim(coalesce(v_active_auth_execution_intent_json->>'execution_mode','')), ''));
     v_suppress_remittances_pending := lower(btrim(coalesce(v_active_auth_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on');
   elsif v_execution_intent_json is not null and jsonb_typeof(v_execution_intent_json) = 'object' then
-    v_execution_mode_pending := nullif(btrim(coalesce(v_execution_intent_json->>'execution_mode','')), '');
+    v_execution_mode_pending := upper(nullif(btrim(coalesce(v_execution_intent_json->>'execution_mode','')), ''));
     v_suppress_remittances_pending := lower(btrim(coalesce(v_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on');
   else
     v_execution_mode_pending := null;
@@ -22119,7 +22118,7 @@ begin
   v_can_create_bank_csv_file := (
     v_provider_known = true
     and v_batch_status_upper not in ('COMMITTED','PAID','SETTLED','CANCELLED')
-    and v_execution_commit_state <> 'COMMITTED'
+    and v_execution_commit_state = 'NOT_SUBMITTED'
   );
   v_can_start_standard_execution := (
     v_provider_known = true
@@ -23648,6 +23647,7 @@ begin
   );
 end;
 $$;
+
 
 
 
