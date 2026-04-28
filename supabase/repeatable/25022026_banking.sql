@@ -8864,6 +8864,8 @@ $$;
 
 
 
+
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -9002,8 +9004,8 @@ begin
         ut.umbrella_id,
         max(u.name) as umbrella_name,
         max(u.remittance_email) as remittance_email,
-        max(coalesce(u.remittance_overrides_enabled,false)) as umb_override_enabled,
-        max(coalesce(u.remittances_detailed_breakdown,false)) as umb_detail_enabled,
+        bool_or(coalesce(u.remittance_overrides_enabled,false)) as umb_override_enabled,
+        bool_or(coalesce(u.remittances_detailed_breakdown,false)) as umb_detail_enabled,
         bool_or(coalesce(ut.is_simulated,false)) as test_mode
       from umb_transfers ut
       join public.umbrellas u
@@ -11279,7 +11281,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
