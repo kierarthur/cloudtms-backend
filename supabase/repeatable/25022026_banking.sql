@@ -5229,8 +5229,6 @@ begin
 end;
 $$;
 
-
-
 drop function if exists public.pay_settle_manual_confirm(uuid, text, text, date, uuid);
 
 create or replace function public.pay_settle_manual_confirm(
@@ -5270,6 +5268,8 @@ declare
   v_intent_csv_uploaded_confirmed boolean := false;
   v_intent_bank_confirm_ref text := null;
   v_intent_external_comment text := null;
+  v_intent_payment_date date := null;
+  v_intent_payment_date_raw text := null;
   v_bank_csv_export_json jsonb := null;
   v_bank_csv_export_hash text := null;
   v_current_transfer_hash text := null;
@@ -5393,6 +5393,49 @@ begin
       'auth_request_id', p_auth_request_id::text,
       'authorised_execution_mode', v_intent_mode,
       'requested_settlement_mode', v_settlement_mode
+    )::text;
+  end if;
+
+  v_intent_payment_date_raw := nullif(btrim(coalesce(v_auth_intent->>'payment_date', '')), '');
+  if v_intent_payment_date_raw is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'AUTH_INTENT_PAYMENT_DATE_REQUIRED',
+      'message', 'pay_settle_manual_confirm: authorised frozen execution intent must contain a valid payment_date',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', p_auth_request_id::text,
+      'authorised_payment_date', null,
+      'requested_payment_date', case when p_payment_date is null then null else p_payment_date::text end,
+      'settlement_mode', v_settlement_mode
+    )::text;
+  end if;
+
+  begin
+    v_intent_payment_date := v_intent_payment_date_raw::date;
+  exception when others then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'AUTH_INTENT_PAYMENT_DATE_REQUIRED',
+      'message', 'pay_settle_manual_confirm: authorised frozen execution intent must contain a valid payment_date',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', p_auth_request_id::text,
+      'authorised_payment_date', null,
+      'authorised_payment_date_raw', v_intent_payment_date_raw,
+      'requested_payment_date', case when p_payment_date is null then null else p_payment_date::text end,
+      'settlement_mode', v_settlement_mode
+    )::text;
+  end;
+
+  if p_payment_date is distinct from v_intent_payment_date then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'AUTH_INTENT_PAYMENT_DATE_MISMATCH',
+      'message', 'pay_settle_manual_confirm: supplied payment_date does not match the authorised frozen execution intent',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', p_auth_request_id::text,
+      'authorised_payment_date', v_intent_payment_date::text,
+      'requested_payment_date', case when p_payment_date is null then null else p_payment_date::text end,
+      'settlement_mode', v_settlement_mode
     )::text;
   end if;
 
@@ -5633,7 +5676,7 @@ begin
     'settlement_mode', v_settlement_mode,
     'settled_at_utc', v_now::text,
     'settled_by_user_id', p_actor_user_id::text,
-    'payment_date', p_payment_date::text,
+    'payment_date', v_intent_payment_date::text,
     'bank_confirm_ref', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_confirm_ref else null end,
     'external_comment', case when v_settlement_mode = 'EXTERNAL_SETTLEMENT' then v_external_settlement_comment else null end,
     'csv_export_hash', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_csv_export_hash else null end,
@@ -5646,9 +5689,9 @@ begin
 
   update public.pay_batches pb2
   set
-    authoritative_payment_date = p_payment_date,
+    authoritative_payment_date = v_intent_payment_date,
     authoritative_payment_date_source = case when v_settlement_mode = 'CSV_SETTLEMENT' then 'CSV_SETTLEMENT_PAYMENT_DATE' else 'EXTERNAL_SETTLEMENT_PAYMENT_DATE' end,
-    pay_date = p_payment_date,
+    pay_date = v_intent_payment_date,
     monzo_confirmed_at_utc = v_now,
     monzo_confirmed_by_user_id = p_actor_user_id,
     execution_commit_ref = coalesce(v_bank_confirm_ref, 'external-settlement:' || p_auth_request_id::text, pb2.execution_commit_ref),
@@ -5700,7 +5743,7 @@ begin
     jsonb_build_object('reservation_status', 'RESERVED'),
     jsonb_build_object(
       'reservation_status', 'COMMITTED',
-      'authoritative_payment_date', p_payment_date::text,
+      'authoritative_payment_date', v_intent_payment_date::text,
       'scope', v_scope,
       'settlement_mode', v_settlement_mode,
       'auth_request_id', p_auth_request_id::text
@@ -5739,7 +5782,7 @@ begin
           'settlement_mode', v_settlement_mode,
           'bank_confirm_ref', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_confirm_ref else null end,
           'external_settlement_comment', case when v_settlement_mode = 'EXTERNAL_SETTLEMENT' then v_external_settlement_comment else null end,
-          'payment_date', p_payment_date::text,
+          'payment_date', v_intent_payment_date::text,
           'confirmed_at_utc', v_now::text,
           'confirmed_by_user_id', p_actor_user_id::text,
           'auth_request_id', p_auth_request_id::text,
@@ -5761,7 +5804,7 @@ begin
 
   return coalesce(v_settle_result, '{}'::jsonb)
     || jsonb_build_object(
-      'authoritative_payment_date', p_payment_date::text,
+      'authoritative_payment_date', v_intent_payment_date::text,
       'authoritative_payment_date_source', case when v_settlement_mode = 'CSV_SETTLEMENT' then 'CSV_SETTLEMENT_PAYMENT_DATE' else 'EXTERNAL_SETTLEMENT_PAYMENT_DATE' end,
       'settlement_mode', v_settlement_mode,
       'settlement_confirmation_json', (select pb3.settlement_confirmation_json from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
@@ -5773,6 +5816,8 @@ begin
     );
 end;
 $$;
+
+
 
 
 
