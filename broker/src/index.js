@@ -35160,58 +35160,69 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     // 1) User evidence rows (timesheet_evidence)
     // ─────────────────────────────────────────────────────────────
     const fetchTimesheetEvidenceRows = async () => {
-      const expandedSelect =
-        'id,evidence_id,kind,display_name,storage_key,r2_key,file_key,created_at,created_by,' +
-        'queue_id,manual_timesheet_queue_id,manual_queue_id,last_rotation_deg,rotation_degrees,rotation_deg,meta_json';
-      try {
-        const { rows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-            `?timesheet_id=eq.${enc(currentTsId)}` +
-            `&select=${enc(expandedSelect)}` +
-            `&order=created_at.asc`
-        );
-        return Array.isArray(rows) ? rows : [];
-      } catch {
-        // Back-compat fallback for deployments where expanded fields are not exposed.
-        const { rows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-            `?timesheet_id=eq.${enc(currentTsId)}` +
-            `&select=id,kind,display_name,storage_key,created_at,created_by,meta_json` +
-            `&order=created_at.asc`
-        );
-        return Array.isArray(rows) ? rows : [];
-      }
+      const { rows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+          `?timesheet_id=eq.${enc(currentTsId)}` +
+          `&select=id,kind,display_name,storage_key,created_at,created_by` +
+          `&order=created_at.asc`
+      );
+      return Array.isArray(rows) ? rows : [];
     };
     const evRows = await fetchTimesheetEvidenceRows();
+
+    const evidenceStorageKeys = Array.from(new Set(
+      (evRows || [])
+        .map((ev) => cleanStorageKey(ev?.storage_key))
+        .filter(Boolean)
+    ));
+
+    const queueProvenanceByStorageKey = {};
+    if (evidenceStorageKeys.length) {
+      try {
+        const r2Param = evidenceStorageKeys.map(enc).join(',');
+        const { rows: queueRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/manual_timesheet_queue` +
+            `?timesheet_id=eq.${enc(currentTsId)}` +
+            `&r2_key=in.(${r2Param})` +
+            `&select=id,r2_key,status,timesheet_id,last_rotation_deg,meta_json` +
+            `&limit=1000`
+        );
+
+        for (const row of (queueRows || [])) {
+          const key = cleanStorageKey(row?.r2_key);
+          if (!key) continue;
+          if (!queueProvenanceByStorageKey[key]) queueProvenanceByStorageKey[key] = row;
+        }
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceList] queue provenance enrich failed (non-fatal)', {
+          timesheet_id: currentTsId,
+          err: e?.message || String(e)
+        });
+      }
+    }
 
     const userEvidenceRaw = (evRows || []).map(ev => {
       const out = { ...(ev || {}) };
       const storageKey = cleanStorageKey(out.storage_key);
-      const metaObj = (out.meta_json && typeof out.meta_json === 'object' && !Array.isArray(out.meta_json))
-        ? out.meta_json
+      const queueMatch = storageKey ? queueProvenanceByStorageKey[storageKey] : null;
+      const queueMetaObj = (queueMatch?.meta_json && typeof queueMatch.meta_json === 'object' && !Array.isArray(queueMatch.meta_json))
+        ? queueMatch.meta_json
         : null;
 
       out.timesheet_id = currentTsId;
-      if (out.evidence_id != null && String(out.evidence_id).trim()) {
-        out.evidence_id = String(out.evidence_id).trim();
-      }
       out.filename = out.display_name || null;
       out.storage_key = storageKey || null;
-      if (out.r2_key != null && String(out.r2_key).trim()) out.r2_key = String(out.r2_key).trim();
-      if (out.file_key != null && String(out.file_key).trim()) out.file_key = String(out.file_key).trim();
-      if (out.queue_id != null && String(out.queue_id).trim()) out.queue_id = String(out.queue_id).trim();
-      if (out.manual_timesheet_queue_id != null && String(out.manual_timesheet_queue_id).trim()) {
-        out.manual_timesheet_queue_id = String(out.manual_timesheet_queue_id).trim();
+      if (queueMatch?.id != null && String(queueMatch.id).trim()) {
+        const queueId = String(queueMatch.id).trim();
+        out.queue_id = queueId;
+        out.manual_timesheet_queue_id = queueId;
+        out.last_rotation_deg = Number(queueMatch.last_rotation_deg ?? 0);
+        out.rotation_degrees = Number(queueMatch.last_rotation_deg ?? 0);
+        out.rotation_deg = Number(queueMatch.last_rotation_deg ?? 0);
       }
-      if (out.manual_queue_id != null && String(out.manual_queue_id).trim()) {
-        out.manual_queue_id = String(out.manual_queue_id).trim();
-      }
-      if (out.last_rotation_deg != null) out.last_rotation_deg = Number(out.last_rotation_deg);
-      if (out.rotation_degrees != null) out.rotation_degrees = Number(out.rotation_degrees);
-      if (out.rotation_deg != null) out.rotation_deg = Number(out.rotation_deg);
-      if (metaObj) out.meta_json = metaObj;
+      if (queueMetaObj) out.meta_json = queueMetaObj;
       out.system = false;
       out.is_view_only = !routeEvidenceEditable;
       out.can_delete = routeEvidenceEditable;
