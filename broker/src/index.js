@@ -12485,11 +12485,71 @@ async function sendPayBatchRemittancesInternal(env, opts) {
 
   let batchGet = null;
   try {
-    const batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId });
-    batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
+    const optionsBatchPayload =
+      (opts?.batch_get && typeof opts.batch_get === 'object')
+        ? opts.batch_get
+        : (opts?.batchGet && typeof opts.batchGet === 'object')
+          ? opts.batchGet
+          : (opts?.batch && typeof opts.batch === 'object')
+            ? opts.batch
+            : null;
+
+    if (optionsBatchPayload) {
+      batchGet = unwrapRpc(optionsBatchPayload, 'pay_batch_get');
+    } else {
+      const batchGet0 = await sbRpc(env, 'pay_batch_get', { p_pay_batch_id: payBatchId });
+      batchGet = unwrapRpc(batchGet0, 'pay_batch_get');
+    }
   } catch (e) {
     const msg = (e && e.message) ? String(e.message) : String(e || 'PAY_BATCH_GET_FAILED');
     throw new Error(msg);
+  }
+
+  const suppressByPriority = (() => {
+    const settlementSuppressed = batchGet?.settlement_confirmation_json?.suppress_remittances === true;
+    if (settlementSuppressed) return 'SUPPRESSED_BY_SETTLEMENT_CONFIRMATION';
+
+    const executionIntentSuppressed = batchGet?.execution_intent_json?.suppress_remittances === true;
+    if (executionIntentSuppressed) return 'SUPPRESSED_BY_EXECUTION_INTENT';
+
+    const authIntentSuppressed = batchGet?.auth?.execution_intent_json?.suppress_remittances === true;
+    if (authIntentSuppressed) return 'SUPPRESSED_BY_AUTH_EXECUTION_INTENT';
+
+    const pendingSuppressed = batchGet?.suppress_remittances_pending === true;
+    if (pendingSuppressed) return 'SUPPRESSED_BY_PENDING_FLAG';
+
+    return null;
+  })();
+
+  if (suppressByPriority) {
+    const suppressedResult = {
+      trigger_status: suppressByPriority,
+      queued_count: 0,
+      skipped_count: 0,
+      suppressed: true,
+      suppress_remittances: true
+    };
+    return {
+      ok: true,
+      pay_batch_id: payBatchId,
+      scope,
+      communication_mode: 'SUPPRESSED',
+      trigger_status: suppressByPriority,
+      error: null,
+      pay_date: null,
+      authoritative_payment_date: null,
+      bulk_reference: null,
+      payroll_testing: false,
+      test_recipient: null,
+      queued_count: 0,
+      skipped_count: 0,
+      queued: [],
+      skipped: [],
+      suppressed: true,
+      suppress_remittances: true,
+      remittance_result: { ...suppressedResult },
+      payout_notice_result: { ...suppressedResult }
+    };
   }
 
   const batchObj = (batchGet && typeof batchGet === 'object') ? (batchGet.batch || null) : null;
@@ -78830,6 +78890,145 @@ async function sbUpdateUserPassword(env, user_id, newHash) {
 
   return updated;
 }
+
+// NOTE: There is currently no separate in-file helper exposing pay_export_bank_csv supported column keys.
+// Keep this set aligned with the current Banking CSV internal keys accepted by CSV settings/export paths.
+const BANKING_PAY_CSV_SUPPORTED_COLUMN_KEYS = new Set([
+  'payment_reference',
+  'payee_name',
+  'sort_code',
+  'account_number',
+  'account_type',
+  'amount',
+  'currency',
+  'pay_channel',
+  'rail_provider',
+  'rail_env',
+  'request_id',
+  'transfer_group_key',
+  'candidate_id',
+  'umbrella_id'
+]);
+
+const normalizePayExportCsvFormatJson = (raw) => {
+  // settings_defaults.pay_export_csv_format_json is NOT NULL with default {} in DB contract.
+  // Treat null/empty-parsed input as reset-to-default-object.
+  if (raw === null || raw === undefined) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('pay_export_csv_format_json must be a JSON object (or null)');
+  }
+
+  const allowedTopLevel = new Set([
+    'include_header',
+    'delimiter',
+    'line_ending',
+    'quote_mode',
+    'bom',
+    'sort_code_format',
+    'account_number_format',
+    'amount_decimals',
+    'empty_value',
+    'headers'
+  ]);
+
+  for (const k of Object.keys(raw)) {
+    if (!allowedTopLevel.has(k)) {
+      throw new Error(`pay_export_csv_format_json.${k} is not supported`);
+    }
+  }
+
+  const out = {};
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'include_header')) {
+    if (typeof raw.include_header !== 'boolean') throw new Error('pay_export_csv_format_json.include_header must be boolean');
+    out.include_header = raw.include_header;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'delimiter')) {
+    const v = String(raw.delimiter ?? '');
+    if (!new Set([',', ';', '\t', '|']).has(v)) throw new Error('pay_export_csv_format_json.delimiter must be one of ",", ";", "\\t", "|"');
+    out.delimiter = v;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'line_ending')) {
+    const v = String(raw.line_ending ?? '').trim().toUpperCase();
+    if (!new Set(['LF', 'CRLF']).has(v)) throw new Error('pay_export_csv_format_json.line_ending must be LF or CRLF');
+    out.line_ending = v;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'quote_mode')) {
+    const v = String(raw.quote_mode ?? '').trim().toUpperCase();
+    if (!new Set(['MINIMAL', 'ALL']).has(v)) throw new Error('pay_export_csv_format_json.quote_mode must be MINIMAL or ALL');
+    out.quote_mode = v;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'bom')) {
+    if (typeof raw.bom !== 'boolean') throw new Error('pay_export_csv_format_json.bom must be boolean');
+    out.bom = raw.bom;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'sort_code_format')) {
+    const v = String(raw.sort_code_format ?? '').trim().toUpperCase();
+    if (!new Set(['AS_STORED', 'DIGITS', 'HYPHENATED']).has(v)) {
+      throw new Error('pay_export_csv_format_json.sort_code_format must be AS_STORED, DIGITS, or HYPHENATED');
+    }
+    out.sort_code_format = v;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'account_number_format')) {
+    const v = String(raw.account_number_format ?? '').trim().toUpperCase();
+    if (!new Set(['AS_STORED', 'DIGITS']).has(v)) {
+      throw new Error('pay_export_csv_format_json.account_number_format must be AS_STORED or DIGITS');
+    }
+    out.account_number_format = v;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'amount_decimals')) {
+    const n = Number(raw.amount_decimals);
+    const v = Number.isFinite(n) ? Math.trunc(n) : NaN;
+    if (!Number.isFinite(v) || n !== v || v < 0 || v > 4) {
+      throw new Error('pay_export_csv_format_json.amount_decimals must be an integer between 0 and 4');
+    }
+    out.amount_decimals = v;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'empty_value')) {
+    if (typeof raw.empty_value !== 'string') throw new Error('pay_export_csv_format_json.empty_value must be a string');
+    const v = raw.empty_value.trim();
+    if (v.length > 50) throw new Error('pay_export_csv_format_json.empty_value max length is 50');
+    out.empty_value = v;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(raw, 'headers')) {
+    const headersRaw = raw.headers;
+    if (headersRaw == null) {
+      out.headers = {};
+    } else if (!headersRaw || typeof headersRaw !== 'object' || Array.isArray(headersRaw)) {
+      throw new Error('pay_export_csv_format_json.headers must be an object');
+    } else {
+      const headersOut = {};
+      for (const [keyRaw, valueRaw] of Object.entries(headersRaw)) {
+        const key = String(keyRaw || '').trim();
+        if (!BANKING_PAY_CSV_SUPPORTED_COLUMN_KEYS.has(key)) {
+          throw new Error(`pay_export_csv_format_json.headers contains unsupported key: ${key}`);
+        }
+        if (typeof valueRaw !== 'string') {
+          throw new Error(`pay_export_csv_format_json.headers.${key} must be a string`);
+        }
+        const value = valueRaw.trim();
+        if (!value) continue;
+        if (value.length > 120) {
+          throw new Error(`pay_export_csv_format_json.headers.${key} max length is 120`);
+        }
+        headersOut[key] = value;
+      }
+      out.headers = headersOut;
+    }
+  }
+
+  return out;
+};
+
 async function handleGetSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized('Unauthorized');
@@ -78871,6 +79070,7 @@ async function handleGetSettings(env, req) {
 
         // ✅ NEW: configurable export CSV columns/order
         'pay_export_csv_columns_json',
+        'pay_export_csv_format_json',
 
         // Global shift patterns + timezone
         'timezone_id',
@@ -78981,6 +79181,7 @@ async function handleUpdateSettings(env, req) {
 
     // ✅ NEW: configurable export CSV columns/order
     'pay_export_csv_columns_json',
+    'pay_export_csv_format_json',
 
     // ✅ NEW: payroll testing mode flag (simulate payments; no real bank payments)
     'payroll_testing',
@@ -79199,6 +79400,31 @@ async function handleUpdateSettings(env, req) {
       }
 
       payload.pay_export_csv_columns_json = parsed.map((it) => String(it).trim());
+      continue;
+    }
+
+    if (k === 'pay_export_csv_format_json') {
+      const raw = data.pay_export_csv_format_json;
+      let parsed = null;
+
+      if (raw == null) {
+        payload.pay_export_csv_format_json = {};
+        continue;
+      } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        parsed = raw;
+      } else if (typeof raw === 'string') {
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          return withCORS(env, req, badRequest('pay_export_csv_format_json must be valid JSON object or null'));
+        }
+      }
+
+      try {
+        payload.pay_export_csv_format_json = normalizePayExportCsvFormatJson(parsed);
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e || 'pay_export_csv_format_json invalid')));
+      }
       continue;
     }
 
