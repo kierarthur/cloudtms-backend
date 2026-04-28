@@ -35159,21 +35159,59 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     // ─────────────────────────────────────────────────────────────
     // 1) User evidence rows (timesheet_evidence)
     // ─────────────────────────────────────────────────────────────
-    const { rows: evRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
-        `?timesheet_id=eq.${enc(currentTsId)}` +
-        `&select=id,kind,display_name,storage_key,created_at,created_by` +
-        `&order=created_at.asc`
-    );
+    const fetchTimesheetEvidenceRows = async () => {
+      const expandedSelect =
+        'id,evidence_id,kind,display_name,storage_key,r2_key,file_key,created_at,created_by,' +
+        'queue_id,manual_timesheet_queue_id,manual_queue_id,last_rotation_deg,rotation_degrees,rotation_deg,meta_json';
+      try {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+            `?timesheet_id=eq.${enc(currentTsId)}` +
+            `&select=${enc(expandedSelect)}` +
+            `&order=created_at.asc`
+        );
+        return Array.isArray(rows) ? rows : [];
+      } catch {
+        // Back-compat fallback for deployments where expanded fields are not exposed.
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+            `?timesheet_id=eq.${enc(currentTsId)}` +
+            `&select=id,kind,display_name,storage_key,created_at,created_by,meta_json` +
+            `&order=created_at.asc`
+        );
+        return Array.isArray(rows) ? rows : [];
+      }
+    };
+    const evRows = await fetchTimesheetEvidenceRows();
 
     const userEvidenceRaw = (evRows || []).map(ev => {
       const out = { ...(ev || {}) };
       const storageKey = cleanStorageKey(out.storage_key);
+      const metaObj = (out.meta_json && typeof out.meta_json === 'object' && !Array.isArray(out.meta_json))
+        ? out.meta_json
+        : null;
 
       out.timesheet_id = currentTsId;
+      if (out.evidence_id != null && String(out.evidence_id).trim()) {
+        out.evidence_id = String(out.evidence_id).trim();
+      }
       out.filename = out.display_name || null;
       out.storage_key = storageKey || null;
+      if (out.r2_key != null && String(out.r2_key).trim()) out.r2_key = String(out.r2_key).trim();
+      if (out.file_key != null && String(out.file_key).trim()) out.file_key = String(out.file_key).trim();
+      if (out.queue_id != null && String(out.queue_id).trim()) out.queue_id = String(out.queue_id).trim();
+      if (out.manual_timesheet_queue_id != null && String(out.manual_timesheet_queue_id).trim()) {
+        out.manual_timesheet_queue_id = String(out.manual_timesheet_queue_id).trim();
+      }
+      if (out.manual_queue_id != null && String(out.manual_queue_id).trim()) {
+        out.manual_queue_id = String(out.manual_queue_id).trim();
+      }
+      if (out.last_rotation_deg != null) out.last_rotation_deg = Number(out.last_rotation_deg);
+      if (out.rotation_degrees != null) out.rotation_degrees = Number(out.rotation_degrees);
+      if (out.rotation_deg != null) out.rotation_deg = Number(out.rotation_deg);
+      if (metaObj) out.meta_json = metaObj;
       out.system = false;
       out.is_view_only = !routeEvidenceEditable;
       out.can_delete = routeEvidenceEditable;
@@ -40146,9 +40184,17 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
 
     const add = (obj) => {
       if (!obj || typeof obj !== 'object') return;
-      const timesheetId = obj.timesheet_id ? String(obj.timesheet_id).trim() : '';
-      const contractWeekId = obj.contract_week_id ? String(obj.contract_week_id).trim() : '';
-      const rowKey = obj.row_key ? String(obj.row_key).trim() : (timesheetId ? `timesheet:${timesheetId}` : (contractWeekId ? `contract_week:${contractWeekId}` : ''));
+      // Authorise is intentionally identity-only. We whitelist selection identity
+      // fields and ignore any queue/evidence attachment-like fields if sent.
+      const {
+        row_key: rawRowKey,
+        timesheet_id: rawTimesheetId,
+        contract_week_id: rawContractWeekId,
+        expected_timesheet_id: rawExpectedTimesheetId
+      } = obj;
+      const timesheetId = rawTimesheetId ? String(rawTimesheetId).trim() : '';
+      const contractWeekId = rawContractWeekId ? String(rawContractWeekId).trim() : '';
+      const rowKey = rawRowKey ? String(rawRowKey).trim() : (timesheetId ? `timesheet:${timesheetId}` : (contractWeekId ? `contract_week:${contractWeekId}` : ''));
       const key = rowKey || `${timesheetId}|${contractWeekId}`;
       if (!key || seen.has(key)) return;
       seen.add(key);
@@ -40156,7 +40202,7 @@ async function handleBulkTimesheetAuthoriseSelected(env, req) {
         row_key: rowKey || null,
         timesheet_id: timesheetId || null,
         contract_week_id: contractWeekId || null,
-        expected_timesheet_id: obj.expected_timesheet_id ? String(obj.expected_timesheet_id).trim() : (timesheetId || null)
+        expected_timesheet_id: rawExpectedTimesheetId ? String(rawExpectedTimesheetId).trim() : (timesheetId || null)
       });
     };
 
