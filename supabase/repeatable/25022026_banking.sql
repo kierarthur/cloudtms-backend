@@ -8866,6 +8866,9 @@ $$;
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -9413,27 +9416,27 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
-              'segment_id', seg_id,
-              'date', coalesce(before_seg->>'date', after_seg->>'date'),
+              'segment_id', x.seg_id,
+              'date', coalesce(x.before_seg->>'date', x.after_seg->>'date'),
               'before', jsonb_build_object(
-                'start_utc', before_seg->>'start_utc',
-                'end_utc', before_seg->>'end_utc',
-                'break_mins', coalesce(nullif(before_seg->>'break_mins','')::numeric,0),
-                'breaks', coalesce(before_seg->'breaks','[]'::jsonb),
-                'exclude_from_pay', coalesce(nullif(before_seg->>'exclude_from_pay','')::boolean,false)
+                'start_utc', x.before_seg->>'start_utc',
+                'end_utc', x.before_seg->>'end_utc',
+                'break_mins', coalesce(nullif(x.before_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(x.before_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(x.before_seg->>'exclude_from_pay','')::boolean,false)
               ),
               'after', jsonb_build_object(
-                'start_utc', after_seg->>'start_utc',
-                'end_utc', after_seg->>'end_utc',
-                'break_mins', coalesce(nullif(after_seg->>'break_mins','')::numeric,0),
-                'breaks', coalesce(after_seg->'breaks','[]'::jsonb),
-                'exclude_from_pay', coalesce(nullif(after_seg->>'exclude_from_pay','')::boolean,false)
+                'start_utc', x.after_seg->>'start_utc',
+                'end_utc', x.after_seg->>'end_utc',
+                'break_mins', coalesce(nullif(x.after_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(x.after_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(x.after_seg->>'exclude_from_pay','')::boolean,false)
               )
             )
             order by
-              coalesce(before_seg->>'date', after_seg->>'date') asc,
-              coalesce(before_seg->>'start_utc', after_seg->>'start_utc') asc,
-              seg_id asc
+              coalesce(x.before_seg->>'date', x.after_seg->>'date') asc,
+              coalesce(x.before_seg->>'start_utc', x.after_seg->>'start_utc') asc,
+              x.seg_id asc
           ),
           '[]'::jsonb
         ) as schedule_changes
@@ -9442,7 +9445,7 @@ begin
           ts0.umbrella_id,
           ts0.candidate_id,
           ts0.timesheet_id,
-          nullif(btrim(coalesce(ids->>'segment_id','')),'') as seg_id,
+          nullif(btrim(coalesce(ids.s->>'segment_id','')),'') as seg_id,
           bseg.seg as before_seg,
           aseg.seg as after_seg
         from ts_sections ts0
@@ -9461,14 +9464,14 @@ begin
           select s as seg
           from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s
           where s is not null and jsonb_typeof(s)='object'
-            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids.s->>'segment_id','')),'')
           limit 1
         ) bseg on true
         left join lateral (
           select s as seg
           from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s
           where s is not null and jsonb_typeof(s)='object'
-            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids.s->>'segment_id','')),'')
           limit 1
         ) aseg on true
       ) x
@@ -10160,27 +10163,27 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
-              'segment_id', seg_id,
-              'date', coalesce(before_seg->>'date', after_seg->>'date'),
+              'segment_id', x.seg_id,
+              'date', coalesce(x.before_seg->>'date', x.after_seg->>'date'),
               'before', jsonb_build_object(
-                'start_utc', before_seg->>'start_utc',
-                'end_utc', before_seg->>'end_utc',
-                'break_mins', coalesce(nullif(before_seg->>'break_mins','')::numeric,0),
-                'breaks', coalesce(before_seg->'breaks','[]'::jsonb),
-                'exclude_from_pay', coalesce(nullif(before_seg->>'exclude_from_pay','')::boolean,false)
+                'start_utc', x.before_seg->>'start_utc',
+                'end_utc', x.before_seg->>'end_utc',
+                'break_mins', coalesce(nullif(x.before_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(x.before_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(x.before_seg->>'exclude_from_pay','')::boolean,false)
               ),
               'after', jsonb_build_object(
-                'start_utc', after_seg->>'start_utc',
-                'end_utc', after_seg->>'end_utc',
-                'break_mins', coalesce(nullif(after_seg->>'break_mins','')::numeric,0),
-                'breaks', coalesce(after_seg->'breaks','[]'::jsonb),
-                'exclude_from_pay', coalesce(nullif(after_seg->>'exclude_from_pay','')::boolean,false)
+                'start_utc', x.after_seg->>'start_utc',
+                'end_utc', x.after_seg->>'end_utc',
+                'break_mins', coalesce(nullif(x.after_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(x.after_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(x.after_seg->>'exclude_from_pay','')::boolean,false)
               )
             )
             order by
-              coalesce(before_seg->>'date', after_seg->>'date') asc,
-              coalesce(before_seg->>'start_utc', after_seg->>'start_utc') asc,
-              seg_id asc
+              coalesce(x.before_seg->>'date', x.after_seg->>'date') asc,
+              coalesce(x.before_seg->>'start_utc', x.after_seg->>'start_utc') asc,
+              x.seg_id asc
           ),
           '[]'::jsonb
         ) as schedule_changes
@@ -10188,7 +10191,7 @@ begin
         select
           ts0.candidate_id,
           ts0.timesheet_id,
-          nullif(btrim(coalesce(ids->>'segment_id','')),'') as seg_id,
+          nullif(btrim(coalesce(ids.s->>'segment_id','')),'') as seg_id,
           bseg.seg as before_seg,
           aseg.seg as after_seg
         from ts_sections ts0
@@ -10207,14 +10210,14 @@ begin
           select s as seg
           from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s
           where s is not null and jsonb_typeof(s)='object'
-            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids.s->>'segment_id','')),'')
           limit 1
         ) bseg on true
         left join lateral (
           select s as seg
           from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s
           where s is not null and jsonb_typeof(s)='object'
-            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids.s->>'segment_id','')),'')
           limit 1
         ) aseg on true
       ) x
@@ -10938,27 +10941,27 @@ begin
         coalesce(
           jsonb_agg(
             jsonb_build_object(
-              'segment_id', seg_id,
-              'date', coalesce(before_seg->>'date', after_seg->>'date'),
+              'segment_id', x.seg_id,
+              'date', coalesce(x.before_seg->>'date', x.after_seg->>'date'),
               'before', jsonb_build_object(
-                'start_utc', before_seg->>'start_utc',
-                'end_utc', before_seg->>'end_utc',
-                'break_mins', coalesce(nullif(before_seg->>'break_mins','')::numeric,0),
-                'breaks', coalesce(before_seg->'breaks','[]'::jsonb),
-                'exclude_from_pay', coalesce(nullif(before_seg->>'exclude_from_pay','')::boolean,false)
+                'start_utc', x.before_seg->>'start_utc',
+                'end_utc', x.before_seg->>'end_utc',
+                'break_mins', coalesce(nullif(x.before_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(x.before_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(x.before_seg->>'exclude_from_pay','')::boolean,false)
               ),
               'after', jsonb_build_object(
-                'start_utc', after_seg->>'start_utc',
-                'end_utc', after_seg->>'end_utc',
-                'break_mins', coalesce(nullif(after_seg->>'break_mins','')::numeric,0),
-                'breaks', coalesce(after_seg->'breaks','[]'::jsonb),
-                'exclude_from_pay', coalesce(nullif(after_seg->>'exclude_from_pay','')::boolean,false)
+                'start_utc', x.after_seg->>'start_utc',
+                'end_utc', x.after_seg->>'end_utc',
+                'break_mins', coalesce(nullif(x.after_seg->>'break_mins','')::numeric,0),
+                'breaks', coalesce(x.after_seg->'breaks','[]'::jsonb),
+                'exclude_from_pay', coalesce(nullif(x.after_seg->>'exclude_from_pay','')::boolean,false)
               )
             )
             order by
-              coalesce(before_seg->>'date', after_seg->>'date') asc,
-              coalesce(before_seg->>'start_utc', after_seg->>'start_utc') asc,
-              seg_id asc
+              coalesce(x.before_seg->>'date', x.after_seg->>'date') asc,
+              coalesce(x.before_seg->>'start_utc', x.after_seg->>'start_utc') asc,
+              x.seg_id asc
           ),
           '[]'::jsonb
         ) as schedule_changes
@@ -10966,7 +10969,7 @@ begin
         select
           ts0.candidate_id,
           ts0.timesheet_id,
-          nullif(btrim(coalesce(ids->>'segment_id','')),'') as seg_id,
+          nullif(btrim(coalesce(ids.s->>'segment_id','')),'') as seg_id,
           bseg.seg as before_seg,
           aseg.seg as after_seg
         from ts_sections ts0
@@ -10985,14 +10988,14 @@ begin
           select s as seg
           from jsonb_array_elements(coalesce(ts0.base_snapshot_json->'segments','[]'::jsonb)) s
           where s is not null and jsonb_typeof(s)='object'
-            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids.s->>'segment_id','')),'')
           limit 1
         ) bseg on true
         left join lateral (
           select s as seg
           from jsonb_array_elements(coalesce(ts0.target_snapshot_json->'segments','[]'::jsonb)) s
           where s is not null and jsonb_typeof(s)='object'
-            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids->>'segment_id','')),'')
+            and nullif(btrim(coalesce(s->>'segment_id','')),'') = nullif(btrim(coalesce(ids.s->>'segment_id','')),'')
           limit 1
         ) aseg on true
       ) x
@@ -11281,7 +11284,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
