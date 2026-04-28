@@ -114550,21 +114550,8 @@ function getRailAdapter(provider) {
           return { ok: true, pay_batch_id: String(batchId), polled: 0, settled: null };
         },
 
-        async confirmManual(env, batchId, payload, actorUserId) {
-          if (!batchId) throw new Error('confirmManual: batchId required');
-          if (!actorUserId) throw new Error('confirmManual: actorUserId required');
-          if (!payload || typeof payload !== 'object') throw new Error('confirmManual: payload required');
-
-          const scope = String(payload.scope || 'ALL').trim();
-          const bankConfirmRef = String(payload.bank_confirm_ref || '').trim();
-          if (!bankConfirmRef) throw new Error('confirmManual: bank_confirm_ref required');
-
-          return sbRpc(env, 'pay_settle_manual_confirm', {
-            p_pay_batch_id: String(batchId),
-            p_scope: scope,
-            p_bank_confirm_ref: bankConfirmRef,
-            p_actor_user_id: String(actorUserId)
-          });
+        async confirmManual() {
+          throw new Error('USE_EXECUTE_MODAL_SETTLEMENT: CSV/manual settlement must be completed through the Execute modal authorisation flow.');
         }
       })
     };
@@ -115047,20 +115034,8 @@ async function csvAdapter_export(env, batchId, scope, actorUserId) {
   }
 }
 
-async function csvAdapter_confirmManual(env, batchId, bankConfirmRef, actorUserId, scope = 'ALL') {
-  if (!batchId) throw new Error('csvAdapter_confirmManual: batchId required');
-  if (!actorUserId) throw new Error('csvAdapter_confirmManual: actorUserId required');
-  const ref = String(bankConfirmRef || '').trim();
-  if (!ref) throw new Error('csvAdapter_confirmManual: bankConfirmRef required');
-
-  const sc = String(scope || 'ALL').trim();
-
-  return sbRpc(env, 'pay_settle_manual_confirm', {
-    p_pay_batch_id: String(batchId),
-    p_scope: sc,
-    p_bank_confirm_ref: ref,
-    p_actor_user_id: String(actorUserId)
-  });
+async function csvAdapter_confirmManual() {
+  throw new Error('USE_EXECUTE_MODAL_SETTLEMENT: CSV/manual settlement must be completed through the Execute modal authorisation flow.');
 }
 
 async function bankingCronTick(env, opts = {}) {
