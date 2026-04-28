@@ -13750,6 +13750,7 @@ declare
   v_batch_created_at_utc timestamptz;
   v_batch_status text;
   v_batch_is_active_reservation boolean := false;
+  v_finance_reservation_expected_status text := 'RESERVED';
   v_same_week_paye_override_used boolean := false;
   v_paye_guardrails jsonb := '{}'::jsonb;
 
@@ -13784,6 +13785,12 @@ begin
   end if;
 
   v_batch_is_active_reservation := public._pay_batch_status_is_active_reservation(v_batch_status);
+
+  if v_batch_status in ('AUTHORISED_FOR_PAYMENT','SCHEDULED','EXECUTING') then
+    v_finance_reservation_expected_status := 'COMMITTED';
+  else
+    v_finance_reservation_expected_status := 'RESERVED';
+  end if;
 
   v_week_start := public._pay_week_start_monday(v_pay_date);
 
@@ -14167,7 +14174,7 @@ begin
       'reservation_id', case when bfi.reservation_id is null then null else bfi.reservation_id::text end,
       'reserved_amount_ex', bfi.reserved_amount_ex,
       'repayment_week_start', case when bfi.repayment_week_start is null then null else bfi.repayment_week_start::text end,
-      'status', 'RESERVED'
+      'status', v_finance_reservation_expected_status
     )::text as expected_text,
     case
       when rr.reservation_id is null then null
@@ -14187,7 +14194,7 @@ begin
      or rr.finance_case_id is distinct from bfi.finance_case_id
      or round(coalesce(rr.reserved_amount_ex, 0), 2) <> round(coalesce(bfi.reserved_amount_ex, 0), 2)
      or rr.repayment_week_start is distinct from bfi.repayment_week_start
-     or rr.reservation_status <> 'RESERVED'
+     or rr.reservation_status <> v_finance_reservation_expected_status
      or (bfi.reservation_id is not null and rr.reservation_id is distinct from bfi.reservation_id);
 
   insert into pg_temp.tmp_fresh_state_diffs (
@@ -15515,6 +15522,7 @@ begin
   );
 end;
 $function$;
+
 
 
 
