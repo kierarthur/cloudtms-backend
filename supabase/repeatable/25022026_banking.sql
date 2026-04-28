@@ -8869,6 +8869,9 @@ $$;
 
 
 
+
+
+
 CREATE OR REPLACE FUNCTION public.pay_remittance_build(p_pay_batch_id uuid, p_scope text DEFAULT 'ALL'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -9079,7 +9082,7 @@ begin
         pbi.amount_vat,
         pbi.amount_inc_vat,
         pbi.pay_channel,
-        pbi.umbrella_id,
+        pbi.umbrella_id as item_umbrella_id,
         upper(coalesce(tsa.sheet_scope_norm, v_missing_scope)) as sheet_scope_norm
       from umb_candidates uc
       join public.pay_batch_candidates pbc
@@ -11284,7 +11287,6 @@ begin
   );
 end;
 $function$;
-
 
 
 
