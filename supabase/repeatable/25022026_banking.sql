@@ -5229,12 +5229,21 @@ begin
 end;
 $$;
 
+
+
+drop function if exists public.pay_settle_manual_confirm(uuid, text, text, date, uuid);
+
 create or replace function public.pay_settle_manual_confirm(
   p_pay_batch_id uuid,
   p_scope text,
   p_bank_confirm_ref text,
   p_payment_date date,
-  p_actor_user_id uuid
+  p_actor_user_id uuid,
+  p_settlement_mode text default 'CSV_SETTLEMENT',
+  p_auth_request_id uuid default null,
+  p_csv_uploaded_confirmed boolean default false,
+  p_external_settlement_comment text default null,
+  p_suppress_remittances boolean default false
 )
 returns jsonb
 language plpgsql
@@ -5244,21 +5253,34 @@ as $$
 declare
   v_scope text := upper(btrim(coalesce(p_scope,'ALL')));
   v_batch record;
+  v_auth record;
 
-  v_settlement_json jsonb := '[]'::jsonb;
   v_now timestamptz := now();
-
-  v_pending_count int := 0;
-  v_comm_result jsonb := '{}'::jsonb;
-  v_comm_trigger_status text := null;
-  v_comm_error text := null;
-  v_worker_communications jsonb := '{}'::jsonb;
-  v_reservations_committed_count int := 0;
-  v_reservations_committed_amount numeric := 0;
-  v_settle_result jsonb := '{}'::jsonb;
+  v_settlement_mode text := upper(btrim(coalesce(p_settlement_mode, 'CSV_SETTLEMENT')));
+  v_provider text := null;
   v_execution_commit_state text := 'NOT_SUBMITTED';
   v_execution_commit_ref text := null;
   v_execution_committed_at_utc timestamptz := null;
+  v_bank_confirm_ref text := nullif(btrim(coalesce(p_bank_confirm_ref, '')), '');
+  v_external_settlement_comment text := nullif(btrim(coalesce(p_external_settlement_comment, '')), '');
+
+  v_auth_intent jsonb := '{}'::jsonb;
+  v_intent_mode text := null;
+  v_intent_suppress_remittances boolean := false;
+  v_intent_csv_uploaded_confirmed boolean := false;
+  v_intent_bank_confirm_ref text := null;
+  v_intent_external_comment text := null;
+  v_bank_csv_export_json jsonb := null;
+  v_bank_csv_export_hash text := null;
+  v_current_transfer_hash text := null;
+
+  v_pending_count int := 0;
+  v_external_submission_count int := 0;
+  v_reservations_committed_count int := 0;
+  v_reservations_committed_amount numeric := 0;
+  v_settlement_json jsonb := '[]'::jsonb;
+  v_settle_result jsonb := '{}'::jsonb;
+  v_settlement_confirmation_json jsonb := '{}'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_settle_manual_confirm: pay_batch_id is required';
@@ -5266,11 +5288,25 @@ begin
   if p_actor_user_id is null then
     raise exception 'pay_settle_manual_confirm: actor_user_id is required';
   end if;
+  if p_auth_request_id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'AUTH_REQUEST_REQUIRED',
+      'message', 'pay_settle_manual_confirm: authorised auth_request_id is required; use the Execute modal settlement flow',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
   if v_scope not in ('ALL','PAYE','UMBRELLA') then
     raise exception 'pay_settle_manual_confirm: invalid scope (ALL|PAYE|UMBRELLA)';
   end if;
-  if nullif(btrim(coalesce(p_bank_confirm_ref,'')),'') is null then
-    raise exception 'pay_settle_manual_confirm: bank_confirm_ref is required';
+  if v_settlement_mode not in ('CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'INVALID_SETTLEMENT_MODE',
+      'message', 'pay_settle_manual_confirm: settlement_mode must be CSV_SETTLEMENT or EXTERNAL_SETTLEMENT',
+      'pay_batch_id', p_pay_batch_id::text,
+      'settlement_mode', v_settlement_mode
+    )::text;
   end if;
   if p_payment_date is null then
     raise exception 'pay_settle_manual_confirm: payment_date is required';
@@ -5284,9 +5320,13 @@ begin
     pb.rail_env_snapshot,
     pb.authoritative_payment_date,
     pb.authoritative_payment_date_source,
+    pb.pay_date,
     pb.execution_commit_state,
     pb.execution_commit_ref,
-    pb.execution_committed_at_utc
+    pb.execution_committed_at_utc,
+    pb.bank_csv_export_json,
+    pb.execution_intent_json,
+    pb.settlement_confirmation_json
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -5296,8 +5336,77 @@ begin
     raise exception 'pay_settle_manual_confirm: pay_batch not found';
   end if;
 
-  if upper(coalesce(v_batch.rail_provider_snapshot,'')) <> 'CSV' then
-    raise exception 'pay_settle_manual_confirm: CSV-only (rail_provider_snapshot must be CSV; current=%)', v_batch.rail_provider_snapshot;
+  select
+    pbar.id,
+    pbar.pay_batch_id,
+    pbar.state,
+    pbar.execution_intent_json
+  into v_auth
+  from public.pay_batch_auth_requests pbar
+  where pbar.id = p_auth_request_id
+  for update;
+
+  if v_auth.id is null then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'AUTH_REQUEST_NOT_FOUND',
+      'message', 'pay_settle_manual_confirm: auth_request not found',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', p_auth_request_id::text
+    )::text;
+  end if;
+  if v_auth.pay_batch_id is distinct from p_pay_batch_id then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'AUTH_REQUEST_BATCH_MISMATCH',
+      'message', 'pay_settle_manual_confirm: auth_request does not belong to this pay batch',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', p_auth_request_id::text
+    )::text;
+  end if;
+  if upper(coalesce(v_auth.state,'')) <> 'AUTHORISED' then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'AUTH_REQUEST_NOT_AUTHORISED',
+      'message', 'pay_settle_manual_confirm: auth_request must be AUTHORISED before settlement can complete',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', p_auth_request_id::text,
+      'auth_state', v_auth.state
+    )::text;
+  end if;
+
+  if v_auth.execution_intent_json is not null and jsonb_typeof(v_auth.execution_intent_json) = 'object' then
+    v_auth_intent := v_auth.execution_intent_json;
+  elsif v_batch.execution_intent_json is not null and jsonb_typeof(v_batch.execution_intent_json) = 'object' then
+    v_auth_intent := v_batch.execution_intent_json;
+  else
+    v_auth_intent := '{}'::jsonb;
+  end if;
+
+  v_intent_mode := upper(btrim(coalesce(v_auth_intent->>'execution_mode', '')));
+  if v_intent_mode <> v_settlement_mode then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'AUTH_INTENT_MODE_MISMATCH',
+      'message', 'pay_settle_manual_confirm: supplied settlement_mode does not match the authorised frozen execution intent',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', p_auth_request_id::text,
+      'authorised_execution_mode', v_intent_mode,
+      'requested_settlement_mode', v_settlement_mode
+    )::text;
+  end if;
+
+  v_intent_suppress_remittances := lower(btrim(coalesce(v_auth_intent->>'suppress_remittances', 'false'))) in ('true','1','yes','y','on');
+  if coalesce(p_suppress_remittances, false) <> v_intent_suppress_remittances then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'SUPPRESS_REMITTANCES_INTENT_MISMATCH',
+      'message', 'pay_settle_manual_confirm: suppress_remittances must match the authorised frozen execution intent',
+      'pay_batch_id', p_pay_batch_id::text,
+      'auth_request_id', p_auth_request_id::text,
+      'authorised_suppress_remittances', v_intent_suppress_remittances,
+      'requested_suppress_remittances', coalesce(p_suppress_remittances, false)
+    )::text;
   end if;
 
   v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
@@ -5307,27 +5416,244 @@ begin
   v_execution_commit_ref := v_batch.execution_commit_ref;
   v_execution_committed_at_utc := v_batch.execution_committed_at_utc;
 
+  if upper(coalesce(v_batch.status,'')) in ('COMMITTED','PAID','SETTLED','CANCELLED') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'BATCH_NOT_SETTLEABLE',
+      'message', 'pay_settle_manual_confirm: batch status cannot be manually settled',
+      'pay_batch_id', p_pay_batch_id::text,
+      'status', v_batch.status
+    )::text;
+  end if;
+
+  if v_execution_commit_state <> 'NOT_SUBMITTED' then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'EXECUTION_STATE_CONFLICT',
+      'message', 'pay_settle_manual_confirm: batch has already crossed the native execution submission boundary',
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_execution_commit_state,
+      'execution_commit_ref', v_execution_commit_ref,
+      'execution_committed_at_utc', case when v_execution_committed_at_utc is null then null else v_execution_committed_at_utc::text end
+    )::text;
+  end if;
+
+  v_provider := upper(btrim(coalesce(v_batch.rail_provider_snapshot, '')));
+  if v_provider = 'REV' then
+    v_provider := 'REVOLUT';
+  end if;
+  if v_provider = '' then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'MISSING_RAIL_PROVIDER',
+      'message', 'pay_settle_manual_confirm: rail_provider_snapshot is required and blank provider is not treated as CSV',
+      'pay_batch_id', p_pay_batch_id::text
+    )::text;
+  end if;
+  if v_provider not in ('REVOLUT','CSV') then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'UNKNOWN_RAIL_PROVIDER',
+      'message', 'pay_settle_manual_confirm: unsupported rail_provider_snapshot',
+      'pay_batch_id', p_pay_batch_id::text,
+      'rail_provider_snapshot', v_batch.rail_provider_snapshot
+    )::text;
+  end if;
+
   select count(*)::int
   into v_pending_count
-  from public.pay_bank_transfers pbt
-  where pbt.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
-    and upper(coalesce(pbt.status,'')) = 'PENDING';
+  from public.pay_bank_transfers pbt_pending
+  where pbt_pending.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or upper(coalesce(pbt_pending.pay_channel,'')) = v_scope)
+    and upper(coalesce(pbt_pending.status,'')) = 'PENDING';
 
   if v_pending_count = 0 then
     raise exception 'pay_settle_manual_confirm: no PENDING transfers found for batch % (scope=%)', p_pay_batch_id, v_scope;
   end if;
 
+  select count(*)::int
+  into v_external_submission_count
+  from public.pay_bank_transfers pbt_ext
+  where pbt_ext.pay_batch_id = p_pay_batch_id
+    and (v_scope = 'ALL' or upper(coalesce(pbt_ext.pay_channel,'')) = v_scope)
+    and upper(coalesce(pbt_ext.status,'')) <> 'BLOCKED'
+    and (
+      nullif(btrim(coalesce(pbt_ext.rail_tx_id,'')), '') is not null
+      or upper(coalesce(pbt_ext.rail_state,'')) in ('SUBMITTED','QUEUED','ACCEPTED','SENT','PROCESSING','IN_FLIGHT','PENDING_SETTLEMENT','PENDING_CONFIRMATION','PENDING_SUBMISSION','COMPLETED','SETTLED','COMMITTED','PAID','EXECUTED')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'submitted','false'))) in ('true','1','yes','y','on')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'queued','false'))) in ('true','1','yes','y','on')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'accepted','false'))) in ('true','1','yes','y','on')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'sent','false'))) in ('true','1','yes','y','on')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'processing','false'))) in ('true','1','yes','y','on')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'completed','false'))) in ('true','1','yes','y','on')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'committed','false'))) in ('true','1','yes','y','on')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'settled','false'))) in ('true','1','yes','y','on')
+      or lower(btrim(coalesce(pbt_ext.rail_meta_json->>'paid','false'))) in ('true','1','yes','y','on')
+      or coalesce(
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_submission_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'submission_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_transfer_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'transfer_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'external_transfer_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'provider_payment_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'payment_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'external_payment_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'transaction_id','')), ''),
+        nullif(btrim(coalesce(pbt_ext.rail_meta_json->>'id','')), '')
+      ) is not null
+    );
+
+  if v_external_submission_count > 0 then
+    raise exception '%', jsonb_build_object(
+      'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+      'code', 'EXTERNAL_SUBMISSION_EXISTS',
+      'message', 'pay_settle_manual_confirm: non-native settlement cannot complete after native rail submission evidence exists',
+      'pay_batch_id', p_pay_batch_id::text,
+      'settlement_mode', v_settlement_mode,
+      'external_submission_transfer_count', v_external_submission_count
+    )::text;
+  end if;
+
+  select md5(coalesce(jsonb_agg(
+    jsonb_build_object(
+      'id', transfer_hash_rows.id,
+      'candidate_id', transfer_hash_rows.candidate_id,
+      'umbrella_id', transfer_hash_rows.umbrella_id,
+      'pay_channel', transfer_hash_rows.pay_channel,
+      'amount', transfer_hash_rows.amount,
+      'currency', transfer_hash_rows.currency,
+      'payment_reference', transfer_hash_rows.payment_reference,
+      'payee_name', transfer_hash_rows.payee_name,
+      'sort_code_digits', transfer_hash_rows.sort_code_digits,
+      'account_number_digits', transfer_hash_rows.account_number_digits,
+      'account_type', transfer_hash_rows.account_type,
+      'bank_details_hash_snapshot', transfer_hash_rows.bank_details_hash_snapshot,
+      'payee_entity_kind', transfer_hash_rows.payee_entity_kind,
+      'payee_entity_id', transfer_hash_rows.payee_entity_id,
+      'transfer_group_key', transfer_hash_rows.transfer_group_key
+    )
+    order by transfer_hash_rows.id
+  )::text, '[]'))
+  into v_current_transfer_hash
+  from (
+    select
+      pbt_hash.id::text as id,
+      case when pbt_hash.candidate_id is null then null else pbt_hash.candidate_id::text end as candidate_id,
+      case when pbt_hash.umbrella_id is null then null else pbt_hash.umbrella_id::text end as umbrella_id,
+      pbt_hash.pay_channel,
+      round(pbt_hash.amount, 2) as amount,
+      pbt_hash.currency,
+      pbt_hash.payment_reference,
+      pbt_hash.payee_name,
+      regexp_replace(coalesce(pbt_hash.sort_code,''), '[^0-9]', '', 'g') as sort_code_digits,
+      regexp_replace(coalesce(pbt_hash.account_number,''), '[^0-9]', '', 'g') as account_number_digits,
+      pbt_hash.account_type,
+      pbt_hash.bank_details_hash_snapshot,
+      pbt_hash.payee_entity_kind,
+      case when pbt_hash.payee_entity_id is null then null else pbt_hash.payee_entity_id::text end as payee_entity_id,
+      pbt_hash.transfer_group_key
+    from public.pay_bank_transfers pbt_hash
+    where pbt_hash.pay_batch_id = p_pay_batch_id
+      and (v_scope = 'ALL' or upper(coalesce(pbt_hash.pay_channel,'')) = v_scope)
+      and upper(coalesce(pbt_hash.status,'')) = 'PENDING'
+    order by pbt_hash.id
+  ) transfer_hash_rows;
+
+  if v_settlement_mode = 'CSV_SETTLEMENT' then
+    v_bank_csv_export_json := v_batch.bank_csv_export_json;
+    v_bank_csv_export_hash := nullif(btrim(coalesce(v_bank_csv_export_json->>'transfer_hash', '')), '');
+    v_intent_csv_uploaded_confirmed := lower(btrim(coalesce(v_auth_intent->>'csv_uploaded_confirmed', 'false'))) in ('true','1','yes','y','on');
+    v_intent_bank_confirm_ref := nullif(btrim(coalesce(v_auth_intent->>'csv_bank_confirm_ref', '')), '');
+
+    if v_bank_csv_export_json is null or jsonb_typeof(v_bank_csv_export_json) <> 'object' or v_bank_csv_export_hash is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+        'code', 'CSV_EXPORT_REQUIRED',
+        'message', 'pay_settle_manual_confirm: CSV settlement requires a CloudTMS-generated CSV banking file first',
+        'pay_batch_id', p_pay_batch_id::text
+      )::text;
+    end if;
+    if v_bank_csv_export_hash <> v_current_transfer_hash then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+        'code', 'CSV_REGENERATION_REQUIRED',
+        'message', 'pay_settle_manual_confirm: generated CSV evidence does not match current frozen transfer rows',
+        'pay_batch_id', p_pay_batch_id::text,
+        'csv_export_hash', v_bank_csv_export_hash,
+        'current_transfer_hash', v_current_transfer_hash
+      )::text;
+    end if;
+    if coalesce(p_csv_uploaded_confirmed, false) = false or v_intent_csv_uploaded_confirmed = false then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+        'code', 'CSV_UPLOAD_CONFIRMATION_REQUIRED',
+        'message', 'pay_settle_manual_confirm: CSV settlement requires confirmation that the CloudTMS CSV was uploaded/processed with the bank',
+        'pay_batch_id', p_pay_batch_id::text
+      )::text;
+    end if;
+    if v_bank_confirm_ref is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+        'code', 'CSV_BANK_CONFIRM_REF_REQUIRED',
+        'message', 'pay_settle_manual_confirm: CSV settlement requires a bank confirmation reference',
+        'pay_batch_id', p_pay_batch_id::text
+      )::text;
+    end if;
+    if v_intent_bank_confirm_ref is not null and v_bank_confirm_ref <> v_intent_bank_confirm_ref then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+        'code', 'CSV_BANK_CONFIRM_REF_INTENT_MISMATCH',
+        'message', 'pay_settle_manual_confirm: supplied bank confirmation reference does not match the authorised frozen intent',
+        'pay_batch_id', p_pay_batch_id::text,
+        'auth_request_id', p_auth_request_id::text
+      )::text;
+    end if;
+  else
+    v_intent_external_comment := nullif(btrim(coalesce(v_auth_intent->>'external_settlement_comment', '')), '');
+    if v_external_settlement_comment is null then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+        'code', 'EXTERNAL_SETTLEMENT_COMMENT_REQUIRED',
+        'message', 'pay_settle_manual_confirm: external settlement requires a mandatory comment',
+        'pay_batch_id', p_pay_batch_id::text
+      )::text;
+    end if;
+    if v_intent_external_comment is not null and v_external_settlement_comment <> v_intent_external_comment then
+      raise exception '%', jsonb_build_object(
+        'error', 'PAY_SETTLE_MANUAL_CONFIRM',
+        'code', 'EXTERNAL_SETTLEMENT_COMMENT_INTENT_MISMATCH',
+        'message', 'pay_settle_manual_confirm: supplied external settlement comment does not match the authorised frozen intent',
+        'pay_batch_id', p_pay_batch_id::text,
+        'auth_request_id', p_auth_request_id::text
+      )::text;
+    end if;
+  end if;
+
+  v_settlement_confirmation_json := jsonb_strip_nulls(jsonb_build_object(
+    'settlement_mode', v_settlement_mode,
+    'settled_at_utc', v_now::text,
+    'settled_by_user_id', p_actor_user_id::text,
+    'payment_date', p_payment_date::text,
+    'bank_confirm_ref', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_confirm_ref else null end,
+    'external_comment', case when v_settlement_mode = 'EXTERNAL_SETTLEMENT' then v_external_settlement_comment else null end,
+    'csv_export_hash', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_csv_export_hash else null end,
+    'suppress_remittances', v_intent_suppress_remittances,
+    'remittances_suppressed_at_utc', case when v_intent_suppress_remittances then v_now::text else null end,
+    'auth_request_id', p_auth_request_id::text,
+    'scope', v_scope,
+    'current_transfer_hash', v_current_transfer_hash
+  ));
+
   update public.pay_batches pb2
   set
     authoritative_payment_date = p_payment_date,
-    authoritative_payment_date_source = 'MANUAL_CONFIRM_PAYMENT_DATE',
+    authoritative_payment_date_source = case when v_settlement_mode = 'CSV_SETTLEMENT' then 'CSV_SETTLEMENT_PAYMENT_DATE' else 'EXTERNAL_SETTLEMENT_PAYMENT_DATE' end,
     pay_date = p_payment_date,
     monzo_confirmed_at_utc = v_now,
     monzo_confirmed_by_user_id = p_actor_user_id,
-    execution_commit_state = 'COMMITTED',
-    execution_commit_ref = coalesce(nullif(btrim(coalesce(p_bank_confirm_ref,'')), ''), pb2.execution_commit_ref),
-    execution_committed_at_utc = coalesce(pb2.execution_committed_at_utc, v_now)
+    execution_commit_ref = coalesce(v_bank_confirm_ref, 'external-settlement:' || p_auth_request_id::text, pb2.execution_commit_ref),
+    settlement_confirmation_json = coalesce(pb2.settlement_confirmation_json, '{}'::jsonb) || v_settlement_confirmation_json,
+    execution_intent_json = coalesce(pb2.execution_intent_json, '{}'::jsonb) || v_auth_intent
   where pb2.id = p_pay_batch_id;
 
   update public.pay_advance_reservations par
@@ -5375,9 +5701,11 @@ begin
     jsonb_build_object(
       'reservation_status', 'COMMITTED',
       'authoritative_payment_date', p_payment_date::text,
-      'scope', v_scope
+      'scope', v_scope,
+      'settlement_mode', v_settlement_mode,
+      'auth_request_id', p_auth_request_id::text
     ),
-    'manual_confirm_commit',
+    lower(v_settlement_mode) || '_commit',
     null
   from public.pay_advance_reservations par
   join public.pay_batch_items pbi
@@ -5387,173 +5715,18 @@ begin
     and par.committed_at_utc = v_now
     and (v_scope = 'ALL' or upper(coalesce(pbi.pay_channel,'')) = v_scope);
 
-  begin
-    if upper(coalesce(v_batch.batch_kind_fixed,'')) = 'LOANS' then
-      v_comm_result := public.pay_finance_payout_notice_queue_commit_stage(
-        p_pay_batch_id,
-        p_actor_user_id
-      );
-
-      if coalesce((v_comm_result->>'ok')::boolean, true) = false then
-        raise exception '%', coalesce(
-          nullif(btrim(coalesce(v_comm_result->>'error','')), ''),
-          'pay_settle_manual_confirm: payout notice queueing failed'
-        );
-      end if;
-
-      v_comm_trigger_status := coalesce(
-        nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-        'PAYOUT_NOTICE_QUEUED'
-      );
-      v_comm_error := nullif(btrim(coalesce(v_comm_result->>'error','')), '');
-    else
-      v_comm_result := public.pay_remittance_queue_commit_stage(
-        p_pay_batch_id,
-        v_scope,
-        p_actor_user_id
-      );
-
-      if coalesce((v_comm_result->>'ok')::boolean, true) = false then
-        raise exception '%', coalesce(
-          nullif(btrim(coalesce(v_comm_result->>'error','')), ''),
-          'pay_settle_manual_confirm: remittance queueing failed'
-        );
-      end if;
-
-      v_comm_trigger_status := coalesce(
-        nullif(btrim(coalesce(v_comm_result->>'trigger_status','')), ''),
-        'REMITTANCE_QUEUED'
-      );
-      v_comm_error := nullif(btrim(coalesce(v_comm_result->>'error','')), '');
-    end if;
-
-    update public.pay_batch_candidates pbc
-    set
-      remittance_trigger_status = v_comm_trigger_status,
-      last_remittance_error = null
-    where pbc.pay_batch_id = p_pay_batch_id
-      and pbc.remittance_sent_at_utc is null
-      and (
-        v_scope = 'ALL'
-        or exists (
-          select 1
-          from public.pay_batch_items pbi2
-          where pbi2.pay_batch_candidate_id = pbc.id
-            and upper(coalesce(pbi2.pay_channel,'')) = v_scope
-        )
-      );
-
-    insert into public.audit_events(
-      actor_user_id,
-      object_type,
-      object_id_text,
-      action,
-      before_json,
-      after_json,
-      reason
-    )
-    values (
-      p_actor_user_id,
-      'pay_batch',
-      p_pay_batch_id::text,
-      'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_TRIGGERED',
-      null,
-      jsonb_build_object(
-        'pay_batch_id', p_pay_batch_id::text,
-        'scope', v_scope,
-        'batch_kind_fixed', upper(coalesce(v_batch.batch_kind_fixed,'')),
-        'authoritative_payment_date', p_payment_date::text,
-        'execution_commit_state', 'COMMITTED',
-        'execution_commit_ref', coalesce(nullif(btrim(coalesce(p_bank_confirm_ref,'')), ''), v_execution_commit_ref),
-        'execution_committed_at_utc', coalesce(v_execution_committed_at_utc, v_now)::text,
-        'trigger_status', v_comm_trigger_status,
-        'result', coalesce(v_comm_result, '{}'::jsonb)
-      ),
-      'manual_confirm_commit_stage'
-    );
-  exception when others then
-    v_comm_trigger_status := case when upper(coalesce(v_batch.batch_kind_fixed,'')) = 'LOANS' then 'PAYOUT_NOTICE_ERROR' else 'COMMIT_STAGE_SEND_ERROR' end;
-    v_comm_error := left(coalesce(SQLERRM,'UNKNOWN_COMMS_ERROR'), 1000);
-    v_comm_result := jsonb_build_object(
-      'ok', false,
-      'trigger_status', v_comm_trigger_status,
-      'error', v_comm_error,
-      'message_kind', case when upper(coalesce(v_batch.batch_kind_fixed,'')) = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
-      'automatic_commit_stage', true
-    );
-
-    begin
-      update public.pay_batch_candidates pbc
-      set
-        remittance_trigger_status = v_comm_trigger_status,
-        last_remittance_error = v_comm_error
-      where pbc.pay_batch_id = p_pay_batch_id
-        and pbc.remittance_sent_at_utc is null
-        and (
-          v_scope = 'ALL'
-          or exists (
-            select 1
-            from public.pay_batch_items pbi2
-            where pbi2.pay_batch_candidate_id = pbc.id
-              and upper(coalesce(pbi2.pay_channel,'')) = v_scope
-          )
-        );
-    exception when others then
-      null;
-    end;
-
-    begin
-      insert into public.audit_events(
-        actor_user_id,
-        object_type,
-        object_id_text,
-        action,
-        before_json,
-        after_json,
-        reason
-      )
-      values (
-        p_actor_user_id,
-        'pay_batch',
-        p_pay_batch_id::text,
-        'PAY_BATCH_COMMIT_STAGE_COMMUNICATION_ERROR',
-        null,
-        jsonb_build_object(
-          'pay_batch_id', p_pay_batch_id::text,
-          'scope', v_scope,
-          'batch_kind_fixed', upper(coalesce(v_batch.batch_kind_fixed,'')),
-          'authoritative_payment_date', p_payment_date::text,
-          'execution_commit_state', 'COMMITTED',
-          'execution_commit_ref', coalesce(nullif(btrim(coalesce(p_bank_confirm_ref,'')), ''), v_execution_commit_ref),
-          'execution_committed_at_utc', coalesce(v_execution_committed_at_utc, v_now)::text,
-          'trigger_status', v_comm_trigger_status,
-          'error', v_comm_error
-        ),
-        'manual_confirm_commit_stage'
-      );
-    exception when others then
-      null;
-    end;
-  end;
-
-  v_worker_communications := jsonb_build_object(
-    'automatic_commit_stage', true,
-    'message_kind', case when upper(coalesce(v_batch.batch_kind_fixed,'')) = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
-    'trigger_status', v_comm_trigger_status,
-    'error', v_comm_error,
-    'result', coalesce(v_comm_result, '{}'::jsonb)
-  );
-
-  update public.pay_batch_items pbi
-  set bank_reference = p_bank_confirm_ref
-  from public.pay_bank_transfers pbt,
-       public.pay_batch_candidates pbc
-  where pbt.pay_batch_id = p_pay_batch_id
-    and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
-    and upper(coalesce(pbt.status,'')) = 'PENDING'
-    and pbc.id = pbi.pay_batch_candidate_id
-    and pbc.pay_batch_id = p_pay_batch_id
-    and pbi.pay_bank_transfer_id = pbt.id;
+  if v_bank_confirm_ref is not null then
+    update public.pay_batch_items pbi
+    set bank_reference = v_bank_confirm_ref
+    from public.pay_bank_transfers pbt,
+         public.pay_batch_candidates pbc
+    where pbt.pay_batch_id = p_pay_batch_id
+      and (v_scope = 'ALL' or upper(coalesce(pbt.pay_channel,'')) = v_scope)
+      and upper(coalesce(pbt.status,'')) = 'PENDING'
+      and pbc.id = pbi.pay_batch_candidate_id
+      and pbc.pay_batch_id = p_pay_batch_id
+      and pbi.pay_bank_transfer_id = pbt.id;
+  end if;
 
   select coalesce(
     jsonb_agg(
@@ -5561,13 +5734,18 @@ begin
         'transfer_id', pbt.id::text,
         'status', 'COMPLETED',
         'rail_tx_id', null,
-        'rail_state', 'MANUAL_CONFIRM',
-        'rail_meta_json', jsonb_build_object(
-          'bank_confirm_ref', p_bank_confirm_ref,
+        'rail_state', case when v_settlement_mode = 'CSV_SETTLEMENT' then 'CSV_MANUAL_CONFIRM' else 'EXTERNAL_SETTLEMENT_CONFIRM' end,
+        'rail_meta_json', jsonb_strip_nulls(jsonb_build_object(
+          'settlement_mode', v_settlement_mode,
+          'bank_confirm_ref', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_confirm_ref else null end,
+          'external_settlement_comment', case when v_settlement_mode = 'EXTERNAL_SETTLEMENT' then v_external_settlement_comment else null end,
           'payment_date', p_payment_date::text,
           'confirmed_at_utc', v_now::text,
-          'confirmed_by_user_id', p_actor_user_id::text
-        )
+          'confirmed_by_user_id', p_actor_user_id::text,
+          'auth_request_id', p_auth_request_id::text,
+          'csv_export_hash', case when v_settlement_mode = 'CSV_SETTLEMENT' then v_bank_csv_export_hash else null end,
+          'suppress_remittances', v_intent_suppress_remittances
+        ))
       )
       order by pbt.pay_channel, pbt.amount desc, pbt.id
     ),
@@ -5584,22 +5762,17 @@ begin
   return coalesce(v_settle_result, '{}'::jsonb)
     || jsonb_build_object(
       'authoritative_payment_date', p_payment_date::text,
-      'authoritative_payment_date_source', 'MANUAL_CONFIRM_PAYMENT_DATE',
+      'authoritative_payment_date_source', case when v_settlement_mode = 'CSV_SETTLEMENT' then 'CSV_SETTLEMENT_PAYMENT_DATE' else 'EXTERNAL_SETTLEMENT_PAYMENT_DATE' end,
+      'settlement_mode', v_settlement_mode,
+      'settlement_confirmation_json', (select pb3.settlement_confirmation_json from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
       'execution_commit_state', (select pb3.execution_commit_state from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
       'execution_commit_ref', (select pb3.execution_commit_ref from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
       'execution_committed_at_utc', (select case when pb3.execution_committed_at_utc is null then null else pb3.execution_committed_at_utc::text end from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
       'reservations_committed_count', v_reservations_committed_count,
-      'reservations_committed_amount', coalesce(v_reservations_committed_amount,0),
-      'worker_communications', v_worker_communications
+      'reservations_committed_amount', coalesce(v_reservations_committed_amount,0)
     );
 end;
 $$;
-
-
-
-
-
-
 
 
 
@@ -5676,6 +5849,12 @@ declare
   v_completed_transfer_count int := 0;
   v_detected_execution_commit_ref text := null;
   v_detected_execution_committed_at_utc timestamptz := null;
+  v_execution_intent_json jsonb := '{}'::jsonb;
+  v_settlement_confirmation_json jsonb := '{}'::jsonb;
+  v_suppress_remittances boolean := false;
+  v_settlement_mode text := 'STANDARD_BANK';
+  v_effective_payment_date date := null;
+  v_suppression_audit_json jsonb := '{}'::jsonb;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_settle_rail: pay_batch_id is required';
@@ -5697,6 +5876,8 @@ begin
     pb.rail_provider_snapshot,
     pb.rail_env_snapshot,
     pb.batch_kind_fixed,
+    pb.execution_intent_json,
+    pb.settlement_confirmation_json,
     pb.execution_commit_state,
     pb.execution_commit_ref,
     pb.execution_committed_at_utc
@@ -5708,6 +5889,19 @@ begin
   if v_batch.id is null then
     raise exception 'pay_settle_rail: pay_batch not found';
   end if;
+
+  if v_batch.execution_intent_json is not null and jsonb_typeof(v_batch.execution_intent_json) = 'object' then
+    v_execution_intent_json := v_batch.execution_intent_json;
+  else
+    v_execution_intent_json := '{}'::jsonb;
+  end if;
+
+  v_settlement_mode := upper(btrim(coalesce(v_execution_intent_json->>'execution_mode', 'STANDARD_BANK')));
+  if v_settlement_mode not in ('STANDARD_BANK','CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') then
+    v_settlement_mode := 'STANDARD_BANK';
+  end if;
+  v_suppress_remittances := lower(btrim(coalesce(v_execution_intent_json->>'suppress_remittances', 'false'))) in ('true','1','yes','y','on');
+  v_effective_payment_date := coalesce(v_batch.authoritative_payment_date, v_batch.pay_date);
 
   v_execution_commit_state := upper(btrim(coalesce(v_batch.execution_commit_state, 'NOT_SUBMITTED')));
   if v_execution_commit_state not in ('NOT_SUBMITTED', 'SUBMITTED_NOT_COMMITTED', 'COMMITTED') then
@@ -6874,6 +7068,22 @@ begin
     execution_committed_at_utc = case
       when coalesce(v_completed_transfer_count, 0) > 0 then coalesce(pb2.execution_committed_at_utc, v_execution_committed_at_utc, v_now)
       else pb2.execution_committed_at_utc
+    end,
+    settlement_confirmation_json = case
+      when coalesce(v_completed_transfer_count, 0) > 0 then
+        coalesce(pb2.settlement_confirmation_json, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(
+          'settlement_mode', v_settlement_mode,
+          'settled_at_utc', v_now::text,
+          'settled_by_user_id', p_actor_user_id::text,
+          'payment_date', case when v_effective_payment_date is null then null else v_effective_payment_date::text end,
+          'bank_confirm_ref', coalesce(v_execution_commit_ref, pb2.execution_commit_ref),
+          'external_comment', nullif(btrim(coalesce(v_execution_intent_json->>'external_settlement_comment', '')), ''),
+          'csv_export_hash', nullif(btrim(coalesce(v_execution_intent_json->>'bank_csv_export_hash', '')), ''),
+          'suppress_remittances', v_suppress_remittances,
+          'remittances_suppressed_at_utc', case when v_suppress_remittances then v_now::text else null end,
+          'auth_request_id', nullif(btrim(coalesce(v_execution_intent_json->>'auth_request_id', '')), '')
+        ))
+      else pb2.settlement_confirmation_json
     end
   where pb2.id = p_pay_batch_id;
 
@@ -6886,7 +7096,49 @@ begin
   )
   into v_catchup_needed;
 
-  if v_catchup_needed then
+  if v_suppress_remittances = true then
+    v_comm_trigger_status := 'SUPPRESSED_BY_EXECUTION_INTENT';
+    v_comm_error := null;
+    v_comm_result := jsonb_build_object(
+      'ok', true,
+      'trigger_status', v_comm_trigger_status,
+      'message_kind', case when upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
+      'catchup_send', false,
+      'dispatch_required', false,
+      'suppressed_by_execution_intent', true,
+      'execution_mode', v_settlement_mode
+    );
+    v_suppression_audit_json := jsonb_build_object(
+      'pay_batch_id', p_pay_batch_id::text,
+      'batch_kind_fixed', upper(coalesce(v_batch.batch_kind_fixed,'')),
+      'settlement_mode', v_settlement_mode,
+      'suppress_remittances', true,
+      'suppressed_at_utc', v_now::text,
+      'auth_request_id', nullif(btrim(coalesce(v_execution_intent_json->>'auth_request_id', '')), '')
+    );
+    begin
+      insert into public.audit_events(
+        actor_user_id,
+        object_type,
+        object_id_text,
+        action,
+        before_json,
+        after_json,
+        reason
+      )
+      values (
+        p_actor_user_id,
+        'pay_batch',
+        p_pay_batch_id::text,
+        'PAY_BATCH_SETTLEMENT_COMMUNICATION_SUPPRESSED',
+        null,
+        v_suppression_audit_json,
+        'suppressed_by_execution_intent'
+      );
+    exception when others then
+      null;
+    end;
+  elsif v_catchup_needed then
     begin
       if upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then
         v_comm_result := public.pay_finance_payout_notice_queue_commit_stage(
@@ -6944,27 +7196,15 @@ begin
         'settlement_catchup_communication'
       );
     exception when others then
-      v_comm_trigger_status := case when upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then 'PAYOUT_NOTICE_CATCHUP_ERROR' else 'REMITTANCE_CATCHUP_ERROR' end;
-      v_comm_error := left(coalesce(SQLERRM,'UNKNOWN_COMMS_ERROR'), 1000);
+      v_comm_trigger_status := case when upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then 'PAYOUT_NOTICE_ERROR' else 'REMITTANCE_ERROR' end;
+      v_comm_error := left(coalesce(SQLERRM, 'UNKNOWN_COMMUNICATION_ERROR'), 1000);
       v_comm_result := jsonb_build_object(
         'ok', false,
         'trigger_status', v_comm_trigger_status,
-        'error', v_comm_error,
         'message_kind', case when upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end,
-        'automatic_commit_stage', false,
-        'catchup_send', true
+        'catchup_send', true,
+        'error', v_comm_error
       );
-
-      begin
-        update public.pay_batch_candidates pbc
-        set
-          remittance_trigger_status = v_comm_trigger_status,
-          last_remittance_error = v_comm_error
-        where pbc.pay_batch_id = p_pay_batch_id
-          and pbc.remittance_sent_at_utc is null;
-      exception when others then
-        null;
-      end;
 
       begin
         insert into public.audit_events(
@@ -7007,11 +7247,13 @@ begin
 
   v_worker_communications := jsonb_build_object(
     'primary_trigger_stage', 'COMMIT',
-    'catchup_attempted_at_settlement', v_catchup_needed,
+    'catchup_attempted_at_settlement', (v_catchup_needed and v_suppress_remittances = false),
     'message_kind', coalesce(nullif(btrim(coalesce(v_comm_result->>'message_kind','')), ''), case when upper(btrim(coalesce(v_batch.batch_kind_fixed,''))) = 'LOANS' then 'PAYOUT_NOTICE' else 'REMITTANCE' end),
     'trigger_status', v_comm_trigger_status,
     'error', v_comm_error,
-    'result', coalesce(v_comm_result, '{}'::jsonb)
+    'result', coalesce(v_comm_result, '{}'::jsonb),
+    'execution_mode', v_settlement_mode,
+    'suppress_remittances', v_suppress_remittances
   );
 
   select coalesce(
@@ -7359,6 +7601,9 @@ begin
     'execution_commit_state', (select pb3.execution_commit_state from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
     'execution_commit_ref', (select pb3.execution_commit_ref from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
     'execution_committed_at_utc', (select case when pb3.execution_committed_at_utc is null then null else pb3.execution_committed_at_utc::text end from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+    'settlement_confirmation_json', (select pb3.settlement_confirmation_json from public.pay_batches pb3 where pb3.id = p_pay_batch_id),
+    'execution_mode', v_settlement_mode,
+    'suppress_remittances', v_suppress_remittances,
     'newly_settled_candidates', v_newly_settled_candidates,
     'still_pending_transfers', v_pending_transfers,
     'failed_transfers', v_failed_transfers,
@@ -7385,10 +7630,6 @@ begin
   );
 end;
 $$;
-
-
-
-
 
 
 
@@ -11455,16 +11696,23 @@ begin
       pb.scheduled_at_utc,
       pb.funding_account_ref,
       pb.created_by_user_id,
+      case
+        when pb.execution_intent_json is not null and jsonb_typeof(pb.execution_intent_json) = 'object'
+          then pb.execution_intent_json
+        else '{}'::jsonb
+      end as execution_intent_json,
+      upper(btrim(coalesce(pb.execution_intent_json->>'execution_mode', 'STANDARD_BANK'))) as execution_mode,
+      lower(btrim(coalesce(pb.execution_intent_json->>'suppress_remittances', 'false'))) in ('true','1','yes','y','on') as suppress_remittances,
       public.pay_batch_validate_freshness(
         pb.id,
         coalesce(pb.created_by_user_id, '00000000-0000-0000-0000-000000000000'::uuid)
       ) as freshness_json
     from public.pay_batches pb
-    where upper(coalesce(pb.status,'')) in ('AUTHORISED_FOR_PAYMENT')
+    where upper(coalesce(pb.status,'')) = 'AUTHORISED_FOR_PAYMENT'
       and upper(coalesce(pb.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED'
       and pb.scheduled_at_utc is not null
       and pb.scheduled_at_utc <= v_cutoff
-      and nullif(btrim(coalesce(pb.funding_account_ref,'')), '') is not null
+      and upper(coalesce(pb.status,'')) not in ('COMMITTED','PAID','SETTLED','CANCELLED')
     order by pb.scheduled_at_utc asc, pb.id asc
     for update skip locked
     limit v_limit
@@ -11476,9 +11724,21 @@ begin
       c.rail_env_snapshot,
       c.schedule_kind,
       c.scheduled_at_utc,
-      c.funding_account_ref
+      c.funding_account_ref,
+      case
+        when c.execution_mode in ('STANDARD_BANK','CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') then c.execution_mode
+        else 'STANDARD_BANK'
+      end as execution_mode,
+      c.execution_intent_json,
+      c.suppress_remittances
     from candidate c
     where coalesce((c.freshness_json->>'is_stale')::boolean, false) = false
+      and (
+        case
+          when c.execution_mode in ('CSV_SETTLEMENT','EXTERNAL_SETTLEMENT') then true
+          else nullif(btrim(coalesce(c.funding_account_ref,'')), '') is not null
+        end
+      )
   ),
   upd as (
     update public.pay_batches pb2
@@ -11488,6 +11748,7 @@ begin
     from claim c
     where pb2.id = c.id
       and upper(coalesce(pb2.execution_commit_state, 'NOT_SUBMITTED')) = 'NOT_SUBMITTED'
+      and upper(coalesce(pb2.status,'')) = 'AUTHORISED_FOR_PAYMENT'
     returning
       pb2.id,
       pb2.rail_provider_snapshot,
@@ -11495,7 +11756,10 @@ begin
       pb2.schedule_kind,
       pb2.scheduled_at_utc,
       pb2.funding_account_ref,
-      pb2.executing_started_at_utc
+      pb2.executing_started_at_utc,
+      c.execution_mode,
+      c.execution_intent_json,
+      c.suppress_remittances
   )
   select
     coalesce(
@@ -11507,7 +11771,10 @@ begin
           'schedule_kind', u.schedule_kind,
           'scheduled_at_utc', u.scheduled_at_utc,
           'funding_account_ref', u.funding_account_ref,
-          'executing_started_at_utc', u.executing_started_at_utc
+          'executing_started_at_utc', u.executing_started_at_utc,
+          'execution_mode', u.execution_mode,
+          'execution_intent_json', u.execution_intent_json,
+          'suppress_remittances', u.suppress_remittances
         )
         order by u.scheduled_at_utc asc nulls last, u.id
       ),
@@ -11527,9 +11794,6 @@ begin
   );
 end;
 $$;
-
-
-
 
 
 create or replace function public.pay_bank_transfers_apply_rail_updates(
@@ -20581,7 +20845,6 @@ begin
 end;
 $function$;
 
-
 CREATE OR REPLACE FUNCTION public.pay_remittance_queue_commit_stage(
   p_pay_batch_id uuid,
   p_scope text,
@@ -20626,6 +20889,9 @@ declare
   v_ready_candidate_count integer := 0;
   v_job_count integer := 0;
   v_trigger_status text := null;
+  v_execution_intent_json jsonb := '{}'::jsonb;
+  v_settlement_confirmation_json jsonb := '{}'::jsonb;
+  v_suppress_remittances boolean := false;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_remittance_queue_commit_stage: pay_batch_id is required';
@@ -20649,7 +20915,9 @@ begin
     pb.bulk_reference,
     pb.execution_commit_state,
     pb.execution_commit_ref,
-    pb.execution_committed_at_utc
+    pb.execution_committed_at_utc,
+    pb.execution_intent_json,
+    pb.settlement_confirmation_json
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -20657,6 +20925,48 @@ begin
 
   if v_batch.id is null then
     raise exception 'pay_remittance_queue_commit_stage: pay batch % not found.', p_pay_batch_id;
+  end if;
+
+  if v_batch.execution_intent_json is not null and jsonb_typeof(v_batch.execution_intent_json) = 'object' then
+    v_execution_intent_json := v_batch.execution_intent_json;
+  else
+    v_execution_intent_json := '{}'::jsonb;
+  end if;
+
+  if v_batch.settlement_confirmation_json is not null and jsonb_typeof(v_batch.settlement_confirmation_json) = 'object' then
+    v_settlement_confirmation_json := v_batch.settlement_confirmation_json;
+  else
+    v_settlement_confirmation_json := '{}'::jsonb;
+  end if;
+
+  v_suppress_remittances := lower(btrim(coalesce(
+    v_settlement_confirmation_json->>'suppress_remittances',
+    v_execution_intent_json->>'suppress_remittances',
+    'false'
+  ))) in ('true','1','yes','y','on');
+
+  if v_suppress_remittances = true then
+    return jsonb_build_object(
+      'ok', true,
+      'trigger_status', 'SUPPRESSED_BY_EXECUTION_INTENT',
+      'error', null,
+      'message_kind', 'REMITTANCE',
+      'automatic_commit_stage', true,
+      'dispatch_required', false,
+      'suppressed_by_execution_intent', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
+      'scope', v_scope,
+      'candidate_count_targeted', 0,
+      'candidate_count_ready', 0,
+      'candidate_count_without_jobs', 0,
+      'job_count', 0,
+      'candidate_results', '[]'::jsonb,
+      'job_results', '[]'::jsonb,
+      'jobs', '[]'::jsonb
+    );
   end if;
 
   drop table if exists pg_temp.tmp_commit_stage_excluded_finance_cases;
@@ -21202,6 +21512,9 @@ declare
   v_ready_candidate_count integer := 0;
   v_job_count integer := 0;
   v_trigger_status text := null;
+  v_execution_intent_json jsonb := '{}'::jsonb;
+  v_settlement_confirmation_json jsonb := '{}'::jsonb;
+  v_suppress_remittances boolean := false;
 begin
   if p_pay_batch_id is null then
     raise exception 'pay_finance_payout_notice_queue_commit_stage: pay_batch_id is required';
@@ -21221,7 +21534,9 @@ begin
     pb.bulk_reference,
     pb.execution_commit_state,
     pb.execution_commit_ref,
-    pb.execution_committed_at_utc
+    pb.execution_committed_at_utc,
+    pb.execution_intent_json,
+    pb.settlement_confirmation_json
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -21229,6 +21544,47 @@ begin
 
   if v_batch.id is null then
     raise exception 'pay_finance_payout_notice_queue_commit_stage: pay batch % not found.', p_pay_batch_id;
+  end if;
+
+  if v_batch.execution_intent_json is not null and jsonb_typeof(v_batch.execution_intent_json) = 'object' then
+    v_execution_intent_json := v_batch.execution_intent_json;
+  else
+    v_execution_intent_json := '{}'::jsonb;
+  end if;
+
+  if v_batch.settlement_confirmation_json is not null and jsonb_typeof(v_batch.settlement_confirmation_json) = 'object' then
+    v_settlement_confirmation_json := v_batch.settlement_confirmation_json;
+  else
+    v_settlement_confirmation_json := '{}'::jsonb;
+  end if;
+
+  v_suppress_remittances := lower(btrim(coalesce(
+    v_settlement_confirmation_json->>'suppress_remittances',
+    v_execution_intent_json->>'suppress_remittances',
+    'false'
+  ))) in ('true','1','yes','y','on');
+
+  if v_suppress_remittances = true then
+    return jsonb_build_object(
+      'ok', true,
+      'trigger_status', 'SUPPRESSED_BY_EXECUTION_INTENT',
+      'error', null,
+      'message_kind', 'PAYOUT_NOTICE',
+      'automatic_commit_stage', true,
+      'dispatch_required', false,
+      'suppressed_by_execution_intent', true,
+      'pay_batch_id', p_pay_batch_id::text,
+      'execution_commit_state', v_batch.execution_commit_state,
+      'execution_commit_ref', v_batch.execution_commit_ref,
+      'execution_committed_at_utc', case when v_batch.execution_committed_at_utc is null then null else v_batch.execution_committed_at_utc::text end,
+      'candidate_count_targeted', 0,
+      'candidate_count_ready', 0,
+      'candidate_count_without_jobs', 0,
+      'job_count', 0,
+      'candidate_results', '[]'::jsonb,
+      'job_results', '[]'::jsonb,
+      'jobs', '[]'::jsonb
+    );
   end if;
 
   drop table if exists pg_temp.tmp_payout_notice_target_candidates;
@@ -21578,9 +21934,6 @@ begin
   );
 end;
 $function$;
-
-
-
 
 
 create or replace function public.pay_finance_case_restructure(
